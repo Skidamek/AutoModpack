@@ -18,6 +18,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
+import pl.skidam.automodpack.client.ScreenImpl;
 /*? if >= 1.21.10 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -251,7 +252,7 @@ public final class AutoTestBridge {
 	private static String disconnect() {
 		Minecraft minecraft = Minecraft.getInstance();
 		if (minecraft.level == null) {
-			minecraft.gui.setScreen(new TitleScreen());
+			ScreenImpl.setScreen(new TitleScreen());
 			return ok();
 		}
 
@@ -261,7 +262,7 @@ public final class AutoTestBridge {
 		/*?} else {*/
 		/*minecraft.level.disconnect();
 		*//*?}*/
-		minecraft.gui.setScreen(new TitleScreen());
+		ScreenImpl.setScreen(new TitleScreen());
 		return ok();
 	}
 

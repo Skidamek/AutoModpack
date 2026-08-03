@@ -2,13 +2,17 @@ package pl.skidam.automodpack_core.update;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
@@ -19,6 +23,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.FileState;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
+import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 
 public record UpdatePreview(
@@ -54,6 +59,16 @@ public record UpdatePreview(
 				|| entry.kind == Kind.PRESERVED_UNAVAILABLE || entry.kind == Kind.PRESERVED_OUTSIDE).mapToLong(Entry::size).sum();
 	}
 
+	public long uncachedAcquisitionBytes() {
+		return plan.operations().stream()
+				.filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT && operation.root() == Root.MODPACK_DIR && operation.expectedExistingHash() == null)
+				.mapToLong(Operation::expectedSize).sum();
+	}
+
+	public Set<RestartReason> restartReasons() {
+		return plan.restartReasons();
+	}
+
 	private long bytesOf(Kind kind) {
 		return entries.stream().filter(entry -> entry.kind == kind).mapToLong(Entry::size).sum();
 	}
@@ -79,8 +94,8 @@ public record UpdatePreview(
 		Objects.requireNonNull(originalFiles, "originalFiles");
 		Objects.requireNonNull(target, "target");
 		Map<FileKey, Operation> operations = plan.operations().stream()
-				.collect(java.util.stream.Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), operation -> operation));
-		Set<FileKey> preserved = new java.util.HashSet<>();
+				.collect(Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), operation -> operation));
+		Set<FileKey> preserved = new HashSet<>();
 		for (Preservation preservation : plan.preservations()) preserved.add(new FileKey(preservation.root(), preservation.relativePath()));
 		Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries = baselineEntries(baseline);
 		List<Entry> entries = new ArrayList<>();
@@ -104,7 +119,7 @@ public record UpdatePreview(
 		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
 			if (targetPaths.contains(ledgerEntry.logicalPath())) continue;
-			java.util.Optional<FileKey> optionalKey = UpdatePlanner.managedCleanupKey(ledgerEntry.logicalPath());
+			Optional<FileKey> optionalKey = UpdatePlanner.managedCleanupKey(ledgerEntry.logicalPath());
 			if (optionalKey.isEmpty()) continue;
 			FileKey key = optionalKey.get();
 			FileState current = originalFiles.get(key);
@@ -140,7 +155,7 @@ public record UpdatePreview(
 
 	private static Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries(Jsons.ClientBaselineFields baseline) {
 		if (baseline == null || baseline.entries == null) return Map.of();
-		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new java.util.HashMap<>();
+		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new HashMap<>();
 		for (var entry : baseline.entries) {
 			if (entry != null && entry.logicalPath != null) entries.put(UpdatePlanner.normalize(entry.logicalPath), entry);
 		}

@@ -15,7 +15,6 @@ import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.config.ServerConfigMigration;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -234,8 +233,6 @@ public class Preload {
 		} else {
 			clientConfig = ConfigTools.readOrCreate(clientConfigFile, Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
 		}
-
-		ServerConfigMigration.migrateToLatest(serverConfigFile);
 
 		// load server config
 		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);

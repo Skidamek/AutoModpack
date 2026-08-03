@@ -22,12 +22,10 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -77,6 +75,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private int page = 0;
 	private int rowsPerPage = 1;
 	private boolean saved = false;
+	private boolean managementInFlight;
+	private Button removeButton;
+	private Button recoveryButton;
+	private Button historyButton;
 
 	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
 		this(parent, manifest, null, null, null, null);
@@ -155,12 +157,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height / 2 + 20, 150, 20,
 					VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop()));
 			this.addRenderableWidget(buttonWidget(this.width / 2 + 5, this.height / 2 + 20, 150, 20,
-					VersionedText.translatable("automodpack.selection.later"), press -> this.minecraft.gui.setScreen(parent)));
+					VersionedText.translatable("automodpack.selection.later"), press -> ScreenImpl.setScreen(parent)));
 			return;
 		}
 
 		int listTop = 50;
-		int listBottom = this.height - 60;
+		int listBottom = this.height - (selectionAction == null ? 108 : 60);
 		rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
 
 		int pageCount = Math.max(1, (int) Math.ceil((double) rows.size() / rowsPerPage));
@@ -216,9 +218,13 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 
 		if (selectionAction == null) {
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 80, 100, 20, VersionedText.literal("Remove"), press -> requestRemoval()));
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 50, this.height - 80, 100, 20, VersionedText.literal("Recovery"), press -> requestRecovery()));
-			this.addRenderableWidget(buttonWidget(this.width / 2 + 55, this.height - 80, 100, 20, VersionedText.literal("History"), press -> requestHistory()));
+			this.removeButton = buttonWidget(this.width / 2 - 155, this.height - 80, 100, 20, VersionedText.literal("Remove"), press -> requestRemoval());
+			this.recoveryButton = buttonWidget(this.width / 2 - 50, this.height - 80, 100, 20, VersionedText.literal("Recovery"), press -> requestRecovery());
+			this.historyButton = buttonWidget(this.width / 2 + 55, this.height - 80, 100, 20, VersionedText.literal("History"), press -> requestHistory());
+			this.addRenderableWidget(this.removeButton);
+			this.addRenderableWidget(this.recoveryButton);
+			this.addRenderableWidget(this.historyButton);
+			updateManagementButtons();
 		}
 
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.reset"), press -> {
@@ -231,7 +237,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			reresolve();
 		}));
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 50, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.cancel"), press -> this.minecraft.gui.setScreen(parent)));
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 50, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.cancel"), press -> ScreenImpl.setScreen(parent)));
 
 		this.addRenderableWidget(buttonWidget(this.width / 2 + 55, this.height - 28, 100, 20,
 				VersionedText.translatable(selectionAction == null ? "automodpack.selection.save" : "automodpack.selection.preview").withStyle(ChatFormatting.BOLD), press -> save()));
@@ -333,23 +339,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void inspect(String groupId) {
-		this.minecraft.gui.setScreen(new GroupInspectorScreen(this, manifest, groupId));
+		ScreenImpl.setScreen(new GroupInspectorScreen(this, manifest, groupId));
 	}
 
 	private ModpackUpdater createUpdater() {
-		if (clientConfig == null || clientConfig.modpackConnections == null) {
-			new ScreenManager().error("automodpack.error.critical", "The modpack connection is unavailable", "automodpack.error.logs");
-			return null;
-		}
-		Jsons.ConnectionInfo connection = clientConfig.modpackConnections.get(modpackId);
-		if (connection == null || !connection.isComplete()) {
-			new ScreenManager().error("automodpack.error.critical", "The modpack connection is unavailable", "automodpack.error.logs");
-			return null;
-		}
-		Secrets.Secret secret = SecretsStore.getClientSecret(connection.origin);
-		if (secret == null) secret = Secrets.anonymousSecret();
 		try {
-			return new ModpackUpdater(connection, secret, ModpackUtils.getModpackPath(modpackId));
+			return new ModpackUpdater(null, null, ModpackUtils.getModpackPath(modpackId));
 		} catch (RuntimeException e) {
 			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			return null;
@@ -357,43 +352,76 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void requestRemoval() {
+		if (!beginManagement()) return;
 		ModpackUpdater removalUpdater = createUpdater();
-		if (removalUpdater == null) return;
+		if (removalUpdater == null) {
+			endManagement();
+			return;
+		}
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
 				UpdatePreview preview = removalUpdater.previewRemoval();
 				new ScreenManager().preview(preview, modpackName,
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeRemoval(removalUpdater)),
-						(Runnable) removalUpdater::close, true);
+						(Runnable) () -> {
+							removalUpdater.close();
+							endManagement();
+						}, true);
 			} catch (Exception e) {
 				removalUpdater.close();
+				endManagement();
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
 	}
 
 	private void requestRecovery() {
+		if (!beginManagement()) return;
 		ModpackUpdater recoveryUpdater = createUpdater();
-		if (recoveryUpdater == null) return;
+		if (recoveryUpdater == null) {
+			endManagement();
+			return;
+		}
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
-				new ScreenManager().recovery(recoveryUpdater, recoveryUpdater.recoverySnapshot(), modpackName);
+				new ScreenManager().recovery(recoveryUpdater, recoveryUpdater.recoverySnapshot(), modpackName, (Runnable) this::endManagement);
 			} catch (Exception e) {
 				recoveryUpdater.close();
+				endManagement();
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
 	}
 
 	private void requestHistory() {
+		if (!beginManagement()) return;
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
 				ClientContentHistory.History history = ClientContentHistory.read(ModpackUtils.getModpackPath(modpackId).resolve(modpackHistoryFileName));
-				new ScreenManager().history(history, modpackName);
+				new ScreenManager().history(history, modpackName, (Runnable) this::endManagement);
 			} catch (Exception e) {
+				endManagement();
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
+	}
+
+	private boolean beginManagement() {
+		if (managementInFlight) return false;
+		managementInFlight = true;
+		updateManagementButtons();
+		return true;
+	}
+
+	private void endManagement() {
+		managementInFlight = false;
+		updateManagementButtons();
+	}
+
+	private void updateManagementButtons() {
+		if (removeButton != null) removeButton.active = !managementInFlight;
+		if (recoveryButton != null) recoveryButton.active = !managementInFlight;
+		if (historyButton != null) historyButton.active = !managementInFlight;
 	}
 
 	private void executeRemoval(ModpackUpdater updater) {
@@ -447,8 +475,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (row.tagId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
 		GroupManifest.SelectionTag tag = manifest.selectionTags().get(row.tagId());
 		String title = tag == null || tag.displayName().isBlank() ? row.tagId() : tag.displayName();
-		if (tag != null && tag.serverForced()) return VersionedText.literal("[#] " + title + " (forced)").withStyle(ChatFormatting.GRAY);
-		return VersionedText.literal((chosenTags.contains(row.tagId()) ? "[x] " : "[ ] ") + title).withStyle(ChatFormatting.BOLD);
+		if (tag != null && tag.serverForced()) return VersionedText.literal(truncateToWidth(this.font, "[#] " + title + " (forced)", ROW_WIDTH - 12)).withStyle(ChatFormatting.GRAY);
+		return VersionedText.literal(truncateToWidth(this.font, (chosenTags.contains(row.tagId()) ? "[x] " : "[ ] ") + title, ROW_WIDTH - 12)).withStyle(ChatFormatting.BOLD);
 	}
 
 	/** The group's metadata and the resolver explanation, shown on hover. */
@@ -479,25 +507,27 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private MutableComponent rowLabel(String groupId, GroupManifest.Group group) {
-		if (group == null) return VersionedText.literal(groupId);
+		if (group == null) return VersionedText.literal(truncateToWidth(this.font, groupId, ROW_WIDTH - 76));
 
 		String name = group.displayName().isBlank() ? groupId : group.displayName();
 		GroupResolution explanation = resolution.explanation(groupId);
 		String suffix = " (" + group.files().size() + " files, " + formatSize(groupBytes(group)) + ")";
-		if (isMandatory(manifest, group)) return VersionedText.literal("[#] " + name + suffix + " (required)").withStyle(ChatFormatting.GRAY);
-		if (explanation != null && explanation.status() == GroupResolution.Status.UNAVAILABLE) return VersionedText.literal("[-] " + name + suffix + " (unavailable)").withStyle(ChatFormatting.RED);
-		if (explanation != null && explanation.status() == GroupResolution.Status.BLOCKED) return VersionedText.literal("[-] " + name + suffix + " (dependency unavailable)").withStyle(ChatFormatting.RED);
-		if (explanation != null && explanation.status() == GroupResolution.Status.CONFLICT) return VersionedText.literal("[!] " + name + suffix + " (conflict)").withStyle(ChatFormatting.RED);
-		if (excluded.contains(groupId)) return VersionedText.literal("[-] " + name + suffix + " (excluded)").withStyle(ChatFormatting.YELLOW);
+		if (isMandatory(manifest, group)) return rowLabel("[#] " + name + suffix + " (required)", ChatFormatting.GRAY);
+		if (explanation != null && explanation.status() == GroupResolution.Status.UNAVAILABLE) return rowLabel("[-] " + name + suffix + " (unavailable)", ChatFormatting.RED);
+		if (explanation != null && explanation.status() == GroupResolution.Status.BLOCKED) return rowLabel("[-] " + name + suffix + " (dependency unavailable)", ChatFormatting.RED);
+		if (explanation != null && explanation.status() == GroupResolution.Status.CONFLICT) return rowLabel("[!] " + name + suffix + " (conflict)", ChatFormatting.RED);
+		if (excluded.contains(groupId)) return rowLabel("[-] " + name + suffix + " (excluded)", ChatFormatting.YELLOW);
 		if (resolution.selectedGroups().contains(groupId)) {
-			if (chosen.contains(groupId)) return VersionedText.literal("[x] " + name + suffix + " (selected)").withStyle(ChatFormatting.GREEN);
-			if (resolution.tagExpandedGroups().contains(groupId)) return VersionedText.literal("[+] " + name + suffix + " (selected by tag)").withStyle(ChatFormatting.AQUA);
-			if (resolution.dependencyGroups().contains(groupId)) return VersionedText.literal("[+] " + name + suffix + " (required by selection)").withStyle(ChatFormatting.AQUA);
-			return VersionedText.literal("[+] " + name + suffix).withStyle(ChatFormatting.AQUA);
+			if (chosen.contains(groupId)) return rowLabel("[x] " + name + suffix + " (selected)", ChatFormatting.GREEN);
+			if (resolution.tagExpandedGroups().contains(groupId)) return rowLabel("[+] " + name + suffix + " (selected by tag)", ChatFormatting.AQUA);
+			if (resolution.dependencyGroups().contains(groupId)) return rowLabel("[+] " + name + suffix + " (required by selection)", ChatFormatting.AQUA);
+			return rowLabel("[+] " + name + suffix, ChatFormatting.AQUA);
 		}
-		return group.recommended()
-					? VersionedText.literal("[ ] " + name + suffix + " (recommended)").withStyle(ChatFormatting.YELLOW)
-					: VersionedText.literal("[ ] " + name + suffix).withStyle(ChatFormatting.GRAY);
+		return group.recommended() ? rowLabel("[ ] " + name + suffix + " (recommended)", ChatFormatting.YELLOW) : rowLabel("[ ] " + name + suffix, ChatFormatting.GRAY);
+	}
+
+	private MutableComponent rowLabel(String text, ChatFormatting color) {
+		return VersionedText.literal(truncateToWidth(this.font, text, ROW_WIDTH - 76)).withStyle(color);
 	}
 
 	private static boolean isMandatory(GroupManifest manifest, GroupManifest.Group group) {
@@ -553,6 +583,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Platform: " + ClientPlatform.current().id() + "  Selected groups: " + resolution.selectedGroups().size())
 					.withStyle(ChatFormatting.GRAY), this.width / 2, 43, TextColors.WHITE);
 		}
+	}
+
+	@Override
+	public boolean shouldCloseOnEsc() {
+		ScreenImpl.setScreen(parent);
+		return false;
 	}
 
 	private record Row(String section, String groupId, String tagId) {}

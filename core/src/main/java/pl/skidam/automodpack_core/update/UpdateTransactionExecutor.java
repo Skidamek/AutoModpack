@@ -71,26 +71,28 @@ public final class UpdateTransactionExecutor {
 
 	public Execution commit(UpdateTransaction transaction) throws IOException {
 		validate(transaction);
+		validateSelectionBeforeMutation(transaction);
 		if (Files.exists(context.transactionFile())) throw new IOException("An update transaction is already active for this game directory");
 		ConfigTools.writeAtomic(context.transactionFile(), transaction);
-		try {
-			claimSelection(transaction);
-		} catch (IOException e) {
-			try {
-				Files.deleteIfExists(context.transactionFile());
-			} catch (IOException cleanupFailure) {
-				e.addSuppressed(cleanupFailure);
-			}
-			throw e;
-		}
 		Files.deleteIfExists(context.transactionResultFile());
 		return executePersisted(transaction);
 	}
 
 	public Execution recover(UpdateTransaction transaction) throws IOException {
 		validate(transaction);
-		claimSelection(transaction);
+		validateSelectionBeforeMutation(transaction);
 		return executePersisted(transaction);
+	}
+
+	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && transaction.purpose != UpdateTransaction.Purpose.MODPACK_REMOVAL) return;
+		SelectionIntent current = new ClientSelectionStore(context.selectionFile()).get(transaction.modpackId).orElse(null);
+		SelectionIntent expected = transaction.expectedPriorIntent();
+		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+				? Objects.equals(current, transaction.targetIntent())
+				: current == null;
+		if (!Objects.equals(current, expected) && !alreadyCommitted)
+			throw new IOException("Group selection changed after planning for modpack " + transaction.modpackId);
 	}
 
 	private void claimSelection(UpdateTransaction transaction) throws IOException {
@@ -266,7 +268,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
+		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null || transaction.ledgerDigest != null
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedTags != null || transaction.expectedPriorRequestedGroups != null
 				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedTags != null || transaction.requestedGroups != null || transaction.excludedGroups != null
@@ -280,7 +282,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private static void validateLegacyDummyCleanupMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
+		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null || transaction.ledgerDigest != null
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedTags != null || transaction.expectedPriorRequestedGroups != null
 				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedTags != null || transaction.requestedGroups != null || transaction.excludedGroups != null
@@ -298,7 +300,7 @@ public final class UpdateTransactionExecutor {
 		} catch (RuntimeException e) {
 			throw new IOException("Transaction generation identity is invalid", e);
 		}
-		GenerationTarget recordTarget = GenerationTarget.from(completeRecord.metadata());
+		GenerationTarget recordTarget = GenerationTarget.from(completeRecord);
 		GenerationTarget flatTarget;
 		try {
 			flatTarget = GenerationTarget.fromFlat(manifest);
@@ -370,7 +372,7 @@ public final class UpdateTransactionExecutor {
 			if (!platform.id().equals(transaction.targetPlatform)) throw new IOException("Transaction platform is not canonical");
 			ResolvedSelection resolved = GroupSelectionResolver.resolve(completeRecord.manifest(), transaction.targetIntent(), platform);
 			Jsons.ModpackContentFields recomposed = SelectedTreeComposer.compose(completeRecord.manifest(), resolved,
-					GenerationTarget.from(completeRecord.metadata()));
+					GenerationTarget.from(completeRecord));
 			recomposed.ownershipLedger = completeRecord.ownershipLedger().toFields();
 			if (!flatManifestState(recomposed).equals(flatManifestState(manifest)))
 				throw new IOException("Embedded selected manifest does not match the complete catalogue and selection intent");
@@ -400,7 +402,7 @@ public final class UpdateTransactionExecutor {
 			throw new IOException("Stored complete catalogue is invalid", e);
 		}
 		if (storedCatalogue == null) throw new IOException("Stored complete catalogue is invalid");
-		GenerationTarget storedCatalogueTarget = GenerationTarget.from(storedCatalogue.metadata());
+		GenerationTarget storedCatalogueTarget = GenerationTarget.from(storedCatalogue);
 		if (storedCatalogueTarget.equals(target) && !storedCatalogue.equals(completeRecord))
 			throw new IOException("Stored complete catalogue disagrees with transaction target");
 		if (!storedCatalogue.manifest().modpackId().equals(transaction.modpackId))
@@ -674,31 +676,33 @@ public final class UpdateTransactionExecutor {
 				}
 			}
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) captureBaselines(transaction);
-			for (Operation operation : transaction.operations) {
-				if (operation.operation() != OperationType.INSTALL_OBJECT || operation.expectedExistingHash() == null) continue;
-				Path target = resolve(operation);
-				long targetSize = Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) ? Files.size(target) : -1;
-				if (!SmartFileUtils.isValidFile(target, targetSize, operation.expectedExistingHash()))
-					throw new IOException("Restore target changed after planning: " + target);
-			}
 			List<SmartFileUtils.CopyRequest> copies = new ArrayList<>();
 			for (Operation operation : transaction.operations) {
 				if (operation.operation() != OperationType.INSTALL_OBJECT) continue;
+				current = operation;
 				Path target = resolve(operation);
+				if (SmartFileUtils.isValidFile(target, operation.expectedSize(), operation.expectedObjectHash())) continue;
+				if (operation.expectedExistingHash() != null) {
+					long targetSize = Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) ? Files.size(target) : -1;
+					if (!SmartFileUtils.isValidFile(target, targetSize, operation.expectedExistingHash()))
+						throw new IOException("Restore target changed after planning: " + target);
+				}
 				Path source = context.storeDirectory().resolve(operation.expectedObjectHash());
 				copies.add(new SmartFileUtils.CopyRequest(source, target, operation.expectedSize(), operation.expectedObjectHash()));
 			}
-			try {
-				SmartFileUtils.copyVerifiedAtomicBatch(copies, COPY_CONCURRENCY);
-			} catch (SmartFileUtils.CopyBatchException e) {
-				blockedPath = e.target();
-				for (Operation operation : transaction.operations) {
-					if (operation.operation() == OperationType.INSTALL_OBJECT && resolve(operation).equals(blockedPath)) {
-						current = operation;
-						break;
+			if (!copies.isEmpty()) {
+				try {
+					SmartFileUtils.copyVerifiedAtomicBatch(copies, COPY_CONCURRENCY);
+				} catch (SmartFileUtils.CopyBatchException e) {
+					blockedPath = e.target();
+					for (Operation operation : transaction.operations) {
+						if (operation.operation() == OperationType.INSTALL_OBJECT && resolve(operation).equals(blockedPath)) {
+							current = operation;
+							break;
+						}
 					}
+					throw e;
 				}
-				throw e;
 			}
 			for (Operation operation : transaction.operations) {
 				if (operation.operation() != OperationType.INSTALL_OBJECT) continue;
@@ -736,7 +740,8 @@ public final class UpdateTransactionExecutor {
 			verifyFinalState(transaction.projectedFinalState, transaction.purpose);
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 				ConfigTools.writeAtomic(context.clientConfigFile(), transaction.plannedClientConfig);
-				if (context.beforeManifestAction() != null) context.beforeManifestAction().run(transaction);
+				if (context.beforeManifestAction() != null && !Files.exists(context.completeCatalogueFile(), LinkOption.NOFOLLOW_LINKS))
+					context.beforeManifestAction().run(transaction);
 				blockedPath = context.completeCatalogueFile();
 				GenerationRecord complete = transaction.completeGenerationRecord();
 				ConfigTools.writeAtomic(context.completeCatalogueFile(), complete.toFields());
@@ -751,6 +756,11 @@ public final class UpdateTransactionExecutor {
 				current = null;
 				blockedPath = context.automodpackDirectory().resolve("automodpack-dummy-files.json");
 				pruneLegacyDummyRegistry(transaction.operations);
+				blockedPath = null;
+			}
+			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
+				blockedPath = context.selectionFile();
+				claimSelection(transaction);
 				blockedPath = null;
 			}
 			Files.deleteIfExists(context.transactionFile());

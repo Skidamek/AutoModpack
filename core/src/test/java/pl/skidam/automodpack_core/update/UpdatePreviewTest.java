@@ -6,7 +6,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.junit.jupiter.api.Test;
 
@@ -16,6 +18,7 @@ import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileState;
+import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 
 class UpdatePreviewTest {
@@ -35,7 +38,7 @@ class UpdatePreviewTest {
 				new FileKey(Root.GAME_DIR, "config/changed.json"), new FileState(OTHER_HASH, 8, true, false),
 				new FileKey(Root.GAME_DIR, "config/old.json"), new FileState(OLD_HASH, 7, true, false));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, java.util.Set.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
@@ -46,13 +49,29 @@ class UpdatePreviewTest {
 	}
 
 	@Test
+	void exposesAcquisitionBytesAndPlanRestartReasons() {
+		Jsons.ModpackContentFields target = manifest(
+				new Jsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, false, TARGET_HASH, "0"),
+				entry("config/new.json", TARGET_HASH, 4, OwnershipLedger.Status.PRESENT));
+		Map<FileKey, FileState> files = Map.of();
+		UpdatePlan planned = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan plan = new UpdatePlan(planned.modpackId(), planned.generationTarget(), planned.operations(), planned.projectedFinalState(), planned.plannedClientConfig(),
+				Set.of(RestartReason.CORRECTED_FILE_LOCATIONS), planned.preservations(), planned.baselineCaptures());
+
+		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
+
+		assertEquals(4, preview.uncachedAcquisitionBytes());
+		assertEquals(plan.restartReasons(), preview.restartReasons());
+	}
+
+	@Test
 	void normalizesTargetPathsBeforeLedgerComparison() {
 		Jsons.ModpackContentFields target = manifest(
 				new Jsons.ModpackContentFields.ModpackContentItem("/config/kept.json", "8", "config", false, false, false, OLD_HASH, "0"),
 				entry("config/kept.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 8, true, false));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, java.util.Set.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
@@ -66,7 +85,7 @@ class UpdatePreviewTest {
 		Jsons.ModpackContentFields target = manifest(entry("config/unknown.json", OLD_HASH, 12, OwnershipLedger.Status.TOMBSTONE));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/unknown.json"), new FileState(null, 12, true, false));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, java.util.Set.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
@@ -89,7 +108,7 @@ class UpdatePreviewTest {
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.MODPACK_DIR, "config/removed.json"), new FileState(OLD_HASH, 7, true, false),
 				new FileKey(Root.GAME_DIR, "config/removed.json"), new FileState(OLD_HASH, 7, true, false));
-		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, java.util.Set.of(), new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), new Jsons.ClientConfigFieldsV3()));
 
 		UpdatePreview preview = UpdatePreview.create(plan, files, installed, null, true);
 
@@ -112,7 +131,7 @@ class UpdatePreviewTest {
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.MODPACK_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true, false),
 				new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true, false));
-		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, java.util.Set.of(OLD_HASH), new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(OLD_HASH), new Jsons.ClientConfigFieldsV3()));
 
 		UpdatePreview preview = UpdatePreview.create(plan, files, installed, null, true, baseline);
 
@@ -123,18 +142,18 @@ class UpdatePreviewTest {
 	void includesExplicitResolvedAndStaleGroupConsequences() {
 		Jsons.ModpackContentFields target = manifest();
 		Map<FileKey, FileState> files = Map.of();
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, java.util.Set.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
-		ResolvedSelection selection = new ResolvedSelection(new SelectionIntent(java.util.Set.of("optional")), new java.util.TreeSet<>(java.util.Set.of("main", "optional")),
-				new java.util.TreeSet<>(java.util.Set.of("stale")));
+		ResolvedSelection selection = new ResolvedSelection(new SelectionIntent(Set.of("optional")), new TreeSet<>(Set.of("main", "optional")),
+				new TreeSet<>(Set.of("stale")));
 
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, selection, false, "Patch notes");
 
 		assertEquals("Patch notes", preview.patchNotes());
-		assertEquals(java.util.Set.of(), preview.groupConsequences().explicitTags());
-		assertEquals(java.util.Set.of("optional"), preview.groupConsequences().explicitGroups());
-		assertEquals(java.util.Set.of("main", "optional"), preview.groupConsequences().resolvedGroups());
-		assertEquals(java.util.Set.of("stale"), preview.groupConsequences().staleGroups());
+		assertEquals(Set.of(), preview.groupConsequences().explicitTags());
+		assertEquals(Set.of("optional"), preview.groupConsequences().explicitGroups());
+		assertEquals(Set.of("main", "optional"), preview.groupConsequences().resolvedGroups());
+		assertEquals(Set.of("stale"), preview.groupConsequences().staleGroups());
 	}
 
 	private static UpdatePreview.Entry assertSingle(UpdatePreview preview, String path) {
@@ -157,6 +176,6 @@ class UpdatePreviewTest {
 	}
 
 	private static OwnershipLedger.Entry entry(String path, String hash, long size, OwnershipLedger.Status status) {
-		return new OwnershipLedger.Entry(path, java.util.Set.of(new OwnershipLedger.Content(hash, size)), java.util.Set.of("main"), "a".repeat(40), "b".repeat(40), status);
+		return new OwnershipLedger.Entry(path, Set.of(new OwnershipLedger.Content(hash, size)), Set.of("main"), "a".repeat(40), "b".repeat(40), status);
 	}
 }

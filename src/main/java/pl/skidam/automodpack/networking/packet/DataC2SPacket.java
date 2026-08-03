@@ -23,13 +23,10 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
-import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
-import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class DataC2SPacket {
 	public static CompletableFuture<FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
@@ -129,26 +126,8 @@ public class DataC2SPacket {
 			ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, modpackDir, downloadClient);
 			try {
 				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
-				if (updateCheckResult.requiresUpdate()) {
-					new ScreenManager().waiting();
-					disconnectImmediately(handler);
-					updater.processModpackUpdate(updateCheckResult);
-					return buildResponse(true);
-				}
-
-				UpdateType restartType = updater.reconcileReceivedManifest();
-				if (restartType == null) return buildResponse(false);
-
-				new ScreenManager().waiting();
 				disconnectImmediately(handler);
-				new ReLauncher(modpackDir, restartType, null).restart(false);
-				return buildResponse(true);
-			} catch (UpdateDeferredException e) {
-				updater.close();
-				LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-				new ScreenManager().waiting();
-				disconnectImmediately(handler);
-				new ReLauncher(modpackDir, UpdateType.UPDATE, null).restart(false);
+				updater.processModpackUpdate(updateCheckResult);
 				return buildResponse(true);
 			} catch (Exception e) {
 				updater.close();

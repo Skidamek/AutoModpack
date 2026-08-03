@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.Executor;
 
@@ -81,7 +82,7 @@ class GenerationStoreImmutableObjectTest {
 	@Test
 	void pointerFailureLeavesPromotedObjectAndRecordUnreachable() throws Exception {
 		Path root = tempDir.resolve("host-generations");
-		GenerationStore store = new GenerationStore(root, java.time.Clock.systemUTC(), () -> {
+		GenerationStore store = new GenerationStore(root, Clock.systemUTC(), () -> {
 			throw new IOException("pointer failure");
 		});
 		try (ModpackCandidate candidate = scan()) {

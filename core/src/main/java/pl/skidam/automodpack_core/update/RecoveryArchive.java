@@ -48,9 +48,11 @@ public final class RecoveryArchive {
 			throw new IOException("Recovery object is missing or corrupt: " + normalizedHash);
 
 		Path archiveRoot = recoveryDirectory.toAbsolutePath().normalize();
+		validateNoSymbolicLinkDescendants(archiveRoot, archiveRoot);
 		Files.createDirectories(archiveRoot);
 		validateNoSymbolicLinkDescendants(archiveRoot, archiveRoot);
 		Path objectsDirectory = archiveRoot.resolve(OBJECTS_DIRECTORY);
+		validateNoSymbolicLinkDescendants(archiveRoot, objectsDirectory);
 		Files.createDirectories(objectsDirectory);
 		validateNoSymbolicLinkDescendants(archiveRoot, objectsDirectory);
 		Path object = objectsDirectory.resolve(normalizedHash);
@@ -87,6 +89,11 @@ public final class RecoveryArchive {
 		if (Files.isSymbolicLink(archiveRoot)) throw new IOException("Recovery archive root may not be a symbolic link");
 		if (Files.exists(archiveRoot, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(archiveRoot, LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("Recovery archive root is not a directory");
+		Path objectsDirectory = archiveRoot.resolve(OBJECTS_DIRECTORY);
+		if (Files.exists(objectsDirectory, LinkOption.NOFOLLOW_LINKS)) {
+			validateNoSymbolicLinkDescendants(archiveRoot, objectsDirectory);
+			if (!Files.isDirectory(objectsDirectory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Recovery archive objects path is not a directory");
+		}
 		Path manifestPath = archiveRoot.resolve("manifest.json");
 		if (!Files.exists(manifestPath, LinkOption.NOFOLLOW_LINKS)) {
 			Jsons.ClientRecoveryArchiveFields empty = new Jsons.ClientRecoveryArchiveFields();

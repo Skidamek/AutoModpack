@@ -1,12 +1,19 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -82,7 +89,7 @@ public final class ClientContentHistory {
 		if (!history.modpackId().isEmpty() && !history.modpackId().equals(target.modpackId)) throw new IOException("Client content history modpack ID changed");
 		Set<String> selectedTags = selection == null ? Set.of() : selection.intent().requestedTags();
 		Set<String> selectedGroups = selection == null ? target.selectedGroups : selection.selectedGroups();
-		Entry next = new Entry(target.stateDigest, target.modpackName, patchNotes, Instant.now().toString(), selectedTags, selectedGroups, fileSummary(target));
+		Entry next = new Entry(effectiveContentDigest(target), target.modpackName, patchNotes, Instant.now().toString(), selectedTags, selectedGroups, fileSummary(target));
 		List<Entry> entries = new ArrayList<>(history.entries());
 		int existing = -1;
 		for (int index = 0; index < entries.size(); index++) if (entries.get(index).stateDigest().equals(next.stateDigest())) {
@@ -126,6 +133,67 @@ public final class ClientContentHistory {
 			}
 		}
 		return target.list.size() + " files, " + formatBytes(totalBytes);
+	}
+
+	private static String effectiveContentDigest(Jsons.ModpackContentFields target) throws IOException {
+		if (target.list == null) throw new IOException("Target file list is missing");
+		List<Jsons.ModpackContentFields.ModpackContentItem> items = new ArrayList<>(target.list);
+		for (var item : items) {
+			if (item == null || item.file == null || item.file.isBlank()) throw new IOException("Target file entry is incomplete");
+			try {
+				long size = Long.parseLong(item.size);
+				if (size < 0) throw new NumberFormatException("negative size");
+			} catch (NumberFormatException e) {
+				throw new IOException("Target file size is invalid", e);
+			}
+		}
+		items.sort(Comparator.comparing(item -> UpdatePlanner.normalize(item.file)));
+		MessageDigest digest;
+		try {
+			digest = MessageDigest.getInstance("SHA-1");
+		} catch (NoSuchAlgorithmException e) {
+			throw new IOException("SHA-1 is unavailable", e);
+		}
+		writeString(digest, "automodpack-selected-content-v1");
+		writeString(digest, target.modpackId);
+		Set<String> selectedGroups = new TreeSet<>(target.selectedGroups == null ? Set.of() : target.selectedGroups);
+		writeInt(digest, selectedGroups.size());
+		for (String group : selectedGroups) writeString(digest, group);
+		writeInt(digest, items.size());
+		for (var item : items) {
+			writeString(digest, UpdatePlanner.normalize(item.file));
+			writeLong(digest, Long.parseLong(item.size));
+			writeString(digest, item.type);
+			writeBoolean(digest, item.editable);
+			writeBoolean(digest, item.overwriteEditable);
+			writeBoolean(digest, item.forceCopy);
+			writeString(digest, item.sha1 == null ? null : item.sha1.toLowerCase(Locale.ROOT));
+			writeString(digest, item.murmur);
+		}
+		return HexFormat.of().formatHex(digest.digest());
+	}
+
+	private static void writeString(MessageDigest digest, String value) {
+		if (value == null) {
+			digest.update((byte) 0);
+			return;
+		}
+		digest.update((byte) 1);
+		byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+		writeInt(digest, bytes.length);
+		digest.update(bytes);
+	}
+
+	private static void writeInt(MessageDigest digest, int value) {
+		digest.update(ByteBuffer.allocate(Integer.BYTES).putInt(value).array());
+	}
+
+	private static void writeLong(MessageDigest digest, long value) {
+		digest.update(ByteBuffer.allocate(Long.BYTES).putLong(value).array());
+	}
+
+	private static void writeBoolean(MessageDigest digest, boolean value) {
+		digest.update((byte) (value ? 1 : 0));
 	}
 
 	private static String formatBytes(long bytes) {

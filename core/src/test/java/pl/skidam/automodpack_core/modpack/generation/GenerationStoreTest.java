@@ -2,12 +2,14 @@ package pl.skidam.automodpack_core.modpack.generation;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
@@ -62,12 +64,12 @@ class GenerationStoreTest {
 			var second = executor.submit(() -> secondStore.publish(candidate("third"), Optional.of(parent), ""));
 			int successes = 0;
 			int failures = 0;
-			for (var result : java.util.List.of(first, second)) {
+			for (var result : List.of(first, second)) {
 				try {
 					assertEquals(GenerationStore.PublicationStatus.PUBLISHED, result.get().status());
 					successes++;
 				} catch (ExecutionException e) {
-					assertInstanceOf(java.io.IOException.class, e.getCause());
+					assertInstanceOf(IOException.class, e.getCause());
 					failures++;
 				}
 			}
@@ -84,9 +86,9 @@ class GenerationStoreTest {
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		byte[] oldPointer = Files.readAllBytes(tempDir.resolve("current.json"));
 		GenerationStore failing = new GenerationStore(tempDir, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC),
-				() -> { throw new java.io.IOException("injected pointer failure"); });
+				() -> { throw new IOException("injected pointer failure"); });
 		GenerationStore.CurrentSnapshot current = failing.loadCurrent().orElseThrow();
-		assertThrows(java.io.IOException.class, () -> failing.publish(candidate("second"), Optional.of(current), ""));
+		assertThrows(IOException.class, () -> failing.publish(candidate("second"), Optional.of(current), ""));
 		assertArrayEquals(oldPointer, Files.readAllBytes(tempDir.resolve("current.json")));
 		assertEquals(first.record(), failing.loadCurrent().orElseThrow().record());
 		assertTrue(countRecords() > 1);
@@ -107,7 +109,7 @@ class GenerationStoreTest {
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
 		String hash = publication.record().manifest().groups().get("main").files().values().iterator().next().sha1();
 		Files.delete(tempDir.resolve("objects").resolve(hash));
-		assertThrows(java.io.IOException.class, store::loadCurrent);
+		assertThrows(IOException.class, store::loadCurrent);
 	}
 
 	@Test
@@ -119,7 +121,7 @@ class GenerationStoreTest {
 		String historicalHash = first.record().manifest().groups().get("main").files().values().iterator().next().sha1();
 		Files.delete(tempDir.resolve("objects").resolve(historicalHash));
 
-		assertThrows(java.io.IOException.class, store::loadCurrent);
+		assertThrows(IOException.class, store::loadCurrent);
 	}
 
 	@Test
@@ -132,7 +134,7 @@ class GenerationStoreTest {
 		String record = Files.readString(recordPath, StandardCharsets.UTF_8).replace(originalId, tamperedId);
 		Files.writeString(recordPath, record, StandardCharsets.UTF_8);
 
-		assertThrows(java.io.IOException.class, store::loadCurrent);
+		assertThrows(IOException.class, store::loadCurrent);
 	}
 
 	@Test
@@ -141,7 +143,7 @@ class GenerationStoreTest {
 		String pointer = "{\"schemaVersion\":" + (GenerationStore.CURRENT_POINTER_SCHEMA_VERSION + 1) + ",\"generationId\":\"" + "0".repeat(40) + "\"}";
 		Files.writeString(tempDir.resolve("current.json"), pointer, StandardCharsets.UTF_8);
 
-		assertThrows(java.io.IOException.class, store::loadCurrent);
+		assertThrows(IOException.class, store::loadCurrent);
 	}
 
 	@Test
@@ -180,7 +182,7 @@ class GenerationStoreTest {
 		Files.write(staged, bytes);
 		String hash = HashUtils.getHash(staged);
 		GroupManifest manifest = manifest(description, hash, bytes.length);
-		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), java.util.List.of(), java.util.List.of());
+		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), List.of(), List.of());
 	}
 
 	private static GroupManifest manifest(String description, String hash, long size) {
@@ -189,7 +191,7 @@ class GenerationStoreTest {
 		fields.selectionTags = Map.of();
 		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
-		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "other", false, false, false, hash, null));
+		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, false, false, hash, null));
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}
