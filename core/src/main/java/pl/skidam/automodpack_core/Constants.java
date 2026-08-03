@@ -33,7 +33,9 @@ public class Constants {
 	public static Jsons.ClientConfigFieldsV3 clientConfig;
 	public static Jsons.KnownHostsFields knownHosts;
 	public static final Path automodpackDir = Path.of("automodpack");
-	public static final Path storeDir = automodpackDir.resolve("store");
+	public static final Path clientGenerationsDir = automodpackDir.resolve("client-generations");
+	public static final Path clientGenerationObjectsDir = clientGenerationsDir.resolve("objects");
+	public static final Path clientGenerationStagingDir = clientGenerationsDir.resolve("staging");
 	public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
 	public static final Path hostGenerationsDir = automodpackDir.resolve("host-generations");
 	public static final Path hostGenerationCurrentFile = hostGenerationsDir.resolve("current.json");

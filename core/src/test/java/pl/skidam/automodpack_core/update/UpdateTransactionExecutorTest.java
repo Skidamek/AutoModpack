@@ -544,7 +544,7 @@ class UpdateTransactionExecutorTest {
 		Path game = temporaryDirectory.resolve("game");
 		Path automodpack = game.resolve("automodpack");
 		Path modpack = automodpack.resolve("modpacks/abc1234");
-		return new Paths(game, modpack, game.resolve("mods"), automodpack.resolve("store"), automodpack,
+		return new Paths(game, modpack, game.resolve("mods"), automodpack.resolve("client-generations/objects"), automodpack,
 				automodpack.resolve(".private/update-transaction.json"), automodpack.resolve(".private/update-transaction-result.json"),
 				automodpack.resolve("automodpack-client.json"),
 				modpack.resolve("automodpack-content.json"), modpack.resolve("automodpack-catalogue.json"),

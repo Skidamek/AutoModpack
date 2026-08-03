@@ -34,7 +34,7 @@ public final class UpdateTransactionSupport {
 			beforeManifest = UpdateTransactionSupport::applyLauncherMetadata;
 		}
 		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(gameDirectory, modpackDirectory, gameDirectory.resolve("mods"),
-				gameDirectory.resolve(storeDir), gameDirectory.resolve(automodpackDir), gameDirectory.resolve(transactionFile), gameDirectory.resolve(transactionResultFile),
+				gameDirectory.resolve(clientGenerationObjectsDir), gameDirectory.resolve(automodpackDir), gameDirectory.resolve(transactionFile), gameDirectory.resolve(transactionResultFile),
 				gameDirectory.resolve(clientConfigFile), installedManifest, completeCatalogue,
 				gameDirectory.resolve(clientSelectionFile), beforeManifest));
 	}

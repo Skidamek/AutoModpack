@@ -29,6 +29,7 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -52,7 +53,9 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_loader_core.DetachedUpdateHelper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
@@ -217,8 +220,8 @@ public class ModpackUpdater implements AutoCloseable {
 		if (!Files.exists(modpackContentFile)) return true;
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
-		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-			PreparedPlan prepared = buildPlan(cache, selectedTarget.flatTarget(), false);
+		try (var cache = FileMetadataCache.open(hashCacheDBFile); var modCache = ModFileCache.open(modCacheDBFile)) {
+			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), false);
 			Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackContentFile);
 			if (installed == null || !GenerationTarget.fromFlat(installed).equals(prepared.plan().generationTarget())) return true;
 			if (!prepared.plan().operations().isEmpty() || !prepared.plan().restartReasons().isEmpty()) return true;
@@ -239,7 +242,10 @@ public class ModpackUpdater implements AutoCloseable {
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(preparation.plan(), preparation.completeFields(), preparation.installed(), modpackDir,
 				ClientPlatform.current(), preparation.expectedPriorIntent());
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
-		if (execution.success()) clientConfig = preparation.plannedConfig();
+		if (execution.success()) {
+			clientConfig = preparation.plannedConfig();
+			collectClientObjects();
+		}
 		return execution;
 	}
 
@@ -279,7 +285,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (baseline.entries != null) for (var entry : baseline.entries) {
 				if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
 				String hash = entry.objectHash.toLowerCase(Locale.ROOT);
-				if (SmartFileUtils.isValidFile(storeDir.resolve(hash), entry.size, hash)) availableBaselineObjects.add(hash);
+				if (SmartFileUtils.isValidFile(clientGenerationObjectsDir.resolve(hash), entry.size, hash)) availableBaselineObjects.add(hash);
 			}
 			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaselineObjects, plannedConfig));
 			SelectionIntent expectedPriorIntent = new ClientSelectionStore(SmartFileUtils.CWD.resolve(clientSelectionFile)).get(installed.modpackId).orElse(null);
@@ -302,7 +308,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (entry == null || normalizedHash == null || !entry.historicalHashes().contains(new OwnershipLedger.Content(normalizedHash, size)))
 			throw new IOException("Recovery object is not owned by the installed modpack ledger");
 		Path archiveDirectory = recoveryDirectory(installed.modpackId);
-		return RecoveryArchive.archive(SmartFileUtils.CWD.resolve(storeDir), archiveDirectory, normalizedPath, normalizedHash, size,
+		return RecoveryArchive.archive(SmartFileUtils.CWD.resolve(clientGenerationObjectsDir), archiveDirectory, normalizedPath, normalizedHash, size,
 				entry.lastPublishedGenerationId(), Instant.now().toString());
 	}
 
@@ -318,7 +324,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (installed.list != null) for (var item : installed.list) targetPaths.add(UpdatePlanner.normalize(item.file));
 		OwnershipLedger ledger = OwnershipLedger.fromFields(installed.ownershipLedger);
 		List<RecoveryFile> available = new ArrayList<>();
-		Path storeRoot = SmartFileUtils.CWD.resolve(storeDir);
+		Path storeRoot = SmartFileUtils.CWD.resolve(clientGenerationObjectsDir);
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
 			if (targetPaths.contains(ledgerEntry.logicalPath()) || UpdatePlanner.managedCleanupKey(ledgerEntry.logicalPath()).isEmpty()) continue;
 			for (OwnershipLedger.Content content : ledgerEntry.historicalHashes()) {
@@ -450,11 +456,11 @@ public class ModpackUpdater implements AutoCloseable {
 	private void startUpdateAfterPreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, PreparedPlan previewPlan) {
 		long start = System.currentTimeMillis();
 
-		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+		try (var cache = FileMetadataCache.open(hashCacheDBFile); var modCache = ModFileCache.open(modCacheDBFile)) {
 			requireLiveConnection();
 			// Don't download files which already exist
 			ModpackUtils.populateStoreFromCWD(filesToUpdate, cache);
-			var finalFilesToUpdate = ModpackUtils.identifyUncachedFiles(filesToUpdate);
+			var finalFilesToUpdate = ModpackUtils.identifyUncachedFiles(filesToUpdate, cache);
 
 			// FETCH
 			long startFetching = System.currentTimeMillis();
@@ -491,7 +497,7 @@ public class ModpackUpdater implements AutoCloseable {
 				throw e;
 			}
 
-			PreparedPlan finalPlan = buildPlan(cache, selectedTarget.flatTarget());
+			PreparedPlan finalPlan = buildPlan(cache, modCache, selectedTarget.flatTarget());
 			if (!previewPlan.equals(finalPlan)) {
 				if (!requestPreparedPlanPreview(finalPlan, () -> executePreparedPlanAfterDownload(finalPlan), () -> {
 					close();
@@ -634,7 +640,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 		populateStoreFromModpack(refreshedContent.list, cache);
 		ModpackUtils.populateStoreFromCWD(refreshedContent.list, cache);
-		Set<Jsons.ModpackContentFields.ModpackContentItem> refreshedFilesToAcquire = ModpackUtils.identifyUncachedFiles(refreshedContent.list);
+		Set<Jsons.ModpackContentFields.ModpackContentItem> refreshedFilesToAcquire = ModpackUtils.identifyUncachedFiles(refreshedContent.list, cache);
 		if (refreshedFilesToAcquire.isEmpty()) return true;
 
 		List<FetchManager.FetchData> refreshedFetchData = new ArrayList<>();
@@ -706,18 +712,18 @@ public class ModpackUpdater implements AutoCloseable {
 		return result;
 	}
 
-	private PreparedPlan buildPlan(FileMetadataCache cache, Jsons.ModpackContentFields target) throws Exception {
-		return buildPlan(cache, target, true);
+	private PreparedPlan buildPlan(FileMetadataCache cache, ModFileCache modCache, Jsons.ModpackContentFields target) throws Exception {
+		return buildPlan(cache, modCache, target, true);
 	}
 
-	private PreparedPlan buildPlan(FileMetadataCache cache, Jsons.ModpackContentFields target, boolean prepareObjects) throws Exception {
+	private PreparedPlan buildPlan(FileMetadataCache cache, ModFileCache modCache, Jsons.ModpackContentFields target, boolean prepareObjects) throws Exception {
 		Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackContentFile);
 		UpdatePlanner.SelectionContext selection = selectionContext(target.modpackId);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, selection, cache);
 		if (prepareObjects) populateSelectionObjects(selection, target, files);
 		Set<String> forceCopyServices = getForceCopyMods(target).stream().map(UpdatePlanner::normalize).collect(Collectors.toSet());
-		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(target, cache);
-		List<UpdatePlan.ModInfo> standardMods = inspectStandardMods(cache);
+		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(target, cache, modCache);
+		List<UpdatePlan.ModInfo> standardMods = inspectStandardMods(cache, modCache);
 		List<UpdatePlan.NestedCopy> nestedCopies = prepareObjects ? inspectNestedCopies(target, cache) : List.of();
 		Jsons.ClientConfigFieldsV3 plannedConfig = ModpackUtils.planModpackSelection(target.modpackId, modpackDir, connectionInfo);
 
@@ -733,8 +739,8 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private boolean requestUpdatePreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
-		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-			PreparedPlan prepared = buildPlan(cache, selectedTarget.flatTarget(), false);
+		try (var cache = FileMetadataCache.open(hashCacheDBFile); var modCache = ModFileCache.open(modCacheDBFile)) {
+			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), false);
 			return requestPreparedPlanPreview(prepared, () -> startUpdateAfterPreview(filesToUpdate, prepared), () -> {
 				close();
 				if (firstConnection) new ScreenManager().title();
@@ -778,7 +784,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void populateSelectionObject(Path source, UpdatePlan.FileState state) throws IOException {
-		Path storeFile = storeDir.resolve(state.sha1());
+		Path storeFile = clientGenerationObjectsDir.resolve(state.sha1());
 		if (!SmartFileUtils.isValidFile(storeFile, state.size(), state.sha1()))
 			SmartFileUtils.copyVerifiedAtomic(source, storeFile, state.size(), state.sha1());
 	}
@@ -835,25 +841,25 @@ public class ModpackUpdater implements AutoCloseable {
 		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true, FileInspection.isMod(path)));
 	}
 
-	private List<UpdatePlan.ModInfo> inspectTargetMods(Jsons.ModpackContentFields target, FileMetadataCache cache) {
+	private List<UpdatePlan.ModInfo> inspectTargetMods(Jsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
 		for (var item : target.list.stream().filter(value -> "mod".equals(value.type)).sorted(Comparator.comparing(value -> value.file)).toList()) {
 			long size = Long.parseLong(item.size);
-			Path source = storeDir.resolve(item.sha1);
+			Path source = clientGenerationObjectsDir.resolve(item.sha1);
 			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) source = SmartFileUtils.getPath(modpackDir, item.file);
 			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) continue;
-			FileInspection.Mod mod = FileInspection.getMod(source, cache);
+			FileInspection.Mod mod = modCache.getModOrNull(source, cache);
 			if (mod != null) mods.add(new UpdatePlan.ModInfo(UpdatePlanner.normalize(item.file), item.sha1, size, mod.IDs(), mod.deps()));
 		}
 		return mods;
 	}
 
-	private List<UpdatePlan.ModInfo> inspectStandardMods(FileMetadataCache cache) throws IOException {
+	private List<UpdatePlan.ModInfo> inspectStandardMods(FileMetadataCache cache, ModFileCache modCache) throws IOException {
 		if (!Files.isDirectory(MODS_DIR)) return List.of();
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
 		try (Stream<Path> stream = Files.list(MODS_DIR)) {
 			for (Path path : stream.filter(Files::isRegularFile).sorted().toList()) {
-				FileInspection.Mod mod = FileInspection.getMod(path, cache);
+				FileInspection.Mod mod = modCache.getModOrNull(path, cache);
 				if (mod != null) mods.add(new UpdatePlan.ModInfo(path.getFileName().toString(), mod.hash(), Files.size(path), mod.IDs(), mod.deps()));
 			}
 		}
@@ -867,7 +873,7 @@ public class ModpackUpdater implements AutoCloseable {
 			Path inspectionMods = inspectionDirectory.resolve("mods");
 			Files.createDirectories(inspectionMods);
 			for (var item : target.list.stream().filter(value -> "mod".equals(value.type)).toList()) {
-				Path source = storeDir.resolve(item.sha1);
+				Path source = clientGenerationObjectsDir.resolve(item.sha1);
 				if (!SmartFileUtils.isValidFile(source, Long.parseLong(item.size), item.sha1)) source = SmartFileUtils.getPath(modpackDir, item.file);
 				if (!SmartFileUtils.isValidFile(source, Long.parseLong(item.size), item.sha1)) continue;
 				SmartFileUtils.copyVerifiedAtomic(source, inspectionMods.resolve(Path.of(UpdatePlanner.normalize(item.file)).getFileName()), Long.parseLong(item.size),
@@ -878,7 +884,7 @@ public class ModpackUpdater implements AutoCloseable {
 			for (FileInspection.Mod mod : MODPACK_LOADER.getModpackNestedConflicts(inspectionDirectory, cache)) {
 				if (mod.path() == null || mod.hash() == null || !Files.isRegularFile(mod.path())) continue;
 				long size = Files.size(mod.path());
-				Path storeFile = storeDir.resolve(mod.hash());
+				Path storeFile = clientGenerationObjectsDir.resolve(mod.hash());
 				if (!SmartFileUtils.isValidFile(storeFile, size, mod.hash())) SmartFileUtils.copyVerifiedAtomic(mod.path(), storeFile, size, mod.hash());
 				copies.add(new UpdatePlan.NestedCopy(mod.path().getFileName().toString(), mod.hash(), size, mod.IDs()));
 			}
@@ -904,11 +910,70 @@ public class ModpackUpdater implements AutoCloseable {
 		} catch (IOException e) {
 			LOGGER.warn("Modpack update succeeded, but client content history could not be written", e);
 		}
+		collectClientObjects();
+	}
+
+	private void collectClientObjects() {
+		if (Files.exists(SmartFileUtils.CWD.resolve(transactionFile))) {
+			LOGGER.warn("Skipping client object collection while an update transaction is pending");
+			return;
+		}
+
+		try (var hashCache = FileMetadataCache.open(hashCacheDBFile); var modCache = ModFileCache.open(modCacheDBFile)) {
+			Set<String> retainedHashes = new HashSet<>();
+			if (Files.isDirectory(modpacksDir)) {
+				try (Stream<Path> modpackDirectories = Files.list(modpacksDir)) {
+					for (Path modpackDirectory : modpackDirectories.filter(Files::isDirectory).toList())
+						collectModpackObjectReferences(modpackDirectory, retainedHashes);
+				}
+			}
+			if (MODS_DIR != null && Files.isDirectory(MODS_DIR)) {
+				try (Stream<Path> standardMods = Files.list(MODS_DIR)) {
+					for (Path mod : standardMods.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).filter(path -> path.toString().endsWith(".jar")).toList()) {
+						String hash = hashCache.getHashOrNull(mod);
+						if (hash != null) retainedHashes.add(ClientObjectStore.normalizeHash(hash));
+					}
+				}
+			}
+
+			ClientObjectStore.CollectionResult result = new ClientObjectStore(SmartFileUtils.CWD.resolve(clientGenerationObjectsDir),
+					SmartFileUtils.CWD.resolve(clientGenerationStagingDir)).collect(retainedHashes);
+			hashCache.cleanup();
+			modCache.retainOnly(retainedHashes);
+			if (result.objectsDeleted() > 0 || result.stagingFilesDeleted() > 0)
+				LOGGER.info("Collected {} unreachable client objects and {} abandoned staging files ({} objects retained)", result.objectsDeleted(),
+						result.stagingFilesDeleted(), result.objectsAfter());
+		} catch (Exception e) {
+			LOGGER.warn("Client update succeeded, but client object collection was skipped", e);
+		}
+	}
+
+	private static void collectModpackObjectReferences(Path modpackDirectory, Set<String> retainedHashes) throws IOException {
+		Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackDirectory.resolve(modpackContentFileName));
+		Jsons.CompleteModpackContentFields complete = ModpackContentTools.readCompleteFields(modpackDirectory.resolve(modpackCatalogueFileName));
+		if (installed == null || complete == null) {
+			try (Stream<Path> files = Files.walk(modpackDirectory)) {
+				if (installed == null && complete == null && files.noneMatch(Files::isRegularFile)) return;
+			}
+			throw new IOException("Client modpack metadata is incomplete: " + modpackDirectory);
+		}
+		for (var item : installed.list) if (item != null && item.sha1 != null) retainedHashes.add(ClientObjectStore.normalizeHash(item.sha1));
+
+		GenerationRecord record = GenerationRecord.fromFields(complete);
+		for (var group : record.manifest().groups().values())
+			for (var file : group.files().values()) retainedHashes.add(ClientObjectStore.normalizeHash(file.sha1()));
+		for (var entry : record.ownershipLedger().entries().values())
+			for (var content : entry.historicalHashes()) retainedHashes.add(ClientObjectStore.normalizeHash(content.sha1()));
+
+		Jsons.ClientBaselineFields baseline = ConfigTools.read(modpackDirectory.resolve(modpackBaselineFileName), Jsons.ClientBaselineFields.class).orElse(null);
+		if (baseline != null && baseline.entries != null)
+			for (var entry : baseline.entries)
+				if (entry != null && !entry.absent && entry.objectHash != null) retainedHashes.add(ClientObjectStore.normalizeHash(entry.objectHash));
 	}
 
 	private void populateStoreFromModpack(Collection<Jsons.ModpackContentFields.ModpackContentItem> items, FileMetadataCache cache) {
 		for (var item : items) {
-			Path storeFile = storeDir.resolve(item.sha1);
+			Path storeFile = clientGenerationObjectsDir.resolve(item.sha1);
 			long size = Long.parseLong(item.size);
 			if (SmartFileUtils.isValidFile(storeFile, size, item.sha1)) continue;
 			Path source = SmartFileUtils.getPath(modpackDir, item.file);
@@ -927,7 +992,7 @@ public class ModpackUpdater implements AutoCloseable {
 				.collect(Collectors.toMap(item -> item.sha1.toLowerCase(Locale.ROOT), item -> item, (first, second) -> first));
 		for (UpdatePlan.Operation operation : plan.operations()) {
 			if (operation.operation() != UpdatePlan.OperationType.INSTALL_OBJECT) continue;
-			Path storeFile = storeDir.resolve(operation.expectedObjectHash());
+			Path storeFile = clientGenerationObjectsDir.resolve(operation.expectedObjectHash());
 			if (SmartFileUtils.isValidFile(storeFile, operation.expectedSize(), operation.expectedObjectHash())) continue;
 			var item = itemsByHash.get(operation.expectedObjectHash().toLowerCase(Locale.ROOT));
 			if (item == null) throw new IOException("Planned CAS object is unavailable: " + operation.expectedObjectHash());
@@ -1025,7 +1090,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (!item.type.equals("mod")) continue;
 
 			long size = Long.parseLong(item.size);
-			Path modPath = storeDir.resolve(item.sha1);
+			Path modPath = clientGenerationObjectsDir.resolve(item.sha1);
 			if (!SmartFileUtils.isValidFile(modPath, size, item.sha1)) modPath = SmartFileUtils.getPath(modpackDir, item.file);
 			if (!SmartFileUtils.isValidFile(modPath, size, item.sha1)) continue;
 			try (FileSystem fs = FileSystems.newFileSystem(modPath)) {

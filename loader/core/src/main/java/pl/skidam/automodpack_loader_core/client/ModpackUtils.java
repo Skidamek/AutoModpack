@@ -191,10 +191,10 @@ public class ModpackUtils {
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
 	public static void populateStoreFromCWD(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache) {
 		for (var entry : filesToUpdate) {
-			Path storeFile = SmartFileUtils.getPath(storeDir, entry.sha1);
+			Path storeFile = SmartFileUtils.getPath(clientGenerationObjectsDir, entry.sha1);
 			long expectedSize = Long.parseLong(entry.size);
 
-			if (SmartFileUtils.isValidFile(storeFile, expectedSize, entry.sha1)) {
+			if (isValidFile(storeFile, expectedSize, entry.sha1, cache)) {
 				LOGGER.debug("Verified file already exists in store: {}", entry.file);
 				continue;
 			}
@@ -209,7 +209,7 @@ public class ModpackUtils {
 			}
 
 			Path fileInCWD = SmartFileUtils.getPathFromCWD(entry.file);
-			if (SmartFileUtils.isValidFile(fileInCWD, expectedSize, entry.sha1)) {
+			if (isValidFile(fileInCWD, expectedSize, entry.sha1, cache)) {
 				LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
 				try {
 					SmartFileUtils.copyVerifiedAtomic(fileInCWD, storeFile, expectedSize, entry.sha1);
@@ -221,11 +221,12 @@ public class ModpackUtils {
 	}
 
 	// Returns the set of files that are missing or corrupt in the store.
-	public static Set<Jsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck) {
+	public static Set<Jsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck,
+			FileMetadataCache cache) {
 		Set<Jsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
-			Path storeFile = SmartFileUtils.getPath(storeDir, entry.sha1);
-			if (SmartFileUtils.isValidFile(storeFile, Long.parseLong(entry.size), entry.sha1)) continue;
+			Path storeFile = SmartFileUtils.getPath(clientGenerationObjectsDir, entry.sha1);
+			if (isValidFile(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
 			if (Files.exists(storeFile)) {
 				try {
 					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
@@ -237,6 +238,15 @@ public class ModpackUtils {
 			uncachedFiles.add(entry);
 		}
 		return uncachedFiles;
+	}
+
+	private static boolean isValidFile(Path file, long expectedSize, String expectedSha1, FileMetadataCache cache) {
+		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
+		try {
+			return Files.size(file) == expectedSize && expectedSha1.equalsIgnoreCase(cache.getOrComputeHash(file));
+		} catch (IOException e) {
+			return false;
+		}
 	}
 
 	public static Jsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, Path modpackDirToSelect, Jsons.ConnectionInfo connectionInfo) {
