@@ -125,10 +125,17 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 	public static OwnershipLedger materialize(OwnershipLedger parent, GroupManifest manifest, String generationId) {
 		Objects.requireNonNull(parent, "parent");
 		Objects.requireNonNull(manifest, "manifest");
+		return materialize(parent, manifest, generationId, OwnershipDelta.between(parent, manifest));
+	}
+
+	static OwnershipLedger materialize(OwnershipLedger parent, GroupManifest manifest, String generationId, OwnershipDelta delta) {
+		Objects.requireNonNull(parent, "parent");
+		Objects.requireNonNull(manifest, "manifest");
+		Objects.requireNonNull(delta, "delta");
 		String currentGeneration = requireGenerationReference(generationId, "generation ID");
 		if (!parent.modpackId().equals(manifest.modpackId())) throw new IllegalArgumentException("Ledger and catalogue modpack IDs disagree");
+		if (!delta.modpackId().equals(manifest.modpackId())) throw new IllegalArgumentException("Delta and catalogue modpack IDs disagree");
 		Map<String, CurrentPath> current = currentPaths(manifest);
-		OwnershipDelta delta = OwnershipDelta.between(parent, manifest);
 		Map<String, Entry> result = new TreeMap<>();
 		Set<String> paths = new TreeSet<>(parent.entries().keySet());
 		paths.addAll(current.keySet());

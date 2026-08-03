@@ -39,6 +39,7 @@ public class Constants {
 	public static final Path hostGenerationCurrentFile = hostGenerationsDir.resolve("current.json");
 	public static final Path hostGenerationCurrentProjectionFile = hostGenerationsDir.resolve("current-projection.json");
 	public static final Path hostGenerationRecordsDir = hostGenerationsDir.resolve("records");
+	public static final Path hostGenerationDeltasDir = hostGenerationsDir.resolve("deltas");
 	public static final Path hostGenerationObjectsDir = hostGenerationsDir.resolve("objects");
 	public static final Path hostGenerationStagingDir = hostGenerationsDir.resolve("staging");
 	public static final Path hostPatchNotesFile = automodpackDir.resolve("host-patch-notes.md");

@@ -294,6 +294,20 @@ public class Jsons {
 		}
 	}
 
+	public static class OwnershipDeltaFields {
+		public String modpackId = "";
+		public List<ChangeFields> changes = List.of();
+		public String digest = "";
+
+		public static class ChangeFields {
+			public String logicalPath = "";
+			public String kind = "";
+			public OwnershipLedgerFields.ContentFields content;
+			public List<OwnershipLedgerFields.ContentFields> contents = List.of();
+			public Set<String> groupIds = Set.of();
+		}
+	}
+
 	public static class ClientContentHistoryFields {
 		public int schemaVersion = 1;
 		public String modpackId = "";

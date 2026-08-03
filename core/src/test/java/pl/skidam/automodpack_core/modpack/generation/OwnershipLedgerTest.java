@@ -73,6 +73,15 @@ class OwnershipLedgerTest {
 	}
 
 	@Test
+	void ownershipDeltaRoundTripsWithItsCanonicalDigest() {
+		GenerationRecord first = GenerationRecord.create(manifest(file(HASH_A, 1)), null, Instant.parse("2026-01-01T00:00:00Z"), "");
+		OwnershipDelta delta = OwnershipDelta.between(first.ownershipLedger(), manifest(file(HASH_B, 2)));
+
+		assertEquals(delta, OwnershipDelta.fromFields(delta.toFields()));
+		assertEquals(delta.digest(), OwnershipDelta.digest(delta.modpackId(), delta.changes()));
+	}
+
+	@Test
 	void digestUsesCanonicalPathAndContentOrdering() {
 		OwnershipLedger.Entry first = entry("config/first.txt", HASH_A, 1);
 		OwnershipLedger.Entry second = entry("config/second.txt", HASH_B, 2);
