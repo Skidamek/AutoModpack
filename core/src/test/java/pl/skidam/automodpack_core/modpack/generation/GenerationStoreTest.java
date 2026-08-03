@@ -158,6 +158,16 @@ class GenerationStoreTest {
 	}
 
 	@Test
+	void deepVerificationRejectsMissingOwnershipDelta() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
+		Files.delete(tempDir.resolve("deltas").resolve(publication.record().metadata().generationId() + ".json"));
+
+		assertDoesNotThrow(() -> store.loadCurrent().orElseThrow());
+		assertThrows(IOException.class, store::loadCurrentDeep);
+	}
+
+	@Test
 	void deepVerificationRejectsTamperedCurrentRecordIdentity() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");

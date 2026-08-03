@@ -76,6 +76,11 @@ public final class GenerationStore {
 		void beforeCurrentPointerReplacement() throws IOException;
 	}
 
+	@FunctionalInterface
+	private interface ImmutableJsonReader<T> {
+		T read(Path path) throws IOException;
+	}
+
 	private static final CommitHook NOOP_HOOK = () -> {};
 	private static final Map<Path, ReentrantLock> PUBLICATION_LOCKS = new ConcurrentHashMap<>();
 	private final Path root;
@@ -83,6 +88,7 @@ public final class GenerationStore {
 	private final Path currentProjectionPath;
 	private final Path publicationLockPath;
 	private final Path recordsDirectory;
+	private final Path deltasDirectory;
 	private final Path objectsDirectory;
 	private final Path stagingDirectory;
 	private final ServerObjectStore objectStore;
@@ -99,6 +105,7 @@ public final class GenerationStore {
 		this.currentProjectionPath = this.root.resolve(Constants.hostGenerationCurrentProjectionFile.getFileName());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
 		this.recordsDirectory = this.root.resolve(Constants.hostGenerationRecordsDir.getFileName());
+		this.deltasDirectory = this.root.resolve(Constants.hostGenerationDeltasDir.getFileName());
 		this.objectsDirectory = this.root.resolve(Constants.hostGenerationObjectsDir.getFileName());
 		this.stagingDirectory = this.root.resolve(Constants.hostGenerationStagingDir.getFileName());
 		this.clock = Objects.requireNonNull(clock);
@@ -206,6 +213,7 @@ public final class GenerationStore {
 			GenerationRecord record = GenerationRecord.create(target.manifest(), previous, clock.instant(), patchNotes, targetGenerationId);
 			Path recordPath = recordPath(record.metadata().generationId());
 			writeRecordNoClobber(recordPath, record);
+			writeDeltaNoClobber(record, previous);
 			NavigableMap<String, Path> hosting = verifyActiveTargetObjects(record);
 			writeCurrentProjection(record);
 			hosting.put("", currentProjectionPath);
@@ -266,6 +274,7 @@ public final class GenerationStore {
 		objectStore.promoteAll(candidate.objects());
 		Path recordPath = recordPath(record.metadata().generationId());
 		writeRecordNoClobber(recordPath, record);
+		writeDeltaNoClobber(record, previous);
 		NavigableMap<String, Path> hosting = verifyActiveTargetObjects(record);
 		writeCurrentProjection(record);
 		hosting.put("", currentProjectionPath);
@@ -313,6 +322,7 @@ public final class GenerationStore {
 	private void ensureStoreDirectories() throws IOException {
 		ensureDirectory(root, "generation store");
 		ensureDirectory(recordsDirectory, "generation records");
+		ensureDirectory(deltasDirectory, "generation deltas");
 		ensureDirectory(objectsDirectory, "immutable objects");
 		ensureDirectory(stagingDirectory, "generation staging");
 	}
@@ -526,6 +536,19 @@ public final class GenerationStore {
 		}
 	}
 
+	private OwnershipDelta readDelta(String generationId) throws IOException {
+		return readDelta(deltaPath(generationId));
+	}
+
+	private OwnershipDelta readDelta(Path path) throws IOException {
+		ensureRegular(path, "generation ownership delta");
+		try {
+			return OwnershipDelta.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.OwnershipDeltaFields.class));
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid generation ownership delta: " + path, e);
+		}
+	}
+
 	private void validateParentChain(GenerationRecord current) throws IOException {
 		Set<String> visited = new HashSet<>();
 		List<GenerationRecord> reverseChain = new ArrayList<>();
@@ -543,10 +566,20 @@ public final class GenerationStore {
 				throw new IOException("Generation parent modpack ID does not match current lineage: " + parent);
 		}
 		Collections.reverse(reverseChain);
-		try {
-			OwnershipLedger.rebuild(reverseChain);
-		} catch (RuntimeException e) {
-			throw new IOException("Generation ownership ledger does not match its parent chain", e);
+		requireDirectory(deltasDirectory, "generation deltas");
+		OwnershipLedger ledger = OwnershipLedger.empty(current.manifest().modpackId());
+		for (GenerationRecord chainRecord : reverseChain) {
+			OwnershipDelta actualDelta = readDelta(chainRecord.metadata().generationId());
+			OwnershipDelta expectedDelta = OwnershipDelta.between(ledger, chainRecord.manifest());
+			if (!expectedDelta.equals(actualDelta))
+				throw new IOException("Generation ownership delta does not match its parent and catalogue: " + chainRecord.metadata().generationId());
+			try {
+				ledger = OwnershipLedger.materialize(ledger, chainRecord.manifest(), chainRecord.metadata().generationId(), actualDelta);
+			} catch (RuntimeException e) {
+				throw new IOException("Generation ownership ledger does not match its parent chain", e);
+			}
+			if (!ledger.equals(chainRecord.ownershipLedger()))
+				throw new IOException("Generation ownership ledger does not match its persisted ownership delta: " + chainRecord.metadata().generationId());
 		}
 	}
 
@@ -599,6 +632,11 @@ public final class GenerationStore {
 		return recordsDirectory.resolve(generationId + ".json");
 	}
 
+	private Path deltaPath(String generationId) throws IOException {
+		if (!isDigest(generationId)) throw new IOException("Invalid generation ID: " + generationId);
+		return deltasDirectory.resolve(generationId + ".json");
+	}
+
 	private static Jsons.GenerationPointerFields pointer(GenerationRecord record) {
 		Jsons.GenerationPointerFields pointer = new Jsons.GenerationPointerFields();
 		pointer.schemaVersion = CURRENT_POINTER_SCHEMA_VERSION;
@@ -611,14 +649,26 @@ public final class GenerationStore {
 	}
 
 	private void writeRecordNoClobber(Path path, GenerationRecord record) throws IOException {
-		ensureDirectory(recordsDirectory, "generation records");
-		byte[] bytes = ConfigTools.GSON.toJson(record.toFields()).getBytes(StandardCharsets.UTF_8);
+		writeImmutableJsonNoClobber(path, recordsDirectory, ".record-", record.toFields(), record, this::readRecord, "generation record");
+	}
+
+	private void writeDeltaNoClobber(GenerationRecord record, GenerationRecord parent) throws IOException {
+		OwnershipLedger base = parent == null ? OwnershipLedger.empty(record.manifest().modpackId()) : parent.ownershipLedger();
+		OwnershipDelta delta = OwnershipDelta.between(base, record.manifest());
+		Path path = deltaPath(record.metadata().generationId());
+		writeImmutableJsonNoClobber(path, deltasDirectory, ".delta-", delta.toFields(), delta, this::readDelta, "generation ownership delta");
+	}
+
+	private <T> void writeImmutableJsonNoClobber(Path path, Path directory, String temporaryPrefix, Object value, T expected,
+			ImmutableJsonReader<T> reader, String description) throws IOException {
+		ensureDirectory(directory, description + "s");
+		byte[] bytes = ConfigTools.GSON.toJson(value).getBytes(StandardCharsets.UTF_8);
 		if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			GenerationRecord existing = readRecord(path);
-			if (!existing.equals(record)) throw new IOException("Generation record already exists with different content: " + path);
+			T existing = reader.read(path);
+			if (!existing.equals(expected)) throw new IOException(description + " already exists with different content: " + path);
 			return;
 		}
-		Path temporary = Files.createTempFile(recordsDirectory, ".record-", ".tmp");
+		Path temporary = Files.createTempFile(directory, temporaryPrefix, ".tmp");
 		try {
 			try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 				ByteBuffer buffer = ByteBuffer.wrap(bytes);
@@ -627,10 +677,10 @@ public final class GenerationStore {
 			}
 			try {
 				Files.createLink(path, temporary);
-				forceDirectory(recordsDirectory);
+				forceDirectory(directory);
 			} catch (FileAlreadyExistsException e) {
-				GenerationRecord existing = readRecord(path);
-				if (!existing.equals(record)) throw new IOException("Generation record publication race: " + path, e);
+				T existing = reader.read(path);
+				if (!existing.equals(expected)) throw new IOException(description + " publication race: " + path, e);
 			}
 		} finally {
 			Files.deleteIfExists(temporary);
