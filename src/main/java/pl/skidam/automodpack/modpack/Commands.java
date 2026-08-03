@@ -18,6 +18,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
@@ -477,7 +478,7 @@ public class Commands {
 	private static int previewRevertGeneration(CommandContext<CommandSourceStack> context) {
 		String targetGenerationId = StringArgumentType.getString(context, "generation-id");
 		try {
-			GenerationRecord target = findRevertTarget(targetGenerationId);
+			GenerationHistoryEntry target = findRevertTarget(targetGenerationId);
 			if (target == null) {
 				send(context, "FAILED: generation target was not found", ChatFormatting.RED, true);
 				return 0;
@@ -495,7 +496,7 @@ public class Commands {
 		String targetGenerationId = StringArgumentType.getString(context, "generation-id");
 		String notes = optionalArgument(context, "notes");
 		try {
-			GenerationRecord target = findRevertTarget(targetGenerationId);
+			GenerationHistoryEntry target = findRevertTarget(targetGenerationId);
 			if (target == null) {
 				send(context, "FAILED: generation target was not found", ChatFormatting.RED, true);
 				return 0;
@@ -524,11 +525,11 @@ public class Commands {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static GenerationRecord findRevertTarget(String targetGenerationId) throws IOException {
-		return modpackExecutor.technicalHistory().stream().filter(record -> record.metadata().generationId().equals(targetGenerationId)).findFirst().orElse(null);
+	private static GenerationHistoryEntry findRevertTarget(String targetGenerationId) throws IOException {
+		return modpackExecutor.technicalHistory().stream().filter(entry -> entry.metadata().generationId().equals(targetGenerationId)).findFirst().orElse(null);
 	}
 
-	private static void reportRevertTarget(CommandContext<CommandSourceStack> context, GenerationRecord target) {
+	private static void reportRevertTarget(CommandContext<CommandSourceStack> context, GenerationHistoryEntry target) {
 		send(context, "Revert target", ChatFormatting.YELLOW, target.metadata().createdAt().toString(), ChatFormatting.WHITE, true);
 		send(context, "Target generation", ChatFormatting.WHITE, copyable(target.metadata().generationId()), ChatFormatting.YELLOW, false);
 		send(context, "Target content", ChatFormatting.WHITE, copyable(target.metadata().stateDigest()), ChatFormatting.YELLOW, false);
@@ -545,16 +546,16 @@ public class Commands {
 				send(context, "No published generations.", ChatFormatting.YELLOW, false);
 				return Command.SINGLE_SUCCESS;
 			}
-			for (GenerationRecord record : history) {
-				String operation = record.metadata().rollbackTargetGenerationId().isEmpty() ? "PUBLISH" : "REVERT";
-				send(context, operation + " " + record.metadata().createdAt(), ChatFormatting.WHITE, false);
-					send(context, "Generation", ChatFormatting.WHITE, copyable(record.metadata().generationId()), ChatFormatting.YELLOW, false);
-					send(context, "Parent", ChatFormatting.WHITE, copyable(record.metadata().parentGenerationId()), ChatFormatting.YELLOW, false);
-					send(context, "Content state", ChatFormatting.WHITE, copyable(record.metadata().stateDigest()), ChatFormatting.YELLOW, false);
-					send(context, "Ledger", ChatFormatting.WHITE, copyable(record.metadata().ledgerDigest()), ChatFormatting.YELLOW, false);
-				if (!record.metadata().rollbackTargetGenerationId().isEmpty())
-					send(context, "Rollback target", ChatFormatting.WHITE, copyable(record.metadata().rollbackTargetGenerationId()), ChatFormatting.YELLOW, false);
-				if (!record.metadata().patchNotes().isBlank()) send(context, "Patch notes: " + record.metadata().patchNotes(), ChatFormatting.GRAY, false);
+			for (GenerationHistoryEntry entry : history) {
+				String operation = entry.metadata().rollbackTargetGenerationId().isEmpty() ? "PUBLISH" : "REVERT";
+				send(context, operation + " " + entry.metadata().createdAt(), ChatFormatting.WHITE, false);
+					send(context, "Generation", ChatFormatting.WHITE, copyable(entry.metadata().generationId()), ChatFormatting.YELLOW, false);
+					send(context, "Parent", ChatFormatting.WHITE, copyable(entry.metadata().parentGenerationId()), ChatFormatting.YELLOW, false);
+					send(context, "Content state", ChatFormatting.WHITE, copyable(entry.metadata().stateDigest()), ChatFormatting.YELLOW, false);
+					send(context, "Ledger", ChatFormatting.WHITE, copyable(entry.metadata().ledgerDigest()), ChatFormatting.YELLOW, false);
+				if (!entry.metadata().rollbackTargetGenerationId().isEmpty())
+					send(context, "Rollback target", ChatFormatting.WHITE, copyable(entry.metadata().rollbackTargetGenerationId()), ChatFormatting.YELLOW, false);
+				if (!entry.metadata().patchNotes().isBlank()) send(context, "Patch notes: " + entry.metadata().patchNotes(), ChatFormatting.GRAY, false);
 			}
 			return Command.SINGLE_SUCCESS;
 		} catch (IOException e) {
@@ -567,7 +568,6 @@ public class Commands {
 			try {
 				GenerationStore.StorageReport report = modpackExecutor.storageReport();
 				send(context, "Generation storage", ChatFormatting.GREEN, false);
-				send(context, "Records", ChatFormatting.WHITE, report.recordCount() + " files, " + report.recordBytes() + " bytes", ChatFormatting.YELLOW, false);
 				send(context, "Catalogues", ChatFormatting.WHITE, report.catalogueCount() + " files, " + report.catalogueBytes() + " bytes", ChatFormatting.YELLOW, false);
 				send(context, "Commits", ChatFormatting.WHITE, report.commitCount() + " files, " + report.commitBytes() + " bytes", ChatFormatting.YELLOW, false);
 				send(context, "Deltas", ChatFormatting.WHITE, report.deltaCount() + " files, " + report.deltaBytes() + " bytes", ChatFormatting.YELLOW, false);
@@ -585,7 +585,7 @@ public class Commands {
 		private static int generationStorageCollect(CommandContext<CommandSourceStack> context) {
 			try {
 				Set<String> retainedGenerationIds = new TreeSet<>();
-				for (GenerationRecord record : modpackExecutor.technicalHistory()) retainedGenerationIds.add(record.metadata().generationId());
+				for (GenerationHistoryEntry entry : modpackExecutor.technicalHistory()) retainedGenerationIds.add(entry.metadata().generationId());
 				GenerationStore.CollectionResult result = new GenerationStore(hostGenerationsDir).collect(retainedGenerationIds, Set.of());
 				send(context, "Generation objects collected", ChatFormatting.GREEN, false);
 				send(context, "Retained generations", ChatFormatting.WHITE, String.valueOf(retainedGenerationIds.size()), ChatFormatting.YELLOW, false);
