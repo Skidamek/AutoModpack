@@ -236,7 +236,7 @@ public class DownloadManager {
 	}
 
 	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task) {
-		Path storeFile = storeDir.resolve(hashPathPair.hash());
+		Path storeFile = clientGenerationObjectsDir.resolve(hashPathPair.hash());
 		boolean success = false;
 		boolean interrupted = false;
 
@@ -272,8 +272,9 @@ public class DownloadManager {
 
 		try {
 			try {
-				Files.createDirectories(storeDir);
-				tempStoreFile = Files.createTempFile(storeDir, "." + hashPathPair.hash() + ".", ".tmp");
+				Files.createDirectories(clientGenerationObjectsDir);
+				Files.createDirectories(clientGenerationStagingDir);
+				tempStoreFile = Files.createTempFile(clientGenerationStagingDir, "." + hashPathPair.hash() + ".", ".tmp");
 				activeTemporaryFiles.put(hashPathPair, tempStoreFile);
 			} catch (IOException e) {
 				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;

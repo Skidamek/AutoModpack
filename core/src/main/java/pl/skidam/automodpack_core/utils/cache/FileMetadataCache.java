@@ -7,8 +7,11 @@ import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.h2.mvstore.MVMap;
@@ -29,10 +32,14 @@ public class FileMetadataCache implements AutoCloseable {
 
 	private final Object[] locks = new Object[64];
 
-	public record CachedFile(String contentHash, long lastModified, long size, String fileKey) implements Serializable {
+	public record CachedFile(String contentHash, long lastModifiedNanos, long creationTimeNanos, long size, String fileKey, long validatedAtNanos) implements Serializable {
 		@java.io.Serial
 		private static final long serialVersionUID = 1L;
 	}
+
+	private record FileFingerprint(long lastModifiedNanos, long creationTimeNanos, long size, String fileKey) {}
+
+	private record ComputedHash(String hash, BasicFileAttributes attributes) {}
 
 	public static FileMetadataCache open(Path path) {
 		Path absPath = path.toAbsolutePath().normalize();
@@ -54,7 +61,7 @@ public class FileMetadataCache implements AutoCloseable {
 		this.dbPath = dbPath;
 		this.store = new MVStore.Builder().fileName(dbPath.toString()).cacheSize(20).open();
 
-		this.fileMetadataMap = store.openMap("file_metadata");
+		this.fileMetadataMap = store.openMap("file_metadata_v2");
 
 		for (int i = 0; i < locks.length; i++) {
 			locks[i] = new Object();
@@ -69,36 +76,72 @@ public class FileMetadataCache implements AutoCloseable {
 	public String getOrComputeHashWithAttributes(Path file, BasicFileAttributes attrs) {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
-
-		long currentSize = attrs.size();
-		long currentTime = attrs.lastModifiedTime().toMillis();
-		String currentFileKey = attrs.fileKey() != null ? attrs.fileKey().toString() : "null";
+		FileFingerprint fingerprint = fingerprint(attrs);
 
 		CachedFile cached = fileMetadataMap.get(pathKey);
-		if (isCacheValid(cached, currentSize, currentTime, currentFileKey)) {
+		if (isCacheValid(cached, fingerprint)) {
 			return cached.contentHash(); // CACHE HIT
 		}
 
 		// Calculate which lock bucket to use
-		int lockIndex = Math.abs(pathKey.hashCode() % locks.length);
+		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
 
 		synchronized (locks[lockIndex]) {
 			// Check if another thread has already updated the cache
 			cached = fileMetadataMap.get(pathKey);
-			if (isCacheValid(cached, currentSize, currentTime, currentFileKey)) return cached.contentHash();
+			if (isCacheValid(cached, fingerprint)) return cached.contentHash();
 
-			// Actual work happens here
-			String newHash = HashUtils.getHash(absPath);
+			ComputedHash computed = computeStableHash(absPath, attrs);
+			if (computed == null) return null;
 
-			CachedFile newRecord = new CachedFile(newHash, currentTime, currentSize, currentFileKey);
+			FileFingerprint stableFingerprint = fingerprint(computed.attributes());
+			CachedFile newRecord = new CachedFile(computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.size(),
+					stableFingerprint.fileKey(), validationTimeNanos());
 			fileMetadataMap.put(pathKey, newRecord);
 
-			return newHash;
+			return computed.hash();
 		}
 	}
 
-	private boolean isCacheValid(CachedFile cached, long size, long time, String key) {
-		return cached != null && cached.size() == size && cached.lastModified() == time && cached.fileKey().equals(key);
+	private static FileFingerprint fingerprint(BasicFileAttributes attrs) {
+		String fileKey = attrs.fileKey() == null ? "null" : attrs.fileKey().toString();
+		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), attrs.size(), fileKey);
+	}
+
+	private static long toNanos(FileTime time) {
+		return time.to(TimeUnit.NANOSECONDS);
+	}
+
+	private static long validationTimeNanos() {
+		Instant now = Instant.now();
+		return now.getEpochSecond() * 1_000_000_000L + now.getNano();
+	}
+
+	private static boolean sameFingerprint(BasicFileAttributes first, BasicFileAttributes second) {
+		return fingerprint(first).equals(fingerprint(second));
+	}
+
+	private ComputedHash computeStableHash(Path file, BasicFileAttributes initialAttributes) {
+		BasicFileAttributes before = initialAttributes;
+		for (int attempt = 0; attempt < 3; attempt++) {
+			String hash = HashUtils.getHash(file);
+			if (hash == null) return null;
+			try {
+				BasicFileAttributes after = Files.readAttributes(file, BasicFileAttributes.class);
+				if (sameFingerprint(before, after)) return new ComputedHash(hash, after);
+				before = after;
+			} catch (IOException e) {
+				return null;
+			}
+		}
+		LOGGER.warn("File changed while hashing; refusing to cache an unstable hash: {}", file);
+		return null;
+	}
+
+	private boolean isCacheValid(CachedFile cached, FileFingerprint fingerprint) {
+		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
+				&& cached.creationTimeNanos() == fingerprint.creationTimeNanos() && cached.fileKey().equals(fingerprint.fileKey())
+				&& fingerprint.lastModifiedNanos() < cached.validatedAtNanos();
 	}
 
 	public String getHashOrNull(Path path) {
@@ -136,15 +179,11 @@ public class FileMetadataCache implements AutoCloseable {
 		String pathKey = absPath.toString();
 
 		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class);
-		long currentSize = attrs.size();
-		long currentTime = attrs.lastModifiedTime().toMillis();
-		String currentFileKey = attrs.fileKey() != null ? attrs.fileKey().toString() : "null";
-
-		CachedFile newRecord = new CachedFile(hash, currentTime, currentSize, currentFileKey);
+		FileFingerprint fingerprint = fingerprint(attrs);
+		CachedFile newRecord = new CachedFile(hash, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.size(), fingerprint.fileKey(), validationTimeNanos());
 		fileMetadataMap.put(pathKey, newRecord);
 	}
 
-	// TODO: Consider running periodically
 	public void cleanup() {
 		synchronized (store) {
 			fileMetadataMap.keySet().removeIf(pathString -> Files.notExists(Path.of(pathString)));

@@ -1,0 +1,49 @@
+package pl.skidam.automodpack_core.utils.cache;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import pl.skidam.automodpack_core.utils.FileInspection;
+
+class ModFileCacheTest {
+	@TempDir
+	Path temporaryDirectory;
+
+	@Test
+	void reusesMetadataForTheSameContentAtAnotherPath() throws Exception {
+		Path first = temporaryDirectory.resolve("first.jar");
+		Path second = temporaryDirectory.resolve("second.jar");
+		writeMod(first);
+		Files.copy(first, second);
+
+		try (FileMetadataCache hashCache = FileMetadataCache.open(temporaryDirectory.resolve("hash-cache.db"));
+				ModFileCache modCache = ModFileCache.open(temporaryDirectory.resolve("mod-cache.db"))) {
+			FileInspection.Mod firstMod = modCache.getOrComputeMod(first, hashCache);
+			FileInspection.Mod secondMod = modCache.getOrComputeMod(second, hashCache);
+
+			assertNotNull(firstMod);
+			assertNotNull(secondMod);
+			assertEquals(firstMod.hash(), secondMod.hash());
+			assertEquals(second.toAbsolutePath().normalize(), secondMod.path());
+			assertEquals("example", secondMod.IDs().iterator().next());
+		}
+	}
+
+	private static void writeMod(Path path) throws Exception {
+		try (OutputStream output = Files.newOutputStream(path); JarOutputStream jar = new JarOutputStream(output)) {
+			jar.putNextEntry(new JarEntry("fabric.mod.json"));
+			jar.write("{\"id\":\"example\",\"version\":\"1.0.0\"}".getBytes(StandardCharsets.UTF_8));
+			jar.closeEntry();
+		}
+	}
+}

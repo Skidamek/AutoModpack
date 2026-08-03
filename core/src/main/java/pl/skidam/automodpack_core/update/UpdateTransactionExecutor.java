@@ -132,7 +132,7 @@ public final class UpdateTransactionExecutor {
 		Path automodpackDirectory = context.automodpackDirectory().toAbsolutePath().normalize();
 		if (!context.modsDirectory().toAbsolutePath().normalize().equals(gameDirectory.resolve("mods"))
 				|| !automodpackDirectory.equals(gameDirectory.resolve("automodpack"))
-				|| !context.storeDirectory().toAbsolutePath().normalize().equals(automodpackDirectory.resolve("store"))
+				|| !context.storeDirectory().toAbsolutePath().normalize().equals(automodpackDirectory.resolve("client-generations/objects"))
 				|| !context.transactionFile().toAbsolutePath().normalize().equals(automodpackDirectory.resolve(".private/update-transaction.json"))
 				|| !context.transactionResultFile().toAbsolutePath().normalize().equals(automodpackDirectory.resolve(".private/update-transaction-result.json")))
 			throw new IOException("Transaction roots do not match the game-directory layout");
