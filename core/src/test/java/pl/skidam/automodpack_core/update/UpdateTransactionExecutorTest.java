@@ -55,7 +55,7 @@ class UpdateTransactionExecutorTest {
 		assertEquals(target.generationRecord(), new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).orElseThrow());
 		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
 		assertEquals(target.manifest().modpackId(), ConfigTools.read(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
-		assertFalse(Files.exists(storage.gameDirectory().resolve("automodpack/modpacks")));
+		assertFalse(Files.exists(storage.automodpackDirectory().resolve("modpacks")));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
 
@@ -123,17 +123,20 @@ class UpdateTransactionExecutorTest {
 	void selfUpdateRemainsAConstrainedCasOperation() throws Exception {
 		ClientStorage storage = storage();
 		Path current = Files.writeString(storage.modsDirectory().resolve("automodpack-old.jar"), "old", StandardCharsets.UTF_8);
+		Path replacementPath = storage.modsDirectory().resolve("automodpack-new.jar");
 		String currentHash = HashUtils.getHash(current);
 		byte[] replacement = "replacement".getBytes(StandardCharsets.UTF_8);
 		String replacementHash = store(storage, replacement);
-		UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(current.getFileName().toString(), "automodpack-new.jar", replacementHash, replacement.length, currentHash);
+		String currentPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(current).toString());
+		String targetPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(replacementPath).toString());
+		UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentPath, targetPath, replacementHash, replacement.length, currentHash);
 
 		assertTrue(executor(storage).commit(transaction).success());
 		assertFalse(Files.exists(current));
-		assertTrue(SmartFileUtils.isValidFile(storage.modsDirectory().resolve("automodpack-new.jar"), replacement.length, replacementHash));
+		assertTrue(SmartFileUtils.isValidFile(replacementPath, replacement.length, replacementHash));
 		assertNull(storage.readActiveState());
 
-		UpdateTransaction invalid = UpdateTransaction.createSelfUpdate("automodpack-old.jar", "../outside.jar", replacementHash, replacement.length, currentHash);
+		UpdateTransaction invalid = UpdateTransaction.createSelfUpdate(currentPath, "../outside.jar", replacementHash, replacement.length, currentHash);
 		assertThrows(IOException.class, () -> executor(storage).validate(invalid));
 	}
 

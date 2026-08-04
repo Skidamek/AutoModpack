@@ -24,7 +24,7 @@ After verification, AutoModpack will ask you to confirm the modpack installation
 
 Restart your game. Your server's modpack should now be loaded, and you should be able to connect, spawning in the overworld.
 
-> #### **Note:** If you don't see your modpack mods in the `mods` folder, they are installed in `~/.minecraft/automodpack/modpacks/{your-modpack}/mods/`. This is intentional to keep mod updates clean.
+> #### **Note:** Most modpack mods are loaded from AutoModpack's active projection. Only loader-required placements are copied to the live `mods` folder.
 
 ---
 
@@ -93,7 +93,7 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 
 AutoModpack automatically manages client configuration. When you connect to a server, AutoModpack will:
 
-- Download the modpack (mods, configs, resource packs, etc.) to `~/.minecraft/automodpack/modpacks/{modpack}/`
+- Download the generation into the client CAS and expose the selected files through `~/.minecraft/automodpack/client-generations/active/`.
 - Authenticate the modpack host using CA trust, DNSSEC AMP1, an explicit address pin, or the saved/manual fingerprint fallback
 - Ask for confirmation to install the modpack
 

@@ -1,8 +1,8 @@
 id: launchpad-fml11-offline
 description: |
   NeoForge 26.1.2 proof that Sinytra Launchpad loads in place from AutoModpack's
-  selected modpack directory and reads an opted-in Fabric-only mod from that same
-  directory. The downstream fixture is staged before Launchpad on purpose: custom
+  active projection and reads an opted-in Fabric-only mod from that same projection.
+  The downstream fixture is staged before Launchpad on purpose: custom
   readers must be installed globally before any staged jar is interpreted, regardless
   of filesystem order. Nothing is copied into standard mods/ and no restart is used.
 
@@ -17,7 +17,7 @@ targets:
 
 flow:
   - do: stage_modpack
-    name: stage a Fabric-only fixture before Launchpad in the modpack directory
+    name: stage a Fabric-only fixture before Launchpad in the active projection
     mods:
       - merged/autotest-fixtures/launchpad-downstream-26.1.jar
       - url: https://cdn.modrinth.com/data/voWgQoWV/versions/nWdOZVsP/launchpad-1.8.0%2B26.1.2-full.jar

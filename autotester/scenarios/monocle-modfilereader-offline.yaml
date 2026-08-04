@@ -1,7 +1,7 @@
 id: monocle-modfilereader-offline
 description: |
   Offline / client-only FML4 proof that a mod shipping an IModFileReader loads straight
-  from AutoModpack's modpack folder, with NO copy into the standard mods/ directory.
+  from AutoModpack's active projection, with NO copy into the standard mods/ directory.
 
   Monocle (an Iris + Embeddium compatibility layer) ships both an
   IModFileCandidateLocator (MonocleModLocator) and an IModFileReader (IrisModParser). The
@@ -28,7 +28,7 @@ targets:
 
 flow:
   - do: stage_modpack
-    name: stage Monocle + Iris + Embeddium into the modpack folder (NOT standard mods/)
+    name: stage Monocle + Iris + Embeddium into the active projection (NOT standard mods/)
     mods:
       - url: https://cdn.modrinth.com/data/apRGdwku/versions/klSc1ush/monocle-0.2.2.ms.jar
         sha512: 233d65f722329c7dbd3c77992f5d400dfe6e76788207da8d0d4669526e662852d0f0832dc3af23cc6373577462c5fb2153e295267e73d6023e125164ad94d8eb

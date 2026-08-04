@@ -60,7 +60,6 @@ public class Constants {
 	public static final Path recoveryDir = automodpackDir.resolve("recovery");
 	public static final Path recoveryManifestFile = recoveryDir.resolve("manifest.json");
 	public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
-	public static Path clientLocalMetadataFile = automodpackDir.resolve("automodpack-client-metadata.json");
 	public static Path cacheDir = automodpackDir.resolve("cache");
 	public static Path hashCacheDBFile = cacheDir.resolve("hash-cache.db");
 	public static Path modCacheDBFile = cacheDir.resolve("mod-cache.db");
