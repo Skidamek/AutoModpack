@@ -313,20 +313,18 @@ public final class ClientStorage {
 	}
 
 	private void validateLayout() {
-		if (!generationsDirectory.startsWith(automodpackDirectory) || !objectsDirectory.startsWith(generationsDirectory)
-				|| !recordsDirectory.startsWith(generationsDirectory) || !overlaysDirectory.startsWith(generationsDirectory)
-				|| !baselinesDirectory.startsWith(generationsDirectory)
-				|| !activeDirectory.startsWith(generationsDirectory) || !incomingDirectory.startsWith(generationsDirectory)
-				|| !backupDirectory.startsWith(generationsDirectory) || !stateFile.startsWith(generationsDirectory)
-				|| !transactionFile.startsWith(automodpackDirectory)
-				|| !selectionFile.startsWith(automodpackDirectory) || !dummyFilesFile.startsWith(automodpackDirectory)
-				|| !restartLoopStateFile.startsWith(privateDirectory) || !clientConfigFile.startsWith(automodpackDirectory)
-				|| !clientSecretsFile.startsWith(automodpackDirectory) || !cacheDirectory.startsWith(automodpackDirectory)
-				|| !hashCacheFile.startsWith(cacheDirectory) || !modCacheFile.startsWith(cacheDirectory)
-				|| !modpackContentTempFile.startsWith(automodpackDirectory) || !helperDirectory.startsWith(cacheDirectory)
-				|| !knownHostsFile.startsWith(privateDirectory) || !knownHostsBootstrapFile.startsWith(automodpackDirectory)
-				|| !recoveryDirectory.startsWith(automodpackDirectory))
-			throw new IllegalArgumentException("Client storage layout escaped the game directory");
+		validateWithin(gameDirectory, automodpackDirectory);
+		validateWithin(automodpackDirectory, generationsDirectory, transactionFile, selectionFile, dummyFilesFile, clientConfigFile, clientSecretsFile,
+				cacheDirectory, modpackContentTempFile, knownHostsBootstrapFile, recoveryDirectory, privateDirectory);
+		validateWithin(generationsDirectory, objectsDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, activeDirectory, incomingDirectory, backupDirectory,
+				stateFile);
+		validateWithin(cacheDirectory, hashCacheFile, modCacheFile, helperDirectory);
+		validateWithin(privateDirectory, restartLoopStateFile, knownHostsFile);
+	}
+
+	private static void validateWithin(Path parent, Path... children) {
+		for (Path child : children)
+			if (!child.startsWith(parent)) throw new IllegalArgumentException("Client storage path escaped " + parent + ": " + child);
 	}
 
 	private static Path requireDirectoryPath(Path path, String description) {

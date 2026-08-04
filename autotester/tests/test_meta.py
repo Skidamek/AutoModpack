@@ -173,7 +173,7 @@ def test_artifact_resolution_rejects_ambiguous_matches(tmp_path):
         runner._resolve_artifact(target, tmp_path)
 
 
-def test_staged_manifest_uses_actual_file_metadata(make_ctx):
+def test_staged_generation_uses_actual_file_metadata(make_ctx):
     ctx = make_ctx()
     root = ctx.game_dir / "staged"
     marker = root / ctx.marker_rel
@@ -183,14 +183,14 @@ def test_staged_manifest_uses_actual_file_metadata(make_ctx):
     mod.parent.mkdir()
     mod.write_bytes(b"fixture")
 
-    runner._write_staged_manifest(ctx, root, "fixture-id")
+    generation = runner._write_staged_generation(ctx, root, "fixture7")
 
-    manifest = json.loads((root / "automodpack-content.json").read_text())
-    by_path = {entry["file"]: entry for entry in manifest["list"]}
-    assert by_path["/mods/fixture.jar"]["size"] == str(len(b"fixture"))
-    assert by_path["/mods/fixture.jar"]["sha1"] == hashlib.sha1(b"fixture").hexdigest()
-    assert by_path["/mods/fixture.jar"]["editable"] is False
-    assert by_path["/config/amp-autotest-marker.json"]["editable"] is True
+    manifest = json.loads((root.parent / "generations" / generation["generationId"] / "manifest.json").read_text())
+    by_path = manifest["groups"]["main"]["files"]
+    assert by_path["mods/fixture.jar"]["size"] == str(len(b"fixture"))
+    assert by_path["mods/fixture.jar"]["sha1"] == hashlib.sha1(b"fixture").hexdigest()
+    assert by_path["mods/fixture.jar"]["editable"] is False
+    assert by_path["config/amp-autotest-marker.json"]["editable"] is True
 
 
 # ── wait_exit (Docker calls stubbed) ─────────────────────────────────────────

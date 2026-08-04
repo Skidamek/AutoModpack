@@ -8,6 +8,7 @@ import java.util.Set;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 
 public record UpdatePlan(
 		String modpackId,
@@ -94,8 +95,9 @@ public record UpdatePlan(
 		}
 	}
 
-	public record NestedCopy(String targetFileName, String sha1, long size, Set<String> ids) {
+	public record NestedCopy(String relativePath, String sha1, long size, Set<String> ids) {
 		public NestedCopy {
+			relativePath = LogicalPath.normalize(relativePath);
 			ids = stableSet(ids);
 		}
 	}
