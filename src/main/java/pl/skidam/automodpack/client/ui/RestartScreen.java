@@ -13,6 +13,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class RestartScreen extends VersionedScreen {
+	private static final int PANEL_WIDTH = 460;
 
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
@@ -44,19 +45,24 @@ public class RestartScreen extends VersionedScreen {
 	public void initWidgets() {
 		assert this.minecraft != null;
 
-		cancelButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.cancel"), button -> {
+		cancelButton = buttonWidget(this.width / 2 - 155, this.height - 74, 150, 20, VersionedText.translatable("automodpack.restart.cancel"), button -> {
 			ScreenImpl.setScreen(null);
 		});
 
-		restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20,
+		restartButton = buttonWidget(this.width / 2 + 5, this.height - 74, 150, 20,
 				VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> {
 					minecraft.stop();
 				});
 
-		changelogsButton = buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.translatable("automodpack.changelog.view"),
+		changelogsButton = buttonWidget(this.width / 2 - 75, this.height - 48, 150, 20, VersionedText.translatable("automodpack.changelog.view"),
 				button -> {
 					new ScreenManager().changelog(this, changelogs);
 				});
+	}
+
+	@Override
+	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+		drawPanel(matrices, PANEL_WIDTH, this.height / 2 - 92, this.height - 64);
 	}
 
 	@Override

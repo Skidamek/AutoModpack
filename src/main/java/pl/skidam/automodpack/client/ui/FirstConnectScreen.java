@@ -22,6 +22,7 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public final class FirstConnectScreen extends VersionedScreen {
+	private static final int PANEL_WIDTH = 560;
 	private final ModpackUpdater updater;
 	private final SelectedModpackTarget target;
 	private boolean finished;
@@ -36,9 +37,10 @@ public final class FirstConnectScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		int y = this.height - 52;
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, y, 150, 20,
+		int left = Math.max(5, (this.width - 310) / 2);
+		this.addRenderableWidget(buttonWidget(left, y, 150, 20,
 				VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
-		this.addRenderableWidget(buttonWidget(this.width / 2 + 5, y, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
+		this.addRenderableWidget(buttonWidget(left + 160, y, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, y + 26, 150, 20, VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
 	}
 
@@ -49,8 +51,8 @@ public final class FirstConnectScreen extends VersionedScreen {
 			return;
 		}
 		finished = true;
-		updater.startConfirmedUpdate();
 		new ScreenManager().waiting();
+		updater.startConfirmedUpdate();
 	}
 
 	private void customize() {
@@ -59,8 +61,8 @@ public final class FirstConnectScreen extends VersionedScreen {
 			try {
 				if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) throw new IllegalStateException("Modpack confirmation expired");
 				updater.selectTarget(intent);
-				updater.startConfirmedUpdate();
 				new ScreenManager().waiting();
+				updater.startConfirmedUpdate();
 			} catch (RuntimeException e) {
 				finished = false;
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
@@ -87,14 +89,20 @@ public final class FirstConnectScreen extends VersionedScreen {
 	}
 
 	@Override
+	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+		drawPanel(matrices, PANEL_WIDTH, 8, this.height - 64);
+	}
+
+	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = target.manifest().modpackName().isBlank() ? "AutoModpack" : target.manifest().modpackName();
 		ResolvedSelection selection = target.selection();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(name).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.description").withStyle(ChatFormatting.GRAY), this.width / 2, 27,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(name).withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.description").withStyle(ChatFormatting.GRAY), this.width / 2, 31,
 				TextColors.WHITE);
+		drawDivider(matrices, PANEL_WIDTH, 43);
 
-		int y = 45;
+		int y = 51;
 		if (!updater.getPatchNotes().isBlank()) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.patchNotes").withStyle(ChatFormatting.YELLOW), this.width / 2, y,
 					TextColors.WHITE);
