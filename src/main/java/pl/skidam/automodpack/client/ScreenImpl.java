@@ -11,6 +11,7 @@ import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.util.Optional;
+import java.util.Locale;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -95,7 +96,7 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public Optional<String> getScreenString() {
 		Screen screen = Screens.getScreen();
-		return Optional.of(screen.getTitle().getString().toLowerCase());
+		return Optional.ofNullable(screen).map(current -> current.getTitle().getString().toLowerCase(Locale.ROOT));
 	}
 
 	@Override
@@ -108,7 +109,7 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	private static class Screens {
-		private static Screen parentBeforePreparing;
+		private static Screen interactiveParent;
 
 		private static Screen getScreen() {
 			/*? if >=26.2 {*/
@@ -120,10 +121,10 @@ public class ScreenImpl implements ScreenService {
 
 		public static void setScreen(Screen screen) {
 			Screen current = Screens.getScreen();
-			if (screen instanceof PreparingScreen) {
-				if (!(current instanceof PreparingScreen)) parentBeforePreparing = current;
+			if (isTransient(screen)) {
+				if (!isTransient(current)) interactiveParent = current;
 			} else {
-				parentBeforePreparing = null;
+				interactiveParent = null;
 			}
 			/*? if >=26.2 {*/
 			Minecraft.getInstance().gui.setScreen(screen);
@@ -158,10 +159,14 @@ public class ScreenImpl implements ScreenService {
 
 		public static void preview(Object... args) {
 			Screen parent = Screens.getScreen();
-			if (parent instanceof PreparingScreen) parent = parentBeforePreparing;
-			parentBeforePreparing = null;
+			if (isTransient(parent)) parent = interactiveParent;
+			interactiveParent = null;
 			boolean removal = args.length > 4 && Boolean.TRUE.equals(args[4]);
 			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3]));
+		}
+
+		private static boolean isTransient(Screen screen) {
+			return screen instanceof PreparingScreen || screen instanceof FetchScreen || screen instanceof DownloadScreen;
 		}
 
 		public static void recovery(Object... args) {

@@ -83,14 +83,6 @@ download_modpack:
   - do: click
     name: confirm update preview
     select: { text: continue }
-  - do: wait_for
-    name: wait for the final update preview
-    timeout: 90s
-    until:
-      element: { text: continue, enabled: true }
-  - do: click
-    name: confirm final update preview
-    select: { text: continue }
   - do: wait_file
     name: wait for the modpack marker file
     path: "${active_dir}/${marker}"
