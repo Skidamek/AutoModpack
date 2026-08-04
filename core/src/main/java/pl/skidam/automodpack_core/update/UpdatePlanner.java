@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -290,7 +289,6 @@ public final class UpdatePlanner {
 			return Optional.empty();
 		}
 		if (ModpackPathPolicy.isPlayerLocal(normalized)) return Optional.empty();
-		if (normalized.equals("mods")) return Optional.empty();
 		return Optional.of(new FileKey(Root.GAME_DIR, normalized));
 	}
 
@@ -302,9 +300,9 @@ public final class UpdatePlanner {
 	private static void planNestedCopies(List<NestedCopy> copies, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations,
 			EnumSet<RestartReason> restartReasons) {
 		Set<String> standardIds = new HashSet<>();
-		for (NestedCopy copy : copies.stream().sorted(Comparator.comparing(NestedCopy::targetFileName)).toList()) {
+		for (NestedCopy copy : copies.stream().sorted(Comparator.comparing(NestedCopy::relativePath)).toList()) {
 			if (copy.ids().stream().anyMatch(standardIds::contains)) continue;
-			FileKey key = new FileKey(Root.GAME_DIR, "mods/" + normalize(copy.targetFileName()));
+			FileKey key = new FileKey(Root.GAME_DIR, normalize(copy.relativePath()));
 			if (!matches(projected.get(key), copy.sha1(), copy.size())) {
 				install(operations, projected, key, copy.sha1(), copy.size(), true);
 				restartReasons.add(RestartReason.FIXED_NESTED_MODS);
@@ -334,9 +332,9 @@ public final class UpdatePlanner {
 			ModInfo standard = duplicate.getValue();
 			FileKey oldKey = new FileKey(Root.GAME_DIR, normalize(standard.relativePath()));
 			if (target.ids().stream().anyMatch(idsToKeep::contains)) {
-				String targetName = Path.of(normalize(target.relativePath())).getFileName().toString();
-				FileKey targetKey = new FileKey(Root.GAME_DIR, "mods/" + targetName);
-				pathsToKeep.add("mods/" + targetName);
+				String targetPath = normalize(target.relativePath());
+				FileKey targetKey = new FileKey(Root.GAME_DIR, targetPath);
+				pathsToKeep.add(targetPath);
 				if (!matches(projected.get(targetKey), target.sha1(), target.size())) {
 					install(operations, projected, targetKey, target.sha1(), target.size(), true);
 					restartReasons.add(RestartReason.REMOVED_DUPLICATE_MODS);

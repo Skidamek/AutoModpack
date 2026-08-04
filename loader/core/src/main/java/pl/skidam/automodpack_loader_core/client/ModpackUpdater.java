@@ -425,11 +425,11 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 
 		// 2. Filter modpack mods excluding those already present in standard mods
-		Path modpackModsDir = storage.activeDirectory().resolve("mods");
-		if (Files.exists(modpackModsDir)) {
-			try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
+		Path activeModsDirectory = storage.activeDirectory().resolve("mods");
+		if (Files.exists(activeModsDirectory)) {
+			try (Stream<Path> activeMods = Files.list(activeModsDirectory)) {
 				final Set<String> finalStandardModsHashes = standardModsHashes;
-				modpackMods = modpackModsStream.filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")).filter(mod -> {
+				modpackMods = activeMods.filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")).filter(mod -> {
 					String modHash = cache.getHashOrNull(mod);
 					// Only load if hash is valid AND not found in standard set
 					return modHash != null && !finalStandardModsHashes.contains(modHash);
@@ -894,7 +894,10 @@ public class ModpackUpdater implements AutoCloseable {
 		try (Stream<Path> stream = Files.list(storage.modsDirectory())) {
 			for (Path path : stream.filter(Files::isRegularFile).sorted().toList()) {
 				FileInspection.Mod mod = modCache.getModOrNull(path, cache);
-				if (mod != null) mods.add(new UpdatePlan.ModInfo("mods/" + path.getFileName(), mod.hash(), Files.size(path), mod.IDs(), mod.deps()));
+				if (mod != null) {
+					String relativePath = UpdatePlanner.normalize(storage.gameDirectory().relativize(path.toAbsolutePath().normalize()).toString());
+					mods.add(new UpdatePlan.ModInfo(relativePath, mod.hash(), Files.size(path), mod.IDs(), mod.deps()));
+				}
 			}
 		}
 		return mods;
@@ -920,7 +923,10 @@ public class ModpackUpdater implements AutoCloseable {
 				long size = Files.size(mod.path());
 				Path storeFile = storage.objectsDirectory().resolve(mod.hash());
 				if (!SmartFileUtils.isValidFile(storeFile, size, mod.hash())) SmartFileUtils.copyVerifiedAtomic(mod.path(), storeFile, size, mod.hash());
-				copies.add(new UpdatePlan.NestedCopy(mod.path().getFileName().toString(), mod.hash(), size, mod.IDs()));
+				Path targetPath = storage.modsDirectory().resolve(mod.path().getFileName()).normalize();
+				if (!targetPath.startsWith(storage.gameDirectory())) throw new IOException("Nested mod target escaped the game directory: " + targetPath);
+				String relativePath = UpdatePlanner.normalize(storage.gameDirectory().relativize(targetPath).toString());
+				copies.add(new UpdatePlan.NestedCopy(relativePath, mod.hash(), size, mod.IDs()));
 			}
 			return copies;
 		} finally {
@@ -1118,7 +1124,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	// Returns the modpack mods that ship a service file this loader's running version cannot host
 	// in place (see ModpackLoaderService#forceCopyServices) - these must be copied into standard
-	// mods/ instead of staying in the modpack folder.
+	// mods/ instead of staying in the active projection.
 	private Set<String> getForceCopyMods(Jsons.ModpackContentFields modpackContentFields) throws IOException {
 		Set<String> forceCopyServices = MODPACK_LOADER.forceCopyServices();
 		Set<String> forceCopyMods = new HashSet<>();

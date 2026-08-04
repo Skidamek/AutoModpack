@@ -57,7 +57,7 @@ class FakeBridge:
     """A tiny GUI state machine that mimics the real client over the file bridge.
 
     Screens: title -> cert -> preparing -> first connection -> preview -> restart -> (relaunch) -> ingame.
-    Clicking the final preview button writes the modpack files into the game dir, so
+    Clicking the final preview button writes the active projection files into the game dir, so
     the filesystem verbs see real files appear exactly as they would in Docker.
     """
 
@@ -147,7 +147,7 @@ class FakeBridge:
 
     # --- helpers ----------------------------------------------------------
     def _write_modpack(self) -> None:
-        root = self.ctx.game_dir / "automodpack" / "modpacks" / self.ctx.modpack_name
+        root = self.ctx.game_dir / "automodpack" / "client-generations" / "active"
         marker = root / self.ctx.marker_rel
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text("{}")

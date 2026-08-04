@@ -14,7 +14,7 @@ public class ModpackLoader implements ModpackLoaderService {
 	}
 
 	@Override
-	public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir, FileMetadataCache cache) {
+	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
 		throw new AssertionError("Loader class not found");
 	}
 }

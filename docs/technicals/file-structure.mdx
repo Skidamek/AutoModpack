@@ -6,20 +6,20 @@ Modpack is generated from files inside `~/automodpack/host-modpack/main/` and/or
 Modpack generation means creation of `~/automodpack/host-modpack/automodpack-content.json` which contains metadata of every single file of the modapck. You **should NOT** touch this file manually, edit config instead.
 
 ## Client
-All of downloaded modpacks are kept inside `~/automodpack/modpacks/`.
+Client generation records, CAS objects, overlays, and the fixed active projection are kept inside `~/automodpack/client-generations/`.
 
-All the selected modpack files are copied to `~/.minecraft/` besides **mods** (with some exceptions, due to mod loader limitations)
+The active projection mirrors the selected generation's game-relative paths, including `mods/`. Immutable files are linked from the client CAS when the platform supports it. Editable files use the client overlay only after the player changes them.
 
-If detected, AutoModpack also tries to get rid of most of if not all of duplicated mods from your standard mods folder in favor of AutoModpack's mods folder.
+The game directory receives live copies for files that the loader or game must read there. Standard `mods/` receives only the AutoModpack loader, loader-required copies, and retained user-owned files. There is no per-modpack client directory.
 <Callout>
-It shouldn't cause any crashes, but if you notice that automodpack removes some dependency causing game to crash, please report it!
+AutoModpack removes a live file only when its ownership ledger and content hash prove that the file is still managed by AutoModpack. User-owned or edited files are preserved.
 </Callout>
 
-### Why separate mods folder?
+### Why an active projection?
 
-Mods are separated for three reasons mostly. Such approach mitigates common drawbacks of placing all modpack mods into the standard mods folder, like:
+The selected generation is materialized into one fixed active projection for three reasons:
 1. This way if you (as a modpack/server admin) accidentally make a bad update which would normally make game crash on launch and require manual intervention, you can fix it remotely because modpack is updated before it's loaded, that's not possible to do when all mods are loaded immediately by loader in the default mods folder.
 2. We can update modpack without requiring restart all the time, if there's a pending update while you were not in game, on launch early, automodpack can update modpack and load it afterward thanks to that you don't need to reboot the game to apply updates.
-3. Separation, it's just cleaner this way, you know exactly what mods you have added yourself (client side) and which not - Yeah, there are exceptions due to loader limitations but overall it's cleaner this way.
+3. The active projection is independent of generation identity, so switching or recovering a generation changes one well-defined tree instead of maintaining one physical tree per modpack.
 
-If you really need to load some mod from the standard mods folder, you can use `forceCopyFilesToStandardLocation` option in server config to force specific mods to be copied to standard mods' folder.
+Some loader services cannot be discovered from the projection. AutoModpack copies those files to standard `mods/` only when the loader-specific placement rule requires it; `forceCopyFilesToStandardLocation` can request the same placement explicitly.

@@ -104,15 +104,15 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	public static UpdateTransaction createSelfUpdate(String currentJar, String targetJar, String targetHash, long targetSize, String currentHash) {
+	public static UpdateTransaction createSelfUpdate(String currentPath, String targetPath, String targetHash, long targetSize, String currentHash) {
 		UpdateTransaction transaction = base(Purpose.SELF_UPDATE);
 		List<Operation> operations = new ArrayList<>();
-		operations.add(new Operation(Root.GAME_DIR, "mods/" + targetJar, OperationType.INSTALL_OBJECT, targetHash, targetSize, null));
+		operations.add(new Operation(Root.GAME_DIR, targetPath, OperationType.INSTALL_OBJECT, targetHash, targetSize, null));
 		List<ProjectedFile> finalState = new ArrayList<>();
-		finalState.add(new ProjectedFile(Root.GAME_DIR, "mods/" + targetJar, true, targetHash, targetSize));
-		if (!currentJar.equals(targetJar)) {
-			operations.add(new Operation(Root.GAME_DIR, "mods/" + currentJar, OperationType.DELETE, null, -1, currentHash));
-			finalState.add(new ProjectedFile(Root.GAME_DIR, "mods/" + currentJar, false, null, -1));
+		finalState.add(new ProjectedFile(Root.GAME_DIR, targetPath, true, targetHash, targetSize));
+		if (!currentPath.equals(targetPath)) {
+			operations.add(new Operation(Root.GAME_DIR, currentPath, OperationType.DELETE, null, -1, currentHash));
+			finalState.add(new ProjectedFile(Root.GAME_DIR, currentPath, false, null, -1));
 		}
 		sortOperations(operations);
 		finalState.sort(Comparator.comparing((ProjectedFile projected) -> projected.root().ordinal()).thenComparing(ProjectedFile::relativePath));

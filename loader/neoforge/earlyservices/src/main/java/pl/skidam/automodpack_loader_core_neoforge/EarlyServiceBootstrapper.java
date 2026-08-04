@@ -45,21 +45,21 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			String launchTarget = argValue(arguments, "--launchTarget");
 			if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
 
-			// Run the update/reconcile step before anything below reads the modpack folder, so an
+			// Run the update/reconcile step before anything below reads the active projection, so an
 			// update that changes which mods are early-service mods is reflected in the same boot.
 			ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
 			new Preload();
 			progress.complete();
 
 			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
-			Path modpackMods = storage.activeDirectory().resolve("mods");
-			if (!Files.isDirectory(modpackMods)) return;
+			Path activeModsDirectory = storage.activeDirectory().resolve("mods");
+			if (!Files.isDirectory(activeModsDirectory)) return;
 
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
+			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
 
 			if (earlyServiceJars.isEmpty()) return;
 
-			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the modpack folder in place", earlyServiceJars.size());
+			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 
 			ClassLoader childLoader = appendToFmlClassLoaderChain(earlyServiceJars);
 			if (childLoader == null) {

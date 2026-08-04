@@ -7,8 +7,10 @@ import os
 import random
 import secrets
 import shutil
+import struct
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 
 import docker as docker_py
@@ -471,21 +473,138 @@ def _sha1(path: Path) -> str:
         return hashlib.file_digest(f, "sha1").hexdigest()
 
 
-def _write_staged_manifest(ctx: Context, root: Path, modpack_id: str) -> None:
-    entries = []
+class _CanonicalEncoder:
+    """Small mirror of the core generation identity encoder for test fixtures."""
+
+    def __init__(self):
+        self.data = bytearray()
+
+    def string(self, value: str | None):
+        if value is None:
+            self.data.append(0)
+            return self
+        encoded = value.encode("utf-8")
+        self.data.append(1)
+        self.data.extend(struct.pack(">i", len(encoded)))
+        self.data.extend(encoded)
+        return self
+
+    def integer(self, value: int):
+        self.data.extend(struct.pack(">i", value))
+        return self
+
+    def long(self, value: int):
+        self.data.extend(struct.pack(">q", value))
+        return self
+
+    def boolean(self, value: bool):
+        self.data.append(1 if value else 0)
+        return self
+
+    def digest(self) -> str:
+        return hashlib.sha1(self.data).hexdigest()
+
+
+def _write_strings(encoder: _CanonicalEncoder, values):
+    values = sorted(values)
+    encoder.integer(len(values))
+    for value in values:
+        encoder.string(value)
+
+
+def _staged_generation_id(modpack_id: str, created_at: str, state_digest: str, ledger_digest: str) -> str:
+    notes_digest = hashlib.sha1(b"").hexdigest()
+    return (
+        _CanonicalEncoder()
+        .string("automodpack-generation-v1")
+        .integer(1)
+        .string(modpack_id)
+        .string("")
+        .string(created_at)
+        .string(state_digest)
+        .string(ledger_digest)
+        .string(notes_digest)
+        .string("")
+        .digest()
+    )
+
+
+def _staged_ledger_digest(modpack_id: str, entries: list[dict]) -> str:
+    encoder = _CanonicalEncoder().string("automodpack-ownership-ledger-v1").string(modpack_id).integer(len(entries))
+    for entry in entries:
+        hashes = sorted(entry["historicalHashes"], key=lambda content: (content["sha1"], int(content["size"])))
+        groups = sorted(entry["historicalGroupIds"])
+        encoder.string(entry["logicalPath"]).integer(len(hashes))
+        for content in hashes:
+            encoder.string(content["sha1"]).long(int(content["size"]))
+        encoder.integer(len(groups))
+        for group in groups:
+            encoder.string(group)
+        encoder.string(entry["currentStatus"])
+    return encoder.digest()
+
+
+def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict]) -> str:
+    encoder = (
+        _CanonicalEncoder()
+        .string("automodpack-state-v1")
+        .string(modpack_id)
+        .string(ctx.modpack_name)
+        .string("")
+        .string(ctx.target.loader)
+        .string(_load_ver(ctx.target))
+        .string(ctx.target.minecraft)
+        .integer(1)
+        .string("main")
+        .string(ctx.modpack_name)
+        .string("")
+        .string("")
+        .boolean(True)
+        .boolean(True)
+    )
+    _write_strings(encoder, [])
+    _write_strings(encoder, [])
+    encoder.integer(0).integer(len(files))
+    for entry in files:
+        encoder.string(entry["logicalPath"]).long(int(entry["size"])).string(entry["type"])
+        encoder.boolean(entry["editable"]).boolean(False).boolean(False).string(entry["sha1"]).string("")
+    return encoder.integer(0).digest()
+
+
+def _write_staged_generation(ctx: Context, root: Path, modpack_id: str) -> dict:
+    files = []
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         if path.name == "automodpack-content.json":
             continue
         rel = path.relative_to(root)
-        entries.append({
-            "file": "/" + rel.as_posix(),
+        files.append({
+            "logicalPath": rel.as_posix(),
             "size": str(path.stat().st_size),
             "type": "mod" if rel.parts and rel.parts[0] == "mods" else "config",
             "editable": rel == ctx.marker_rel,
-            "forceCopy": False,
             "sha1": _sha1(path),
-            "murmur": "",
         })
+
+    files.sort(key=lambda entry: entry["logicalPath"])
+    ledger_entries = [
+        {
+            "logicalPath": entry["logicalPath"],
+            "historicalHashes": [{"sha1": entry["sha1"], "size": int(entry["size"])}],
+            "historicalGroupIds": ["main"],
+            "firstPublishedGenerationId": "0" * 40,
+            "lastPublishedGenerationId": "0" * 40,
+            "currentStatus": "PRESENT",
+        }
+        for entry in files
+    ]
+    state_digest = _staged_state_digest(ctx, modpack_id, files)
+    provisional_ledger_digest = _staged_ledger_digest(modpack_id, ledger_entries)
+    created_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    generation_id = _staged_generation_id(modpack_id, created_at, state_digest, provisional_ledger_digest)
+    for entry in ledger_entries:
+        entry["firstPublishedGenerationId"] = generation_id
+        entry["lastPublishedGenerationId"] = generation_id
+
     manifest = {
         "modpackName": ctx.modpack_name,
         "modpackId": modpack_id,
@@ -493,19 +612,68 @@ def _write_staged_manifest(ctx: Context, root: Path, modpack_id: str) -> None:
         "loader": ctx.target.loader,
         "loaderVersion": _load_ver(ctx.target),
         "mcVersion": ctx.target.minecraft,
-        "list": entries,
+        "groups": {
+            "main": {
+                "displayName": ctx.modpack_name,
+                "description": "",
+                "tag": "",
+                "required": True,
+                "recommended": True,
+                "breaksWith": [],
+                "requires": [],
+                "compatiblePlatforms": [],
+                "files": {
+                    entry["logicalPath"]: {
+                        "size": entry["size"],
+                        "type": entry["type"],
+                        "editable": entry["editable"],
+                        "overwriteEditable": False,
+                        "forceCopy": False,
+                        "sha1": entry["sha1"],
+                        "murmur": "",
+                    }
+                    for entry in files
+                },
+            }
+        },
+        "selectionTags": {},
+        "ownershipLedger": {
+            "modpackId": modpack_id,
+            "entries": ledger_entries,
+            "digest": provisional_ledger_digest,
+        },
+        "generation": {
+            "schemaVersion": 1,
+            "generationId": generation_id,
+            "parentGenerationId": "",
+            "createdAt": created_at,
+            "stateDigest": state_digest,
+            "ledgerDigest": provisional_ledger_digest,
+            "patchNotes": "",
+            "patchNotesDigest": hashlib.sha1(b"").hexdigest(),
+            "rollbackTargetGenerationId": "",
+        },
     }
-    (root / "automodpack-content.json").write_text(json.dumps(manifest, indent=2))
+    generation_path = root.parent / "generations" / generation_id / "manifest.json"
+    generation_path.parent.mkdir(parents=True, exist_ok=True)
+    generation_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    objects = root.parent / "objects"
+    objects.mkdir(parents=True, exist_ok=True)
+    for entry in files:
+        object_path = objects / entry["sha1"]
+        if not object_path.is_file():
+            shutil.copy2(root / entry["logicalPath"], object_path)
+    return {"generationId": generation_id, "stateDigest": state_digest, "ledgerDigest": provisional_ledger_digest}
 
 
 @verb("stage_modpack")
 def _v_stage_modpack(ctx: Context, step):
     """Pre-stage a modpack into the client game dir for offline / client-only runs.
 
-    Lays down ``automodpack/modpacks/<modpackId>/`` and writes a client config that
-    selects it with ``updateSelectedModpackOnLaunch=false``, so the client loads
-    the staged modpack on boot without ever contacting a server. Run this before
-    ``launch_client`` in a ``mode: client-only`` scenario.
+    Lays down the fixed active projection plus its immutable generation record and
+    writes a client config that selects it with ``updateSelectedModpackOnLaunch=false``,
+    so the client loads the staged generation on boot without contacting a server.
+    Run this before ``launch_client`` in a ``mode: client-only`` scenario.
 
     Args: ``from`` (a ready modpack dir to copy wholesale, path relative to the
     repo root), ``mods`` (extra jars to drop into the pack's ``mods/`` - each a
@@ -515,8 +683,8 @@ def _v_stage_modpack(ctx: Context, step):
     """
     game = ctx.game_dir
     modpack_id = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(7))
-    root = game / "automodpack" / "modpacks" / modpack_id
-    ctx.vars["modpack_dir"] = f"automodpack/modpacks/{modpack_id}"
+    root = game / "automodpack" / "client-generations" / "active"
+    ctx.vars["active_dir"] = "automodpack/client-generations/active"
     root.mkdir(parents=True, exist_ok=True)
 
     src = step.get("from")
@@ -555,13 +723,23 @@ def _v_stage_modpack(ctx: Context, step):
             for mod in resolved_mods:
                 shutil.copy2(mod, root / "mods" / mod.name)
 
-    manifest_path = root / "automodpack-content.json"
-    if step.get("manifest", False):
-        _write_staged_manifest(ctx, root, modpack_id)
-    elif manifest_path.is_file():
-        manifest = json.loads(manifest_path.read_text())
-        manifest["modpackId"] = modpack_id
-        manifest_path.write_text(json.dumps(manifest, indent=2))
+    (root / "automodpack-content.json").unlink(missing_ok=True)
+    generation = _write_staged_generation(ctx, root, modpack_id)
+    state = {
+        "schemaVersion": 1,
+        "modpackId": modpack_id,
+        "generationId": generation["generationId"],
+        "platform": "linux",
+        "stateDigest": generation["stateDigest"],
+        "ledgerDigest": generation["ledgerDigest"],
+    }
+    (root.parent / "active-state.json").write_text(json.dumps(state, indent=2) + "\n")
+
+    selection_store = game / "automodpack" / "automodpack-client-selection.json"
+    selection_store.write_text(json.dumps({
+        "DO_NOT_CHANGE_IT": 1,
+        "selections": {modpack_id: {"requestedTags": [], "requestedGroups": [], "excludedGroups": []}},
+    }, indent=2) + "\n")
 
     # A client config that selects the staged pack and disables the launch update,
     # so Preload loads it locally (no server contact, no file reconciliation). The
