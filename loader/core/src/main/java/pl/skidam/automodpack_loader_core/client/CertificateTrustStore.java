@@ -10,7 +10,9 @@ import java.util.Objects;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 /** Exact certificate pins owned by the original Minecraft server identity. */
 public final class CertificateTrustStore {
@@ -74,7 +76,7 @@ public final class CertificateTrustStore {
 
 	private static void save() {
 		try {
-			ConfigTools.writeAtomic(knownHostsFile, knownHosts);
+			ConfigTools.writeAtomic(ClientStorage.fromGameDirectory(SmartFileUtils.CWD).knownHostsFile(), knownHosts);
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save known hosts", e);
 		}

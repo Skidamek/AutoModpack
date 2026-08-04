@@ -2,12 +2,8 @@ package pl.skidam.automodpack.client.ui;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
-import static pl.skidam.automodpack_core.Constants.clientSelectionFile;
-import static pl.skidam.automodpack_core.Constants.modpackCatalogueFileName;
-import static pl.skidam.automodpack_core.Constants.modpackHistoryFileName;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,6 +22,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -35,11 +32,12 @@ import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.update.ClientContentHistory;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePreview;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /**
@@ -59,7 +57,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final String modpackId;
 	private final String modpackName;
 	private final Map<String, GroupManifest.Group> groups;
-	private final ClientSelectionStore selectionStore = new ClientSelectionStore(clientSelectionFile);
+	private final ClientStorage storage;
+	private final ClientSelectionStore selectionStore;
 	private final SelectionIntent expectedSelection;
 	private final Consumer<SelectionIntent> selectionAction;
 	private final ModpackUpdater pendingUpdater;
@@ -96,8 +95,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.modpackId = manifest.modpackId();
 		this.modpackName = manifest.modpackName();
 		this.groups = manifest.groups();
+		this.storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+		this.selectionStore = new ClientSelectionStore(storage.selectionFile());
 		this.expectedSelection = expectedSelection == null && initialSelection == null
-				? new ClientSelectionStore(clientSelectionFile).get(modpackId).orElse(null)
+				? selectionStore.get(modpackId).orElse(null)
 				: expectedSelection;
 		this.selectionAction = selectionAction;
 		this.pendingUpdater = pendingUpdater;
@@ -125,10 +126,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return parent;
 		}
 
-		Path contentFile = ModpackUtils.getModpackPath(modpackId).resolve(modpackCatalogueFileName);
-		GroupManifest manifest = Optional.ofNullable(ModpackContentTools.readGenerationRecord(contentFile)).map(record -> record.manifest()).orElse(null);
+		GenerationRecord record = activeGeneration(modpackId);
+		GroupManifest manifest = record == null ? null : record.manifest();
 		if (manifest == null) {
-			LOGGER.info("Modpack {} catalogue is unavailable", modpackId);
+			LOGGER.info("Modpack {} generation record is unavailable", modpackId);
 			return parent;
 		}
 
@@ -136,15 +137,24 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	public static boolean hasModpackManagement() {
-		return modpackHasCatalogue(clientConfig == null ? null : clientConfig.selectedModpackId);
+		return modpackHasGeneration(clientConfig == null ? null : clientConfig.selectedModpackId);
 	}
 
-	private static boolean modpackHasCatalogue(String modpackId) {
+	private static boolean modpackHasGeneration(String modpackId) {
 		if (modpackId == null || modpackId.isBlank()) return false;
+		return activeGeneration(modpackId) != null;
+	}
 
-		GroupManifest manifest = Optional.ofNullable(ModpackContentTools.readGenerationRecord(ModpackUtils.getModpackPath(modpackId).resolve(modpackCatalogueFileName)))
-				.map(record -> record.manifest()).orElse(null);
-		return manifest != null;
+	private static GenerationRecord activeGeneration(String modpackId) {
+		try {
+			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state == null || !modpackId.equals(state.modpackId)) return null;
+			return new ClientGenerationStore(storage).read(state.generationId).orElse(null);
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Could not read the active generation for modpack {}", modpackId, e);
+			return null;
+		}
 	}
 
 	@Override
@@ -344,7 +354,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private ModpackUpdater createUpdater() {
 		try {
-			return new ModpackUpdater(null, null, ModpackUtils.getModpackPath(modpackId));
+			return new ModpackUpdater(null, null, storage);
 		} catch (RuntimeException e) {
 			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			return null;
@@ -397,7 +407,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (!beginManagement()) return;
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
-				ClientContentHistory.History history = ClientContentHistory.read(ModpackUtils.getModpackPath(modpackId).resolve(modpackHistoryFileName));
+				Jsons.ClientGenerationStateFields state = storage.readActiveState();
+				if (state == null || !modpackId.equals(state.modpackId)) throw new IOException("Active generation is unavailable");
+				List<GenerationRecord> history = new ClientGenerationStore(storage).lineage(modpackId, state.generationId);
 				new ScreenManager().history(history, modpackName, (Runnable) this::endManagement);
 			} catch (Exception e) {
 				endManagement();

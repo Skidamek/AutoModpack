@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.modpack.group;
 
-import static pl.skidam.automodpack_core.Constants.modpackCatalogueFileName;
 import static pl.skidam.automodpack_core.Constants.modpackContentFileName;
 
 import java.text.Normalizer;
@@ -115,7 +114,7 @@ public final class GroupManifestValidator {
 			errors.add("Group '" + groupId + "': " + e.getMessage());
 			return false;
 		}
-		if (path.equalsIgnoreCase(modpackContentFileName.toString()) || path.equalsIgnoreCase(modpackCatalogueFileName.toString())) {
+		if (path.equalsIgnoreCase(modpackContentFileName.toString())) {
 			errors.add("Group '" + groupId + "' reserves AutoModpack metadata path: " + path);
 			return false;
 		}

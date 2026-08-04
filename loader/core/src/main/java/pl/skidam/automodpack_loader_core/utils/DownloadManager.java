@@ -15,6 +15,7 @@ import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -57,12 +58,20 @@ public class DownloadManager {
 
 	private final Semaphore semaphore = new Semaphore(0);
 	private final Speedometer speedometer = new Speedometer();
+	private final ClientStorage storage;
 
-	public DownloadManager() {}
+	public DownloadManager() {
+		this(0, ClientStorage.fromGameDirectory(SmartFileUtils.CWD));
+	}
 
 	public DownloadManager(long bytesToDownload) {
+		this(bytesToDownload, ClientStorage.fromGameDirectory(SmartFileUtils.CWD));
+	}
+
+	public DownloadManager(long bytesToDownload, ClientStorage storage) {
 		this.totalBytesToDownload.set(bytesToDownload);
 		this.speedometer.setExpectedBytes(bytesToDownload);
+		this.storage = Objects.requireNonNull(storage, "storage");
 	}
 
 	public void attachDownloadClient(DownloadClient downloadClient) {
@@ -236,7 +245,7 @@ public class DownloadManager {
 	}
 
 	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task) {
-		Path storeFile = clientGenerationObjectsDir.resolve(hashPathPair.hash());
+		Path storeFile = storage.objectsDirectory().resolve(hashPathPair.hash());
 		boolean success = false;
 		boolean interrupted = false;
 
@@ -272,9 +281,9 @@ public class DownloadManager {
 
 		try {
 			try {
-				Files.createDirectories(clientGenerationObjectsDir);
-				Files.createDirectories(clientGenerationStagingDir);
-				tempStoreFile = Files.createTempFile(clientGenerationStagingDir, "." + hashPathPair.hash() + ".", ".tmp");
+				Files.createDirectories(storage.objectsDirectory());
+				Files.createDirectories(storage.incomingDirectory());
+				tempStoreFile = Files.createTempFile(storage.incomingDirectory(), "." + hashPathPair.hash() + ".", ".tmp");
 				activeTemporaryFiles.put(hashPathPair, tempStoreFile);
 			} catch (IOException e) {
 				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;

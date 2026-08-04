@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransaction.LegacyDummyTarget;
@@ -48,10 +49,8 @@ class LegacyDummyFilesTest {
 		registry.files.add(dummy.toAbsolutePath().normalize().toString());
 		ConfigTools.writeAtomic(registryPath, registry);
 
-		UpdateTransaction transaction = UpdateTransaction.createLegacyDummyCleanup(List.of(new LegacyDummyTarget(Root.MODS_DIR, "legacy.jar")));
-		UpdateTransactionExecutor executor = new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(game, null, mods, store, automodpack,
-				privateDirectory.resolve("update-transaction.json"), privateDirectory.resolve("update-transaction-result.json"),
-				automodpack.resolve("automodpack-client.json"), null, null, null, null));
+		UpdateTransaction transaction = UpdateTransaction.createLegacyDummyCleanup(List.of(new LegacyDummyTarget(Root.GAME_DIR, "mods/legacy.jar")));
+		UpdateTransactionExecutor executor = new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(ClientStorage.fromGameDirectory(game), null));
 
 		assertTrue(executor.commit(transaction).success());
 		assertFalse(Files.exists(dummy));

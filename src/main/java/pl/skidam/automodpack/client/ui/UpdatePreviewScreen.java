@@ -181,9 +181,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	private static String rootText(UpdatePlan.Root root) {
 		return switch (root) {
-			case MODPACK_DIR -> "modpack";
+			case PROJECTION -> "active";
+			case OVERLAY -> "editable overlay";
 			case GAME_DIR -> "game";
-			case MODS_DIR -> "mods";
 			case STORE_DIR -> "cas";
 			case AUTOMODPACK_DIR -> "automodpack";
 		};

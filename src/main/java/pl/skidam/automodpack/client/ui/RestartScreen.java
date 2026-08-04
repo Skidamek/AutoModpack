@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.client.ui;
 
-import java.nio.file.Path;
-
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 
@@ -16,16 +14,14 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class RestartScreen extends VersionedScreen {
 
-	private final Path modpackDir;
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
 	private static Button cancelButton;
 	private static Button restartButton;
 	private static Button changelogsButton;
 
-	public RestartScreen(Path modpackDir, UpdateType updateType, Changelogs changelogs) {
+	public RestartScreen(UpdateType updateType, Changelogs changelogs) {
 		super(VersionedText.literal("RestartScreen"));
-		this.modpackDir = modpackDir;
 		this.updateType = updateType;
 		this.changelogs = changelogs;
 
@@ -59,7 +55,7 @@ public class RestartScreen extends VersionedScreen {
 
 		changelogsButton = buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.translatable("automodpack.changelog.view"),
 				button -> {
-					new ScreenManager().changelog(this, modpackDir, changelogs);
+					new ScreenManager().changelog(this, changelogs);
 				});
 	}
 
