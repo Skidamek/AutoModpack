@@ -12,6 +12,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -21,6 +22,9 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.UpdatePlanner;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -43,22 +47,24 @@ public class ModpackUtils {
 	}
 
 	// Fast and friendly method to check if the modpack is up to date without modifying anything on disk
-	public static UpdateCheckResult isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+	public static UpdateCheckResult isUpdate(Jsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
-
-		var optionalClientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
-		if (optionalClientModpackContentFile.isEmpty() || !Files.exists(optionalClientModpackContentFile.get())) {
+		Path modpackDir = storage.activeDirectory();
+		try {
+			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state == null || !Files.isDirectory(modpackDir, LinkOption.NOFOLLOW_LINKS)) {
+				return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
+			}
+		} catch (IOException e) {
+			LOGGER.warn("Cannot read active client generation state", e);
 			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 		}
-
-		Jsons.ModpackContentFields clientModpackContent = ModpackContentTools.read(optionalClientModpackContentFile.get());
-		if (clientModpackContent == null) return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 
 		LOGGER.info("Verifying content against server list...");
 		var start = System.currentTimeMillis();
 
 		Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
-		Set<String> changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, clientModpackContent);
+		Set<String> changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, modpackDir);
 
 		// Group & Sort Server Files (Optimizes Disk Seek Pattern)
 		// Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
@@ -66,7 +72,7 @@ public class ModpackUtils {
 		Map<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> itemsByDir = serverModpackContent.list.stream()
 				.collect(Collectors.groupingBy(item -> SmartFileUtils.getPath(modpackDir, item.file).getParent(), TreeMap::new, Collectors.toList()));
 
-		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+		try (var cache = FileMetadataCache.open(storage.hashCacheFile())) {
 
 			// Process Directory by Directory
 			for (Map.Entry<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
@@ -151,22 +157,27 @@ public class ModpackUtils {
 
 		LOGGER.info("Checking for deleted files...");
 
-		Set<String> serverFileSet = serverModpackContent.list.stream().map(item -> item.file).collect(Collectors.toSet());
-
-		for (Jsons.ModpackContentFields.ModpackContentItem clientItem : clientModpackContent.list) {
-			if (!serverFileSet.contains(clientItem.file)) {
-				LOGGER.info("Found file marked for deletion: {}", clientItem.file);
-				return new UpdateCheckResult(true, Set.of(), Set.of());
+		Set<String> serverFileSet = serverModpackContent.list.stream().map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet());
+		try {
+			try (Stream<Path> projectedFiles = Files.walk(modpackDir)) {
+				for (Path path : projectedFiles.filter(file -> Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)).toList()) {
+					String relative = UpdatePlanner.normalize(modpackDir.relativize(path).toString());
+					if (!serverFileSet.contains(relative)) {
+						LOGGER.info("Found projected file marked for deletion: {}", relative);
+						return new UpdateCheckResult(true, Set.of(), Set.of());
+					}
+				}
 			}
+		} catch (IOException e) {
+			LOGGER.warn("Failed to inspect the active projection for deleted files", e);
+			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 		}
 
 		LOGGER.info("Modpack {} is up to date! Took {} ms", modpackDir, System.currentTimeMillis() - start);
 		return new UpdateCheckResult(false, Set.of(), Set.of());
 	}
 
-	static Set<String> findChangedOverwriteEditableFiles(Collection<Jsons.ModpackContentFields.ModpackContentItem> serverItems,
-			Jsons.ModpackContentFields installedContent) {
-		if (installedContent == null || installedContent.list == null) return Set.of();
+	static Set<String> findChangedOverwriteEditableFiles(Collection<Jsons.ModpackContentFields.ModpackContentItem> serverItems, Path projection) {
 
 		Set<String> overwriteEditablePaths = new HashSet<>();
 		for (var item : serverItems) {
@@ -174,24 +185,20 @@ public class ModpackUtils {
 		}
 		if (overwriteEditablePaths.isEmpty()) return Set.of();
 
-		Map<String, String> installedHashes = new HashMap<>(overwriteEditablePaths.size());
-		for (var item : installedContent.list) {
-			if (overwriteEditablePaths.contains(item.file)) installedHashes.put(item.file, item.sha1);
-		}
-
 		Set<String> changedPaths = new HashSet<>();
 		for (var item : serverItems) {
 			if (!item.editable || !item.overwriteEditable) continue;
-			String installedHash = installedHashes.get(item.file);
+			Path path = SmartFileUtils.getPath(projection, item.file);
+			String installedHash = HashUtils.getHash(path);
 			if (!item.sha1.equalsIgnoreCase(installedHash)) changedPaths.add(item.file);
 		}
 		return changedPaths;
 	}
 
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
-	public static void populateStoreFromCWD(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache) {
+	public static void populateStoreFromCWD(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache, ClientStorage storage) {
 		for (var entry : filesToUpdate) {
-			Path storeFile = SmartFileUtils.getPath(clientGenerationObjectsDir, entry.sha1);
+			Path storeFile = storage.objectsDirectory().resolve(entry.sha1);
 			long expectedSize = Long.parseLong(entry.size);
 
 			if (isValidFile(storeFile, expectedSize, entry.sha1, cache)) {
@@ -222,10 +229,10 @@ public class ModpackUtils {
 
 	// Returns the set of files that are missing or corrupt in the store.
 	public static Set<Jsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck,
-			FileMetadataCache cache) {
+			FileMetadataCache cache, ClientStorage storage) {
 		Set<Jsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
-			Path storeFile = SmartFileUtils.getPath(clientGenerationObjectsDir, entry.sha1);
+			Path storeFile = storage.objectsDirectory().resolve(entry.sha1);
 			if (isValidFile(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
 			if (Files.exists(storeFile)) {
 				try {
@@ -249,9 +256,8 @@ public class ModpackUtils {
 		}
 	}
 
-	public static Jsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, Path modpackDirToSelect, Jsons.ConnectionInfo connectionInfo) {
+	public static Jsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, Jsons.ConnectionInfo connectionInfo) {
 		ModpackId.requireValid(modpackId);
-		if (!modpackDirToSelect.getFileName().toString().equals(modpackId)) throw new IllegalArgumentException("Modpack directory does not match its ID");
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing");
 
 		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
@@ -260,13 +266,9 @@ public class ModpackUtils {
 		return updatedConfig;
 	}
 
-	public static Path getModpackPath(String modpackId) {
-		return modpacksDir.resolve(ModpackId.requireValid(modpackId));
-	}
-
-	public static ManifestFetchResult requestServerModpackContent(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser) {
+	public static ManifestFetchResult requestServerModpackContent(ClientStorage storage, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser) {
 		try {
-			return requestServerModpackContentAsync(connectionInfo, secret, allowAskingUser).get();
+			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser).get();
 		} catch (Exception e) {
 			Throwable cause = DownloadClient.unwrap(e);
 			LOGGER.error("Error while getting server modpack content", cause);
@@ -274,9 +276,9 @@ public class ModpackUtils {
 		}
 	}
 
-	public static Optional<Jsons.CompleteModpackContentFields> refreshServerModpackContent(DownloadClient client, byte[][] fileHashes) {
+	public static Optional<Jsons.CompleteModpackContentFields> refreshServerModpackContent(ClientStorage storage, DownloadClient client, byte[][] fileHashes) {
 		try {
-			return fetchModpackContentAsync(client, current -> current.requestRefresh(fileHashes, modpackContentTempFile)).get();
+			return fetchModpackContentAsync(storage, client, current -> current.requestRefresh(fileHashes, storage.modpackContentTempFile())).get();
 		} catch (Exception e) {
 			LOGGER.error("Error while refreshing server modpack content", DownloadClient.unwrap(e));
 			return Optional.empty();
@@ -285,7 +287,7 @@ public class ModpackUtils {
 
 	// ---- Async versions (non-blocking, used by login packet flow) ----
 
-	public static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
+	public static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(ClientStorage storage, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			boolean allowAskingUser) {
 		if (secret == null) {
 			return CompletableFuture.completedFuture(
@@ -297,7 +299,7 @@ public class ModpackUtils {
 		}
 
 		return createDownloadClient(connectionInfo, secret.secretBytes(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
-				.thenCompose(client -> fetchModpackContentAsync(client, current -> current.downloadFile(new byte[0], modpackContentTempFile, null)).handle((content, error) -> {
+				.thenCompose(client -> fetchModpackContentAsync(storage, client, current -> current.downloadFile(new byte[0], storage.modpackContentTempFile(), null)).handle((content, error) -> {
 					if (error != null || content.isEmpty()) {
 						client.close();
 						Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : DownloadClient.unwrap(error);
@@ -313,7 +315,7 @@ public class ModpackUtils {
 				});
 	}
 
-	private static CompletableFuture<Optional<Jsons.CompleteModpackContentFields>> fetchModpackContentAsync(DownloadClient client,
+	private static CompletableFuture<Optional<Jsons.CompleteModpackContentFields>> fetchModpackContentAsync(ClientStorage storage, DownloadClient client,
 			Function<DownloadClient, CompletableFuture<Path>> operation) {
 		CompletableFuture<Path> operationFuture;
 		try {
@@ -327,7 +329,7 @@ public class ModpackUtils {
 			return Optional.ofNullable(content);
 		}, DownloadClient.NET_EXECUTOR).whenComplete((content, error) -> {
 			try {
-				Files.deleteIfExists(modpackContentTempFile);
+				Files.deleteIfExists(storage.modpackContentTempFile());
 			} catch (IOException e) {
 				LOGGER.warn("Failed to remove temporary modpack content", e);
 			}

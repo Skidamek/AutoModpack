@@ -106,7 +106,7 @@ class UpdatePreviewTest {
 		baselineEntry.absent = true;
 		baseline.entries = new ArrayList<>(List.of(baselineEntry));
 		Map<FileKey, FileState> files = Map.of(
-				new FileKey(Root.MODPACK_DIR, "config/removed.json"), new FileState(OLD_HASH, 7, true, false),
+				new FileKey(Root.PROJECTION, "config/removed.json"), new FileState(OLD_HASH, 7, true, false),
 				new FileKey(Root.GAME_DIR, "config/removed.json"), new FileState(OLD_HASH, 7, true, false));
 		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), new Jsons.ClientConfigFieldsV3()));
 
@@ -129,7 +129,7 @@ class UpdatePreviewTest {
 		baselineEntry.size = 7;
 		baseline.entries = List.of(baselineEntry);
 		Map<FileKey, FileState> files = Map.of(
-				new FileKey(Root.MODPACK_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true, false),
+				new FileKey(Root.PROJECTION, "config/kept.json"), new FileState(OLD_HASH, 7, true, false),
 				new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true, false));
 		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(OLD_HASH), new Jsons.ClientConfigFieldsV3()));
 

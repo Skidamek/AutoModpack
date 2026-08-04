@@ -32,18 +32,18 @@ class UpdatePlannerTest {
 						entry("mods/new.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT),
 						entry("config/kept.json", OTHER_HASH, 4, OwnershipLedger.Status.PRESENT)));
 		Map<FileKey, FileState> files = new LinkedHashMap<>();
-		files.put(new FileKey(Root.MODS_DIR, "old.jar"), new FileState(OLD_HASH, 8, true, true));
-		files.put(new FileKey(Root.MODPACK_DIR, "mods/new.jar"), new FileState(TARGET_HASH, 9, true, true));
+		files.put(new FileKey(Root.GAME_DIR, "mods/old.jar"), new FileState(OLD_HASH, 8, true, true));
+		files.put(new FileKey(Root.PROJECTION, "mods/new.jar"), new FileState(TARGET_HASH, 9, true, true));
 		files.put(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OTHER_HASH, 4, true, false));
 
 		UpdatePlan plan = UpdatePlanner.plan(input(target, files));
 
-		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.MODS_DIR
-				&& operation.relativePath().equals("old.jar") && operation.operation() == OperationType.DELETE
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR
+				&& operation.relativePath().equals("mods/old.jar") && operation.operation() == OperationType.DELETE
 				&& OLD_HASH.equals(operation.expectedExistingHash())));
 		assertTrue(plan.restartReasons().contains(RestartReason.APPLIED_SERVER_DELETIONS));
-		assertEquals(List.of(new Preservation(Root.MODS_DIR, "old.jar", OLD_HASH, 8)), plan.preservations());
-		assertEquals(List.of(new BaselineCapture(Root.MODS_DIR, "old.jar", OLD_HASH, 8, false)), plan.baselineCaptures());
+		assertEquals(List.of(new Preservation(Root.GAME_DIR, "mods/old.jar", OLD_HASH, 8)), plan.preservations());
+		assertEquals(List.of(new BaselineCapture(Root.GAME_DIR, "mods/old.jar", OLD_HASH, 8, false)), plan.baselineCaptures());
 	}
 
 	@Test
@@ -66,11 +66,11 @@ class UpdatePlannerTest {
 		assertTrue(UpdatePlanner.managedCleanupKey("config/changed.json").isPresent());
 		assertTrue(UpdatePlanner.managedCleanupKey("config/size.json").isPresent());
 		assertTrue(UpdatePlanner.managedCleanupKey("saves/world.dat").isEmpty());
-		assertEquals(Optional.of(new FileKey(Root.MODS_DIR, "old.jar")), UpdatePlanner.managedCleanupKey("mods/nested/old.jar"));
+		assertEquals(Optional.of(new FileKey(Root.GAME_DIR, "mods/nested/old.jar")), UpdatePlanner.managedCleanupKey("mods/nested/old.jar"));
 	}
 
 	@Test
-	void editableSelectionPreservationRemainsSeparateFromLedgerCleanup() {
+	void editedEditableFilesBecomeLineageOverlays() {
 		String editedOldHash = "5555555555555555555555555555555555555555";
 		String editedTargetHash = "6666666666666666666666666666666666666666";
 		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(Set.of(
@@ -87,17 +87,18 @@ class UpdatePlannerTest {
 		previous.parentGenerationId = "";
 		previous.stateDigest = "4".repeat(40);
 		previous.ownershipLedger = ledgerFor("old1234", entry("config/settings.json", OLD_HASH, 6, OwnershipLedger.Status.PRESENT));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(editedOldHash, 6, true, false),
-				new FileKey(Root.MODPACK_DIR, "config/settings.json"), new FileState(editedTargetHash, 7, true, false));
-		UpdatePlanner.Input input = new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(),
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(editedTargetHash, 7, true, false),
+				new FileKey(Root.PROJECTION, "config/settings.json"), new FileState(editedTargetHash, 7, true, false));
+		UpdatePlanner.Input input = new UpdatePlanner.Input(null, target, files,
+				Map.of("config/settings.json", new FileState(editedOldHash, 6, true, false)), Set.of(), List.of(), List.of(), List.of(),
 				new UpdatePlanner.SelectionContext("old1234", previous), new Jsons.ClientConfigFieldsV3());
 
 		UpdatePlan plan = UpdatePlanner.plan(input);
 
-		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.AUTOMODPACK_DIR
-				&& operation.relativePath().equals("modpacks/old1234/config/settings.json") && operation.expectedObjectHash().equals(editedOldHash)));
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.OVERLAY
+				&& operation.relativePath().equals("config/settings.json") && operation.expectedObjectHash().equals(editedOldHash)));
 		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR
-				&& operation.relativePath().equals("config/settings.json") && operation.expectedObjectHash().equals(editedTargetHash)));
+				&& operation.relativePath().equals("config/settings.json") && operation.expectedObjectHash().equals(editedOldHash)));
 		assertTrue(plan.restartReasons().contains(RestartReason.SELECTED_MODPACK));
 	}
 
