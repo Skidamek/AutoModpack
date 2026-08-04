@@ -11,31 +11,25 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+/** Explicit maintenance for the client CAS. Transaction workspaces are separate and are never swept as CAS staging. */
 public final class ClientObjectStore {
 	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
-
 	private final Path objectsDirectory;
-	private final Path stagingDirectory;
 
-	public record CollectionResult(int objectsBefore, int objectsDeleted, int stagingFilesDeleted) {
+	public record CollectionResult(int objectsBefore, int objectsDeleted) {
 		public int objectsAfter() {
 			return objectsBefore - objectsDeleted;
 		}
 	}
 
-	public ClientObjectStore(Path objectsDirectory, Path stagingDirectory) {
+	public ClientObjectStore(Path objectsDirectory) {
 		this.objectsDirectory = Objects.requireNonNull(objectsDirectory).toAbsolutePath().normalize();
-		this.stagingDirectory = Objects.requireNonNull(stagingDirectory).toAbsolutePath().normalize();
-		if (this.objectsDirectory.startsWith(this.stagingDirectory) || this.stagingDirectory.startsWith(this.objectsDirectory))
-			throw new IllegalArgumentException("Managed object and staging directories must be separate");
 	}
 
 	public CollectionResult collect(Set<String> retainedHashes) throws IOException {
 		Set<String> retained = new HashSet<>();
 		for (String hash : retainedHashes) retained.add(normalizeHash(hash));
-		ensureManagedDirectory(objectsDirectory, "client object");
-		ensureManagedDirectory(stagingDirectory, "client staging");
-
+		ensureManagedDirectory(objectsDirectory);
 		int objectsBefore = 0;
 		int objectsDeleted = 0;
 		try (Stream<Path> files = Files.list(objectsDirectory)) {
@@ -50,15 +44,7 @@ public final class ClientObjectStore {
 				}
 			}
 		}
-
-		int stagingFilesDeleted = 0;
-		try (Stream<Path> files = Files.list(stagingDirectory)) {
-			for (Path file : files.toList()) {
-				if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) continue;
-				if (Files.deleteIfExists(file)) stagingFilesDeleted++;
-			}
-		}
-		return new CollectionResult(objectsBefore, objectsDeleted, stagingFilesDeleted);
+		return new CollectionResult(objectsBefore, objectsDeleted);
 	}
 
 	public static String normalizeHash(String sha1) {
@@ -66,10 +52,9 @@ public final class ClientObjectStore {
 		return sha1.toLowerCase(Locale.ROOT);
 	}
 
-	private static void ensureManagedDirectory(Path directory, String description) throws IOException {
-		if (Files.isSymbolicLink(directory)) throw new IOException("Managed " + description + " directory cannot be a symbolic link: " + directory);
+	private static void ensureManagedDirectory(Path directory) throws IOException {
+		if (Files.isSymbolicLink(directory)) throw new IOException("Client object directory cannot be a symbolic link: " + directory);
 		Files.createDirectories(directory);
-		if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Managed " + description + " directory is not a regular directory: " + directory);
+		if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client object directory is not a directory: " + directory);
 	}
 }

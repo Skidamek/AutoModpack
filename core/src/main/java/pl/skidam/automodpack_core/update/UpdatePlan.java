@@ -43,9 +43,9 @@ public record UpdatePlan(
 	}
 
 	public enum Root {
-		MODPACK_DIR,
+		PROJECTION,
+		OVERLAY,
 		GAME_DIR,
-		MODS_DIR,
 		STORE_DIR,
 		AUTOMODPACK_DIR
 	}

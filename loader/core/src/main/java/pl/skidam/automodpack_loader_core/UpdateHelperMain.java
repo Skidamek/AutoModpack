@@ -1,17 +1,14 @@
 package pl.skidam.automodpack_loader_core;
 
-import static pl.skidam.automodpack_core.Constants.transactionFile;
-import static pl.skidam.automodpack_core.Constants.transactionResultFile;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateExecutionException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
-import pl.skidam.automodpack_core.update.UpdateTransactionResult;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public final class UpdateHelperMain {
@@ -35,7 +32,8 @@ public final class UpdateHelperMain {
 			if (parentPid <= 0 || parentPid == ProcessHandle.current().pid()) throw new IOException("Invalid parent PID");
 			ProcessHandle.of(parentPid).ifPresent(parent -> parent.onExit().join());
 
-			Path persistedPath = SmartFileUtils.CWD.resolve(transactionFile);
+			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			Path persistedPath = storage.transactionFile();
 			UpdateTransaction transaction = ConfigTools.read(persistedPath, UpdateTransaction.class)
 					.orElseThrow(() -> new IOException("Persisted update transaction is missing"));
 			if (!expectedTransactionId.equals(transaction.transactionId)) throw new IOException("Persisted transaction UUID does not match helper invocation");
@@ -46,12 +44,10 @@ public final class UpdateHelperMain {
 			for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
 				UpdateTransactionExecutor.Execution execution = executor.recover(transaction);
 				if (execution.success()) {
-					writeResult(new UpdateTransactionResult(transaction.transactionId, UpdateTransactionResult.Status.SUCCESS, null, null, null));
 					return 0;
 				}
 				if (attempt == MAX_ATTEMPTS) {
-					writeResult(new UpdateTransactionResult(transaction.transactionId, UpdateTransactionResult.Status.FAILED, execution.operation(),
-							execution.blockedPath() == null ? null : execution.blockedPath().toString(), execution.message()));
+					recordFailure(storage, transaction, execution.operation(), execution.blockedPath() == null ? null : execution.blockedPath().toString(), execution.message());
 					return 1;
 				}
 				Thread.sleep(backoff);
@@ -66,7 +62,9 @@ public final class UpdateHelperMain {
 				path = executionFailure.path() == null ? null : executionFailure.path().toString();
 			}
 			try {
-				writeResult(new UpdateTransactionResult(expectedTransactionId, UpdateTransactionResult.Status.FAILED, operation, path, failure.toString()));
+				ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+				UpdateTransaction transaction = ConfigTools.read(storage.transactionFile(), UpdateTransaction.class).orElse(null);
+				if (transaction != null && expectedTransactionId.equals(transaction.transactionId)) recordFailure(storage, transaction, operation, path, failure.toString());
 			} catch (Exception ignored) {
 				failure.addSuppressed(ignored);
 			}
@@ -75,7 +73,11 @@ public final class UpdateHelperMain {
 		}
 	}
 
-	private static void writeResult(UpdateTransactionResult result) throws IOException {
-		ConfigTools.writeAtomic(SmartFileUtils.CWD.resolve(transactionResultFile), result);
+	private static void recordFailure(ClientStorage storage, UpdateTransaction transaction, String operation, String path, String message) throws IOException {
+		transaction.resultStatus = UpdateTransaction.Status.FAILED;
+		transaction.resultOperation = operation;
+		transaction.resultPath = path;
+		transaction.resultMessage = message;
+		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 	}
 }

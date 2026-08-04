@@ -61,7 +61,7 @@ public record UpdatePreview(
 
 	public long uncachedAcquisitionBytes() {
 		return plan.operations().stream()
-				.filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT && operation.root() == Root.MODPACK_DIR && operation.expectedExistingHash() == null)
+				.filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT && operation.root() == Root.PROJECTION && operation.expectedExistingHash() == null)
 				.mapToLong(Operation::expectedSize).sum();
 	}
 

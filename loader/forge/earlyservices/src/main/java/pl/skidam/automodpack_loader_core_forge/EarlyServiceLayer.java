@@ -42,8 +42,10 @@ import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
@@ -161,12 +163,11 @@ public final class EarlyServiceLayer {
 		if (!BOOTSTRAPPED.compareAndSet(false, true)) return;
 
 		try {
-			// selectedModpackDir is published by Preload (run just before this) and set only when a
-			// modpack is selected on a client.
-			Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
-			if (modpackMods == null || !Files.isDirectory(modpackMods)) return;
+			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			Path modpackMods = storage.activeDirectory().resolve("mods");
+			if (!Files.isDirectory(modpackMods)) return;
 
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, EarlyServiceLayer::eligibleForInPlace);
+			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
 
 			if (earlyServiceJars.isEmpty()) return;
 
