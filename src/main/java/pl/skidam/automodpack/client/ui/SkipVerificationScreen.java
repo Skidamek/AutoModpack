@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class SkipVerificationScreen extends VersionedScreen {
+	private static final int PANEL_WIDTH = 500;
 	private final Screen verificationScreen;
 	private final Runnable validatedCallback;
 	private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE,
@@ -56,7 +57,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 		);
 		this.textField.setMaxLength(128);
 
-		this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 150, 20,
+		this.backButton = buttonWidget(this.width / 2 - 155, this.height - 48, 150, 20,
 				VersionedText.translatable("automodpack.back"),
 				button -> {
 					assert this.minecraft != null;
@@ -64,7 +65,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 				}
 		);
 
-		this.confirmButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 80, 150, 20,
+		this.confirmButton = buttonWidget(this.width / 2 + 5, this.height - 48, 150, 20,
 				VersionedText.translatable("automodpack.skip"),
 				button -> confirmSkip());
 		this.confirmButton.active = false;
@@ -84,6 +85,11 @@ public class SkipVerificationScreen extends VersionedScreen {
 		} else {
 			this.confirmButton.setMessage(VersionedText.translatable("automodpack.skip"));
 		}
+	}
+
+	@Override
+	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+		drawPanel(matrices, PANEL_WIDTH, this.height / 2 - 112, this.height - 64);
 	}
 
 	private void confirmSkip() {

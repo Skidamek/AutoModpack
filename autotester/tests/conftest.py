@@ -90,11 +90,6 @@ class FakeBridge:
                 "buttons": [{"id": 5, "text": "Continue", "enabled": True, "visible": True}],
                 "textFields": [],
             },
-            "preview_final": {
-                "screenClass": "UpdatePreviewScreen",
-                "buttons": [{"id": 5, "text": "Continue", "enabled": True, "visible": True}],
-                "textFields": [],
-            },
             "restart": {
                 "screenClass": "RestartScreen",
                 "buttons": [
@@ -125,8 +120,6 @@ class FakeBridge:
             self.screen = "preview"
         elif element_id == 5:
             if self.screen == "preview":
-                self.screen = "preview_final"
-            else:
                 self._write_modpack()
                 self.screen = "restart"
         elif element_id == 4:

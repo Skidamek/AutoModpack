@@ -10,6 +10,7 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class DangerScreen extends VersionedScreen {
+	private static final int PANEL_WIDTH = 440;
 
 	private final ModpackUpdater modpackUpdater;
 	private boolean confirmationFinished;
@@ -25,15 +26,20 @@ public class DangerScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 115, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.cancel"),
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 115, this.height - 48, 120, 20, VersionedText.translatable("automodpack.danger.cancel"),
 				button -> cancelConfirmation()));
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20,
+		this.addRenderableWidget(buttonWidget(this.width / 2 + 15, this.height - 48, 120, 20,
 				VersionedText.translatable("automodpack.danger.confirm").withStyle(ChatFormatting.BOLD), button -> startUpdate()));
 	}
 
 	private void startUpdate() {
 		modpackUpdater.startConfirmedUpdate();
+	}
+
+	@Override
+	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+		drawPanel(matrices, PANEL_WIDTH, this.height / 2 - 92, this.height - 64);
 	}
 
 	private void cancelConfirmation() {

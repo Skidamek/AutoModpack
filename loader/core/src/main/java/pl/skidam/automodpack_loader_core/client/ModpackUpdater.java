@@ -450,6 +450,7 @@ public class ModpackUpdater implements AutoCloseable {
 				return;
 			}
 			requireLiveConnection();
+			new ScreenManager().waiting();
 			if (requestUpdatePreview(filesToUpdate)) return;
 			LOGGER.warn("Update preview was not shown; leaving the installed modpack unchanged");
 			close();
@@ -506,15 +507,7 @@ public class ModpackUpdater implements AutoCloseable {
 			}
 
 			PreparedPlan finalPlan = buildPlan(cache, modCache, selectedTarget.flatTarget());
-			if (!previewPlan.equals(finalPlan)) {
-				if (!requestPreparedPlanPreview(finalPlan, () -> executePreparedPlanAfterDownload(finalPlan), () -> {
-					close();
-					if (firstConnection) new ScreenManager().title();
-				})) {
-					throw new IOException("The update preview screen is unavailable");
-				}
-				return;
-			}
+			if (!previewPlan.equals(finalPlan)) LOGGER.info("The verified local objects changed the prepared plan; applying the final plan without reopening the update preview");
 
 			ApplyResult applyResult = applyPreparedPlan(finalPlan, selectedTarget);
 
@@ -532,21 +525,6 @@ public class ModpackUpdater implements AutoCloseable {
 		} catch (Exception e) {
 			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
 			LOGGER.error("Critical error during modpack update", e);
-		} finally {
-			close();
-		}
-	}
-
-	private void executePreparedPlanAfterDownload(PreparedPlan prepared) {
-		try {
-			ApplyResult applyResult = applyPreparedPlan(prepared, selectedTarget);
-			restartAfterApply(applyResult);
-		} catch (UpdateDeferredException e) {
-			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(storage.activeDirectory(), UpdateType.UPDATE, changelogs).restart(preload);
-		} catch (Exception e) {
-			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
-			LOGGER.error("Critical error while applying the final modpack update plan", e);
 		} finally {
 			close();
 		}

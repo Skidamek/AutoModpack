@@ -49,6 +49,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
  */
 public class ModpackSelectionScreen extends VersionedScreen {
 
+	private static final int PANEL_WIDTH = 440;
 	private static final int ROW_HEIGHT = 24;
 	private static final int ROW_WIDTH = 320;
 
@@ -178,7 +179,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int pageCount = Math.max(1, (int) Math.ceil((double) rows.size() / rowsPerPage));
 		if (page >= pageCount) page = pageCount - 1;
 
-		int x = this.width / 2 - ROW_WIDTH / 2;
+		int x = Math.max(6, (this.width - ROW_WIDTH) / 2);
 		int start = page * rowsPerPage;
 
 		for (int i = start; i < Math.min(rows.size(), start + rowsPerPage); i++) {
@@ -251,6 +252,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 		this.addRenderableWidget(buttonWidget(this.width / 2 + 55, this.height - 28, 100, 20,
 				VersionedText.translatable(selectionAction == null ? "automodpack.selection.save" : "automodpack.selection.preview").withStyle(ChatFormatting.BOLD), press -> save()));
+	}
+
+	@Override
+	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+		drawPanel(matrices, PANEL_WIDTH, 8, saved ? this.height - 8 : this.height - (selectionAction == null ? 98 : 50));
 	}
 
 	@Override
@@ -576,6 +582,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				? VersionedText.translatable("automodpack.selection.title")
 				: VersionedText.literal(modpackName + " – ").append(VersionedText.translatable("automodpack.selection.title"));
 		drawCenteredTextWithShadow(matrices, this.font, header.withStyle(ChatFormatting.BOLD), this.width / 2, 18, TextColors.WHITE);
+		drawDivider(matrices, PANEL_WIDTH, 28);
 
 		if (saved) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.saved").withStyle(ChatFormatting.GREEN), this.width / 2, this.height / 2 - 30,

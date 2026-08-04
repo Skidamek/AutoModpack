@@ -16,6 +16,7 @@ import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 
 public class ChangelogScreen extends VersionedScreen {
+	private static final int PANEL_WIDTH = 600;
 
 	private final Screen parent;
 	private final Changelogs changelogs;
@@ -100,6 +101,11 @@ public class ChangelogScreen extends VersionedScreen {
 	}
 
 	@Override
+	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+		drawPanel(matrices, PANEL_WIDTH, 2, this.height - 42);
+	}
+
+	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		/*? if <26.1 {*/
 		/*this.listEntryWidget.render(
@@ -120,6 +126,7 @@ public class ChangelogScreen extends VersionedScreen {
 
 		// Draw summary of added/removed mods
 		drawSummaryOfChanges(matrices);
+		drawDivider(matrices, PANEL_WIDTH, 43);
 	}
 
 	private void drawSummaryOfChanges(VersionedMatrices matrices) {
