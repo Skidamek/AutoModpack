@@ -26,8 +26,8 @@ class ModFileCacheTest {
 		writeMod(first);
 		Files.copy(first, second);
 
-		try (FileMetadataCache hashCache = FileMetadataCache.open(temporaryDirectory.resolve("hash-cache.db"));
-				ModFileCache modCache = ModFileCache.open(temporaryDirectory.resolve("mod-cache.db"))) {
+		try (FileMetadataCache hashCache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"));
+				ModFileCache modCache = ModFileCache.open(temporaryDirectory.resolve("mod-metadata"))) {
 			FileInspection.Mod firstMod = modCache.getOrComputeMod(first, hashCache);
 			FileInspection.Mod secondMod = modCache.getOrComputeMod(second, hashCache);
 

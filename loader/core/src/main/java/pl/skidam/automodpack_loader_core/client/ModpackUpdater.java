@@ -483,7 +483,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 
 		// 2. Filter modpack mods excluding those already present in standard mods
-		Path activeModsDirectory = storage.activeDirectory().resolve("mods");
+		Path activeModsDirectory = storage.activePath("mods");
 		if (Files.exists(activeModsDirectory)) {
 			try (Stream<Path> activeMods = Files.list(activeModsDirectory)) {
 				final Set<String> finalStandardModsHashes = standardModsHashes;

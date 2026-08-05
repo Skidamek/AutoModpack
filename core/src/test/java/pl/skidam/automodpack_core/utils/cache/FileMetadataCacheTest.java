@@ -28,7 +28,7 @@ class FileMetadataCacheTest {
 		assumeTrue(!storedFirstTime.equals(storedSecondTime), "The filesystem does not expose sub-millisecond timestamps");
 		Files.setLastModifiedTime(file, firstTime);
 
-		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("hash-cache.db"))) {
+		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
 			String firstHash = cache.getOrComputeHash(file);
 			Files.writeString(file, "two");
 			Files.setLastModifiedTime(file, secondTime);
