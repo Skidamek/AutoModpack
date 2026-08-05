@@ -22,7 +22,6 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public final class FirstConnectScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 560;
 	private final ModpackUpdater updater;
 	private final SelectedModpackTarget target;
 	private boolean finished;
@@ -47,7 +46,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 	private void continueWithDefaults() {
 		if (finished) return;
 		if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) {
-			new ScreenManager().title();
+			ScreenImpl.multiplayer();
 			return;
 		}
 		finished = true;
@@ -75,7 +74,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		if (finished) return;
 		finished = true;
 		updater.cancelConfirmation();
-		new ScreenManager().title();
+		ScreenImpl.multiplayer();
 	}
 
 	@Override
@@ -85,12 +84,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		ModpackUpdater.ConfirmationState state = updater.getConfirmationState();
 		if (state != ModpackUpdater.ConfirmationState.EXPIRED && state != ModpackUpdater.ConfirmationState.CANCELLED) return;
 		finished = true;
-		new ScreenManager().title();
-	}
-
-	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, 8, this.height - 64);
+		ScreenImpl.multiplayer();
 	}
 
 	@Override
@@ -100,8 +94,6 @@ public final class FirstConnectScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(name).withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.description").withStyle(ChatFormatting.GRAY), this.width / 2, 31,
 				TextColors.WHITE);
-		drawDivider(matrices, PANEL_WIDTH, 43);
-
 		int y = 51;
 		if (!updater.getPatchNotes().isBlank()) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.patchNotes").withStyle(ChatFormatting.YELLOW), this.width / 2, y,
@@ -137,6 +129,18 @@ public final class FirstConnectScreen extends VersionedScreen {
 		String groups = names(target.manifest().groups(), selection.selectedGroups());
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Default groups: " + groups, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
 				TextColors.WHITE);
+		if (updater.getSourceAvailability().totalFiles() > 0) {
+			y += 14;
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, sourceAvailability(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y,
+					TextColors.WHITE);
+		}
+	}
+
+	private String sourceAvailability() {
+		ModpackUpdater.SourceAvailability availability = updater.getSourceAvailability();
+		if (availability.cancelled()) return "Third-party sources: lookup cancelled; server download remains available";
+		if (!availability.complete()) return "Third-party sources: resolving (" + availability.resolvedFiles() + " / " + availability.totalFiles() + " files matched)";
+		return "Third-party sources: " + availability.resolvedFiles() + " / " + availability.totalFiles() + " files matched; unmatched files use the server";
 	}
 
 	private String names(Map<String, ?> values, Iterable<String> ids) {

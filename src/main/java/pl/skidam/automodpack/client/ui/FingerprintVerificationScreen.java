@@ -15,7 +15,6 @@ import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class FingerprintVerificationScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 500;
 	private final Screen parent;
 	private final String serverFingerprint;
 	private final Runnable validatedCallback;
@@ -103,11 +102,6 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		this.inputText = "";
 		new ScreenManager().waiting();
 		validatedCallback.run();
-	}
-
-	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, this.height / 2 - 112, this.height - 64);
 	}
 
 	public void setInputText(String text) {

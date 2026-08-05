@@ -12,6 +12,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.utils.FetchManager;
 
 public final class UpdatePreviewScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 600;
@@ -22,16 +23,22 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final boolean removal;
 	private final Runnable continueAction;
 	private final Runnable cancelAction;
+	private final FetchManager sourceFetchManager;
 	private Button previousButton;
 	private Button nextButton;
 	private int page;
 	private boolean finished;
 
 	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
-		this(parent, preview, modpackName, false, continueAction, cancelAction);
+		this(parent, preview, modpackName, false, continueAction, cancelAction, null);
 	}
 
 	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, Runnable continueAction, Runnable cancelAction) {
+		this(parent, preview, modpackName, removal, continueAction, cancelAction, null);
+	}
+
+	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, Runnable continueAction, Runnable cancelAction,
+			FetchManager sourceFetchManager) {
 		super(VersionedText.literal(removal ? "ModpackRemovalScreen" : "UpdatePreviewScreen"));
 		this.parent = parent;
 		this.preview = preview;
@@ -39,6 +46,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.removal = removal;
 		this.continueAction = continueAction;
 		this.cancelAction = cancelAction;
+		this.sourceFetchManager = sourceFetchManager;
 	}
 
 	@Override
@@ -72,7 +80,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private int headerBottom() {
-		return 86 + patchNoteLines().size() * 12;
+		return 86 + patchNoteLines().size() * 12 + (sourceFetchManager == null ? 0 : 12);
 	}
 
 	private int summaryY() {
@@ -118,11 +126,6 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, 8, panelBottom());
-	}
-
-	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		int left = contentLeft();
 		int contentWidth = contentWidth();
@@ -131,9 +134,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				: (modpackName.isBlank() ? "Update preview" : modpackName + " update preview");
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), left, 16, TextColors.WHITE);
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(removal ? "Review before removal" : "Review before download").withStyle(ChatFormatting.AQUA), left, 31,
-				TextColors.PANEL_ACCENT);
-		drawDivider(matrices, PANEL_WIDTH, 42);
-
+				TextColors.CYAN);
 		int headerY = 50;
 		List<String> notes = patchNoteLines();
 		drawTextWithShadow(matrices, this.font, VersionedText.literal("Patch notes:").withStyle(ChatFormatting.YELLOW), left, headerY, TextColors.WHITE);
@@ -158,8 +159,11 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 						? ChatFormatting.GRAY
 						: ChatFormatting.RED),
 				left, headerY, TextColors.WHITE);
-		drawDivider(matrices, PANEL_WIDTH, entryTop() - 6);
-
+		if (sourceFetchManager != null) {
+			headerY += 12;
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, sourceAvailability(), contentWidth)).withStyle(ChatFormatting.GRAY), left, headerY,
+					TextColors.WHITE);
+		}
 		List<UpdatePreview.Entry> entries = preview.entries();
 		int pageSize = pageSize();
 		int start = page * pageSize;
@@ -202,6 +206,13 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		}
 		String result = joined.length() == 0 ? "none" : joined.toString();
 		return truncateToWidth(this.font, result, contentWidth());
+	}
+
+	private String sourceAvailability() {
+		if (sourceFetchManager.totalFiles() == 0) return "Third-party sources: none queried";
+		if (sourceFetchManager.isCancelled()) return "Third-party sources: lookup cancelled; server download remains available";
+		if (!sourceFetchManager.isComplete()) return "Third-party sources: resolving (" + sourceFetchManager.resolvedFiles() + " / " + sourceFetchManager.totalFiles() + " files matched)";
+		return "Third-party sources: " + sourceFetchManager.resolvedFiles() + " / " + sourceFetchManager.totalFiles() + " files matched; unmatched files use the server";
 	}
 
 	private static String rootText(UpdatePlan.Root root) {

@@ -2,15 +2,14 @@ package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.ChatFormatting;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class DangerScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 440;
 
 	private final ModpackUpdater modpackUpdater;
 	private boolean confirmationFinished;
@@ -37,14 +36,9 @@ public class DangerScreen extends VersionedScreen {
 		modpackUpdater.startConfirmedUpdate();
 	}
 
-	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, this.height / 2 - 92, this.height - 64);
-	}
-
 	private void cancelConfirmation() {
 		modpackUpdater.cancelConfirmation();
-		new ScreenManager().title();
+		ScreenImpl.multiplayer();
 	}
 
 	@Override
@@ -54,7 +48,7 @@ public class DangerScreen extends VersionedScreen {
 		ModpackUpdater.ConfirmationState state = modpackUpdater.getConfirmationState();
 		if (state != ModpackUpdater.ConfirmationState.EXPIRED && state != ModpackUpdater.ConfirmationState.CANCELLED) return;
 		confirmationFinished = true;
-		new ScreenManager().title();
+		ScreenImpl.multiplayer();
 	}
 
 	@Override

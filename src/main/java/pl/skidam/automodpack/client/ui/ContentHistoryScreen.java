@@ -13,7 +13,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 
 public final class ContentHistoryScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 560;
 	private static final int ENTRY_TOP = 58;
 	private static final int ENTRY_HEIGHT = 58;
 
@@ -76,19 +75,12 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	}
 
 	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, 8, this.height - 36);
-	}
-
-	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String title = modpackName.isBlank() ? "Content history" : modpackName + " content history";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Immutable server generations in the active lineage.").withStyle(ChatFormatting.GRAY), this.width / 2, 25,
 				TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("The current group selection is stored separately.").withStyle(ChatFormatting.GRAY), this.width / 2, 38, TextColors.WHITE);
-		drawDivider(matrices, PANEL_WIDTH, 45);
-
 		List<GenerationRecord> entries = history;
 		int pageSize = rowsPerPage();
 		int start = page * pageSize;

@@ -13,7 +13,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class RestartScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 460;
 
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
@@ -58,11 +57,6 @@ public class RestartScreen extends VersionedScreen {
 				button -> {
 					new ScreenManager().changelog(this, changelogs);
 				});
-	}
-
-	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, this.height / 2 - 92, this.height - 64);
 	}
 
 	@Override

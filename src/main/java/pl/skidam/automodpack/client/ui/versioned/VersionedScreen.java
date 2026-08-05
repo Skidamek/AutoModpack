@@ -66,16 +66,12 @@ public class VersionedScreen extends Screen {
 		// Render background
 		/*? if <1.20.2 {*/
 		/*super.renderBackground(matrices.getContext());
-		versionedBackground(matrices, mouseX, mouseY, delta);
 		*//*?} elif <1.20.6 {*/
 		/*super.renderBackground(matrices.getContext(), mouseX, mouseY, delta);
-		versionedBackground(matrices, mouseX, mouseY, delta);
 		*//*?} elif >=26.1 {*/
-		versionedBackground(matrices, mouseX, mouseY, delta);
 		super.extractRenderState(matrix, mouseX, mouseY, delta);
 		/*?} else {*/
-		/*versionedBackground(matrices, mouseX, mouseY, delta);
-		super.render(matrix, mouseX, mouseY, delta);
+		/*super.render(matrix, mouseX, mouseY, delta);
 		*//*?}*/
 
 		// Render the rest of our screen
@@ -85,8 +81,6 @@ public class VersionedScreen extends Screen {
 		/*super.render(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?}*/
 	}
-
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
 
 	// This method is to be override by the child classes
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
@@ -137,25 +131,6 @@ public class VersionedScreen extends Screen {
 	protected final int panelLeft(int preferredWidth) {
 		return (this.width - panelWidth(preferredWidth)) / 2;
 	}
-
-	protected final void drawPanel(VersionedMatrices matrices, int preferredWidth, int top, int bottom) {
-		int left = panelLeft(preferredWidth);
-		int right = left + panelWidth(preferredWidth);
-		int boundedTop = Math.max(8, top);
-		int boundedBottom = Math.min(this.height - 8, Math.max(boundedTop + 1, bottom));
-		matrices.fill(left, boundedTop, right, boundedBottom, TextColors.PANEL_BACKGROUND);
-		matrices.fill(left, boundedTop, right, boundedTop + 1, TextColors.PANEL_BORDER);
-		matrices.fill(left, boundedBottom - 1, right, boundedBottom, TextColors.PANEL_BORDER);
-		matrices.fill(left, boundedTop, left + 1, boundedBottom, TextColors.PANEL_BORDER);
-		matrices.fill(right - 1, boundedTop, right, boundedBottom, TextColors.PANEL_BORDER);
-	}
-
-	protected final void drawDivider(VersionedMatrices matrices, int preferredWidth, int y) {
-		int left = panelLeft(preferredWidth) + 12;
-		int right = panelLeft(preferredWidth) + panelWidth(preferredWidth) - 12;
-		matrices.fill(left, y, right, y + 1, TextColors.PANEL_DIVIDER);
-	}
-
 
 	/*? if <1.19.3 {*/
 	/*public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {

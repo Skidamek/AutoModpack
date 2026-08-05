@@ -10,7 +10,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 public class ErrorScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 460;
 
 	private final String[] errorMessages;
 	private Button backButton;
@@ -36,11 +35,6 @@ public class ErrorScreen extends VersionedScreen {
 			assert minecraft != null;
 			ScreenImpl.setScreen(null);
 		});
-	}
-
-	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, this.height / 2 - 92, this.height - 64);
 	}
 
 	@Override

@@ -15,7 +15,6 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public final class RecoveryArchiveScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 560;
 	private static final int ARCHIVED_ROW_HEIGHT = 42;
 
 	private final Screen parent;
@@ -157,11 +156,6 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 	}
 
 	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, 8, this.height - 36);
-	}
-
-	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String title = modpackName.isBlank() ? "Recovery archive" : modpackName + " recovery archive";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
@@ -169,8 +163,6 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 				TextColors.WHITE);
 		String counts = "Recoverable: " + snapshot.available().size() + "  Archived: " + snapshot.archived().size();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(counts).withStyle(ChatFormatting.YELLOW), this.width / 2, 42, TextColors.WHITE);
-		drawDivider(matrices, PANEL_WIDTH, 64);
-
 		List<ModpackUpdater.RecoveryFile> files = files();
 		int pageSize = rowsPerPage();
 		int start = page * pageSize;

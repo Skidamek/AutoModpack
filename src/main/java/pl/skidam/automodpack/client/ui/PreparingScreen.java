@@ -7,15 +7,9 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 public class PreparingScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 360;
 
 	public PreparingScreen() {
 		super(VersionedText.literal("PreparingScreen"));
-	}
-
-	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, this.height / 2 - 46, this.height / 2 + 46);
 	}
 
 	@Override
