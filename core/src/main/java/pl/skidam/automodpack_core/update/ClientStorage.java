@@ -113,6 +113,10 @@ public final class ClientStorage {
 		return gameDirectory;
 	}
 
+	public Path gamePath(String logicalPath) {
+		return resolveLogical(gameDirectory, logicalPath);
+	}
+
 	public Path automodpackDirectory() {
 		return automodpackDirectory;
 	}
@@ -147,6 +151,10 @@ public final class ClientStorage {
 
 	public Path activeDirectory() {
 		return activeDirectory;
+	}
+
+	public Path activePath(String logicalPath) {
+		return resolveLogical(activeDirectory, logicalPath);
 	}
 
 	public Path incomingDirectory() {
@@ -193,12 +201,16 @@ public final class ClientStorage {
 		return helperDirectory;
 	}
 
+	public Path recoveryDirectory() {
+		return recoveryDirectory;
+	}
+
 	public Path bootstrapFile() {
 		return bootstrapFile;
 	}
 
 	public Path modsDirectory() {
-		return gameDirectory.resolve("mods").normalize();
+		return gamePath("mods");
 	}
 
 	public Path generationDirectory(String generationId) {
@@ -379,6 +391,12 @@ public final class ClientStorage {
 
 	private static String requireLogicalPath(String value) {
 		return LogicalPath.requireCanonical(value);
+	}
+
+	private static Path resolveLogical(Path root, String logicalPath) {
+		Path resolved = root.resolve(requireLogicalPath(logicalPath)).normalize();
+		if (!resolved.startsWith(root)) throw new IllegalArgumentException("Logical path escapes its root: " + logicalPath);
+		return resolved;
 	}
 
 	private static String automodpackDirName() {

@@ -39,7 +39,7 @@ class UpdateTransactionExecutorTest {
 		byte[] bytes = "projection-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
 		SelectedModpackTarget target = target("mods/new.jar", "mod", false, hash, bytes.length);
-		Path projectionFile = storage.activeDirectory().resolve("mods/new.jar");
+		Path projectionFile = storage.activePath("mods/new.jar");
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()),
 				List.of(new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
@@ -82,7 +82,7 @@ class UpdateTransactionExecutorTest {
 		assertTrue(SmartFileUtils.isValidFile(overlay, editedBytes.length, editedHash));
 		assertFalse(Files.isSameFile(storage.objectsDirectory().resolve(editedHash), live));
 		assertArrayEquals(editedBytes, Files.readAllBytes(live));
-		assertTrue(SmartFileUtils.isValidFile(storage.activeDirectory().resolve("config/settings.json"), baseBytes.length, baseHash));
+		assertTrue(SmartFileUtils.isValidFile(storage.activePath("config/settings.json"), baseBytes.length, baseHash));
 	}
 
 	@Test
