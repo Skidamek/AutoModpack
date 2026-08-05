@@ -65,7 +65,6 @@ public class Jsons {
 
 	public static class ConnectionRecordFields {
 		public ConnectionInfo connection;
-		public Map<String, CertificateTrustEntry> trusts = new HashMap<>();
 		public Map<String, Secrets.Secret> secrets = new HashMap<>();
 	}
 
@@ -210,6 +209,10 @@ public class Jsons {
 
 	public static class SecretsFields {
 		public Map<String, Secrets.Secret> secrets = new HashMap<>();
+	}
+
+	public static class KnownHostsFields {
+		public Map<String, CertificateTrustEntry> hosts = new HashMap<>();
 	}
 
 	public static class CertificateTrustEntry {
