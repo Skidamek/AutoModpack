@@ -164,7 +164,7 @@ public final class EarlyServiceLayer {
 
 		try {
 			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
-			Path activeModsDirectory = storage.activeDirectory().resolve("mods");
+			Path activeModsDirectory = storage.activePath("mods");
 			if (!Files.isDirectory(activeModsDirectory)) return;
 
 			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);

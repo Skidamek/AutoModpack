@@ -23,7 +23,9 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 import java.io.IOException;
@@ -591,12 +593,14 @@ public class Commands {
 				for (GenerationHistoryEntry entry : modpackExecutor.technicalHistory()) retainedGenerationIds.add(entry.metadata().generationId());
 				Path serverRoot = SmartFileUtils.CWD.resolve(serverDir).normalize();
 				Path objectRoot = DataRootResolver.resolve(SmartFileUtils.CWD).root().resolve("objects").normalize();
-				GenerationStore.CollectionResult result = new GenerationStore(serverRoot, objectRoot).collect(retainedGenerationIds, Set.of());
+				Set<String> clientObjectPins = ClientObjectStore.referencedHashes(ClientStorage.fromGameDirectory(SmartFileUtils.CWD));
+				GenerationStore.CollectionResult result = new GenerationStore(serverRoot, objectRoot).collect(retainedGenerationIds, clientObjectPins);
 				send(context, "Generation objects collected", ChatFormatting.GREEN, false);
 				send(context, "Retained generations", ChatFormatting.WHITE, String.valueOf(retainedGenerationIds.size()), ChatFormatting.YELLOW, false);
 				send(context, "Objects", ChatFormatting.WHITE, result.beforeObjectCount() + " -> " + result.afterObjectCount(), ChatFormatting.YELLOW, false);
 				send(context, "Bytes", ChatFormatting.WHITE, result.beforeObjectBytes() + " -> " + result.afterObjectBytes(), ChatFormatting.YELLOW, false);
 				send(context, "Deleted", ChatFormatting.WHITE, result.deletedObjectCount() + " objects, " + result.deletedObjectBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Client-pinned objects", ChatFormatting.WHITE, String.valueOf(clientObjectPins.size()), ChatFormatting.YELLOW, false);
 				return Command.SINGLE_SUCCESS;
 			} catch (IOException e) {
 				send(context, "Failed to collect generation objects: " + e.getMessage(), ChatFormatting.RED, false);
