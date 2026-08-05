@@ -49,7 +49,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
  */
 public class ModpackSelectionScreen extends VersionedScreen {
 
-	private static final int PANEL_WIDTH = 440;
 	private static final int ROW_HEIGHT = 24;
 	private static final int ROW_WIDTH = 320;
 
@@ -172,7 +171,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return;
 		}
 
-		int listTop = 50;
+		int listTop = pendingUpdater != null && pendingUpdater.getSourceAvailability().totalFiles() > 0 ? 64 : 50;
 		int listBottom = this.height - (selectionAction == null ? 108 : 60);
 		rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
 
@@ -255,16 +254,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, 8, saved ? this.height - 8 : this.height - (selectionAction == null ? 98 : 50));
-	}
-
-	@Override
 	public void tick() {
 		super.tick();
 		if (pendingUpdater == null) return;
 		ModpackUpdater.ConfirmationState state = pendingUpdater.getConfirmationState();
-		if (state == ModpackUpdater.ConfirmationState.EXPIRED || state == ModpackUpdater.ConfirmationState.CANCELLED) new ScreenManager().title();
+		if (state == ModpackUpdater.ConfirmationState.EXPIRED || state == ModpackUpdater.ConfirmationState.CANCELLED) ScreenImpl.multiplayer();
 	}
 
 	private boolean canToggle(String groupId, GroupManifest.Group group) {
@@ -582,8 +576,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				? VersionedText.translatable("automodpack.selection.title")
 				: VersionedText.literal(modpackName + " – ").append(VersionedText.translatable("automodpack.selection.title"));
 		drawCenteredTextWithShadow(matrices, this.font, header.withStyle(ChatFormatting.BOLD), this.width / 2, 18, TextColors.WHITE);
-		drawDivider(matrices, PANEL_WIDTH, 28);
-
 		if (saved) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.saved").withStyle(ChatFormatting.GREEN), this.width / 2, this.height / 2 - 30,
 					TextColors.WHITE);
@@ -601,6 +593,16 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					this.width / 2, 32, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Platform: " + ClientPlatform.current().id() + "  Selected groups: " + resolution.selectedGroups().size())
 					.withStyle(ChatFormatting.GRAY), this.width / 2, 43, TextColors.WHITE);
+			if (pendingUpdater != null && pendingUpdater.getSourceAvailability().totalFiles() > 0) {
+				ModpackUpdater.SourceAvailability availability = pendingUpdater.getSourceAvailability();
+				String sourceStatus = availability.cancelled()
+						? "Third-party sources: lookup cancelled; server download remains available"
+						: !availability.complete()
+								? "Third-party sources: resolving (" + availability.resolvedFiles() + " / " + availability.totalFiles() + " files matched)"
+								: "Third-party sources: " + availability.resolvedFiles() + " / " + availability.totalFiles() + " files matched; unmatched files use the server";
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, sourceStatus, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 54,
+						TextColors.WHITE);
+			}
 		}
 	}
 

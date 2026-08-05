@@ -6,8 +6,6 @@ public interface ScreenService {
 
 	void download(Object... args);
 
-	void fetch(Object... args);
-
 	void changelog(Object... args);
 
 	void restart(Object... args);

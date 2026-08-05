@@ -35,6 +35,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -90,6 +91,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private final UpdateLoopDetector updateLoopDetector;
 	private volatile ScheduledFuture<?> confirmationExpiry;
 	private final ClientStorage storage;
+	private volatile FetchManager sourceFetchManager;
 	private static final Comparator<RecoveryFile> RECOVERY_FILE_ORDER = Comparator.comparing(RecoveryFile::logicalPath).thenComparing(RecoveryFile::sha1)
 			.thenComparingLong(RecoveryFile::size);
 
@@ -117,6 +119,8 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
+	public record SourceAvailability(int totalFiles, int resolvedFiles, boolean complete, boolean cancelled) {}
+
 	public String getModpackName() {
 		return serverModpackContent.modpackName;
 	}
@@ -127,6 +131,12 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public String getPatchNotes() {
 		return getSelectedTarget().generationRecord().metadata().patchNotes();
+	}
+
+	public SourceAvailability getSourceAvailability() {
+		FetchManager manager = sourceFetchManager;
+		if (manager == null) return new SourceAvailability(0, 0, true, false);
+		return new SourceAvailability(manager.totalFiles(), manager.resolvedFiles(), manager.isComplete(), manager.isCancelled());
 	}
 
 	public Set<Jsons.ModpackContentFields.ModpackContentItem> getModpackFileList() {
@@ -177,6 +187,51 @@ public class ModpackUpdater implements AutoCloseable {
 		close();
 	}
 
+	private void startSourceFetch() {
+		if (sourceFetchManager != null) return;
+		List<FetchManager.FetchData> fetchData = new ArrayList<>();
+		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
+		for (var group : selectedTarget.manifest().groups().values()) {
+			for (var file : group.files().entrySet()) {
+				GroupManifest.GroupFile value = file.getValue();
+				addSourceFetchData(unique, file.getKey(), value.sha1(), value.murmur(), String.valueOf(value.size()), value.type());
+			}
+		}
+		if (selectedTarget.flatTarget().list != null)
+			for (var item : selectedTarget.flatTarget().list)
+				addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
+		fetchData.addAll(unique.values());
+		sourceFetchManager = newSourceFetchManager(fetchData);
+	}
+
+	private FetchManager ensureSourceFetch(Collection<Jsons.ModpackContentFields.ModpackContentItem> items) {
+		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
+		for (var item : items) addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
+		List<FetchManager.FetchData> fetchData = new ArrayList<>(unique.values());
+		if (fetchData.isEmpty()) return null;
+		FetchManager current = sourceFetchManager;
+		if (current != null && fetchData.stream().allMatch(item -> current.getFetchDatas().containsKey(item.sha1()))) return current;
+		if (current != null) current.cancel();
+		sourceFetchManager = newSourceFetchManager(fetchData);
+		return sourceFetchManager;
+	}
+
+	private FetchManager newSourceFetchManager(List<FetchManager.FetchData> fetchData) {
+		if (fetchData.isEmpty()) return null;
+		FetchManager manager = new FetchManager(fetchData);
+		manager.fetchAsync();
+		return manager;
+	}
+
+	private static void addSourceFetchData(Map<String, FetchManager.FetchData> unique, String file, String sha1, String murmur, String size, String type) {
+		if (!isSourceFetchType(type) || sha1 == null || sha1.isBlank()) return;
+		unique.putIfAbsent(sha1, new FetchManager.FetchData(file, sha1, murmur, size, type));
+	}
+
+	private static boolean isSourceFetchType(String type) {
+		return "mod".equals(type) || "shader".equals(type) || "resourcepack".equals(type);
+	}
+
 	public ModpackUpdater(SelectedModpackTarget selectedTarget, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
 		this(selectedTarget, connectionInfo, secret, storage, null);
 	}
@@ -207,6 +262,7 @@ public class ModpackUpdater implements AutoCloseable {
 			requireLiveConnection();
 
 			if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
+			startSourceFetch();
 
 			// Handle new modpack
 			if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) {
@@ -473,29 +529,9 @@ public class ModpackUpdater implements AutoCloseable {
 			ModpackUtils.populateStoreFromCWD(filesToUpdate, cache, storage);
 			var finalFilesToUpdate = ModpackUtils.identifyUncachedFiles(filesToUpdate, cache, storage);
 
-			// FETCH
 			long startFetching = System.currentTimeMillis();
-			List<FetchManager.FetchData> fetchDatas = new ArrayList<>();
-
-			for (Jsons.ModpackContentFields.ModpackContentItem serverItem : finalFilesToUpdate) {
-
-				totalBytesToDownload += Long.parseLong(serverItem.size);
-				String fileType = serverItem.type;
-
-				// Check if the file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
-				if (fileType.equals("mod") || fileType.equals("shader") || fileType.equals("resourcepack")) {
-					fetchDatas.add(new FetchManager.FetchData(serverItem.file, serverItem.sha1, serverItem.murmur, serverItem.size, fileType));
-				}
-			}
-
-			FetchManager fetchManager = null;
-
-			if (!fetchDatas.isEmpty()) {
-				fetchManager = new FetchManager(fetchDatas);
-				new ScreenManager().fetch(fetchManager);
-				fetchManager.fetch();
-				LOGGER.info("Finished fetching urls in {}ms", System.currentTimeMillis() - startFetching);
-			}
+			for (Jsons.ModpackContentFields.ModpackContentItem serverItem : finalFilesToUpdate) totalBytesToDownload += Long.parseLong(serverItem.size);
+			FetchManager fetchManager = ensureSourceFetch(finalFilesToUpdate);
 
 			// DOWNLOAD
 			try {
@@ -549,6 +585,12 @@ public class ModpackUpdater implements AutoCloseable {
 		LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
 		if (downloadClient == null) return false;
+		if (fetchManager != null) {
+			long fetchStart = System.currentTimeMillis();
+			fetchManager.fetch();
+			LOGGER.info("Finished resolving third-party sources in {}ms ({} of {} files matched)", System.currentTimeMillis() - fetchStart,
+					fetchManager.resolvedFiles(), fetchManager.totalFiles());
+		}
 
 		downloadManager = new DownloadManager(totalBytesToDownload, storage);
 		new ScreenManager().download(downloadManager, getModpackName());
@@ -631,18 +673,9 @@ public class ModpackUpdater implements AutoCloseable {
 		Set<Jsons.ModpackContentFields.ModpackContentItem> refreshedFilesToAcquire = ModpackUtils.identifyUncachedFiles(refreshedContent.list, cache, storage);
 		if (refreshedFilesToAcquire.isEmpty()) return true;
 
-		List<FetchManager.FetchData> refreshedFetchData = new ArrayList<>();
-		for (var item : refreshedFilesToAcquire) {
-			totalBytesToDownload += Long.parseLong(item.size);
-			if (item.type.equals("mod") || item.type.equals("shader") || item.type.equals("resourcepack"))
-				refreshedFetchData.add(new FetchManager.FetchData(item.file, item.sha1, item.murmur, item.size, item.type));
-		}
-		FetchManager refreshedFetchManager = null;
-		if (!refreshedFetchData.isEmpty()) {
-			refreshedFetchManager = new FetchManager(refreshedFetchData);
-			new ScreenManager().fetch(refreshedFetchManager);
-			refreshedFetchManager.fetch();
-		}
+		for (var item : refreshedFilesToAcquire) totalBytesToDownload += Long.parseLong(item.size);
+		FetchManager refreshedFetchManager = ensureSourceFetch(refreshedFilesToAcquire);
+		if (refreshedFetchManager != null) refreshedFetchManager.fetch();
 
 		downloadManager = new DownloadManager(totalBytesToDownload, storage);
 		new ScreenManager().download(downloadManager, getModpackName());
@@ -773,7 +806,6 @@ public class ModpackUpdater implements AutoCloseable {
 			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), false);
 			return requestPreparedPlanPreview(prepared, () -> startUpdateAfterPreview(filesToUpdate, prepared), () -> {
 				close();
-				if (firstConnection) new ScreenManager().title();
 			});
 		}
 	}
@@ -781,7 +813,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private boolean requestPreparedPlanPreview(PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
 		UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, getPatchNotes());
 		return new ScreenManager().preview(preview, getModpackName(),
-				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction);
+				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, sourceFetchManager);
 	}
 
 	private UpdatePlanner.SelectionContext selectionContext(String targetModpackId) throws IOException {
@@ -1012,6 +1044,8 @@ public class ModpackUpdater implements AutoCloseable {
 	public void close() {
 		confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED);
 		cancelConfirmationExpiry();
+		FetchManager sourceFetch = sourceFetchManager;
+		if (sourceFetch != null && !sourceFetch.isComplete()) sourceFetch.cancel();
 		if (closed.compareAndSet(false, true) && downloadClient != null) downloadClient.close();
 	}
 
