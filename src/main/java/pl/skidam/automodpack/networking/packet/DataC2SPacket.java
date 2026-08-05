@@ -14,6 +14,7 @@ import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.client.ClientLoginDisconnect;
 import pl.skidam.automodpack.networking.content.DataPacket;
+import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -115,7 +116,8 @@ public class DataC2SPacket {
 			}
 			Jsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
 			try {
-				SecretsStore.saveClientSecret(connectionInfo.origin, secret);
+				ConnectionStore.saveConnection(storage, serverModpackContent.modpackId, connectionInfo);
+				SecretsStore.saveClientSecret(storage, serverModpackContent.modpackId, connectionInfo.origin, secret);
 			} catch (Exception e) {
 				downloadClient.close();
 				LOGGER.error("Failed to persist client secret", e);

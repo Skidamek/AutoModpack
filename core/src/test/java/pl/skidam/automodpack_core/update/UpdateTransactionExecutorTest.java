@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.update;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,7 +22,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
@@ -50,7 +48,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(execution.success());
 		assertTrue(SmartFileUtils.isValidFile(projectionFile, bytes.length, hash));
-		assertTrue(Files.isSameFile(storage.objectsDirectory().resolve(hash), projectionFile));
+		assertVerifiedObjectProjection(storage.objectsDirectory().resolve(hash), projectionFile, bytes.length, hash);
 		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
 		assertEquals(target.generationRecord(), new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).orElseThrow());
 		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
@@ -60,7 +58,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
-	void installsEditableOverlayAsCasLinkAndCopiesItToTheLiveGamePath() throws Exception {
+	void installsEditableOverlayAsMutableCopyAndCopiesItToTheLiveGamePath() throws Exception {
 		ClientStorage storage = storage();
 		byte[] baseBytes = "server-base".getBytes(StandardCharsets.UTF_8);
 		String baseHash = store(storage, baseBytes);
@@ -81,7 +79,7 @@ class UpdateTransactionExecutorTest {
 		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/settings.json");
 		Path live = storage.gameDirectory().resolve("config/settings.json");
 		assertTrue(execution.success());
-		assertTrue(Files.isSameFile(storage.objectsDirectory().resolve(editedHash), overlay));
+		assertTrue(SmartFileUtils.isValidFile(overlay, editedBytes.length, editedHash));
 		assertFalse(Files.isSameFile(storage.objectsDirectory().resolve(editedHash), live));
 		assertArrayEquals(editedBytes, Files.readAllBytes(live));
 		assertTrue(SmartFileUtils.isValidFile(storage.activeDirectory().resolve("config/settings.json"), baseBytes.length, baseHash));
@@ -155,8 +153,17 @@ class UpdateTransactionExecutorTest {
 		Path temporary = Files.createTempFile(storage.objectsDirectory(), ".object-", ".tmp");
 		Files.write(temporary, bytes);
 		String hash = HashUtils.getHash(temporary);
-		Files.move(temporary, storage.objectsDirectory().resolve(hash));
+		Path destination = storage.objectsDirectory().resolve(hash);
+		if (Files.exists(destination)) {
+			assertTrue(SmartFileUtils.isValidFile(destination, bytes.length, hash));
+			Files.delete(temporary);
+		} else Files.move(temporary, destination);
 		return hash;
+	}
+
+	private static void assertVerifiedObjectProjection(Path object, Path projection, long size, String hash) throws Exception {
+		assertTrue(SmartFileUtils.isValidFile(projection, size, hash));
+		if (Files.getFileStore(object).equals(Files.getFileStore(projection))) assertTrue(Files.isSameFile(object, projection));
 	}
 
 	private static UpdatePlan plan(SelectedModpackTarget target, Jsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {
@@ -185,9 +192,6 @@ class UpdateTransactionExecutorTest {
 	private static Jsons.ClientConfigFieldsV3 clientConfig(String modpackId) {
 		Jsons.ClientConfigFieldsV3 config = new Jsons.ClientConfigFieldsV3();
 		config.selectedModpackId = modpackId;
-		config.modpackConnections.put(modpackId,
-				new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("origin.example", 25565), InetSocketAddress.createUnresolved("endpoint.example", 25564),
-						ModpackConnectionMode.MAGIC_PACKET, null, null));
 		return config;
 	}
 }

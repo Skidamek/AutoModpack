@@ -21,8 +21,6 @@ public class Jsons {
 	public static class ClientConfigFieldsV3 {
 		public int DO_NOT_CHANGE_IT = 3; // file version
 		public String selectedModpackId = "";
-		@SerializedName(value = "modpackConnections", alternate = "installedModpacks")
-		public Map<String, ConnectionInfo> modpackConnections = new HashMap<>(); // modpack ID, known origin and endpoint routing
 		public boolean updateSelectedModpackOnLaunch = true;
 		public boolean selfUpdater = false;
 		public boolean syncAutoModpackVersion = true;
@@ -33,7 +31,6 @@ public class Jsons {
 
 		public ClientConfigFieldsV3(ClientConfigFieldsV3 source) {
 			this.selectedModpackId = source.selectedModpackId;
-			this.modpackConnections = source.modpackConnections == null ? new HashMap<>() : new HashMap<>(source.modpackConnections);
 			this.updateSelectedModpackOnLaunch = source.updateSelectedModpackOnLaunch;
 			this.selfUpdater = source.selfUpdater;
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
@@ -64,6 +61,12 @@ public class Jsons {
 		public boolean isComplete() {
 			return origin != null && endpoint != null && connectionMode != null && !origin.getHostString().isBlank() && !endpoint.getHostString().isBlank();
 		}
+	}
+
+	public static class ConnectionRecordFields {
+		public ConnectionInfo connection;
+		public Map<String, CertificateTrustEntry> trusts = new HashMap<>();
+		public Map<String, Secrets.Secret> secrets = new HashMap<>();
 	}
 
 	public static class ServerConfigFieldsV1 {
@@ -200,19 +203,13 @@ public class Jsons {
 		public boolean serverForced = false;
 	}
 
-	public static class ServerCoreConfigFields {
-		public String automodpackVersion = "";
-		public String loader = "";
-		public String loaderVersion = "";
-		public String mcVersion = "";
+	public static class DataRootFields {
+		public String root = "";
+		public boolean shared;
 	}
 
 	public static class SecretsFields {
 		public Map<String, Secrets.Secret> secrets = new HashMap<>();
-	}
-
-	public static class KnownHostsFields {
-		public Map<String, CertificateTrustEntry> hosts; // canonical Minecraft origin, exact certificate trust
 	}
 
 	public static class CertificateTrustEntry {
@@ -282,12 +279,9 @@ public class Jsons {
 	}
 
 	public static class ClientGenerationStateFields {
-		public int schemaVersion = 1;
 		public String modpackId = "";
 		public String generationId = "";
-		public String platform = "";
-		public String stateDigest = "";
-		public String ledgerDigest = "";
+		public String status = "ACTIVE";
 	}
 
 	public static class ClientRecoveryArchiveFields {
@@ -301,6 +295,11 @@ public class Jsons {
 			public String sourceGenerationId = "";
 			public String preservedAt = "";
 		}
+	}
+
+	public static class ClientOverlayFields {
+		public String modpackId = "";
+		public List<String> deletedPaths = List.of();
 	}
 
 	public static class OwnershipDeltaFields {
@@ -487,14 +486,9 @@ public class Jsons {
 		}
 	}
 
-	public static class ClientDummyFiles {
-		// Set of absolute file paths to delete when we can
-		public Set<String> files = ConcurrentHashMap.newKeySet();
-	}
-
 	// Per-modpack record of which groups the player picked, so the selection screen is shown
 	// once and later launches reuse the answer. Keyed by modpack id, matching
-	// ClientConfigFieldsV3.modpackConnections, which already owns the connection details.
+	// the modpack identity in the shared connection store.
 	public static class ClientSelectionStoreFields {
 		public int DO_NOT_CHANGE_IT = 1; // file version
 		public Map<String, ModpackSelection> selections = new HashMap<>();

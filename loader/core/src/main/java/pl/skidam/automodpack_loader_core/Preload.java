@@ -5,10 +5,9 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.*;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
 
+import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
@@ -50,10 +49,7 @@ public class Preload {
 			loadConfigs();
 			DetachedUpdateHelper.cleanupOldHelperJars();
 			recoverPendingTransaction();
-			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
-				LegacyDummyCleanup.migrate();
-				importBootstrap();
-			}
+			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) importBootstrap();
 			updateAll();
 			LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
 		} catch (Exception e) {
@@ -106,8 +102,8 @@ public class Preload {
 	}
 
 	private void quarantineTransaction(Exception reason) throws IOException {
-		Files.createDirectories(storage.privateDirectory());
-		Path quarantine = storage.privateDirectory().resolve("update-transaction.invalid-" + UUID.randomUUID() + ".json");
+		Files.createDirectories(storage.clientDirectory());
+		Path quarantine = storage.clientDirectory().resolve("update-transaction.invalid-" + UUID.randomUUID() + ".json");
 		Files.move(storage.transactionFile(), quarantine, StandardCopyOption.REPLACE_EXISTING);
 		LOGGER.error("Quarantined invalid update transaction at {}", quarantine.toAbsolutePath().normalize(), reason);
 	}
@@ -125,7 +121,11 @@ public class Preload {
 				clientConfig.selectedModpackId = "";
 				writeConfig(storage.clientConfigFile(), clientConfig);
 			} else {
-				storedConnectionInfo = clientConfig.modpackConnections.get(clientConfig.selectedModpackId);
+				try {
+					storedConnectionInfo = ConnectionStore.getConnection(storage, clientConfig.selectedModpackId);
+				} catch (IOException e) {
+					LOGGER.error("Failed to load selected modpack connection state", e);
+				}
 			}
 		}
 
@@ -137,7 +137,7 @@ public class Preload {
 		String expectedFingerprint = CertificateTrustStore.getFingerprint(storedConnectionInfo.origin);
 		Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(storedConnectionInfo.origin, storedConnectionInfo.endpoint,
 				storedConnectionInfo.connectionMode, expectedFingerprint, null);
-		Secrets.Secret secret = SecretsStore.getClientSecret(storedConnectionInfo.origin);
+		Secrets.Secret secret = SecretsStore.getClientSecret(storage, clientConfig.selectedModpackId, storedConnectionInfo.origin);
 		if (secret == null) {
 			secret = Secrets.anonymousSecret();
 			LOGGER.info("No saved secret for seeded/selected origin {}; using an anonymous preload secret", AddressHelpers.formatAddress(storedConnectionInfo.origin));
@@ -213,7 +213,7 @@ public class Preload {
 			if (record == null) return null;
 			SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId)
 					.orElseGet(() -> GroupSelectionResolver.defaultIntent(record.manifest()));
-			return SelectedModpackTarget.prepare(record.toFields(), null, intent, ClientPlatform.parse(state.platform));
+			return SelectedModpackTarget.prepare(record.toFields(), null, intent, ClientPlatform.current());
 		} catch (IOException | RuntimeException e) {
 			LOGGER.error("Failed to resolve the stored modpack catalogue and group selection", e);
 			return null;
@@ -235,17 +235,9 @@ public class Preload {
 
 	private void loadConfigs() {
 		long startTime = System.currentTimeMillis();
-		boolean shouldSaveClientConfig = false;
 
 		// load client config
-		var clientConfigVersion = ConfigTools.read(storage.clientConfigFile(), Jsons.VersionConfigField.class).orElse(null);
-		if (clientConfigVersion != null && clientConfigVersion.DO_NOT_CHANGE_IT < 3) {
-			clientConfig = new Jsons.ClientConfigFieldsV3();
-			shouldSaveClientConfig = true;
-			LOGGER.warn("Legacy client config detected. Stable modpack IDs require a one-time modpack redownload.");
-		} else {
-			clientConfig = ConfigTools.readOrCreate(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
-		}
+		clientConfig = ConfigTools.readOrCreate(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
 
 		// load server config
 		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
@@ -262,38 +254,11 @@ public class Preload {
 			if (!serverConfigBefore.equals(ConfigTools.GSON.toJson(serverConfig))) writeConfig(serverConfigFile, serverConfig);
 		}
 
-		if (clientConfig != null) {
-			if (clientConfig.modpackConnections == null) {
-				clientConfig.modpackConnections = new HashMap<>();
-				shouldSaveClientConfig = true;
-			}
-			if (clientConfig.selectedModpackId == null) {
-				clientConfig.selectedModpackId = "";
-				shouldSaveClientConfig = true;
-			}
-			if (shouldSaveClientConfig) writeConfig(storage.clientConfigFile(), clientConfig);
-		}
-
-		knownHosts = ConfigTools.readOrCreate(storage.knownHostsFile(), Jsons.KnownHostsFields.class, Jsons.KnownHostsFields::new);
-		if (knownHosts != null && knownHosts.hosts == null) {
-			knownHosts.hosts = new HashMap<>();
-			writeConfig(storage.knownHostsFile(), knownHosts);
-		}
 		try {
-			Files.createDirectories(storage.privateDirectory());
-			String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
-			try {
-				if (os.contains("win")) {
-					Files.setAttribute(storage.privateDirectory(), "dos:hidden", true);
-				} else if (os.contains("nix") || os.contains("nux") || os.contains("aix") || os.contains("mac")) {
-					Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------"); // Corresponds to 0700
-					Files.setPosixFilePermissions(storage.privateDirectory(), perms);
-				}
-			} catch (UnsupportedOperationException | IOException e) {
-				LOGGER.debug("Failed to set private directory attributes for os: {}", os);
-			}
+			storage.ensureRoots();
+			Files.createDirectories(serverDir);
 		} catch (IOException e) {
-			LOGGER.error("Failed to create private directory", e);
+			LOGGER.error("Failed to create AutoModpack state roots", e);
 		}
 
 		if (serverConfig == null || clientConfig == null) throw new RuntimeException("Failed to load config!");
@@ -302,55 +267,57 @@ public class Preload {
 	}
 
 	private void importBootstrap() {
-		if (!Files.isRegularFile(storage.knownHostsBootstrapFile())) return;
+		if (!Files.isRegularFile(storage.bootstrapFile())) return;
 
-		Jsons.KnownHostsBootstrapFields fields = ConfigTools.read(storage.knownHostsBootstrapFile(), Jsons.KnownHostsBootstrapFields.class)
+		Jsons.KnownHostsBootstrapFields fields = ConfigTools.read(storage.bootstrapFile(), Jsons.KnownHostsBootstrapFields.class)
 				.orElseThrow(() -> new ConfigTools.ConfigException("Bootstrap file is not a regular file"));
 		final BootstrapConfig.Validated bootstrap;
 		try {
 			bootstrap = BootstrapConfig.validate(fields);
 		} catch (IllegalArgumentException e) {
-			throw new ConfigTools.ConfigException("Invalid bootstrap file " + storage.knownHostsBootstrapFile().toAbsolutePath().normalize(), e);
+			throw new ConfigTools.ConfigException("Invalid bootstrap file " + storage.bootstrapFile().toAbsolutePath().normalize(), e);
 		}
 
-		Jsons.KnownHostsFields updatedKnownHosts = new Jsons.KnownHostsFields();
-		updatedKnownHosts.hosts = new HashMap<>(knownHosts.hosts);
 		String originKey = AddressHelpers.formatAddress(bootstrap.origin());
-		Jsons.CertificateTrustEntry previousTrust = updatedKnownHosts.hosts.put(originKey,
-				new Jsons.CertificateTrustEntry(bootstrap.fingerprint(), CertificateTrustStore.Reason.SEED.name()));
-
 		String previousSelectedModpackId = clientConfig.selectedModpackId;
 		Jsons.ClientConfigFieldsV3 updatedClientConfig = clientConfig;
-		Jsons.ConnectionInfo previousConnection = null;
-		if (bootstrap.installsModpack()) {
-			updatedClientConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
-			previousConnection = updatedClientConfig.modpackConnections.put(bootstrap.modpackId(),
-					new Jsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
-			updatedClientConfig.selectedModpackId = bootstrap.modpackId();
+		String targetModpackId = bootstrap.installsModpack() ? bootstrap.modpackId() : ModpackId.isValid(clientConfig.selectedModpackId) ? clientConfig.selectedModpackId : null;
+		if (targetModpackId != null) {
+			try {
+				Jsons.ConnectionInfo previousConnection = ConnectionStore.getConnection(storage, targetModpackId);
+				Jsons.CertificateTrustEntry previousTrust = ConnectionStore.getTrust(storage, targetModpackId, bootstrap.origin());
+				ConnectionStore.saveTrust(storage, targetModpackId, bootstrap.origin(),
+						new Jsons.CertificateTrustEntry(bootstrap.fingerprint(), CertificateTrustStore.Reason.SEED.name()));
+				if (bootstrap.installsModpack()) {
+					ConnectionStore.saveConnection(storage, targetModpackId,
+							new Jsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
+					updatedClientConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
+					updatedClientConfig.selectedModpackId = targetModpackId;
+					writeConfig(storage.clientConfigFile(), updatedClientConfig);
+					clientConfig = updatedClientConfig;
+				}
+				if (previousTrust == null) {
+					LOGGER.info("Imported seeded certificate pin for origin {} ({})", originKey, NetUtils.shortenFingerprint(bootstrap.fingerprint()));
+				} else {
+					LOGGER.info("Replaced seeded certificate pin for origin {}: {} -> {}", originKey, NetUtils.shortenFingerprint(previousTrust.fingerprint),
+							NetUtils.shortenFingerprint(bootstrap.fingerprint()));
+				}
+				if (bootstrap.installsModpack()) {
+					String oldOrigin = previousConnection == null || previousConnection.origin == null ? "none" : AddressHelpers.formatAddress(previousConnection.origin);
+					String oldEndpoint = previousConnection == null || previousConnection.endpoint == null ? "none" : AddressHelpers.formatAddress(previousConnection.endpoint);
+					LOGGER.info("Seed selection {} -> {}; connection origin {} -> {}; endpoint {} -> {}", previousSelectedModpackId, targetModpackId, oldOrigin,
+							AddressHelpers.formatAddress(bootstrap.origin()), oldEndpoint, AddressHelpers.formatAddress(bootstrap.endpoint()));
+				}
+			} catch (IOException e) {
+				throw new ConfigTools.ConfigException("Failed to import bootstrap connection state", e);
+			}
+		} else {
+			LOGGER.warn("Bootstrap pin for {} has no modpack identity; it will not be persisted", originKey);
 		}
-
-		writeConfig(storage.knownHostsFile(), updatedKnownHosts);
-		if (bootstrap.installsModpack()) writeConfig(storage.clientConfigFile(), updatedClientConfig);
-
-		knownHosts = updatedKnownHosts;
-		clientConfig = updatedClientConfig;
 		try {
-			Files.delete(storage.knownHostsBootstrapFile());
+			Files.delete(storage.bootstrapFile());
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Bootstrap state was saved but the bootstrap file could not be deleted", e);
-		}
-
-		if (previousTrust == null) {
-			LOGGER.info("Imported seeded certificate pin for origin {} ({})", originKey, NetUtils.shortenFingerprint(bootstrap.fingerprint()));
-		} else {
-			LOGGER.info("Replaced seeded certificate pin for origin {}: {} -> {}", originKey, NetUtils.shortenFingerprint(previousTrust.fingerprint),
-					NetUtils.shortenFingerprint(bootstrap.fingerprint()));
-		}
-		if (bootstrap.installsModpack()) {
-			String oldOrigin = previousConnection == null || previousConnection.origin == null ? "none" : AddressHelpers.formatAddress(previousConnection.origin);
-			String oldEndpoint = previousConnection == null || previousConnection.endpoint == null ? "none" : AddressHelpers.formatAddress(previousConnection.endpoint);
-			LOGGER.info("Seed selection {} -> {}; connection origin {} -> {}; endpoint {} -> {}", previousSelectedModpackId, bootstrap.modpackId(), oldOrigin,
-					AddressHelpers.formatAddress(bootstrap.origin()), oldEndpoint, AddressHelpers.formatAddress(bootstrap.endpoint()));
 		}
 	}
 }

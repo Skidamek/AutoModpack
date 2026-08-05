@@ -210,7 +210,6 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			case OVERLAY -> "editable overlay";
 			case GAME_DIR -> "game";
 			case STORE_DIR -> "cas";
-			case AUTOMODPACK_DIR -> "automodpack";
 		};
 	}
 

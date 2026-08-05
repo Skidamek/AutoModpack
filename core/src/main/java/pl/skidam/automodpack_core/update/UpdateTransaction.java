@@ -23,7 +23,6 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
-import pl.skidam.automodpack_core.utils.LegacyDummyFiles;
 
 /** The single write-ahead record for one client update. It stores intent and operations, never filesystem paths or duplicated manifests. */
 public final class UpdateTransaction {
@@ -122,18 +121,6 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	public static UpdateTransaction createLegacyDummyCleanup(List<LegacyDummyTarget> targets) {
-		UpdateTransaction transaction = base(Purpose.LEGACY_DUMMY_CLEANUP);
-		transaction.operations = targets.stream().map(target -> new Operation(target.root(), target.relativePath(), OperationType.DELETE, null, -1, LegacyDummyFiles.SHA1))
-				.sorted(Comparator.comparing((Operation operation) -> operation.operation().ordinal()).thenComparing(operation -> operation.root().ordinal())
-						.thenComparing(Operation::relativePath))
-				.toList();
-		transaction.projectedFinalState = targets.stream().map(target -> new ProjectedFile(target.root(), target.relativePath(), false, null, -1))
-				.sorted(Comparator.comparing((ProjectedFile projected) -> projected.root().ordinal()).thenComparing(ProjectedFile::relativePath)).toList();
-		transaction.restartReasons = List.of();
-		return transaction;
-	}
-
 	private static void fillGeneration(UpdateTransaction transaction, GenerationTarget target) {
 		transaction.modpackId = target.modpackId();
 		transaction.targetGenerationId = target.targetGenerationId();
@@ -210,8 +197,6 @@ public final class UpdateTransaction {
 		}
 	}
 
-	public record LegacyDummyTarget(Root root, String relativePath) {}
-
 	public enum Phase {
 		PLANNED,
 		PREPARING,
@@ -224,8 +209,7 @@ public final class UpdateTransaction {
 	public enum Purpose {
 		MODPACK_UPDATE,
 		MODPACK_REMOVAL,
-		SELF_UPDATE,
-		LEGACY_DUMMY_CLEANUP
+		SELF_UPDATE
 	}
 
 	public enum Status {
