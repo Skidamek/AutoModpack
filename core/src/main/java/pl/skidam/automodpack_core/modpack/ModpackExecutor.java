@@ -21,8 +21,11 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNotes;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public class ModpackExecutor {
 	private final ThreadPoolExecutor creationExecutor;
@@ -36,11 +39,11 @@ public class ModpackExecutor {
 	private final CandidateScan candidateScan;
 
 	public ModpackExecutor() {
-		this(SmartFileUtils.CWD, hostModpackDir, hostGenerationsDir);
+		this(SmartFileUtils.CWD, hostModpackDir, SmartFileUtils.CWD.resolve(serverDir));
 	}
 
 	public ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot) {
-		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot), new ModpackCandidateScanner()::scan,
+		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).root().resolve("objects")), new ModpackCandidateScanner()::scan,
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()));
 	}
@@ -50,7 +53,7 @@ public class ModpackExecutor {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
-		this.patchNotesFile = this.generationRoot.getParent().resolve(hostPatchNotesFile.getFileName()).normalize();
+		this.patchNotesFile = this.generationRoot.resolve(serverPatchNotesFile.getFileName()).normalize();
 		this.generationStore = Objects.requireNonNull(generationStore);
 		this.candidateScan = Objects.requireNonNull(candidateScan);
 		this.creationExecutor = Objects.requireNonNull(creationExecutor);
@@ -242,10 +245,15 @@ public class ModpackExecutor {
 		validateConfiguration();
 		prepareDirectories();
 		String modpackId = previous.map(snapshot -> ModpackId.requireValid(snapshot.record().manifest().modpackId())).orElseGet(ModpackId::generate);
-		ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
-				LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups, serverConfig.selectionTags,
-				serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(hostGenerationStagingDir.getFileName()), creationExecutor);
-		return candidateScan.scan(request);
+		Path cacheRoot = generationStore.objectRoot().getParent();
+		try (FileMetadataCache fileMetadataCache = FileMetadataCache.open(cacheRoot.resolve("file-metadata"));
+				ModFileCache modFileCache = ModFileCache.open(cacheRoot.resolve("mod-metadata"))) {
+			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
+					LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups, serverConfig.selectionTags,
+					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(serverStagingDir.getFileName()), creationExecutor,
+					generationStore.objectRoot(), fileMetadataCache, modFileCache);
+			return candidateScan.scan(request);
+		}
 	}
 
 	private boolean acquire(boolean publication) {

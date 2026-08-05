@@ -100,19 +100,27 @@ public final class GenerationStore {
 	private final CommitHook commitHook;
 
 	public GenerationStore(Path root) {
-		this(root, Clock.systemUTC(), NOOP_HOOK);
+		this(root, root.resolve("objects"), Clock.systemUTC(), NOOP_HOOK);
 	}
 
 	GenerationStore(Path root, Clock clock, CommitHook commitHook) {
+		this(root, root.resolve("objects"), clock, commitHook);
+	}
+
+	public GenerationStore(Path root, Path objectsDirectory) {
+		this(root, objectsDirectory, Clock.systemUTC(), NOOP_HOOK);
+	}
+
+	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
-		this.currentPath = this.root.resolve(Constants.hostGenerationCurrentFile.getFileName());
-		this.currentProjectionPath = this.root.resolve(Constants.hostGenerationCurrentProjectionFile.getFileName());
+		this.currentPath = this.root.resolve(Constants.serverCurrentFile.getFileName());
+		this.currentProjectionPath = this.root.resolve(Constants.serverCurrentProjectionFile.getFileName());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
-		this.cataloguesDirectory = this.root.resolve(Constants.hostGenerationCataloguesDir.getFileName());
-		this.commitsDirectory = this.root.resolve(Constants.hostGenerationCommitsDir.getFileName());
-		this.deltasDirectory = this.root.resolve(Constants.hostGenerationDeltasDir.getFileName());
-		this.objectsDirectory = this.root.resolve(Constants.hostGenerationObjectsDir.getFileName());
-		this.stagingDirectory = this.root.resolve(Constants.hostGenerationStagingDir.getFileName());
+		this.cataloguesDirectory = this.root.resolve(Constants.serverCataloguesDir.getFileName());
+		this.commitsDirectory = this.root.resolve(Constants.serverCommitsDir.getFileName());
+		this.deltasDirectory = this.root.resolve(Constants.serverDeltasDir.getFileName());
+		this.objectsDirectory = Objects.requireNonNull(objectsDirectory).toAbsolutePath().normalize();
+		this.stagingDirectory = this.root.resolve(Constants.serverStagingDir.getFileName());
 		this.clock = Objects.requireNonNull(clock);
 		this.commitHook = Objects.requireNonNull(commitHook);
 		this.objectStore = new ServerObjectStore(objectsDirectory, stagingDirectory);

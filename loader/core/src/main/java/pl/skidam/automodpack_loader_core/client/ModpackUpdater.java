@@ -25,6 +25,7 @@ import java.util.stream.Stream;
 
 import org.jetbrains.annotations.Nullable;
 
+import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -54,7 +55,6 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
-import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
@@ -150,7 +150,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (!state.modpackId.equals(record.manifest().modpackId())) throw new IOException("Active client state and generation record belong to different modpacks");
 		SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId)
 				.orElseGet(() -> GroupSelectionResolver.defaultIntent(record.manifest()));
-		return SelectedModpackTarget.prepare(record.toFields(), null, intent, ClientPlatform.parse(state.platform));
+		return SelectedModpackTarget.prepare(record.toFields(), null, intent, ClientPlatform.current());
 	}
 
 	public void selectTarget(SelectionIntent intent) {
@@ -237,7 +237,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return true;
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
-		try (var cache = FileMetadataCache.open(storage.hashCacheFile()); var modCache = ModFileCache.open(storage.modCacheFile())) {
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), false);
 			Jsons.ModpackContentFields installed = storedTarget();
 			if (installed == null || !GenerationTarget.fromFlat(installed).equals(prepared.plan().generationTarget())) return true;
@@ -260,7 +260,11 @@ public class ModpackUpdater implements AutoCloseable {
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
 		if (execution.success()) {
 			clientConfig = preparation.plannedConfig();
-			collectClientObjects();
+			try {
+				storage.clearOverlay(preparation.installed().modpackId);
+			} catch (IOException e) {
+				LOGGER.warn("Modpack removal committed, but its editable overlay could not be removed", e);
+			}
 		}
 		return execution;
 	}
@@ -286,13 +290,11 @@ public class ModpackUpdater implements AutoCloseable {
 				});
 		Jsons.ClientConfigFieldsV3 currentConfig = ConfigTools.read(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class)
 				.orElseGet(Jsons.ClientConfigFieldsV3::new);
-		if (currentConfig.modpackConnections == null) currentConfig.modpackConnections = new HashMap<>();
 		Jsons.ClientConfigFieldsV3 plannedConfig = new Jsons.ClientConfigFieldsV3(currentConfig);
-		plannedConfig.modpackConnections.remove(installed.modpackId);
 		if (installed.modpackId.equals(plannedConfig.selectedModpackId)) plannedConfig.selectedModpackId = "";
 		clientConfig = currentConfig;
 
-		try (var cache = FileMetadataCache.open(storage.hashCacheFile())) {
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, cache);
 			Set<String> availableBaselineObjects = new HashSet<>();
 			if (baseline.entries != null) for (var entry : baseline.entries) {
@@ -326,7 +328,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public RecoverySnapshot recoverySnapshot() throws IOException {
 		Jsons.ModpackContentFields installed = storedTarget();
-		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(recoveryDirectory(installed.modpackId));
+		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(storage.objectsDirectory(), recoveryDirectory(installed.modpackId));
 		List<RecoveryFile> archived = new ArrayList<>();
 		for (var entry : archive.entries) archived.add(new RecoveryFile(entry.logicalPath, entry.sha1, entry.size, entry.sourceGenerationId, entry.preservedAt));
 		archived.sort(RECOVERY_FILE_ORDER);
@@ -367,7 +369,7 @@ public class ModpackUpdater implements AutoCloseable {
 	public void loadModpack() throws Exception {
 
 		if (!Files.exists(storage.activeDirectory())) return;
-		try (var cache = FileMetadataCache.open(storage.hashCacheFile())) {
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			loadModpackMods(cache);
 		}
 	}
@@ -465,7 +467,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private void startUpdateAfterPreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, PreparedPlan previewPlan) {
 		long start = System.currentTimeMillis();
 
-		try (var cache = FileMetadataCache.open(storage.hashCacheFile()); var modCache = ModFileCache.open(storage.modCacheFile())) {
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			requireLiveConnection();
 			// Don't download files which already exist
 			ModpackUtils.populateStoreFromCWD(filesToUpdate, cache, storage);
@@ -730,12 +732,14 @@ public class ModpackUpdater implements AutoCloseable {
 		SelectedModpackTarget activeTarget = storedSelectedTarget();
 		if (activeTarget == null || activeTarget.flatTarget().list == null) return;
 		storage.ensureRoots();
+		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.manifest().modpackId()).deletedPaths);
 		for (var item : activeTarget.flatTarget().list) {
 			if (!item.editable) continue;
 			Path live = livePath(item);
 			Path overlay = storage.overlayFile(activeTarget.manifest().modpackId(), item.file);
 			if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) {
 				Files.deleteIfExists(overlay);
+				deletedPaths.add(UpdatePlanner.normalize(item.file));
 				continue;
 			}
 			String hash = cache.getHashOrNull(live);
@@ -747,12 +751,15 @@ public class ModpackUpdater implements AutoCloseable {
 			long size = Files.size(live);
 			if (item.sha1.equalsIgnoreCase(hash) && Long.parseLong(item.size) == size) {
 				Files.deleteIfExists(overlay);
+				deletedPaths.remove(UpdatePlanner.normalize(item.file));
 				continue;
 			}
 			Path object = storage.objectsDirectory().resolve(hash);
 			if (!SmartFileUtils.isValidFile(object, size, hash)) SmartFileUtils.copyVerifiedAtomic(live, object, size, hash);
-			SmartFileUtils.linkVerifiedAtomic(object, overlay, size, hash);
+			SmartFileUtils.copyVerifiedAtomic(object, overlay, size, hash);
+			deletedPaths.remove(UpdatePlanner.normalize(item.file));
 		}
+		storage.writeOverlayState(activeTarget.manifest().modpackId(), deletedPaths);
 	}
 
 	private Path livePath(Jsons.ModpackContentFields.ModpackContentItem item) {
@@ -762,7 +769,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private boolean requestUpdatePreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
-		try (var cache = FileMetadataCache.open(storage.hashCacheFile()); var modCache = ModFileCache.open(storage.modCacheFile())) {
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), false);
 			return requestPreparedPlanPreview(prepared, () -> startUpdateAfterPreview(filesToUpdate, prepared), () -> {
 				close();
@@ -814,6 +821,8 @@ public class ModpackUpdater implements AutoCloseable {
 					putFileState(files, UpdatePlan.Root.OVERLAY, overlayDirectory, path, cache);
 			}
 		}
+		for (String deletedPath : storage.readOverlayState(target.modpackId).deletedPaths)
+			files.put(new UpdatePlan.FileKey(UpdatePlan.Root.OVERLAY, deletedPath), new UpdatePlan.FileState(null, -1, false, false));
 		Set<String> gamePaths = new HashSet<>();
 		if (target.list != null) target.list.forEach(item -> gamePaths.add(item.file));
 		if (installed != null && installed.list != null) installed.list.forEach(item -> gamePaths.add(item.file));
@@ -882,8 +891,8 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private List<UpdatePlan.NestedCopy> inspectNestedCopies(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
-		Files.createDirectories(storage.cacheDirectory());
-		Path inspectionDirectory = Files.createTempDirectory(storage.cacheDirectory(), "update-inspection-");
+		Files.createDirectories(storage.incomingDirectory());
+		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
 			Path inspectionMods = inspectionDirectory.resolve("mods");
 			Files.createDirectories(inspectionMods);
@@ -923,69 +932,25 @@ public class ModpackUpdater implements AutoCloseable {
 			DetachedUpdateHelper.launch(transaction);
 			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
 		}
+		try {
+			cleanupOverlayState(plan, target.manifest().modpackId());
+		} catch (IOException e) {
+			LOGGER.warn("Modpack update committed, but stale overlay tombstones could not be cleaned", e);
+		}
+		try {
+			ConnectionStore.saveConnection(storage, target.manifest().modpackId(), connectionInfo);
+		} catch (IOException e) {
+			throw new IOException("Modpack generation committed but connection state could not be saved", e);
+		}
 		clientConfig = plan.plannedClientConfig();
-		collectClientObjects();
 	}
 
-	private void collectClientObjects() {
-		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) {
-			LOGGER.warn("Skipping client object collection while an update transaction is pending");
-			return;
-		}
-
-		try (var hashCache = FileMetadataCache.open(storage.hashCacheFile()); var modCache = ModFileCache.open(storage.modCacheFile())) {
-			Set<String> retainedHashes = new HashSet<>();
-			ClientGenerationStore generationStore = new ClientGenerationStore(storage);
-			if (Files.isDirectory(storage.recordsDirectory(), LinkOption.NOFOLLOW_LINKS)) {
-				try (Stream<Path> records = Files.list(storage.recordsDirectory())) {
-					for (Path recordDirectory : records.filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)).toList()) {
-						GenerationRecord record = generationStore.read(recordDirectory.getFileName().toString()).orElse(null);
-						if (record == null) continue;
-						for (var group : record.manifest().groups().values())
-							for (var file : group.files().values())
-								retainedHashes.add(ClientObjectStore.normalizeHash(file.sha1()));
-						for (var entry : record.ownershipLedger().entries().values())
-							for (var content : entry.historicalHashes())
-								retainedHashes.add(ClientObjectStore.normalizeHash(content.sha1()));
-					}
-				}
-			}
-			if (Files.isDirectory(storage.overlaysDirectory(), LinkOption.NOFOLLOW_LINKS)) {
-				try (Stream<Path> overlays = Files.walk(storage.overlaysDirectory())) {
-					for (Path overlay : overlays.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList()) {
-						String hash = hashCache.getHashOrNull(overlay);
-						if (hash != null) retainedHashes.add(ClientObjectStore.normalizeHash(hash));
-					}
-				}
-			}
-			if (Files.isDirectory(storage.baselinesDirectory(), LinkOption.NOFOLLOW_LINKS)) {
-				try (Stream<Path> baselines = Files.walk(storage.baselinesDirectory())) {
-					for (Path baselinePath : baselines.filter(path -> path.getFileName().toString().equals("baseline.json")).toList()) {
-						Jsons.ClientBaselineFields baseline = ConfigTools.read(baselinePath, Jsons.ClientBaselineFields.class).orElse(null);
-						if (baseline == null || baseline.entries == null) continue;
-						for (var entry : baseline.entries)
-							if (entry != null && !entry.absent && entry.objectHash != null)
-								retainedHashes.add(ClientObjectStore.normalizeHash(entry.objectHash));
-					}
-				}
-			}
-			if (Files.isDirectory(storage.modsDirectory())) {
-				try (Stream<Path> standardMods = Files.list(storage.modsDirectory())) {
-					for (Path mod : standardMods.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).filter(path -> path.toString().endsWith(".jar")).toList()) {
-						String hash = hashCache.getHashOrNull(mod);
-						if (hash != null) retainedHashes.add(ClientObjectStore.normalizeHash(hash));
-					}
-				}
-			}
-
-			ClientObjectStore.CollectionResult result = new ClientObjectStore(storage.objectsDirectory()).collect(retainedHashes);
-			hashCache.cleanup();
-			modCache.retainOnly(retainedHashes);
-			if (result.objectsDeleted() > 0)
-				LOGGER.info("Collected {} unreachable client objects ({} objects retained)", result.objectsDeleted(), result.objectsAfter());
-		} catch (Exception e) {
-			LOGGER.warn("Client update succeeded, but client object collection was skipped", e);
-		}
+	private void cleanupOverlayState(UpdatePlan plan, String modpackId) throws IOException {
+		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(modpackId).deletedPaths);
+		for (UpdatePlan.Operation operation : plan.operations())
+			if (operation.root() == UpdatePlan.Root.OVERLAY && operation.operation() == UpdatePlan.OperationType.DELETE)
+				deletedPaths.remove(UpdatePlanner.normalize(operation.relativePath()));
+		storage.writeOverlayState(modpackId, deletedPaths);
 	}
 
 	private void populateStoreFromModpack(Collection<Jsons.ModpackContentFields.ModpackContentItem> items, FileMetadataCache cache) {
