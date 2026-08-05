@@ -18,7 +18,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
-/** Shared per-user route, trust, and client-secret state keyed by modpack identity. */
+/** Shared per-user route and client-secret state keyed by modpack identity. */
 public final class ConnectionStore {
 	private ConnectionStore() {}
 
@@ -50,21 +50,6 @@ public final class ConnectionStore {
 		update(storage, modpackId, fields -> fields.connection = connection);
 	}
 
-	public static Jsons.CertificateTrustEntry getTrust(ClientStorage storage, String modpackId, InetSocketAddress origin) throws IOException {
-		if (origin == null) return null;
-		return read(storage, modpackId).trusts.get(AddressHelpers.formatAddress(origin));
-	}
-
-	public static void saveTrust(ClientStorage storage, String modpackId, InetSocketAddress origin, Jsons.CertificateTrustEntry trust) throws IOException {
-		if (origin == null || trust == null) throw new IllegalArgumentException("Origin and trust entry are required");
-		update(storage, modpackId, fields -> fields.trusts.put(AddressHelpers.formatAddress(origin), trust));
-	}
-
-	public static void removeTrust(ClientStorage storage, String modpackId, InetSocketAddress origin) throws IOException {
-		if (origin == null) return;
-		update(storage, modpackId, fields -> fields.trusts.remove(AddressHelpers.formatAddress(origin)));
-	}
-
 	public static Secrets.Secret getClientSecret(ClientStorage storage, String modpackId, InetSocketAddress origin) throws IOException {
 		if (origin == null) return null;
 		return read(storage, modpackId).secrets.get(AddressHelpers.formatAddress(origin));
@@ -89,7 +74,6 @@ public final class ConnectionStore {
 	}
 
 	private static void normalize(Jsons.ConnectionRecordFields fields) {
-		if (fields.trusts == null) fields.trusts = new HashMap<>();
 		if (fields.secrets == null) fields.secrets = new HashMap<>();
 	}
 

@@ -76,6 +76,8 @@ public final class ClientStorage {
 	private final Path bootstrapFile;
 	private final Path fileMetadataDirectory;
 	private final Path modMetadataDirectory;
+	private final Path knownHostsFile;
+	private final Path knownHostsLockFile;
 
 	public ClientStorage(Path gameDirectory) {
 		this.gameDirectory = requireDirectoryPath(gameDirectory, "game directory");
@@ -102,6 +104,8 @@ public final class ClientStorage {
 		this.recoveryDirectory = this.clientDirectory.resolve(clientRecoveryDir.getFileName()).normalize();
 		this.fileMetadataDirectory = dataDirectory.resolve("file-metadata").normalize();
 		this.modMetadataDirectory = dataDirectory.resolve("mod-metadata").normalize();
+		this.knownHostsFile = dataDirectory.resolve("known-hosts.json").normalize();
+		this.knownHostsLockFile = dataDirectory.resolve("known-hosts.json.lock").normalize();
 		validateLayout();
 	}
 
@@ -191,6 +195,14 @@ public final class ClientStorage {
 
 	public Path modMetadataDirectory() {
 		return modMetadataDirectory;
+	}
+
+	public Path knownHostsFile() {
+		return knownHostsFile;
+	}
+
+	public Path knownHostsLockFile() {
+		return knownHostsLockFile;
 	}
 
 	public Path modpackContentTempFile() {
@@ -364,7 +376,7 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, bootstrapFile);
 		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, activeDirectory, incomingDirectory, backupDirectory, recoveryDirectory,
 				stateFile, transactionFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
-		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory);
+		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, knownHostsFile, knownHostsLockFile);
 	}
 
 	private static void validateWithin(Path parent, Path... children) {
