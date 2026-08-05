@@ -282,12 +282,13 @@ public class Preload {
 		String previousSelectedModpackId = clientConfig.selectedModpackId;
 		Jsons.ClientConfigFieldsV3 updatedClientConfig = clientConfig;
 		String targetModpackId = bootstrap.installsModpack() ? bootstrap.modpackId() : ModpackId.isValid(clientConfig.selectedModpackId) ? clientConfig.selectedModpackId : null;
-		if (targetModpackId != null) {
-			try {
-				Jsons.ConnectionInfo previousConnection = ConnectionStore.getConnection(storage, targetModpackId);
-				Jsons.CertificateTrustEntry previousTrust = ConnectionStore.getTrust(storage, targetModpackId, bootstrap.origin());
-				ConnectionStore.saveTrust(storage, targetModpackId, bootstrap.origin(),
-						new Jsons.CertificateTrustEntry(bootstrap.fingerprint(), CertificateTrustStore.Reason.SEED.name()));
+		Jsons.ConnectionInfo previousConnection = null;
+		Jsons.CertificateTrustEntry previousTrust;
+		try {
+			previousTrust = CertificateTrustStore.get(bootstrap.origin());
+			CertificateTrustStore.save(bootstrap.origin(), bootstrap.fingerprint(), CertificateTrustStore.Reason.SEED);
+			if (targetModpackId != null) {
+				previousConnection = ConnectionStore.getConnection(storage, targetModpackId);
 				if (bootstrap.installsModpack()) {
 					ConnectionStore.saveConnection(storage, targetModpackId,
 							new Jsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
@@ -296,23 +297,21 @@ public class Preload {
 					writeConfig(storage.clientConfigFile(), updatedClientConfig);
 					clientConfig = updatedClientConfig;
 				}
-				if (previousTrust == null) {
-					LOGGER.info("Imported seeded certificate pin for origin {} ({})", originKey, NetUtils.shortenFingerprint(bootstrap.fingerprint()));
-				} else {
-					LOGGER.info("Replaced seeded certificate pin for origin {}: {} -> {}", originKey, NetUtils.shortenFingerprint(previousTrust.fingerprint),
-							NetUtils.shortenFingerprint(bootstrap.fingerprint()));
-				}
-				if (bootstrap.installsModpack()) {
-					String oldOrigin = previousConnection == null || previousConnection.origin == null ? "none" : AddressHelpers.formatAddress(previousConnection.origin);
-					String oldEndpoint = previousConnection == null || previousConnection.endpoint == null ? "none" : AddressHelpers.formatAddress(previousConnection.endpoint);
-					LOGGER.info("Seed selection {} -> {}; connection origin {} -> {}; endpoint {} -> {}", previousSelectedModpackId, targetModpackId, oldOrigin,
-							AddressHelpers.formatAddress(bootstrap.origin()), oldEndpoint, AddressHelpers.formatAddress(bootstrap.endpoint()));
-				}
-			} catch (IOException e) {
-				throw new ConfigTools.ConfigException("Failed to import bootstrap connection state", e);
 			}
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to import bootstrap connection state", e);
+		}
+		if (previousTrust == null) {
+			LOGGER.info("Imported seeded certificate pin for origin {} ({})", originKey, NetUtils.shortenFingerprint(bootstrap.fingerprint()));
 		} else {
-			LOGGER.warn("Bootstrap pin for {} has no modpack identity; it will not be persisted", originKey);
+			LOGGER.info("Replaced seeded certificate pin for origin {}: {} -> {}", originKey, NetUtils.shortenFingerprint(previousTrust.fingerprint),
+					NetUtils.shortenFingerprint(bootstrap.fingerprint()));
+		}
+		if (bootstrap.installsModpack()) {
+			String oldOrigin = previousConnection == null || previousConnection.origin == null ? "none" : AddressHelpers.formatAddress(previousConnection.origin);
+			String oldEndpoint = previousConnection == null || previousConnection.endpoint == null ? "none" : AddressHelpers.formatAddress(previousConnection.endpoint);
+			LOGGER.info("Seed selection {} -> {}; connection origin {} -> {}; endpoint {} -> {}", previousSelectedModpackId, targetModpackId, oldOrigin,
+					AddressHelpers.formatAddress(bootstrap.origin()), oldEndpoint, AddressHelpers.formatAddress(bootstrap.endpoint()));
 		}
 		try {
 			Files.delete(storage.bootstrapFile());
