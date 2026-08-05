@@ -16,7 +16,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 
 public final class GroupInspectorScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 560;
 	private final Screen parent;
 	private final String groupId;
 	private final GroupManifest manifest;
@@ -56,16 +55,10 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	}
 
 	@Override
-	public void versionedBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawPanel(matrices, PANEL_WIDTH, 8, this.height - 36);
-	}
-
-	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = group.displayName().isBlank() ? groupId : group.displayName();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Group " + groupId, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 26, TextColors.WHITE);
-		drawDivider(matrices, PANEL_WIDTH, 34);
 		List<String> descriptionLines = descriptionLines();
 		for (int index = 0; index < descriptionLines.size(); index++) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.WHITE), this.width / 2, 40 + index * 12, TextColors.WHITE);

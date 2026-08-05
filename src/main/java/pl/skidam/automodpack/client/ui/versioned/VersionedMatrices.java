@@ -65,13 +65,4 @@ public class VersionedMatrices  /*? if <1.20 {*/ /*extends PoseStack *//*?}*/   
 	*//*?}*/
 /*?}*/
 
-	public void fill(int left, int top, int right, int bottom, int color) {
-		/*? if >=26.1 {*/
-		context.fill(left, top, right, bottom, color);
-		/*?} elif >=1.20 {*/
-		/*context.fill(left, top, right, bottom, color);
-		*//*?} else {*/
-		/*GuiComponent.fill(getContext(), left, top, right, bottom, color);
-		*//*?}*/
-	}
 }

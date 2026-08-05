@@ -61,8 +61,4 @@ public class TextColors {
 	public static final int CYAN = -11010079;
 	public static final int LIGHT_PINK = -13108;
 
-	public static final int PANEL_BACKGROUND = 0xE20B1018;
-	public static final int PANEL_BORDER = 0xFF3A465A;
-	public static final int PANEL_DIVIDER = 0xFF273142;
-	public static final int PANEL_ACCENT = 0xFF57FFE1;
 }

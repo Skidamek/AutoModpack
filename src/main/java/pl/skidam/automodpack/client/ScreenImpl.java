@@ -15,6 +15,7 @@ import java.util.Locale;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 
 public class ScreenImpl implements ScreenService {
 
@@ -25,11 +26,6 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public void download(Object... args) {
 		executeOnClient(() -> Screens.download(args[0], args[1]));
-	}
-
-	@Override
-	public void fetch(Object... args) {
-		executeOnClient(() -> Screens.fetch(args[0]));
 	}
 
 	@Override
@@ -108,6 +104,10 @@ public class ScreenImpl implements ScreenService {
 		Screens.setScreen(screen);
 	}
 
+	public static void multiplayer() {
+		Screens.multiplayer();
+	}
+
 	private static class Screens {
 		private static Screen interactiveParent;
 
@@ -137,10 +137,6 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
 		}
 
-		public static void fetch(Object fetchManager) {
-			Screens.setScreen(new FetchScreen((FetchManager) fetchManager));
-		}
-
 		public static void changelog(Object parent, Object changelog) {
 			Screens.setScreen(new ChangelogScreen((Screen) parent, (Changelogs) changelog));
 		}
@@ -162,11 +158,14 @@ public class ScreenImpl implements ScreenService {
 			if (isTransient(parent)) parent = interactiveParent;
 			interactiveParent = null;
 			boolean removal = args.length > 4 && Boolean.TRUE.equals(args[4]);
-			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3]));
+			FetchManager sourceFetchManager = args.length > 5 && args[5] instanceof FetchManager manager
+					? manager
+					: null;
+			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3], sourceFetchManager));
 		}
 
 		private static boolean isTransient(Screen screen) {
-			return screen instanceof PreparingScreen || screen instanceof FetchScreen || screen instanceof DownloadScreen;
+			return screen instanceof PreparingScreen || screen instanceof DownloadScreen;
 		}
 
 		public static void recovery(Object... args) {
@@ -189,6 +188,10 @@ public class ScreenImpl implements ScreenService {
 
 		public static void title() {
 			Screens.setScreen(new TitleScreen());
+		}
+
+		public static void multiplayer() {
+			Screens.setScreen(new JoinMultiplayerScreen(new TitleScreen()));
 		}
 
 		public static void menu(Object parent) {
