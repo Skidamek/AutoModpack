@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 
@@ -72,7 +73,7 @@ public final class ClientGenerationStore {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generation manifest is not a regular file: " + path);
 		try {
-			return ConfigTools.read(path, pl.skidam.automodpack_core.config.Jsons.CompleteModpackContentFields.class).map(GenerationRecord::fromFields);
+			return ConfigTools.read(path, Jsons.CompleteModpackContentFields.class).map(GenerationRecord::fromFields);
 		} catch (RuntimeException e) {
 			throw new IOException("Client generation manifest is invalid: " + path, e);
 		}

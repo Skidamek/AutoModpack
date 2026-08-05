@@ -19,8 +19,8 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
+/** A manifest of user-recoverable paths whose content remains pinned in the shared CAS. */
 public final class RecoveryArchive {
-	private static final String OBJECTS_DIRECTORY = "objects";
 	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
 	private static final Comparator<Jsons.ClientRecoveryArchiveFields.EntryFields> ENTRY_ORDER = Comparator
 			.comparing((Jsons.ClientRecoveryArchiveFields.EntryFields entry) -> entry.logicalPath)
@@ -33,38 +33,19 @@ public final class RecoveryArchive {
 	}
 
 	public static Path archive(Path storeDirectory, Path recoveryDirectory, String logicalPath, String sha1, long size, String sourceGenerationId, String preservedAt) throws IOException {
-		Objects.requireNonNull(storeDirectory, "storeDirectory");
-		Objects.requireNonNull(recoveryDirectory, "recoveryDirectory");
+		Path storeRoot = requireDirectory(storeDirectory, "shared object store");
+		Path archiveRoot = requireArchiveRoot(recoveryDirectory);
 		String normalizedPath = requirePath(logicalPath);
 		String normalizedHash = requireHash(sha1);
 		String normalizedSourceGenerationId = requireOptionalGeneration(sourceGenerationId);
 		String normalizedPreservedAt = requireInstant(preservedAt);
 		if (size < 0) throw new IOException("Recovery object size is invalid");
 
-		Path storeRoot = storeDirectory.toAbsolutePath().normalize();
-		Path source = storeRoot.resolve(normalizedHash).normalize();
-		validateNoSymbolicLinkDescendants(storeRoot, source);
-		if (!SmartFileUtils.isValidFile(source, size, normalizedHash))
-			throw new IOException("Recovery object is missing or corrupt: " + normalizedHash);
+		Path object = storeRoot.resolve(normalizedHash).normalize();
+		validateNoSymbolicLinkDescendants(storeRoot, object);
+		if (!SmartFileUtils.isValidFile(object, size, normalizedHash)) throw new IOException("Recovery object is missing or corrupt: " + normalizedHash);
 
-		Path archiveRoot = recoveryDirectory.toAbsolutePath().normalize();
-		validateNoSymbolicLinkDescendants(archiveRoot, archiveRoot);
-		Files.createDirectories(archiveRoot);
-		validateNoSymbolicLinkDescendants(archiveRoot, archiveRoot);
-		Path objectsDirectory = archiveRoot.resolve(OBJECTS_DIRECTORY);
-		validateNoSymbolicLinkDescendants(archiveRoot, objectsDirectory);
-		Files.createDirectories(objectsDirectory);
-		validateNoSymbolicLinkDescendants(archiveRoot, objectsDirectory);
-		Path object = objectsDirectory.resolve(normalizedHash);
-		validateNoSymbolicLinkDescendants(archiveRoot, object);
-		if (!SmartFileUtils.isValidFile(object, size, normalizedHash)) {
-			SmartFileUtils.copyVerifiedAtomic(source, object, size, normalizedHash);
-			if (!SmartFileUtils.isValidFile(object, size, normalizedHash)) throw new IOException("Recovery archive object failed verification: " + object);
-		}
-
-		Path manifestPath = archiveRoot.resolve("manifest.json");
-		validateNoSymbolicLinkDescendants(archiveRoot, manifestPath);
-		Jsons.ClientRecoveryArchiveFields archive = read(recoveryDirectory);
+		Jsons.ClientRecoveryArchiveFields archive = read(storeRoot, archiveRoot);
 		boolean alreadyRecorded = archive.entries.stream().anyMatch(entry -> normalizedPath.equals(entry.logicalPath)
 				&& normalizedHash.equalsIgnoreCase(entry.sha1) && size == entry.size);
 		if (!alreadyRecorded) {
@@ -78,22 +59,14 @@ public final class RecoveryArchive {
 			entries.add(entry);
 			entries.sort(ENTRY_ORDER);
 			archive.entries = entries;
-			ConfigTools.writeAtomic(manifestPath, archive);
+			ConfigTools.writeAtomic(archiveRoot.resolve("manifest.json"), archive);
 		}
 		return object;
 	}
 
-	public static Jsons.ClientRecoveryArchiveFields read(Path recoveryDirectory) throws IOException {
-		Objects.requireNonNull(recoveryDirectory, "recoveryDirectory");
-		Path archiveRoot = recoveryDirectory.toAbsolutePath().normalize();
-		if (Files.isSymbolicLink(archiveRoot)) throw new IOException("Recovery archive root may not be a symbolic link");
-		if (Files.exists(archiveRoot, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(archiveRoot, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Recovery archive root is not a directory");
-		Path objectsDirectory = archiveRoot.resolve(OBJECTS_DIRECTORY);
-		if (Files.exists(objectsDirectory, LinkOption.NOFOLLOW_LINKS)) {
-			validateNoSymbolicLinkDescendants(archiveRoot, objectsDirectory);
-			if (!Files.isDirectory(objectsDirectory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Recovery archive objects path is not a directory");
-		}
+	public static Jsons.ClientRecoveryArchiveFields read(Path storeDirectory, Path recoveryDirectory) throws IOException {
+		Path storeRoot = requireDirectory(storeDirectory, "shared object store");
+		Path archiveRoot = requireArchiveRoot(recoveryDirectory);
 		Path manifestPath = archiveRoot.resolve("manifest.json");
 		if (!Files.exists(manifestPath, LinkOption.NOFOLLOW_LINKS)) {
 			Jsons.ClientRecoveryArchiveFields empty = new Jsons.ClientRecoveryArchiveFields();
@@ -120,15 +93,29 @@ public final class RecoveryArchive {
 			requireInstant(entry.preservedAt);
 			if (entry.size < 0 || !unique.add(entry.logicalPath + "\0" + hash + "\0" + entry.size))
 				throw new IOException("Recovery archive entry metadata is invalid");
-			Path object = archiveRoot.resolve(OBJECTS_DIRECTORY).resolve(hash);
-			validateNoSymbolicLinkDescendants(archiveRoot, object);
-			if (!SmartFileUtils.isValidFile(object, entry.size, hash)) throw new IOException("Recovery archive object is missing or corrupt: " + hash);
+			Path object = storeRoot.resolve(hash).normalize();
+			validateNoSymbolicLinkDescendants(storeRoot, object);
+			if (!SmartFileUtils.isValidFile(object, entry.size, hash)) throw new IOException("Pinned recovery object is missing or corrupt: " + hash);
 		}
 		sorted.sort(ENTRY_ORDER);
 		List<String> actualOrder = archive.entries.stream().map(entry -> entry.logicalPath + "\0" + entry.sha1.toLowerCase(Locale.ROOT) + "\0" + entry.size).toList();
 		List<String> expectedOrder = sorted.stream().map(entry -> entry.logicalPath + "\0" + entry.sha1.toLowerCase(Locale.ROOT) + "\0" + entry.size).toList();
 		if (!actualOrder.equals(expectedOrder)) throw new IOException("Recovery archive entries are not ordered");
 		return archive;
+	}
+
+	private static Path requireDirectory(Path path, String description) throws IOException {
+		Path normalized = Objects.requireNonNull(path, description).toAbsolutePath().normalize();
+		if (Files.isSymbolicLink(normalized) || !Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " is not a directory: " + normalized);
+		return normalized;
+	}
+
+	private static Path requireArchiveRoot(Path path) throws IOException {
+		Path archiveRoot = Objects.requireNonNull(path, "recovery directory").toAbsolutePath().normalize();
+		if (Files.isSymbolicLink(archiveRoot)) throw new IOException("Recovery archive root may not be a symbolic link");
+		Files.createDirectories(archiveRoot);
+		validateNoSymbolicLinkDescendants(archiveRoot, archiveRoot);
+		return archiveRoot;
 	}
 
 	private static String requireOptionalGeneration(String value) throws IOException {

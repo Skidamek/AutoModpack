@@ -10,6 +10,8 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public final class ModpackCandidateScanner {
 	private final StableSourceSnapshotter sourceSnapshotter = new StableSourceSnapshotter();
@@ -172,7 +174,7 @@ public final class ModpackCandidateScanner {
 		StagedObject object = null;
 		if (pair.explicit != null) {
 			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(pair.explicit, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
-					request.stagingDirectory());
+					request.stagingDirectory(), request.fileMetadataCache(), request.modFileCache(), request.objectStoreDirectory());
 			if (snapshot.exclusion() == null) {
 				selected = pair.explicit;
 				file = snapshot.file();
@@ -181,7 +183,7 @@ public final class ModpackCandidateScanner {
 		}
 		if (pair.explicit == null && pair.synced != null) {
 			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(pair.synced, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
-					request.stagingDirectory());
+					request.stagingDirectory(), request.fileMetadataCache(), request.modFileCache(), request.objectStoreDirectory());
 			if (snapshot.exclusion() == null) {
 				selected = pair.synced;
 				file = snapshot.file();
@@ -339,11 +341,22 @@ public final class ModpackCandidateScanner {
 			boolean autoExcludeUnnecessaryFiles,
 			boolean autoExcludeServerSideMods,
 			Path stagingDirectory,
-			Executor executor) {
+			Executor executor,
+			Path objectStoreDirectory,
+			FileMetadataCache fileMetadataCache,
+			ModFileCache modFileCache) {
+		public Request(String modpackId, String modpackName, String automodpackVersion, String loader, String loaderVersion, String mcVersion, Path serverRoot,
+				Path groupRoot, Map<String, Jsons.GroupDeclaration> groups, Map<String, Jsons.SelectionTagDeclaration> selectionTags, boolean autoExcludeUnnecessaryFiles,
+				boolean autoExcludeServerSideMods, Path stagingDirectory, Executor executor) {
+			this(modpackId, modpackName, automodpackVersion, loader, loaderVersion, mcVersion, serverRoot, groupRoot, groups, selectionTags, autoExcludeUnnecessaryFiles,
+					autoExcludeServerSideMods, stagingDirectory, executor, null, null, null);
+		}
+
 		public Request {
 			serverRoot = serverRoot.toAbsolutePath().normalize();
 			groupRoot = groupRoot.toAbsolutePath().normalize();
 			stagingDirectory = stagingDirectory.toAbsolutePath().normalize();
+			if (objectStoreDirectory != null) objectStoreDirectory = objectStoreDirectory.toAbsolutePath().normalize();
 			Objects.requireNonNull(executor);
 		}
 	}

@@ -26,7 +26,6 @@ val gsonVersion = versionProperty("versionGson")
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val tomljVersion = versionProperty("versionTomlj")
 val antlrVersion = versionProperty("versionAntlr")
-val h2Version = versionProperty("versionH2")
 val junitVersion = versionProperty("versionJunit")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
 val aircompressorVersion = versionProperty("versionAircompressor")
@@ -39,7 +38,6 @@ val deps =
 		"org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion",
 		"org.tomlj:tomlj:$tomljVersion",
 		"org.antlr:antlr4-runtime:$antlrVersion",
-		"com.h2database:h2-mvstore:$h2Version",
 		"io.airlift:aircompressor:$aircompressorVersion",
 	)
 

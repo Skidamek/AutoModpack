@@ -47,8 +47,7 @@ public record UpdatePlan(
 		PROJECTION,
 		OVERLAY,
 		GAME_DIR,
-		STORE_DIR,
-		AUTOMODPACK_DIR
+		STORE_DIR
 	}
 
 	public enum OperationType {

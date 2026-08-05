@@ -72,7 +72,7 @@ public class ModpackUtils {
 		Map<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> itemsByDir = serverModpackContent.list.stream()
 				.collect(Collectors.groupingBy(item -> SmartFileUtils.getPath(activeDirectory, item.file).getParent(), TreeMap::new, Collectors.toList()));
 
-		try (var cache = FileMetadataCache.open(storage.hashCacheFile())) {
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 
 			// Process Directory by Directory
 			for (Map.Entry<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
@@ -262,7 +262,6 @@ public class ModpackUtils {
 
 		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
 		updatedConfig.selectedModpackId = modpackId;
-		updatedConfig.modpackConnections.put(modpackId, connectionInfo);
 		return updatedConfig;
 	}
 

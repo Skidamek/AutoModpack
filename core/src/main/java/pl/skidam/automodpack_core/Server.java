@@ -32,8 +32,7 @@ public class Server {
 
 		modpackDir.toFile().mkdirs();
 
-		serverConfigFile = modpackDir.resolve("automodpack-server.json");
-		serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
+		serverConfigFile = modpackDir.resolve("server-config.json");
 
 		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
 		if (serverConfig == null) {
@@ -50,18 +49,8 @@ public class Server {
 			return;
 		}
 
-		Jsons.ServerCoreConfigFields serverCoreConfig = ConfigTools.readOrCreate(serverCoreConfigFile, Jsons.ServerCoreConfigFields.class,
-				Jsons.ServerCoreConfigFields::new);
-		if (serverCoreConfig != null) {
-			AM_VERSION = serverCoreConfig.automodpackVersion;
-			LOADER = serverCoreConfig.loader;
-			LOADER_VERSION = serverCoreConfig.loaderVersion;
-			MC_VERSION = serverCoreConfig.mcVersion;
-			ConfigTools.writeAtomic(serverCoreConfigFile, serverCoreConfig);
-		}
-
-		Path hostGenerations = modpackDir.resolve(hostGenerationsDir.getFileName());
-		modpackExecutor = new ModpackExecutor(modpackDir, modpackDir, hostGenerations);
+		Path serverRoot = modpackDir.resolve(serverDir);
+		modpackExecutor = new ModpackExecutor(modpackDir, modpackDir, serverRoot);
 		var generation = modpackExecutor.publish();
 
 		if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {

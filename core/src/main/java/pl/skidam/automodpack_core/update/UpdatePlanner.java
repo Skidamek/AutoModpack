@@ -142,7 +142,7 @@ public final class UpdatePlanner {
 		projectedScope.addAll(operations.keySet());
 		List<ProjectedFile> finalState = projectedScope.stream().sorted(FILE_KEY_ORDER).map(key -> {
 			FileState state = projected.get(key);
-			return state == null
+			return state == null || !state.regularFile()
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
@@ -174,6 +174,8 @@ public final class UpdatePlanner {
 			if (targetItems.containsKey(entry.getKey())) continue;
 			FileKey modpackKey = new FileKey(Root.PROJECTION, normalize(entry.getKey()));
 			delete(operations, projected, modpackKey, null);
+			FileKey overlayKey = new FileKey(Root.OVERLAY, normalize(entry.getKey()));
+			if (projected.containsKey(overlayKey)) delete(operations, projected, overlayKey, projected.get(overlayKey).sha1());
 			FileKey liveKey = liveKey(entry.getValue());
 			FileState live = projected.get(liveKey);
 			if (live != null && hashesEqual(live.sha1(), entry.getValue().sha1)) {
@@ -196,7 +198,7 @@ public final class UpdatePlanner {
 			boolean installedHashChanged = !hashesEqual(item.sha1, Optional.ofNullable(installedItems.get(relative)).map(old -> old.sha1).orElse(null));
 			boolean overwriteEditable = item.editable && item.overwriteEditable && installedHashChanged;
 			FileState overlay = item.editable && !overwriteEditable ? input.editableOverlays().get(relative) : null;
-			if (overlay != null && !matches(projected.get(new FileKey(Root.OVERLAY, relative)), overlay.sha1(), overlay.size()))
+			if (overlay != null && overlay.regularFile() && !matches(projected.get(new FileKey(Root.OVERLAY, relative)), overlay.sha1(), overlay.size()))
 				install(operations, projected, new FileKey(Root.OVERLAY, relative), overlay.sha1(), overlay.size(), overlay.mod());
 			if (overlay == null && projected.containsKey(new FileKey(Root.OVERLAY, relative)))
 				delete(operations, projected, new FileKey(Root.OVERLAY, relative), projected.get(new FileKey(Root.OVERLAY, relative)).sha1());
@@ -207,11 +209,15 @@ public final class UpdatePlanner {
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {
 				FileState live = projected.get(liveKey);
-				String liveHash = overlay == null ? item.sha1 : overlay.sha1();
-				long liveSize = overlay == null ? parseSize(item.size) : overlay.size();
-				if (!matches(live, liveHash, liveSize)) {
-					install(operations, projected, liveKey, liveHash, liveSize, "mod".equals(item.type));
-					if ("mod".equals(item.type)) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
+				if (overlay != null && !overlay.regularFile()) {
+					if (live != null) delete(operations, projected, liveKey, live.sha1());
+				} else {
+					String liveHash = overlay == null ? item.sha1 : overlay.sha1();
+					long liveSize = overlay == null ? parseSize(item.size) : overlay.size();
+					if (!matches(live, liveHash, liveSize)) {
+						install(operations, projected, liveKey, liveHash, liveSize, "mod".equals(item.type));
+						if ("mod".equals(item.type)) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
+					}
 				}
 			}
 		}
@@ -236,7 +242,7 @@ public final class UpdatePlanner {
 		projectedScope.addAll(operations.keySet());
 		List<ProjectedFile> finalState = projectedScope.stream().sorted(FILE_KEY_ORDER).map(key -> {
 			FileState state = projected.get(key);
-			return state == null
+			return state == null || !state.regularFile()
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();

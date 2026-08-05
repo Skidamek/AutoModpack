@@ -1,23 +1,20 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.cacheDir;
-import static pl.skidam.automodpack_core.Constants.clientDummyFilesFile;
-import static pl.skidam.automodpack_core.Constants.clientGenerationActiveDir;
-import static pl.skidam.automodpack_core.Constants.clientGenerationBackupDir;
-import static pl.skidam.automodpack_core.Constants.clientGenerationBaselinesDir;
-import static pl.skidam.automodpack_core.Constants.clientGenerationIncomingDir;
-import static pl.skidam.automodpack_core.Constants.clientGenerationObjectsDir;
-import static pl.skidam.automodpack_core.Constants.clientGenerationOverlaysDir;
-import static pl.skidam.automodpack_core.Constants.clientGenerationRecordsDir;
-import static pl.skidam.automodpack_core.Constants.clientGenerationStateFile;
-import static pl.skidam.automodpack_core.Constants.clientGenerationsDir;
+import static pl.skidam.automodpack_core.Constants.clientActiveDir;
+import static pl.skidam.automodpack_core.Constants.clientActiveStateFile;
+import static pl.skidam.automodpack_core.Constants.clientBackupDir;
+import static pl.skidam.automodpack_core.Constants.clientBaselinesDir;
+import static pl.skidam.automodpack_core.Constants.clientConfigFile;
+import static pl.skidam.automodpack_core.Constants.clientContentTempFile;
+import static pl.skidam.automodpack_core.Constants.clientDir;
+import static pl.skidam.automodpack_core.Constants.clientHelperDir;
+import static pl.skidam.automodpack_core.Constants.clientIncomingDir;
+import static pl.skidam.automodpack_core.Constants.clientOverlaysDir;
+import static pl.skidam.automodpack_core.Constants.clientRecordsDir;
+import static pl.skidam.automodpack_core.Constants.clientRecoveryDir;
 import static pl.skidam.automodpack_core.Constants.clientRestartLoopStateFile;
 import static pl.skidam.automodpack_core.Constants.clientSelectionFile;
-import static pl.skidam.automodpack_core.Constants.hashCacheDBFile;
-import static pl.skidam.automodpack_core.Constants.helperDir;
-import static pl.skidam.automodpack_core.Constants.modCacheDBFile;
-import static pl.skidam.automodpack_core.Constants.privateDir;
-import static pl.skidam.automodpack_core.Constants.recoveryDir;
+import static pl.skidam.automodpack_core.Constants.clientTransactionFile;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -27,7 +24,10 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -36,7 +36,9 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 /**
  * The only authority for client-side AutoModpack paths.
@@ -53,7 +55,9 @@ public final class ClientStorage {
 
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
-	private final Path generationsDirectory;
+	private final Path clientDirectory;
+	private final Path dataDirectory;
+	private final boolean sharedDataDirectory;
 	private final Path objectsDirectory;
 	private final Path recordsDirectory;
 	private final Path overlaysDirectory;
@@ -64,47 +68,40 @@ public final class ClientStorage {
 	private final Path stateFile;
 	private final Path transactionFile;
 	private final Path selectionFile;
-	private final Path dummyFilesFile;
 	private final Path restartLoopStateFile;
 	private final Path clientConfigFile;
-	private final Path clientSecretsFile;
-	private final Path cacheDirectory;
-	private final Path hashCacheFile;
-	private final Path modCacheFile;
 	private final Path modpackContentTempFile;
 	private final Path helperDirectory;
-	private final Path knownHostsFile;
-	private final Path knownHostsBootstrapFile;
 	private final Path recoveryDirectory;
-	private final Path privateDirectory;
+	private final Path bootstrapFile;
+	private final Path fileMetadataDirectory;
+	private final Path modMetadataDirectory;
 
 	public ClientStorage(Path gameDirectory) {
 		this.gameDirectory = requireDirectoryPath(gameDirectory, "game directory");
 		this.automodpackDirectory = this.gameDirectory.resolve(automodpackDirName()).normalize();
-		this.generationsDirectory = this.gameDirectory.resolve(clientGenerationsDir).normalize();
-		this.objectsDirectory = this.gameDirectory.resolve(clientGenerationObjectsDir).normalize();
-		this.recordsDirectory = this.gameDirectory.resolve(clientGenerationRecordsDir).normalize();
-		this.overlaysDirectory = this.gameDirectory.resolve(clientGenerationOverlaysDir).normalize();
-		this.baselinesDirectory = this.gameDirectory.resolve(clientGenerationBaselinesDir).normalize();
-		this.activeDirectory = this.gameDirectory.resolve(clientGenerationActiveDir).normalize();
-		this.incomingDirectory = this.gameDirectory.resolve(clientGenerationIncomingDir).normalize();
-		this.backupDirectory = this.gameDirectory.resolve(clientGenerationBackupDir).normalize();
-		this.stateFile = this.gameDirectory.resolve(clientGenerationStateFile).normalize();
-		this.transactionFile = this.gameDirectory.resolve(Constants.transactionFile).normalize();
-		this.selectionFile = this.gameDirectory.resolve(clientSelectionFile).normalize();
-		this.dummyFilesFile = this.gameDirectory.resolve(clientDummyFilesFile).normalize();
-		this.restartLoopStateFile = this.gameDirectory.resolve(clientRestartLoopStateFile).normalize();
+		this.clientDirectory = this.gameDirectory.resolve(clientDir).normalize();
+		DataRootResolver.Location dataLocation = DataRootResolver.resolve(this.gameDirectory);
+		this.dataDirectory = dataLocation.root();
+		this.sharedDataDirectory = dataLocation.shared();
+		this.objectsDirectory = dataDirectory.resolve("objects").normalize();
+		this.recordsDirectory = this.clientDirectory.resolve(clientRecordsDir.getFileName()).normalize();
+		this.overlaysDirectory = this.clientDirectory.resolve(clientOverlaysDir.getFileName()).normalize();
+		this.baselinesDirectory = this.clientDirectory.resolve(clientBaselinesDir.getFileName()).normalize();
+		this.activeDirectory = this.clientDirectory.resolve(clientActiveDir.getFileName()).normalize();
+		this.incomingDirectory = this.clientDirectory.resolve(clientIncomingDir.getFileName()).normalize();
+		this.backupDirectory = this.clientDirectory.resolve(clientBackupDir.getFileName()).normalize();
+		this.stateFile = this.clientDirectory.resolve(clientActiveStateFile.getFileName()).normalize();
+		this.transactionFile = this.clientDirectory.resolve(clientTransactionFile.getFileName()).normalize();
+		this.selectionFile = this.clientDirectory.resolve(clientSelectionFile.getFileName()).normalize();
+		this.restartLoopStateFile = this.clientDirectory.resolve(clientRestartLoopStateFile.getFileName()).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(Constants.clientConfigFile).normalize();
-		this.clientSecretsFile = this.gameDirectory.resolve(Constants.clientSecretsFile).normalize();
-		this.cacheDirectory = this.gameDirectory.resolve(cacheDir).normalize();
-		this.hashCacheFile = this.gameDirectory.resolve(hashCacheDBFile).normalize();
-		this.modCacheFile = this.gameDirectory.resolve(modCacheDBFile).normalize();
-		this.modpackContentTempFile = this.gameDirectory.resolve(Constants.modpackContentTempFile).normalize();
-		this.helperDirectory = this.gameDirectory.resolve(Constants.helperDir).normalize();
-		this.knownHostsFile = this.gameDirectory.resolve(Constants.knownHostsFile).normalize();
-		this.knownHostsBootstrapFile = this.gameDirectory.resolve(Constants.knownHostsBootstrapFile).normalize();
-		this.recoveryDirectory = this.gameDirectory.resolve(recoveryDir).normalize();
-		this.privateDirectory = this.gameDirectory.resolve(privateDir).normalize();
+		this.modpackContentTempFile = this.clientDirectory.resolve(clientContentTempFile.getFileName()).normalize();
+		this.helperDirectory = this.clientDirectory.resolve(clientHelperDir.getFileName()).normalize();
+		this.bootstrapFile = this.gameDirectory.resolve(Constants.bootstrapFile).normalize();
+		this.recoveryDirectory = this.clientDirectory.resolve(clientRecoveryDir.getFileName()).normalize();
+		this.fileMetadataDirectory = dataDirectory.resolve("file-metadata").normalize();
+		this.modMetadataDirectory = dataDirectory.resolve("mod-metadata").normalize();
 		validateLayout();
 	}
 
@@ -120,8 +117,16 @@ public final class ClientStorage {
 		return automodpackDirectory;
 	}
 
-	public Path generationsDirectory() {
-		return generationsDirectory;
+	public Path clientDirectory() {
+		return clientDirectory;
+	}
+
+	public Path dataDirectory() {
+		return dataDirectory;
+	}
+
+	public boolean sharedDataDirectory() {
+		return sharedDataDirectory;
 	}
 
 	public Path objectsDirectory() {
@@ -164,10 +169,6 @@ public final class ClientStorage {
 		return selectionFile;
 	}
 
-	public Path dummyFilesFile() {
-		return dummyFilesFile;
-	}
-
 	public Path restartLoopStateFile() {
 		return restartLoopStateFile;
 	}
@@ -176,20 +177,12 @@ public final class ClientStorage {
 		return clientConfigFile;
 	}
 
-	public Path clientSecretsFile() {
-		return clientSecretsFile;
+	public Path fileMetadataDirectory() {
+		return fileMetadataDirectory;
 	}
 
-	public Path cacheDirectory() {
-		return cacheDirectory;
-	}
-
-	public Path hashCacheFile() {
-		return hashCacheFile;
-	}
-
-	public Path modCacheFile() {
-		return modCacheFile;
+	public Path modMetadataDirectory() {
+		return modMetadataDirectory;
 	}
 
 	public Path modpackContentTempFile() {
@@ -200,16 +193,8 @@ public final class ClientStorage {
 		return helperDirectory;
 	}
 
-	public Path knownHostsFile() {
-		return knownHostsFile;
-	}
-
-	public Path knownHostsBootstrapFile() {
-		return knownHostsBootstrapFile;
-	}
-
-	public Path privateDirectory() {
-		return privateDirectory;
+	public Path bootstrapFile() {
+		return bootstrapFile;
 	}
 
 	public Path modsDirectory() {
@@ -224,6 +209,14 @@ public final class ClientStorage {
 		return generationDirectory(generationId).resolve("manifest.json");
 	}
 
+	public Path connectionFile(String modpackId) {
+		return dataDirectory.resolve("modpacks").resolve(ModpackId.requireValid(modpackId)).resolve("connection.json").normalize();
+	}
+
+	public Path connectionLockFile(String modpackId) {
+		return connectionFile(modpackId).resolveSibling("connection.json.lock");
+	}
+
 	public Path overlayDirectory(String modpackId) {
 		return overlaysDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
 	}
@@ -233,6 +226,48 @@ public final class ClientStorage {
 		Path resolved = root.resolve(LogicalPath.normalize(logicalPath)).normalize();
 		if (!resolved.startsWith(root)) throw new IllegalArgumentException("Overlay path escapes its modpack lineage");
 		return resolved;
+	}
+
+	public Path overlayStateFile(String modpackId) {
+		return overlaysDirectory.resolve(ModpackId.requireValid(modpackId) + ".json").normalize();
+	}
+
+	public Jsons.ClientOverlayFields readOverlayState(String modpackId) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		Path stateFile = overlayStateFile(normalizedModpackId);
+		if (!Files.exists(stateFile, LinkOption.NOFOLLOW_LINKS)) {
+			Jsons.ClientOverlayFields empty = new Jsons.ClientOverlayFields();
+			empty.modpackId = normalizedModpackId;
+			empty.deletedPaths = List.of();
+			return empty;
+		}
+		if (Files.isSymbolicLink(stateFile) || !Files.isRegularFile(stateFile, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client overlay state is not a regular file: " + stateFile);
+		Jsons.ClientOverlayFields state = ConfigTools.read(stateFile, Jsons.ClientOverlayFields.class)
+				.orElseThrow(() -> new IOException("Client overlay state is empty: " + stateFile));
+		if (!normalizedModpackId.equals(state.modpackId) || state.deletedPaths == null) throw new IOException("Client overlay state identity is invalid: " + stateFile);
+		List<String> canonical = state.deletedPaths.stream().map(ClientStorage::requireLogicalPath).distinct().sorted().toList();
+		if (!canonical.equals(state.deletedPaths)) throw new IOException("Client overlay tombstones are not canonical: " + stateFile);
+		return state;
+	}
+
+	public void writeOverlayState(String modpackId, Set<String> deletedPaths) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		TreeSet<String> canonical = new TreeSet<>();
+		for (String path : deletedPaths) canonical.add(requireLogicalPath(path));
+		Path stateFile = overlayStateFile(normalizedModpackId);
+		if (canonical.isEmpty()) {
+			Files.deleteIfExists(stateFile);
+			return;
+		}
+		Jsons.ClientOverlayFields state = new Jsons.ClientOverlayFields();
+		state.modpackId = normalizedModpackId;
+		state.deletedPaths = List.copyOf(canonical);
+		ConfigTools.writeAtomic(stateFile, state);
+	}
+
+	public void clearOverlay(String modpackId) throws IOException {
+		SmartFileUtils.deleteTree(overlayDirectory(modpackId));
+		Files.deleteIfExists(overlayStateFile(modpackId));
 	}
 
 	public Path baselineFile(String modpackId) {
@@ -253,10 +288,11 @@ public final class ClientStorage {
 
 	public String overlayDigest(String modpackId) throws IOException {
 		Path root = overlayDirectory(modpackId);
-		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return "";
-		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client overlay root is not a directory: " + root);
 		try {
 			MessageDigest digest = MessageDigest.getInstance("SHA-1");
+			for (String deletedPath : readOverlayState(modpackId).deletedPaths) digest.update(("D\0" + deletedPath + "\n").getBytes(StandardCharsets.UTF_8));
+			if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) return HexFormat.of().formatHex(digest.digest());
+			if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client overlay root is not a directory: " + root);
 			try (Stream<Path> paths = Files.walk(root)) {
 				for (Path path : paths.filter(candidate -> !candidate.equals(root)).sorted().toList()) {
 					if (Files.isSymbolicLink(path)) throw new IOException("Client overlay contains a symbolic link: " + path);
@@ -274,15 +310,17 @@ public final class ClientStorage {
 	}
 
 	public void ensureRoots() throws IOException {
-		ensureDirectory(generationsDirectory, "client generation root");
+		ensureDirectory(clientDirectory, "client state root");
 		ensureDirectory(objectsDirectory, "client object store");
+		ensureDirectory(dataDirectory.resolve("file-metadata"), "file metadata cache");
+		ensureDirectory(dataDirectory.resolve("mod-metadata"), "mod metadata cache");
+		ensureDirectory(dataDirectory.resolve("modpacks"), "shared modpack state");
 		ensureDirectory(recordsDirectory, "client generation records");
 		ensureDirectory(overlaysDirectory, "client overlays");
 		ensureDirectory(baselinesDirectory, "client baselines");
 		ensureDirectory(incomingDirectory, "client transaction incoming root");
 		ensureDirectory(backupDirectory, "client transaction backup root");
-		ensureDirectory(privateDirectory, "client private state");
-		ensureDirectory(cacheDirectory, "client cache");
+		ensureDirectory(helperDirectory, "client update helper");
 	}
 
 	public Jsons.ClientGenerationStateFields readActiveState() throws IOException {
@@ -291,19 +329,15 @@ public final class ClientStorage {
 			throw new IOException("Client active state is not a regular file");
 		Jsons.ClientGenerationStateFields state = ConfigTools.read(stateFile, Jsons.ClientGenerationStateFields.class)
 				.orElseThrow(() -> new IOException("Client active state is empty"));
-		if (state.schemaVersion != 1 || !ModpackId.isValid(state.modpackId) || !DIGEST.matcher(state.generationId).matches()
-				|| state.platform == null || state.platform.isBlank() || !DIGEST.matcher(state.stateDigest).matches() || !DIGEST.matcher(state.ledgerDigest).matches())
+		if (!ModpackId.isValid(state.modpackId) || !DIGEST.matcher(state.generationId).matches() || !"ACTIVE".equals(state.status))
 			throw new IOException("Client active state identity is invalid");
 		return state;
 	}
 
-	public void writeActiveState(String modpackId, String generationId, String platform, String stateDigest, String ledgerDigest) throws IOException {
+	public void writeActiveState(String modpackId, String generationId) throws IOException {
 		Jsons.ClientGenerationStateFields state = new Jsons.ClientGenerationStateFields();
 		state.modpackId = ModpackId.requireValid(modpackId);
 		state.generationId = requireDigest(generationId, "generation ID");
-		state.platform = Objects.requireNonNull(platform, "platform");
-		state.stateDigest = requireDigest(stateDigest, "state digest");
-		state.ledgerDigest = requireDigest(ledgerDigest, "ledger digest");
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
 	}
@@ -314,12 +348,11 @@ public final class ClientStorage {
 
 	private void validateLayout() {
 		validateWithin(gameDirectory, automodpackDirectory);
-		validateWithin(automodpackDirectory, generationsDirectory, transactionFile, selectionFile, dummyFilesFile, clientConfigFile, clientSecretsFile,
-				cacheDirectory, modpackContentTempFile, knownHostsBootstrapFile, recoveryDirectory, privateDirectory);
-		validateWithin(generationsDirectory, objectsDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, activeDirectory, incomingDirectory, backupDirectory,
-				stateFile);
-		validateWithin(cacheDirectory, hashCacheFile, modCacheFile, helperDirectory);
-		validateWithin(privateDirectory, restartLoopStateFile, knownHostsFile);
+		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile);
+		validateWithin(gameDirectory, bootstrapFile);
+		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, activeDirectory, incomingDirectory, backupDirectory, recoveryDirectory,
+				stateFile, transactionFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
+		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory);
 	}
 
 	private static void validateWithin(Path parent, Path... children) {
@@ -342,6 +375,10 @@ public final class ClientStorage {
 		} catch (RuntimeException e) {
 			throw new IllegalArgumentException("Invalid transaction UUID", e);
 		}
+	}
+
+	private static String requireLogicalPath(String value) {
+		return LogicalPath.requireCanonical(value);
 	}
 
 	private static String automodpackDirName() {
