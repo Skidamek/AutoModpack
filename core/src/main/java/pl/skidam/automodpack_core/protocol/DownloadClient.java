@@ -380,10 +380,6 @@ public class DownloadClient implements AutoCloseable {
 		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
 	}
 
-	public CompletableFuture<Path> requestRefresh(byte[][] fileHashes, Path destination) {
-		return withConnection(connection -> connection.sendRefreshRequest(fileHashes, destination));
-	}
-
 	static boolean isSelfSigned(X509Certificate certificate) {
 		if (certificate == null || !certificate.getSubjectX500Principal().equals(certificate.getIssuerX500Principal())) return false;
 
@@ -506,34 +502,6 @@ class Connection implements AutoCloseable {
 		}, executor);
 	}
 
-	public CompletableFuture<Path> sendRefreshRequest(byte[][] fileHashes, Path destination) {
-		return CompletableFuture.supplyAsync(() -> {
-			Exception exception = null;
-			try {
-				ByteArrayOutputStream baos = new ByteArrayOutputStream();
-				DataOutputStream dos = new DataOutputStream(baos);
-				dos.writeByte(protocolVersion);
-				dos.writeByte(REFRESH_REQUEST_TYPE);
-				dos.write(secretBytes);
-				dos.writeInt(fileHashes.length);
-				if (fileHashes.length > 0) {
-					dos.writeInt(fileHashes[0].length);
-					for (byte[] hash : fileHashes) {
-						dos.write(hash);
-					}
-				}
-
-				writeProtocolMessage(baos.toByteArray());
-				return readFileResponse(destination, null);
-			} catch (Exception e) {
-				exception = e;
-				throw new CompletionException(e);
-			} finally {
-				finalBlock(exception);
-			}
-		}, executor);
-	}
-
 	private void finalBlock(Exception exception) {
 		try {
 			int available;
@@ -546,42 +514,11 @@ class Connection implements AutoCloseable {
 	}
 
 	private void writeProtocolMessage(byte[] payload) throws IOException {
-		CompressionCodec codec = getCompressionCodec();
-		int offset = 0;
-
-		while (offset < payload.length) {
-			int bytesToSend = Math.min(payload.length - offset, this.chunkSize);
-			byte[] chunk = new byte[bytesToSend];
-			System.arraycopy(payload, offset, chunk, 0, bytesToSend);
-
-			byte[] compressedChunk = codec.compress(chunk);
-			out.writeInt(compressedChunk.length);
-			out.writeInt(chunk.length);
-			out.write(compressedChunk);
-
-			offset += bytesToSend;
-		}
-		out.flush();
+		ProtocolFrameCodec.write(out, getCompressionCodec(), payload, chunkSize);
 	}
 
 	private byte[] readProtocolMessageFrame() throws IOException {
-		int compressedLength = in.readInt();
-		int originalLength = in.readInt();
-
-		if (originalLength < 0 || originalLength > chunkSize) {
-			throw new IOException("Frame original length (" + originalLength + ") exceeds chunk size (" + chunkSize + ")");
-		}
-
-		int maxCompressedLength = getCompressionCodec().maxCompressedLength(originalLength);
-		if (compressedLength < 0 || compressedLength > maxCompressedLength) {
-			throw new IOException("Frame compressed length (" + compressedLength + ") exceeds codec limit (" + maxCompressedLength + ")");
-		}
-
-		if (compressedLength > networkInputBuffer.length) throw new IOException("Compressed length exceeds buffer capacity");
-
-		in.readFully(networkInputBuffer, 0, compressedLength);
-
-		return getCompressionCodec().decompress(networkInputBuffer, 0, compressedLength, originalLength);
+		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, networkInputBuffer);
 	}
 
 	private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {

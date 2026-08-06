@@ -23,14 +23,9 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 
-import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
-import pl.skidam.automodpack_core.protocol.netty.handler.CompressionDecoder;
-import pl.skidam.automodpack_core.protocol.netty.handler.CompressionEncoder;
-import pl.skidam.automodpack_core.protocol.netty.handler.ConfigurationHandler;
+import pl.skidam.automodpack_core.protocol.netty.ProtocolPipeline;
 import pl.skidam.automodpack_core.protocol.netty.handler.ErrorPrinter;
-import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolMessageDecoder;
-import pl.skidam.automodpack_core.protocol.netty.handler.ServerMessageHandler;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
@@ -129,10 +124,6 @@ public final class ServerHolepunchBridge {
 				DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()))) {
 			channel = new EmbeddedChannel();
 			channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
-			channel.attr(NettyServer.PROTOCOL_VERSION).set(LATEST_SUPPORTED_PROTOCOL_VERSION);
-			channel.attr(NettyServer.COMPRESSION_TYPE).set(CompressionType.ZSTD);
-			channel.attr(NettyServer.CHUNK_SIZE).set(DEFAULT_CHUNK_SIZE);
-
 			channel.pipeline().addLast("error-printer-first", new ErrorPrinter());
 			if (server.getSslCtx() != null) {
 				SslHandler sslHandler = server.getSslCtx().newHandler(channel.alloc());
@@ -148,14 +139,7 @@ public final class ServerHolepunchBridge {
 				LOGGER.debug("TLS termination handled externally for holepunch connection: {}", remoteAddress);
 			}
 
-			channel.pipeline()
-					.addLast("configuration", new ConfigurationHandler())
-					.addLast("compression-encoder", new CompressionEncoder())
-					.addLast("compression-decoder", new CompressionDecoder())
-					.addLast("chunked-write", new ChunkedWriteHandler())
-					.addLast("protocol-msg-decoder", new ProtocolMessageDecoder())
-					.addLast("msg-handler", new ServerMessageHandler(server))
-					.addLast("error-printer-last", new ErrorPrinter());
+			ProtocolPipeline.install(channel, server, remoteAddress);
 
 			socket.setSoTimeout(EVENT_LOOP_TICK_MILLIS);
 			byte[] readBuffer = new byte[8192];
