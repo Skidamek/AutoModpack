@@ -1,0 +1,45 @@
+id: cas-reuse
+description: |
+  Seed every server file in the client's content-addressed store, then install
+  the modpack without network downloads. The completion screen must still count
+  the file changes that were applied.
+renderClient: true
+
+flow:
+  - do: seed_cas
+    name: seed the client CAS with every server file
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: verify_files
+    name: verify all CAS-backed files were installed
+  - do: wait_for
+    name: verify the completion count describes applied changes
+    timeout: 20s
+    until:
+      all:
+        - screen: RestartScreen
+        - log: { container: client, matches: "No files to download" }
+        - log: { container: client, matches: "Prepared update changes: 8 updated, 0 removed" }
+  - do: screenshot
+    name: capture the CAS-backed completion summary
+    file: cas-update-complete
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+    - path: config/amp-autotest-alpha.txt
+      content: "amp-autotest-alpha\n"
+    - path: config/amp-autotest-beta.json
+      content: '{"id":"beta","value":42}'
+    - path: config/amp-autotest-gamma.cfg
+      content: "alpha=true\nbeta=false\n"

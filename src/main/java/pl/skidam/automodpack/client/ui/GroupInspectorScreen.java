@@ -39,12 +39,16 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		int y = this.height - 28;
-		this.previousButton = buttonWidget(this.width / 2 - 155, y, 70, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
-		this.nextButton = buttonWidget(this.width / 2 + 85, y, 70, 20, VersionedText.literal("Next >"), button -> changePage(1));
+		int left = panelLeft(310);
+		int rowWidth = panelWidth(310);
+		this.previousButton = buttonWidget(left, y, 70, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
+		this.nextButton = buttonWidget(left + rowWidth - 70, y, 70, 20, VersionedText.literal("Next >"), button -> changePage(1));
 		this.previousButton.active = page > 0;
 		this.nextButton.active = page + 1 < pageCount();
-		this.addRenderableWidget(this.previousButton);
-		this.addRenderableWidget(this.nextButton);
+		if (pageCount() > 1) {
+			this.addRenderableWidget(this.previousButton);
+			this.addRenderableWidget(this.nextButton);
+		}
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 40, y, 80, 20, VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
 	}
 

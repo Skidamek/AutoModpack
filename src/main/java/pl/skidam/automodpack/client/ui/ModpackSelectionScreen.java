@@ -62,6 +62,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final ClientSelectionStore selectionStore;
 	private final SelectionIntent expectedSelection;
 	private final Consumer<SelectionIntent> selectionAction;
+	private final Runnable cancelAction;
 	private final ModpackUpdater pendingUpdater;
 
 	// What the player has actually ticked; resolved is what that implies once required groups,
@@ -70,26 +71,32 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final Set<String> chosenTags = new LinkedHashSet<>();
 	private final Set<String> excluded = new LinkedHashSet<>();
 	private ResolvedSelection resolution;
+	private List<String> resolutionErrors = List.of();
 	private final List<Row> rows = new ArrayList<>();
 
 	private int page = 0;
 	private int rowsPerPage = 1;
 	private boolean saved = false;
+	private boolean closed;
 	private boolean managementInFlight;
 	private Button removeButton;
 	private Button recoveryButton;
 	private Button historyButton;
 
 	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
-		this(parent, manifest, null, null, null, null);
+		this(parent, manifest, null, null, null, () -> {}, null);
 	}
 
 	public ModpackSelectionScreen(Screen parent, ModpackUpdater updater, Consumer<SelectionIntent> selectionAction) {
-		this(parent, updater.getSelectedTarget().manifest(), updater.getSelectedTarget().expectedPriorIntent(), updater.getSelectedTarget().selection().intent(), selectionAction, updater);
+		this(parent, updater.getSelectedTarget().manifest(), updater.getSelectedTarget().expectedPriorIntent(), updater.getSelectedTarget().selection().intent(), selectionAction, () -> {}, updater);
+	}
+
+	public static ModpackSelectionScreen repair(Screen parent, GroupManifest manifest, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+		return new ModpackSelectionScreen(parent, manifest, savedSelection, savedSelection, selectionAction, cancelAction, null);
 	}
 
 	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, SelectionIntent expectedSelection, SelectionIntent initialSelection,
-			Consumer<SelectionIntent> selectionAction, ModpackUpdater pendingUpdater) {
+			Consumer<SelectionIntent> selectionAction, Runnable cancelAction, ModpackUpdater pendingUpdater) {
 		super(VersionedText.translatable("automodpack.selection.title"));
 		this.parent = parent;
 		this.manifest = Objects.requireNonNull(manifest);
@@ -102,6 +109,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				? selectionStore.get(modpackId).orElse(null)
 				: expectedSelection;
 		this.selectionAction = selectionAction;
+		this.cancelAction = cancelAction;
 		this.pendingUpdater = pendingUpdater;
 		SelectionIntent initial = initialSelection != null
 				? initialSelection
@@ -109,7 +117,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.chosenTags.addAll(initial.requestedTags());
 		this.chosen.addAll(initial.requestedGroups());
 		this.excluded.addAll(initial.excludedGroups());
-		this.resolution = GroupSelectionResolver.resolve(manifest, initial, ClientPlatform.current());
+		try {
+			this.resolution = GroupSelectionResolver.resolve(manifest, initial, ClientPlatform.current());
+		} catch (SelectionResolutionException e) {
+			this.resolution = Objects.requireNonNull(e.resolution(), "Invalid selection did not include a partial resolution");
+			this.resolutionErrors = e.errors();
+		}
 		rebuildRows();
 	}
 
@@ -172,21 +185,22 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return;
 		}
 
-		int listTop = pendingUpdater != null && pendingUpdater.getSourceAvailability().totalFiles() > 0 ? 64 : 50;
+		int listTop = !resolutionErrors.isEmpty() || pendingUpdater != null && pendingUpdater.getSourceAvailability().totalFiles() > 0 ? 64 : 50;
 		int listBottom = this.height - (selectionAction == null ? 108 : 60);
 		rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
 
 		int pageCount = Math.max(1, (int) Math.ceil((double) rows.size() / rowsPerPage));
 		if (page >= pageCount) page = pageCount - 1;
 
-		int x = Math.max(6, (this.width - ROW_WIDTH) / 2);
+		int rowWidth = panelWidth(ROW_WIDTH);
+		int x = panelLeft(ROW_WIDTH);
 		int start = page * rowsPerPage;
 
 		for (int i = start; i < Math.min(rows.size(), start + rowsPerPage); i++) {
 			Row row = rows.get(i);
 			int y = listTop + (i - start) * ROW_HEIGHT;
 			if (row.groupId() == null) {
-				Button section = buttonWidget(x, y, ROW_WIDTH, 20, sectionLabel(row), press -> {
+				Button section = buttonWidget(x, y, rowWidth, 20, sectionLabel(row), press -> {
 					if (row.tagId() != null) toggleTag(row.tagId());
 				});
 				section.active = row.tagId() != null && manifest.selectionTags().containsKey(row.tagId()) && !manifest.selectionTags().get(row.tagId()).serverForced();
@@ -200,14 +214,14 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 			String groupId = row.groupId();
 			var group = groups.get(groupId);
-			Button button = buttonWidget(x, y, ROW_WIDTH - 68, 20, rowLabel(groupId, group), press -> toggle(groupId));
+			Button button = buttonWidget(x, y, rowWidth - 68, 20, rowLabel(groupId, group), press -> toggle(groupId));
 			// Required groups, forced groups, dependencies and unavailable groups are shown so the player
 			// can understand the target, but only optional compatible choices are togglable.
 			button.active = group != null && canToggle(groupId, group);
 			MutableComponent tooltip = rowTooltip(groupId, group);
 			if (tooltip != null) setTooltip(button, tooltip);
 			this.addRenderableWidget(button);
-			Button inspect = buttonWidget(x + ROW_WIDTH - 64, y, 64, 20, VersionedText.literal("Info"), press -> inspect(groupId));
+			Button inspect = buttonWidget(x + rowWidth - 64, y, 64, 20, VersionedText.literal("Info"), press -> inspect(groupId));
 			inspect.active = group != null;
 			if (tooltip != null) setTooltip(inspect, tooltip);
 			this.addRenderableWidget(inspect);
@@ -220,7 +234,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					rebuild();
 				}
 			}));
-			this.addRenderableWidget(buttonWidget(x + ROW_WIDTH - 60, listBottom + 4, 60, 20, VersionedText.literal("Next >"), press -> {
+			this.addRenderableWidget(buttonWidget(x + rowWidth - 60, listBottom + 4, 60, 20, VersionedText.literal("Next >"), press -> {
 				if (page < pageCount - 1) {
 					page++;
 					rebuild();
@@ -248,10 +262,18 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			reresolve();
 		}));
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 50, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.cancel"), press -> ScreenImpl.setScreen(parent)));
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 50, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.cancel"), press -> back()));
 
 		this.addRenderableWidget(buttonWidget(this.width / 2 + 55, this.height - 28, 100, 20,
 				VersionedText.translatable(selectionAction == null ? "automodpack.selection.save" : "automodpack.selection.preview").withStyle(ChatFormatting.BOLD), press -> save()));
+	}
+
+	public boolean isUpdateFlow() {
+		return selectionAction != null;
+	}
+
+	public boolean isConfirmationFlow() {
+		return pendingUpdater != null;
 	}
 
 	@Override
@@ -259,7 +281,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		super.tick();
 		if (pendingUpdater == null) return;
 		ModpackUpdater.ConfirmationState state = pendingUpdater.getConfirmationState();
-		if (state == ModpackUpdater.ConfirmationState.EXPIRED || state == ModpackUpdater.ConfirmationState.CANCELLED) ScreenImpl.multiplayer();
+		if (state == ModpackUpdater.ConfirmationState.CANCELLED) ScreenImpl.multiplayer();
 	}
 
 	private boolean canToggle(String groupId, GroupManifest.Group group) {
@@ -322,15 +344,13 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private void restoreResolution(SelectionResolutionException exception, ResolvedSelection previousResolution) {
 		resolution = exception.resolution() == null ? previousResolution : exception.resolution();
+		resolutionErrors = exception.errors();
 		rebuild();
-	}
-
-	private boolean hasConflicts() {
-		return resolution.groupResolutions().values().stream().anyMatch(explanation -> explanation.status() == GroupResolution.Status.CONFLICT);
 	}
 
 	private void reresolve() {
 		resolution = GroupSelectionResolver.resolve(manifest, new SelectionIntent(chosenTags, chosen, excluded), ClientPlatform.current());
+		resolutionErrors = List.of();
 		rebuild();
 	}
 
@@ -371,7 +391,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 						(Runnable) () -> {
 							removalUpdater.close();
 							endManagement();
-						}, true);
+						}, true, false);
 			} catch (Exception e) {
 				removalUpdater.close();
 				endManagement();
@@ -449,8 +469,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private void save() {
 		SelectionIntent target = new SelectionIntent(chosenTags, chosen, excluded);
-		if (hasConflicts()) {
-			new ScreenManager().error("automodpack.error.critical", "Resolve conflicting group choices before saving", "automodpack.error.logs");
+		if (!resolutionErrors.isEmpty()) {
+			new ScreenManager().error("automodpack.error.critical", "Resolve incompatible group choices before continuing", "automodpack.error.logs");
 			return;
 		}
 		if (selectionAction != null) {
@@ -472,6 +492,13 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 	}
 
+	private void back() {
+		if (closed) return;
+		closed = true;
+		cancelAction.run();
+		ScreenImpl.setScreen(parent);
+	}
+
 	private void rebuildRows() {
 		rows.clear();
 		rows.add(new Row("General", null, null));
@@ -488,8 +515,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (row.tagId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
 		GroupManifest.SelectionTag tag = manifest.selectionTags().get(row.tagId());
 		String title = tag == null || tag.displayName().isBlank() ? row.tagId() : tag.displayName();
-		if (tag != null && tag.serverForced()) return VersionedText.literal(truncateToWidth(this.font, "[#] " + title + " (forced)", ROW_WIDTH - 12)).withStyle(ChatFormatting.GRAY);
-		return VersionedText.literal(truncateToWidth(this.font, (chosenTags.contains(row.tagId()) ? "[x] " : "[ ] ") + title, ROW_WIDTH - 12)).withStyle(ChatFormatting.BOLD);
+		if (tag != null && tag.serverForced()) return VersionedText.literal(truncateToWidth(this.font, "[#] " + title + " (forced)", panelWidth(ROW_WIDTH) - 12)).withStyle(ChatFormatting.GRAY);
+		return VersionedText.literal(truncateToWidth(this.font, (chosenTags.contains(row.tagId()) ? "[x] " : "[ ] ") + title, panelWidth(ROW_WIDTH) - 12)).withStyle(ChatFormatting.BOLD);
 	}
 
 	/** The group's metadata and the resolver explanation, shown on hover. */
@@ -520,7 +547,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private MutableComponent rowLabel(String groupId, GroupManifest.Group group) {
-		if (group == null) return VersionedText.literal(truncateToWidth(this.font, groupId, ROW_WIDTH - 76));
+		if (group == null) return VersionedText.literal(truncateToWidth(this.font, groupId, panelWidth(ROW_WIDTH) - 76));
 
 		String name = group.displayName().isBlank() ? groupId : group.displayName();
 		GroupResolution explanation = resolution.explanation(groupId);
@@ -540,7 +567,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private MutableComponent rowLabel(String text, ChatFormatting color) {
-		return VersionedText.literal(truncateToWidth(this.font, text, ROW_WIDTH - 76)).withStyle(color);
+		return VersionedText.literal(truncateToWidth(this.font, text, panelWidth(ROW_WIDTH) - 76)).withStyle(color);
 	}
 
 	private static boolean isMandatory(GroupManifest manifest, GroupManifest.Group group) {
@@ -569,7 +596,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		MutableComponent header = modpackName.isBlank()
 				? VersionedText.translatable("automodpack.selection.title")
 				: VersionedText.literal(modpackName + " – ").append(VersionedText.translatable("automodpack.selection.title"));
-		drawCenteredTextWithShadow(matrices, this.font, header.withStyle(ChatFormatting.BOLD), this.width / 2, 18, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header.getString(), this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 18,
+				TextColors.WHITE);
 		if (saved) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.saved").withStyle(ChatFormatting.GREEN), this.width / 2, this.height / 2 - 30,
 					TextColors.WHITE);
@@ -587,7 +615,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					this.width / 2, 32, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Platform: " + ClientPlatform.current().id() + "  Selected groups: " + resolution.selectedGroups().size())
 					.withStyle(ChatFormatting.GRAY), this.width / 2, 43, TextColors.WHITE);
-			if (pendingUpdater != null && pendingUpdater.getSourceAvailability().totalFiles() > 0) {
+			if (!resolutionErrors.isEmpty()) {
+				drawCenteredTextWithShadow(matrices, this.font,
+						VersionedText.literal(truncateToWidth(this.font, "Saved choices need attention. Reset them or resolve the highlighted conflict.", this.width - 20)).withStyle(ChatFormatting.RED),
+						this.width / 2, 54, TextColors.WHITE);
+			} else if (pendingUpdater != null && pendingUpdater.getSourceAvailability().totalFiles() > 0) {
 				ModpackUpdater.SourceAvailability availability = pendingUpdater.getSourceAvailability();
 				String sourceStatus = availability.cancelled()
 						? "Third-party sources: lookup cancelled; server download remains available"
@@ -602,7 +634,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		ScreenImpl.setScreen(parent);
+		back();
 		return false;
 	}
 

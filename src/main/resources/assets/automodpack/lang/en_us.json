@@ -23,10 +23,10 @@
   "automodpack.selection.preview": "Preview target",
 
   "automodpack.firstConnect.title": "Set up this modpack",
-  "automodpack.firstConnect.description": "Review the recommended content before any files are downloaded.",
+  "automodpack.firstConnect.description": "Review the recommended content before downloading.",
   "automodpack.firstConnect.patchNotes": "Patch notes",
   "automodpack.firstConnect.noPatchNotes": "No patch notes were published for this content.",
-  "automodpack.firstConnect.bundleExplanation": "Groups are bundles of files and features. You can customize them before downloading.",
+  "automodpack.firstConnect.bundleExplanation": "Groups are bundles of optional features.",
   "automodpack.firstConnect.continue": "Continue with defaults",
   "automodpack.firstConnect.customize": "Customize groups",
   "automodpack.firstConnect.cancel": "Do not download",

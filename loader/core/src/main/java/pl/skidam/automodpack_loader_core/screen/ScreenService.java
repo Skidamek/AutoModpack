@@ -10,8 +10,6 @@ public interface ScreenService {
 
 	void restart(Object... args);
 
-	void danger(Object... args);
-
 	void welcome(Object... args);
 
 	boolean preview(Object... args);

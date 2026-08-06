@@ -16,9 +16,9 @@ public class RestartScreen extends VersionedScreen {
 
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
-	private static Button cancelButton;
-	private static Button restartButton;
-	private static Button changelogsButton;
+	private Button cancelButton;
+	private Button restartButton;
+	private Button changelogsButton;
 
 	public RestartScreen(UpdateType updateType, Changelogs changelogs) {
 		super(VersionedText.literal("RestartScreen"));
@@ -38,7 +38,7 @@ public class RestartScreen extends VersionedScreen {
 		this.addRenderableWidget(restartButton);
 		this.addRenderableWidget(changelogsButton);
 
-		if (changelogs == null || (changelogs.changesAddedList.isEmpty() && changelogs.changesDeletedList.isEmpty())) changelogsButton.active = false;
+		if (changelogs == null || (changelogs.updatedFiles().isEmpty() && changelogs.removedFiles().isEmpty())) changelogsButton.active = false;
 	}
 
 	public void initWidgets() {
@@ -76,9 +76,9 @@ public class RestartScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.restart.secDescription"), this.width / 2,
 				this.height / 2 - 60 + lineHeight * 4, TextColors.WHITE);
 
-		int added = changelogs == null ? 0 : changelogs.changesAddedList.size();
-		int removed = changelogs == null ? 0 : changelogs.changesDeletedList.size();
-		String summary = "Changes: +" + added + " added  -" + removed + " removed";
+		int updated = changelogs == null ? 0 : changelogs.updatedFiles().size();
+		int removed = changelogs == null ? 0 : changelogs.removedFiles().size();
+		String summary = "Files changed: " + updated + " updated  " + removed + " removed";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2,
 				this.height / 2 + 12, TextColors.WHITE);
 	}

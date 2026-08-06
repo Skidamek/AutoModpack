@@ -275,6 +275,12 @@ def _launch_client(ctx: Context):
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx.artifact, game_dir / "mods" / "automodpack.jar")
     (game_dir / "options.txt").write_text("narrator:0\n")
+    automodpack_dir = game_dir / "automodpack"
+    data_root_marker = automodpack_dir / "data-root.json"
+    if not data_root_marker.exists():
+        data_root = automodpack_dir / "data"
+        data_root.mkdir(parents=True, exist_ok=True)
+        data_root_marker.write_text(json.dumps({"root": "/work/game/automodpack/data", "shared": False}, indent=2) + "\n")
     _bridge_state(ctx).unlink(missing_ok=True)
 
     # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
@@ -304,6 +310,7 @@ def _launch_client(ctx: Context):
             "AM_AUTOTEST_GAME_DIR": "/work/game",
             "AM_AUTOTEST_HMC_CACHE_DIR": "/work/hmc-cache",
             "AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS": str(client_run_seconds),
+            "AM_AUTOTEST_RENDER_CLIENT": str(bool(ctx.scenario.get("renderClient", False))).lower(),
         },
         mounts=[
             (game_dir, "/work/game", False),
@@ -652,7 +659,7 @@ def _v_stage_modpack(ctx: Context, step):
     ctx.vars["active_dir"] = "automodpack/client/active"
     root.mkdir(parents=True, exist_ok=True)
     data_root.mkdir(parents=True, exist_ok=True)
-    (automodpack / "data-root.json").write_text(json.dumps({"root": str(data_root.resolve()), "shared": False}, indent=2) + "\n")
+    (automodpack / "data-root.json").write_text(json.dumps({"root": "/work/game/automodpack/client/data", "shared": False}, indent=2) + "\n")
 
     src = step.get("from")
     if src:
@@ -729,6 +736,18 @@ def _v_stage_modpack(ctx: Context, step):
     cfg.update(ctx.resolve(step.get("config", {}) or {}))
     automodpack.mkdir(parents=True, exist_ok=True)
     (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2))
+
+
+@verb("seed_cas")
+def _v_seed_cas(ctx: Context, _step):
+    """Put the scenario's server files in the client CAS without installing them."""
+    automodpack = ctx.game_dir / "automodpack"
+    objects = automodpack / "data" / "objects"
+    objects.mkdir(parents=True, exist_ok=True)
+    payloads = [json.dumps({"marker": ctx.modpack_name}).encode("utf-8") + b"\n"]
+    payloads.extend(content.encode("utf-8") for _, content in ctx.scenario_files)
+    for payload in payloads:
+        (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
 
 
 # ── case orchestration ────────────────────────────────────────────────────
