@@ -1,4 +1,4 @@
-"""UI verbs: click, type/paste, wait_for, assert, sleep."""
+"""UI verbs: click, type/paste, screenshot, wait_for, assert, sleep."""
 from __future__ import annotations
 
 import time
@@ -38,6 +38,20 @@ def type_(ctx, step):
     ctx.bridge.text(int(el["id"]), value)
 
 
+@verb("screenshot")
+def screenshot(ctx, step):
+    """Capture the current Minecraft framebuffer into the case artifacts."""
+    ctx.assert_client_running()
+    if ctx.bridge is None:
+        raise RuntimeError("bridge not ready (run wait_bridge first)")
+    name = str(ctx.resolve(step.get("file") or "screen"))
+    response = ctx.bridge.screenshot(name)
+    path = ctx.game_dir / str(response["path"])
+    if not path.is_file():
+        raise RuntimeError(f"client reported screenshot but did not create {path}")
+    ctx.vars["screenshot"] = str(path)
+
+
 @verb("wait_for")
 def wait_for(ctx, step):
     cond = step.get("until") or {}
@@ -58,12 +72,29 @@ def wait_for(ctx, step):
             raise
         return None
 
-    await_condition(
-        _pred,
-        timeout,
-        step.get("poll"),
-        f"condition not met: {conditions.describe(cond)}",
-    )
+    try:
+        await_condition(
+            _pred,
+            timeout,
+            step.get("poll"),
+            f"condition not met: {conditions.describe(cond)}",
+        )
+    except TimeoutError as error:
+        if ctx.bridge is None:
+            raise
+        try:
+            gui = ctx.gui()
+        except (ClientExited, RuntimeError, TimeoutError) as snapshot_error:
+            raise error from snapshot_error
+        visible = list(
+            dict.fromkeys(
+                str(element.get("text", ""))
+                for role in ("buttons", "textFields", "elements")
+                for element in gui.get(role, [])
+                if element.get("visible", True) and element.get("text")
+            )
+        )
+        raise TimeoutError(f"{error}; current screen: {gui.get('screenClass')!r}; visible elements: {visible!r}") from error
 
 
 @verb("assert")

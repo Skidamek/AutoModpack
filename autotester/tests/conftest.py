@@ -56,8 +56,8 @@ def make_ctx(tmp_path):
 class FakeBridge:
     """A tiny GUI state machine that mimics the real client over the file bridge.
 
-    Screens: title -> cert -> preparing -> download -> restart -> (relaunch) -> ingame.
-    Clicking the download button writes the modpack files into the game dir, so
+    Screens: title -> cert -> preparing -> first connection -> preview -> restart -> (relaunch) -> ingame.
+    Clicking the update button writes the active projection files into the game dir, so
     the filesystem verbs see real files appear exactly as they would in Docker.
     """
 
@@ -69,6 +69,7 @@ class FakeBridge:
         self.exited = False
         self.clicks: list[int] = []
         self.typed: dict[int, str] = {}
+        self.screenshots: list[str] = []
 
     # --- snapshot ---------------------------------------------------------
     def gui(self, timeout: float = 30) -> dict:
@@ -80,21 +81,29 @@ class FakeBridge:
                 "textFields": [{"id": 1, "text": "", "enabled": True, "visible": True}],
             },
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
-            "download": {
-                "screenClass": "DownloadScreen",
-                "buttons": [{"id": 3, "text": "Download", "enabled": True, "visible": True}],
+            "first_connection": {
+                "screenClass": "FirstConnectScreen",
+                "buttons": [{"id": 3, "text": "Continue", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "preview": {
+                "screenClass": "UpdatePreviewScreen",
+                "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "restart": {
                 "screenClass": "RestartScreen",
-                "buttons": [{"id": 4, "text": "Close the game", "enabled": True, "visible": True}],
+                "buttons": [
+                    {"id": 6, "text": "Cancel", "enabled": True, "visible": True},
+                    {"id": 4, "text": "Restart", "enabled": True, "visible": True},
+                ],
                 "textFields": [],
             },
             "ingame": {"screenClass": None, "buttons": [], "textFields": []},
         }
         snapshot = snapshots[self.screen]
         if self.screen == "preparing":
-            self.screen = "download"
+            self.screen = "first_connection"
         return snapshot
 
     # --- actions ----------------------------------------------------------
@@ -109,8 +118,11 @@ class FakeBridge:
         if element_id == 2 and self.fingerprint:
             self.screen = "preparing"
         elif element_id == 3:
-            self._write_modpack()
-            self.screen = "restart"
+            self.screen = "preview"
+        elif element_id == 5:
+            if self.screen == "preview":
+                self._write_modpack()
+                self.screen = "restart"
         elif element_id == 4:
             self.exited = True
         return {"ok": True}
@@ -119,6 +131,14 @@ class FakeBridge:
         # Already-synced clients drop straight in-game; first contact hits the cert prompt.
         self.screen = "ingame" if self.synced else "cert"
         return {"ok": True}
+
+    def screenshot(self, name: str, timeout: float = 30) -> dict:
+        relative = Path("automodpack") / "autotest" / "screenshots" / f"{name}.png"
+        path = self.ctx.game_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"png")
+        self.screenshots.append(name)
+        return {"ok": True, "path": str(relative), "width": 640, "height": 480}
 
     def request(self, op: str, timeout: float = 30, **payload) -> dict:
         if op == "disconnect":
@@ -129,7 +149,7 @@ class FakeBridge:
 
     # --- helpers ----------------------------------------------------------
     def _write_modpack(self) -> None:
-        root = self.ctx.game_dir / "automodpack" / "modpacks" / self.ctx.modpack_name
+        root = self.ctx.game_dir / "automodpack" / "client" / "active"
         marker = root / self.ctx.marker_rel
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text("{}")

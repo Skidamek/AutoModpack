@@ -28,11 +28,11 @@ import pl.skidam.automodpack_core.utils.FileInspection;
  * grows via its private {@code appendLoader(name, List<JarContents>)}. Because
  * {@code FMLLoader.buildTransformingLoader()} always does
  * {@code gameLoader.setFallbackClassLoader(currentClassLoader)}, growing that same chain with a
- * modpack-folder jar's classes BEFORE the game loader is built makes them resolve through that
+ * active-projection jar's classes BEFORE the game loader is built makes them resolve through that
  * native fallback with no manual class/resource bridging, {@code addReads}, or {@code Unsafe}.
  *
  * <p>
- * This class inspects and registers modpack-folder early-service jars. Once appended, FML discovers
+ * This class inspects and registers active-projection early-service jars. Once appended, FML discovers
  * their locators, readers, language loaders, and class processors through its native ServiceLoader
  * passes; AutoModpack only invokes GraphicsBootstrapper early because that pass already happened.
  */

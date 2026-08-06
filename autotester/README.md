@@ -138,20 +138,22 @@ A step is either a bare name (`- quit`, or a macro name) or a mapping with a
 
 ### Networking, modes, and scoping
 
-Three scenario-header keys decouple *how* a scenario runs from *what* it tests:
+Scenario-header keys decouple *how* a scenario runs from *what* it tests:
 
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `network` | `bridge` (default) / `host` | Container transport. `bridge` wires a per-run user network (CI). `host` puts both containers in the host network namespace (the client reaches the server on `localhost`) — the only topology a host-network-only sandbox allows. Run host transport with `--jobs 1`: host-mode servers all bind `25565` and would collide. Also settable globally via `network:` in `settings.yaml`. |
-| `mode` | `full` (default) / `client-only` | `full` launches a server + client. `client-only` launches **only** the client against a pre-staged modpack — no server, no certificate/download/restart dance. |
+| `mode` | `full` (default) / `client-only` | `full` launches a server + client. `client-only` launches **only** the client against a pre-staged generation — no server, no certificate/download/restart dance. |
 | `targets` / `loaders` / `minecraft` | list (globs where noted) | Scope the scenario to compatible targets. A target must pass every key present: `targets` (glob on id), `loaders` (exact), `minecraft` (glob). Out-of-scope targets are skipped with a `SKIP` line instead of failing on missing mods. |
+| `renderClient` | boolean | Run Minecraft in Xvfb with Mesa software rendering at the 320x240 logical minimum. Set this to `true` for `screenshot` steps; ordinary scenarios keep the faster HeadlessMC renderer stub. |
 
 #### Client-only (offline / pre-staged) mode
 
-`mode: client-only` is the fast loader-debugging path: stage a modpack, boot just
-the client, and assert on the launch log — seconds per iteration instead of a
-multi-minute gameplay round trip. The `stage_modpack` verb lays the modpack into
-`automodpack/modpacks/<modpackId>/` and writes a client config that selects it with
+`mode: client-only` is the fast loader-debugging path: stage a generation, boot
+just the client, and assert on the launch log — seconds per iteration instead of
+a multi-minute gameplay round trip. The `stage_modpack` verb writes the fixed
+`automodpack/client/active/` projection, its immutable generation
+record, CAS objects, active state, and a client config with
 `updateSelectedModpackOnLaunch=false`, so the client loads it on boot without
 contacting a server:
 
@@ -170,11 +172,12 @@ flow:
   - use: finish_client_only       # best-effort quit; cleanup handles a crashed client
 ```
 
-`stage_modpack` accepts `from:` (a ready modpack dir to copy wholesale), `mods:`
+`stage_modpack` accepts `from:` (a ready directory to copy wholesale), `mods:`
 (extra jars to drop into the pack's `mods/`), and `config:` (extra client-config
 overrides). **`from:` and `mods:` paths resolve against the repo root** (the
-parent of `autotester/`) unless absolute. `manifest: true` derives a local
-`automodpack-content.json` from the final staged files for reconciliation tests.
+parent of `autotester/`) unless absolute. The staged generation is always
+derived from the final files, so its identity and ownership ledger match the
+active projection used by the client.
 Whole-log assertions followed by `finish_client_only` make "verify it loaded, then
 stop immediately" robust on both headless and GPU hosts. See
 `scenarios/client-loads-offline.yaml`.
@@ -199,6 +202,7 @@ aborts on a malformed scenario.
 | --- | --- |
 | `click` | Click the element matched by `select:` (defaults to enabled elements). Set `enable: true` to force-enable it first. |
 | `type` / `paste` | Type `value:` into the field matched by `select:` (defaults to the first text field). |
+| `screenshot` | Save the real rendered Minecraft framebuffer under the case's `client/game/automodpack/autotest/screenshots/` directory. Set `renderClient: true` on the scenario and use `file:` to choose the PNG name. |
 | `wait_for` | Poll `until:` (a condition) until it holds or `timeout:` elapses. |
 | `assert` | Fail immediately unless `that:` (a condition) holds. |
 | `sleep` | Wait `duration:` (e.g. `2s`). |
@@ -325,7 +329,9 @@ Important files:
 - `results.json`: aggregated pass/fail result.
 - `<case>/amp-s-*.log`: server container log.
 - `<case>/amp-c-*.log`: client container log.
-- `<case>/client/game/automodpack/modpacks/`: synced client modpacks.
+- `<case>/client/game/automodpack/client/active/`: current client projection.
+- `<case>/client/game/automodpack/client/records/`: immutable generation records.
+- `<case>/client/game/automodpack/autotest/screenshots/`: screenshots captured by `do: screenshot` steps.
 
 `results.json` has this shape:
 

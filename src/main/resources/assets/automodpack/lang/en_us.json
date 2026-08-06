@@ -8,7 +8,7 @@
   "automodpack.restart.confirm": "Yes, close the game",
   "automodpack.restart.cancel": "No, back to the game",
 
-  "automodpack.selection.title": "Optional Mods",
+  "automodpack.selection.title": "Modpack settings",
   "automodpack.selection.description": "Choose which optional parts of the modpack you want.",
   "automodpack.selection.saved": "Your selection was saved.",
   "automodpack.selection.restartRequired": "Restart the game to apply your changes.",
@@ -18,8 +18,18 @@
   "automodpack.selection.save": "Save",
   "automodpack.selection.cancel": "Back",
   "automodpack.selection.reset": "Recommended",
-  "automodpack.selection.button": "Optional Mods",
+  "automodpack.selection.button": "Modpack settings",
   "automodpack.selection.noGroups": "This modpack has no optional parts.",
+  "automodpack.selection.preview": "Preview target",
+
+  "automodpack.firstConnect.title": "Set up this modpack",
+  "automodpack.firstConnect.description": "Review the recommended content before downloading.",
+  "automodpack.firstConnect.patchNotes": "Patch notes",
+  "automodpack.firstConnect.noPatchNotes": "No patch notes were published for this content.",
+  "automodpack.firstConnect.bundleExplanation": "Groups are bundles of optional features.",
+  "automodpack.firstConnect.continue": "Continue with defaults",
+  "automodpack.firstConnect.customize": "Customize groups",
+  "automodpack.firstConnect.cancel": "Do not download",
 
   "automodpack.danger": "This server provides an external modpack!",
   "automodpack.danger.description": "Do you want to download it?",

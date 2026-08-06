@@ -2,7 +2,7 @@ id: crash-assistant-offline
 description: |
   Offline / client-only proof that CrashAssistant - a mod whose only "early service" is a no-op
   cpw.mods.modlauncher.api.ITransformationService plus an IDependencyLocator that jar-in-jars the
-  real mod - loads straight from AutoModpack's modpack folder, in place, with NO copy into the
+  real mod - loads straight from AutoModpack's active projection, in place, with NO copy into the
   standard mods/ directory, across every loader generation this feature supports.
 
   On the ModLauncher generations (NeoForge fml4 = 1.21.1, Forge fml47 = 1.20.1, fml40 = 1.18.2)
@@ -32,7 +32,7 @@ targets:
 
 flow:
   - do: stage_modpack
-    name: stage CrashAssistant into the modpack folder (NOT standard mods/)
+    name: stage CrashAssistant into the active projection (NOT standard mods/)
     mods:
       - url:
           1.21.1-neoforge: https://cdn.modrinth.com/data/ix1qq8Ux/versions/znBtgMA0/CrashAssistant-neoforge-1.20.6-1.21.4-1.11.10.jar

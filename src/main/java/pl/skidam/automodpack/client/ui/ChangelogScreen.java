@@ -1,39 +1,35 @@
 package pl.skidam.automodpack.client.ui;
 
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.ListEntry;
 import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 
 public class ChangelogScreen extends VersionedScreen {
 
 	private final Screen parent;
-	private final Path modpackDir;
 	private final Changelogs changelogs;
-	private static Map<String, String> formattedChanges;
-	private Jsons.ModpackContentFields modpackContent = null;
+	private List<ListEntryWidget.Row> formattedChanges;
 	private ListEntryWidget listEntryWidget;
 	private EditBox searchField;
 	private Button backButton;
 	private Button openMainPageButton;
 
-	public ChangelogScreen(Screen parent, Path modpackDir, Changelogs changelogs) {
+	public ChangelogScreen(Screen parent, Changelogs changelogs) {
 		super(VersionedText.literal("ChangelogScreen"));
 		this.parent = parent;
-		this.modpackDir = modpackDir;
 		this.changelogs = changelogs;
 
 		if (AudioManager.isMusicPlaying()) {
@@ -78,20 +74,20 @@ public class ChangelogScreen extends VersionedScreen {
 		this.searchField.setResponder(textField -> updateChangelogs());
 
 		this.backButton = buttonWidget(
-			this.width / 2 - 140,
+			centeredActionButtonX(310, 3, 2, 0),
 			this.height - 30,
-			140,
+			actionButtonWidth(310, 3),
 			20,
 			VersionedText.translatable("automodpack.back"),
-			button -> this.minecraft.gui.setScreen(this.parent)
+			button -> ScreenImpl.setScreen(this.parent)
 		);
 
 		this.openMainPageButton = buttonWidget(
-			this.width / 2 + 20,
+			centeredActionButtonX(310, 3, 2, 1),
 			this.height - 30,
-			140,
+			actionButtonWidth(310, 3),
 			20,
-			VersionedText.translatable("automodpack.changelog.openPage"),
+			VersionedText.literal("Project page"),
 			button -> {
 				ListEntry selectedEntry = listEntryWidget.getSelected();
 
@@ -129,20 +125,10 @@ public class ChangelogScreen extends VersionedScreen {
 	}
 
 	private void drawSummaryOfChanges(VersionedMatrices matrices) {
-		if (modpackContent == null) {
-			var optionalModpackContentFile =
-				ModpackContentTools.getModpackContentFile(modpackDir);
-			if (optionalModpackContentFile.isEmpty()) return;
-			modpackContent = ModpackContentTools.read(
-				optionalModpackContentFile.get()
-			);
-		}
+		int filesUpdated = changelogs.updatedFiles().size();
+		int filesRemoved = changelogs.removedFiles().size();
 
-		if (modpackContent == null) return;
-		int filesAdded = changelogs.changesAddedList.size();
-		int filesRemoved = changelogs.changesDeletedList.size();
-
-		String summary = "+ " + filesAdded + " | - " + filesRemoved;
+		String summary = "+ " + filesUpdated + " | - " + filesRemoved;
 
 		drawCenteredTextWithShadow(
 			matrices,
@@ -158,12 +144,9 @@ public class ChangelogScreen extends VersionedScreen {
 		if (this.searchField.getValue().isEmpty()) {
 			formattedChanges = reFormatChanges();
 		} else {
-			Map<String, String> filteredChangelogs = new HashMap<>();
-			for (Map.Entry<String, String> changelog : reFormatChanges().entrySet()) {
-				if (changelog.getKey().toLowerCase().contains(this.searchField.getValue().toLowerCase())) {
-					filteredChangelogs.put(changelog.getKey(), changelog.getValue());
-				}
-			}
+			List<ListEntryWidget.Row> filteredChangelogs = new ArrayList<>();
+			for (ListEntryWidget.Row changelog : reFormatChanges())
+				if (changelog.text().getString().toLowerCase(Locale.ROOT).contains(this.searchField.getValue().toLowerCase(Locale.ROOT))) filteredChangelogs.add(changelog);
 			formattedChanges = filteredChangelogs;
 		}
 
@@ -172,28 +155,28 @@ public class ChangelogScreen extends VersionedScreen {
 		this.addRenderableWidget(this.listEntryWidget);
 	}
 
-	private Map<String, String> reFormatChanges() {
-		Map<String, String> reFormattedChanges = new HashMap<>();
+	private List<ListEntryWidget.Row> reFormatChanges() {
+		List<ListEntryWidget.Row> reFormattedChanges = new ArrayList<>();
 
-		for (var changelog : changelogs.changesAddedList.entrySet()) {
-			String modPageUrl = null;
-			if (changelog.getValue() != null && !changelog.getValue().isEmpty()) modPageUrl = changelog.getValue().get(0);
-			reFormattedChanges.put("+ " + changelog.getKey(), modPageUrl);
+		for (var changelog : changelogs.updatedFiles().entrySet()) {
+			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("+ " + UiFormat.changePath(changelog.getKey())).withStyle(ChatFormatting.GREEN), firstUrl(changelog.getValue())));
 		}
 
-		for (var changelog : changelogs.changesDeletedList.entrySet()) {
-			String modPageUrl = null;
-			if (changelog.getValue() != null && !changelog.getValue().isEmpty()) modPageUrl = changelog.getValue().get(0);
-			reFormattedChanges.put("- " + changelog.getKey(), modPageUrl);
+		for (var changelog : changelogs.removedFiles().entrySet()) {
+			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("- " + UiFormat.changePath(changelog.getKey())).withStyle(ChatFormatting.RED), firstUrl(changelog.getValue())));
 		}
 
 		return reFormattedChanges;
 	}
 
+	private static String firstUrl(List<String> urls) {
+		return urls == null || urls.isEmpty() ? null : urls.get(0);
+	}
+
 	@Override
 	public boolean shouldCloseOnEsc() {
 		assert this.minecraft != null;
-		this.minecraft.gui.setScreen(this.parent);
+		ScreenImpl.setScreen(this.parent);
 		return false;
 	}
 }

@@ -8,9 +8,9 @@ import java.net.SocketAddress;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletionException;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
@@ -19,20 +19,18 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.stream.ChunkedNioStream;
 import io.netty.handler.stream.ChunkedWriteHandler;
-import io.netty.util.CharsetUtil;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
 	private final NettyServer server;
-	private final Map<byte[], String> secretLookup = new HashMap<>();
+	private String authenticatedSecret;
 	private byte protocolVersion;
 	private int chunkSize;
 
@@ -80,50 +78,26 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 				FileRequestMessage fileRequest = (FileRequestMessage) msg;
 				sendFile(ctx, fileRequest.getFileHash());
 				break;
-			case REFRESH_REQUEST_TYPE :
-				RefreshRequestMessage refreshRequest = (RefreshRequestMessage) msg;
-				refreshModpackFiles(ctx, refreshRequest.getFileHashesList());
-				break;
 			default :
 				sendError(ctx, protocolVersion, "Unknown message type");
 		}
 	}
 
-	private void refreshModpackFiles(ChannelHandlerContext context, byte[][] fileHashesList) throws IOException {
-		Set<String> hashes = new TreeSet<>();
-		for (byte[] hash : fileHashesList) hashes.add(new String(hash, StandardCharsets.UTF_8));
-		LOGGER.info("Received full modpack regeneration request after failed hashes: {}", hashes);
-		try {
-			var manifest = modpackExecutor.regenerateFullManifest().join();
-			LOGGER.info("Sending regenerated full manifest {} with {} files", manifest.modpackId, manifest.list.size());
-			sendFile(context, new byte[0]);
-		} catch (CompletionException e) {
-			LOGGER.error("Failed to regenerate full modpack manifest", e);
-			sendError(context, protocolVersion, "Modpack regeneration failed");
-		}
-	}
-
 	private boolean validateSecret(ChannelHandlerContext ctx, SocketAddress address, byte[] secret) {
-		String decodedSecret = secretLookup.get(secret);
-		boolean addConnection = false;
-		if (decodedSecret == null) {
-			decodedSecret = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
-			addConnection = true;
-			secretLookup.put(secret, decodedSecret);
+		String decodedSecret = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
+		if (!Secrets.isSecretValid(decodedSecret, address)) return false;
+		if (authenticatedSecret == null) {
+			authenticatedSecret = decodedSecret;
+			server.addConnection(ctx.channel(), decodedSecret);
 		}
-
-		boolean valid = Secrets.isSecretValid(decodedSecret, address);
-
-		if (addConnection && valid) server.addConnection(ctx.channel(), decodedSecret);
-
-		return valid;
+		return authenticatedSecret.equals(decodedSecret);
 	}
 
 	private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) throws IOException {
-		final String sha1 = new String(bsha1, CharsetUtil.UTF_8);
+		final String sha1 = new String(bsha1, StandardCharsets.UTF_8);
 		final Optional<Path> optionalPath = resolvePath(sha1);
 
-		if (optionalPath.isEmpty() || !Files.exists(optionalPath.get())) {
+		if (optionalPath.isEmpty() || Files.isSymbolicLink(optionalPath.get()) || !Files.isRegularFile(optionalPath.get(), LinkOption.NOFOLLOW_LINKS)) {
 			sendError(ctx, this.protocolVersion, "File not found");
 			return;
 		}
@@ -170,12 +144,11 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 	}
 
 	public Optional<Path> resolvePath(final String sha1) {
-		if (sha1.isBlank()) return Optional.of(hostModpackContentFile);
 		return server.getPath(sha1);
 	}
 
 	private void sendError(ChannelHandlerContext ctx, byte version, String errorMessage) {
-		byte[] errMsgBytes = errorMessage.getBytes(CharsetUtil.UTF_8);
+		byte[] errMsgBytes = errorMessage.getBytes(StandardCharsets.UTF_8);
 		ByteBuf errorBuf = ctx.alloc().buffer(1 + 1 + 4 + errMsgBytes.length);
 		errorBuf.writeByte(version);
 		errorBuf.writeByte(ERROR);

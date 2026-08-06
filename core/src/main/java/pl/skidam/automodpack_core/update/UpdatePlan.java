@@ -3,25 +3,40 @@ package pl.skidam.automodpack_core.update;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 
 public record UpdatePlan(
 		String modpackId,
+		GenerationTarget generationTarget,
 		List<Operation> operations,
 		List<ProjectedFile> projectedFinalState,
 		Jsons.ClientConfigFieldsV3 plannedClientConfig,
-		Set<String> plannedDeletionTimestamps,
 		Set<RestartReason> restartReasons,
-		List<Warning> warnings) {
+		List<Preservation> preservations,
+		List<BaselineCapture> baselineCaptures) {
 
 	public UpdatePlan {
+		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
 		operations = List.copyOf(operations);
 		projectedFinalState = List.copyOf(projectedFinalState);
-		plannedDeletionTimestamps = stableSet(plannedDeletionTimestamps);
 		restartReasons = stableSet(restartReasons);
-		warnings = List.copyOf(warnings);
+		preservations = List.copyOf(preservations);
+		baselineCaptures = List.copyOf(baselineCaptures);
+	}
+
+	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
+			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons) {
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, List.of(), List.of());
+	}
+
+	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
+			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations) {
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, List.of());
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
@@ -29,11 +44,10 @@ public record UpdatePlan(
 	}
 
 	public enum Root {
-		MODPACK_DIR,
+		PROJECTION,
+		OVERLAY,
 		GAME_DIR,
-		MODS_DIR,
-		STORE_DIR,
-		AUTOMODPACK_DIR
+		STORE_DIR
 	}
 
 	public enum OperationType {
@@ -51,15 +65,13 @@ public record UpdatePlan(
 		REMOVED_STANDARD_MODS,
 		APPLIED_SERVER_DELETIONS,
 		CHANGED_LOADER_VERSION,
+		CHANGED_GROUP_SELECTION,
 		SELECTED_MODPACK
 	}
 
-	public enum WarningType {
-		REMOTE_DELETION_DISABLED,
-		REMOTE_DELETION_HASH_MISMATCH
-	}
+	public record Preservation(Root root, String relativePath, String expectedHash, long expectedSize) {}
 
-	public record Warning(WarningType type, String timestamp, String requestedPath, String expectedHash, String actualPath, String actualHash) {}
+	public record BaselineCapture(Root root, String relativePath, String expectedHash, long expectedSize, boolean absent) {}
 
 	public record Operation(
 			Root root,
@@ -82,8 +94,9 @@ public record UpdatePlan(
 		}
 	}
 
-	public record NestedCopy(String targetFileName, String sha1, long size, Set<String> ids) {
+	public record NestedCopy(String relativePath, String sha1, long size, Set<String> ids) {
 		public NestedCopy {
+			relativePath = LogicalPath.normalize(relativePath);
 			ids = stableSet(ids);
 		}
 	}

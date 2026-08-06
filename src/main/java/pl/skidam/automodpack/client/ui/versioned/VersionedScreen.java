@@ -1,5 +1,8 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.Button;
 /*? if >= 1.20.2 {*/
@@ -38,6 +41,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack.client.ui.TextColors;
 
 public class VersionedScreen extends Screen {
 
@@ -106,6 +110,47 @@ public class VersionedScreen extends Screen {
 	}
 	*//*?}*/
 
+	/*? if >=1.20 {*/
+	public static void drawTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int x, int y, int color) {
+		/*? if >=26.1 {*/
+		matrices.getContext().text(textRenderer, text, x, y, color, true);
+		/*?} else {*/
+		/*matrices.getContext().drawString(textRenderer, text, x, y, color, true);
+		*//*?}*/
+	}
+	/*?} else {*/
+	/*public static void drawTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int x, int y, int color) {
+		textRenderer.drawShadow(matrices.getContext(), text, (float)x, (float)y, color);
+	}
+	*//*?}*/
+
+	protected final int panelWidth(int preferredWidth) {
+		return Math.min(preferredWidth, Math.max(1, this.width - 24));
+	}
+
+	protected final int panelLeft(int preferredWidth) {
+		return (this.width - panelWidth(preferredWidth)) / 2;
+	}
+
+	protected final int actionRowGap() {
+		return 8;
+	}
+
+	protected final int actionButtonWidth(int preferredPanelWidth, int buttonCount) {
+		int count = Math.max(1, buttonCount);
+		return Math.max(1, (panelWidth(preferredPanelWidth) - actionRowGap() * (count - 1)) / count);
+	}
+
+	protected final int actionButtonX(int preferredPanelWidth, int buttonCount, int index) {
+		return panelLeft(preferredPanelWidth) + index * (actionButtonWidth(preferredPanelWidth, buttonCount) + actionRowGap());
+	}
+
+	protected final int centeredActionButtonX(int preferredPanelWidth, int slotCount, int visibleButtonCount, int index) {
+		int buttonWidth = actionButtonWidth(preferredPanelWidth, slotCount);
+		int visibleCount = Math.max(1, Math.min(slotCount, visibleButtonCount));
+		int groupWidth = visibleCount * buttonWidth + actionRowGap() * (visibleCount - 1);
+		return (this.width - groupWidth) / 2 + index * (buttonWidth + actionRowGap());
+	}
 
 	/*? if <1.19.3 {*/
 	/*public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
@@ -116,6 +161,55 @@ public class VersionedScreen extends Screen {
 		return Button.builder(message, onPress).pos(x, y).size(width, height).build();
 	}
 	/*?}*/
+
+	protected static String truncateToWidth(Font font, String text, int maxWidth) {
+		if (text == null || text.isEmpty() || maxWidth <= 0) return "";
+		if (font.width(text) <= maxWidth) return text;
+		String ellipsis = "...";
+		if (font.width(ellipsis) >= maxWidth) return fitPrefix(font, text, maxWidth);
+		return fitPrefix(font, text, maxWidth - font.width(ellipsis)).stripTrailing() + ellipsis;
+	}
+
+	protected static List<String> wrapToWidth(Font font, String text, int maxWidth, int maxLines) {
+		List<String> lines = new ArrayList<>();
+		if (text == null || text.isBlank() || maxWidth <= 0 || maxLines <= 0) return lines;
+		boolean truncated = false;
+		for (String rawLine : text.split("\\R", -1)) {
+			String remaining = rawLine.strip();
+			if (remaining.isEmpty()) {
+				if (lines.size() < maxLines) lines.add("");
+				continue;
+			}
+			while (!remaining.isEmpty()) {
+				if (lines.size() == maxLines) {
+					truncated = true;
+					break;
+				}
+				String fitting = fitPrefix(font, remaining, maxWidth);
+				int end = fitting.length();
+				if (end < remaining.length()) {
+					int wordEnd = remaining.lastIndexOf(' ', end - 1);
+					if (wordEnd > 0) end = wordEnd;
+				}
+				if (end == 0) end = 1;
+				lines.add(remaining.substring(0, end).strip());
+				remaining = remaining.substring(Math.min(end, remaining.length())).strip();
+			}
+			if (truncated) break;
+		}
+		if (lines.isEmpty()) lines.add("");
+		if (truncated) {
+			int last = lines.size() - 1;
+			lines.set(last, truncateToWidth(font, lines.get(last) + "...", maxWidth));
+		}
+		return lines;
+	}
+
+	private static String fitPrefix(Font font, String text, int maxWidth) {
+		int end = text.length();
+		while (end > 0 && font.width(text.substring(0, end)) > maxWidth) end--;
+		return text.substring(0, end);
+	}
 
 	/*? if >= 1.20.2 {*/
 	public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {

@@ -37,7 +37,7 @@ When a client connects to the server:
 1. AutoModpack establishes a secure connection and prompts you to [verify the server's certificate fingerprint](https://moddedmc.wiki/en/project/automodpack/docs/technicals/certificate).
 2. It fetches the APIs for direct downloads of your modpack's files from Modrinth and CurseForge, where possible (mods,
    resource packs, shaders).
-3. Downloads all files to the client's automodpack folder.
+3. Downloads all files into the client's content-addressed store and active projection.
 4. After game restart AutoModpack loads the modpack, and the client is perfectly synced and ready to play!
 
 On subsequent game launches, AutoModpack checks for updates. If changes are detected, it updates the modpack in the background - no

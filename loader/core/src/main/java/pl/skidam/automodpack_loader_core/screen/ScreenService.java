@@ -6,13 +6,17 @@ public interface ScreenService {
 
 	void download(Object... args);
 
-	void fetch(Object... args);
-
 	void changelog(Object... args);
 
 	void restart(Object... args);
 
-	void danger(Object... args);
+	void welcome(Object... args);
+
+	boolean preview(Object... args);
+
+	void recovery(Object... args);
+
+	void history(Object... args);
 
 	void error(String... args);
 

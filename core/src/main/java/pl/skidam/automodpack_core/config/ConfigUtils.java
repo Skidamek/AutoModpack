@@ -28,8 +28,6 @@ public class ConfigUtils {
 			LOGGER.warn("HOLEPUNCH connection mode is unavailable on " + LOADER + " " + MC_VERSION + ". Falling back to MAGIC_PACKET");
 		}
 
-		Map<String, String> fixedNonModpackFilesToDelete = new LinkedHashMap<>(config.nonModpackFilesToDelete.size());
-
 		String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";
 		Pattern pattern = Pattern.compile(prefixPattern);
 
@@ -47,27 +45,6 @@ public class ConfigUtils {
 						pattern);
 			}
 		}
-
-		for (var entry : config.nonModpackFilesToDelete.entrySet()) {
-			var file = entry.getKey();
-			var hash = entry.getValue();
-			if (file == null) {
-				LOGGER.warn("Ignored null key in nonModpackFilesToDelete.");
-				continue;
-			}
-			var trimmed = file.trim();
-			if (trimmed.isEmpty()) {
-				LOGGER.warn("Ignored empty key in nonModpackFilesToDelete.");
-				continue;
-			}
-			var fixed = pattern.matcher(trimmed).replaceFirst("");
-			if (!fixed.equals(trimmed)) {
-				LOGGER.info("Normalized nonModpackFilesToDelete entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", file, fixed);
-			}
-			fixedNonModpackFilesToDelete.put(prefixSlash(fixed), hash);
-		}
-
-		config.nonModpackFilesToDelete = fixedNonModpackFilesToDelete;
 	}
 
 	private static Set<String> normalizeSyncedFiles(Set<String> syncedFiles, Pattern hostModpackPattern) {

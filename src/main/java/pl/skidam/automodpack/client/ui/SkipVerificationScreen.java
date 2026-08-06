@@ -7,6 +7,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.screens.Screen;
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -55,15 +56,15 @@ public class SkipVerificationScreen extends VersionedScreen {
 		);
 		this.textField.setMaxLength(128);
 
-		this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 150, 20,
+		this.backButton = buttonWidget(this.width / 2 - 155, this.height - 48, 150, 20,
 				VersionedText.translatable("automodpack.back"),
 				button -> {
 					assert this.minecraft != null;
-					this.minecraft.gui.setScreen(verificationScreen);
+					ScreenImpl.setScreen(verificationScreen);
 				}
 		);
 
-		this.confirmButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 80, 150, 20,
+		this.confirmButton = buttonWidget(this.width / 2 + 5, this.height - 48, 150, 20,
 				VersionedText.translatable("automodpack.skip"),
 				button -> confirmSkip());
 		this.confirmButton.active = false;

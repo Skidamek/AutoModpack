@@ -13,7 +13,9 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.Preload;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
@@ -43,22 +45,21 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			String launchTarget = argValue(arguments, "--launchTarget");
 			if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
 
-			// Run the update/reconcile step before anything below reads the modpack folder, so an
+			// Run the update/reconcile step before anything below reads the active projection, so an
 			// update that changes which mods are early-service mods is reflected in the same boot.
-			// This also publishes Constants.selectedModpackDir / Constants.MODS_DIR.
 			ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
 			new Preload();
 			progress.complete();
 
-			// Set by Preload only when a modpack is selected on a client - null means nothing to do.
-			Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
-			if (modpackMods == null || !Files.isDirectory(modpackMods)) return;
+			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			Path activeModsDirectory = storage.activePath("mods");
+			if (!Files.isDirectory(activeModsDirectory)) return;
 
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, EarlyServiceLayer::eligibleForInPlace);
+			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
 
 			if (earlyServiceJars.isEmpty()) return;
 
-			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the modpack folder in place", earlyServiceJars.size());
+			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 
 			ClassLoader childLoader = appendToFmlClassLoaderChain(earlyServiceJars);
 			if (childLoader == null) {

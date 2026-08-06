@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
@@ -25,6 +26,7 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
@@ -32,7 +34,6 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
-import pl.skidam.automodpack_core.utils.ObservableMap;
 
 public class NettyServer {
 
@@ -41,7 +42,7 @@ public class NettyServer {
 	public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
 	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
 	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
-	private final Map<String, Path> paths = new ConcurrentHashMap<>();
+	private volatile Map<String, Path> paths = Map.of();
 	private MultithreadEventLoopGroup eventLoopGroup;
 	private ChannelFuture serverChannel;
 	private volatile boolean sharedMagicEnabled;
@@ -68,18 +69,37 @@ public class NettyServer {
 		return certificateFingerprint;
 	}
 
-	public void setPaths(ObservableMap<String, Path> paths) {
-		this.paths.putAll(paths.getMap());
-		paths.addOnPutCallback(this.paths::put);
-		paths.addOnRemoveCallback(this.paths::remove);
+	public void replacePaths(Map<String, Path> paths) {
+		replacePaths(new GenerationHosting(paths));
 	}
 
-	public void removePaths(ObservableMap<String, Path> paths) {
-		paths.getMap().forEach(this.paths::remove);
+	public void replacePaths(GenerationHosting hosting) {
+		this.paths = hosting.asMap();
 	}
 
-	public Optional<Path> getPath(String hash) {
-		return Optional.ofNullable(paths.get(hash));
+	public Map<String, Path> getPathsSnapshot() {
+		return paths;
+	}
+
+	public Optional<Path> getPath(String requestKey) {
+		if (requestKey == null) return Optional.empty();
+		if (requestKey.isEmpty()) return regularPath(paths.get(""));
+		if (!isSha1(requestKey)) return Optional.empty();
+
+		return regularPath(paths.get(requestKey.toLowerCase(Locale.ROOT)));
+	}
+
+	private static Optional<Path> regularPath(Path path) {
+		return path != null && !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ? Optional.of(path) : Optional.empty();
+	}
+
+	private static boolean isSha1(String value) {
+		if (value.length() != 40) return false;
+		for (int i = 0; i < value.length(); i++) {
+			char c = value.charAt(i);
+			if (!(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') && !(c >= 'A' && c <= 'F')) return false;
+		}
+		return true;
 	}
 
 	public synchronized Optional<ChannelFuture> start() {
@@ -93,8 +113,8 @@ public class NettyServer {
 			return Optional.empty();
 		}
 
-		if (paths.isEmpty()) {
-			LOGGER.warn("No file to host. Can't start modpack hosting.");
+		if (getPath("").isEmpty()) {
+			LOGGER.warn("No current generation record is prepared. Can't start modpack hosting.");
 			return Optional.empty();
 		}
 
