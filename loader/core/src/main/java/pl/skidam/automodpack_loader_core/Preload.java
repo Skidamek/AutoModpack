@@ -16,12 +16,9 @@ import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
-import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
-import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -207,14 +204,7 @@ public class Preload {
 
 	private SelectedModpackTarget loadStoredTarget() {
 		try {
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null) return null;
-			Jsons.CompleteModpackContentFields fields = new ClientGenerationStore(storage).readFields(state.generationId).orElse(null);
-			if (fields == null) return null;
-			GenerationRecord record = GenerationRecord.fromFields(fields);
-			SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId)
-					.orElseGet(() -> GroupSelectionResolver.defaultIntent(record.manifest()));
-			return SelectedModpackTarget.prepare(fields, null, intent, ClientPlatform.current());
+			return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
 		} catch (IOException | RuntimeException e) {
 			LOGGER.error("Failed to resolve the stored modpack catalogue and group selection", e);
 			return null;

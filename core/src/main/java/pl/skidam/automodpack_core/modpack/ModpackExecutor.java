@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationIdentity;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNotes;
@@ -265,7 +266,7 @@ public class ModpackExecutor {
 		return true;
 	}
 
-	private void replaceHosting(Map<String, Path> paths) {
+	private void replaceHosting(GenerationHosting paths) {
 		if (hostServer != null) {
 			hostServer.replacePaths(paths);
 		}

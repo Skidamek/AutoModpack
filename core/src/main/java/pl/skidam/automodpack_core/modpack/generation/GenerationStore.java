@@ -26,20 +26,28 @@ public final class GenerationStore {
 		PUBLISHED, NO_CHANGES
 	}
 
-	public record CurrentSnapshot(GenerationRecord record, Path projectionPath, NavigableMap<String, Path> hostingPaths) {
+	public record CurrentSnapshot(GenerationRecord record, Path projectionPath, GenerationHosting hostingPaths) {
 		public CurrentSnapshot {
 			record = Objects.requireNonNull(record);
 			projectionPath = Objects.requireNonNull(projectionPath).toAbsolutePath().normalize();
-			hostingPaths = immutablePaths(hostingPaths);
+			hostingPaths = Objects.requireNonNull(hostingPaths);
+		}
+
+		public CurrentSnapshot(GenerationRecord record, Path projectionPath, Map<String, Path> hostingPaths) {
+			this(record, projectionPath, new GenerationHosting(hostingPaths));
 		}
 	}
 
-	public record Publication(PublicationStatus status, GenerationRecord record, Path projectionPath, NavigableMap<String, Path> hostingPaths) {
+	public record Publication(PublicationStatus status, GenerationRecord record, Path projectionPath, GenerationHosting hostingPaths) {
 		public Publication {
 			status = Objects.requireNonNull(status);
 			record = Objects.requireNonNull(record);
 			projectionPath = Objects.requireNonNull(projectionPath).toAbsolutePath().normalize();
-			hostingPaths = immutablePaths(hostingPaths);
+			hostingPaths = Objects.requireNonNull(hostingPaths);
+		}
+
+		public Publication(PublicationStatus status, GenerationRecord record, Path projectionPath, Map<String, Path> hostingPaths) {
+			this(status, record, projectionPath, new GenerationHosting(hostingPaths));
 		}
 	}
 
@@ -850,9 +858,4 @@ public final class GenerationStore {
 		}
 	}
 
-	private static NavigableMap<String, Path> immutablePaths(Map<String, Path> paths) {
-		TreeMap<String, Path> sorted = new TreeMap<>();
-		if (paths != null) for (var entry : paths.entrySet()) sorted.put(entry.getKey(), entry.getValue().toAbsolutePath().normalize());
-		return Collections.unmodifiableNavigableMap(sorted);
-	}
 }

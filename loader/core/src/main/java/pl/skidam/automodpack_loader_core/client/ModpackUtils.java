@@ -275,15 +275,6 @@ public class ModpackUtils {
 		}
 	}
 
-	public static Optional<Jsons.CompleteModpackContentFields> refreshServerModpackContent(ClientStorage storage, DownloadClient client, byte[][] fileHashes) {
-		try {
-			return fetchModpackContentAsync(storage, client, current -> current.requestRefresh(fileHashes, storage.modpackContentTempFile())).get();
-		} catch (Exception e) {
-			LOGGER.error("Error while refreshing server modpack content", DownloadClient.unwrap(e));
-			return Optional.empty();
-		}
-	}
-
 	// ---- Async versions (non-blocking, used by login packet flow) ----
 
 	public static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(ClientStorage storage, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
