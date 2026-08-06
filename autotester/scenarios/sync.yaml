@@ -3,6 +3,7 @@ description: |
   Full round trip: boot, trust the certificate, sync the modpack, verify the files,
   restart the client, rejoin, and confirm the player reaches the game with the
   modpack applied.
+renderClient: true
 
 flow:
   - use: boot

@@ -12,10 +12,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -64,15 +61,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
-// TODO: clean up this mess
 public class ModpackUpdater implements AutoCloseable {
-	private static final long CONFIRMATION_TIMEOUT_MINUTES = 5;
-	private static final ScheduledExecutorService CONFIRMATION_TIMER = Executors.newSingleThreadScheduledExecutor(task -> {
-		Thread thread = new Thread(task, "AutoModpack confirmation timer");
-		thread.setDaemon(true);
-		return thread;
-	});
-
 	public Changelogs changelogs = new Changelogs();
 	public DownloadManager downloadManager;
 	public long totalBytesToDownload = 0;
@@ -80,14 +69,14 @@ public class ModpackUpdater implements AutoCloseable {
 	private boolean firstConnection;
 	private SelectedModpackTarget selectedTarget;
 	private Jsons.ModpackContentFields serverModpackContent;
-	public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
-	private final Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new HashMap<>();
+	private final Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new ConcurrentHashMap<>();
+	private final Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new ConcurrentHashMap<>();
+	private final Map<String, List<String>> downloadedMainPages = new ConcurrentHashMap<>();
 	private final Jsons.ConnectionInfo connectionInfo;
 	private final DownloadClient downloadClient;
 	private final AtomicBoolean closed = new AtomicBoolean();
 	private final AtomicReference<ConfirmationState> confirmationState = new AtomicReference<>(ConfirmationState.INACTIVE);
 	private final UpdateLoopDetector updateLoopDetector;
-	private volatile ScheduledFuture<?> confirmationExpiry;
 	private final ClientStorage storage;
 	private volatile FetchManager sourceFetchManager;
 	private static final Comparator<RecoveryFile> RECOVERY_FILE_ORDER = Comparator.comparing(RecoveryFile::logicalPath).thenComparing(RecoveryFile::sha1)
@@ -163,14 +152,12 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public void startConfirmedUpdate() {
-		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.STARTED)) return;
-		cancelConfirmationExpiry();
+		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.PREVIEWING)) return;
 		DownloadClient.NET_EXECUTOR.execute(() -> startUpdate(getModpackFileList()));
 	}
 
 	public void cancelConfirmation() {
 		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED)) return;
-		cancelConfirmationExpiry();
 		close();
 	}
 
@@ -509,7 +496,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private void startUpdateAfterPreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, PreparedPlan previewPlan) {
 		long start = System.currentTimeMillis();
-
+		PreparedPlan finalPlan;
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			requireLiveConnection();
 			// Don't download files which already exist
@@ -524,6 +511,7 @@ public class ModpackUpdater implements AutoCloseable {
 			try {
 				if (!downloadModpack(finalFilesToUpdate, startFetching, fetchManager)) {
 					reportFailedDownloads(start);
+					close();
 					return;
 				}
 			} catch (Exception e) {
@@ -531,25 +519,53 @@ public class ModpackUpdater implements AutoCloseable {
 				throw e;
 			}
 
-			PreparedPlan finalPlan = buildPlan(cache, modCache, selectedTarget.flatTarget());
-			if (!previewPlan.equals(finalPlan)) LOGGER.info("The verified local objects changed the prepared plan; applying the final plan without reopening the update preview");
+			finalPlan = buildPlan(cache, modCache, selectedTarget.flatTarget());
+		} catch (SocketTimeoutException | ConnectException e) {
+			String host = connectionInfo == null || connectionInfo.endpoint == null ? "modpack host" : "Modpack host of " + connectionInfo.endpoint.getHostString();
+			LOGGER.error("{} is not responding", host, e);
+			new ScreenManager().error("automodpack.error.critical", host + " is not responding", "automodpack.error.logs");
+			close();
+			return;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			LOGGER.info("Interrupted the download");
+			close();
+			return;
+		} catch (Exception e) {
+			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
+			LOGGER.error("Critical error while acquiring modpack objects", e);
+			close();
+			return;
+		}
 
-			ApplyResult applyResult = applyPreparedPlan(finalPlan, selectedTarget);
+		if (!previewPlan.equals(finalPlan)) {
+			try {
+				LOGGER.info("The verified local objects changed the prepared plan; requesting approval for the final plan");
+				if (requestPreparedPlanPreview(finalPlan, () -> applyApprovedPlan(finalPlan, start), this::close, false, true)) return;
+				LOGGER.warn("The final update preview was not shown; leaving the installed modpack unchanged");
+			} catch (Exception e) {
+				new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
+				LOGGER.error("Failed to present the final modpack update preview", e);
+			}
+			close();
+			return;
+		}
 
-			boolean requiredRestart = applyResult.requiresRestart();
-			LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);
+		applyApprovedPlan(finalPlan, start);
+	}
+
+	private void applyApprovedPlan(PreparedPlan plan, long start) {
+		try {
+			recordChangelogs(plan, selectedTarget);
+			ApplyResult applyResult = applyPreparedPlan(plan, selectedTarget);
+			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 			restartAfterApply(applyResult);
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
 			new ReLauncher(storage.activeDirectory(), UpdateType.UPDATE, changelogs).restart(preload);
-		} catch (SocketTimeoutException | ConnectException e) {
-			String host = connectionInfo == null || connectionInfo.endpoint == null ? "modpack host" : "Modpack host of " + connectionInfo.endpoint.getHostString();
-			LOGGER.error("{} is not responding", host, e);
-		} catch (InterruptedException e) {
-			LOGGER.info("Interrupted the download");
 		} catch (Exception e) {
 			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
-			LOGGER.error("Critical error during modpack update", e);
+			LOGGER.error("Critical error while applying the modpack update", e);
 		} finally {
 			close();
 		}
@@ -607,7 +623,7 @@ public class ModpackUpdater implements AutoCloseable {
 					mainPageUrls = fetchManager.getFetchDatas().get(serverFileHash).fetchedData().mainPageUrls();
 				}
 
-				changelogs.changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrls);
+				downloadedMainPages.put(UpdatePlanner.normalize(serverItem.file), List.copyOf(mainPageUrls));
 			};
 
 			downloadManager.download(downloadFile, serverFileHash, sources, serverFileSize, successCallback, failureCallback);
@@ -663,6 +679,22 @@ public class ModpackUpdater implements AutoCloseable {
 		ApplyResult result = new ApplyResult(restartReasons);
 		if (result.requiresRestart()) LOGGER.info("Restart required because: {}", String.join(", ", result.reasonDescriptions()));
 		return result;
+	}
+
+	private void recordChangelogs(PreparedPlan prepared, SelectedModpackTarget target) {
+		UpdatePreview applied = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), target.flatTarget(), target.selection(), false);
+		changelogs.clear();
+		for (UpdatePreview.Entry entry : applied.entries()) {
+			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
+			switch (entry.kind()) {
+				case ADDED, CHANGED, RESTORED_BASELINE -> changelogs.recordUpdated(file,
+						downloadedMainPages.getOrDefault(UpdatePlanner.normalize(entry.relativePath()), List.of()));
+				case REMOVED -> changelogs.recordRemoved(file);
+				default -> {
+				}
+			}
+		}
+		LOGGER.info("Prepared update changes: {} updated, {} removed", changelogs.updatedFiles().size(), changelogs.removedFiles().size());
 	}
 
 	private PreparedPlan buildPlan(FileMetadataCache cache, ModFileCache modCache, Jsons.ModpackContentFields target) throws Exception {
@@ -736,17 +768,22 @@ public class ModpackUpdater implements AutoCloseable {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), false);
-			return requestPreparedPlanPreview(prepared, () -> startUpdateAfterPreview(filesToUpdate, prepared), () -> {
-				close();
-			});
+			Runnable continueAction = () -> {
+				if (firstConnection && !confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return;
+				startUpdateAfterPreview(filesToUpdate, prepared);
+			};
+			Runnable cancelAction = firstConnection
+					? () -> confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING)
+					: this::close;
+			return requestPreparedPlanPreview(prepared, continueAction, cancelAction, firstConnection, false);
 		}
 	}
 
-	private boolean requestPreparedPlanPreview(PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
+	private boolean requestPreparedPlanPreview(PreparedPlan prepared, Runnable continueAction, Runnable cancelAction, boolean returnToSelection, boolean finalVerification) throws IOException {
 		List<GenerationPatchNoteHistory.Entry> missedPatchNotes = GenerationPatchNoteHistory.after(selectedTarget.patchNotesHistory(), installedGenerationId());
 		UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, null, getPatchNotes(), missedPatchNotes);
 		return new ScreenManager().preview(preview, getModpackName(),
-				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, sourceFetchManager);
+				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, false, returnToSelection, finalVerification);
 	}
 
 	private String installedGenerationId() throws IOException {
@@ -964,30 +1001,20 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private boolean beginConfirmation() {
-		if (!confirmationState.compareAndSet(ConfirmationState.INACTIVE, ConfirmationState.WAITING)) return false;
-		confirmationExpiry = CONFIRMATION_TIMER.schedule(() -> {
-			if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.EXPIRED)) return;
-			close();
-		}, CONFIRMATION_TIMEOUT_MINUTES, TimeUnit.MINUTES);
-		return true;
-	}
-
-	private void cancelConfirmationExpiry() {
-		ScheduledFuture<?> expiry = confirmationExpiry;
-		if (expiry != null) expiry.cancel(false);
+		return confirmationState.compareAndSet(ConfirmationState.INACTIVE, ConfirmationState.WAITING);
 	}
 
 	@Override
 	public void close() {
 		confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED);
-		cancelConfirmationExpiry();
+		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.CANCELLED);
 		FetchManager sourceFetch = sourceFetchManager;
 		if (sourceFetch != null && !sourceFetch.isComplete()) sourceFetch.cancel();
 		if (closed.compareAndSet(false, true) && downloadClient != null) downloadClient.close();
 	}
 
 	public enum ConfirmationState {
-		INACTIVE, WAITING, STARTED, CANCELLED, EXPIRED
+		INACTIVE, WAITING, PREVIEWING, STARTED, CANCELLED
 	}
 
 	private enum RestartReason {
