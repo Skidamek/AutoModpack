@@ -59,6 +59,21 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void refusesPlanBeforePersistingTargetWhenAnotherTransactionIsActive() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "blocked-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		SelectedModpackTarget target = target("mods/blocked.jar", "mod", false, hash, bytes.length);
+		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/blocked.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/blocked.jar", true, hash, bytes.length)));
+		Files.writeString(storage.transactionFile(), "active");
+
+		assertThrows(IOException.class, () -> executor(storage).commit(plan, target));
+		assertTrue(new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).isEmpty());
+	}
+
+	@Test
 	void persistsPatchNotesForGenerationsTheClientSkipped() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "history-object".getBytes(StandardCharsets.UTF_8);
@@ -67,8 +82,14 @@ class UpdateTransactionExecutorTest {
 		GenerationRecord first = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "First notes");
 		GenerationRecord second = GenerationRecord.create(first.manifest(), first, Instant.parse("2026-01-02T00:00:00Z"), "Second notes");
 		List<GenerationPatchNoteHistory.Entry> history = GenerationPatchNoteHistory.fromRecords(List.of(first, second));
+		Jsons.CompleteModpackContentFields secondFields = second.toFields();
+		GenerationPatchNoteHistory.writeFields(secondFields, history);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(secondFields, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/history.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/history.jar", true, hash, bytes.length)));
 
-		new ClientGenerationStore(storage).write(second, history);
+		assertTrue(executor(storage).commit(plan, target).success());
 
 		assertEquals(history, new ClientGenerationStore(storage).patchNotesHistory(second.metadata().generationId()));
 		assertEquals(List.of(second), new ClientGenerationStore(storage).availableLineage("abc1234", second.metadata().generationId()));
