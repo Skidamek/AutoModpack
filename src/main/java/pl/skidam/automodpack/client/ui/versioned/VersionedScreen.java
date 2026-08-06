@@ -145,6 +145,13 @@ public class VersionedScreen extends Screen {
 		return panelLeft(preferredPanelWidth) + index * (actionButtonWidth(preferredPanelWidth, buttonCount) + actionRowGap());
 	}
 
+	protected final int centeredActionButtonX(int preferredPanelWidth, int slotCount, int visibleButtonCount, int index) {
+		int buttonWidth = actionButtonWidth(preferredPanelWidth, slotCount);
+		int visibleCount = Math.max(1, Math.min(slotCount, visibleButtonCount));
+		int groupWidth = visibleCount * buttonWidth + actionRowGap() * (visibleCount - 1);
+		return (this.width - groupWidth) / 2 + index * (buttonWidth + actionRowGap());
+	}
+
 	/*? if <1.19.3 {*/
 	/*public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
 		return new Button(x, y, width, height, message, onPress);

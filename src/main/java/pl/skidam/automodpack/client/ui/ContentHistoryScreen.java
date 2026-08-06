@@ -42,16 +42,18 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		int y = this.height - 28;
 		int actionWidth = actionButtonWidth(310, 3);
 		boolean hasNotes = GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
-		int navigationY = hasNotes && pageCount() > 1 ? y - 26 : y;
-		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
-		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.literal("Next >"), button -> changePage(1));
+		boolean hasPagination = pageCount() > 1;
+		int navigationY = hasNotes && hasPagination ? y - 26 : y;
+		this.previousButton = buttonWidget(hasNotes ? centeredActionButtonX(310, 3, 2, 0) : actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
+		this.nextButton = buttonWidget(hasNotes ? centeredActionButtonX(310, 3, 2, 1) : actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.literal("Next >"), button -> changePage(1));
 		updateNavigation();
-		if (pageCount() > 1) {
+		if (hasPagination) {
 			this.addRenderableWidget(this.previousButton);
 			this.addRenderableWidget(this.nextButton);
 		}
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 0), y, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
-		if (hasNotes) this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 1), y, actionWidth, 20, VersionedText.literal("Notes"), button -> openPatchNotes()));
+		int bottomButtonCount = hasNotes ? 2 : hasPagination ? 3 : 1;
+		this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, 0), y, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
+		if (hasNotes) this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, 1), y, actionWidth, 20, VersionedText.literal("Notes"), button -> openPatchNotes()));
 	}
 
 	private int pageCount() {
