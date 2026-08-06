@@ -74,7 +74,7 @@ public class ChangelogScreen extends VersionedScreen {
 		this.searchField.setResponder(textField -> updateChangelogs());
 
 		this.backButton = buttonWidget(
-			actionButtonX(310, 3, 0),
+			centeredActionButtonX(310, 3, 2, 0),
 			this.height - 30,
 			actionButtonWidth(310, 3),
 			20,
@@ -83,7 +83,7 @@ public class ChangelogScreen extends VersionedScreen {
 		);
 
 		this.openMainPageButton = buttonWidget(
-			actionButtonX(310, 3, 1),
+			centeredActionButtonX(310, 3, 2, 1),
 			this.height - 30,
 			actionButtonWidth(310, 3),
 			20,

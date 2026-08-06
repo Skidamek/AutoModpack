@@ -53,14 +53,15 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 		this.addRenderableWidget(availableTab);
 		this.addRenderableWidget(archivedTab);
 		int actionWidth = actionButtonWidth(310, 3);
+		boolean hasPagination = pageCount() > 1;
 		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
 		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.literal("Next >"), button -> changePage(1));
 		updateNavigation();
-		if (pageCount() > 1) {
+		if (hasPagination) {
 			this.addRenderableWidget(this.previousButton);
 			this.addRenderableWidget(this.nextButton);
 		}
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 0), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
+		this.addRenderableWidget(buttonWidget(hasPagination ? actionButtonX(310, 3, 0) : centeredActionButtonX(310, 3, 1, 0), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
 		addFileButtons();
 	}
 
