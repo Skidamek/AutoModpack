@@ -109,7 +109,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 
 		y += 22;
 		long bytes = target.flatTarget().list.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		String summary = truncateToWidth(this.font, "Selected groups: " + selection.selectedGroups().size() + "  Files: " + target.flatTarget().list.size() + "  Download: " + formatSize(bytes), this.width - 20);
+		String summary = truncateToWidth(this.font, "Selected groups: " + selection.selectedGroups().size() + "  Files: " + target.flatTarget().list.size() + "  Download: " + UiFormat.formatSize(bytes), this.width - 20);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
 		y += 14;
 		String compatibility = "Compatibility: " + ClientPlatform.current().id() + "  " + (selection.unavailableGroups().isEmpty()
@@ -156,13 +156,6 @@ public final class FirstConnectScreen extends VersionedScreen {
 		if (names.isEmpty()) return "none";
 		String joined = String.join(", ", names);
 		return truncateToWidth(this.font, joined, Math.max(1, this.width - 20));
-	}
-
-	private static String formatSize(long bytes) {
-		if (bytes < 1024) return bytes + " B";
-		if (bytes < 1024 * 1024) return (bytes / 1024) + " KiB";
-		if (bytes < 1024L * 1024L * 1024L) return (bytes / (1024 * 1024)) + " MiB";
-		return (bytes / (1024L * 1024L * 1024L)) + " GiB";
 	}
 
 	@Override

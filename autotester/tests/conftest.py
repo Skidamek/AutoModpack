@@ -140,7 +140,7 @@ class FakeBridge:
 
     # --- helpers ----------------------------------------------------------
     def _write_modpack(self) -> None:
-        root = self.ctx.game_dir / "automodpack" / "client-generations" / "active"
+        root = self.ctx.game_dir / "automodpack" / "client" / "active"
         marker = root / self.ctx.marker_rel
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text("{}")

@@ -313,7 +313,7 @@ public class ModpackUpdater implements AutoCloseable {
 	public UpdateTransactionExecutor.Execution removeModpack() throws Exception {
 		RemovalPreparation preparation = prepareRemoval();
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 		if (execution.success()) {
 			clientConfig = preparation.plannedConfig();
 			try {
@@ -384,7 +384,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public RecoverySnapshot recoverySnapshot() throws IOException {
 		Jsons.ModpackContentFields installed = storedTarget();
-		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(storage.objectsDirectory(), recoveryDirectory(installed.modpackId));
+		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(recoveryDirectory(installed.modpackId));
 		List<RecoveryFile> archived = new ArrayList<>();
 		for (var entry : archive.entries) archived.add(new RecoveryFile(entry.logicalPath, entry.sha1, entry.size, entry.sourceGenerationId, entry.preservedAt));
 		archived.sort(RECOVERY_FILE_ORDER);
@@ -959,7 +959,7 @@ public class ModpackUpdater implements AutoCloseable {
 		ensurePlanObjects(plan, target.flatTarget());
 		new ClientGenerationStore(storage).write(target.generationRecord());
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 		if (!execution.success()) {
 			DetachedUpdateHelper.launch(transaction);
 			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());

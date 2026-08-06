@@ -185,7 +185,7 @@ public class SelfUpdater {
 			String currentPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(currentJar).toString());
 			String targetPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(targetJar).toString());
 			UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentPath, targetPath, automodpack.SHA1Hash(), automodpack.fileSize(), currentHash);
-			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
+			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 			if (!execution.success()) DetachedUpdateHelper.launch(transaction);
 			LOGGER.info("AutoModpack update transaction {} is ready; restart required", transaction.transactionId);
 			new ReLauncher(UpdateType.AUTOMODPACK).restart(true);

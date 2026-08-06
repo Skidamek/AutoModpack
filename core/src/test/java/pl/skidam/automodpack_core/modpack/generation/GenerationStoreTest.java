@@ -234,7 +234,7 @@ class GenerationStoreTest {
 		Files.writeString(projectionPath, projection, StandardCharsets.UTF_8);
 
 		GenerationStore.CurrentSnapshot current = assertDoesNotThrow(() -> store.loadCurrent().orElseThrow());
-		assertEquals(tempDir.resolve("current-projection.json"), current.hostingPaths().get(""));
+		assertFalse(current.hostingPaths().containsKey(""));
 		assertThrows(IOException.class, store::loadCurrentDeep);
 	}
 

@@ -7,7 +7,6 @@ import os
 import random
 import secrets
 import shutil
-import struct
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -21,6 +20,7 @@ from .mods import resolve_mod
 from .engine import ClientExited, Context, run_flow
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
+from .generation_identity import CanonicalEncoder, write_strings
 
 
 logger = logging.getLogger(__name__)
@@ -473,49 +473,10 @@ def _sha1(path: Path) -> str:
         return hashlib.file_digest(f, "sha1").hexdigest()
 
 
-class _CanonicalEncoder:
-    """Small mirror of the core generation identity encoder for test fixtures."""
-
-    def __init__(self):
-        self.data = bytearray()
-
-    def string(self, value: str | None):
-        if value is None:
-            self.data.append(0)
-            return self
-        encoded = value.encode("utf-8")
-        self.data.append(1)
-        self.data.extend(struct.pack(">i", len(encoded)))
-        self.data.extend(encoded)
-        return self
-
-    def integer(self, value: int):
-        self.data.extend(struct.pack(">i", value))
-        return self
-
-    def long(self, value: int):
-        self.data.extend(struct.pack(">q", value))
-        return self
-
-    def boolean(self, value: bool):
-        self.data.append(1 if value else 0)
-        return self
-
-    def digest(self) -> str:
-        return hashlib.sha1(self.data).hexdigest()
-
-
-def _write_strings(encoder: _CanonicalEncoder, values):
-    values = sorted(values)
-    encoder.integer(len(values))
-    for value in values:
-        encoder.string(value)
-
-
 def _staged_generation_id(modpack_id: str, created_at: str, state_digest: str, ledger_digest: str) -> str:
     notes_digest = hashlib.sha1(b"").hexdigest()
     return (
-        _CanonicalEncoder()
+        CanonicalEncoder()
         .string("automodpack-generation-v1")
         .integer(1)
         .string(modpack_id)
@@ -530,7 +491,7 @@ def _staged_generation_id(modpack_id: str, created_at: str, state_digest: str, l
 
 
 def _staged_ledger_digest(modpack_id: str, entries: list[dict]) -> str:
-    encoder = _CanonicalEncoder().string("automodpack-ownership-ledger-v1").string(modpack_id).integer(len(entries))
+    encoder = CanonicalEncoder().string("automodpack-ownership-ledger-v1").string(modpack_id).integer(len(entries))
     for entry in entries:
         hashes = sorted(entry["historicalHashes"], key=lambda content: (content["sha1"], int(content["size"])))
         groups = sorted(entry["historicalGroupIds"])
@@ -546,7 +507,7 @@ def _staged_ledger_digest(modpack_id: str, entries: list[dict]) -> str:
 
 def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict]) -> str:
     encoder = (
-        _CanonicalEncoder()
+        CanonicalEncoder()
         .string("automodpack-state-v1")
         .string(modpack_id)
         .string(ctx.modpack_name)
@@ -562,8 +523,8 @@ def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict]) -> st
         .boolean(True)
         .boolean(True)
     )
-    _write_strings(encoder, [])
-    _write_strings(encoder, [])
+    write_strings(encoder, [])
+    write_strings(encoder, [])
     encoder.integer(0).integer(len(files))
     for entry in files:
         encoder.string(entry["logicalPath"]).long(int(entry["size"])).string(entry["type"])
@@ -571,7 +532,7 @@ def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict]) -> st
     return encoder.integer(0).digest()
 
 
-def _write_staged_generation(ctx: Context, root: Path, modpack_id: str) -> dict:
+def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_root: Path) -> dict:
     files = []
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         if path.name == "automodpack-content.json":
@@ -654,10 +615,11 @@ def _write_staged_generation(ctx: Context, root: Path, modpack_id: str) -> dict:
             "rollbackTargetGenerationId": "",
         },
     }
-    generation_path = root.parent / "generations" / generation_id / "manifest.json"
+    client_root = root.parent
+    generation_path = client_root / "records" / generation_id / "manifest.json"
     generation_path.parent.mkdir(parents=True, exist_ok=True)
     generation_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    objects = root.parent / "objects"
+    objects = data_root / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     for entry in files:
         object_path = objects / entry["sha1"]
@@ -683,9 +645,14 @@ def _v_stage_modpack(ctx: Context, step):
     """
     game = ctx.game_dir
     modpack_id = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(7))
-    root = game / "automodpack" / "client-generations" / "active"
-    ctx.vars["active_dir"] = "automodpack/client-generations/active"
+    automodpack = game / "automodpack"
+    client_root = automodpack / "client"
+    data_root = client_root / "data"
+    root = client_root / "active"
+    ctx.vars["active_dir"] = "automodpack/client/active"
     root.mkdir(parents=True, exist_ok=True)
+    data_root.mkdir(parents=True, exist_ok=True)
+    (automodpack / "data-root.json").write_text(json.dumps({"root": str(data_root.resolve()), "shared": False}, indent=2) + "\n")
 
     src = step.get("from")
     if src:
@@ -724,7 +691,7 @@ def _v_stage_modpack(ctx: Context, step):
                 shutil.copy2(mod, root / "mods" / mod.name)
 
     (root / "automodpack-content.json").unlink(missing_ok=True)
-    generation = _write_staged_generation(ctx, root, modpack_id)
+    generation = _write_staged_generation(ctx, root, modpack_id, data_root)
     state = {
         "schemaVersion": 1,
         "modpackId": modpack_id,
@@ -733,9 +700,9 @@ def _v_stage_modpack(ctx: Context, step):
         "stateDigest": generation["stateDigest"],
         "ledgerDigest": generation["ledgerDigest"],
     }
-    (root.parent / "active-state.json").write_text(json.dumps(state, indent=2) + "\n")
+    (client_root / "active-state.json").write_text(json.dumps(state, indent=2) + "\n")
 
-    selection_store = game / "automodpack" / "automodpack-client-selection.json"
+    selection_store = client_root / "selections.json"
     selection_store.write_text(json.dumps({
         "DO_NOT_CHANGE_IT": 1,
         "selections": {modpack_id: {"requestedTags": [], "requestedGroups": [], "excludedGroups": []}},
@@ -760,9 +727,8 @@ def _v_stage_modpack(ctx: Context, step):
         },
     }
     cfg.update(ctx.resolve(step.get("config", {}) or {}))
-    amp = game / "automodpack"
-    amp.mkdir(parents=True, exist_ok=True)
-    (amp / "automodpack-client.json").write_text(json.dumps(cfg, indent=2))
+    automodpack.mkdir(parents=True, exist_ok=True)
+    (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2))
 
 
 # ── case orchestration ────────────────────────────────────────────────────

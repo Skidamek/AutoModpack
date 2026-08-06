@@ -18,6 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
@@ -361,11 +362,16 @@ public final class UpdateTransactionExecutor {
 		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
-		for (Preservation preservation : transaction.plannedPreservations) {
+		List<Preservation> sorted = transaction.plannedPreservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal())
+				.thenComparing(Preservation::relativePath).thenComparing(Preservation::expectedHash).thenComparingLong(Preservation::expectedSize)).toList();
+		if (!transaction.plannedPreservations.equals(sorted)) throw new IOException("Preservations are not deterministically ordered");
+		Set<FileKey> preservationKeys = new HashSet<>();
+		for (Preservation preservation : sorted) {
 			if (preservation == null || preservation.root() != Root.GAME_DIR)
 				throw new IOException("Invalid preservation root");
 			String relative = normalizeOperationPath(preservation.relativePath());
 			validateRootAndPath(preservation.root(), relative, transaction.modpackId, transaction.purpose);
+			if (!preservationKeys.add(new FileKey(preservation.root(), relative))) throw new IOException("Duplicate preservation target");
 			validateHash(preservation.expectedHash(), "preservation SHA-1");
 			String logicalPath = relative;
 			if (!removal && targetPaths.contains(logicalPath)) throw new IOException("Preservation target remains in the selected target");
@@ -426,6 +432,7 @@ public final class UpdateTransactionExecutor {
 			setPhase(transaction, UpdateTransaction.Phase.PREPARING);
 			if (isModpackTransaction(transaction)) {
 				captureBaselines(transaction);
+				preserveBeforeMutation(transaction);
 				applyOperations(transaction, current);
 				current.set(null);
 				verifyManagedFinalState(transaction);
@@ -523,6 +530,22 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
+	private void preserveBeforeMutation(UpdateTransaction transaction) throws IOException {
+		Path objects = context.storage().objectsDirectory().toAbsolutePath().normalize();
+		for (Preservation preservation : transaction.plannedPreservations) {
+			Path source = resolve(preservation.root(), preservation.relativePath(), transaction);
+			Path object = objects.resolve(preservation.expectedHash().toLowerCase(Locale.ROOT)).normalize();
+			validateNoSymbolicLinkDescendants(objects, object);
+			if (!SmartFileUtils.isValidFile(object, preservation.expectedSize(), preservation.expectedHash())) {
+				if (!SmartFileUtils.isValidFile(source, preservation.expectedSize(), preservation.expectedHash()))
+					throw new IOException("Preservation source changed after planning: " + source);
+				SmartFileUtils.copyVerifiedAtomic(source, object, preservation.expectedSize(), preservation.expectedHash());
+			}
+			if (!SmartFileUtils.isValidFile(object, preservation.expectedSize(), preservation.expectedHash()))
+				throw new IOException("Preserved object verification failed: " + object);
+		}
+	}
+
 	private void verifyManagedFinalState(UpdateTransaction transaction) throws IOException {
 		for (ProjectedFile projected : transaction.projectedFinalState) {
 			if (projected.root() == Root.PROJECTION) continue;
@@ -611,7 +634,7 @@ public final class UpdateTransactionExecutor {
 		if (transaction.plannedBaselineCaptures.isEmpty()) return;
 		Path baselinePath = context.storage().baselineFile(transaction.modpackId);
 		Jsons.ClientBaselineFields baseline = readBaseline(baselinePath, transaction.modpackId);
-		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new java.util.TreeMap<>();
+		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
 		for (Jsons.ClientBaselineFields.EntryFields entry : baseline.entries) entries.put(entry.logicalPath, entry);
 		boolean changed = false;
 		for (BaselineCapture capture : transaction.plannedBaselineCaptures) {
