@@ -965,12 +965,10 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private void executePlan(UpdatePlan plan, SelectedModpackTarget target) throws IOException {
 		ensurePlanObjects(plan, target.flatTarget());
-		new ClientGenerationStore(storage).write(target.generationRecord(), target.patchNotesHistory());
-		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target);
 		if (!execution.success()) {
-			DetachedUpdateHelper.launch(transaction);
-			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
+			DetachedUpdateHelper.launch(execution.transaction());
+			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
 		}
 		try {
 			cleanupOverlayState(plan, target.manifest().modpackId());
