@@ -34,7 +34,7 @@ public class ErrorScreen extends VersionedScreen {
 	}
 
 	private void initWidgets() {
-		backButton = buttonWidget(actionButtonX(310, 2, 0), this.height - 28, actionButtonWidth(310, 2), 20, VersionedText.translatable("automodpack.back"), button -> back());
+		backButton = buttonWidget(centeredActionButtonX(310, 2, 1, 0), this.height - 28, actionButtonWidth(310, 2), 20, VersionedText.translatable("automodpack.back"), button -> back());
 	}
 
 	private void back() {
