@@ -18,6 +18,11 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 
 /** Persistent immutable client copies of complete server generation records. */
 public final class ClientGenerationStore {
@@ -61,6 +66,21 @@ public final class ClientGenerationStore {
 
 	public Optional<Jsons.CompleteModpackContentFields> readFields(String generationId) throws IOException {
 		return readFields(storage.generationManifest(generationId));
+	}
+
+	/** Reconstructs the active target from one validated generation record and the persisted selection intent. */
+	public Optional<SelectedModpackTarget> readActiveTarget(ClientPlatform platform) throws IOException {
+		Objects.requireNonNull(platform, "platform");
+		Jsons.ClientGenerationStateFields state = storage.readActiveState();
+		if (state == null) return Optional.empty();
+		Jsons.CompleteModpackContentFields fields = readFields(state.generationId)
+				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
+		GenerationRecord record = GenerationRecord.fromFields(fields);
+		if (!Objects.equals(state.modpackId, record.manifest().modpackId()))
+			throw new IOException("Active client state and generation record belong to different modpacks");
+		SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId)
+				.orElseGet(() -> GroupSelectionResolver.defaultIntent(record.manifest()));
+		return Optional.of(SelectedModpackTarget.prepare(fields, null, intent, platform));
 	}
 
 	public List<GenerationPatchNoteHistory.Entry> patchNotesHistory(String generationId) throws IOException {

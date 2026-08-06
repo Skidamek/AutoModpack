@@ -16,8 +16,8 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
-import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.protocol.netty.ProtocolPipeline;
 import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 import pl.skidam.automodpack_core.protocol.netty.detectors.AMMHDetector;
 import pl.skidam.automodpack_core.protocol.netty.detectors.HAProxyDetector;
@@ -151,14 +151,6 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 			LOGGER.debug("Pipeline: TLS termination handled externally");
 		}
 
-		ctx.channel().attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
-		ctx.channel().attr(NettyServer.PROTOCOL_VERSION).set(LATEST_SUPPORTED_PROTOCOL_VERSION);
-		ctx.channel().attr(NettyServer.COMPRESSION_TYPE).set(CompressionType.ZSTD);
-		ctx.channel().attr(NettyServer.CHUNK_SIZE).set(DEFAULT_CHUNK_SIZE);
-
-		ctx.pipeline().addLast("configuration-handler", new ConfigurationHandler()).addLast("compression-encoder", new CompressionEncoder())
-				.addLast("compression-decoder", new CompressionDecoder()).addLast("chunked-write", new ChunkedWriteHandler())
-				.addLast("protocol-msg-decoder", new ProtocolMessageDecoder()).addLast("msg-handler", new ServerMessageHandler(server))
-				.addLast("error-printer-last", new ErrorPrinter());
+		ProtocolPipeline.install(ctx.channel(), server, remoteAddress);
 	}
 }

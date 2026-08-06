@@ -5,7 +5,6 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -31,13 +30,11 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
-import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -154,15 +151,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private SelectedModpackTarget storedSelectedTarget() throws IOException {
-		Jsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state == null) return null;
-		Jsons.CompleteModpackContentFields fields = new ClientGenerationStore(storage).readFields(state.generationId)
-				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
-		GenerationRecord record = GenerationRecord.fromFields(fields);
-		if (!state.modpackId.equals(record.manifest().modpackId())) throw new IOException("Active client state and generation record belong to different modpacks");
-		SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId)
-				.orElseGet(() -> GroupSelectionResolver.defaultIntent(record.manifest()));
-		return SelectedModpackTarget.prepare(fields, null, intent, ClientPlatform.current());
+		return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
 	}
 
 	public void selectTarget(SelectionIntent intent) {
@@ -537,7 +526,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 			// DOWNLOAD
 			try {
-				if (!downloadModpack(finalFilesToUpdate, startFetching, fetchManager, cache)) {
+				if (!downloadModpack(finalFilesToUpdate, startFetching, fetchManager)) {
 					reportFailedDownloads(start);
 					return;
 				}
@@ -575,8 +564,8 @@ public class ModpackUpdater implements AutoCloseable {
 		if (downloadClient == null) throw new IOException("Modpack transfer session is unavailable");
 	}
 
-	private boolean downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager,
-			FileMetadataCache cache) throws InterruptedException {
+	private boolean downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager)
+			throws InterruptedException {
 		int wholeQueue = finalFilesToUpdate.size();
 
 		if (wholeQueue == 0) {
@@ -646,63 +635,8 @@ public class ModpackUpdater implements AutoCloseable {
 			return false;
 		}
 
-		Map<String, String> hashesToRefresh = failedDownloads.keySet().stream()
-				.collect(Collectors.toMap(item -> item.file, item -> item.sha1, (first, second) -> first, LinkedHashMap::new));
-		if (hashesToRefresh.isEmpty()) return false;
-		LOGGER.warn("Remote acquisition failed for {} files after all sources; requesting one full regeneration", hashesToRefresh.size());
-		byte[][] hashesArray = hashesToRefresh.values().stream().map(value -> value.getBytes(StandardCharsets.UTF_8)).toArray(byte[][]::new);
-		var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(storage, downloadClient, hashesArray);
-		if (refreshedContentOptional.isEmpty()) {
-			LOGGER.error("Failed to refresh the modpack content");
-			return false;
-		}
-
-		SelectedModpackTarget refreshedTarget = SelectedModpackTarget.prepare(refreshedContentOptional.get(), selectedTarget.expectedPriorIntent(),
-				selectedTarget.selection().intent(), selectedTarget.platform());
-		Jsons.ModpackContentFields refreshedContent = refreshedTarget.flatTarget();
-		if (!Objects.equals(serverModpackContent.modpackId, refreshedContent.modpackId)) {
-			LOGGER.error("Refreshed catalogue changed modpack ID from {} to {}", serverModpackContent.modpackId, refreshedContent.modpackId);
-			return false;
-		}
-		this.selectedTarget = refreshedTarget;
-		this.serverModpackContent = refreshedContent;
-		failedDownloads.clear();
-		failedDownloadCategories.clear();
-		totalBytesToDownload = 0;
-
-		populateStoreFromModpack(refreshedContent.list, cache);
-		ModpackUtils.populateStoreFromCWD(refreshedContent.list, cache, storage);
-		Set<Jsons.ModpackContentFields.ModpackContentItem> refreshedFilesToAcquire = ModpackUtils.identifyUncachedFiles(refreshedContent.list, cache, storage);
-		if (refreshedFilesToAcquire.isEmpty()) return true;
-
-		for (var item : refreshedFilesToAcquire) totalBytesToDownload += Long.parseLong(item.size);
-		FetchManager refreshedFetchManager = ensureSourceFetch(refreshedFilesToAcquire);
-		if (refreshedFetchManager != null) refreshedFetchManager.fetch();
-
-		downloadManager = new DownloadManager(totalBytesToDownload, storage);
-		new ScreenManager().download(downloadManager, getModpackName());
-		downloadManager.attachDownloadClient(downloadClient);
-
-		for (var serverItem : refreshedFilesToAcquire) {
-			Path downloadFile = SmartFileUtils.getPath(storage.activeDirectory(), serverItem.file);
-			List<DownloadSource> sources = refreshedFetchManager != null && refreshedFetchManager.getFetchDatas().containsKey(serverItem.sha1)
-					? refreshedFetchManager.getFetchDatas().get(serverItem.sha1).fetchedData().sources()
-					: List.of();
-			Consumer<DownloadManager.FailureCategory> failureCallback = category -> {
-				failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
-				failedDownloadCategories.put(serverItem, category);
-			};
-			Runnable successCallback = () -> changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
-			downloadManager.download(downloadFile, serverItem.sha1, sources, Long.parseLong(serverItem.size), successCallback, failureCallback);
-		}
-		downloadManager.joinAll();
-		if (downloadManager.isCancelled()) {
-			LOGGER.warn("Download canceled after regeneration");
-			return false;
-		}
-		downloadManager.cancelAllAndShutdown();
-		LOGGER.info("Finished full refreshed acquisition in {}ms", System.currentTimeMillis() - startFetching);
-		return failedDownloads.isEmpty();
+		LOGGER.error("Remote object acquisition failed for {}; the advertised generation remains unchanged", failedDownloads.keySet());
+		return false;
 	}
 
 	private void reportFailedDownloads(long start) {

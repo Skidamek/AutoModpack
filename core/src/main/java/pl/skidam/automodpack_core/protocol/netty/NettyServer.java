@@ -26,6 +26,7 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
@@ -69,7 +70,11 @@ public class NettyServer {
 	}
 
 	public void replacePaths(Map<String, Path> paths) {
-		this.paths = Map.copyOf(paths);
+		replacePaths(new GenerationHosting(paths));
+	}
+
+	public void replacePaths(GenerationHosting hosting) {
+		this.paths = hosting.asMap();
 	}
 
 	public Map<String, Path> getPathsSnapshot() {
