@@ -56,6 +56,21 @@ class GenerationStoreTest {
 	}
 
 	@Test
+	void currentProjectionCarriesPatchNotesForSkippedGenerations() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "First generation notes");
+		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "Second generation notes");
+
+		Jsons.CompleteModpackContentFields fields = ConfigTools.read(tempDir.resolve("current-projection.json"), Jsons.CompleteModpackContentFields.class).orElseThrow();
+		List<GenerationPatchNoteHistory.Entry> history = GenerationPatchNoteHistory.fromFields(fields);
+		assertEquals(List.of("First generation notes", "Second generation notes"), history.stream().map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
+		assertEquals(List.of("Second generation notes"), GenerationPatchNoteHistory.after(history, first.record().metadata().generationId()).stream()
+				.map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
+		assertEquals(second.record().metadata().generationId(), history.get(history.size() - 1).generationId());
+	}
+
+	@Test
 	void concurrentPublishersFromOneParentCannotBothSucceed() throws Exception {
 		GenerationStore firstStore = store(Instant.parse("2026-01-01T00:00:00Z"));
 		firstStore.publish(candidate("first"), Optional.empty(), "");

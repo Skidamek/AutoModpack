@@ -13,6 +13,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
@@ -41,6 +42,8 @@ public final class FirstConnectScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
 		this.addRenderableWidget(buttonWidget(left + 160, y, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, y + 26, 150, 20, VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
+		if (GenerationPatchNoteHistory.containsNotes(target.patchNotesHistory()))
+			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, y - 26, 150, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
 	}
 
 	private void continueWithDefaults() {
@@ -75,6 +78,10 @@ public final class FirstConnectScreen extends VersionedScreen {
 		finished = true;
 		updater.cancelConfirmation();
 		ScreenImpl.multiplayer();
+	}
+
+	private void openPatchNotes() {
+		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, target.patchNotesHistory(), target.manifest().modpackName()));
 	}
 
 	@Override

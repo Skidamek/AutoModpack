@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.FetchManager;
@@ -177,10 +178,16 @@ public class ScreenImpl implements ScreenService {
 
 		public static void history(Object... args) {
 			Screen parent = Screens.getScreen();
-			Runnable closed = args.length > 2 && args[2] instanceof Runnable callback ? callback : () -> {};
 			@SuppressWarnings("unchecked")
 			List<GenerationRecord> history = (List<GenerationRecord>) args[0];
-			Screens.setScreen(new ContentHistoryScreen(parent, history, (String) args[1], closed));
+			boolean hasPatchNotesHistory = args.length > 2 && args[2] instanceof List<?>;
+			@SuppressWarnings("unchecked")
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory = hasPatchNotesHistory
+					? (List<GenerationPatchNoteHistory.Entry>) args[2]
+					: GenerationPatchNoteHistory.fromRecords(history);
+			int callbackIndex = hasPatchNotesHistory ? 3 : 2;
+			Runnable closed = args.length > callbackIndex && args[callbackIndex] instanceof Runnable callback ? callback : () -> {};
+			Screens.setScreen(new ContentHistoryScreen(parent, history, (String) args[1], patchNotesHistory, closed));
 		}
 
 		public static void error(String... errors) {

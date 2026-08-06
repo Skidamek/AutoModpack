@@ -10,6 +10,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.FetchManager;
@@ -64,6 +65,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.addRenderableWidget(buttonWidget(left + 80, navigationY, 75, 20, VersionedText.translatable("automodpack.cancel"), button -> cancel()));
 		this.addRenderableWidget(buttonWidget(left + 165, navigationY, 75, 20,
 				VersionedText.literal(removal ? "Remove" : "Continue").withStyle(ChatFormatting.BOLD), button -> continueUpdate()));
+		if (GenerationPatchNoteHistory.containsNotes(preview.patchNotesHistory()))
+			this.addRenderableWidget(buttonWidget(left + 80, navigationY - 24, 150, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
 	}
 
 	private int pageCount() {
@@ -123,6 +126,10 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		finished = true;
 		ScreenImpl.setScreen(parent instanceof PreparingScreen ? null : parent);
 		cancelAction.run();
+	}
+
+	private void openPatchNotes() {
+		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, preview.patchNotesHistory(), modpackName));
 	}
 
 	@Override

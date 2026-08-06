@@ -522,7 +522,9 @@ public final class GenerationStore {
 	private GenerationRecord readProjection(Path path) throws IOException {
 		ensureRegular(path, "current generation projection");
 		try {
-			return GenerationRecord.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CompleteModpackContentFields.class));
+			Jsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CompleteModpackContentFields.class);
+			GenerationPatchNoteHistory.fromFields(fields);
+			return GenerationRecord.fromFields(fields);
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid current generation projection: " + path, e);
 		}
@@ -731,7 +733,9 @@ public final class GenerationStore {
 	}
 
 	private void writeCurrentProjection(GenerationRecord record) throws IOException {
-		ConfigTools.writeAtomic(currentProjectionPath, record.toFields());
+		Jsons.CompleteModpackContentFields fields = record.toFields();
+		GenerationPatchNoteHistory.writeFields(fields, GenerationPatchNoteHistory.fromHistory(readCompactHistory(record.metadata().generationId()).entries()));
+		ConfigTools.writeAtomic(currentProjectionPath, fields);
 	}
 
 	private OwnershipDelta writeDeltaNoClobber(GenerationRecord record, GenerationRecord parent) throws IOException {

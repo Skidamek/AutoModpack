@@ -349,6 +349,7 @@ public class Jsons {
 		public Map<String, SelectionTagFields> selectionTags = Map.of();
 		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
 		public GenerationFields generation;
+		public List<PatchNotesHistoryEntryFields> patchNotesHistory = List.of();
 
 		public static class GenerationFields {
 			public int schemaVersion;
@@ -360,6 +361,15 @@ public class Jsons {
 			public String patchNotes = "";
 			public String patchNotesDigest = "";
 			public String rollbackTargetGenerationId = "";
+		}
+
+		public static class PatchNotesHistoryEntryFields {
+			public int schemaVersion;
+			public String generationId = "";
+			public String parentGenerationId = "";
+			public String createdAt = "";
+			public String patchNotes = "";
+			public String patchNotesDigest = "";
 		}
 
 		public static class ModpackGroupFields {

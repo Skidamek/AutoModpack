@@ -77,7 +77,7 @@ public final class UpdateTransactionExecutor {
 
 	public Execution commit(UpdatePlan plan, SelectedModpackTarget target) throws IOException {
 		ClientStorage storage = context.storage();
-		new ClientGenerationStore(storage).write(target.generationRecord());
+		new ClientGenerationStore(storage).write(target.generationRecord(), target.patchNotesHistory());
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(plan.modpackId()));
 		return commit(transaction);
 	}
@@ -184,7 +184,9 @@ public final class UpdateTransactionExecutor {
 			SelectionIntent intent = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
 					? transaction.targetIntent()
 					: expected == null ? GroupSelectionResolver.defaultIntent(record.manifest()) : expected;
-			return SelectedModpackTarget.prepare(record.toFields(), expected, intent, transaction.platform());
+			Jsons.CompleteModpackContentFields fields = new ClientGenerationStore(context.storage()).readFields(transaction.targetGenerationId)
+					.orElseThrow(() -> new IOException("Client generation record is missing: " + transaction.targetGenerationId));
+			return SelectedModpackTarget.prepare(fields, expected, intent, transaction.platform());
 		} catch (RuntimeException e) {
 			throw new IOException("Client generation selection is invalid", e);
 		}
