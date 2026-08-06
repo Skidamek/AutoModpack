@@ -725,13 +725,18 @@ The server can attach patch notes to a generation.
 
 Patch notes are normalized, bounded, and included in generation identity through their digest. The current 16 KiB UTF-8 cap is a human-input tripwire, not a storage budget; the boundary receipt is `GenerationPatchNotesTest.fileNotesRequireStrictUtf8AndBoundedSize`, which rejects the first byte above the cap. Stable reads and source snapshots use three attempts as bounded-concurrency tripwires; the receipts are `GenerationPatchNotesTest.unchangedFileNotesCanBeConsumedAndChangedFileIsPreserved` and `ModpackCandidateScannerTest.sourceMutationAfterEveryCopyExhaustsRetriesWithoutLeakingStagedFiles`. These values must not be increased without a new measurement and a matching test receipt.
 
-The client receives the notes with the target record.
+The client receives an ordered compact patch-note history with the target record. The history contains the generation parent chain, creation timestamp, normalized note text, and note digest; it does not repeat the generation catalogue or ownership ledger.
+
+Before an update, the client finds its installed generation in that chain. The update preview's `All patch notes` view shows every note after that generation, including generations that the client did not download. If the installed generation is not in the received chain, the client shows the complete received note history because it cannot safely identify a narrower boundary.
+
+The client stores the received history with the immutable target generation record before file mutation. A deferred or interrupted update therefore retains the same history, and the later content-history screen can open it even though intermediate server generations were never installed locally. Older records without the optional history field fall back to their own generation notes.
 
 The client shows the notes in:
 
 - First-connect welcome screen.
 - Update preview.
 - Friendly client content history.
+- Complete missed-generation patch-note history from the update target.
 
 Patch notes do not create a generation by themselves when the candidate has no semantic change.
 
@@ -1551,6 +1556,7 @@ Test:
 - `D` uses `B` catalogue state.
 - `D` keeps cumulative ledger history through `D`.
 - Client direct update from `A` to `D`.
+- Client update from `A` to `D` shows the notes for skipped `B` and `C`.
 - Explicit tag intent survives a revert when valid.
 - Explicit group intent survives a revert when valid.
 - Client history collapses equal effective content states.

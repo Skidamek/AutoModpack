@@ -16,6 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -55,6 +56,22 @@ class UpdateTransactionExecutorTest {
 		assertEquals(target.manifest().modpackId(), ConfigTools.read(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
 		assertFalse(Files.exists(storage.automodpackDirectory().resolve("modpacks")));
 		assertFalse(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
+	void persistsPatchNotesForGenerationsTheClientSkipped() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "history-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		Jsons.CompleteModpackContentFields fields = fields("mods/history.jar", "mod", false, hash, bytes.length);
+		GenerationRecord first = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "First notes");
+		GenerationRecord second = GenerationRecord.create(first.manifest(), first, Instant.parse("2026-01-02T00:00:00Z"), "Second notes");
+		List<GenerationPatchNoteHistory.Entry> history = GenerationPatchNoteHistory.fromRecords(List.of(first, second));
+
+		new ClientGenerationStore(storage).write(second, history);
+
+		assertEquals(history, new ClientGenerationStore(storage).patchNotesHistory(second.metadata().generationId()));
+		assertEquals(List.of(second), new ClientGenerationStore(storage).availableLineage("abc1234", second.metadata().generationId()));
 	}
 
 	@Test
@@ -183,6 +200,12 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static SelectedModpackTarget target(String path, String type, boolean editable, String hash, long size) {
+		Jsons.CompleteModpackContentFields fields = fields(path, type, editable, hash, size);
+		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
+		return SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+	}
+
+	private static Jsons.CompleteModpackContentFields fields(String path, String type, boolean editable, String hash, long size) {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.modpackName = "Test";
@@ -197,8 +220,7 @@ class UpdateTransactionExecutorTest {
 		file.murmur = "0";
 		group.files = Map.of(path, file);
 		fields.groups = Map.of("main", group);
-		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
-		return SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		return fields;
 	}
 
 	private static Jsons.ClientConfigFieldsV3 clientConfig(String modpackId) {

@@ -209,11 +209,12 @@ public class Preload {
 		try {
 			Jsons.ClientGenerationStateFields state = storage.readActiveState();
 			if (state == null) return null;
-			GenerationRecord record = new ClientGenerationStore(storage).read(state.generationId).orElse(null);
-			if (record == null) return null;
+			Jsons.CompleteModpackContentFields fields = new ClientGenerationStore(storage).readFields(state.generationId).orElse(null);
+			if (fields == null) return null;
+			GenerationRecord record = GenerationRecord.fromFields(fields);
 			SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId)
 					.orElseGet(() -> GroupSelectionResolver.defaultIntent(record.manifest()));
-			return SelectedModpackTarget.prepare(record.toFields(), null, intent, ClientPlatform.current());
+			return SelectedModpackTarget.prepare(fields, null, intent, ClientPlatform.current());
 		} catch (IOException | RuntimeException e) {
 			LOGGER.error("Failed to resolve the stored modpack catalogue and group selection", e);
 			return null;
