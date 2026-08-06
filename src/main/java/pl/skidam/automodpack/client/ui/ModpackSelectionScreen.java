@@ -178,10 +178,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		// Once saved, the screen becomes a restart prompt: the new selection only takes effect after
 		// a relaunch, so there is nothing left to toggle here.
 		if (saved) {
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height / 2 + 20, 150, 20,
-					VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop()));
-			this.addRenderableWidget(buttonWidget(this.width / 2 + 5, this.height / 2 + 20, 150, 20,
+			int buttonWidth = actionButtonWidth(310, 2);
+			int y = this.height / 2 + 20;
+			this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 0), y, buttonWidth, 20,
 					VersionedText.translatable("automodpack.selection.later"), press -> ScreenImpl.setScreen(parent)));
+			this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 1), y, buttonWidth, 20,
+					VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop()));
 			return;
 		}
 
@@ -252,7 +254,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			updateManagementButtons();
 		}
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.reset"), press -> {
+		int actionWidth = actionButtonWidth(310, 3);
+		int actionY = this.height - 28;
+		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 0), actionY, actionWidth, 20, VersionedText.translatable("automodpack.selection.cancel"), press -> back()));
+
+		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 1), actionY, actionWidth, 20, VersionedText.translatable("automodpack.selection.reset"), press -> {
 			SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
 			chosenTags.clear();
 			chosenTags.addAll(defaults.requestedTags());
@@ -262,9 +268,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			reresolve();
 		}));
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 50, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.cancel"), press -> back()));
-
-		this.addRenderableWidget(buttonWidget(this.width / 2 + 55, this.height - 28, 100, 20,
+		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 2), actionY, actionWidth, 20,
 				VersionedText.translatable(selectionAction == null ? "automodpack.selection.save" : "automodpack.selection.preview").withStyle(ChatFormatting.BOLD), press -> save()));
 	}
 

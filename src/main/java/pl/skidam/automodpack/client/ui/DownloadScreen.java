@@ -68,7 +68,7 @@ public class DownloadScreen extends VersionedScreen {
 
 	private void initWidgets() {
 		cancelButton = addRenderableWidget(
-				buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.translatable("automodpack.cancel"), button -> {
+				buttonWidget(actionButtonX(310, 2, 0), this.height - 28, actionButtonWidth(310, 2), 20, VersionedText.translatable("automodpack.cancel"), button -> {
 					cancelButton.active = false;
 					cancelDownload();
 					AudioManager.stopMusic();

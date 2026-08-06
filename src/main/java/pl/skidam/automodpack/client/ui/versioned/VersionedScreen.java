@@ -132,6 +132,19 @@ public class VersionedScreen extends Screen {
 		return (this.width - panelWidth(preferredWidth)) / 2;
 	}
 
+	protected final int actionRowGap() {
+		return 8;
+	}
+
+	protected final int actionButtonWidth(int preferredPanelWidth, int buttonCount) {
+		int count = Math.max(1, buttonCount);
+		return Math.max(1, (panelWidth(preferredPanelWidth) - actionRowGap() * (count - 1)) / count);
+	}
+
+	protected final int actionButtonX(int preferredPanelWidth, int buttonCount, int index) {
+		return panelLeft(preferredPanelWidth) + index * (actionButtonWidth(preferredPanelWidth, buttonCount) + actionRowGap());
+	}
+
 	/*? if <1.19.3 {*/
 	/*public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
 		return new Button(x, y, width, height, message, onPress);
