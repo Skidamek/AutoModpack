@@ -13,7 +13,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
-import pl.skidam.automodpack_core.utils.FetchManager;
 
 public final class UpdatePreviewScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 600;
@@ -22,51 +21,51 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final UpdatePreview preview;
 	private final String modpackName;
 	private final boolean removal;
+	private final boolean returnToSelection;
+	private final boolean finalVerification;
 	private final Runnable continueAction;
 	private final Runnable cancelAction;
-	private final FetchManager sourceFetchManager;
 	private Button previousButton;
 	private Button nextButton;
 	private int page;
 	private boolean finished;
 
-	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
-		this(parent, preview, modpackName, false, continueAction, cancelAction, null);
-	}
-
-	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, Runnable continueAction, Runnable cancelAction) {
-		this(parent, preview, modpackName, removal, continueAction, cancelAction, null);
-	}
-
-	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, Runnable continueAction, Runnable cancelAction,
-			FetchManager sourceFetchManager) {
+	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, boolean returnToSelection, boolean finalVerification, Runnable continueAction,
+			Runnable cancelAction) {
 		super(VersionedText.literal(removal ? "ModpackRemovalScreen" : "UpdatePreviewScreen"));
 		this.parent = parent;
 		this.preview = preview;
 		this.modpackName = modpackName == null ? "" : modpackName;
 		this.removal = removal;
+		this.returnToSelection = returnToSelection;
+		this.finalVerification = finalVerification;
 		this.continueAction = continueAction;
 		this.cancelAction = cancelAction;
-		this.sourceFetchManager = sourceFetchManager;
 	}
 
 	@Override
 	protected void init() {
 		super.init();
 		int pageCount = pageCount();
-		int navigationY = this.height - 48;
-		int left = Math.max(5, (this.width - 310) / 2);
+		int navigationY = this.height - 54;
+		int left = panelLeft(310);
+		int rowWidth = panelWidth(310);
+		int gap = 10;
+		int actionWidth = (rowWidth - gap) / 2;
 		this.previousButton = buttonWidget(left, navigationY, 70, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
-		this.nextButton = buttonWidget(left + 240, navigationY, 70, 20, VersionedText.literal("Next >"), button -> changePage(1));
+		this.nextButton = buttonWidget(left + rowWidth - 70, navigationY, 70, 20, VersionedText.literal("Next >"), button -> changePage(1));
 		this.previousButton.active = page > 0;
 		this.nextButton.active = page + 1 < pageCount;
-		this.addRenderableWidget(this.previousButton);
-		this.addRenderableWidget(this.nextButton);
-		this.addRenderableWidget(buttonWidget(left + 80, navigationY, 75, 20, VersionedText.translatable("automodpack.cancel"), button -> cancel()));
-		this.addRenderableWidget(buttonWidget(left + 165, navigationY, 75, 20,
-				VersionedText.literal(removal ? "Remove" : "Continue").withStyle(ChatFormatting.BOLD), button -> continueUpdate()));
+		if (pageCount > 1) {
+			this.addRenderableWidget(this.previousButton);
+			this.addRenderableWidget(this.nextButton);
+		}
+		this.addRenderableWidget(buttonWidget(left, this.height - 28, actionWidth, 20,
+				returnToSelection ? VersionedText.translatable("automodpack.back") : VersionedText.translatable("automodpack.cancel"), button -> cancel()));
+		this.addRenderableWidget(buttonWidget(left + actionWidth + gap, this.height - 28, actionWidth, 20,
+				VersionedText.literal(removal ? "Remove" : finalVerification ? "Apply" : "Continue").withStyle(ChatFormatting.BOLD), button -> continueUpdate()));
 		if (GenerationPatchNoteHistory.containsNotes(preview.patchNotesHistory()))
-			this.addRenderableWidget(buttonWidget(left + 80, navigationY - 24, 150, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
+			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, navigationY, 150, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
 	}
 
 	private int pageCount() {
@@ -83,15 +82,12 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private int headerBottom() {
-		return 86 + patchNoteLines().size() * 12 + (sourceFetchManager == null ? 0 : 12);
+		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
+		return groups.staleTags().isEmpty() && groups.staleGroups().isEmpty() ? 78 : 90;
 	}
 
 	private int summaryY() {
-		return panelBottom() - 48;
-	}
-
-	private int panelBottom() {
-		return Math.max(10, this.height - 58);
+		return this.height - 110;
 	}
 
 	private int contentLeft() {
@@ -105,7 +101,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private List<String> patchNoteLines() {
 		return preview.patchNotes().isBlank()
 				? List.of("No patch notes published.")
-				: wrapToWidth(this.font, preview.patchNotes(), contentWidth(), 2);
+				: wrapToWidth(this.font, preview.patchNotes(), contentWidth(), 1);
 	}
 
 	private void changePage(int amount) {
@@ -124,7 +120,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private void cancel() {
 		if (finished) return;
 		finished = true;
-		ScreenImpl.setScreen(parent instanceof PreparingScreen ? null : parent);
+		ScreenImpl.setScreen(parent);
 		cancelAction.run();
 	}
 
@@ -139,8 +135,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		String title = removal
 				? (modpackName.isBlank() ? "Remove modpack" : "Remove " + modpackName)
 				: (modpackName.isBlank() ? "Update preview" : modpackName + " update preview");
-		drawTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), left, 16, TextColors.WHITE);
-		drawTextWithShadow(matrices, this.font, VersionedText.literal(removal ? "Review before removal" : "Review before download").withStyle(ChatFormatting.AQUA), left, 31,
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, contentWidth)).withStyle(ChatFormatting.BOLD), left, 16, TextColors.WHITE);
+		String subtitle = removal ? "Review before removal" : finalVerification ? "Files are ready. Review before applying" : "Review before preparing files";
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(subtitle).withStyle(ChatFormatting.AQUA), left, 31,
 				TextColors.CYAN);
 		int headerY = 50;
 		List<String> notes = patchNoteLines();
@@ -152,23 +149,13 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
 		headerY += 14;
-		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Tags: " + join(groups.explicitTags()), contentWidth)).withStyle(ChatFormatting.GRAY), left, headerY,
-				TextColors.WHITE);
-		headerY += 12;
-		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Groups: " + join(groups.resolvedGroups()), contentWidth)).withStyle(ChatFormatting.GRAY), left,
-				headerY, TextColors.WHITE);
-		headerY += 12;
-		String stale = groups.staleTags().isEmpty() && groups.staleGroups().isEmpty()
-				? "none"
-				: "tags=" + join(groups.staleTags()) + " groups=" + join(groups.staleGroups());
 		drawTextWithShadow(matrices, this.font,
-				VersionedText.literal(truncateToWidth(this.font, "Stale choices: " + stale, contentWidth)).withStyle(groups.staleTags().isEmpty() && groups.staleGroups().isEmpty()
-						? ChatFormatting.GRAY
-						: ChatFormatting.RED),
-				left, headerY, TextColors.WHITE);
-		if (sourceFetchManager != null) {
+				VersionedText.literal(truncateToWidth(this.font, "Selected content: " + groups.resolvedGroups().size() + " groups", contentWidth)).withStyle(ChatFormatting.GRAY), left, headerY,
+				TextColors.WHITE);
+		if (!groups.staleTags().isEmpty() || !groups.staleGroups().isEmpty()) {
 			headerY += 12;
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, sourceAvailability(), contentWidth)).withStyle(ChatFormatting.GRAY), left, headerY,
+			String stale = "Unavailable old choices: tags=" + join(groups.staleTags()) + " groups=" + join(groups.staleGroups());
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, stale, contentWidth)).withStyle(ChatFormatting.RED), left, headerY,
 					TextColors.WHITE);
 		}
 		List<UpdatePreview.Entry> entries = preview.entries();
@@ -187,13 +174,11 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			drawTextWithShadow(matrices, this.font, VersionedText.literal("No file changes are required.").withStyle(ChatFormatting.GREEN), left, entryTop(),
 					TextColors.WHITE);
 		}
-		long acquisitionBytes = entries.stream().filter(entry -> entry.kind() == UpdatePreview.Kind.ADDED || entry.kind() == UpdatePreview.Kind.CHANGED
-				|| entry.kind() == UpdatePreview.Kind.RESTORED_BASELINE).mapToLong(UpdatePreview.Entry::size).sum();
-		long acquisitionFiles = entries.stream().filter(entry -> entry.kind() == UpdatePreview.Kind.ADDED || entry.kind() == UpdatePreview.Kind.CHANGED
+		long updatedFiles = entries.stream().filter(entry -> entry.kind() == UpdatePreview.Kind.ADDED || entry.kind() == UpdatePreview.Kind.CHANGED
 				|| entry.kind() == UpdatePreview.Kind.RESTORED_BASELINE).count();
 		String changeSummary = "Changes: added " + UiFormat.formatSize(preview.addedBytes()) + "  changed " + UiFormat.formatSize(preview.changedBytes()) + "  removed "
 				+ UiFormat.formatSize(preview.removedBytes()) + "  preserved " + UiFormat.formatSize(preview.preservedBytes());
-		String acquisitionSummary = "Download: " + acquisitionFiles + " files, " + UiFormat.formatSize(acquisitionBytes);
+		String acquisitionSummary = (finalVerification ? "Ready: " : "File updates: ") + updatedFiles + (finalVerification ? " file updates" : "");
 		String restartSummary = "Restart: " + restartReasons();
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, changeSummary, contentWidth)).withStyle(ChatFormatting.YELLOW), left, summaryY(), TextColors.WHITE);
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, acquisitionSummary, contentWidth)).withStyle(ChatFormatting.GREEN), left, summaryY() + 12,
@@ -201,7 +186,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, restartSummary, contentWidth)).withStyle(ChatFormatting.GRAY), left, summaryY() + 24,
 				TextColors.WHITE);
 		if (pageCount() > 1) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal((page + 1) + " / " + pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 27,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal((page + 1) + " / " + pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 66,
 					TextColors.WHITE);
 		}
 	}
@@ -216,20 +201,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		return truncateToWidth(this.font, result, contentWidth());
 	}
 
-	private String sourceAvailability() {
-		if (sourceFetchManager.totalFiles() == 0) return "Third-party sources: none queried";
-		if (sourceFetchManager.isCancelled()) return "Third-party sources: lookup cancelled; server download remains available";
-		if (!sourceFetchManager.isComplete()) return "Third-party sources: resolving (" + sourceFetchManager.resolvedFiles() + " / " + sourceFetchManager.totalFiles() + " files matched)";
-		return "Third-party sources: " + sourceFetchManager.resolvedFiles() + " / " + sourceFetchManager.totalFiles() + " files matched; unmatched files use the server";
-	}
-
 	private static String rootText(UpdatePlan.Root root) {
-		return switch (root) {
-			case PROJECTION -> "active";
-			case OVERLAY -> "editable overlay";
-			case GAME_DIR -> "game";
-			case STORE_DIR -> "cas";
-		};
+		return UiFormat.rootLabel(root);
 	}
 
 	private String restartReasons() {

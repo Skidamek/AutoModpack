@@ -138,13 +138,14 @@ A step is either a bare name (`- quit`, or a macro name) or a mapping with a
 
 ### Networking, modes, and scoping
 
-Three scenario-header keys decouple *how* a scenario runs from *what* it tests:
+Scenario-header keys decouple *how* a scenario runs from *what* it tests:
 
 | Key | Values | Meaning |
 | --- | --- | --- |
 | `network` | `bridge` (default) / `host` | Container transport. `bridge` wires a per-run user network (CI). `host` puts both containers in the host network namespace (the client reaches the server on `localhost`) — the only topology a host-network-only sandbox allows. Run host transport with `--jobs 1`: host-mode servers all bind `25565` and would collide. Also settable globally via `network:` in `settings.yaml`. |
 | `mode` | `full` (default) / `client-only` | `full` launches a server + client. `client-only` launches **only** the client against a pre-staged generation — no server, no certificate/download/restart dance. |
 | `targets` / `loaders` / `minecraft` | list (globs where noted) | Scope the scenario to compatible targets. A target must pass every key present: `targets` (glob on id), `loaders` (exact), `minecraft` (glob). Out-of-scope targets are skipped with a `SKIP` line instead of failing on missing mods. |
+| `renderClient` | boolean | Run Minecraft in Xvfb with Mesa software rendering at the 320x240 logical minimum. Set this to `true` for `screenshot` steps; ordinary scenarios keep the faster HeadlessMC renderer stub. |
 
 #### Client-only (offline / pre-staged) mode
 
@@ -201,6 +202,7 @@ aborts on a malformed scenario.
 | --- | --- |
 | `click` | Click the element matched by `select:` (defaults to enabled elements). Set `enable: true` to force-enable it first. |
 | `type` / `paste` | Type `value:` into the field matched by `select:` (defaults to the first text field). |
+| `screenshot` | Save the real rendered Minecraft framebuffer under the case's `client/game/automodpack/autotest/screenshots/` directory. Set `renderClient: true` on the scenario and use `file:` to choose the PNG name. |
 | `wait_for` | Poll `until:` (a condition) until it holds or `timeout:` elapses. |
 | `assert` | Fail immediately unless `that:` (a condition) holds. |
 | `sleep` | Wait `duration:` (e.g. `2s`). |
@@ -329,6 +331,7 @@ Important files:
 - `<case>/amp-c-*.log`: client container log.
 - `<case>/client/game/automodpack/client/active/`: current client projection.
 - `<case>/client/game/automodpack/client/records/`: immutable generation records.
+- `<case>/client/game/automodpack/autotest/screenshots/`: screenshots captured by `do: screenshot` steps.
 
 `results.json` has this shape:
 

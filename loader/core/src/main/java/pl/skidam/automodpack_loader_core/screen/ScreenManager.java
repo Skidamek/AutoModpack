@@ -22,11 +22,6 @@ public class ScreenManager implements ScreenService {
 	}
 
 	@Override
-	public void danger(Object... args) {
-		INSTANCE.danger(args);
-	}
-
-	@Override
 	public void welcome(Object... args) {
 		INSTANCE.welcome(args);
 	}

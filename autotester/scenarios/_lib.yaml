@@ -56,7 +56,7 @@ accept_certificate:
     timeout: 20s
     until:
       all:
-        - screen: [PreparingScreen, DangerScreen, DownloadScreen, FetchScreen, RestartScreen]
+        - screen: [PreparingScreen, FirstConnectScreen, UpdatePreviewScreen, DownloadScreen, FetchScreen, RestartScreen]
         - screen_not: DisconnectedScreen
   - do: wait_for
     name: wait for the certificate to be accepted
@@ -72,6 +72,9 @@ download_modpack:
     timeout: 90s
     until:
       element: { text: continue, enabled: true }
+  - do: screenshot
+    name: capture the first-connection prompt
+    file: first-connect
   - do: click
     name: accept first connection
     select: { text: continue }
@@ -80,9 +83,35 @@ download_modpack:
     timeout: 90s
     until:
       element: { text: continue, enabled: true }
+  - do: screenshot
+    name: capture the update preview
+    file: update-preview
   - do: click
     name: confirm update preview
     select: { text: continue }
+  - do: wait_for
+    name: wait for files or a revised final plan
+    timeout: 300s
+    until:
+      any:
+        - file: "${active_dir}/${marker}"
+        - all:
+            - screen: UpdatePreviewScreen
+            - log: { container: client, matches: "verified local objects changed the prepared plan" }
+  - do: screenshot
+    name: capture the revised final plan
+    file: final-update-preview
+    when:
+      all:
+        - screen: UpdatePreviewScreen
+        - log: { container: client, matches: "verified local objects changed the prepared plan" }
+  - do: click
+    name: apply the revised final plan
+    select: { text: apply }
+    when:
+      all:
+        - screen: UpdatePreviewScreen
+        - log: { container: client, matches: "verified local objects changed the prepared plan" }
   - do: wait_file
     name: wait for the modpack marker file
     path: "${active_dir}/${marker}"
@@ -95,6 +124,9 @@ restart_client:
     timeout: 20s
     until:
       screen: RestartScreen
+  - do: screenshot
+    name: capture the completed update summary
+    file: update-complete
   - do: click
     name: confirm restart
     select: { role: button, index: 1 }

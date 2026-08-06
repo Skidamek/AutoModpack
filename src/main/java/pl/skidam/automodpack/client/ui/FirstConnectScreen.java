@@ -14,7 +14,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -36,14 +35,20 @@ public final class FirstConnectScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int y = this.height - 52;
-		int left = Math.max(5, (this.width - 310) / 2);
-		this.addRenderableWidget(buttonWidget(left, y, 150, 20,
+		int y = this.height - 54;
+		int left = panelLeft(310);
+		int rowWidth = panelWidth(310);
+		int gap = 10;
+		int buttonWidth = (rowWidth - gap) / 2;
+		this.addRenderableWidget(buttonWidget(left, y, buttonWidth, 20,
 				VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
-		this.addRenderableWidget(buttonWidget(left + 160, y, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, y + 26, 150, 20, VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
-		if (GenerationPatchNoteHistory.containsNotes(target.patchNotesHistory()))
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, y - 26, 150, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
+		this.addRenderableWidget(buttonWidget(left + buttonWidth + gap, y, buttonWidth, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
+		if (GenerationPatchNoteHistory.containsNotes(target.patchNotesHistory())) {
+			this.addRenderableWidget(buttonWidget(left, y + 26, buttonWidth, 20, VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
+			this.addRenderableWidget(buttonWidget(left + buttonWidth + gap, y + 26, buttonWidth, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
+		} else {
+			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, y + 26, 150, 20, VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
+		}
 	}
 
 	private void continueWithDefaults() {
@@ -61,7 +66,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		if (finished) return;
 		Consumer<SelectionIntent> action = intent -> {
 			try {
-				if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) throw new IllegalStateException("Modpack confirmation expired");
+				if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) throw new IllegalStateException("Modpack confirmation is no longer active");
 				updater.selectTarget(intent);
 				new ScreenManager().waiting();
 				updater.startConfirmedUpdate();
@@ -87,9 +92,13 @@ public final class FirstConnectScreen extends VersionedScreen {
 	@Override
 	public void tick() {
 		super.tick();
+		if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING) {
+			finished = false;
+			return;
+		}
 		if (finished) return;
 		ModpackUpdater.ConfirmationState state = updater.getConfirmationState();
-		if (state != ModpackUpdater.ConfirmationState.EXPIRED && state != ModpackUpdater.ConfirmationState.CANCELLED) return;
+		if (state != ModpackUpdater.ConfirmationState.CANCELLED) return;
 		finished = true;
 		ScreenImpl.multiplayer();
 	}
@@ -98,14 +107,14 @@ public final class FirstConnectScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = target.manifest().modpackName().isBlank() ? "AutoModpack" : target.manifest().modpackName();
 		ResolvedSelection selection = target.selection();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(name).withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.description").withStyle(ChatFormatting.GRAY), this.width / 2, 31,
 				TextColors.WHITE);
 		int y = 51;
 		if (!updater.getPatchNotes().isBlank()) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.patchNotes").withStyle(ChatFormatting.YELLOW), this.width / 2, y,
 					TextColors.WHITE);
-			for (String line : wrapToWidth(this.font, updater.getPatchNotes(), Math.max(1, this.width - 20), Math.min(3, Math.max(1, (this.height - 208) / 13)))) {
+			for (String line : wrapToWidth(this.font, updater.getPatchNotes(), Math.max(1, this.width - 20), 2)) {
 				y += 13;
 				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
 			}
@@ -114,40 +123,35 @@ public final class FirstConnectScreen extends VersionedScreen {
 					TextColors.WHITE);
 		}
 
-		y += 22;
+		y += 19;
 		long bytes = target.flatTarget().list.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		String summary = truncateToWidth(this.font, "Selected groups: " + selection.selectedGroups().size() + "  Files: " + target.flatTarget().list.size() + "  Download: " + UiFormat.formatSize(bytes), this.width - 20);
+		String summary = truncateToWidth(this.font, "Selected groups: " + selection.selectedGroups().size() + "  Files: " + target.flatTarget().list.size() + "  Content size: " + UiFormat.formatSize(bytes),
+				this.width - 20);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
-		y += 14;
-		String compatibility = "Compatibility: " + ClientPlatform.current().id() + "  " + (selection.unavailableGroups().isEmpty()
-				? "all selected choices available"
-				: selection.unavailableGroups().size() + " choices unavailable");
-		String stale = "Stale choices: tags=" + names(target.manifest().selectionTags(), selection.staleRequestedTags()) + " groups="
-				+ names(target.manifest().groups(), selection.staleRequestedGroups());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, stale + "  " + compatibility, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y,
-				TextColors.WHITE);
-		y += 14;
+		y += 16;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.bundleExplanation").withStyle(ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
-		y += 17;
+		y += 16;
 		String tags = names(target.manifest().selectionTags(), selection.intent().requestedTags());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Default tags: " + tags, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Recommended options: " + tags, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
+				TextColors.WHITE);
 		y += 14;
 		String groups = names(target.manifest().groups(), selection.selectedGroups());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Default groups: " + groups, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Included groups: " + groups, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
 				TextColors.WHITE);
-		if (updater.getSourceAvailability().totalFiles() > 0) {
+		if (!selection.staleRequestedTags().isEmpty() || !selection.staleRequestedGroups().isEmpty()) {
 			y += 14;
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, sourceAvailability(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y,
+			String stale = "Unavailable old choices: " + names(target.manifest().selectionTags(), selection.staleRequestedTags()) + " / "
+					+ names(target.manifest().groups(), selection.staleRequestedGroups());
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, stale, this.width - 20)).withStyle(ChatFormatting.RED), this.width / 2, y,
 					TextColors.WHITE);
 		}
-	}
-
-	private String sourceAvailability() {
-		ModpackUpdater.SourceAvailability availability = updater.getSourceAvailability();
-		if (availability.cancelled()) return "Third-party sources: lookup cancelled; server download remains available";
-		if (!availability.complete()) return "Third-party sources: resolving (" + availability.resolvedFiles() + " / " + availability.totalFiles() + " files matched)";
-		return "Third-party sources: " + availability.resolvedFiles() + " / " + availability.totalFiles() + " files matched; unmatched files use the server";
+		if (!selection.unavailableGroups().isEmpty()) {
+			y += 14;
+			drawCenteredTextWithShadow(matrices, this.font,
+					VersionedText.literal(truncateToWidth(this.font, selection.unavailableGroups().size() + " selected groups are unavailable on this platform.", this.width - 20)).withStyle(ChatFormatting.RED),
+					this.width / 2, y, TextColors.WHITE);
+		}
 	}
 
 	private String names(Map<String, ?> values, Iterable<String> ids) {

@@ -1,0 +1,81 @@
+id: ui-navigation
+description: |
+  Exercise first-connection group editing and preview the selection twice. This
+  catches previews that consume the confirmation state when the player goes back.
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - do: wait_for
+    name: wait for the first-connection prompt
+    timeout: 90s
+    until: { screen: FirstConnectScreen }
+  - do: click
+    name: open group customization
+    select: { text: customize groups }
+  - do: wait_for
+    name: wait for group customization
+    until: { screen: ModpackSelectionScreen }
+  - do: click
+    name: preview the customized selection
+    select: { text: preview target }
+  - do: wait_for
+    name: wait for the first update preview
+    timeout: 90s
+    until: { screen: UpdatePreviewScreen }
+  - do: click
+    name: return to group customization
+    select: { text: back }
+  - do: wait_for
+    name: verify group customization is reusable
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: preview target, enabled: true }
+  - do: click
+    name: preview the selection again
+    select: { text: preview target }
+  - do: wait_for
+    name: verify the second update preview opens
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: continue, enabled: true }
+  - do: click
+    name: return from the second preview
+    select: { text: back }
+  - do: wait_for
+    name: return from customization to first connection
+    until: { screen: ModpackSelectionScreen }
+  - do: click
+    name: return to first connection
+    select: { text: back }
+  - do: wait_for
+    name: verify first connection is still usable
+    until:
+      all:
+        - screen: FirstConnectScreen
+        - element: { text: do not download, enabled: true }
+  - do: click
+    name: cancel first connection
+    select: { text: do not download }
+  - do: wait_for
+    name: verify cancellation returns to multiplayer
+    timeout: 20s
+    until: { screen: Play Multiplayer }
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+    - path: config/amp-autotest-navigation.txt
+      content: "navigation\n"

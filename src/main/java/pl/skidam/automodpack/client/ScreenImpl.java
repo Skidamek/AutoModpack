@@ -1,10 +1,12 @@
 package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePreview;
-import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
@@ -14,6 +16,7 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 import java.util.Optional;
 import java.util.Locale;
 import java.util.List;
+import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -38,11 +41,6 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public void restart(Object... args) {
 		executeOnClient(() -> Screens.restart(args[1], args[2]));
-	}
-
-	@Override
-	public void danger(Object... args) {
-		executeOnClient(() -> Screens.danger(args[0]));
 	}
 
 	@Override
@@ -110,6 +108,10 @@ public class ScreenImpl implements ScreenService {
 		Screens.multiplayer();
 	}
 
+	public static void repairSelection(Jsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+		executeOnClient(() -> Screens.repairSelection(fields, savedSelection, selectionAction, cancelAction));
+	}
+
 	private static class Screens {
 		private static Screen interactiveParent;
 
@@ -147,10 +149,6 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new RestartScreen((UpdateType) updateType, (Changelogs) changelogs));
 		}
 
-		public static void danger(Object modpackUpdaterInstance) {
-			Screens.setScreen(new DangerScreen((ModpackUpdater) modpackUpdaterInstance));
-		}
-
 		public static void welcome(Object modpackUpdaterInstance) {
 			Screens.setScreen(new FirstConnectScreen((ModpackUpdater) modpackUpdaterInstance));
 		}
@@ -158,12 +156,19 @@ public class ScreenImpl implements ScreenService {
 		public static void preview(Object... args) {
 			Screen parent = Screens.getScreen();
 			if (isTransient(parent)) parent = interactiveParent;
+			parent = previewParent(parent);
 			interactiveParent = null;
 			boolean removal = args.length > 4 && Boolean.TRUE.equals(args[4]);
-			FetchManager sourceFetchManager = args.length > 5 && args[5] instanceof FetchManager manager
-					? manager
-					: null;
-			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3], sourceFetchManager));
+			boolean returnToSelection = args.length > 5 && Boolean.TRUE.equals(args[5]);
+			boolean finalVerification = args.length > 6 && Boolean.TRUE.equals(args[6]);
+			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, returnToSelection, finalVerification, (Runnable) args[2],
+					(Runnable) args[3]));
+		}
+
+		private static Screen previewParent(Screen parent) {
+			if (parent instanceof FirstConnectScreen) return parent;
+			if (parent instanceof ModpackSelectionScreen selection && (!selection.isUpdateFlow() || selection.isConfirmationFlow())) return parent;
+			return multiplayerScreen();
 		}
 
 		private static boolean isTransient(Screen screen) {
@@ -191,7 +196,11 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void error(String... errors) {
-			Screens.setScreen(new ErrorScreen(errors));
+			Screen parent = Screens.getScreen();
+			if (isTransient(parent)) parent = interactiveParent;
+			if (parent instanceof FirstConnectScreen || parent instanceof UpdatePreviewScreen || parent instanceof ModpackSelectionScreen selection && selection.isUpdateFlow())
+				parent = multiplayerScreen();
+			Screens.setScreen(new ErrorScreen(parent, errors));
 		}
 
 		public static void title() {
@@ -199,11 +208,20 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void multiplayer() {
-			Screens.setScreen(new JoinMultiplayerScreen(new TitleScreen()));
+			Screens.setScreen(multiplayerScreen());
+		}
+
+		private static Screen multiplayerScreen() {
+			return new JoinMultiplayerScreen(new TitleScreen());
 		}
 
 		public static void menu(Object parent) {
 			Screens.setScreen(ModpackSelectionScreen.forSelectedModpack((Screen) parent));
+		}
+
+		public static void repairSelection(Jsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+			GroupManifest manifest = GenerationRecord.fromFields(fields).manifest();
+			Screens.setScreen(ModpackSelectionScreen.repair(multiplayerScreen(), manifest, savedSelection, selectionAction, cancelAction));
 		}
 
 		public static void validation(Object parent, Object serverFingerprint, Object validatedCallback, Object canceledCallback) {

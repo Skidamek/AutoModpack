@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
@@ -19,7 +20,7 @@ public class ChangelogScreen extends VersionedScreen {
 
 	private final Screen parent;
 	private final Changelogs changelogs;
-	private static Map<String, String> formattedChanges;
+	private Map<String, String> formattedChanges;
 	private ListEntryWidget listEntryWidget;
 	private EditBox searchField;
 	private Button backButton;
@@ -123,10 +124,10 @@ public class ChangelogScreen extends VersionedScreen {
 	}
 
 	private void drawSummaryOfChanges(VersionedMatrices matrices) {
-		int filesAdded = changelogs.changesAddedList.size();
-		int filesRemoved = changelogs.changesDeletedList.size();
+		int filesUpdated = changelogs.updatedFiles().size();
+		int filesRemoved = changelogs.removedFiles().size();
 
-		String summary = "+ " + filesAdded + " | - " + filesRemoved;
+		String summary = "Updated " + filesUpdated + " | Removed " + filesRemoved;
 
 		drawCenteredTextWithShadow(
 			matrices,
@@ -144,7 +145,7 @@ public class ChangelogScreen extends VersionedScreen {
 		} else {
 			Map<String, String> filteredChangelogs = new HashMap<>();
 			for (Map.Entry<String, String> changelog : reFormatChanges().entrySet()) {
-				if (changelog.getKey().toLowerCase().contains(this.searchField.getValue().toLowerCase())) {
+				if (changelog.getKey().toLowerCase(Locale.ROOT).contains(this.searchField.getValue().toLowerCase(Locale.ROOT))) {
 					filteredChangelogs.put(changelog.getKey(), changelog.getValue());
 				}
 			}
@@ -159,16 +160,14 @@ public class ChangelogScreen extends VersionedScreen {
 	private Map<String, String> reFormatChanges() {
 		Map<String, String> reFormattedChanges = new HashMap<>();
 
-		for (var changelog : changelogs.changesAddedList.entrySet()) {
+		for (var changelog : changelogs.updatedFiles().entrySet()) {
 			String modPageUrl = null;
 			if (changelog.getValue() != null && !changelog.getValue().isEmpty()) modPageUrl = changelog.getValue().get(0);
-			reFormattedChanges.put("+ " + changelog.getKey(), modPageUrl);
+			reFormattedChanges.put("Updated " + UiFormat.filePath(changelog.getKey()), modPageUrl);
 		}
 
-		for (var changelog : changelogs.changesDeletedList.entrySet()) {
-			String modPageUrl = null;
-			if (changelog.getValue() != null && !changelog.getValue().isEmpty()) modPageUrl = changelog.getValue().get(0);
-			reFormattedChanges.put("- " + changelog.getKey(), modPageUrl);
+		for (var file : changelogs.removedFiles()) {
+			reFormattedChanges.put("Removed " + UiFormat.filePath(file), null);
 		}
 
 		return reFormattedChanges;

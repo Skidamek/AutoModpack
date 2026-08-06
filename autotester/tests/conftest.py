@@ -69,6 +69,7 @@ class FakeBridge:
         self.exited = False
         self.clicks: list[int] = []
         self.typed: dict[int, str] = {}
+        self.screenshots: list[str] = []
 
     # --- snapshot ---------------------------------------------------------
     def gui(self, timeout: float = 30) -> dict:
@@ -130,6 +131,14 @@ class FakeBridge:
         # Already-synced clients drop straight in-game; first contact hits the cert prompt.
         self.screen = "ingame" if self.synced else "cert"
         return {"ok": True}
+
+    def screenshot(self, name: str, timeout: float = 30) -> dict:
+        relative = Path("automodpack") / "autotest" / "screenshots" / f"{name}.png"
+        path = self.ctx.game_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"png")
+        self.screenshots.append(name)
+        return {"ok": True, "path": str(relative), "width": 640, "height": 480}
 
     def request(self, op: str, timeout: float = 30, **payload) -> dict:
         if op == "disconnect":
