@@ -6,7 +6,9 @@ Modpack is generated from files inside `~/automodpack/host-modpack/main/` and/or
 Modpack generation means creation of `~/automodpack/host-modpack/automodpack-content.json` which contains metadata of every single file of the modapck. You **should NOT** touch this file manually, edit config instead.
 
 ## Client
-Client generation records, CAS objects, overlays, and the fixed active projection are kept inside `~/automodpack/client-generations/`.
+Client generation records, overlays, baselines, transaction workspaces, recovery archives, and the fixed active projection are kept inside `~/automodpack/client/`.
+
+The client pins its content-addressed data root in `~/automodpack/data-root.json`. A normal installation may use the shared platform data directory; when that is not available, it falls back to `~/automodpack/data/`. The pinned data root contains `objects/` and the derived client caches. The autotester pins this root to `~/automodpack/client/data/` so a scenario is self-contained.
 
 The active projection mirrors the selected generation's game-relative paths, including `mods/`. Immutable files are linked from the client CAS when the platform supports it. Editable files use the client overlay only after the player changes them.
 

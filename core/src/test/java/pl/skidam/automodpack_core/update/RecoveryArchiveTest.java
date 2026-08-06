@@ -31,10 +31,13 @@ class RecoveryArchiveTest {
 
 		assertEquals(archived, repeated);
 		assertArrayEquals(Files.readAllBytes(object), Files.readAllBytes(archived));
-		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(store, recovery);
+		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(recovery);
 		assertEquals(1, archive.entries.size());
 		assertEquals("config/old.json", archive.entries.get(0).logicalPath);
 		assertEquals(hash, archive.entries.get(0).sha1);
+		Files.delete(object);
+		assertEquals(1, RecoveryArchive.read(recovery).entries.size());
+		assertEquals(archived, RecoveryArchive.archive(store, recovery, "config/old.json", hash, Files.size(archived)));
 	}
 
 	@Test
@@ -50,7 +53,7 @@ class RecoveryArchiveTest {
 
 		RecoveryArchive.archive(store, recovery, "config/old.json", hash, Files.size(object), generationId, preservedAt);
 
-		Jsons.ClientRecoveryArchiveFields.EntryFields entry = RecoveryArchive.read(store, recovery).entries.get(0);
+		Jsons.ClientRecoveryArchiveFields.EntryFields entry = RecoveryArchive.read(recovery).entries.get(0);
 		assertEquals(generationId, entry.sourceGenerationId);
 		assertEquals(preservedAt, entry.preservedAt);
 	}
@@ -68,11 +71,12 @@ class RecoveryArchiveTest {
 		Path firstArchived = RecoveryArchive.archive(store, recoveryRoot.resolve("first"), "config/one.json", hash, size);
 		Path secondArchived = RecoveryArchive.archive(store, recoveryRoot.resolve("second"), "config/two.json", hash, size);
 
-		assertEquals(firstArchived, secondArchived);
-		assertEquals(1, RecoveryArchive.read(store, recoveryRoot.resolve("first")).entries.size());
-		assertEquals(1, RecoveryArchive.read(store, recoveryRoot.resolve("second")).entries.size());
-		assertEquals("config/one.json", RecoveryArchive.read(store, recoveryRoot.resolve("first")).entries.get(0).logicalPath);
-		assertEquals("config/two.json", RecoveryArchive.read(store, recoveryRoot.resolve("second")).entries.get(0).logicalPath);
+		assertNotEquals(firstArchived, secondArchived);
+		assertEquals(1, RecoveryArchive.read(recoveryRoot.resolve("first")).entries.size());
+		assertEquals(1, RecoveryArchive.read(recoveryRoot.resolve("second")).entries.size());
+		assertEquals("config/one.json", RecoveryArchive.read(recoveryRoot.resolve("first")).entries.get(0).logicalPath);
+		assertEquals("config/two.json", RecoveryArchive.read(recoveryRoot.resolve("second")).entries.get(0).logicalPath);
+		assertArrayEquals(Files.readAllBytes(firstArchived), Files.readAllBytes(secondArchived));
 	}
 
 	@Test

@@ -25,9 +25,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -326,7 +328,7 @@ public final class ClientStorage {
 					String relative = LogicalPath.normalize(root.relativize(path).toString());
 					String hash = HashUtils.getHash(path);
 					if (hash == null) throw new IOException("Cannot hash client overlay file: " + path);
-					digest.update((relative + "\0" + Files.size(path) + "\0" + hash.toLowerCase(java.util.Locale.ROOT) + "\n").getBytes(StandardCharsets.UTF_8));
+					digest.update((relative + "\0" + Files.size(path) + "\0" + hash.toLowerCase(Locale.ROOT) + "\n").getBytes(StandardCharsets.UTF_8));
 				}
 			}
 			return HexFormat.of().formatHex(digest.digest());
@@ -392,12 +394,12 @@ public final class ClientStorage {
 
 	private static String requireDigest(String value, String description) {
 		if (value == null || !DIGEST.matcher(value).matches()) throw new IllegalArgumentException("Invalid " + description);
-		return value.toLowerCase(java.util.Locale.ROOT);
+		return value.toLowerCase(Locale.ROOT);
 	}
 
 	private static String requireTransactionId(String value) {
 		try {
-			return java.util.UUID.fromString(value).toString();
+			return UUID.fromString(value).toString();
 		} catch (RuntimeException e) {
 			throw new IllegalArgumentException("Invalid transaction UUID", e);
 		}

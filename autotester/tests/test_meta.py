@@ -15,6 +15,7 @@ from automodpack_autotester.config import (
     load_targets,
     scenario_matches_target,
 )
+from automodpack_autotester.generation_identity import CanonicalEncoder
 from automodpack_autotester.engine.registry import describe, names
 from automodpack_autotester.validate import validate_scenario
 
@@ -46,6 +47,10 @@ def test_shipped_scenarios_validate():
     targets = load_targets()
     for name, scenario in load_scenarios().items():
         assert validate_scenario(scenario, macros, targets) == [], name
+
+
+def test_canonical_encoder_has_java_parity_vector():
+    assert CanonicalEncoder().string("parity").integer(7).long(11).boolean(True).digest() == "74298b52636c03aab0beb88c118b33b03343fd30"
 
 
 def test_validate_flags_unknown_verb_and_macro():
@@ -183,9 +188,10 @@ def test_staged_generation_uses_actual_file_metadata(make_ctx):
     mod.parent.mkdir()
     mod.write_bytes(b"fixture")
 
-    generation = runner._write_staged_generation(ctx, root, "fixture7")
+    data_root = root.parent / "data"
+    generation = runner._write_staged_generation(ctx, root, "fixture7", data_root)
 
-    manifest = json.loads((root.parent / "generations" / generation["generationId"] / "manifest.json").read_text())
+    manifest = json.loads((root.parent / "records" / generation["generationId"] / "manifest.json").read_text())
     by_path = manifest["groups"]["main"]["files"]
     assert by_path["mods/fixture.jar"]["size"] == str(len(b"fixture"))
     assert by_path["mods/fixture.jar"]["sha1"] == hashlib.sha1(b"fixture").hexdigest()

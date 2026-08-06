@@ -151,7 +151,7 @@ Three scenario-header keys decouple *how* a scenario runs from *what* it tests:
 `mode: client-only` is the fast loader-debugging path: stage a generation, boot
 just the client, and assert on the launch log — seconds per iteration instead of
 a multi-minute gameplay round trip. The `stage_modpack` verb writes the fixed
-`automodpack/client-generations/active/` projection, its immutable generation
+`automodpack/client/active/` projection, its immutable generation
 record, CAS objects, active state, and a client config with
 `updateSelectedModpackOnLaunch=false`, so the client loads it on boot without
 contacting a server:
@@ -327,8 +327,8 @@ Important files:
 - `results.json`: aggregated pass/fail result.
 - `<case>/amp-s-*.log`: server container log.
 - `<case>/amp-c-*.log`: client container log.
-- `<case>/client/game/automodpack/client-generations/active/`: current client projection.
-- `<case>/client/game/automodpack/client-generations/generations/`: immutable generation records.
+- `<case>/client/game/automodpack/client/active/`: current client projection.
+- `<case>/client/game/automodpack/client/records/`: immutable generation records.
 
 `results.json` has this shape:
 

@@ -3,7 +3,9 @@ package pl.skidam.automodpack_core.modpack.generation;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -19,6 +21,12 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 class GenerationIdentityTest {
 	@TempDir
 	Path temporaryDirectory;
+
+	@Test
+	void canonicalEncoderHasTheAutotesterParityVector() throws Exception {
+		CanonicalEncoder encoder = new CanonicalEncoder().string("parity").integer(7).longValue(11).bool(true);
+		assertEquals("74298b52636c03aab0beb88c118b33b03343fd30", HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(encoder.bytes())));
+	}
 
 	@Test
 	void shuffledCatalogueOrderDoesNotChangeStateDigest() {

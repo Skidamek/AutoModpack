@@ -150,11 +150,6 @@ public final class GenerationStore {
 		}
 	}
 
-	/** Short alias for callers that treat collection as the store's explicit maintenance operation. */
-	public CollectionResult collect(Set<String> retainedGenerationIds, Set<String> pinnedObjectHashes) throws IOException {
-		return collectUnreachableObjects(retainedGenerationIds, pinnedObjectHashes);
-	}
-
 	/** Loads the current materialized projection and verifies only the active target objects. */
 	public Optional<CurrentSnapshot> loadCurrent() throws IOException {
 		return loadCurrent(false, false);
@@ -201,7 +196,8 @@ public final class GenerationStore {
 			writeCurrentProjection(record);
 			materializedPath = currentProjectionPath;
 		}
-		if (Files.exists(materializedPath, LinkOption.NOFOLLOW_LINKS)) hosting.put("", materializedPath);
+		boolean projectionReady = loaded == null || !loaded.needsRepair() || repairProjection;
+		if (projectionReady && Files.exists(materializedPath, LinkOption.NOFOLLOW_LINKS)) hosting.put("", materializedPath);
 		return Optional.of(new CurrentSnapshot(record, materializedPath, hosting));
 	}
 

@@ -275,7 +275,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		SelectionIntent previous = new SelectionIntent(chosenTags, chosen, excluded);
 		ResolvedSelection previousResolution = resolution;
 		try {
-			SelectionIntent next = GroupSelectionResolver.preferTag(manifest, previous, tagId, ClientPlatform.current());
+			SelectionIntent next = GroupSelectionResolver.preferTag(previous, tagId);
 			chosenTags.clear();
 			chosenTags.addAll(next.requestedTags());
 			chosen.clear();
@@ -284,21 +284,15 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			excluded.addAll(next.excludedGroups());
 			reresolve();
 		} catch (SelectionResolutionException e) {
-			chosenTags.clear();
-			chosenTags.addAll(previous.requestedTags());
-			chosen.clear();
-			chosen.addAll(previous.requestedGroups());
-			excluded.clear();
-			excluded.addAll(previous.excludedGroups());
-			resolution = previousResolution;
+			resolution = e.resolution() == null ? previousResolution : e.resolution();
 			rebuild();
-			LOGGER.warn("Could not apply tag preference for {}: {}", tagId, e.getMessage());
+			LOGGER.warn("Tag preference for {} creates a conflict that needs explicit resolution: {}", tagId, e.getMessage());
 		}
 	}
 
 	/**
 	 * A group inside a selected tag becomes an explicit exclusion when it is not otherwise required.
-	 * A direct group choice still uses the resolver's conflict preference behavior.
+	 * Direct choices remain in the intent when they conflict, so the player can remove either choice explicitly.
 	 */
 	private void toggle(String groupId) {
 		GroupManifest.Group group = groups.get(groupId);
@@ -313,7 +307,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				reresolve();
 				return;
 			}
-			SelectionIntent next = GroupSelectionResolver.prefer(manifest, previous, groupId, ClientPlatform.current());
+			SelectionIntent next = GroupSelectionResolver.prefer(previous, groupId);
 			chosenTags.clear();
 			chosenTags.addAll(next.requestedTags());
 			chosen.clear();
@@ -322,16 +316,14 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			excluded.addAll(next.excludedGroups());
 			reresolve();
 		} catch (SelectionResolutionException e) {
-			chosenTags.clear();
-			chosenTags.addAll(previous.requestedTags());
-			chosen.clear();
-			chosen.addAll(previous.requestedGroups());
-			excluded.clear();
-			excluded.addAll(previous.excludedGroups());
-			resolution = previousResolution;
+			resolution = e.resolution() == null ? previousResolution : e.resolution();
 			rebuild();
-			LOGGER.warn("Could not apply group preference for {}: {}", groupId, e.getMessage());
+			LOGGER.warn("Group preference for {} creates a conflict that needs explicit resolution: {}", groupId, e.getMessage());
 		}
+	}
+
+	private boolean hasConflicts() {
+		return resolution.groupResolutions().values().stream().anyMatch(explanation -> explanation.status() == GroupResolution.Status.CONFLICT);
 	}
 
 	private void reresolve() {
@@ -452,6 +444,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private void save() {
 		SelectionIntent target = new SelectionIntent(chosenTags, chosen, excluded);
+		if (hasConflicts()) {
+			new ScreenManager().error("automodpack.error.critical", "Resolve conflicting group choices before saving", "automodpack.error.logs");
+			return;
+		}
 		if (selectionAction != null) {
 			try {
 				selectionAction.accept(target);
@@ -502,7 +498,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		appendTooltipLine(tooltip, "Tag: " + tagLabel(group));
 		if (!group.requires().isEmpty()) appendTooltipLine(tooltip, "Requires: " + names(group.requires()));
 		if (!group.breaksWith().isEmpty()) appendTooltipLine(tooltip, "Conflicts: " + names(group.breaksWith()));
-		appendTooltipLine(tooltip, "Files: " + group.files().size() + " (" + formatSize(groupBytes(group)) + ")");
+		appendTooltipLine(tooltip, "Files: " + group.files().size() + " (" + UiFormat.formatSize(groupBytes(group)) + ")");
 		appendTooltipLine(tooltip, group.supports(ClientPlatform.current()) ? "Available on " + ClientPlatform.current().id() : "Not available on " + ClientPlatform.current().id());
 		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
 	}
@@ -523,7 +519,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 		String name = group.displayName().isBlank() ? groupId : group.displayName();
 		GroupResolution explanation = resolution.explanation(groupId);
-		String suffix = " (" + group.files().size() + " files, " + formatSize(groupBytes(group)) + ")";
+		String suffix = " (" + group.files().size() + " files, " + UiFormat.formatSize(groupBytes(group)) + ")";
 		if (isMandatory(manifest, group)) return rowLabel("[#] " + name + suffix + " (required)", ChatFormatting.GRAY);
 		if (explanation != null && explanation.status() == GroupResolution.Status.UNAVAILABLE) return rowLabel("[-] " + name + suffix + " (unavailable)", ChatFormatting.RED);
 		if (explanation != null && explanation.status() == GroupResolution.Status.BLOCKED) return rowLabel("[-] " + name + suffix + " (dependency unavailable)", ChatFormatting.RED);
@@ -560,13 +556,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			result.append(value);
 		}
 		return result.length() == 0 ? "none" : result.toString();
-	}
-
-	private static String formatSize(long bytes) {
-		if (bytes < 1024) return bytes + " B";
-		if (bytes < 1024 * 1024) return (bytes / 1024) + " KiB";
-		if (bytes < 1024L * 1024L * 1024L) return (bytes / (1024 * 1024)) + " MiB";
-		return (bytes / (1024L * 1024L * 1024L)) + " GiB";
 	}
 
 	@Override

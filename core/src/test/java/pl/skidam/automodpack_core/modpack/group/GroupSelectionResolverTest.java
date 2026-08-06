@@ -33,17 +33,19 @@ class GroupSelectionResolverTest {
 	}
 
 	@Test
-	void clickedGroupWinsWhenConflictComesThroughDependencyClosure() {
+	void clickedGroupKeepsConflictingIntentForExplicitResolution() {
 		var dependency = new GroupManifest.Group("", "", "", false, false, new TreeSet<>(Set.of("conflicting")), new TreeSet<>(), Set.of(),
 				new TreeMap<>());
 		var clicked = group(false, false, Set.of("dependency"));
 		var conflicting = group(false, false, Set.of());
 		GroupManifest manifest = manifest(Map.of("clicked", clicked, "dependency", dependency, "conflicting", conflicting));
 
-		SelectionIntent preferred = GroupSelectionResolver.prefer(manifest, new SelectionIntent(Set.of("conflicting")), "clicked", ClientPlatform.LINUX);
+		SelectionIntent preferred = GroupSelectionResolver.prefer(new SelectionIntent(Set.of("conflicting")), "clicked");
 
-		assertEquals(Set.of("clicked"), preferred.requestedGroups());
-		assertEquals(Set.of("clicked", "dependency"), GroupSelectionResolver.resolve(manifest, preferred, ClientPlatform.LINUX).selectedGroups());
+		assertEquals(Set.of("clicked", "conflicting"), preferred.requestedGroups());
+		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
+				() -> GroupSelectionResolver.resolve(manifest, preferred, ClientPlatform.LINUX));
+		assertEquals(GroupResolution.Status.CONFLICT, failure.resolution().explanation("dependency").status());
 	}
 
 	@Test
