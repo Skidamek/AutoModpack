@@ -76,6 +76,7 @@ public final class ClientStorage {
 	private final Path bootstrapFile;
 	private final Path fileMetadataDirectory;
 	private final Path modMetadataDirectory;
+	private final Path packsDirectory;
 	private final Path knownHostsFile;
 	private final Path knownHostsLockFile;
 
@@ -104,6 +105,7 @@ public final class ClientStorage {
 		this.recoveryDirectory = this.clientDirectory.resolve(clientRecoveryDir.getFileName()).normalize();
 		this.fileMetadataDirectory = dataDirectory.resolve("file-metadata").normalize();
 		this.modMetadataDirectory = dataDirectory.resolve("mod-metadata").normalize();
+		this.packsDirectory = dataDirectory.resolve("packs").normalize();
 		this.knownHostsFile = dataDirectory.resolve("known-hosts.json").normalize();
 		this.knownHostsLockFile = dataDirectory.resolve("known-hosts.json.lock").normalize();
 		validateLayout();
@@ -234,7 +236,7 @@ public final class ClientStorage {
 	}
 
 	public Path connectionFile(String modpackId) {
-		return dataDirectory.resolve("modpacks").resolve(ModpackId.requireValid(modpackId)).resolve("connection.json").normalize();
+		return packsDirectory.resolve(ModpackId.requireValid(modpackId)).resolve("connection.json").normalize();
 	}
 
 	public Path connectionLockFile(String modpackId) {
@@ -338,7 +340,7 @@ public final class ClientStorage {
 		ensureDirectory(objectsDirectory, "client object store");
 		ensureDirectory(dataDirectory.resolve("file-metadata"), "file metadata cache");
 		ensureDirectory(dataDirectory.resolve("mod-metadata"), "mod metadata cache");
-		ensureDirectory(dataDirectory.resolve("modpacks"), "shared modpack state");
+		ensureDirectory(packsDirectory, "shared pack state");
 		ensureDirectory(recordsDirectory, "client generation records");
 		ensureDirectory(overlaysDirectory, "client overlays");
 		ensureDirectory(baselinesDirectory, "client baselines");
@@ -376,7 +378,7 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, bootstrapFile);
 		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, activeDirectory, incomingDirectory, backupDirectory, recoveryDirectory,
 				stateFile, transactionFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
-		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, knownHostsFile, knownHostsLockFile);
+		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}
 
 	private static void validateWithin(Path parent, Path... children) {
