@@ -68,7 +68,7 @@ public class Constants {
 	// Switches - optional or required packs, chosen by the player, only one can be installed at a time
 	public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
 	public static final Path modpackContentFileName = Path.of("automodpack-content.json");
-	public static Path serverConfigFile = automodpackDir.resolve("server-config.json");
+	public static final Path serverConfigFile = automodpackDir.resolve("server-config.json");
 	public static final Path bootstrapFile = Path.of("automodpack-bootstrap.json");
 	public static final Path clientConfigFile = automodpackDir.resolve("client-config.json");
 
