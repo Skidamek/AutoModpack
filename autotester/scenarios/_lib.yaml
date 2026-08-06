@@ -64,7 +64,7 @@ accept_certificate:
     until:
       no_element: { text: verify }
 
-# Accept the first-connection prompt, confirm the update preview, and wait for
+# Accept the first-connection prompt, approve the update preview, and wait for
 # the modpack to land on disk.
 download_modpack:
   - do: wait_for
@@ -82,36 +82,13 @@ download_modpack:
     name: wait for the update preview
     timeout: 90s
     until:
-      element: { text: continue, enabled: true }
+      element: { text: update, enabled: true }
   - do: screenshot
     name: capture the update preview
     file: update-preview
   - do: click
-    name: confirm update preview
-    select: { text: continue }
-  - do: wait_for
-    name: wait for files or a revised final plan
-    timeout: 300s
-    until:
-      any:
-        - file: "${active_dir}/${marker}"
-        - all:
-            - screen: UpdatePreviewScreen
-            - log: { container: client, matches: "verified local objects changed the prepared plan" }
-  - do: screenshot
-    name: capture the revised final plan
-    file: final-update-preview
-    when:
-      all:
-        - screen: UpdatePreviewScreen
-        - log: { container: client, matches: "verified local objects changed the prepared plan" }
-  - do: click
-    name: apply the revised final plan
-    select: { text: apply }
-    when:
-      all:
-        - screen: UpdatePreviewScreen
-        - log: { container: client, matches: "verified local objects changed the prepared plan" }
+    name: approve update
+    select: { text: update }
   - do: wait_file
     name: wait for the modpack marker file
     path: "${active_dir}/${marker}"

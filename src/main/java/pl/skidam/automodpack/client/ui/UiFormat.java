@@ -16,6 +16,10 @@ final class UiFormat {
 		return rootLabel(file.root()) + "/" + file.relativePath();
 	}
 
+	static String changePath(UpdatePlan.FileKey file) {
+		return file.root() == UpdatePlan.Root.PROJECTION ? file.relativePath() : filePath(file);
+	}
+
 	static String rootLabel(UpdatePlan.Root root) {
 		return switch (root) {
 			case PROJECTION -> "active";

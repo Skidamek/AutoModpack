@@ -1,8 +1,9 @@
 package pl.skidam.automodpack.client.ui;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -20,7 +21,7 @@ public class ChangelogScreen extends VersionedScreen {
 
 	private final Screen parent;
 	private final Changelogs changelogs;
-	private Map<String, String> formattedChanges;
+	private List<ListEntryWidget.Row> formattedChanges;
 	private ListEntryWidget listEntryWidget;
 	private EditBox searchField;
 	private Button backButton;
@@ -73,20 +74,20 @@ public class ChangelogScreen extends VersionedScreen {
 		this.searchField.setResponder(textField -> updateChangelogs());
 
 		this.backButton = buttonWidget(
-			this.width / 2 - 140,
+			actionButtonX(310, 3, 0),
 			this.height - 30,
-			140,
+			actionButtonWidth(310, 3),
 			20,
 			VersionedText.translatable("automodpack.back"),
 			button -> ScreenImpl.setScreen(this.parent)
 		);
 
 		this.openMainPageButton = buttonWidget(
-			this.width / 2 + 20,
+			actionButtonX(310, 3, 1),
 			this.height - 30,
-			140,
+			actionButtonWidth(310, 3),
 			20,
-			VersionedText.translatable("automodpack.changelog.openPage"),
+			VersionedText.literal("Project page"),
 			button -> {
 				ListEntry selectedEntry = listEntryWidget.getSelected();
 
@@ -127,7 +128,7 @@ public class ChangelogScreen extends VersionedScreen {
 		int filesUpdated = changelogs.updatedFiles().size();
 		int filesRemoved = changelogs.removedFiles().size();
 
-		String summary = "Updated " + filesUpdated + " | Removed " + filesRemoved;
+		String summary = "+ " + filesUpdated + " | - " + filesRemoved;
 
 		drawCenteredTextWithShadow(
 			matrices,
@@ -143,12 +144,9 @@ public class ChangelogScreen extends VersionedScreen {
 		if (this.searchField.getValue().isEmpty()) {
 			formattedChanges = reFormatChanges();
 		} else {
-			Map<String, String> filteredChangelogs = new HashMap<>();
-			for (Map.Entry<String, String> changelog : reFormatChanges().entrySet()) {
-				if (changelog.getKey().toLowerCase(Locale.ROOT).contains(this.searchField.getValue().toLowerCase(Locale.ROOT))) {
-					filteredChangelogs.put(changelog.getKey(), changelog.getValue());
-				}
-			}
+			List<ListEntryWidget.Row> filteredChangelogs = new ArrayList<>();
+			for (ListEntryWidget.Row changelog : reFormatChanges())
+				if (changelog.text().getString().toLowerCase(Locale.ROOT).contains(this.searchField.getValue().toLowerCase(Locale.ROOT))) filteredChangelogs.add(changelog);
 			formattedChanges = filteredChangelogs;
 		}
 
@@ -157,20 +155,22 @@ public class ChangelogScreen extends VersionedScreen {
 		this.addRenderableWidget(this.listEntryWidget);
 	}
 
-	private Map<String, String> reFormatChanges() {
-		Map<String, String> reFormattedChanges = new HashMap<>();
+	private List<ListEntryWidget.Row> reFormatChanges() {
+		List<ListEntryWidget.Row> reFormattedChanges = new ArrayList<>();
 
 		for (var changelog : changelogs.updatedFiles().entrySet()) {
-			String modPageUrl = null;
-			if (changelog.getValue() != null && !changelog.getValue().isEmpty()) modPageUrl = changelog.getValue().get(0);
-			reFormattedChanges.put("Updated " + UiFormat.filePath(changelog.getKey()), modPageUrl);
+			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("+ " + UiFormat.changePath(changelog.getKey())).withStyle(ChatFormatting.GREEN), firstUrl(changelog.getValue())));
 		}
 
-		for (var file : changelogs.removedFiles()) {
-			reFormattedChanges.put("Removed " + UiFormat.filePath(file), null);
+		for (var changelog : changelogs.removedFiles().entrySet()) {
+			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("- " + UiFormat.changePath(changelog.getKey())).withStyle(ChatFormatting.RED), firstUrl(changelog.getValue())));
 		}
 
 		return reFormattedChanges;
+	}
+
+	private static String firstUrl(List<String> urls) {
+		return urls == null || urls.isEmpty() ? null : urls.get(0);
 	}
 
 	@Override

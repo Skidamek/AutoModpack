@@ -71,7 +71,6 @@ public class ModpackUpdater implements AutoCloseable {
 	private Jsons.ModpackContentFields serverModpackContent;
 	private final Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new ConcurrentHashMap<>();
 	private final Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new ConcurrentHashMap<>();
-	private final Map<String, List<String>> downloadedMainPages = new ConcurrentHashMap<>();
 	private final Jsons.ConnectionInfo connectionInfo;
 	private final DownloadClient downloadClient;
 	private final AtomicBoolean closed = new AtomicBoolean();
@@ -161,9 +160,8 @@ public class ModpackUpdater implements AutoCloseable {
 		close();
 	}
 
-	private void startSourceFetch() {
+	private void startSourceFetch() throws IOException {
 		if (sourceFetchManager != null) return;
-		List<FetchManager.FetchData> fetchData = new ArrayList<>();
 		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
 		for (var group : selectedTarget.manifest().groups().values()) {
 			for (var file : group.files().entrySet()) {
@@ -174,8 +172,11 @@ public class ModpackUpdater implements AutoCloseable {
 		if (selectedTarget.flatTarget().list != null)
 			for (var item : selectedTarget.flatTarget().list)
 				addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
-		fetchData.addAll(unique.values());
-		sourceFetchManager = newSourceFetchManager(fetchData);
+		Jsons.ModpackContentFields installed = storedTarget();
+		if (installed != null && installed.list != null)
+			for (var item : installed.list)
+				addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
+		sourceFetchManager = newSourceFetchManager(new ArrayList<>(unique.values()));
 	}
 
 	private FetchManager ensureSourceFetch(Collection<Jsons.ModpackContentFields.ModpackContentItem> items) {
@@ -494,7 +495,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	private void startUpdateAfterPreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, PreparedPlan previewPlan) {
+	private void startUpdateAfterPreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
 		long start = System.currentTimeMillis();
 		PreparedPlan finalPlan;
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
@@ -534,19 +535,6 @@ public class ModpackUpdater implements AutoCloseable {
 		} catch (Exception e) {
 			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
 			LOGGER.error("Critical error while acquiring modpack objects", e);
-			close();
-			return;
-		}
-
-		if (!previewPlan.equals(finalPlan)) {
-			try {
-				LOGGER.info("The verified local objects changed the prepared plan; requesting approval for the final plan");
-				if (requestPreparedPlanPreview(finalPlan, () -> applyApprovedPlan(finalPlan, start), this::close, false, true)) return;
-				LOGGER.warn("The final update preview was not shown; leaving the installed modpack unchanged");
-			} catch (Exception e) {
-				new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
-				LOGGER.error("Failed to present the final modpack update preview", e);
-			}
 			close();
 			return;
 		}
@@ -617,16 +605,7 @@ public class ModpackUpdater implements AutoCloseable {
 				failedDownloadCategories.put(serverItem, category);
 			};
 
-			Runnable successCallback = () -> {
-				List<String> mainPageUrls = new LinkedList<>();
-				if (fetchManager != null && fetchManager.getFetchDatas().get(serverFileHash) != null) {
-					mainPageUrls = fetchManager.getFetchDatas().get(serverFileHash).fetchedData().mainPageUrls();
-				}
-
-				downloadedMainPages.put(UpdatePlanner.normalize(serverItem.file), List.copyOf(mainPageUrls));
-			};
-
-			downloadManager.download(downloadFile, serverFileHash, sources, serverFileSize, successCallback, failureCallback);
+			downloadManager.download(downloadFile, serverFileHash, sources, serverFileSize, () -> {}, failureCallback);
 		}
 
 		downloadManager.joinAll();
@@ -683,18 +662,41 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private void recordChangelogs(PreparedPlan prepared, SelectedModpackTarget target) {
 		UpdatePreview applied = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), target.flatTarget(), target.selection(), false);
+		Map<UpdatePlan.FileKey, List<String>> mainPageUrls = resolveMainPageUrls(prepared);
 		changelogs.clear();
 		for (UpdatePreview.Entry entry : applied.entries()) {
 			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
 			switch (entry.kind()) {
-				case ADDED, CHANGED, RESTORED_BASELINE -> changelogs.recordUpdated(file,
-						downloadedMainPages.getOrDefault(UpdatePlanner.normalize(entry.relativePath()), List.of()));
-				case REMOVED -> changelogs.recordRemoved(file);
+				case ADDED, CHANGED, RESTORED_BASELINE -> changelogs.recordUpdated(file, mainPageUrls.getOrDefault(file, List.of()));
+				case REMOVED -> changelogs.recordRemoved(file, mainPageUrls.getOrDefault(file, List.of()));
 				default -> {
 				}
 			}
 		}
 		LOGGER.info("Prepared update changes: {} updated, {} removed", changelogs.updatedFiles().size(), changelogs.removedFiles().size());
+	}
+
+	private Map<UpdatePlan.FileKey, List<String>> resolveMainPageUrls(PreparedPlan prepared) {
+		FetchManager manager = sourceFetchManager;
+		if (manager == null) return Map.of();
+		manager.fetch();
+		Map<UpdatePlan.FileKey, String> hashes = new LinkedHashMap<>();
+		for (UpdatePlan.Operation operation : prepared.plan().operations()) {
+			UpdatePlan.FileKey file = new UpdatePlan.FileKey(operation.root(), operation.relativePath());
+			if (operation.operation() == UpdatePlan.OperationType.INSTALL_OBJECT && operation.expectedObjectHash() != null) {
+				hashes.put(file, operation.expectedObjectHash());
+			} else if (operation.operation() == UpdatePlan.OperationType.DELETE) {
+				UpdatePlan.FileState original = prepared.originalFiles().get(file);
+				if (original != null && original.sha1() != null) hashes.put(file, original.sha1());
+			}
+		}
+		Map<UpdatePlan.FileKey, List<String>> resolved = new LinkedHashMap<>();
+		for (var entry : hashes.entrySet()) {
+			FetchManager.Datas data = manager.getFetchDatas().get(entry.getValue());
+			if (data == null || data.fetchedData().mainPageUrls().isEmpty()) continue;
+			resolved.put(entry.getKey(), List.copyOf(data.fetchedData().mainPageUrls()));
+		}
+		return Map.copyOf(resolved);
 	}
 
 	private PreparedPlan buildPlan(FileMetadataCache cache, ModFileCache modCache, Jsons.ModpackContentFields target) throws Exception {
@@ -770,20 +772,20 @@ public class ModpackUpdater implements AutoCloseable {
 			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), false);
 			Runnable continueAction = () -> {
 				if (firstConnection && !confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return;
-				startUpdateAfterPreview(filesToUpdate, prepared);
+				startUpdateAfterPreview(filesToUpdate);
 			};
 			Runnable cancelAction = firstConnection
 					? () -> confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING)
 					: this::close;
-			return requestPreparedPlanPreview(prepared, continueAction, cancelAction, firstConnection, false);
+			return requestPreparedPlanPreview(prepared, continueAction, cancelAction, firstConnection);
 		}
 	}
 
-	private boolean requestPreparedPlanPreview(PreparedPlan prepared, Runnable continueAction, Runnable cancelAction, boolean returnToSelection, boolean finalVerification) throws IOException {
+	private boolean requestPreparedPlanPreview(PreparedPlan prepared, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) throws IOException {
 		List<GenerationPatchNoteHistory.Entry> missedPatchNotes = GenerationPatchNoteHistory.after(selectedTarget.patchNotesHistory(), installedGenerationId());
 		UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, null, getPatchNotes(), missedPatchNotes);
 		return new ScreenManager().preview(preview, getModpackName(),
-				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, false, returnToSelection, finalVerification);
+				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, false, returnToSelection, resolveMainPageUrls(prepared));
 	}
 
 	private String installedGenerationId() throws IOException {

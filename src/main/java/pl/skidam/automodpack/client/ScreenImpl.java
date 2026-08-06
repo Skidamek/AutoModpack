@@ -6,6 +6,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -16,6 +17,7 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 import java.util.Optional;
 import java.util.Locale;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -160,9 +162,9 @@ public class ScreenImpl implements ScreenService {
 			interactiveParent = null;
 			boolean removal = args.length > 4 && Boolean.TRUE.equals(args[4]);
 			boolean returnToSelection = args.length > 5 && Boolean.TRUE.equals(args[5]);
-			boolean finalVerification = args.length > 6 && Boolean.TRUE.equals(args[6]);
-			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, returnToSelection, finalVerification, (Runnable) args[2],
-					(Runnable) args[3]));
+			@SuppressWarnings("unchecked")
+			Map<UpdatePlan.FileKey, List<String>> mainPageUrls = args.length > 6 ? (Map<UpdatePlan.FileKey, List<String>>) args[6] : Map.of();
+			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, returnToSelection, (Runnable) args[2], (Runnable) args[3], mainPageUrls));
 		}
 
 		private static Screen previewParent(Screen parent) {
