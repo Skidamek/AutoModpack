@@ -4,27 +4,23 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.Jsons;
 
 /** The ordered, compact patch-note projection carried with a current generation target. */
 public final class GenerationPatchNoteHistory {
-	private static final Pattern DIGEST = Pattern.compile("[0-9a-f]{40}");
-
 	private GenerationPatchNoteHistory() {}
 
 	public record Entry(int schemaVersion, String generationId, String parentGenerationId, Instant createdAt, String patchNotes, String patchNotesDigest) {
 		public Entry {
 			if (schemaVersion != GenerationMetadata.CURRENT_SCHEMA_VERSION) throw new IllegalArgumentException("Unsupported patch-note history schema version: " + schemaVersion);
-			generationId = requireDigest(generationId, "generation ID");
-			parentGenerationId = requireOptionalDigest(parentGenerationId, "parent generation ID");
+			generationId = GenerationMetadata.requireDigest(generationId, "generation ID");
+			parentGenerationId = GenerationMetadata.requireOptionalDigest(parentGenerationId, "parent generation ID");
 			createdAt = Objects.requireNonNull(createdAt, "createdAt");
 			patchNotes = GenerationMetadata.validateNotes(patchNotes);
-			patchNotesDigest = requireDigest(patchNotesDigest, "patch notes digest");
+			patchNotesDigest = GenerationMetadata.requireDigest(patchNotesDigest, "patch notes digest");
 			if (!GenerationIdentity.patchNotesDigest(patchNotes).equals(patchNotesDigest)) throw new IllegalArgumentException("Patch-note history digest does not match its notes");
 		}
 
@@ -136,14 +132,4 @@ public final class GenerationPatchNoteHistory {
 		return history.size() == 1 && current.equals(history.get(0)) && !current.parentGenerationId().isEmpty();
 	}
 
-	private static String requireDigest(String value, String name) {
-		if (value == null || !DIGEST.matcher(value).matches() || !value.equals(value.toLowerCase(Locale.ROOT))) throw new IllegalArgumentException("Invalid canonical " + name);
-		return value;
-	}
-
-	private static String requireOptionalDigest(String value, String name) {
-		if (value == null) throw new IllegalArgumentException("Missing " + name);
-		if (value.isEmpty()) return GenerationMetadata.ROOT_PARENT;
-		return requireDigest(value, name);
-	}
 }

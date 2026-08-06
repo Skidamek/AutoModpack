@@ -146,10 +146,6 @@ public class ModpackUpdater implements AutoCloseable {
 		return target == null ? null : target.flatTarget();
 	}
 
-	private Jsons.ModpackContentFields readStoredTargetOrNull() throws IOException {
-		return storedTarget();
-	}
-
 	private SelectedModpackTarget storedSelectedTarget() throws IOException {
 		return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
 	}
@@ -675,7 +671,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private PreparedPlan buildPlan(FileMetadataCache cache, ModFileCache modCache, Jsons.ModpackContentFields target, boolean prepareObjects) throws Exception {
 		captureActiveEditableOverlays(cache);
-		Jsons.ModpackContentFields installed = readStoredTargetOrNull();
+		Jsons.ModpackContentFields installed = storedTarget();
 		UpdatePlanner.SelectionContext selection = selectionContext(target.modpackId);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, selection, cache);
 		if (prepareObjects) populateStoreFromActive(target, cache);
@@ -761,22 +757,25 @@ public class ModpackUpdater implements AutoCloseable {
 	private UpdatePlanner.SelectionContext selectionContext(String targetModpackId) throws IOException {
 		String previousId = clientConfig.selectedModpackId;
 		if (previousId == null || previousId.isBlank() || previousId.equals(targetModpackId) || !ModpackId.isValid(previousId)) return null;
-		Jsons.ModpackContentFields previousManifest = readStoredTargetOrNull();
+		Jsons.ModpackContentFields previousManifest = storedTarget();
 		return new UpdatePlanner.SelectionContext(previousId, previousManifest);
 	}
 
 	private void populateStoreFromActive(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
 		if (target.list == null) return;
 		for (var item : target.list) {
-			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
 			Path object = storage.objectsDirectory().resolve(item.sha1);
 			long size = Long.parseLong(item.size);
 			if (SmartFileUtils.isValidFile(object, size, item.sha1)) continue;
-			if (SmartFileUtils.isValidFile(source, size, item.sha1)) {
-				SmartFileUtils.copyVerifiedAtomic(source, object, size, item.sha1);
-				cache.overwriteCache(object, item.sha1);
-			}
+			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
+			populateStoreObject(source, object, size, item.sha1, cache);
 		}
+	}
+
+	private static void populateStoreObject(Path source, Path object, long size, String sha1, FileMetadataCache cache) throws IOException {
+		if (!SmartFileUtils.isValidFile(source, size, sha1)) return;
+		SmartFileUtils.copyVerifiedAtomic(source, object, size, sha1);
+		cache.overwriteCache(object, sha1);
 	}
 
 	private Map<UpdatePlan.FileKey, UpdatePlan.FileState> inspectFiles(Jsons.ModpackContentFields target, Jsons.ModpackContentFields installed,
@@ -931,10 +930,8 @@ public class ModpackUpdater implements AutoCloseable {
 			long size = Long.parseLong(item.size);
 			if (SmartFileUtils.isValidFile(storeFile, size, item.sha1)) continue;
 			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
-			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) continue;
 			try {
-				SmartFileUtils.copyVerifiedAtomic(source, storeFile, size, item.sha1);
-				cache.overwriteCache(storeFile, item.sha1);
+				populateStoreObject(source, storeFile, size, item.sha1, cache);
 			} catch (IOException e) {
 				LOGGER.warn("Failed to reuse installed modpack object {}", item.file, e);
 			}

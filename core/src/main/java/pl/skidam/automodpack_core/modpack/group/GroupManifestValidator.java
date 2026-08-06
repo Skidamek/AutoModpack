@@ -137,24 +137,23 @@ public final class GroupManifestValidator {
 								.add(new PathOwner(groupId, path));
 				}
 			}
-			for (List<PathOwner> owners : aliases.values()) {
-				for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
-					PathOwner first = owners.get(i);
-					PathOwner second = owners.get(j);
-					if (first.path().equals(second.path())) continue;
-					if (first.groupId().equals(second.groupId()) || coSelectable(manifest, first.groupId(), second.groupId()))
-						errors.add(platform.id() + ": paths '" + first.path() + "' (group '" + first.groupId() + "') and '" + second.path()
-								+ "' (group '" + second.groupId() + "') alias on this platform");
-				}
-			}
-			for (List<PathOwner> owners : modBasenameAliases.values()) {
-				for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
-					PathOwner first = owners.get(i);
-					PathOwner second = owners.get(j);
-					if (first.path().equals(second.path())) continue;
-					if (first.groupId().equals(second.groupId()) || coSelectable(manifest, first.groupId(), second.groupId()))
-						errors.add(platform.id() + ": mod files '" + first.path() + "' (group '" + first.groupId() + "') and '" + second.path()
-								+ "' (group '" + second.groupId() + "') share a basename in the live mods directory");
+			validateAliasOwners(platform, manifest, aliases, false, errors);
+			validateAliasOwners(platform, manifest, modBasenameAliases, true, errors);
+		}
+	}
+
+	private static void validateAliasOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, boolean modBasenames,
+			List<String> errors) {
+		String prefix = modBasenames ? "mod files" : "paths";
+		String suffix = modBasenames ? " share a basename in the live mods directory" : " alias on this platform";
+		for (List<PathOwner> owners : aliases.values()) {
+			for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
+				PathOwner first = owners.get(i);
+				PathOwner second = owners.get(j);
+				if (first.path().equals(second.path())) continue;
+				if (first.groupId().equals(second.groupId()) || coSelectable(manifest, first.groupId(), second.groupId())) {
+					errors.add(platform.id() + ": " + prefix + " '" + first.path() + "' (group '" + first.groupId() + "') and '" + second.path()
+							+ "' (group '" + second.groupId() + "')" + suffix);
 				}
 			}
 		}
