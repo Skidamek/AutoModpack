@@ -35,19 +35,16 @@ public final class FirstConnectScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int y = this.height - 54;
-		int left = panelLeft(310);
-		int rowWidth = panelWidth(310);
-		int gap = 10;
-		int buttonWidth = (rowWidth - gap) / 2;
-		this.addRenderableWidget(buttonWidget(left, y, buttonWidth, 20,
+		int actionY = this.height - 28;
+		int twoButtonWidth = actionButtonWidth(310, 2);
+		this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 0), actionY, twoButtonWidth, 20,
+				VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
+		this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 1), actionY, twoButtonWidth, 20,
 				VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
-		this.addRenderableWidget(buttonWidget(left + buttonWidth + gap, y, buttonWidth, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
+		int optionalY = actionY - 26;
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
 		if (GenerationPatchNoteHistory.containsNotes(target.patchNotesHistory())) {
-			this.addRenderableWidget(buttonWidget(left, y + 26, buttonWidth, 20, VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
-			this.addRenderableWidget(buttonWidget(left + buttonWidth + gap, y + 26, buttonWidth, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
-		} else {
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, y + 26, 150, 20, VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
+			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY - 26, 150, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
 		}
 	}
 

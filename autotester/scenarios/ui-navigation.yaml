@@ -41,7 +41,7 @@ flow:
     until:
       all:
         - screen: UpdatePreviewScreen
-        - element: { text: continue, enabled: true }
+        - element: { text: update, enabled: true }
   - do: click
     name: return from the second preview
     select: { text: back }

@@ -24,6 +24,15 @@ flow:
   - do: screenshot
     name: capture the CAS-backed completion summary
     file: cas-update-complete
+  - do: click
+    name: open the completed changelog
+    select: { text: view changelogs }
+  - do: wait_for
+    name: wait for the completed changelog
+    until: { screen: ChangelogScreen }
+  - do: screenshot
+    name: capture the completed changelog
+    file: cas-changelog
   - do: quit
     name: quit the client
 

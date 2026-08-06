@@ -57,7 +57,7 @@ class FakeBridge:
     """A tiny GUI state machine that mimics the real client over the file bridge.
 
     Screens: title -> cert -> preparing -> first connection -> preview -> restart -> (relaunch) -> ingame.
-    Clicking the final preview button writes the active projection files into the game dir, so
+    Clicking the update button writes the active projection files into the game dir, so
     the filesystem verbs see real files appear exactly as they would in Docker.
     """
 
@@ -88,7 +88,7 @@ class FakeBridge:
             },
             "preview": {
                 "screenClass": "UpdatePreviewScreen",
-                "buttons": [{"id": 5, "text": "Continue", "enabled": True, "visible": True}],
+                "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "restart": {

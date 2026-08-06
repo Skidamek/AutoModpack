@@ -40,21 +40,18 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		int y = this.height - 28;
-		int left = panelLeft(310);
-		int rowWidth = panelWidth(310);
-		this.previousButton = buttonWidget(left, y, 70, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
-		this.nextButton = buttonWidget(left + rowWidth - 70, y, 70, 20, VersionedText.literal("Next >"), button -> changePage(1));
+		int actionWidth = actionButtonWidth(310, 3);
+		boolean hasNotes = GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
+		int navigationY = hasNotes && pageCount() > 1 ? y - 26 : y;
+		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
+		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.literal("Next >"), button -> changePage(1));
 		updateNavigation();
 		if (pageCount() > 1) {
 			this.addRenderableWidget(this.previousButton);
 			this.addRenderableWidget(this.nextButton);
 		}
-		if (GenerationPatchNoteHistory.containsNotes(patchNotesHistory)) {
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 76, y, 72, 20, VersionedText.translatable("automodpack.back"), button -> back()));
-			this.addRenderableWidget(buttonWidget(this.width / 2 + 4, y, 72, 20, VersionedText.literal("Notes"), button -> openPatchNotes()));
-		} else {
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 40, y, 80, 20, VersionedText.translatable("automodpack.back"), button -> back()));
-		}
+		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 0), y, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
+		if (hasNotes) this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 1), y, actionWidth, 20, VersionedText.literal("Notes"), button -> openPatchNotes()));
 	}
 
 	private int pageCount() {
