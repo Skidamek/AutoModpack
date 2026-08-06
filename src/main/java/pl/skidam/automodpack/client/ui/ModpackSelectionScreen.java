@@ -277,16 +277,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		ResolvedSelection previousResolution = resolution;
 		try {
 			SelectionIntent next = GroupSelectionResolver.preferTag(previous, tagId);
-			chosenTags.clear();
-			chosenTags.addAll(next.requestedTags());
-			chosen.clear();
-			chosen.addAll(next.requestedGroups());
-			excluded.clear();
-			excluded.addAll(next.excludedGroups());
+			applyIntent(next);
 			reresolve();
 		} catch (SelectionResolutionException e) {
-			resolution = e.resolution() == null ? previousResolution : e.resolution();
-			rebuild();
+			restoreResolution(e, previousResolution);
 			LOGGER.warn("Tag preference for {} creates a conflict that needs explicit resolution: {}", tagId, e.getMessage());
 		}
 	}
@@ -309,18 +303,26 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				return;
 			}
 			SelectionIntent next = GroupSelectionResolver.prefer(previous, groupId);
-			chosenTags.clear();
-			chosenTags.addAll(next.requestedTags());
-			chosen.clear();
-			chosen.addAll(next.requestedGroups());
-			excluded.clear();
-			excluded.addAll(next.excludedGroups());
+			applyIntent(next);
 			reresolve();
 		} catch (SelectionResolutionException e) {
-			resolution = e.resolution() == null ? previousResolution : e.resolution();
-			rebuild();
+			restoreResolution(e, previousResolution);
 			LOGGER.warn("Group preference for {} creates a conflict that needs explicit resolution: {}", groupId, e.getMessage());
 		}
+	}
+
+	private void applyIntent(SelectionIntent intent) {
+		chosenTags.clear();
+		chosenTags.addAll(intent.requestedTags());
+		chosen.clear();
+		chosen.addAll(intent.requestedGroups());
+		excluded.clear();
+		excluded.addAll(intent.excludedGroups());
+	}
+
+	private void restoreResolution(SelectionResolutionException exception, ResolvedSelection previousResolution) {
+		resolution = exception.resolution() == null ? previousResolution : exception.resolution();
+		rebuild();
 	}
 
 	private boolean hasConflicts() {
