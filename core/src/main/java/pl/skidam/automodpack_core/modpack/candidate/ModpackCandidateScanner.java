@@ -169,26 +169,18 @@ public final class ModpackCandidateScanner {
 
 	private PathResult process(SourcePair pair, GroupRules rules, Request request) throws CandidateBuildException {
 		List<ExcludedCandidate> exclusions = new ArrayList<>();
+		CandidateSource candidate = pair.explicit != null ? pair.explicit : pair.synced;
 		CandidateSource selected = null;
 		GroupManifest.GroupFile file = null;
 		StagedObject object = null;
-		if (pair.explicit != null) {
-			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(pair.explicit, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
+		if (candidate != null) {
+			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
 					request.stagingDirectory(), request.fileMetadataCache(), request.modFileCache(), request.objectStoreDirectory());
 			if (snapshot.exclusion() == null) {
-				selected = pair.explicit;
+				selected = candidate;
 				file = snapshot.file();
 				object = snapshot.object();
-			} else exclusions.add(excluded(pair.explicit, snapshot.exclusion()));
-		}
-		if (pair.explicit == null && pair.synced != null) {
-			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(pair.synced, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
-					request.stagingDirectory(), request.fileMetadataCache(), request.modFileCache(), request.objectStoreDirectory());
-			if (snapshot.exclusion() == null) {
-				selected = pair.synced;
-				file = snapshot.file();
-				object = snapshot.object();
-			} else exclusions.add(excluded(pair.synced, snapshot.exclusion()));
+			} else exclusions.add(excluded(candidate, snapshot.exclusion()));
 		}
 		ShadowedCandidate shadow = pair.explicit != null && pair.synced != null
 				? new ShadowedCandidate(pair.explicit, pair.synced, ShadowedCandidate.Relationship.NOT_COMPARED)

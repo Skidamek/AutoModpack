@@ -49,20 +49,11 @@ public record GenerationDiff(
 	}
 
 	public Summary summary() {
-		int added = 0;
-		int modified = 0;
-		int removed = 0;
-		int metadataOnly = 0;
-		for (FileChange change : files) {
-			switch (change.classification()) {
-				case ADDED -> added++;
-				case MODIFIED -> modified++;
-				case REMOVED -> removed++;
-				case METADATA_ONLY -> metadataOnly++;
-			}
-		}
-		return new Summary(added, modified, removed, metadataOnly, packMetadata.changedCount() + groupMetadata.changedCount()
-				+ selectionTagMetadata.changedCount());
+		int[] counts = new int[FileClassification.values().length];
+		for (FileChange change : files) counts[change.classification().ordinal()]++;
+		return new Summary(counts[FileClassification.ADDED.ordinal()], counts[FileClassification.MODIFIED.ordinal()], counts[FileClassification.REMOVED.ordinal()],
+				counts[FileClassification.METADATA_ONLY.ordinal()], packMetadata.changedCount() + groupMetadata.changedCount()
+						+ selectionTagMetadata.changedCount());
 	}
 
 	/** Returns deterministic text for an operator-facing generation change summary. */
@@ -72,13 +63,7 @@ public record GenerationDiff(
 		appendMetadataChanges(changes, "group", groupMetadata);
 		appendMetadataChanges(changes, "tag", selectionTagMetadata);
 		for (FileChange change : files) {
-			String action = switch (change.classification()) {
-				case ADDED -> "Added";
-				case MODIFIED -> "Changed";
-				case REMOVED -> "Removed";
-				case METADATA_ONLY -> "Changed metadata for";
-			};
-			changes.add(action + " file '" + change.groupId() + "/" + change.logicalPath() + "'");
+			changes.add(change.classification().action() + " file '" + change.groupId() + "/" + change.logicalPath() + "'");
 		}
 		return changes.isEmpty() ? List.of("No catalogue changes.") : List.copyOf(changes);
 	}
@@ -90,7 +75,34 @@ public record GenerationDiff(
 	}
 
 	public enum FileClassification {
-		ADDED, MODIFIED, REMOVED, METADATA_ONLY
+		ADDED("Added", false, true, "Added file change endpoints do not match classification"),
+		MODIFIED("Changed", true, true, "Changed file endpoints are incomplete"),
+		REMOVED("Removed", true, false, "Removed file change endpoints do not match classification"),
+		METADATA_ONLY("Changed metadata for", true, true, "Changed file endpoints are incomplete");
+
+		private final String action;
+		private final boolean beforeRequired;
+		private final boolean afterRequired;
+		private final String endpointError;
+
+		FileClassification(String action, boolean beforeRequired, boolean afterRequired, String endpointError) {
+			this.action = action;
+			this.beforeRequired = beforeRequired;
+			this.afterRequired = afterRequired;
+			this.endpointError = endpointError;
+		}
+
+		private String action() {
+			return action;
+		}
+
+		private boolean validEndpoints(GroupManifest.GroupFile before, GroupManifest.GroupFile after) {
+			return (before != null) == beforeRequired && (after != null) == afterRequired;
+		}
+
+		private String endpointError() {
+			return endpointError;
+		}
 	}
 
 	public record FileChange(String groupId, String logicalPath, FileClassification classification, GroupManifest.GroupFile before,
@@ -99,17 +111,7 @@ public record GenerationDiff(
 			groupId = Objects.requireNonNull(groupId);
 			logicalPath = Objects.requireNonNull(logicalPath);
 			classification = Objects.requireNonNull(classification);
-			switch (classification) {
-				case ADDED -> {
-					if (before != null || after == null) throw new IllegalArgumentException("Added file change endpoints do not match classification");
-				}
-				case REMOVED -> {
-					if (before == null || after != null) throw new IllegalArgumentException("Removed file change endpoints do not match classification");
-				}
-				case MODIFIED, METADATA_ONLY -> {
-					if (before == null || after == null) throw new IllegalArgumentException("Changed file endpoints are incomplete");
-				}
-			}
+			if (!classification.validEndpoints(before, after)) throw new IllegalArgumentException(classification.endpointError());
 		}
 	}
 

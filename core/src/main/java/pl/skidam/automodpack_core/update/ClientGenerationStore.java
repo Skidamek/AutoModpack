@@ -96,24 +96,15 @@ public final class ClientGenerationStore {
 
 	/** Returns the committed lineage ending at the generation selected by active-state.json. */
 	public List<GenerationRecord> lineage(String modpackId, String generationId) throws IOException {
-		ModpackId.requireValid(modpackId);
-		List<GenerationRecord> reverse = new ArrayList<>();
-		Set<String> visited = new HashSet<>();
-		String current = generationId;
-		while (current != null && !current.isEmpty()) {
-			if (!visited.add(current)) throw new IOException("Client generation lineage contains a cycle");
-			String generation = current;
-			GenerationRecord record = read(generation).orElseThrow(() -> new IOException("Client generation lineage is incomplete: " + generation));
-			if (!modpackId.equals(record.manifest().modpackId())) throw new IOException("Client generation lineage crosses modpack IDs");
-			reverse.add(record);
-			current = record.metadata().parentGenerationId();
-		}
-		Collections.reverse(reverse);
-		return List.copyOf(reverse);
+		return readLineage(modpackId, generationId, false);
 	}
 
 	/** Returns the downloaded part of the committed lineage; skipped server generations are not client records. */
 	public List<GenerationRecord> availableLineage(String modpackId, String generationId) throws IOException {
+		return readLineage(modpackId, generationId, true);
+	}
+
+	private List<GenerationRecord> readLineage(String modpackId, String generationId, boolean stopAtMissingAncestor) throws IOException {
 		ModpackId.requireValid(modpackId);
 		List<GenerationRecord> reverse = new ArrayList<>();
 		Set<String> visited = new HashSet<>();
@@ -122,10 +113,11 @@ public final class ClientGenerationStore {
 			if (!visited.add(current)) throw new IOException("Client generation lineage contains a cycle");
 			Optional<GenerationRecord> optional = read(current);
 			if (optional.isEmpty()) {
-				if (reverse.isEmpty()) throw new IOException("Active client generation record is missing: " + current);
+				if (!stopAtMissingAncestor || reverse.isEmpty())
+					throw new IOException((stopAtMissingAncestor ? "Active client generation record is missing: " : "Client generation lineage is incomplete: ") + current);
 				break;
 			}
-			GenerationRecord record = optional.orElseThrow();
+			GenerationRecord record = optional.get();
 			if (!modpackId.equals(record.manifest().modpackId())) throw new IOException("Client generation lineage crosses modpack IDs");
 			reverse.add(record);
 			current = record.metadata().parentGenerationId();
