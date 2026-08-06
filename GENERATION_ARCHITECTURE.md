@@ -838,7 +838,7 @@ The server ledger contains the historical ownership needed to clean paths from s
 
 The transaction records the old target and final target.
 
-The client writes the final target metadata only after file mutation succeeds.
+The interactive client passes the plan and final target to the transaction executor. The executor creates the journal and stores the immutable target record, including patch-note history, before file mutation. It promotes `active-state.json` only after preservation, projection swap, configuration, and other planned mutations succeed. A deferred transaction therefore keeps its target record and journal while the active generation remains unchanged.
 
 ## 10. Ownership ledger
 
