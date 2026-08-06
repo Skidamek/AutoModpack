@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -137,7 +138,7 @@ class NettyServerObjectResolutionTest {
 		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "config", false, false, false, hash, null));
 		fields.groups = Map.of("main", group);
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
-		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), java.util.List.of(), java.util.List.of());
+		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), List.of(), List.of());
 	}
 
 	private static String hash(GenerationStore.Publication publication) {

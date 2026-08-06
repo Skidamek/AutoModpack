@@ -12,6 +12,7 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.util.Optional;
 import java.util.Locale;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -178,7 +179,7 @@ public class ScreenImpl implements ScreenService {
 			Screen parent = Screens.getScreen();
 			Runnable closed = args.length > 2 && args[2] instanceof Runnable callback ? callback : () -> {};
 			@SuppressWarnings("unchecked")
-			java.util.List<GenerationRecord> history = (java.util.List<GenerationRecord>) args[0];
+			List<GenerationRecord> history = (List<GenerationRecord>) args[0];
 			Screens.setScreen(new ContentHistoryScreen(parent, history, (String) args[1], closed));
 		}
 

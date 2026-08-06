@@ -84,7 +84,7 @@ public final class ClientObjectStore {
 			for (Path modpack : modpacks.toList()) {
 				if (Files.isSymbolicLink(modpack)) throw new IOException("Client recovery path is a symbolic link: " + modpack);
 				if (!Files.isDirectory(modpack, LinkOption.NOFOLLOW_LINKS)) continue;
-				for (var entry : RecoveryArchive.read(storage.objectsDirectory(), modpack).entries) addHash(retained, entry.sha1);
+				RecoveryArchive.read(modpack);
 			}
 		}
 	}
@@ -98,6 +98,9 @@ public final class ClientObjectStore {
 		if (transaction.operations != null) for (var operation : transaction.operations) if (operation != null) addHash(retained, operation.expectedObjectHash());
 		if (transaction.projectedFinalState != null) for (var projected : transaction.projectedFinalState) if (projected != null && projected.present()) addHash(retained, projected.expectedHash());
 		if (transaction.plannedBaselineCaptures != null) for (var capture : transaction.plannedBaselineCaptures) if (capture != null && !capture.absent()) addHash(retained, capture.expectedHash());
+		if (transaction.plannedPreservations != null)
+			for (var preservation : transaction.plannedPreservations)
+				if (preservation != null) addHash(retained, preservation.expectedHash());
 	}
 
 	private static void addHash(Set<String> retained, String hash) throws IOException {

@@ -171,8 +171,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		for (int index = start; index < end; index++) {
 			UpdatePreview.Entry entry = entries.get(index);
 			int y = entryTop() + (index - start) * 16;
-			String line = kindText(entry.kind()) + "  " + rootText(entry.root()) + ":/" + entry.relativePath() + "  (" + formatSize(entry.size()) + ")";
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, line, contentWidth)).withStyle(color(entry.kind())), left, y, TextColors.WHITE);
+			KindPresentation kind = kindPresentation(entry.kind());
+			String line = kind.label() + "  " + rootText(entry.root()) + ":/" + entry.relativePath() + "  (" + UiFormat.formatSize(entry.size()) + ")";
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, line, contentWidth)).withStyle(kind.color()), left, y, TextColors.WHITE);
 		}
 
 		if (entries.isEmpty()) {
@@ -183,9 +184,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				|| entry.kind() == UpdatePreview.Kind.RESTORED_BASELINE).mapToLong(UpdatePreview.Entry::size).sum();
 		long acquisitionFiles = entries.stream().filter(entry -> entry.kind() == UpdatePreview.Kind.ADDED || entry.kind() == UpdatePreview.Kind.CHANGED
 				|| entry.kind() == UpdatePreview.Kind.RESTORED_BASELINE).count();
-		String changeSummary = "Changes: added " + formatSize(preview.addedBytes()) + "  changed " + formatSize(preview.changedBytes()) + "  removed "
-				+ formatSize(preview.removedBytes()) + "  preserved " + formatSize(preview.preservedBytes());
-		String acquisitionSummary = "Download: " + acquisitionFiles + " files, " + formatSize(acquisitionBytes);
+		String changeSummary = "Changes: added " + UiFormat.formatSize(preview.addedBytes()) + "  changed " + UiFormat.formatSize(preview.changedBytes()) + "  removed "
+				+ UiFormat.formatSize(preview.removedBytes()) + "  preserved " + UiFormat.formatSize(preview.preservedBytes());
+		String acquisitionSummary = "Download: " + acquisitionFiles + " files, " + UiFormat.formatSize(acquisitionBytes);
 		String restartSummary = "Restart: " + restartReasons();
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, changeSummary, contentWidth)).withStyle(ChatFormatting.YELLOW), left, summaryY(), TextColors.WHITE);
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, acquisitionSummary, contentWidth)).withStyle(ChatFormatting.GREEN), left, summaryY() + 12,
@@ -243,33 +244,21 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		};
 	}
 
-	private static String kindText(UpdatePreview.Kind kind) {
+	private static KindPresentation kindPresentation(UpdatePreview.Kind kind) {
 		return switch (kind) {
-			case ADDED -> "Added";
-			case CHANGED -> "Changed";
-			case REMOVED -> "Removed";
-			case PRESERVED_CAS -> "Preserved in CAS";
-			case PRESERVED_CHANGED -> "Preserved changed";
-			case PRESERVED_UNAVAILABLE -> "Preserved unavailable";
-			case PRESERVED_OUTSIDE -> "Preserved outside roots";
-			case UNSAFE -> "Unsafe file type";
-			case RESTORED_BASELINE -> "Restored baseline";
+			case ADDED -> new KindPresentation("Added", ChatFormatting.GREEN);
+			case CHANGED -> new KindPresentation("Changed", ChatFormatting.GREEN);
+			case REMOVED -> new KindPresentation("Removed", ChatFormatting.YELLOW);
+			case PRESERVED_CAS -> new KindPresentation("Preserved in CAS", ChatFormatting.YELLOW);
+			case PRESERVED_CHANGED -> new KindPresentation("Preserved changed", ChatFormatting.RED);
+			case PRESERVED_UNAVAILABLE -> new KindPresentation("Preserved unavailable", ChatFormatting.RED);
+			case PRESERVED_OUTSIDE -> new KindPresentation("Preserved outside roots", ChatFormatting.RED);
+			case UNSAFE -> new KindPresentation("Unsafe file type", ChatFormatting.RED);
+			case RESTORED_BASELINE -> new KindPresentation("Restored baseline", ChatFormatting.GREEN);
 		};
 	}
 
-	private static ChatFormatting color(UpdatePreview.Kind kind) {
-		return switch (kind) {
-			case ADDED, CHANGED, RESTORED_BASELINE -> ChatFormatting.GREEN;
-			case REMOVED, PRESERVED_CAS -> ChatFormatting.YELLOW;
-			case PRESERVED_CHANGED, PRESERVED_UNAVAILABLE, PRESERVED_OUTSIDE, UNSAFE -> ChatFormatting.RED;
-		};
-	}
-
-	private static String formatSize(long bytes) {
-		if (bytes < 1024) return bytes + " B";
-		if (bytes < 1024 * 1024) return (bytes / 1024) + " KiB";
-		return (bytes / (1024 * 1024)) + " MiB";
-	}
+	private record KindPresentation(String label, ChatFormatting color) {}
 
 	@Override
 	public boolean shouldCloseOnEsc() {

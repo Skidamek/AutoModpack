@@ -16,5 +16,5 @@ This preserves player customization while still giving a server operator a relia
 
 - **Editable file:** A file matched by `allowEditsInFiles`; after installation, changes on the client are normally preserved.
 - **Overwrite-editable file:** An editable file also matched by `overwriteEditableFiles`. It is overwritten only when its server manifest SHA-1 changes.
-- **Installed generation:** The immutable `manifest.json` under `automodpack/client-generations/generations/`. It records the target state last applied by the client.
+- **Installed generation:** The immutable `manifest.json` under `automodpack/client/records/<generationId>/`. It records the target state last applied by the client.
 - **Active file:** The file in the fixed active projection or, when the loader requires it, its managed live-game placement.

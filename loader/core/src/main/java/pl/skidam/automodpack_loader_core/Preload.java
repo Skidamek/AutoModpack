@@ -80,7 +80,7 @@ public class Preload {
 
 		UpdateTransactionExecutor executor;
 		try {
-			executor = UpdateTransactionSupport.executor(transaction);
+			executor = UpdateTransactionSupport.executor();
 			executor.validate(transaction);
 		} catch (IOException | RuntimeException e) {
 			quarantineTransaction(e);

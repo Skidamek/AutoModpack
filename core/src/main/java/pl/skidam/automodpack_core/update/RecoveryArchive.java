@@ -19,7 +19,7 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
-/** A manifest of user-recoverable paths whose content remains pinned in the shared CAS. */
+/** A manifest of user-recoverable paths whose bytes are copied into an independent recovery archive. */
 public final class RecoveryArchive {
 	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
 	private static final Comparator<Jsons.ClientRecoveryArchiveFields.EntryFields> ENTRY_ORDER = Comparator
@@ -41,11 +41,17 @@ public final class RecoveryArchive {
 		String normalizedPreservedAt = requireInstant(preservedAt);
 		if (size < 0) throw new IOException("Recovery object size is invalid");
 
-		Path object = storeRoot.resolve(normalizedHash).normalize();
-		validateNoSymbolicLinkDescendants(storeRoot, object);
-		if (!SmartFileUtils.isValidFile(object, size, normalizedHash)) throw new IOException("Recovery object is missing or corrupt: " + normalizedHash);
+		Path archiveObjects = archiveRoot.resolve("objects").normalize();
+		Path archivedObject = archiveObjects.resolve(normalizedHash).normalize();
+		validateNoSymbolicLinkDescendants(archiveRoot, archivedObject);
+		if (!SmartFileUtils.isValidFile(archivedObject, size, normalizedHash)) {
+			Path object = storeRoot.resolve(normalizedHash).normalize();
+			validateNoSymbolicLinkDescendants(storeRoot, object);
+			if (!SmartFileUtils.isValidFile(object, size, normalizedHash)) throw new IOException("Recovery object is missing or corrupt: " + normalizedHash);
+			SmartFileUtils.copyVerifiedAtomic(object, archivedObject, size, normalizedHash);
+		}
 
-		Jsons.ClientRecoveryArchiveFields archive = read(storeRoot, archiveRoot);
+		Jsons.ClientRecoveryArchiveFields archive = read(archiveRoot);
 		boolean alreadyRecorded = archive.entries.stream().anyMatch(entry -> normalizedPath.equals(entry.logicalPath)
 				&& normalizedHash.equalsIgnoreCase(entry.sha1) && size == entry.size);
 		if (!alreadyRecorded) {
@@ -61,11 +67,10 @@ public final class RecoveryArchive {
 			archive.entries = entries;
 			ConfigTools.writeAtomic(archiveRoot.resolve("manifest.json"), archive);
 		}
-		return object;
+		return archivedObject;
 	}
 
-	public static Jsons.ClientRecoveryArchiveFields read(Path storeDirectory, Path recoveryDirectory) throws IOException {
-		Path storeRoot = requireDirectory(storeDirectory, "shared object store");
+	public static Jsons.ClientRecoveryArchiveFields read(Path recoveryDirectory) throws IOException {
 		Path archiveRoot = requireArchiveRoot(recoveryDirectory);
 		Path manifestPath = archiveRoot.resolve("manifest.json");
 		if (!Files.exists(manifestPath, LinkOption.NOFOLLOW_LINKS)) {
@@ -83,6 +88,7 @@ public final class RecoveryArchive {
 			throw new IOException("Recovery archive manifest is invalid", e);
 		}
 		if (archive.schemaVersion != 1 || archive.entries == null) throw new IOException("Recovery archive manifest identity is invalid");
+		Path archiveObjects = requireDirectory(archiveRoot.resolve("objects"), "recovery object archive");
 		Set<String> unique = new HashSet<>();
 		List<Jsons.ClientRecoveryArchiveFields.EntryFields> sorted = new ArrayList<>(archive.entries);
 		for (Jsons.ClientRecoveryArchiveFields.EntryFields entry : sorted) {
@@ -93,9 +99,9 @@ public final class RecoveryArchive {
 			requireInstant(entry.preservedAt);
 			if (entry.size < 0 || !unique.add(entry.logicalPath + "\0" + hash + "\0" + entry.size))
 				throw new IOException("Recovery archive entry metadata is invalid");
-			Path object = storeRoot.resolve(hash).normalize();
-			validateNoSymbolicLinkDescendants(storeRoot, object);
-			if (!SmartFileUtils.isValidFile(object, entry.size, hash)) throw new IOException("Pinned recovery object is missing or corrupt: " + hash);
+			Path object = archiveObjects.resolve(hash).normalize();
+			validateNoSymbolicLinkDescendants(archiveRoot, object);
+			if (!SmartFileUtils.isValidFile(object, entry.size, hash)) throw new IOException("Archived recovery object is missing or corrupt: " + hash);
 		}
 		sorted.sort(ENTRY_ORDER);
 		List<String> actualOrder = archive.entries.stream().map(entry -> entry.logicalPath + "\0" + entry.sha1.toLowerCase(Locale.ROOT) + "\0" + entry.size).toList();

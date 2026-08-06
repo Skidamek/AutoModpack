@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -65,7 +66,7 @@ public final class ClientGenerationStore {
 			reverse.add(record);
 			current = record.metadata().parentGenerationId();
 		}
-		java.util.Collections.reverse(reverse);
+		Collections.reverse(reverse);
 		return List.copyOf(reverse);
 	}
 

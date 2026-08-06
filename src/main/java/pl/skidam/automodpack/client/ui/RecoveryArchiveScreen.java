@@ -68,7 +68,7 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 			ModpackUpdater.RecoveryFile file = files.get(index);
 			int y = 72 + (index - start) * 22;
 			Button button = buttonWidget(this.width / 2 - 155, y, 310, 20,
-					VersionedText.literal(truncateToWidth(this.font, "Archive " + file.logicalPath() + " (" + formatSize(file.size()) + ")", 290)), press -> archive(file));
+					VersionedText.literal(truncateToWidth(this.font, "Archive " + file.logicalPath() + " (" + UiFormat.formatSize(file.size()) + ")", 290)), press -> archive(file));
 			button.active = !busy;
 			this.addRenderableWidget(button);
 		}
@@ -173,7 +173,7 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Path: " + file.logicalPath(), this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
 					TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.literal(truncateToWidth(this.font, "SHA-1: " + shortHash(file.sha1()) + "  Size: " + formatSize(file.size()) + "  State: Archived", this.width - 20)).withStyle(ChatFormatting.GREEN), this.width / 2, y + 10,
+				VersionedText.literal(truncateToWidth(this.font, "SHA-1: " + shortHash(file.sha1()) + "  Size: " + UiFormat.formatSize(file.size()) + "  State: Archived", this.width - 20)).withStyle(ChatFormatting.GREEN), this.width / 2, y + 10,
 					TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font,
 				VersionedText.literal(truncateToWidth(this.font, "Source generation: " + displayGeneration(file.sourceGenerationId()), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 20, TextColors.WHITE);
@@ -200,12 +200,6 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 
 	private String displayPreservedAt(String preservedAt) {
 		return preservedAt == null || preservedAt.isEmpty() ? "Unknown" : truncateToWidth(this.font, preservedAt, Math.max(1, this.width - 20));
-	}
-
-	private static String formatSize(long bytes) {
-		if (bytes < 1024) return bytes + " B";
-		if (bytes < 1024 * 1024) return (bytes / 1024) + " KiB";
-		return (bytes / (1024 * 1024)) + " MiB";
 	}
 
 	@Override

@@ -56,7 +56,7 @@ class Context:
     def active_projection_dir(self) -> str:
         if active_dir := self.vars.get("active_dir"):
             return str(active_dir)
-        active_dir = "automodpack/client-generations/active"
+        active_dir = "automodpack/client/active"
         self.vars["active_dir"] = active_dir
         return active_dir
 

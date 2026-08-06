@@ -96,18 +96,30 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/remove.jar", true, hash, bytes.length)));
 		UpdateTransactionExecutor executor = executor(storage);
 		executor.commit(install, target);
+		Path live = storage.gameDirectory().resolve("mods/remove.jar");
+		Files.write(live, bytes);
 
 		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
 		baseline.modpackId = target.manifest().modpackId();
-		baseline.entries = List.of();
+		Jsons.ClientBaselineFields.EntryFields baselineEntry = new Jsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = "mods/remove.jar";
+		baselineEntry.absent = true;
+		baselineEntry.objectHash = "";
+		baselineEntry.size = -1;
+		baseline.entries = List.of(baselineEntry);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
-				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true));
+				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true),
+				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true));
 		Jsons.ClientConfigFieldsV3 removalConfig = new Jsons.ClientConfigFieldsV3();
 		UpdatePlan removal = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), removalConfig));
+		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, "mods/remove.jar", hash, bytes.length)), removal.preservations());
 		SelectionIntent expected = target.selection().intent();
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(removal, ClientPlatform.LINUX, expected, storage.overlayDigest(target.manifest().modpackId()));
+		Files.delete(storage.objectsDirectory().resolve(hash));
 
 		assertTrue(executor.commit(transaction).success());
+		assertFalse(Files.exists(live));
+		assertTrue(SmartFileUtils.isValidFile(storage.objectsDirectory().resolve(hash), bytes.length, hash));
 		assertTrue(Files.isDirectory(storage.activeDirectory()));
 		try (var paths = Files.list(storage.activeDirectory())) {
 			assertEquals(List.of(), paths.toList());

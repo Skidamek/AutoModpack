@@ -83,7 +83,7 @@ class GenerationStoreStorageTest {
 		String orphanHash = createObject("orphan");
 		long orphanBytes = Files.size(store.objectRoot().resolve(orphanHash));
 
-		GenerationStore.CollectionResult result = store.collect(Set.of(), Set.of());
+		GenerationStore.CollectionResult result = store.collectUnreachableObjects(Set.of(), Set.of());
 
 		assertEquals(2, result.beforeObjectCount());
 		assertEquals(1, result.afterObjectCount());
@@ -102,13 +102,13 @@ class GenerationStoreStorageTest {
 		store.publish(candidate("current"), Optional.of(current), "");
 		String pinnedHash = createObject("explicit-object-pin");
 
-		GenerationStore.CollectionResult pinned = store.collect(Set.of(first.record().metadata().generationId()), Set.of(pinnedHash));
+		GenerationStore.CollectionResult pinned = store.collectUnreachableObjects(Set.of(first.record().metadata().generationId()), Set.of(pinnedHash));
 		assertEquals(3, pinned.beforeObjectCount());
 		assertEquals(3, pinned.afterObjectCount());
 		assertEquals(0, pinned.deletedObjectCount());
 		assertTrue(Files.exists(store.objectRoot().resolve(pinnedHash)));
 
-		GenerationStore.CollectionResult unpinnedGeneration = store.collect(Set.of(), Set.of(pinnedHash));
+		GenerationStore.CollectionResult unpinnedGeneration = store.collectUnreachableObjects(Set.of(), Set.of(pinnedHash));
 		assertEquals(0, unpinnedGeneration.deletedObjectCount());
 		assertTrue(Files.exists(store.objectRoot().resolve(pinnedHash)));
 		assertTrue(Files.exists(store.objectRoot().resolve(first.record().manifest().groups().get("main").files().get("config/example.txt").sha1())));
@@ -120,7 +120,7 @@ class GenerationStoreStorageTest {
 		store.publish(candidate("current"), Optional.empty(), "");
 		Files.delete(tempDir.resolve("current.json"));
 
-		assertThrows(IOException.class, () -> store.collect(Set.of(), Set.of()));
+		assertThrows(IOException.class, () -> store.collectUnreachableObjects(Set.of(), Set.of()));
 	}
 
 	private GenerationStore store(Instant instant) {
