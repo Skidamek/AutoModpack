@@ -30,6 +30,7 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -155,12 +156,13 @@ public class ModpackUpdater implements AutoCloseable {
 	private SelectedModpackTarget storedSelectedTarget() throws IOException {
 		Jsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return null;
-		GenerationRecord record = new ClientGenerationStore(storage).read(state.generationId)
+		Jsons.CompleteModpackContentFields fields = new ClientGenerationStore(storage).readFields(state.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
+		GenerationRecord record = GenerationRecord.fromFields(fields);
 		if (!state.modpackId.equals(record.manifest().modpackId())) throw new IOException("Active client state and generation record belong to different modpacks");
 		SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId)
 				.orElseGet(() -> GroupSelectionResolver.defaultIntent(record.manifest()));
-		return SelectedModpackTarget.prepare(record.toFields(), null, intent, ClientPlatform.current());
+		return SelectedModpackTarget.prepare(fields, null, intent, ClientPlatform.current());
 	}
 
 	public void selectTarget(SelectionIntent intent) {
@@ -811,9 +813,15 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private boolean requestPreparedPlanPreview(PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
-		UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, getPatchNotes());
+		List<GenerationPatchNoteHistory.Entry> missedPatchNotes = GenerationPatchNoteHistory.after(selectedTarget.patchNotesHistory(), installedGenerationId());
+		UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, null, getPatchNotes(), missedPatchNotes);
 		return new ScreenManager().preview(preview, getModpackName(),
 				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, sourceFetchManager);
+	}
+
+	private String installedGenerationId() throws IOException {
+		Jsons.ClientGenerationStateFields state = storage.readActiveState();
+		return state != null && selectedTarget != null && selectedTarget.manifest().modpackId().equals(state.modpackId) ? state.generationId : "";
 	}
 
 	private UpdatePlanner.SelectionContext selectionContext(String targetModpackId) throws IOException {
@@ -957,7 +965,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private void executePlan(UpdatePlan plan, SelectedModpackTarget target) throws IOException {
 		ensurePlanObjects(plan, target.flatTarget());
-		new ClientGenerationStore(storage).write(target.generationRecord());
+		new ClientGenerationStore(storage).write(target.generationRecord(), target.patchNotesHistory());
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 		if (!execution.success()) {

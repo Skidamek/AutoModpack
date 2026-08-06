@@ -48,11 +48,15 @@ class GenerationIdentityTest {
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-03T00:00:00Z"), "notes\n");
 		Path path = temporaryDirectory.resolve("automodpack-catalogue.json");
-		ConfigTools.writeAtomic(path, record.toFields());
+		Jsons.CompleteModpackContentFields completeFields = record.toFields();
+		GenerationPatchNoteHistory.writeFields(completeFields, GenerationPatchNoteHistory.forRecord(record));
+		ConfigTools.writeAtomic(path, completeFields);
 
 		GenerationRecord read = ModpackContentTools.readGenerationRecord(path);
+		Jsons.CompleteModpackContentFields readFields = ModpackContentTools.readCompleteFields(path);
 
 		assertEquals(record, read);
+		assertEquals(GenerationPatchNoteHistory.forRecord(record), GenerationPatchNoteHistory.fromFields(readFields));
 		assertEquals(record.metadata().generationId(), read.metadata().generationId());
 		assertEquals(record.metadata().parentGenerationId(), read.metadata().parentGenerationId());
 		assertEquals(record.metadata().stateDigest(), read.metadata().stateDigest());

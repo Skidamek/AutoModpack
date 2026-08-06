@@ -32,6 +32,7 @@ import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -401,8 +402,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			try {
 				Jsons.ClientGenerationStateFields state = storage.readActiveState();
 				if (state == null || !modpackId.equals(state.modpackId)) throw new IOException("Active generation is unavailable");
-				List<GenerationRecord> history = new ClientGenerationStore(storage).lineage(modpackId, state.generationId);
-				new ScreenManager().history(history, modpackName, (Runnable) this::endManagement);
+				ClientGenerationStore generationStore = new ClientGenerationStore(storage);
+				List<GenerationRecord> history = generationStore.availableLineage(modpackId, state.generationId);
+				List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(state.generationId);
+				new ScreenManager().history(history, modpackName, patchNotesHistory, (Runnable) this::endManagement);
 			} catch (Exception e) {
 				endManagement();
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");

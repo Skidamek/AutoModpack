@@ -10,6 +10,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 
 public final class ContentHistoryScreen extends VersionedScreen {
@@ -18,6 +19,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	private final Screen parent;
 	private final List<GenerationRecord> history;
+	private final List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
 	private final String modpackName;
 	private final Runnable closedCallback;
 	private Button previousButton;
@@ -25,13 +27,19 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private int page;
 
 	public ContentHistoryScreen(Screen parent, List<GenerationRecord> history, String modpackName) {
-		this(parent, history, modpackName, () -> {});
+		this(parent, history, modpackName, GenerationPatchNoteHistory.fromRecords(history), () -> {});
 	}
 
 	public ContentHistoryScreen(Screen parent, List<GenerationRecord> history, String modpackName, Runnable closedCallback) {
+		this(parent, history, modpackName, GenerationPatchNoteHistory.fromRecords(history), closedCallback);
+	}
+
+	public ContentHistoryScreen(Screen parent, List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory,
+			Runnable closedCallback) {
 		super(VersionedText.literal("ContentHistoryScreen"));
 		this.parent = parent;
 		this.history = history;
+		this.patchNotesHistory = List.copyOf(patchNotesHistory);
 		this.modpackName = modpackName == null ? "" : modpackName;
 		this.closedCallback = closedCallback;
 	}
@@ -47,6 +55,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		this.addRenderableWidget(this.previousButton);
 		this.addRenderableWidget(this.nextButton);
 		this.addRenderableWidget(buttonWidget(left + 80, y, 75, 20, VersionedText.translatable("automodpack.back"), button -> back()));
+		if (GenerationPatchNoteHistory.containsNotes(patchNotesHistory))
+			this.addRenderableWidget(buttonWidget(left + 160, y, 75, 20, VersionedText.literal("Notes"), button -> openPatchNotes()));
 	}
 
 	private int pageCount() {
@@ -72,6 +82,10 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private void back() {
 		closedCallback.run();
 		ScreenImpl.setScreen(parent);
+	}
+
+	private void openPatchNotes() {
+		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, patchNotesHistory, modpackName));
 	}
 
 	@Override
