@@ -19,11 +19,34 @@ def _await_element(ctx, selector, step, not_found):
     )
 
 
+def _gui_diagnostic(gui):
+    visible = []
+    for role in ("buttons", "textFields", "other"):
+        for element in gui.get(role, []):
+            if element.get("visible", True) and element.get("text"):
+                visible.append({
+                    "role": role,
+                    "id": element.get("id"),
+                    "text": str(element.get("text")),
+                    "enabled": bool(element.get("enabled", False)),
+                })
+    return f"current screen: {gui.get('screenClass')!r}; title: {gui.get('title')!r}; visible elements: {visible!r}"
+
+
 @verb("click")
 def click(ctx, step):
     selector = dict(ctx.resolve(step.get("select") or {}))
     selector.setdefault("enabled", True)  # by default only click clickable elements
-    el = _await_element(ctx, selector, step, f"no element matched {selector!r}")
+    try:
+        el = _await_element(ctx, selector, step, f"no element matched {selector!r}")
+    except TimeoutError as error:
+        if ctx.bridge is None:
+            raise
+        try:
+            gui = ctx.gui()
+        except (ClientExited, RuntimeError, TimeoutError) as snapshot_error:
+            raise error from snapshot_error
+        raise TimeoutError(f"{error}; {_gui_diagnostic(gui)}") from error
     if step.get("enable"):
         ctx.bridge.click(int(el["id"]), enable=True)
     else:
@@ -87,15 +110,7 @@ def wait_for(ctx, step):
             gui = ctx.gui()
         except (ClientExited, RuntimeError, TimeoutError) as snapshot_error:
             raise error from snapshot_error
-        visible = list(
-            dict.fromkeys(
-                str(element.get("text", ""))
-                for role in ("buttons", "textFields", "elements")
-                for element in gui.get(role, [])
-                if element.get("visible", True) and element.get("text")
-            )
-        )
-        raise TimeoutError(f"{error}; current screen: {gui.get('screenClass')!r}; visible elements: {visible!r}") from error
+        raise TimeoutError(f"{error}; {_gui_diagnostic(gui)}") from error
 
 
 @verb("assert")
