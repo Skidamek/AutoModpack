@@ -31,7 +31,6 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
-import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -197,13 +196,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private void startSourceFetch() throws IOException {
 		if (sourceFetchManager != null) return;
 		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
-		for (var group : selectedTarget.manifest().groups().values()) {
-			for (var file : group.files().entrySet()) {
-				GroupManifest.GroupFile value = file.getValue();
-				addSourceFetchData(unique, file.getKey(), value.sha1(), value.murmur(), String.valueOf(value.size()), value.type());
-			}
-		}
-		if (selectedTarget.flatTarget().list != null)
+		if (selectedTarget != null && selectedTarget.flatTarget().list != null)
 			for (var item : selectedTarget.flatTarget().list)
 				addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
 		Jsons.ModpackContentFields installed = storedTarget();
@@ -260,14 +253,23 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result) {
-		try {
-			if (preload) {
-				// Preload has no player-facing screen. Keep the installed tree untouched and let the
-				// first normal connection present the same preview that all other updates use.
-				loadModpack();
+		if (preload) {
+			try {
+				preloadAcquireTarget();
+			} catch (Exception e) {
+				LOGGER.error("Failed to preload the selected modpack objects; keeping the active projection unchanged", e);
+			} finally {
+				try {
+					loadSelectedActiveProjection();
+				} catch (Exception e) {
+					LOGGER.error("Failed to load the active modpack projection after preload", e);
+				}
 				close();
-				return;
 			}
+			return;
+		}
+
+		try {
 			requireLiveConnection();
 
 			if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
@@ -295,6 +297,54 @@ public class ModpackUpdater implements AutoCloseable {
 			LOGGER.error("Error while initializing modpack updater", e);
 			close();
 		}
+	}
+
+	private void preloadAcquireTarget() throws Exception {
+		if (selectedTarget == null || serverModpackContent == null) {
+			LOGGER.info("Skipping modpack preload because no resolved target is available");
+			return;
+		}
+		requireLiveConnection();
+		Collection<Jsons.ModpackContentFields.ModpackContentItem> targetItems = serverModpackContent.list == null ? List.of() : serverModpackContent.list;
+		if (targetItems.isEmpty()) {
+			LOGGER.info("Selected modpack target contains no files; preload has nothing to acquire");
+			return;
+		}
+
+		long start = System.currentTimeMillis();
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			Set<Jsons.ModpackContentFields.ModpackContentItem> targetSet = new LinkedHashSet<>(targetItems);
+			ModpackUtils.populateStoreFromCWD(targetSet, cache, storage);
+			populateStoreFromActive(serverModpackContent, cache);
+			Set<Jsons.ModpackContentFields.ModpackContentItem> uncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
+			if (uncached.isEmpty()) {
+				LOGGER.info("Preload reused all {} verified selected modpack objects", targetSet.size());
+				return;
+			}
+
+			totalBytesToDownload = uncached.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
+			FetchManager fetchManager = ensureSourceFetch(uncached);
+			if (!downloadModpack(uncached, start, fetchManager, false)) throw new IOException("One or more selected modpack objects could not be acquired");
+			Set<Jsons.ModpackContentFields.ModpackContentItem> stillUncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
+			if (!stillUncached.isEmpty()) throw new IOException("Verified CAS objects are still missing after preload: " + stillUncached.size());
+			LOGGER.info("Preloaded {} selected modpack objects in {}ms", targetSet.size(), System.currentTimeMillis() - start);
+		}
+	}
+
+	private void loadSelectedActiveProjection() throws Exception {
+		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
+		Jsons.ClientGenerationStateFields state = storage.readActiveState();
+		if (state == null) return;
+		if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
+			LOGGER.warn("Skipping active modpack load after preload because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
+			return;
+		}
+		if (!clientConfig.selectedModpackId.equals(state.modpackId)) {
+			LOGGER.warn("Skipping active modpack load after preload because active state belongs to {}, but the selected modpack is {}", state.modpackId,
+					clientConfig.selectedModpackId);
+			return;
+		}
+		loadModpack();
 	}
 
 	public boolean requiresUpdateBeforeLogin(ModpackUtils.UpdateCheckResult result) throws Exception {
@@ -511,11 +561,6 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
 		try {
-			if (preload) {
-				LOGGER.info("Deferring modpack update until the client has a player-facing screen");
-				close();
-				return;
-			}
 			requireLiveConnection();
 			new ScreenManager().waiting();
 			if (requestUpdatePreview(filesToUpdate)) return;
@@ -601,6 +646,11 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private boolean downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager)
 			throws InterruptedException {
+		return downloadModpack(finalFilesToUpdate, startFetching, fetchManager, true);
+	}
+
+	private boolean downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager,
+			boolean playerFacing) throws InterruptedException {
 		int wholeQueue = finalFilesToUpdate.size();
 
 		if (wholeQueue == 0) {
@@ -619,7 +669,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 
 		downloadManager = new DownloadManager(totalBytesToDownload, storage);
-		new ScreenManager().download(downloadManager, getModpackName());
+		if (playerFacing) new ScreenManager().download(downloadManager, getModpackName());
 		downloadManager.attachDownloadClient(downloadClient);
 
 		for (var serverItem : finalFilesToUpdate) {
@@ -1088,6 +1138,8 @@ public class ModpackUpdater implements AutoCloseable {
 		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.CANCELLED);
 		FetchManager sourceFetch = sourceFetchManager;
 		if (sourceFetch != null && !sourceFetch.isComplete()) sourceFetch.cancel();
+		DownloadManager manager = downloadManager;
+		if (manager != null && manager.isRunning()) manager.cancelAllAndShutdown();
 		if (closed.compareAndSet(false, true) && downloadClient != null) downloadClient.close();
 	}
 
