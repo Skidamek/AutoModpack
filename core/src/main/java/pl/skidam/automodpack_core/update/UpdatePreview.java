@@ -162,8 +162,7 @@ public record UpdatePreview(
 	private static GroupConsequences consequences(ResolvedSelection selection) {
 		Map<String, String> explanations = new TreeMap<>();
 		selection.explanations().forEach((groupId, resolution) -> explanations.put(groupId, resolution.explanation()));
-		return new GroupConsequences(selection.intent().requestedTags(), selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedTags(),
-				selection.staleRequestedGroups(), explanations);
+		return new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), explanations);
 	}
 
 	private static Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries(Jsons.ClientBaselineFields baseline) {
@@ -189,17 +188,14 @@ public record UpdatePreview(
 		}
 	}
 
-	public record GroupConsequences(Set<String> explicitTags, Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleTags,
-			Set<String> staleGroups, Map<String, String> explanations) {
+	public record GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups, Map<String, String> explanations) {
 		public GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups) {
-			this(Set.of(), explicitGroups, resolvedGroups, Set.of(), staleGroups, Map.of());
+			this(explicitGroups, resolvedGroups, staleGroups, Map.of());
 		}
 
 		public GroupConsequences {
-			explicitTags = immutable(explicitTags);
 			explicitGroups = immutable(explicitGroups);
 			resolvedGroups = immutable(resolvedGroups);
-			staleTags = immutable(staleTags);
 			staleGroups = immutable(staleGroups);
 			explanations = immutableMap(explanations);
 		}

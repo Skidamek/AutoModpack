@@ -41,8 +41,6 @@ public class ConfigUtils {
 				group.syncedFiles = normalizeSyncedFiles(group.syncedFiles, pattern);
 				group.allowEditsInFiles = normalizePathRules(group.allowEditsInFiles, "allowEditsInFiles", pattern);
 				group.overwriteEditableFiles = normalizePathRules(group.overwriteEditableFiles, "overwriteEditableFiles", pattern);
-				group.forceCopyFilesToStandardLocation = normalizePathRules(group.forceCopyFilesToStandardLocation, "forceCopyFilesToStandardLocation",
-						pattern);
 			}
 		}
 	}

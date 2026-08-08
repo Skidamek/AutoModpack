@@ -119,11 +119,11 @@ class UpdatePlannerTest {
 	}
 
 	private static Jsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
-		return new Jsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, false, false, false, hash, "0");
+		return new Jsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, false, false, hash, "0");
 	}
 
 	private static Jsons.ModpackContentFields.ModpackContentItem editableItem(String path, String hash, long size, String type) {
-		return new Jsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, true, false, false, hash, "0");
+		return new Jsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, true, false, hash, "0");
 	}
 
 	private static Jsons.OwnershipLedgerFields ledger(OwnershipLedger.Entry... entries) {

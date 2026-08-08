@@ -78,9 +78,10 @@ public final class ClientGenerationStore {
 		GenerationRecord record = GenerationRecord.fromFields(fields);
 		if (!Objects.equals(state.modpackId, record.manifest().modpackId()))
 			throw new IOException("Active client state and generation record belong to different modpacks");
-		SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId)
-				.orElseGet(() -> GroupSelectionResolver.defaultIntent(record.manifest()));
-		return Optional.of(SelectedModpackTarget.prepare(fields, null, intent, platform));
+		Optional<SelectionIntent> stored = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId);
+		return stored.isPresent()
+				? Optional.of(SelectedModpackTarget.prepare(fields, null, stored.get(), platform))
+				: Optional.of(SelectedModpackTarget.prepareDefault(fields, platform));
 	}
 
 	public List<GenerationPatchNoteHistory.Entry> patchNotesHistory(String generationId) throws IOException {

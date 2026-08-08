@@ -186,12 +186,11 @@ public final class UpdateTransactionExecutor {
 	private SelectedModpackTarget resolvedTarget(UpdateTransaction transaction, GenerationRecord record) throws IOException {
 		try {
 			SelectionIntent expected = transaction.expectedPriorIntent();
-			SelectionIntent intent = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
-					? transaction.targetIntent()
-					: expected == null ? GroupSelectionResolver.defaultIntent(record.manifest()) : expected;
 			Jsons.CompleteModpackContentFields fields = new ClientGenerationStore(context.storage()).readFields(transaction.targetGenerationId)
 					.orElseThrow(() -> new IOException("Client generation record is missing: " + transaction.targetGenerationId));
-			return SelectedModpackTarget.prepare(fields, expected, intent, transaction.platform());
+			if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && expected == null)
+				return SelectedModpackTarget.prepareDefault(fields, transaction.platform());
+			return SelectedModpackTarget.prepare(fields, expected, transaction.targetIntent(), transaction.platform());
 		} catch (RuntimeException e) {
 			throw new IOException("Client generation selection is invalid", e);
 		}
@@ -231,11 +230,11 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateSelectionMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedTags == null || transaction.expectedPriorRequestedGroups == null
-				|| transaction.expectedPriorExcludedGroups == null || transaction.requestedTags == null || transaction.requestedGroups == null || transaction.excludedGroups == null)
+		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorExcludedGroups == null
+				|| transaction.requestedGroups == null || transaction.excludedGroups == null)
 			throw new IOException("Selection metadata is incomplete");
-		if (!isCanonicalIntentList(transaction.expectedPriorRequestedTags) || !isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
-				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups) || !isCanonicalIntentList(transaction.requestedTags)
+		if (!isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
+				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups)
 				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.excludedGroups))
 			throw new IOException("Selection metadata is not canonical");
 		try {
@@ -264,8 +263,8 @@ public final class UpdateTransactionExecutor {
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
 		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
 				|| transaction.ledgerDigest != null || transaction.targetPlatform != null || transaction.selectionDigest != null || transaction.overlayDigest != null
-				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedTags != null || transaction.expectedPriorRequestedGroups != null
-				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedTags != null || transaction.requestedGroups != null || transaction.excludedGroups != null
+				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null
+				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.excludedGroups != null
 				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty() || !transaction.plannedBaselineCaptures.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
 		long installs = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT).count();

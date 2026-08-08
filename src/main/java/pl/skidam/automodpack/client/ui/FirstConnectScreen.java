@@ -129,24 +129,23 @@ public final class FirstConnectScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.bundleExplanation").withStyle(ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += 16;
-		String tags = names(target.manifest().selectionTags(), selection.intent().requestedTags());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Recommended options: " + tags, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
+		String requested = names(target.manifest().groups(), selection.intent().requestedGroups());
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.requestedGroups", requested).withStyle(ChatFormatting.WHITE), this.width / 2, y,
 				TextColors.WHITE);
 		y += 14;
 		String groups = names(target.manifest().groups(), selection.selectedGroups());
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Included groups: " + groups, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
 				TextColors.WHITE);
-		if (!selection.staleRequestedTags().isEmpty() || !selection.staleRequestedGroups().isEmpty()) {
+		if (!selection.staleRequestedGroups().isEmpty()) {
 			y += 14;
-			String stale = "Unavailable old choices: " + names(target.manifest().selectionTags(), selection.staleRequestedTags()) + " / "
-					+ names(target.manifest().groups(), selection.staleRequestedGroups());
+			String stale = "Unavailable old choices: " + names(target.manifest().groups(), selection.staleRequestedGroups());
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, stale, this.width - 20)).withStyle(ChatFormatting.RED), this.width / 2, y,
 					TextColors.WHITE);
 		}
-		if (!selection.unavailableGroups().isEmpty()) {
+		if (!selection.requestedUnavailableGroups().isEmpty()) {
 			y += 14;
 			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal(truncateToWidth(this.font, selection.unavailableGroups().size() + " selected groups are unavailable on this platform.", this.width - 20)).withStyle(ChatFormatting.RED),
+					VersionedText.translatable("automodpack.firstConnect.requestedUnavailable", names(target.manifest().groups(), selection.requestedUnavailableGroups())).withStyle(ChatFormatting.RED),
 					this.width / 2, y, TextColors.WHITE);
 		}
 	}
@@ -156,8 +155,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		for (String id : ids) {
 			Object value = values.get(id);
 			String display;
-			if (value instanceof GroupManifest.SelectionTag tag) display = tag.displayName().isBlank() ? id : tag.displayName();
-			else if (value instanceof GroupManifest.Group group) display = group.displayName().isBlank() ? id : group.displayName();
+			if (value instanceof GroupManifest.Group group) display = group.displayName().isBlank() ? id : group.displayName();
 			else display = id;
 			names.add(display);
 		}

@@ -78,7 +78,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Platforms: " + platforms(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY + 26,
 				TextColors.WHITE);
 		int nextMetadataY = metadataY + 39;
-		String status = (group.required() ? "Required" : group.recommended() ? "Recommended" : "Optional") + "  |  " + files.size() + " files";
+		String status = (group.required() ? "Required" : group.defaultSelected() ? "Included by default" : "Optional") + "  |  " + files.size() + " files";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(status).withStyle(ChatFormatting.YELLOW), this.width / 2, nextMetadataY, TextColors.WHITE);
 
 		int pageSize = rowsPerPage();
@@ -120,8 +120,17 @@ public final class GroupInspectorScreen extends VersionedScreen {
 
 	private String tagLabel() {
 		if (group.tag().isEmpty()) return "General";
-		GroupManifest.SelectionTag tag = manifest.selectionTags().get(group.tag());
-		return tag == null || tag.displayName().isBlank() ? group.tag() : tag.displayName();
+		return categoryLabel(group.tag());
+	}
+
+	private static String categoryLabel(String category) {
+		String[] words = category.replace('_', ' ').replace('-', ' ').split(" +");
+		StringBuilder result = new StringBuilder();
+		for (String word : words) {
+			if (result.length() > 0) result.append(' ');
+			if (!word.isEmpty()) result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+		}
+		return result.toString();
 	}
 
 	private String platforms() {
@@ -132,7 +141,8 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		StringBuilder result = new StringBuilder();
 		for (String value : values) {
 			if (result.length() > 0) result.append(", ");
-			result.append(value);
+			GroupManifest.Group related = manifest.groups().get(value);
+			result.append(related == null || related.displayName().isBlank() ? value : related.displayName());
 		}
 		return result.length() == 0 ? "none" : truncateToWidth(this.font, result.toString(), Math.max(1, this.width - 20));
 	}
@@ -140,7 +150,6 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	private static String fileFlags(GroupManifest.GroupFile file) {
 		StringBuilder flags = new StringBuilder();
 		if (file.editable()) flags.append(" editable");
-		if (file.forceCopy()) flags.append(" copied");
 		return flags.toString();
 	}
 
