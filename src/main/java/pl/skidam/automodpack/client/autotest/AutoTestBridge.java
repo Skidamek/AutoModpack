@@ -62,14 +62,12 @@ public final class AutoTestBridge {
 	private static final AtomicBoolean STARTED = new AtomicBoolean(false);
 	private static volatile Path bridgeDir;
 	private static final AtomicBoolean CLIENT_READY = new AtomicBoolean(false);
-	private static volatile boolean reloadFinished = false;
+	private static final Object READY_STATE_LOCK = new Object();
+	private static final AtomicBoolean READY_STATE_PUBLISHED = new AtomicBoolean(false);
+	private static final AtomicBoolean READY_STATE_WRITE_FAILED = new AtomicBoolean(false);
 
 	public static void markReloadFinished() {
-		reloadFinished = true;
-	}
-
-	public static boolean hasReloadFinished() {
-		return reloadFinished;
+		onClientReady();
 	}
 
 	public static void start() {
@@ -90,7 +88,7 @@ public final class AutoTestBridge {
 			while (!CLIENT_READY.get()) {
 				try {
 					Thread.sleep(100);
-					if (currentScreen() instanceof TitleScreen && hasReloadFinished()) {
+					if (currentScreen() instanceof TitleScreen) {
 						onClientReady();
 						return;
 					}
@@ -103,20 +101,29 @@ public final class AutoTestBridge {
 	}
 
 	public static void onClientReady() {
-		if (!CLIENT_READY.compareAndSet(false, true)) return;
-		Path dir = bridgeDir;
-		if (dir == null) return;
-		try {
-			writeFile(dir.resolve("bridge-state.json"), "{\"status\":\"ready\"}");
-			LOGGER.info("AutoModpack autotest: client ready, wrote bridge-state.json");
-		} catch (IOException e) {
-			LOGGER.error("Cannot write client-ready state", e);
+		CLIENT_READY.set(true);
+		publishReadyState();
+	}
+
+	private static void publishReadyState() {
+		if (!CLIENT_READY.get()) return;
+		synchronized (READY_STATE_LOCK) {
+			if (READY_STATE_PUBLISHED.get()) return;
+			Path dir = bridgeDir;
+			if (dir == null) return;
+			try {
+				writeFile(dir.resolve("bridge-state.json"), "{\"status\":\"ready\"}");
+				READY_STATE_PUBLISHED.set(true);
+				READY_STATE_WRITE_FAILED.set(false);
+				LOGGER.info("AutoModpack autotest: client ready, wrote bridge-state.json");
+			} catch (IOException e) {
+				if (READY_STATE_WRITE_FAILED.compareAndSet(false, true)) LOGGER.error("Cannot write client-ready state", e);
+			}
 		}
 	}
 
 	private static void run(Path gameDir, String token) {
 		Path dir = gameDir.resolve("automodpack/autotest");
-		bridgeDir = dir;
 		try {
 			Files.createDirectories(dir);
 		} catch (IOException e) {
@@ -124,11 +131,14 @@ public final class AutoTestBridge {
 			return;
 		}
 
+		bridgeDir = dir;
 		LOGGER.info("AutoModpack bridge ready at {}", dir);
+		publishReadyState();
 		Path cmd = dir.resolve("bridge-command.json");
 		Path rsp = dir.resolve("bridge-response.json");
 		while (true) {
 			try {
+				if (CLIENT_READY.get() && !READY_STATE_PUBLISHED.get()) publishReadyState();
 				if (Files.exists(cmd)) {
 					String json = Files.readString(cmd, StandardCharsets.UTF_8);
 					Files.delete(cmd);
@@ -326,7 +336,8 @@ public final class AutoTestBridge {
 		/*?} else if >=1.21.1 {*/
 		/*minecraft.disconnect(new TitleScreen());
 		*//*?} else {*/
-		/*minecraft.clearLevel(new TitleScreen());
+		/*minecraft.level.disconnect();
+		minecraft.clearLevel(new TitleScreen());
 		*//*?}*/
 		return ok();
 	}

@@ -143,13 +143,40 @@ def test_metadata_only_fixture_uses_no_code_loader_metadata():
     with zipfile.ZipFile(io.BytesIO(valid_mod_jar_bytes(fixture))) as archive:
         forge = archive.read("META-INF/mods.toml").decode("utf-8")
         neoforge = archive.read("META-INF/neoforge.mods.toml").decode("utf-8")
+        pack = json.loads(archive.read("pack.mcmeta"))
         names = archive.namelist()
 
     for metadata in (forge, neoforge):
         assert 'modLoader = "lowcodefml"' in metadata
         assert 'loaderVersion = "[1,)"' in metadata
         assert "amp_autotest_metadata" in metadata
+    assert pack["pack"]["pack_format"] == 15
     assert not any(name.endswith(".class") for name in names)
+
+
+def test_autotest_bridge_readiness_is_level_triggered():
+    source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java").read_text()
+    start = source[source.index("public static void start()") : source.index("public static void onClientReady()")]
+    mark_reload = source[source.index("public static void markReloadFinished()") : source.index("public static void start()")]
+    on_ready = source[source.index("public static void onClientReady()") : source.index("private static void run(")]
+    publish = source[source.index("private static void publishReadyState()") : source.index("private static void run(")]
+    run = source[source.index("private static void run(") : source.index("private static String handle(")]
+
+    assert "if (currentScreen() instanceof TitleScreen)" in start
+    assert "hasReloadFinished()" not in start
+    assert "onClientReady();" in mark_reload
+    assert "CLIENT_READY.set(true);" in on_ready
+    assert "CLIENT_READY.compareAndSet(false, true)" not in on_ready
+    assert "publishReadyState();" in on_ready
+    assert "private static void publishReadyState()" in source
+    assert "READY_STATE_PUBLISHED" in source
+    assert "synchronized (READY_STATE_LOCK)" in publish
+    assert "if (READY_STATE_PUBLISHED.get()) return;" in publish
+    assert publish.index("writeFile(") < publish.index("READY_STATE_PUBLISHED.set(true);")
+    assert "READY_STATE_WRITE_FAILED.compareAndSet(false, true)" in publish
+    assert 'writeFile(dir.resolve("bridge-state.json"), "{\\"status\\":\\"ready\\"}");' in source
+    assert run.index("Files.createDirectories(dir)") < run.index("bridgeDir = dir;")
+    assert run.count("publishReadyState();") >= 2
 
 
 def test_validation_rejects_plain_text_unowned_jar_seed():
@@ -442,8 +469,9 @@ def test_legacy_bridge_disconnect_uses_full_client_lifecycle():
     source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java").read_text(encoding="utf-8")
 
     assert "/*minecraft.disconnect(new TitleScreen());" in source
-    assert "/*minecraft.clearLevel(new TitleScreen());" in source
-    assert "/*minecraft.level.disconnect();" not in source
+    assert "minecraft.clearLevel(new TitleScreen());" in source
+    assert "/*minecraft.level.disconnect();" in source
+    assert source.index("/*minecraft.level.disconnect();") < source.index("minecraft.clearLevel(new TitleScreen());")
 
 
 def test_assert_preload_acquired_checks_complete_projection(make_ctx):
