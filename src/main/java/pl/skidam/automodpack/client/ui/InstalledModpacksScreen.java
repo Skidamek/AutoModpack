@@ -101,7 +101,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private MutableComponent rowLabel(Entry entry) {
 		String name = entry.record().manifest().modpackName().isBlank() ? entry.record().manifest().modpackId() : entry.record().manifest().modpackName();
-		String state = entry.active() ? "  [active]" : "  [switch]";
+		String state = entry.active() ? "  [active]" : "  [review switch]";
 		String connection = entry.connectionAvailable() ? "  connected" : "  local record";
 		return VersionedText.literal(truncateToWidth(this.font, name + state + connection, panelWidth(PANEL_WIDTH) - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
 	}

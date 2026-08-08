@@ -446,11 +446,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (!beginManagement()) return;
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
-				Jsons.ClientGenerationStateFields state = storage.readActiveState();
-				if (state == null || !modpackId.equals(state.modpackId)) throw new IOException("Active generation is unavailable");
 				ClientGenerationStore generationStore = new ClientGenerationStore(storage);
-				List<GenerationRecord> history = generationStore.availableLineage(modpackId, state.generationId);
-				List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(state.generationId);
+				String generationId = historyGenerationId();
+				List<GenerationRecord> history = generationStore.availableLineage(modpackId, generationId);
+				List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(generationId);
 				new ScreenManager().history(history, modpackName, patchNotesHistory, (Runnable) this::endManagement);
 			} catch (Exception e) {
 				endManagement();
@@ -482,8 +481,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (activeModpack) {
 			if (modpackHasGeneration(modpackId)) actions.add(new ManagementAction(ManagementKind.REMOVE, VersionedText.literal("Remove"), this::requestRemoval));
 			if (hasRecoveryArchive()) actions.add(new ManagementAction(ManagementKind.RECOVERY, VersionedText.literal("Recovery"), this::requestRecovery));
-			if (hasHistory()) actions.add(new ManagementAction(ManagementKind.HISTORY, VersionedText.literal("History"), this::requestHistory));
 		}
+		if (hasHistory()) actions.add(new ManagementAction(ManagementKind.HISTORY, VersionedText.literal("History"), this::requestHistory));
 		if (hasOtherInstalledPacks()) actions.add(new ManagementAction(ManagementKind.MANAGER, VersionedText.translatable("automodpack.packManager.switch"), this::requestPackManager));
 		return List.copyOf(actions);
 	}
@@ -502,12 +501,22 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private boolean hasHistory() {
 		try {
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null || !modpackId.equals(state.modpackId)) return false;
-			return new ClientGenerationStore(storage).availableLineage(modpackId, state.generationId).size() > 1;
+			ClientGenerationStore generationStore = new ClientGenerationStore(storage);
+			String generationId = historyGenerationId();
+			return generationStore.availableLineage(modpackId, generationId).size() > 1 || GenerationPatchNoteHistory.containsNotes(generationStore.patchNotesHistory(generationId));
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
+	}
+
+	private String historyGenerationId() throws IOException {
+		if (activeModpack) {
+			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state == null || !modpackId.equals(state.modpackId)) throw new IOException("Active generation is unavailable");
+			return state.generationId;
+		}
+		if (localRecord == null) throw new IOException("Installed generation record is unavailable");
+		return localRecord.metadata().generationId();
 	}
 
 	private boolean hasOtherInstalledPacks() {
