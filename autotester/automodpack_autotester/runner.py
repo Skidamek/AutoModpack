@@ -316,11 +316,38 @@ def _launch_server(ctx: Context):
     _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts)
 
 
+def _seed_client_options(game_dir: Path) -> None:
+    """Keep the client's options and suppress the one-time vanilla warning."""
+    options_path = game_dir / "options.txt"
+    if options_path.exists():
+        content = options_path.read_text(encoding="utf-8")
+    else:
+        content = "narrator:0\n"
+
+    lines = content.splitlines(keepends=True)
+    updated = []
+    found = False
+    for line in lines:
+        body = line.rstrip("\r\n")
+        key, separator, _value = body.partition(":")
+        if separator and key == "skipMultiplayerWarning":
+            newline = line[len(body):]
+            updated.append(f"skipMultiplayerWarning:true{newline}")
+            found = True
+        else:
+            updated.append(line)
+    if not found:
+        if updated and not updated[-1].endswith(("\n", "\r")):
+            updated[-1] += "\n"
+        updated.append("skipMultiplayerWarning:true\n")
+    options_path.write_text("".join(updated), encoding="utf-8")
+
+
 def _launch_client(ctx: Context):
     game_dir = ctx.game_dir
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx.artifact, game_dir / "mods" / "automodpack.jar")
-    (game_dir / "options.txt").write_text("narrator:0\n")
+    _seed_client_options(game_dir)
     automodpack_dir = game_dir / "automodpack"
     data_root_marker = automodpack_dir / "data-root.json"
     if not data_root_marker.exists():
