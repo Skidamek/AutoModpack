@@ -133,10 +133,12 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                 if not isinstance(step.get("path"), str) or not step["path"].strip():
                     if verb not in ("assert_quarantine_payload",):
                         problems.append(f"{label}.path: expected a non-empty relative path")
-                if verb in ("seed_same_path_conflict", "assert_mod_fixture", "assert_quarantine_payload"):
+                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "assert_mod_fixture", "assert_quarantine_payload") and step.get("fixture") is not None:
                     _check_mod_fixture(step.get("fixture"), problems, f"{label}.fixture")
-                if verb in ("seed_same_path_conflict", "assert_mod_fixture") and isinstance(step.get("path"), str) and not step["path"].lower().endswith(".jar"):
+                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "assert_mod_fixture") and step.get("fixture") is not None and isinstance(step.get("path"), str) and not step["path"].lower().endswith(".jar"):
                     problems.append(f"{label}.path: valid mod fixtures must use a .jar path")
+                if verb == "seed_unowned_local_file" and step.get("fixture") is None and isinstance(step.get("path"), str) and step["path"].lower().endswith(".jar"):
+                    problems.append(f"{label}.fixture: .jar paths require a valid mod fixture mapping")
                 if verb == "assert_quarantine_payload" and (not isinstance(step.get("packId"), str) or not step["packId"].strip()):
                     problems.append(f"{label}.packId: expected a non-empty pack ID")
 

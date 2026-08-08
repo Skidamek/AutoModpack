@@ -181,7 +181,10 @@ def test_release_gate_flow(make_ctx):
     assert ctx.bridge.selected_pack == "A"
     assert (active / "config/pack-a-only.txt").read_text(encoding="utf-8") == "pack-a-v2\n"
     assert not (active / "config/pack-b.txt").exists()
-    assert (ctx.game_dir / "mods/local-unowned.jar").read_text(encoding="utf-8") == "not-a-pack-owned-file"
+    assert_valid_mod_fixture(
+        (ctx.game_dir / "mods/local-unowned.jar").read_bytes(),
+        {"modId": "amp_autotest_unowned", "version": "1.0.0-local-unowned", "marker": "unowned-local"},
+    )
     quarantine = ctx.game_dir / "automodpack/client/quarantine/packbbb/conflicts/fake-conflict/payload"
     assert_valid_mod_fixture(
         quarantine.read_bytes(),
