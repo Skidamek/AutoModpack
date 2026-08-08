@@ -710,7 +710,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private PreparedPlan buildPlan(FileMetadataCache cache, ModFileCache modCache, Jsons.ModpackContentFields target, boolean prepareObjects) throws Exception {
 		captureActiveEditableOverlays(cache);
 		Jsons.ModpackContentFields installed = storedTarget();
-		UpdatePlanner.SelectionContext selection = selectionContext(target.modpackId);
+		UpdatePlanner.SelectionContext selection = selectionContext();
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, selection, cache);
 		if (prepareObjects) populateStoreFromActive(target, cache);
 		Set<String> forceCopyServices = getForceCopyMods(target).stream().map(UpdatePlanner::normalize).collect(Collectors.toSet());
@@ -727,7 +727,7 @@ public class ModpackUpdater implements AutoCloseable {
 		restartReasons.addAll(plan.restartReasons());
 		restartReasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
 		UpdatePlan withLoaderRestart = new UpdatePlan(plan.modpackId(), plan.generationTarget(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(),
-				restartReasons, plan.preservations(), plan.baselineCaptures());
+				restartReasons, plan.preservations(), plan.baselineCaptures(), plan.conflicts());
 		return new PreparedPlan(withLoaderRestart, files);
 	}
 
@@ -797,11 +797,29 @@ public class ModpackUpdater implements AutoCloseable {
 		return state != null && selectedTarget != null && selectedTarget.manifest().modpackId().equals(state.modpackId) ? state.generationId : "";
 	}
 
-	private UpdatePlanner.SelectionContext selectionContext(String targetModpackId) throws IOException {
+	private UpdatePlanner.SelectionContext selectionContext() throws IOException {
 		String previousId = clientConfig.selectedModpackId;
-		if (previousId == null || previousId.isBlank() || previousId.equals(targetModpackId) || !ModpackId.isValid(previousId)) return null;
+		if (previousId == null || previousId.isBlank() || !ModpackId.isValid(previousId)) return null;
 		Jsons.ModpackContentFields previousManifest = storedTarget();
-		return new UpdatePlanner.SelectionContext(previousId, previousManifest);
+		return new UpdatePlanner.SelectionContext(previousId, previousManifest, readEditableOverlayStates(previousId));
+	}
+
+	private Map<String, UpdatePlan.FileState> readEditableOverlayStates(String modpackId) throws IOException {
+		Map<String, UpdatePlan.FileState> states = new HashMap<>();
+		Path root = storage.overlayDirectory(modpackId);
+		if (Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+			try (Stream<Path> paths = Files.walk(root)) {
+				for (Path path : paths.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
+					String relative = UpdatePlanner.normalize(root.relativize(path).toString());
+					String hash = HashUtils.getHash(path);
+					if (hash == null) throw new IOException("Failed to hash stored editable overlay: " + path);
+					states.put(relative, new UpdatePlan.FileState(hash, Files.size(path), true, FileInspection.isMod(path)));
+				}
+			}
+		}
+		for (String deletedPath : storage.readOverlayState(modpackId).deletedPaths)
+			states.put(deletedPath, new UpdatePlan.FileState(null, -1, false, false));
+		return states;
 	}
 
 	private void populateStoreFromActive(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
@@ -843,6 +861,10 @@ public class ModpackUpdater implements AutoCloseable {
 		if (target.list != null) target.list.forEach(item -> gamePaths.add(item.file));
 		if (installed != null && installed.list != null) installed.list.forEach(item -> gamePaths.add(item.file));
 		if (selection != null && selection.previousManifest() != null && selection.previousManifest().list != null) selection.previousManifest().list.forEach(item -> gamePaths.add(item.file));
+		if (installed != null && installed.ownershipLedger != null && installed.ownershipLedger.entries != null)
+			installed.ownershipLedger.entries.forEach(entry -> {
+				if (entry != null) gamePaths.add(entry.logicalPath);
+			});
 		for (String gamePath : gamePaths) {
 			Path path = SmartFileUtils.getPath(storage.gameDirectory(), gamePath);
 			if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, UpdatePlan.Root.GAME_DIR, storage.gameDirectory(), path, cache);

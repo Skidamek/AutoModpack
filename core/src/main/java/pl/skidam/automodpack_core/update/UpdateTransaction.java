@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
+import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
@@ -51,6 +52,7 @@ public final class UpdateTransaction {
 	public List<RestartReason> restartReasons;
 	public List<Preservation> plannedPreservations;
 	public List<BaselineCapture> plannedBaselineCaptures;
+	public List<Conflict> plannedConflicts;
 	public Status resultStatus;
 	public String resultOperation;
 	public String resultPath;
@@ -130,6 +132,7 @@ public final class UpdateTransaction {
 		transaction.restartReasons = new ArrayList<>(new LinkedHashSet<>(plan.restartReasons()));
 		transaction.plannedPreservations = List.copyOf(plan.preservations());
 		transaction.plannedBaselineCaptures = List.copyOf(plan.baselineCaptures());
+		transaction.plannedConflicts = List.copyOf(plan.conflicts());
 	}
 
 	private static UpdateTransaction base(Purpose purpose) {
@@ -140,6 +143,7 @@ public final class UpdateTransaction {
 		transaction.phase = Phase.PLANNED;
 		transaction.plannedPreservations = new ArrayList<>();
 		transaction.plannedBaselineCaptures = new ArrayList<>();
+		transaction.plannedConflicts = new ArrayList<>();
 		return transaction;
 	}
 

@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
+import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileState;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
@@ -114,6 +115,11 @@ public record UpdatePreview(
 
 	public Set<RestartReason> restartReasons() {
 		return plan.restartReasons();
+	}
+
+	/** Conflict rows are kept separate from file rows so a later screen can offer restore/keep actions. */
+	public List<Conflict> conflicts() {
+		return plan.conflicts();
 	}
 
 	private long bytesOf(Kind kind) {
