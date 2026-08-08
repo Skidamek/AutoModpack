@@ -128,6 +128,24 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void installedRecordCatalogueKeepsNewestValidPackAndSkipsMalformedRecords() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "catalogue-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		GenerationRecord first = GenerationRecord.create(GroupManifestValidator.validate(fields("mods/catalogue.jar", "mod", false, hash, bytes.length)), null,
+				Instant.parse("2026-01-01T00:00:00Z"), "first");
+		GenerationRecord second = GenerationRecord.create(first.manifest(), first, Instant.parse("2026-01-02T00:00:00Z"), "second");
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		generations.write(first);
+		generations.write(second);
+		String malformedId = "0".repeat(40);
+		Files.createDirectories(storage.generationDirectory(malformedId));
+		Files.writeString(storage.generationManifest(malformedId), "{}");
+
+		assertEquals(List.of(second), generations.installedRecords());
+	}
+
+	@Test
 	void installsEditableOverlayAsMutableCopyAndCopiesItToTheLiveGamePath() throws Exception {
 		ClientStorage storage = storage();
 		byte[] baseBytes = "server-base".getBytes(StandardCharsets.UTF_8);

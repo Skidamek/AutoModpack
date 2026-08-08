@@ -78,6 +78,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private final UpdateLoopDetector updateLoopDetector;
 	private final ClientStorage storage;
 	private volatile FetchManager sourceFetchManager;
+	private PreparedPlan cachedSwitchPlan;
 	private static final Comparator<RecoveryFile> RECOVERY_FILE_ORDER = Comparator.comparing(RecoveryFile::logicalPath).thenComparing(RecoveryFile::sha1)
 			.thenComparingLong(RecoveryFile::size);
 
@@ -123,6 +124,39 @@ public class ModpackUpdater implements AutoCloseable {
 		FetchManager manager = sourceFetchManager;
 		if (manager == null) return new SourceAvailability(0, 0, true, false);
 		return new SourceAvailability(manager.totalFiles(), manager.resolvedFiles(), manager.isComplete(), manager.isCancelled());
+	}
+
+	/** Builds a reviewable switch plan using only the stored generation and verified local objects. */
+	public UpdatePreview previewCachedSwitch() throws Exception {
+		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Cached modpack target is unavailable");
+		Jsons.ClientGenerationStateFields active = storage.readActiveState();
+		if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)) throw new IllegalArgumentException("Cached switch target is already active");
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+			populateStoreFromCachedLocations(selectedTarget.flatTarget(), cache);
+			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), true);
+			ensurePlanObjects(prepared.plan(), selectedTarget.flatTarget());
+			cachedSwitchPlan = prepared;
+			List<GenerationPatchNoteHistory.Entry> missedPatchNotes = GenerationPatchNoteHistory.after(selectedTarget.patchNotesHistory(), "");
+			return UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, null,
+					selectedTarget.generationRecord().metadata().patchNotes(), missedPatchNotes);
+		}
+	}
+
+	/** Applies the last cached switch plan through the normal atomic transaction executor. */
+	public void applyCachedSwitch() throws Exception {
+		PreparedPlan prepared = cachedSwitchPlan;
+		if (prepared == null || selectedTarget == null) throw new IllegalStateException("Cached switch was not prepared");
+		try {
+			recordChangelogs(prepared, selectedTarget);
+			ApplyResult applyResult = applyPreparedPlan(prepared, selectedTarget);
+			changelogs.setRestartReasons(applyResult.reasonDescriptions());
+			restartAfterApply(applyResult);
+		} catch (UpdateDeferredException e) {
+			LOGGER.warn("Cached modpack switch transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+			new ReLauncher(storage.activeDirectory(), UpdateType.SELECT, changelogs).restart(false);
+		} finally {
+			close();
+		}
 	}
 
 	public Set<Jsons.ModpackContentFields.ModpackContentItem> getModpackFileList() {
@@ -717,7 +751,9 @@ public class ModpackUpdater implements AutoCloseable {
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(target, cache, modCache);
 		List<UpdatePlan.ModInfo> standardMods = inspectStandardMods(cache, modCache);
 		List<UpdatePlan.NestedCopy> nestedCopies = prepareObjects ? inspectNestedCopies(target, cache) : List.of();
-		Jsons.ClientConfigFieldsV3 plannedConfig = ModpackUtils.planModpackSelection(target.modpackId, connectionInfo);
+		Jsons.ClientConfigFieldsV3 plannedConfig = connectionInfo == null || !connectionInfo.isComplete()
+				? ModpackUtils.planCachedModpackSelection(target.modpackId)
+				: ModpackUtils.planModpackSelection(target.modpackId, connectionInfo);
 		Map<String, UpdatePlan.FileState> editableOverlays = files.entrySet().stream().filter(entry -> entry.getKey().root() == UpdatePlan.Root.OVERLAY)
 				.collect(Collectors.toMap(entry -> entry.getKey().relativePath(), Map.Entry::getValue));
 
@@ -829,6 +865,18 @@ public class ModpackUpdater implements AutoCloseable {
 			long size = Long.parseLong(item.size);
 			if (SmartFileUtils.isValidFile(object, size, item.sha1)) continue;
 			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
+			populateStoreObject(source, object, size, item.sha1, cache);
+		}
+	}
+
+	private void populateStoreFromCachedLocations(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
+		if (target.list == null) return;
+		for (var item : target.list) {
+			long size = Long.parseLong(item.size);
+			Path object = storage.objectsDirectory().resolve(item.sha1);
+			if (SmartFileUtils.isValidFile(object, size, item.sha1)) continue;
+			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
+			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) source = livePath(item);
 			populateStoreObject(source, object, size, item.sha1, cache);
 		}
 	}
@@ -973,10 +1021,12 @@ public class ModpackUpdater implements AutoCloseable {
 		} catch (IOException e) {
 			LOGGER.warn("Modpack update committed, but stale overlay tombstones could not be cleaned", e);
 		}
-		try {
-			ConnectionStore.saveConnection(storage, target.manifest().modpackId(), connectionInfo);
-		} catch (IOException e) {
-			throw new IOException("Modpack generation committed but connection state could not be saved", e);
+		if (connectionInfo != null && connectionInfo.isComplete()) {
+			try {
+				ConnectionStore.saveConnection(storage, target.manifest().modpackId(), connectionInfo);
+			} catch (IOException e) {
+				throw new IOException("Modpack generation committed but connection state could not be saved", e);
+			}
 		}
 		clientConfig = plan.plannedClientConfig();
 	}
