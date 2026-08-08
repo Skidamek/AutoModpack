@@ -157,6 +157,23 @@ def _bridge_state(ctx: Context) -> Path:
     return ctx.game_dir / "automodpack" / "autotest" / "bridge-state.json"
 
 
+_CLIENT_DATA_ROOT = Path("automodpack/client/data")
+_CLIENT_DATA_ROOT_IN_CONTAINER = "/work/game/automodpack/client/data"
+
+
+def _ensure_client_data_root(game_dir: Path) -> Path:
+    """Create the one local data root used by every client lifecycle step."""
+    automodpack_dir = game_dir / "automodpack"
+    marker = automodpack_dir / "data-root.json"
+    data_root = game_dir / _CLIENT_DATA_ROOT
+    if not marker.exists():
+        data_root.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"root": _CLIENT_DATA_ROOT_IN_CONTAINER, "shared": False}, indent=2) + "\n")
+    else:
+        data_root.mkdir(parents=True, exist_ok=True)
+    return data_root
+
+
 def _exit_code(name) -> int | None:
     try:
         return _inspect_container(name).get("State", {}).get("ExitCode")
@@ -348,12 +365,7 @@ def _launch_client(ctx: Context):
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx.artifact, game_dir / "mods" / "automodpack.jar")
     _seed_client_options(game_dir)
-    automodpack_dir = game_dir / "automodpack"
-    data_root_marker = automodpack_dir / "data-root.json"
-    if not data_root_marker.exists():
-        data_root = automodpack_dir / "data"
-        data_root.mkdir(parents=True, exist_ok=True)
-        data_root_marker.write_text(json.dumps({"root": "/work/game/automodpack/data", "shared": False}, indent=2) + "\n")
+    _ensure_client_data_root(game_dir)
     _bridge_state(ctx).unlink(missing_ok=True)
 
     # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
@@ -759,16 +771,13 @@ def _v_stage_modpack(ctx: Context, step):
     modpack_name = str(step.get("packName") or ctx.modpack_name)
     automodpack = game / "automodpack"
     client_root = automodpack / "client"
-    data_root = client_root / "data"
+    data_root = _ensure_client_data_root(game)
     root = client_root / "staging" / modpack_id if record_only else client_root / "active"
     if root.exists():
         shutil.rmtree(root)
     if not record_only:
         ctx.vars["active_dir"] = "automodpack/client/active"
     root.mkdir(parents=True, exist_ok=True)
-    data_root.mkdir(parents=True, exist_ok=True)
-    (automodpack / "data-root.json").write_text(json.dumps({"root": "/work/game/automodpack/client/data", "shared": False}, indent=2) + "\n")
-
     src = step.get("from")
     if src:
         src_path = Path(ctx.resolve(str(src)))
@@ -874,8 +883,7 @@ def _v_stage_modpack(ctx: Context, step):
 @verb("seed_cas")
 def _v_seed_cas(ctx: Context, _step):
     """Put the scenario's server files in the client CAS without installing them."""
-    automodpack = ctx.game_dir / "automodpack"
-    objects = automodpack / "data" / "objects"
+    objects = _ensure_client_data_root(ctx.game_dir) / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     payloads = [json.dumps({"marker": ctx.modpack_name}).encode("utf-8") + b"\n"]
     payloads.extend(content.encode("utf-8") for _, content in ctx.scenario_files)
