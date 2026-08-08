@@ -35,7 +35,7 @@ class GenerationStoreTest {
 	@Test
 	void publishesRootThenParentAndReturnsNoChanges() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
-		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "ignored");
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "First generation notes\r\n");
 		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, first.status());
 		assertEquals("", first.record().metadata().parentGenerationId());
 		assertTrue(Files.exists(tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json")));
@@ -44,7 +44,7 @@ class GenerationStoreTest {
 		String pointer = Files.readString(tempDir.resolve("current.json"), StandardCharsets.UTF_8);
 
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
-		GenerationStore.Publication unchanged = store.publish(candidate("first"), Optional.of(current), "different notes");
+		GenerationStore.Publication unchanged = store.publish(candidate("first"), Optional.of(current), "First generation notes\n");
 		assertEquals(GenerationStore.PublicationStatus.NO_CHANGES, unchanged.status());
 		assertEquals(pointer, Files.readString(tempDir.resolve("current.json"), StandardCharsets.UTF_8));
 		assertFalse(Files.exists(tempDir.resolve("records")));
@@ -53,6 +53,30 @@ class GenerationStoreTest {
 		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, second.status());
 		assertEquals(first.record().metadata().generationId(), second.record().metadata().parentGenerationId());
 		assertEquals(second.record(), store.loadCurrent().orElseThrow().record());
+	}
+
+	@Test
+	void publishesMetadataOnlyGenerationForChangedPatchNotes() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "First generation notes");
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+
+		GenerationStore.Publication changedNotes = store.publish(candidate("first"), Optional.of(current), "Updated generation notes");
+		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, changedNotes.status());
+		assertNotEquals(first.record().metadata().generationId(), changedNotes.record().metadata().generationId());
+		assertEquals(first.record().metadata().generationId(), changedNotes.record().metadata().parentGenerationId());
+		assertEquals(first.record().metadata().stateDigest(), changedNotes.record().metadata().stateDigest());
+		assertEquals(first.record().metadata().ledgerDigest(), changedNotes.record().metadata().ledgerDigest());
+		assertEquals("Updated generation notes", changedNotes.record().metadata().patchNotes());
+		assertEquals(changedNotes.record(), store.loadCurrent().orElseThrow().record());
+
+		List<GenerationHistoryEntry> history = store.currentHistory();
+		assertEquals(List.of(first.record().metadata().generationId(), changedNotes.record().metadata().generationId()), history.stream()
+				.map(entry -> entry.metadata().generationId()).toList());
+		assertEquals(List.of("First generation notes", "Updated generation notes"), history.stream().map(entry -> entry.metadata().patchNotes()).toList());
+		Jsons.CompleteModpackContentFields fields = ConfigTools.read(tempDir.resolve("current-projection.json"), Jsons.CompleteModpackContentFields.class).orElseThrow();
+		assertEquals(List.of("First generation notes", "Updated generation notes"), GenerationPatchNoteHistory.fromFields(fields).stream()
+				.map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
 	}
 
 	@Test
