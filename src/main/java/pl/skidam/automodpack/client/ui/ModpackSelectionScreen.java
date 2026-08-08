@@ -41,6 +41,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.QuarantineArchive;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -89,6 +90,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private boolean switchInFlight;
 	private Button removeButton;
 	private Button recoveryButton;
+	private Button quarantineButton;
 	private Button historyButton;
 
 	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
@@ -205,7 +207,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 		int listTop = 64;
 		List<ManagementAction> managementActions = selectionAction == null ? managementActions() : List.of();
-		int listBottom = this.height - (selectionAction == null ? (managementActions.isEmpty() ? 80 : 108) : 60);
+		int managementRows = managementRowCount(managementActions.size());
+		int managementTop = this.height - 80 - Math.max(0, managementRows - 1) * 28;
+		int listBottom = this.height - (selectionAction == null ? (managementActions.isEmpty() ? 80 : 108 + Math.max(0, managementRows - 1) * 28) : 60);
 		rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
 
 		int pageCount = Math.max(1, (int) Math.ceil((double) rows.size() / rowsPerPage));
@@ -264,14 +268,18 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 
 		if (!managementActions.isEmpty()) {
-			int managementWidth = actionButtonWidth(ROW_WIDTH, managementActions.size());
 			for (int index = 0; index < managementActions.size(); index++) {
 				ManagementAction action = managementActions.get(index);
-				Button button = buttonWidget(centeredActionButtonX(ROW_WIDTH, managementActions.size(), managementActions.size(), index), this.height - 80,
+				int row = index / 3;
+				int rowStart = row * 3;
+				int rowCount = Math.min(3, managementActions.size() - rowStart);
+				int managementWidth = actionButtonWidth(ROW_WIDTH, rowCount);
+				Button button = buttonWidget(centeredActionButtonX(ROW_WIDTH, rowCount, rowCount, index - rowStart), managementTop + row * 28,
 						managementWidth, 20, action.label(), press -> action.action().run());
 				this.addRenderableWidget(button);
 				if (action.kind() == ManagementKind.REMOVE) this.removeButton = button;
 				if (action.kind() == ManagementKind.RECOVERY) this.recoveryButton = button;
+				if (action.kind() == ManagementKind.QUARANTINE) this.quarantineButton = button;
 				if (action.kind() == ManagementKind.HISTORY) this.historyButton = button;
 			}
 			updateManagementButtons();
@@ -458,6 +466,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		});
 	}
 
+	private void requestQuarantine() {
+		if (!beginManagement()) return;
+		ScreenImpl.setScreen(new QuarantineArchiveScreen(this, storage, modpackId, modpackName, activeModpack, this::endManagement));
+	}
+
 	private boolean beginManagement() {
 		if (managementInFlight) return false;
 		managementInFlight = true;
@@ -473,6 +486,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private void updateManagementButtons() {
 		if (removeButton != null) removeButton.active = !managementInFlight;
 		if (recoveryButton != null) recoveryButton.active = !managementInFlight;
+		if (quarantineButton != null) quarantineButton.active = !managementInFlight;
 		if (historyButton != null) historyButton.active = !managementInFlight;
 	}
 
@@ -482,6 +496,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			if (modpackHasGeneration(modpackId)) actions.add(new ManagementAction(ManagementKind.REMOVE, VersionedText.literal("Remove"), this::requestRemoval));
 			if (hasRecoveryArchive()) actions.add(new ManagementAction(ManagementKind.RECOVERY, VersionedText.literal("Recovery"), this::requestRecovery));
 		}
+		if (hasQuarantineArchive()) actions.add(new ManagementAction(ManagementKind.QUARANTINE, VersionedText.literal("Quarantine"), this::requestQuarantine));
 		if (hasHistory()) actions.add(new ManagementAction(ManagementKind.HISTORY, VersionedText.literal("History"), this::requestHistory));
 		if (hasOtherInstalledPacks()) actions.add(new ManagementAction(ManagementKind.MANAGER, VersionedText.translatable("automodpack.packManager.switch"), this::requestPackManager));
 		return List.copyOf(actions);
@@ -497,6 +512,18 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
+	}
+
+	private boolean hasQuarantineArchive() {
+		try {
+			return QuarantineArchive.hasEntries(storage, modpackId);
+		} catch (IOException | RuntimeException e) {
+			return false;
+		}
+	}
+
+	private static int managementRowCount(int actionCount) {
+		return actionCount == 0 ? 0 : (actionCount + 2) / 3;
 	}
 
 	private boolean hasHistory() {
@@ -804,5 +831,5 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private record ManagementAction(ManagementKind kind, MutableComponent label, Runnable action) {}
 
-	private enum ManagementKind { REMOVE, RECOVERY, HISTORY, MANAGER }
+	private enum ManagementKind { REMOVE, RECOVERY, QUARANTINE, HISTORY, MANAGER }
 }
