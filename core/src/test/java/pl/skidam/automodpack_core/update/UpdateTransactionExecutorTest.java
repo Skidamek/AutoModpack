@@ -60,6 +60,24 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void metadataOnlyUpdateKeepsProjectionAndDoesNotRequireCasObject() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "metadata-only-projection".getBytes(StandardCharsets.UTF_8);
+		Files.createDirectories(storage.activePath("mods"));
+		String hash = HashUtils.getHash(Files.write(storage.activePath("mods/existing.jar"), bytes));
+		SelectedModpackTarget target = target("mods/existing.jar", "mod", false, hash, bytes.length);
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), List.of(),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of());
+
+		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
+
+		assertTrue(execution.success());
+		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/existing.jar"), bytes.length, hash));
+		assertFalse(Files.exists(storage.objectsDirectory().resolve(hash)));
+		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
+	}
+
+	@Test
 	void firstInstallQuarantinesLocalSameIdModBeforeProjectionApply() throws Exception {
 		ClientStorage storage = storage();
 		byte[] serverBytes = "server-sodium".getBytes(StandardCharsets.UTF_8);

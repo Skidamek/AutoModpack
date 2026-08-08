@@ -517,10 +517,14 @@ public final class UpdateTransactionExecutor {
 				applyOperations(transaction, current);
 				current.set(null);
 				verifyManagedFinalState(transaction);
-				buildIncomingProjection(transaction);
-				setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
-				setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
-				swapProjection(transaction);
+				if (transaction.operations.isEmpty()) {
+					verifyProjection(context.storage().activeDirectory(), transaction.projectedFinalState);
+				} else {
+					buildIncomingProjection(transaction);
+					setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
+					setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
+					swapProjection(transaction);
+				}
 				Jsons.ModpackContentFields target = resolvedTarget(transaction, storedRecord(transaction)).flatTarget();
 				if (transaction.plannedClientConfig != null) ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
 				if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
