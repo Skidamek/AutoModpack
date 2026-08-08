@@ -421,6 +421,14 @@ def test_connect_screen_classifier_does_not_loop_on_first_connection():
     assert not runner._is_connecting_screen("pl.skidam.automodpack.client.ui.FirstConnectScreen")
 
 
+def test_legacy_bridge_disconnect_uses_full_client_lifecycle():
+    source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java").read_text(encoding="utf-8")
+
+    assert "/*minecraft.disconnect(new TitleScreen());" in source
+    assert "/*minecraft.clearLevel(new TitleScreen());" in source
+    assert "/*minecraft.level.disconnect();" not in source
+
+
 def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     ctx = make_ctx()
     payloads = {"a" * 40: b"first", "b" * 40: b"second"}
