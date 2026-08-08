@@ -6,28 +6,26 @@ public record ResolvedSelection(
 		SelectionIntent intent,
 		NavigableSet<String> selectedGroups,
 		NavigableSet<String> staleRequestedGroups,
-		NavigableSet<String> staleRequestedTags,
 		NavigableSet<String> requiredGroups,
 		NavigableSet<String> forcedGroups,
 		NavigableSet<String> dependencyGroups,
-		NavigableSet<String> tagSelectedGroups,
 		NavigableSet<String> unavailableGroups,
+		NavigableSet<String> requestedUnavailableGroups,
 		NavigableMap<String, GroupResolution> groupResolutions) {
 	public ResolvedSelection(SelectionIntent intent, Collection<String> selectedGroups, Collection<String> staleRequestedGroups) {
 		this(intent, immutableSet(selectedGroups), immutableSet(staleRequestedGroups), immutableSet(Set.of()), immutableSet(Set.of()), immutableSet(Set.of()), immutableSet(Set.of()),
-				immutableSet(Set.of()), immutableSet(Set.of()), immutableMap(Map.of()));
+				immutableSet(Set.of()), immutableMap(Map.of()));
 	}
 
 	public ResolvedSelection {
 		intent = Objects.requireNonNull(intent);
 		selectedGroups = immutableSet(selectedGroups);
 		staleRequestedGroups = immutableSet(staleRequestedGroups);
-		staleRequestedTags = immutableSet(staleRequestedTags);
 		requiredGroups = immutableSet(requiredGroups);
 		forcedGroups = immutableSet(forcedGroups);
 		dependencyGroups = immutableSet(dependencyGroups);
-		tagSelectedGroups = immutableSet(tagSelectedGroups);
 		unavailableGroups = immutableSet(unavailableGroups);
+		requestedUnavailableGroups = immutableSet(requestedUnavailableGroups);
 		groupResolutions = immutableMap(groupResolutions);
 	}
 
@@ -41,10 +39,6 @@ public record ResolvedSelection(
 
 	public NavigableSet<String> unsupportedGroups() {
 		return unavailableGroups;
-	}
-
-	public NavigableSet<String> tagExpandedGroups() {
-		return tagSelectedGroups;
 	}
 
 	private static NavigableSet<String> immutableSet(Collection<String> values) {

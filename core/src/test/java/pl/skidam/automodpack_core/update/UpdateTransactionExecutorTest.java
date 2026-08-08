@@ -230,7 +230,6 @@ class UpdateTransactionExecutorTest {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.modpackName = "Test";
-		fields.selectionTags = Map.of();
 		Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.required = true;
 		Jsons.CompleteModpackContentFields.GroupFileFields file = new Jsons.CompleteModpackContentFields.GroupFileFields();

@@ -9,8 +9,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 public record GenerationDiff(
 		List<FileChange> files,
 		MetadataSummary packMetadata,
-		MetadataSummary groupMetadata,
-		MetadataSummary selectionTagMetadata) {
+		MetadataSummary groupMetadata) {
 	public GenerationDiff {
 		files = files == null
 				? List.of()
@@ -19,7 +18,6 @@ public record GenerationDiff(
 						.thenComparing(change -> Objects.toString(change.after(), ""))).toList();
 		packMetadata = Objects.requireNonNull(packMetadata);
 		groupMetadata = Objects.requireNonNull(groupMetadata);
-		selectionTagMetadata = Objects.requireNonNull(selectionTagMetadata);
 	}
 
 	public static GenerationDiff between(GroupManifest parent, GroupManifest child) {
@@ -41,19 +39,18 @@ public record GenerationDiff(
 			else continue;
 			changes.add(new FileChange(key.groupId(), key.logicalPath(), classification, oldFile, newFile));
 		}
-		return new GenerationDiff(changes, packSummary(parent, child), groupSummary(parent, child), tagSummary(parent, child));
+		return new GenerationDiff(changes, packSummary(parent, child), groupSummary(parent, child));
 	}
 
 	public boolean isEmpty() {
-		return files.isEmpty() && packMetadata.isEmpty() && groupMetadata.isEmpty() && selectionTagMetadata.isEmpty();
+		return files.isEmpty() && packMetadata.isEmpty() && groupMetadata.isEmpty();
 	}
 
 	public Summary summary() {
 		int[] counts = new int[FileClassification.values().length];
 		for (FileChange change : files) counts[change.classification().ordinal()]++;
 		return new Summary(counts[FileClassification.ADDED.ordinal()], counts[FileClassification.MODIFIED.ordinal()], counts[FileClassification.REMOVED.ordinal()],
-				counts[FileClassification.METADATA_ONLY.ordinal()], packMetadata.changedCount() + groupMetadata.changedCount()
-						+ selectionTagMetadata.changedCount());
+				counts[FileClassification.METADATA_ONLY.ordinal()], packMetadata.changedCount() + groupMetadata.changedCount());
 	}
 
 	/** Returns deterministic text for an operator-facing generation change summary. */
@@ -61,7 +58,6 @@ public record GenerationDiff(
 		List<String> changes = new ArrayList<>();
 		appendMetadataChanges(changes, "pack metadata", packMetadata);
 		appendMetadataChanges(changes, "group", groupMetadata);
-		appendMetadataChanges(changes, "tag", selectionTagMetadata);
 		for (FileChange change : files) {
 			changes.add(change.classification().action() + " file '" + change.groupId() + "/" + change.logicalPath() + "'");
 		}
@@ -150,11 +146,6 @@ public record GenerationDiff(
 		return compareKeys(before, child.groups(), GenerationDiff::sameGroupMetadata);
 	}
 
-	private static MetadataSummary tagSummary(GroupManifest parent, GroupManifest child) {
-		Map<String, GroupManifest.SelectionTag> before = parent == null ? Map.of() : parent.selectionTags();
-		return compareKeys(before, child.selectionTags(), Objects::equals);
-	}
-
 	private static <T> MetadataSummary compareKeys(Map<String, T> before, Map<String, T> after, BiPredicate<T, T> equal) {
 		List<String> added = new ArrayList<>();
 		List<String> modified = new ArrayList<>();
@@ -172,7 +163,7 @@ public record GenerationDiff(
 
 	private static boolean sameGroupMetadata(GroupManifest.Group before, GroupManifest.Group after) {
 		return Objects.equals(before.displayName(), after.displayName()) && Objects.equals(before.description(), after.description())
-				&& Objects.equals(before.tag(), after.tag()) && before.required() == after.required() && before.recommended() == after.recommended()
+				&& Objects.equals(before.tag(), after.tag()) && before.required() == after.required() && before.defaultSelected() == after.defaultSelected()
 				&& Objects.equals(before.breaksWith(), after.breaksWith()) && Objects.equals(before.requires(), after.requires())
 				&& Objects.equals(before.compatiblePlatforms(), after.compatiblePlatforms());
 	}
