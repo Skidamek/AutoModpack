@@ -47,10 +47,11 @@ public record GenerationDiff(
 	}
 
 	public Summary summary() {
-		int[] counts = new int[FileClassification.values().length];
-		for (FileChange change : files) counts[change.classification().ordinal()]++;
-		return new Summary(counts[FileClassification.ADDED.ordinal()], counts[FileClassification.MODIFIED.ordinal()], counts[FileClassification.REMOVED.ordinal()],
-				counts[FileClassification.METADATA_ONLY.ordinal()], packMetadata.changedCount() + groupMetadata.changedCount());
+		EnumMap<FileClassification, Set<String>> paths = new EnumMap<>(FileClassification.class);
+		for (FileClassification classification : FileClassification.values()) paths.put(classification, new TreeSet<>());
+		for (FileChange change : files) paths.get(change.classification()).add(change.logicalPath());
+		return new Summary(paths.get(FileClassification.ADDED).size(), paths.get(FileClassification.MODIFIED).size(), paths.get(FileClassification.REMOVED).size(),
+				paths.get(FileClassification.METADATA_ONLY).size(), packMetadata.changedCount() + groupMetadata.changedCount());
 	}
 
 	/** Returns deterministic text for an operator-facing generation change summary. */

@@ -546,6 +546,7 @@ public class ModpackUpdater implements AutoCloseable {
 		try {
 			recordChangelogs(plan, selectedTarget);
 			ApplyResult applyResult = applyPreparedPlan(plan, selectedTarget);
+			changelogs.setRestartReasons(applyResult.reasonDescriptions());
 			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 			restartAfterApply(applyResult);
 		} catch (UpdateDeferredException e) {
@@ -656,24 +657,27 @@ public class ModpackUpdater implements AutoCloseable {
 		EnumSet<RestartReason> restartReasons = plan.restartReasons().stream().map(reason -> RestartReason.valueOf(reason.name()))
 				.collect(Collectors.toCollection(() -> EnumSet.noneOf(RestartReason.class)));
 		ApplyResult result = new ApplyResult(restartReasons);
+		changelogs.setRestartReasons(result.reasonDescriptions());
 		if (result.requiresRestart()) LOGGER.info("Restart required because: {}", String.join(", ", result.reasonDescriptions()));
 		return result;
 	}
 
 	private void recordChangelogs(PreparedPlan prepared, SelectedModpackTarget target) {
-		UpdatePreview applied = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), target.flatTarget(), target.selection(), false);
+		UpdatePreview applied = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), target.flatTarget(), target.selection(), false, null,
+				target.generationRecord().metadata().patchNotes(), target.patchNotesHistory());
 		Map<UpdatePlan.FileKey, List<String>> mainPageUrls = resolveMainPageUrls(prepared);
 		changelogs.clear();
+		changelogs.setPatchNotes(applied.latestPatchNotes(), applied.patchNotesHistory());
 		for (UpdatePreview.Entry entry : applied.entries()) {
 			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
 			switch (entry.kind()) {
-				case ADDED, CHANGED, RESTORED_BASELINE -> changelogs.recordUpdated(file, mainPageUrls.getOrDefault(file, List.of()));
+				case ADDED, CHANGED, RESTORED_BASELINE -> changelogs.recordChanged(file, mainPageUrls.getOrDefault(file, List.of()));
 				case REMOVED -> changelogs.recordRemoved(file, mainPageUrls.getOrDefault(file, List.of()));
 				default -> {
 				}
 			}
 		}
-		LOGGER.info("Prepared update changes: {} updated, {} removed", changelogs.updatedFiles().size(), changelogs.removedFiles().size());
+		LOGGER.info("Prepared update changes: {} changed, {} removed", changelogs.changedFiles().size(), changelogs.removedFiles().size());
 	}
 
 	private Map<UpdatePlan.FileKey, List<String>> resolveMainPageUrls(PreparedPlan prepared) {
