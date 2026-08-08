@@ -77,6 +77,7 @@ class FakeBridge:
         self.pending_pack: str | None = None
         self.pack_b_files: list[tuple[Path, bytes | str]] = []
         self.update_available = False
+        self.bootstrap = False
         self.history_parent = "restart"
         self.dependency = False
         self.conflict = False
@@ -259,7 +260,7 @@ class FakeBridge:
 
     def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
         # Already-synced clients drop straight in-game; first contact hits the cert prompt.
-        self.screen = "preview" if self.update_available else ("ingame" if self.synced else "cert")
+        self.screen = "preview" if self.update_available else ("ingame" if self.synced else "first_connection" if self.bootstrap else "cert")
         return {"ok": True}
 
     def screenshot(self, name: str, timeout: float = 30) -> dict:

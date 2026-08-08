@@ -64,12 +64,13 @@ def wait_for(ctx, step):
         # become true - fail fast (raise ClientExited) instead of polling to the timeout.
         # Re-check the condition after detecting the exit so a marker the container printed
         # in its final, now-complete logs still counts (exit-right-after-marker race).
-        try:
-            ctx.assert_client_running()
-        except ClientExited:
-            if conditions.evaluate(ctx, cond):
-                return True
-            raise
+        if conditions.requires_client(cond):
+            try:
+                ctx.assert_client_running()
+            except ClientExited:
+                if conditions.evaluate(ctx, cond):
+                    return True
+                raise
         return None
 
     try:
