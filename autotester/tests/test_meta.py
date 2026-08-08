@@ -325,6 +325,54 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
     assert json.loads(marker.read_text()) == before
 
 
+def test_seed_bootstrap_writes_live_fields(make_ctx):
+    ctx = make_ctx()
+    server_state = ctx.server_dir / "automodpack" / "server"
+    server_state.mkdir(parents=True, exist_ok=True)
+    (server_state / "current-projection.json").write_text(json.dumps({"modpackId": "packaaa"}), encoding="utf-8")
+    (ctx.server_dir / "automodpack" / "server-config.json").write_text(json.dumps({"connectionMode": "HOLEPUNCH"}), encoding="utf-8")
+    ctx.server_host = "amp-server"
+    ctx.vars["fingerprint"] = "01:23:45"
+
+    runner._v_seed_bootstrap(ctx, {})
+
+    assert json.loads((ctx.game_dir / "automodpack-bootstrap.json").read_text(encoding="utf-8")) == {
+        "origin": "amp-server:25565",
+        "fingerprint": "01:23:45",
+        "modpackId": "packaaa",
+        "endpoint": "amp-server:25565",
+        "connectionMode": "HOLEPUNCH",
+    }
+    assert ctx.vars["bootstrap_modpack_id"] == "packaaa"
+
+
+def test_connect_screen_classifier_does_not_loop_on_first_connection():
+    assert runner._is_connecting_screen("net.minecraft.client.gui.screens.ConnectScreen")
+    assert not runner._is_connecting_screen("pl.skidam.automodpack.client.ui.FirstConnectScreen")
+
+
+def test_assert_preload_acquired_checks_complete_projection(make_ctx):
+    ctx = make_ctx()
+    payloads = {"a" * 40: b"first", "b" * 40: b"second"}
+    projection = {"groups": {"main": {"files": {
+        "config/a.txt": {"sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(), "size": str(len(payloads["a" * 40]))},
+        "config/b.txt": {"sha1": hashlib.sha1(payloads["b" * 40]).hexdigest(), "size": str(len(payloads["b" * 40]))},
+        "config/a-copy.txt": {"sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(), "size": str(len(payloads["a" * 40]))},
+    }}}}
+    projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
+    projection_path.parent.mkdir(parents=True, exist_ok=True)
+    projection_path.write_text(json.dumps(projection), encoding="utf-8")
+    objects = runner._ensure_client_data_root(ctx.game_dir) / "objects"
+    objects.mkdir(parents=True, exist_ok=True)
+    for payload in payloads.values():
+        (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
+    ctx.logs_provider = lambda _which, _tail=None: "Preloaded 2 complete modpack objects in 1ms"
+
+    runner._v_assert_preload_acquired(ctx, {})
+
+    assert ctx.vars["preloaded_object_count"] == 2
+
+
 def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     ctx = make_ctx()
     local = {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"}

@@ -35,6 +35,11 @@ public record SelectedModpackTarget(
 		return fields;
 	}
 
+	/** Returns the complete catalogue flattened for preloading, without changing the selected projection. */
+	public Jsons.ModpackContentFields completeTarget() {
+		return SelectedTreeComposer.composeAll(manifest(), GenerationTarget.from(generationRecord));
+	}
+
 	public GenerationTarget generationTarget() {
 		return GenerationTarget.from(generationRecord);
 	}

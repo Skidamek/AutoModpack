@@ -111,6 +111,17 @@ def test_wait_for_passes_on_marker_in_final_logs_at_exit(make_ctx):
     wait_for(ctx, _log_step("READY", timeout="30s"))  # must not raise
 
 
+def test_wait_for_server_log_does_not_require_client(make_ctx):
+    """Server readiness can be checked before the bootstrap client is launched."""
+    from automodpack_autotester.engine.steps_ui import wait_for
+
+    ctx = make_ctx()
+    ctx.logs_provider = lambda which, tail=None: "Certificate fingerprint: AB:CD:EF" if which == "server" else ""
+    ctx.running_provider = lambda: (_ for _ in ()).throw(ClientExited("client not launched yet"))
+
+    wait_for(ctx, {"until": {"log": {"container": "server", "matches": "fingerprint"}}, "timeout": "30s"})
+
+
 # ── selectors ─────────────────────────────────────────────────────────────
 
 

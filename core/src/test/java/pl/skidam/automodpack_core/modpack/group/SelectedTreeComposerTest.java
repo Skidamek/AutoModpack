@@ -55,6 +55,33 @@ class SelectedTreeComposerTest {
 		assertEquals(second.sha1(), target.list.iterator().next().sha1);
 	}
 
+	@Test
+	void composesCompleteCatalogueForPreloadWithoutChangingSelection() {
+		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, "config", false, false,
+				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
+		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, "config", false, false,
+				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
+		GroupManifest manifest = manifest(Map.of("main", new GroupManifest.Group("", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("config/first.txt", first))), "optional",
+				new GroupManifest.Group("", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(),
+						new TreeMap<>(Map.of("config/second.txt", second)))));
+		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "");
+		SelectedModpackTarget target = SelectedModpackTarget.prepareDefault(record.toFields(), ClientPlatform.LINUX);
+
+		assertEquals(2, target.completeTarget().list.size());
+		assertNotEquals(Set.of("main", "optional"), target.flatTarget().selectedGroups);
+	}
+
+	@Test
+	void composesAlternativeCatalogueObjectsWithTheSamePath() {
+		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, "config", false, false, "base-hash", null);
+		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, "config", false, false, "alternative-hash", null);
+		GroupManifest manifest = manifest(Map.of("base", group(first), "alternative", group(second)));
+
+		var target = SelectedTreeComposer.composeAll(manifest, null);
+
+		assertEquals(Set.of("base-hash", "alternative-hash"), target.list.stream().map(item -> item.sha1).collect(java.util.stream.Collectors.toSet()));
+	}
+
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
 		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups));
 	}

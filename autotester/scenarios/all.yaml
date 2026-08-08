@@ -17,12 +17,23 @@ releaseGate:
     - conflict-preservation
 
 flow:
-  - use: boot
-  - use: accept_certificate
+  - use: boot_with_bootstrap
   - do: wait_for
-    name: wait for first connection review
+    name: verify bootstrap seeded trust without a TOFU prompt
     timeout: 90s
-    until: { screen: FirstConnectScreen }
+    until:
+      all:
+        - log:
+            container: client
+            matches: 'Imported seeded certificate pin for origin'
+            not_matches: 'Received untrusted certificate|Asking user to verify certificate'
+  - do: wait_for
+    name: show the first connection review
+    timeout: 90s
+    until:
+      all:
+        - screen: FirstConnectScreen
+        - no_element: { text: verify }
   - do: click
     name: open advanced group selection
     select: { text: customize groups }
@@ -384,6 +395,11 @@ topology:
       ENABLE_ROLLING_LOGS: "false"
     automodpack:
       config:
+        # A fresh bootstrap file has no per-client login secret. This isolated
+        # release fixture allows the bootstrap transport to acquire the initial
+        # generation before Minecraft login; production keeps validateSecrets
+        # enabled and obtains its secret during authenticated login.
+        validateSecrets: false
         groups:
           main:
             displayName: Core

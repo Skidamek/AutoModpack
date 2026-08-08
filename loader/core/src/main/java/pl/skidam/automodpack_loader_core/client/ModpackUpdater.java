@@ -304,7 +304,8 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		requireLiveConnection();
-		Collection<Jsons.ModpackContentFields.ModpackContentItem> targetItems = serverModpackContent.list == null ? List.of() : serverModpackContent.list;
+		Jsons.ModpackContentFields preloadTarget = selectedTarget.completeTarget();
+		Collection<Jsons.ModpackContentFields.ModpackContentItem> targetItems = preloadTarget.list == null ? List.of() : preloadTarget.list;
 		if (targetItems.isEmpty()) {
 			LOGGER.info("Selected modpack target contains no files; preload has nothing to acquire");
 			return;
@@ -312,12 +313,13 @@ public class ModpackUpdater implements AutoCloseable {
 
 		long start = System.currentTimeMillis();
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			Set<Jsons.ModpackContentFields.ModpackContentItem> targetSet = new LinkedHashSet<>(targetItems);
-			ModpackUtils.populateStoreFromCWD(targetSet, cache, storage);
-			populateStoreFromActive(serverModpackContent, cache);
+			Set<Jsons.ModpackContentFields.ModpackContentItem> allTargetItems = new LinkedHashSet<>(targetItems);
+			ModpackUtils.populateStoreFromCWD(allTargetItems, cache, storage);
+			populateStoreFromActive(preloadTarget, cache);
+			Set<Jsons.ModpackContentFields.ModpackContentItem> targetSet = uniqueObjects(allTargetItems);
 			Set<Jsons.ModpackContentFields.ModpackContentItem> uncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
 			if (uncached.isEmpty()) {
-				LOGGER.info("Preload reused all {} verified selected modpack objects", targetSet.size());
+				LOGGER.info("Preload reused all {} verified complete modpack objects", targetSet.size());
 				return;
 			}
 
@@ -326,8 +328,14 @@ public class ModpackUpdater implements AutoCloseable {
 			if (!downloadModpack(uncached, start, fetchManager, false)) throw new IOException("One or more selected modpack objects could not be acquired");
 			Set<Jsons.ModpackContentFields.ModpackContentItem> stillUncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
 			if (!stillUncached.isEmpty()) throw new IOException("Verified CAS objects are still missing after preload: " + stillUncached.size());
-			LOGGER.info("Preloaded {} selected modpack objects in {}ms", targetSet.size(), System.currentTimeMillis() - start);
+			LOGGER.info("Preloaded {} complete modpack objects in {}ms", targetSet.size(), System.currentTimeMillis() - start);
 		}
+	}
+
+	private static Set<Jsons.ModpackContentFields.ModpackContentItem> uniqueObjects(Collection<Jsons.ModpackContentFields.ModpackContentItem> items) {
+		Map<String, Jsons.ModpackContentFields.ModpackContentItem> unique = new LinkedHashMap<>();
+		for (var item : items) unique.putIfAbsent(item.sha1.toLowerCase(Locale.ROOT), item);
+		return new LinkedHashSet<>(unique.values());
 	}
 
 	private void loadSelectedActiveProjection() throws Exception {
