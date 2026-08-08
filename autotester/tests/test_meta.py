@@ -90,7 +90,11 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     (client / "active/config/old.txt").write_text("old")
     (client / "data/objects").mkdir(parents=True)
     (client / "data/objects" / ("a" * 40)).write_bytes(b"cached")
+    (client / "data/known-hosts.json").write_text('{"hosts": {}}')
+    (client / "data/packs/packaaa").mkdir(parents=True)
+    (client / "data/packs/packaaa/connection.json").write_text('{"connection": {}}')
     (client / "active-state.json").write_text("{}")
+    (ctx.game_dir / "automodpack/client-config.json").write_text('{"selectedModpackId": "packaaa"}')
     fixture = {"modId": "amp_autotest_removed", "version": "1.0.0-published", "marker": "published"}
     (ctx.game_dir / "mods/old.jar").write_bytes(valid_mod_jar_bytes(fixture))
     runner._v_reset_client_generation(ctx, {})
@@ -100,6 +104,9 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     assert not (client / "data/objects").exists()
     assert not (client / "active-state.json").exists()
     assert_valid_mod_fixture((ctx.game_dir / "mods/old.jar").read_bytes(), fixture)
+    assert (client / "data/known-hosts.json").read_text() == '{"hosts": {}}'
+    assert (client / "data/packs/packaaa/connection.json").read_text() == '{"connection": {}}'
+    assert (ctx.game_dir / "automodpack/client-config.json").read_text() == '{"selectedModpackId": "packaaa"}'
 
 
 def test_validation_rejects_generation_fixture_on_non_jar_path():
