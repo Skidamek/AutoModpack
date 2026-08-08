@@ -135,8 +135,8 @@ class FakeBridge:
             "restart": {
                 "screenClass": "RestartScreen",
                 "buttons": [
-                    {"id": 6, "text": "Cancel", "enabled": True, "visible": True},
-                    {"id": 4, "text": "Restart", "enabled": True, "visible": True},
+                    {"id": 6, "text": "No, back to the game", "enabled": True, "visible": True},
+                    {"id": 4, "text": "Yes, close the game", "enabled": True, "visible": True},
                     {"id": 40, "text": "View changelogs", "enabled": True, "visible": True},
                 ],
                 "textFields": [],

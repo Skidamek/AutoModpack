@@ -160,7 +160,10 @@ flow:
     select: { text: Back }
   - do: click
     name: restart after bootstrap
-    select: { text: restart }
+    # RestartScreen adds buttons in this stable semantic order: cancel, confirm,
+    # changelog. Select the confirm action by role/index because its label is
+    # localized (for example, "Yes, close the game").
+    select: { role: button, index: 1 }
   - do: wait_client_exit
     name: wait for bootstrap restart
   - use: rejoin
@@ -228,7 +231,7 @@ flow:
     until: { screen: RestartScreen }
   - do: click
     name: restart into Pack B
-    select: { text: restart }
+    select: { role: button, index: 1 }
   - do: wait_client_exit
     name: wait for Pack B restart
   - do: launch_client
@@ -282,7 +285,7 @@ flow:
     until: { screen: RestartScreen }
   - do: click
     name: restart into Pack A
-    select: { text: restart }
+    select: { role: button, index: 1 }
   - do: wait_client_exit
     name: wait for reverse switch restart
   - use: rejoin
@@ -366,7 +369,7 @@ flow:
     select: { text: back }
   - do: click
     name: restart after changed generation
-    select: { text: restart }
+    select: { role: button, index: 1 }
   - do: wait_client_exit
     name: wait for final restart
   - use: rejoin

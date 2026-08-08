@@ -156,6 +156,17 @@ def test_sync_flow_round_trip(make_ctx):
     assert ctx.bridge.exited  # final quit
 
 
+def test_fake_restart_screen_matches_production_button_order(make_ctx):
+    bridge = FakeBridge(make_ctx())
+    bridge.screen = "restart"
+
+    assert bridge.gui()["buttons"] == [
+        {"id": 6, "text": "No, back to the game", "enabled": True, "visible": True},
+        {"id": 4, "text": "Yes, close the game", "enabled": True, "visible": True},
+        {"id": 40, "text": "View changelogs", "enabled": True, "visible": True},
+    ]
+
+
 def test_release_gate_flow(make_ctx):
     scenario = load_scenarios()["all"]
     ctx = _ctx_for(make_ctx, scenario)
