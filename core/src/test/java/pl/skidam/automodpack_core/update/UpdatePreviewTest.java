@@ -65,6 +65,21 @@ class UpdatePreviewTest {
 	}
 
 	@Test
+	void summaryDeduplicatesLogicalPathsAndLabelsOtherEffects() {
+		Jsons.ModpackContentFields target = manifest();
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Set.of(), List.of(), List.of(), List.of(), null,
+				new Jsons.ClientConfigFieldsV3()));
+		UpdatePreview preview = new UpdatePreview(plan, List.of(
+				new UpdatePreview.Entry(UpdatePreview.Kind.PRESERVED_CAS, Root.GAME_DIR, "config/shared.json", 1),
+				new UpdatePreview.Entry(UpdatePreview.Kind.CHANGED, Root.PROJECTION, "config/shared.json", 2),
+				new UpdatePreview.Entry(UpdatePreview.Kind.REMOVED, Root.GAME_DIR, "config/removed.json", 3)),
+				new UpdatePreview.GroupConsequences(Set.of("optional"), Set.of("main"), Set.of("stale")));
+
+		assertEquals(new UpdatePreview.Summary(1, 1, 1, 0, 1), preview.summary());
+		assertEquals(List.of(UpdatePreview.Kind.CHANGED, UpdatePreview.Kind.REMOVED, UpdatePreview.Kind.PRESERVED_CAS), preview.displayEntries().stream().map(UpdatePreview.Entry::kind).toList());
+	}
+
+	@Test
 	void normalizesTargetPathsBeforeLedgerComparison() {
 		Jsons.ModpackContentFields target = manifest(
 				new Jsons.ModpackContentFields.ModpackContentItem("/config/kept.json", "8", "config", false, false, OLD_HASH, "0"),
