@@ -24,7 +24,7 @@ from automodpack_autotester.config import (
 from automodpack_autotester.generation_identity import CanonicalEncoder
 from automodpack_autotester.engine.registry import describe, names
 from automodpack_autotester.engine.steps_io import seed_unowned_local_file, wait_file_content
-from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, valid_mod_jar_bytes
+from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, pack_metadata_for, valid_mod_jar_bytes
 from automodpack_autotester.validate import validate_scenario
 
 
@@ -80,6 +80,7 @@ def test_release_fixture_uses_server_config_and_declared_group_directories(make_
     assert_valid_mod_fixture(
         (host_root / "main" / "mods/amp-autotest-removed.jar").read_bytes(),
         {"modId": "amp_autotest_removed", "version": "1.0.0-published", "marker": "published"},
+        ctx.target.minecraft,
     )
     assert not (host_root / "main" / "config/amp-autotest-visual.txt").exists()
 
@@ -134,7 +135,7 @@ def test_unowned_local_fixture_writes_a_valid_cross_loader_archive(make_ctx):
 
     seed_unowned_local_file(ctx, {"path": "mods/local-unowned.jar", "fixture": fixture})
 
-    assert_valid_mod_fixture((ctx.game_dir / "mods/local-unowned.jar").read_bytes(), fixture)
+    assert_valid_mod_fixture((ctx.game_dir / "mods/local-unowned.jar").read_bytes(), fixture, ctx.target.minecraft)
 
 
 def test_metadata_only_fixture_uses_no_code_loader_metadata():
@@ -154,6 +155,32 @@ def test_metadata_only_fixture_uses_no_code_loader_metadata():
     assert not any(name.endswith(".class") for name in names)
 
 
+@pytest.mark.parametrize(
+    ("minecraft_version", "format_fields"),
+    [
+        ("1.18.2", {"pack_format": 8}),
+        ("1.20.1", {"pack_format": 15}),
+        ("1.21.8", {"pack_format": 64}),
+        ("1.21.10", {"min_format": 69, "max_format": 69}),
+    ],
+)
+def test_fixture_pack_metadata_matches_target_receipts(minecraft_version, format_fields):
+    fixture = {"modId": "amp_autotest_metadata", "version": "1.0.0", "marker": "metadata"}
+    payload = valid_mod_jar_bytes(fixture, minecraft_version)
+
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        pack = json.loads(archive.read("pack.mcmeta"))
+
+    assert pack == pack_metadata_for(minecraft_version)
+    assert pack["pack"] == {"description": "AutoModpack autotest fixture", **format_fields}
+    assert_valid_mod_fixture(payload, fixture, minecraft_version)
+
+
+def test_fixture_pack_metadata_covers_configured_targets():
+    for target in load_targets().values():
+        pack_metadata_for(target.minecraft)
+
+
 def test_autotest_bridge_readiness_is_level_triggered():
     source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java").read_text()
     start = source[source.index("public static void start()") : source.index("public static void onClientReady()")]
@@ -162,8 +189,9 @@ def test_autotest_bridge_readiness_is_level_triggered():
     publish = source[source.index("private static void publishReadyState()") : source.index("private static void run(")]
     run = source[source.index("private static void run(") : source.index("private static String handle(")]
 
-    assert "if (currentScreen() instanceof TitleScreen)" in start
-    assert "hasReloadFinished()" not in start
+    assert "if (currentScreen() instanceof TitleScreen && hasReloadFinished())" in start
+    assert "RELOAD_FINISHED.set(true);" in mark_reload
+    assert mark_reload.index("RELOAD_FINISHED.set(true);") < mark_reload.index("onClientReady();")
     assert "onClientReady();" in mark_reload
     assert "CLIENT_READY.set(true);" in on_ready
     assert "CLIENT_READY.compareAndSet(false, true)" not in on_ready
@@ -513,7 +541,7 @@ def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     manifest = json.loads(records[0].read_text())
     metadata = manifest["groups"]["main"]["files"]["mods/amp-autotest-conflict.jar"]
     object_path = ctx.game_dir / "automodpack/client/data/objects" / metadata["sha1"]
-    assert_valid_mod_fixture(object_path.read_bytes(), server)
+    assert_valid_mod_fixture(object_path.read_bytes(), server, ctx.target.minecraft)
 
 
 def test_record_only_generation_state_digest_matches_its_manifest(make_ctx):

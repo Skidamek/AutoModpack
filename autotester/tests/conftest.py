@@ -285,7 +285,7 @@ class FakeBridge:
         if index >= len(generations):
             return []
         return [
-            (Path(str(item["path"])), valid_mod_jar_bytes(item["fixture"]))
+            (Path(str(item["path"])), valid_mod_jar_bytes(item["fixture"], self.ctx.target.minecraft))
             for item in generations[index].get("files", [])
             if isinstance(item, dict) and item.get("fixture") is not None
         ]
@@ -358,7 +358,7 @@ class FakeBridge:
 
             payload = self.ctx.game_dir / "automodpack" / "client" / "quarantine" / "packbbb" / "conflicts" / "fake-conflict" / "payload"
             payload.parent.mkdir(parents=True, exist_ok=True)
-            payload.write_bytes(valid_mod_jar_bytes(self.ctx.vars["same_path_conflict_fixture"]))
+            payload.write_bytes(valid_mod_jar_bytes(self.ctx.vars["same_path_conflict_fixture"], self.ctx.target.minecraft))
             source = self.ctx.path(self.ctx.vars["same_path_conflict_path"])
             source.unlink(missing_ok=True)
         self._write_manifest()
