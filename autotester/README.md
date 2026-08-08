@@ -38,7 +38,7 @@ uv --project autotester run autotester run --target 1.21.11-fabric --scenario do
 Run the full default matrix:
 
 ```bash
-uv --project autotester run autotester run --target all --scenario sync --jobs 3
+uv --project autotester run autotester run --target all --scenario all --jobs 3
 ```
 
 Clean generated output:
@@ -49,15 +49,15 @@ uv --project autotester run autotester clean
 
 ## What It Tests
 
-The default `sync` scenario performs this flow:
+The default `all` scenario performs one release-confidence flow:
 
-1. Start a server container.
-2. Start a client container.
-3. Connect to the server.
-4. Accept the server certificate fingerprint.
-5. Download and verify synced files.
-6. Restart the client.
-7. Rejoin and verify the player reaches the game.
+1. Start a server and client container and trust the certificate.
+2. Review advanced groups, including categories, dependencies, conflicts, defaults, and platform filtering.
+3. Bootstrap the complete pack, verify generation metadata, and open the latest patch notes and connected history.
+4. Cache a second installed record and switch A to B to A through the pack manager's review/accept flow.
+5. Publish a real second server generation, review its changed/removed files and patch notes, and verify final contents.
+
+`sync` and the other focused scenarios remain available for faster diagnosis.
 
 The `download-only` scenario stops after the first sync and file verification.
 Use it for faster debugging when restart/rejoin behavior is not relevant.
@@ -174,7 +174,9 @@ flow:
 
 `stage_modpack` accepts `from:` (a ready directory to copy wholesale), `mods:`
 (extra jars to drop into the pack's `mods/`), and `config:` (extra client-config
-overrides). **`from:` and `mods:` paths resolve against the repo root** (the
+overrides). Set `recordOnly: true` with a stable `packId`/`packName` to add a
+complete cached generation record without changing the active projection.
+**`from:` and `mods:` paths resolve against the repo root** (the
 parent of `autotester/`) unless absolute. The staged generation is always
 derived from the final files, so its identity and ownership ledger match the
 active projection used by the client.
@@ -187,8 +189,8 @@ stop immediately" robust on both headless and GPU hosts. See
 ```bash
 autotester verbs                       # list verbs + condition keys (from the registry)
 autotester validate                    # statically check every scenario
-autotester validate --scenario sync    # check one
-autotester targets --scenario sync     # print the in-scope target IDs as JSON
+autotester validate --scenario all     # check the release gate
+autotester targets --scenario all      # print the in-scope target IDs as JSON
 ```
 
 `validate` expands macros and checks that every verb/macro name resolves and
@@ -341,7 +343,7 @@ Important files:
   "results": [
     {
       "target": "1.21.11-fabric",
-      "scenario": "sync",
+      "scenario": "all",
       "ok": false,
       "duration": 142.7,
       "error": "step 'confirm download' failed: ...",

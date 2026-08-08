@@ -137,3 +137,29 @@ rejoin:
   - use: connect_to_server
   - do: wait_join
     name: wait until the player is in-game
+
+# Navigate from the title screen to the vanilla multiplayer screen. The settings
+# button under test is injected there, so this keeps the release scenario honest
+# about the real entry point instead of calling the screen directly.
+open_multiplayer:
+  - do: click
+    name: open vanilla multiplayer
+    select: { text: multiplayer }
+  - do: wait_for
+    name: wait for multiplayer screen
+    timeout: 20s
+    until: { screen: Play Multiplayer }
+
+open_pack_manager:
+  - do: click
+    name: open modpack settings from multiplayer
+    select: { text: modpack settings }
+  - do: wait_for
+    name: wait for modpack settings
+    until: { screen: ModpackSelectionScreen }
+  - do: click
+    name: open installed pack manager
+    select: { text: pack manager }
+  - do: wait_for
+    name: wait for installed pack manager
+    until: { screen: InstalledModpacksScreen }
