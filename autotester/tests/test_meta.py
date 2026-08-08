@@ -283,6 +283,38 @@ def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     assert_valid_mod_fixture(object_path.read_bytes(), server)
 
 
+def test_record_only_generation_state_digest_matches_its_manifest(make_ctx):
+    ctx = make_ctx(modpack_name="Pack B", marker_rel=Path("config/marker.json"))
+    runner._v_stage_modpack(ctx, {
+        "recordOnly": True,
+        "packId": "packbbb",
+        "packName": "Pack B",
+        "files": [{"path": "config/b.txt", "content": "b"}],
+    })
+
+    manifest_path = next((ctx.game_dir / "automodpack/client/records").glob("*/manifest.json"))
+    manifest = json.loads(manifest_path.read_text())
+    encoder = (CanonicalEncoder().string("automodpack-state-v1").string(manifest["modpackId"]).string(manifest["modpackName"])
+               .string(manifest["automodpackVersion"]).string(manifest["loader"]).string(manifest["loaderVersion"])
+               .string(manifest["mcVersion"]).integer(len(manifest["groups"])))
+    for group_id, group in sorted(manifest["groups"].items()):
+        encoder.string(group_id).string(group["displayName"]).string(group["description"]).string(group["tag"])
+        encoder.boolean(group["required"]).boolean(group["defaultSelected"])
+        for values in (group["breaksWith"], group["requires"]):
+            encoder.integer(len(values))
+            for value in sorted(values):
+                encoder.string(value)
+        encoder.integer(len(group["compatiblePlatforms"]))
+        for platform in sorted(group["compatiblePlatforms"]):
+            encoder.string(platform)
+        encoder.integer(len(group["files"]))
+        for logical_path, file in sorted(group["files"].items()):
+            encoder.string(logical_path).long(int(file["size"])).string(file["type"]).boolean(file["editable"])
+            encoder.boolean(file["overwriteEditable"]).string(file["sha1"]).string(file["murmur"])
+
+    assert manifest["generation"]["stateDigest"] == encoder.digest()
+
+
 # ── wait_exit (Docker calls stubbed) ─────────────────────────────────────────
 
 

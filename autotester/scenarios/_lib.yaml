@@ -157,9 +157,15 @@ open_pack_manager:
   - do: wait_for
     name: wait for modpack settings
     until: { screen: ModpackSelectionScreen }
+  - do: screenshot
+    name: capture modpack settings before manager action
+    file: all-pack-settings
   - do: click
     name: open installed pack manager
     select: { text: pack manager }
   - do: wait_for
     name: wait for installed pack manager
     until: { screen: InstalledModpacksScreen }
+  - do: screenshot
+    name: capture installed pack manager
+    file: all-installed-pack-manager
