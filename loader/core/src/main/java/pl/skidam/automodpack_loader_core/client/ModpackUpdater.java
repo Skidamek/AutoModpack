@@ -274,20 +274,18 @@ public class ModpackUpdater implements AutoCloseable {
 			requireLiveConnection();
 
 			if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
-			startSourceFetch();
 
 			// Handle new modpack
 			if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) {
 				firstConnection = true;
 				fullDownload = true;
+				startSourceFetch();
 				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
 				new ScreenManager().welcome(this);
 			} else {
 				// Handle existing modpack
 				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, storage);
 
-				// Always show the preview. A zero-file result can still require metadata, selection,
-				// ledger, or restart work.
 				startUpdate(result.filesToUpdate());
 			}
 		} catch (UpdateDeferredException e) {
@@ -356,9 +354,7 @@ public class ModpackUpdater implements AutoCloseable {
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), false);
 			Jsons.ModpackContentFields installed = storedTarget();
-			if (installed == null || !GenerationTarget.fromFlat(installed).equals(prepared.plan().generationTarget())) return true;
-			if (!prepared.plan().operations().isEmpty() || !prepared.plan().restartReasons().isEmpty()) return true;
-			return !ConfigTools.GSON.toJson(prepared.plan().plannedClientConfig()).equals(ConfigTools.GSON.toJson(clientConfig));
+			return requiresReconciliation(prepared, installed);
 		}
 	}
 
@@ -565,8 +561,15 @@ public class ModpackUpdater implements AutoCloseable {
 		try {
 			requireLiveConnection();
 			new ScreenManager().waiting();
-			if (requestUpdatePreview(filesToUpdate)) return;
-			LOGGER.warn("Update preview was not shown; leaving the installed modpack unchanged");
+			switch (requestUpdatePreview(filesToUpdate)) {
+				case PREVIEW_SHOWN -> {
+					return;
+				}
+				case APPLIED -> LOGGER.info("Applied a metadata-only generation update without opening a review screen");
+				case DEFERRED -> LOGGER.info("Metadata-only generation update was deferred to the detached helper");
+				case FAILED -> LOGGER.error("Metadata-only generation update failed; the installed generation was not advanced");
+				case PREVIEW_NOT_SHOWN -> LOGGER.warn("Update preview could not be shown; leaving the installed generation unchanged");
+			}
 			close();
 		} catch (Exception e) {
 			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
@@ -623,19 +626,22 @@ public class ModpackUpdater implements AutoCloseable {
 		applyApprovedPlan(finalPlan, start);
 	}
 
-	private void applyApprovedPlan(PreparedPlan plan, long start) {
+	private ApplyStatus applyApprovedPlan(PreparedPlan plan, long start) {
 		try {
 			recordChangelogs(plan, selectedTarget);
 			ApplyResult applyResult = applyPreparedPlan(plan, selectedTarget);
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
 			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 			restartAfterApply(applyResult);
+			return ApplyStatus.APPLIED;
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
 			new ReLauncher(storage.activeDirectory(), UpdateType.UPDATE, changelogs).restart(preload);
+			return ApplyStatus.DEFERRED;
 		} catch (Exception e) {
 			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
 			LOGGER.error("Critical error while applying the modpack update", e);
+			return ApplyStatus.FAILED;
 		} finally {
 			close();
 		}
@@ -861,10 +867,18 @@ public class ModpackUpdater implements AutoCloseable {
 		return storage.gameDirectory().resolve(relative);
 	}
 
-	private boolean requestUpdatePreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) throws Exception {
+	private PreviewRequestResult requestUpdatePreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			PreparedPlan prepared = buildPlan(cache, modCache, selectedTarget.flatTarget(), false);
+			if (!requiresPlayerReview(prepared, firstConnection)) {
+				return switch (applyApprovedPlan(prepared, System.currentTimeMillis())) {
+					case APPLIED -> PreviewRequestResult.APPLIED;
+					case DEFERRED -> PreviewRequestResult.DEFERRED;
+					case FAILED -> PreviewRequestResult.FAILED;
+				};
+			}
+			startSourceFetch();
 			Runnable continueAction = () -> {
 				if (firstConnection && !confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return;
 				startUpdateAfterPreview(filesToUpdate);
@@ -872,8 +886,27 @@ public class ModpackUpdater implements AutoCloseable {
 			Runnable cancelAction = firstConnection
 					? () -> confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING)
 					: this::close;
-			return requestPreparedPlanPreview(prepared, continueAction, cancelAction, firstConnection);
+			return requestPreparedPlanPreview(prepared, continueAction, cancelAction, firstConnection)
+					? PreviewRequestResult.PREVIEW_SHOWN
+					: PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		}
+	}
+
+	/** A review is required for the first install or any plan that changes player-visible state. */
+	private boolean requiresPlayerReview(PreparedPlan prepared, boolean firstInstall) {
+		if (firstInstall) return true;
+		return hasPlanImpact(prepared);
+	}
+
+	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */
+	private boolean requiresReconciliation(PreparedPlan prepared, Jsons.ModpackContentFields installed) {
+		return installed == null || !GenerationTarget.fromFlat(installed).equals(prepared.plan().generationTarget()) || hasPlanImpact(prepared);
+	}
+
+	private boolean hasPlanImpact(PreparedPlan prepared) {
+		UpdatePlan plan = prepared.plan();
+		return !plan.operations().isEmpty() || !plan.conflicts().isEmpty() || !plan.preservations().isEmpty() || !plan.baselineCaptures().isEmpty()
+				|| !plan.restartReasons().isEmpty() || !ConfigTools.GSON.toJson(plan.plannedClientConfig()).equals(ConfigTools.GSON.toJson(clientConfig));
 	}
 
 	private boolean requestPreparedPlanPreview(PreparedPlan prepared, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) throws IOException {
@@ -1183,6 +1216,14 @@ public class ModpackUpdater implements AutoCloseable {
 		private List<String> reasonDescriptions() {
 			return restartReasons.stream().map(reason -> reason.description).toList();
 		}
+	}
+
+	private enum ApplyStatus {
+		APPLIED, DEFERRED, FAILED
+	}
+
+	private enum PreviewRequestResult {
+		PREVIEW_SHOWN, PREVIEW_NOT_SHOWN, APPLIED, DEFERRED, FAILED
 	}
 
 	// Returns the modpack mods that ship a service file this loader's running version cannot host
