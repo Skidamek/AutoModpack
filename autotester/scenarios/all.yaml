@@ -54,8 +54,17 @@ flow:
     name: select a group with a dependency
     select: { text: Addon }
   - do: wait_for
+    name: return to the dependency selected by Addon
+    until: { element: { text: "< Prev" } }
+  - do: click
+    name: inspect the dependency selected by Addon
+    select: { text: "< Prev" }
+  - do: wait_for
     name: show the dependency explanation
-    until: { element: { text: required by selection } }
+    until: { element: { text: "[+] Visuals (" } }
+  - do: click
+    name: return to dependency and conflict groups
+    select: { text: "Next >" }
   - do: click
     name: select the conflicting alternative
     select: { text: Alternative }
@@ -416,21 +425,21 @@ serverFiles:
   generations:
     - patchNotes: "Initial release: core content and optional client groups."
       files:
-        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
-        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
-        - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
-        - { path: config/amp-autotest-visual.txt, content: "visual-v1\n" }
-        - { path: config/amp-autotest-addon.txt, content: "addon-v1\n" }
-        - { path: config/amp-autotest-alternative.txt, content: "alternative-v1\n" }
-        - { path: config/amp-autotest-windows.txt, content: "windows-v1\n" }
-        - { path: config/pack-a-only.txt, content: "pack-a\n" }
+        - { group: main, path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
+        - { group: main, path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
+        - { group: main, path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { group: visual, path: config/amp-autotest-visual.txt, content: "visual-v1\n" }
+        - { group: addon, path: config/amp-autotest-addon.txt, content: "addon-v1\n" }
+        - { group: alternative, path: config/amp-autotest-alternative.txt, content: "alternative-v1\n" }
+        - { group: windows, path: config/amp-autotest-windows.txt, content: "windows-v1\n" }
+        - { group: main, path: config/pack-a-only.txt, content: "pack-a\n" }
     - patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
       files:
-        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v2\n" }
-        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":43}' }
-        - { path: config/amp-autotest-visual.txt, content: "visual-v2\n" }
-        - { path: config/amp-autotest-delta.txt, content: "delta-v2\n" }
-        - { path: config/amp-autotest-addon.txt, content: "addon-v2\n" }
-        - { path: config/amp-autotest-alternative.txt, content: "alternative-v2\n" }
-        - { path: config/amp-autotest-windows.txt, content: "windows-v2\n" }
-        - { path: config/pack-a-only.txt, content: "pack-a-v2\n" }
+        - { group: main, path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v2\n" }
+        - { group: main, path: config/amp-autotest-beta.json, content: '{"id":"beta","value":43}' }
+        - { group: visual, path: config/amp-autotest-visual.txt, content: "visual-v2\n" }
+        - { group: main, path: config/amp-autotest-delta.txt, content: "delta-v2\n" }
+        - { group: addon, path: config/amp-autotest-addon.txt, content: "addon-v2\n" }
+        - { group: alternative, path: config/amp-autotest-alternative.txt, content: "alternative-v2\n" }
+        - { group: windows, path: config/amp-autotest-windows.txt, content: "windows-v2\n" }
+        - { group: main, path: config/pack-a-only.txt, content: "pack-a-v2\n" }

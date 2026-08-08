@@ -14,6 +14,7 @@ from automodpack_autotester.config import (
     load_macros,
     load_scenarios,
     load_targets,
+    parse_server_files,
     scenario_matches_target,
 )
 from automodpack_autotester.generation_identity import CanonicalEncoder
@@ -49,6 +50,28 @@ def test_shipped_scenarios_validate():
     targets = load_targets()
     for name, scenario in load_scenarios().items():
         assert validate_scenario(scenario, macros, targets) == [], name
+
+
+def test_release_fixture_uses_server_config_and_declared_group_directories(make_ctx):
+    scenario = load_scenarios()["all"]
+    server_files = parse_server_files(scenario)
+    ctx = make_ctx(scenario=scenario, modpack_name=server_files.modpack_name, marker_rel=server_files.marker,
+                   scenario_files=server_files.files)
+    ctx.artifact.write_bytes(b"autotest-artifact")
+    runner._prepare_server(ctx)
+
+    config_path = ctx.server_dir / "automodpack" / "server-config.json"
+    assert config_path.is_file()
+    assert not (ctx.server_dir / "automodpack" / "automodpack-server.json").exists()
+    assert set(json.loads(config_path.read_text())["groups"]) == {"main", "visual", "addon", "alternative", "windows"}
+
+    host_root = ctx.server_dir / "automodpack" / "host-modpack"
+    assert (host_root / "main" / "config/amp-autotest-alpha.txt").is_file()
+    assert (host_root / "visual" / "config/amp-autotest-visual.txt").is_file()
+    assert (host_root / "addon" / "config/amp-autotest-addon.txt").is_file()
+    assert (host_root / "alternative" / "config/amp-autotest-alternative.txt").is_file()
+    assert (host_root / "windows" / "config/amp-autotest-windows.txt").is_file()
+    assert not (host_root / "main" / "config/amp-autotest-visual.txt").exists()
 
 
 def test_release_gate_cannot_drop_a_required_capability():
