@@ -189,7 +189,6 @@ public final class UpdatePlanner {
 			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
 		if (input.installedManifest() == null || isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
 		Set<String> forceCopyPaths = new HashSet<>(input.forceCopyServicePaths());
-		for (var item : targetItems.values()) if (item.forceCopy) forceCopyPaths.add(normalize(item.file));
 
 		for (var item : targetItems.values()) {
 			String relative = normalize(item.file);

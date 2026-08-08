@@ -115,7 +115,7 @@ public final class ModpackCandidateScanner {
 				GroupManifest.GroupFile file = result.file;
 				if (result.object == null) throw new CandidateBuildException("Selected source has no staged object: " + result.selected.sourcePath());
 				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new Jsons.CompleteModpackContentFields.GroupFileFields(
-						String.valueOf(file.size()), file.type(), file.editable(), file.overwriteEditable(), file.forceCopy(), file.sha1(), file.murmur()));
+						String.valueOf(file.size()), file.type(), file.editable(), file.overwriteEditable(), file.sha1(), file.murmur()));
 				StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
 				if (redundant != null) result.object.delete();
 				provenance.put(ModpackCandidate.provenanceKey(result.selected.groupId(), result.selected.logicalPath()), result.provenance);
@@ -136,7 +136,7 @@ public final class ModpackCandidateScanner {
 				group.description = declaration.description;
 				group.tag = declaration.tag == null ? "" : declaration.tag;
 				group.required = declaration.required;
-				group.recommended = declaration.recommended;
+				group.defaultSelected = declaration.defaultSelected;
 				group.breaksWith = sortedSet(declaration.breaksWith);
 				group.requires = sortedSet(declaration.requires);
 				group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);
@@ -144,18 +144,6 @@ public final class ModpackCandidateScanner {
 				groups.put(entry.getKey(), group);
 			}
 			fields.groups = groups;
-			Map<String, Jsons.CompleteModpackContentFields.SelectionTagFields> tags = new LinkedHashMap<>();
-			if (request.selectionTags() != null) for (var entry : new TreeMap<>(request.selectionTags()).entrySet()) {
-				Jsons.SelectionTagDeclaration declaration = entry.getValue();
-				if (declaration == null) throw new CandidateBuildException("Selection tag '" + entry.getKey() + "' has no declaration");
-				Jsons.CompleteModpackContentFields.SelectionTagFields tag = new Jsons.CompleteModpackContentFields.SelectionTagFields();
-				tag.displayName = declaration.displayName;
-				tag.description = declaration.description;
-				tag.defaultSelected = declaration.defaultSelected;
-				tag.serverForced = declaration.serverForced;
-				tags.put(entry.getKey(), tag);
-			}
-			fields.selectionTags = tags;
 			GroupManifest manifest = GroupManifestValidator.validate(fields);
 			if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
 				throw new CandidateBuildException("Candidate contains no published files");
@@ -189,10 +177,9 @@ public final class ModpackCandidateScanner {
 		if (selected != null && file != null) {
 			PathRuleSet.Decision editable = rules.allowEditsInFiles().evaluate(selected.logicalPath());
 			PathRuleSet.Decision overwrite = rules.overwriteEditableFiles().evaluate(selected.logicalPath());
-			PathRuleSet.Decision forceCopy = rules.forceCopyFilesToStandardLocation().evaluate(selected.logicalPath());
 			boolean isEditable = editable.included();
-			file = new GroupManifest.GroupFile(file.size(), file.type(), isEditable, isEditable && overwrite.included(), forceCopy.included(), file.sha1(), file.murmur());
-			provenance = new CandidateProvenance(selected, editable.decisiveRule(), overwrite.decisiveRule(), forceCopy.decisiveRule());
+			file = new GroupManifest.GroupFile(file.size(), file.type(), isEditable, isEditable && overwrite.included(), file.sha1(), file.murmur());
+			provenance = new CandidateProvenance(selected, editable.decisiveRule(), overwrite.decisiveRule());
 		}
 		return new PathResult(selected, file, object, provenance, exclusions, shadow, pair.explicit != null ? pair.explicit : pair.synced);
 	}
@@ -200,8 +187,7 @@ public final class ModpackCandidateScanner {
 	private static GroupRules compileRules(String groupId, Jsons.GroupDeclaration declaration) throws CandidateBuildException {
 		return new GroupRules(compileRuleSet(declaration.syncedFiles, groupId, "syncedFiles"),
 				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"),
-				compileRuleSet(declaration.overwriteEditableFiles, groupId, "overwriteEditableFiles"),
-				compileRuleSet(declaration.forceCopyFilesToStandardLocation, groupId, "forceCopyFilesToStandardLocation"));
+				compileRuleSet(declaration.overwriteEditableFiles, groupId, "overwriteEditableFiles"));
 	}
 
 	private static PathRuleSet compileRuleSet(Set<String> rules, String groupId, String name) throws CandidateBuildException {
@@ -298,8 +284,7 @@ public final class ModpackCandidateScanner {
 	private record GroupRules(
 			PathRuleSet syncedFiles,
 			PathRuleSet allowEditsInFiles,
-			PathRuleSet overwriteEditableFiles,
-			PathRuleSet forceCopyFilesToStandardLocation) {}
+			PathRuleSet overwriteEditableFiles) {}
 
 	private static final class SourcePair {
 		private CandidateSource explicit;
@@ -329,7 +314,6 @@ public final class ModpackCandidateScanner {
 			Path serverRoot,
 			Path groupRoot,
 			Map<String, Jsons.GroupDeclaration> groups,
-			Map<String, Jsons.SelectionTagDeclaration> selectionTags,
 			boolean autoExcludeUnnecessaryFiles,
 			boolean autoExcludeServerSideMods,
 			Path stagingDirectory,
@@ -338,9 +322,9 @@ public final class ModpackCandidateScanner {
 			FileMetadataCache fileMetadataCache,
 			ModFileCache modFileCache) {
 		public Request(String modpackId, String modpackName, String automodpackVersion, String loader, String loaderVersion, String mcVersion, Path serverRoot,
-				Path groupRoot, Map<String, Jsons.GroupDeclaration> groups, Map<String, Jsons.SelectionTagDeclaration> selectionTags, boolean autoExcludeUnnecessaryFiles,
+				Path groupRoot, Map<String, Jsons.GroupDeclaration> groups, boolean autoExcludeUnnecessaryFiles,
 				boolean autoExcludeServerSideMods, Path stagingDirectory, Executor executor) {
-			this(modpackId, modpackName, automodpackVersion, loader, loaderVersion, mcVersion, serverRoot, groupRoot, groups, selectionTags, autoExcludeUnnecessaryFiles,
+			this(modpackId, modpackName, automodpackVersion, loader, loaderVersion, mcVersion, serverRoot, groupRoot, groups, autoExcludeUnnecessaryFiles,
 					autoExcludeServerSideMods, stagingDirectory, executor, null, null, null);
 		}
 

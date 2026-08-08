@@ -53,7 +53,7 @@ final class ClientLoginUpdateFlow {
 			SelectedModpackTarget selectedTarget;
 			try {
 				selectedTarget = savedSelection == null
-						? SelectedModpackTarget.prepare(manifestResult.content(), null, GroupSelectionResolver.defaultIntent(record.manifest()), ClientPlatform.current())
+						? SelectedModpackTarget.prepareDefault(manifestResult.content(), ClientPlatform.current())
 						: SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, savedSelection, ClientPlatform.current());
 			} catch (SelectionResolutionException e) {
 				if (savedSelection != null && canRepair(manifestResult.content())) {
@@ -96,7 +96,7 @@ final class ClientLoginUpdateFlow {
 	private static boolean canRepair(Jsons.CompleteModpackContentFields fields) {
 		try {
 			GenerationRecord record = GenerationRecord.fromFields(fields);
-			SelectedModpackTarget.prepare(fields, null, GroupSelectionResolver.defaultIntent(record.manifest()), ClientPlatform.current());
+			SelectedModpackTarget.prepareDefault(fields, ClientPlatform.current());
 			return true;
 		} catch (RuntimeException ignored) {
 			return false;

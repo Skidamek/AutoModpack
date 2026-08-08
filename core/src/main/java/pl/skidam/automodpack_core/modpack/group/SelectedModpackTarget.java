@@ -43,8 +43,13 @@ public record SelectedModpackTarget(
 		GenerationRecord record = GenerationRecord.fromFields(fields);
 		List<GenerationPatchNoteHistory.Entry> patchNotesHistory = GenerationPatchNoteHistory.fromFields(fields);
 		SelectionIntent existing = store.get(record.manifest().modpackId()).orElse(null);
-		if (existing == null) return prepare(record, null, GroupSelectionResolver.defaultIntent(record.manifest()), platform, patchNotesHistory);
+		if (existing == null) return prepareResolved(record, null, GroupSelectionResolver.resolveDefault(record.manifest(), platform), platform, patchNotesHistory);
 		return prepare(record, existing, existing, platform, patchNotesHistory);
+	}
+
+	public static SelectedModpackTarget prepareDefault(Jsons.CompleteModpackContentFields fields, ClientPlatform platform) {
+		GenerationRecord record = GenerationRecord.fromFields(fields);
+		return prepareResolved(record, null, GroupSelectionResolver.resolveDefault(record.manifest(), platform), platform, GenerationPatchNoteHistory.fromFields(fields));
 	}
 
 	public static SelectedModpackTarget prepare(Jsons.CompleteModpackContentFields fields, SelectionIntent expectedPriorIntent, SelectionIntent intent,
@@ -60,6 +65,12 @@ public record SelectedModpackTarget(
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
 		GroupManifest manifest = record.manifest();
 		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, intent, platform);
+		return prepareResolved(record, expectedPriorIntent, resolved, platform, patchNotesHistory);
+	}
+
+	private static SelectedModpackTarget prepareResolved(GenerationRecord record, SelectionIntent expectedPriorIntent, ResolvedSelection resolved, ClientPlatform platform,
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
+		GroupManifest manifest = record.manifest();
 		Jsons.ModpackContentFields flatTarget = SelectedTreeComposer.compose(manifest, resolved, GenerationTarget.from(record));
 		flatTarget.ownershipLedger = record.ownershipLedger().toFields();
 		return new SelectedModpackTarget(record, expectedPriorIntent, resolved, platform, flatTarget, patchNotesHistory);

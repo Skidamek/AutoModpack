@@ -12,7 +12,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 class SelectedTreeComposerTest {
 	@Test
 	void deduplicatesSharedFileAndKeepsItWhileOneOwnerRemains() {
-		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, false, false,
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, false,
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
 		GroupManifest manifest = manifest(Map.of("main", group(file), "visuals", group(file)));
 
@@ -28,7 +28,7 @@ class SelectedTreeComposerTest {
 
 	@Test
 	void selectionChangeKeepsGenerationIdentity() {
-		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, false, false,
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, false,
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
 		GroupManifest manifest = manifest(Map.of("main", group(file), "visuals", group(file)));
 		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "");
@@ -43,9 +43,9 @@ class SelectedTreeComposerTest {
 
 	@Test
 	void selectsCorrectMutuallyExclusiveVariant() {
-		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, "mod", false, false, false,
+		GroupManifest.GroupFile first = new GroupManifest.GroupFile(1, "mod", false, false,
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
-		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, "mod", false, false, false,
+		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, "mod", false, false,
 				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
 		GroupManifest manifest = manifest(Map.of("first", group(first), "second", group(second)));
 
@@ -56,7 +56,7 @@ class SelectedTreeComposerTest {
 	}
 
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
-		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups), new TreeMap<>());
+		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups));
 	}
 
 	private static GroupManifest.Group group(GroupManifest.GroupFile file) {

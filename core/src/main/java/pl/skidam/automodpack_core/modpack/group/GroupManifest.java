@@ -11,11 +11,9 @@ public record GroupManifest(
 		String loader,
 		String loaderVersion,
 		String mcVersion,
-		NavigableMap<String, Group> groups,
-		NavigableMap<String, SelectionTag> selectionTags) {
+		NavigableMap<String, Group> groups) {
 	public GroupManifest {
 		groups = immutableMap(groups);
-		selectionTags = immutableMap(selectionTags);
 	}
 
 	public Jsons.CompleteModpackContentFields toFields() {
@@ -35,7 +33,7 @@ public record GroupManifest(
 			serialized.description = group.description();
 			serialized.tag = group.tag();
 			serialized.required = group.required();
-			serialized.recommended = group.recommended();
+			serialized.defaultSelected = group.defaultSelected();
 			serialized.breaksWith = new LinkedHashSet<>(group.breaksWith());
 			serialized.requires = new LinkedHashSet<>(group.requires());
 			serialized.compatiblePlatforms = group.compatiblePlatforms().stream().map(ClientPlatform::id)
@@ -44,24 +42,12 @@ public record GroupManifest(
 			for (var fileEntry : group.files().entrySet()) {
 				GroupFile file = fileEntry.getValue();
 				files.put(fileEntry.getKey(), new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.size()), file.type(), file.editable(),
-						file.overwriteEditable(), file.forceCopy(), file.sha1(), file.murmur()));
+						file.overwriteEditable(), file.sha1(), file.murmur()));
 			}
 			serialized.files = files;
 			serializedGroups.put(entry.getKey(), serialized);
 		}
 		fields.groups = serializedGroups;
-
-		Map<String, Jsons.CompleteModpackContentFields.SelectionTagFields> serializedTags = new LinkedHashMap<>();
-		for (var entry : selectionTags.entrySet()) {
-			SelectionTag tag = entry.getValue();
-			Jsons.CompleteModpackContentFields.SelectionTagFields serialized = new Jsons.CompleteModpackContentFields.SelectionTagFields();
-			serialized.displayName = tag.displayName();
-			serialized.description = tag.description();
-			serialized.defaultSelected = tag.defaultSelected();
-			serialized.serverForced = tag.serverForced();
-			serializedTags.put(entry.getKey(), serialized);
-		}
-		fields.selectionTags = serializedTags;
 
 		return fields;
 	}
@@ -88,7 +74,7 @@ public record GroupManifest(
 			String description,
 			String tag,
 			boolean required,
-			boolean recommended,
+			boolean defaultSelected,
 			NavigableSet<String> breaksWith,
 			NavigableSet<String> requires,
 			Set<ClientPlatform> compatiblePlatforms,
@@ -107,18 +93,10 @@ public record GroupManifest(
 			return compatiblePlatforms.isEmpty() || compatiblePlatforms.contains(platform);
 		}
 	}
-
-	public record SelectionTag(String displayName, String description, boolean defaultSelected, boolean serverForced) {
-		public SelectionTag {
-			displayName = displayName == null ? "" : displayName;
-			description = description == null ? "" : description;
-		}
-	}
-
-	public record GroupFile(long size, String type, boolean editable, boolean overwriteEditable, boolean forceCopy, String sha1, String murmur) {
+	public record GroupFile(long size, String type, boolean editable, boolean overwriteEditable, String sha1, String murmur) {
 		public boolean sameEffectiveState(GroupFile other) {
 			return other != null && size == other.size && editable == other.editable && overwriteEditable == other.overwriteEditable
-					&& forceCopy == other.forceCopy && Objects.equals(type, other.type) && sha1.equalsIgnoreCase(other.sha1);
+					&& Objects.equals(type, other.type) && sha1.equalsIgnoreCase(other.sha1);
 		}
 	}
 }

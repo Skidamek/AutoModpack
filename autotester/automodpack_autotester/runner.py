@@ -586,7 +586,7 @@ def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_roo
                 "description": "",
                 "tag": "",
                 "required": True,
-                "recommended": True,
+                "defaultSelected": True,
                 "breaksWith": [],
                 "requires": [],
                 "compatiblePlatforms": [],
@@ -596,7 +596,6 @@ def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_roo
                         "type": entry["type"],
                         "editable": entry["editable"],
                         "overwriteEditable": False,
-                        "forceCopy": False,
                         "sha1": entry["sha1"],
                         "murmur": "",
                     }
@@ -604,7 +603,6 @@ def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_roo
                 },
             }
         },
-        "selectionTags": {},
         "ownershipLedger": {
             "modpackId": modpack_id,
             "entries": ledger_entries,
@@ -712,7 +710,7 @@ def _v_stage_modpack(ctx: Context, step):
     selection_store = client_root / "selections.json"
     selection_store.write_text(json.dumps({
         "DO_NOT_CHANGE_IT": 1,
-        "selections": {modpack_id: {"requestedTags": [], "requestedGroups": [], "excludedGroups": []}},
+        "selections": {modpack_id: {"requestedGroups": [], "excludedGroups": []}},
     }, indent=2) + "\n")
 
     # A client config that selects the staged pack and disables the launch update,

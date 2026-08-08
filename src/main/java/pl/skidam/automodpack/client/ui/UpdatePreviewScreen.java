@@ -143,7 +143,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				VersionedText.literal(truncateToWidth(this.font, "Patch notes: " + patchNotes, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.GRAY), this.width / 2, 44, TextColors.WHITE);
 
 		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
-		boolean staleSelection = !groups.staleTags().isEmpty() || !groups.staleGroups().isEmpty();
+		boolean staleSelection = !groups.staleGroups().isEmpty();
 		String selection = staleSelection ? "Some previously selected content is no longer available." : groups.resolvedGroups().size() + " content groups selected";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(selection).withStyle(staleSelection ? ChatFormatting.RED : ChatFormatting.GRAY), this.width / 2, 56,
 				TextColors.WHITE);
