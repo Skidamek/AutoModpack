@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -942,32 +943,31 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void populateStoreFromActive(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
-		if (target.list == null) return;
-		for (var item : target.list) {
-			Path object = storage.objectsDirectory().resolve(item.sha1);
-			long size = Long.parseLong(item.size);
-			if (SmartFileUtils.isValidFile(object, size, item.sha1)) continue;
-			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
-			populateStoreObject(source, object, size, item.sha1, cache);
-		}
+		populateStoreFromSources(target, cache, item -> List.of(SmartFileUtils.getPath(storage.activeDirectory(), item.file)));
 	}
 
 	private void populateStoreFromCachedLocations(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
+		populateStoreFromSources(target, cache,
+				item -> List.of(SmartFileUtils.getPath(storage.activeDirectory(), item.file), livePath(item)));
+	}
+
+	private void populateStoreFromSources(Jsons.ModpackContentFields target, FileMetadataCache cache,
+			Function<Jsons.ModpackContentFields.ModpackContentItem, List<Path>> sourceResolver) throws IOException {
 		if (target.list == null) return;
 		for (var item : target.list) {
-			long size = Long.parseLong(item.size);
 			Path object = storage.objectsDirectory().resolve(item.sha1);
+			long size = Long.parseLong(item.size);
 			if (SmartFileUtils.isValidFile(object, size, item.sha1)) continue;
-			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
-			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) source = livePath(item);
-			populateStoreObject(source, object, size, item.sha1, cache);
+			for (Path source : sourceResolver.apply(item))
+				if (populateStoreObject(source, object, size, item.sha1, cache)) break;
 		}
 	}
 
-	private static void populateStoreObject(Path source, Path object, long size, String sha1, FileMetadataCache cache) throws IOException {
-		if (!SmartFileUtils.isValidFile(source, size, sha1)) return;
+	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileMetadataCache cache) throws IOException {
+		if (!SmartFileUtils.isValidFile(source, size, sha1)) return false;
 		SmartFileUtils.copyVerifiedAtomic(source, object, size, sha1);
 		cache.overwriteCache(object, sha1);
+		return true;
 	}
 
 	private Map<UpdatePlan.FileKey, UpdatePlan.FileState> inspectFiles(Jsons.ModpackContentFields target, Jsons.ModpackContentFields installed,
