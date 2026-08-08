@@ -83,11 +83,19 @@ def assert_file_content(ctx, step):
 
 @verb("seed_unowned_local_file")
 def seed_unowned_local_file(ctx, step):
-    """Create a deterministic local file used to verify non-pack content survives switching."""
+    """Create deterministic local content used to verify non-pack content survives switching."""
     raw_path = Path(str(ctx.resolve(step["path"])))
     path = ctx.path(raw_path)
     if raw_path.is_absolute() or not path.resolve().is_relative_to(ctx.game_dir.resolve()):
         raise ValueError(f"local fixture path escapes the client game directory: {path}")
+    fixture = ctx.resolve(step.get("fixture"))
+    if fixture is not None:
+        if not isinstance(fixture, dict):
+            raise ValueError("unowned local fixture must be a valid mod fixture mapping")
+        write_valid_mod_fixture(path, fixture)
+        return
+    if path.suffix.lower() == ".jar":
+        raise ValueError("unowned local .jar files require a valid mod fixture mapping")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(ctx.resolve(step.get("content", ""))), encoding="utf-8")
 

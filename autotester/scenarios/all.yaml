@@ -171,7 +171,7 @@ flow:
   - do: seed_unowned_local_file
     name: seed an unowned local file for preservation coverage
     path: mods/local-unowned.jar
-    content: "not-a-pack-owned-file"
+    fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
   # A second complete record is cached while A is active. The manager path
   # below proves that selecting a row does not activate it before review.
   - do: stage_modpack
@@ -238,10 +238,10 @@ flow:
     name: relaunch after Pack B switch
   - do: wait_bridge
     name: wait for Pack B bridge
-  - do: assert_file_content
-    name: verify the unowned local file survived A to B
+  - do: assert_mod_fixture
+    name: verify the unowned local mod survived A to B
     path: mods/local-unowned.jar
-    content: "not-a-pack-owned-file"
+    fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
   - do: assert_file_content
     name: verify Pack B payload is active after accepting the switch
     path: "${active_dir}/config/pack-b.txt"
@@ -289,10 +289,10 @@ flow:
   - do: wait_client_exit
     name: wait for reverse switch restart
   - use: rejoin
-  - do: assert_file_content
-    name: verify the unowned local file survived B to A
+  - do: assert_mod_fixture
+    name: verify the unowned local mod survived B to A
     path: mods/local-unowned.jar
-    content: "not-a-pack-owned-file"
+    fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
   - do: assert_file_content
     name: verify the Pack A only payload is restored after the reverse switch
     path: "${active_dir}/config/pack-a-only.txt"

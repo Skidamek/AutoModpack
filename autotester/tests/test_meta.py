@@ -19,6 +19,7 @@ from automodpack_autotester.config import (
 )
 from automodpack_autotester.generation_identity import CanonicalEncoder
 from automodpack_autotester.engine.registry import describe, names
+from automodpack_autotester.engine.steps_io import seed_unowned_local_file
 from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, valid_mod_jar_bytes
 from automodpack_autotester.validate import validate_scenario
 
@@ -72,6 +73,25 @@ def test_release_fixture_uses_server_config_and_declared_group_directories(make_
     assert (host_root / "alternative" / "config/amp-autotest-alternative.txt").is_file()
     assert (host_root / "windows" / "config/amp-autotest-windows.txt").is_file()
     assert not (host_root / "main" / "config/amp-autotest-visual.txt").exists()
+
+
+def test_unowned_local_fixture_writes_a_valid_cross_loader_archive(make_ctx):
+    fixture = {"modId": "amp_autotest_unowned", "version": "1.0.0-local-unowned", "marker": "unowned-local"}
+    ctx = make_ctx()
+
+    seed_unowned_local_file(ctx, {"path": "mods/local-unowned.jar", "fixture": fixture})
+
+    assert_valid_mod_fixture((ctx.game_dir / "mods/local-unowned.jar").read_bytes(), fixture)
+
+
+def test_validation_rejects_plain_text_unowned_jar_seed():
+    scenario = load_scenarios()["all"]
+    seed = next(step for step in scenario["flow"] if isinstance(step, dict) and step.get("do") == "seed_unowned_local_file")
+    seed.pop("fixture")
+
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+
+    assert any(".jar paths require a valid mod fixture mapping" in problem for problem in problems)
 
 
 def test_release_gate_cannot_drop_a_required_capability():
