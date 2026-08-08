@@ -4,11 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,7 +42,7 @@ class ClientOverlaySnapshotTest {
 		ClientStorage storage = storage();
 		Path overlay = storage.overlayFile("abcdefg", "config/example.txt");
 		Files.createDirectories(overlay.getParent());
-		Files.writeString(overlay, "overlay");
+		Files.writeString(overlay, "overlay", StandardCharsets.UTF_8);
 		storage.writeOverlayState("abcdefg", Set.of("config/deleted.txt"));
 
 		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
@@ -64,7 +66,7 @@ class ClientOverlaySnapshotTest {
 
 	private static Map<Path, BasicFileAttributes> metadataRecords(Path root) throws Exception {
 		try (var paths = Files.walk(root)) {
-			return paths.filter(path -> Files.isRegularFile(path)).collect(java.util.stream.Collectors.toMap(path -> path, path -> readAttributes(path)));
+			return paths.filter(path -> Files.isRegularFile(path)).collect(Collectors.toMap(path -> path, path -> readAttributes(path)));
 		}
 	}
 

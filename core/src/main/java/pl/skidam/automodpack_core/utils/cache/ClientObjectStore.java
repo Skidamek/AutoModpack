@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -73,12 +74,12 @@ public final class ClientObjectStore {
 				throw new IllegalArgumentException("Client storage reference counts are inconsistent");
 		}
 
-		public java.util.OptionalDouble referencedObjectCoverageRatio() {
-			return referencedObjectCount == 0 ? java.util.OptionalDouble.empty() : java.util.OptionalDouble.of((double) validReferencedObjectCount / referencedObjectCount);
+		public OptionalDouble referencedObjectCoverageRatio() {
+			return referencedObjectCount == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) validReferencedObjectCount / referencedObjectCount);
 		}
 
-		public java.util.OptionalDouble referencedObjectSpaceRatio() {
-			return objectBytes == 0 ? java.util.OptionalDouble.empty() : java.util.OptionalDouble.of((double) validReferencedObjectBytes / objectBytes);
+		public OptionalDouble referencedObjectSpaceRatio() {
+			return objectBytes == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) validReferencedObjectBytes / objectBytes);
 		}
 	}
 

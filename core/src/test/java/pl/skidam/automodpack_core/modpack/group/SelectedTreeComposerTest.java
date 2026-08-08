@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
@@ -79,7 +80,7 @@ class SelectedTreeComposerTest {
 
 		var target = SelectedTreeComposer.composeAll(manifest, null);
 
-		assertEquals(Set.of("base-hash", "alternative-hash"), target.list.stream().map(item -> item.sha1).collect(java.util.stream.Collectors.toSet()));
+		assertEquals(Set.of("base-hash", "alternative-hash"), target.list.stream().map(item -> item.sha1).collect(Collectors.toSet()));
 	}
 
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {

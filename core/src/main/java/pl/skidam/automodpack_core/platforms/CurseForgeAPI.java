@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -111,7 +112,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		request.add("modIds", new Gson().toJsonTree(modIds));
 		JsonObject response = Json.fromCurseForgeUrl(BASE_URL + "/mods", request);
 		if (response == null || !response.has("data") || !response.get("data").isJsonArray()) return Map.of();
-		Map<Integer, String> urls = new java.util.HashMap<>();
+		Map<Integer, String> urls = new HashMap<>();
 		for (JsonElement element : response.getAsJsonArray("data")) {
 			JsonObject project = element.getAsJsonObject();
 			if (!project.has("id")) continue;
