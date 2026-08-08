@@ -21,4 +21,11 @@ dependencies {
 	implementation(
 		"dev.luna5ama.jar-optimizer:dev.luna5ama.jar-optimizer.gradle.plugin:${version("pluginJarOptimizerVersion")}",
 	)
+	testImplementation(gradleTestKit())
+	testImplementation("org.junit.jupiter:junit-jupiter:${version("versionJunit")}")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher:${version("versionJunit")}")
+}
+
+tasks.test {
+	useJUnitPlatform()
 }

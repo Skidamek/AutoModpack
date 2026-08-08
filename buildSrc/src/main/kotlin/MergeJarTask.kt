@@ -26,6 +26,9 @@ abstract class MergeJarTask : DefaultTask() {
     @get:Input
     abstract val loaderModuleName: Property<String>
 
+    @get:Input
+    abstract val buildMode: Property<String>
+
     @get:Internal
     abstract val buildDirectory: DirectoryProperty
 
