@@ -18,13 +18,9 @@ import static pl.skidam.automodpack_core.Constants.clientSelectionFile;
 import static pl.skidam.automodpack_core.Constants.clientTransactionFile;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -32,7 +28,6 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -40,8 +35,8 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
-import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /**
  * The only authority for client-side AutoModpack paths.
@@ -305,6 +300,8 @@ public final class ClientStorage {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		TreeSet<String> canonical = new TreeSet<>();
 		for (String path : deletedPaths) canonical.add(requireLogicalPath(path));
+		Jsons.ClientOverlayFields current = readOverlayState(normalizedModpackId);
+		if (current.deletedPaths.equals(List.copyOf(canonical))) return;
 		Path stateFile = overlayStateFile(normalizedModpackId);
 		if (canonical.isEmpty()) {
 			Files.deleteIfExists(stateFile);
@@ -338,26 +335,11 @@ public final class ClientStorage {
 	}
 
 	public String overlayDigest(String modpackId) throws IOException {
-		Path root = overlayDirectory(modpackId);
-		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-1");
-			for (String deletedPath : readOverlayState(modpackId).deletedPaths) digest.update(("D\0" + deletedPath + "\n").getBytes(StandardCharsets.UTF_8));
-			if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) return HexFormat.of().formatHex(digest.digest());
-			if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client overlay root is not a directory: " + root);
-			try (Stream<Path> paths = Files.walk(root)) {
-				for (Path path : paths.filter(candidate -> !candidate.equals(root)).sorted().toList()) {
-					if (Files.isSymbolicLink(path)) throw new IOException("Client overlay contains a symbolic link: " + path);
-					if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
-					String relative = LogicalPath.normalize(root.relativize(path).toString());
-					String hash = HashUtils.getHash(path);
-					if (hash == null) throw new IOException("Cannot hash client overlay file: " + path);
-					digest.update((relative + "\0" + Files.size(path) + "\0" + hash.toLowerCase(Locale.ROOT) + "\n").getBytes(StandardCharsets.UTF_8));
-				}
-			}
-			return HexFormat.of().formatHex(digest.digest());
-		} catch (NoSuchAlgorithmException e) {
-			throw new AssertionError("SHA-1 is required by the client protocol", e);
-		}
+		return ClientOverlaySnapshot.capture(this, modpackId, null).digest();
+	}
+
+	public ClientOverlaySnapshot overlaySnapshot(String modpackId, FileMetadataCache cache) throws IOException {
+		return ClientOverlaySnapshot.capture(this, modpackId, cache);
 	}
 
 	public void ensureRoots() throws IOException {

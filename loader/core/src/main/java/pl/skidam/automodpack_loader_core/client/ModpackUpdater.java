@@ -36,6 +36,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
+import pl.skidam.automodpack_core.update.ClientOverlaySnapshot;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -410,7 +411,8 @@ public class ModpackUpdater implements AutoCloseable {
 		clientConfig = currentConfig;
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, cache);
+			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, cache,
+					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
 			Set<String> availableBaselineObjects = new HashSet<>();
 			if (baseline.entries != null) for (var entry : baseline.entries) {
 				if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
@@ -735,7 +737,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	// this is run every time we modpack is updated
 	private ApplyResult applyPreparedPlan(PreparedPlan prepared, SelectedModpackTarget target) throws Exception {
-		executePlan(prepared.plan(), target);
+		executePlan(prepared, target);
 		UpdatePlan plan = prepared.plan();
 
 		EnumSet<RestartReason> restartReasons = plan.restartReasons().stream().map(reason -> RestartReason.valueOf(reason.name()))
@@ -794,8 +796,11 @@ public class ModpackUpdater implements AutoCloseable {
 	private PreparedPlan buildPlan(FileMetadataCache cache, ModFileCache modCache, Jsons.ModpackContentFields target, boolean prepareObjects) throws Exception {
 		captureActiveEditableOverlays(cache);
 		Jsons.ModpackContentFields installed = storedTarget();
-		UpdatePlanner.SelectionContext selection = selectionContext();
-		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, selection, cache);
+		Map<String, ClientOverlaySnapshot> overlaySnapshots = new HashMap<>();
+		ClientOverlaySnapshot targetOverlay = storage.overlaySnapshot(target.modpackId, cache);
+		overlaySnapshots.put(target.modpackId, targetOverlay);
+		UpdatePlanner.SelectionContext selection = selectionContext(cache, overlaySnapshots);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, selection, cache, overlaySnapshots);
 		if (prepareObjects) populateStoreFromActive(target, cache);
 		Set<String> forceCopyServices = getForceCopyMods(target).stream().map(UpdatePlanner::normalize).collect(Collectors.toSet());
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(target, cache, modCache);
@@ -808,13 +813,13 @@ public class ModpackUpdater implements AutoCloseable {
 				.collect(Collectors.toMap(entry -> entry.getKey().relativePath(), Map.Entry::getValue));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, editableOverlays, forceCopyServices, targetMods, standardMods, nestedCopies, selection, plannedConfig));
-		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(target.loader, target.loaderVersion)) return new PreparedPlan(plan, files);
+		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(target.loader, target.loaderVersion)) return new PreparedPlan(plan, files, targetOverlay.digest());
 		Set<UpdatePlan.RestartReason> restartReasons = EnumSet.noneOf(UpdatePlan.RestartReason.class);
 		restartReasons.addAll(plan.restartReasons());
 		restartReasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
 		UpdatePlan withLoaderRestart = new UpdatePlan(plan.modpackId(), plan.generationTarget(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(),
 				restartReasons, plan.preservations(), plan.baselineCaptures(), plan.conflicts());
-		return new PreparedPlan(withLoaderRestart, files);
+		return new PreparedPlan(withLoaderRestart, files, targetOverlay.digest());
 	}
 
 	private void captureActiveEditableOverlays(FileMetadataCache cache) throws IOException {
@@ -883,29 +888,16 @@ public class ModpackUpdater implements AutoCloseable {
 		return state != null && selectedTarget != null && selectedTarget.manifest().modpackId().equals(state.modpackId) ? state.generationId : "";
 	}
 
-	private UpdatePlanner.SelectionContext selectionContext() throws IOException {
+	private UpdatePlanner.SelectionContext selectionContext(FileMetadataCache cache, Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
 		String previousId = clientConfig.selectedModpackId;
 		if (previousId == null || previousId.isBlank() || !ModpackId.isValid(previousId)) return null;
 		Jsons.ModpackContentFields previousManifest = storedTarget();
-		return new UpdatePlanner.SelectionContext(previousId, previousManifest, readEditableOverlayStates(previousId));
-	}
-
-	private Map<String, UpdatePlan.FileState> readEditableOverlayStates(String modpackId) throws IOException {
-		Map<String, UpdatePlan.FileState> states = new HashMap<>();
-		Path root = storage.overlayDirectory(modpackId);
-		if (Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
-			try (Stream<Path> paths = Files.walk(root)) {
-				for (Path path : paths.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
-					String relative = UpdatePlanner.normalize(root.relativize(path).toString());
-					String hash = HashUtils.getHash(path);
-					if (hash == null) throw new IOException("Failed to hash stored editable overlay: " + path);
-					states.put(relative, new UpdatePlan.FileState(hash, Files.size(path), true, FileInspection.isMod(path)));
-				}
-			}
+		ClientOverlaySnapshot snapshot = overlaySnapshots.get(previousId);
+		if (snapshot == null) {
+			snapshot = storage.overlaySnapshot(previousId, cache);
+			overlaySnapshots.put(previousId, snapshot);
 		}
-		for (String deletedPath : storage.readOverlayState(modpackId).deletedPaths)
-			states.put(deletedPath, new UpdatePlan.FileState(null, -1, false, false));
-		return states;
+		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files());
 	}
 
 	private void populateStoreFromActive(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
@@ -938,7 +930,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private Map<UpdatePlan.FileKey, UpdatePlan.FileState> inspectFiles(Jsons.ModpackContentFields target, Jsons.ModpackContentFields installed,
-			UpdatePlanner.SelectionContext selection, FileMetadataCache cache) throws IOException {
+			UpdatePlanner.SelectionContext selection, FileMetadataCache cache, Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = new HashMap<>();
 		if (Files.isDirectory(storage.activeDirectory())) {
 			try (Stream<Path> stream = Files.walk(storage.activeDirectory())) {
@@ -946,15 +938,13 @@ public class ModpackUpdater implements AutoCloseable {
 					putFileState(files, UpdatePlan.Root.PROJECTION, storage.activeDirectory(), path, cache);
 			}
 		}
-		Path overlayDirectory = storage.overlayDirectory(target.modpackId);
-		if (Files.isDirectory(overlayDirectory, LinkOption.NOFOLLOW_LINKS)) {
-			try (Stream<Path> stream = Files.walk(overlayDirectory)) {
-				for (Path path : stream.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList())
-					putFileState(files, UpdatePlan.Root.OVERLAY, overlayDirectory, path, cache);
-			}
+		ClientOverlaySnapshot targetOverlay = overlaySnapshots.get(target.modpackId);
+		if (targetOverlay == null) {
+			targetOverlay = storage.overlaySnapshot(target.modpackId, cache);
+			overlaySnapshots.put(target.modpackId, targetOverlay);
 		}
-		for (String deletedPath : storage.readOverlayState(target.modpackId).deletedPaths)
-			files.put(new UpdatePlan.FileKey(UpdatePlan.Root.OVERLAY, deletedPath), new UpdatePlan.FileState(null, -1, false, false));
+		for (var entry : targetOverlay.files().entrySet())
+			files.put(new UpdatePlan.FileKey(UpdatePlan.Root.OVERLAY, entry.getKey()), entry.getValue());
 		Set<String> gamePaths = new HashSet<>();
 		if (target.list != null) target.list.forEach(item -> gamePaths.add(item.file));
 		if (installed != null && installed.list != null) installed.list.forEach(item -> gamePaths.add(item.file));
@@ -1059,9 +1049,10 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	private void executePlan(UpdatePlan plan, SelectedModpackTarget target) throws IOException {
+	private void executePlan(PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
+		UpdatePlan plan = prepared.plan();
 		ensurePlanObjects(plan, target.flatTarget());
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target);
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest());
 		if (!execution.success()) {
 			DetachedUpdateHelper.launch(execution.transaction());
 			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
@@ -1165,9 +1156,10 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	private record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles) {
+	private record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles, String overlayDigest) {
 		private PreparedPlan {
 			originalFiles = Map.copyOf(originalFiles);
+			if (overlayDigest == null || !overlayDigest.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Prepared overlay digest is invalid");
 		}
 	}
 
