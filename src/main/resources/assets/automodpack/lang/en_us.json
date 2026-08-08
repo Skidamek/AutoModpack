@@ -19,6 +19,7 @@
   "automodpack.selection.cancel": "Back",
   "automodpack.selection.reset": "Defaults",
   "automodpack.selection.button": "Modpack settings",
+  "automodpack.selection.shortButton": "Settings",
   "automodpack.selection.noGroups": "This modpack has no optional parts.",
   "automodpack.selection.preview": "Preview target",
   "automodpack.selection.categoryExplanation": "Category buttons select their groups; category tags are not saved separately.",
