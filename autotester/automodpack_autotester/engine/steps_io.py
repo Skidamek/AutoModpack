@@ -86,6 +86,37 @@ def verify_mods(ctx, step):
     await_condition(_all, timeout, step.get("poll"), "expected mods missing")
 
 
+def _read_active_generation(ctx):
+    state_path = ctx.game_dir / "automodpack" / "client" / "active-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    if not isinstance(state, dict):
+        raise ValueError("active generation state is not an object")
+    modpack_id = state["modpackId"]
+    generation_id = state["generationId"]
+    if state.get("status") != "ACTIVE" or not isinstance(modpack_id, str) or not isinstance(generation_id, str):
+        raise ValueError("active generation state is not committed")
+    record_path = ctx.game_dir / "automodpack" / "client" / "records" / generation_id / "manifest.json"
+    manifest = json.loads(record_path.read_text(encoding="utf-8"))
+    generation = manifest.get("generation") if isinstance(manifest, dict) else None
+    if not isinstance(generation, dict) or manifest.get("modpackId") != modpack_id or generation.get("generationId") != generation_id:
+        raise ValueError("active generation state does not match its immutable record")
+    return state, manifest
+
+
+@verb("wait_generation")
+def wait_generation(ctx, step):
+    """Wait until active-state.json and its immutable generation record are committed."""
+    timeout = parse_duration(step.get("timeout"), default=300)
+
+    def _committed():
+        try:
+            return _read_active_generation(ctx)
+        except (FileNotFoundError, IsADirectoryError, OSError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+
+    await_condition(_committed, timeout, step.get("poll"), "active generation state was not committed")
+
+
 @verb("assert_file_content")
 def assert_file_content(ctx, step):
     """Assert the exact UTF-8 contents of a file under the client game directory."""
@@ -247,11 +278,8 @@ def assert_quarantine_payload(ctx, step):
 @verb("assert_generation")
 def assert_generation(ctx, step):
     """Assert installed generation metadata without coupling scenarios to Java internals."""
-    state_path = ctx.game_dir / "automodpack" / "client" / "active-state.json"
     try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-        record_path = ctx.game_dir / "automodpack" / "client" / "records" / state["generationId"] / "manifest.json"
-        manifest = json.loads(record_path.read_text(encoding="utf-8"))
+        _state, manifest = _read_active_generation(ctx)
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"active generation metadata is invalid: {error}") from error
     for group_id, requirements in (step.get("groups", {}) or {}).items():

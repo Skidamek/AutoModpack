@@ -391,6 +391,6 @@ class FakeBridge:
         record.mkdir(parents=True, exist_ok=True)
         (record / "manifest.json").write_text(json.dumps({
             "modpackName": "Pack A", "modpackId": "packaaa", "groups": manifest_groups,
-            "generation": {"patchNotes": notes},
+            "generation": {"generationId": generation_id, "patchNotes": notes},
         }))
-        (client / "active-state.json").write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id}))
+        (client / "active-state.json").write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}))

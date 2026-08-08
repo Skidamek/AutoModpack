@@ -132,8 +132,11 @@ flow:
     name: accept the complete bootstrap
     select: { text: Update }
   - do: wait_file
-    name: wait for the bootstrapped marker
+    name: wait for the projected modpack marker
     path: "${active_dir}/${marker}"
+    timeout: 300s
+  - do: wait_generation
+    name: wait for the committed bootstrapped generation
     timeout: 300s
   - do: assert_authenticated_secret
     name: verify authenticated login persisted the server-issued secret
@@ -368,6 +371,9 @@ flow:
   - do: assert
     name: verify removed file is gone
     that: { file_gone: "${active_dir}/config/amp-autotest-gamma.cfg" }
+  - do: wait_generation
+    name: wait for the committed changed generation
+    timeout: 300s
   - do: assert_generation
     name: verify the published generation and latest patch notes
     patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
