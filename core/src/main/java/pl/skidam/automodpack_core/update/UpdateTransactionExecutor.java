@@ -79,9 +79,13 @@ public final class UpdateTransactionExecutor {
 	}
 
 	public Execution commit(UpdatePlan plan, SelectedModpackTarget target) throws IOException {
+		return commit(plan, target, context.storage().overlayDigest(plan.modpackId()));
+	}
+
+	public Execution commit(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest) throws IOException {
 		ClientStorage storage = context.storage();
 		ensureNoActiveTransaction(storage);
-		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(plan.modpackId()));
+		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest);
 		new ClientGenerationStore(storage).write(target.generationRecord(), target.patchNotesHistory());
 		return commit(transaction);
 	}
