@@ -196,7 +196,7 @@ def _prepare_server(ctx: Context):
     cfg["modpackName"] = ctx.modpack_name
     cfg["acceptedLoaders"] = [ctx.target.loader]
     (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
-    (srv_dir / "automodpack" / "automodpack-server.json").write_text(json.dumps(cfg, indent=2))
+    (srv_dir / "automodpack" / "server-config.json").write_text(json.dumps(cfg, indent=2))
     _write_server_generation(ctx, 0)
 
 
@@ -217,19 +217,29 @@ def _server_generation(ctx: Context, index: int) -> dict:
 def _write_server_generation(ctx: Context, index: int) -> None:
     generation = _server_generation(ctx, index)
     srv_dir = ctx.server_dir
-    host_root = srv_dir / "automodpack" / "host-modpack" / "main"
+    host_root = srv_dir / "automodpack" / "host-modpack"
     if host_root.exists():
         shutil.rmtree(host_root)
     host_root.mkdir(parents=True, exist_ok=True)
-    (host_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
-    (host_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
+    main_root = host_root / "main"
+    (main_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
+    (main_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
+    configured_groups = {
+        str(group_id)
+        for group_id in ((ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {}).get("groups", {}) or {})
+    }
     for item in generation.get("files", []):
         if not isinstance(item, dict) or "path" not in item:
             raise ValueError(f"serverFiles.generations[{index}].files entries need path/content")
         rel = Path(str(item["path"]))
         if rel.is_absolute() or ".." in rel.parts:
             raise ValueError(f"server generation path escapes the host modpack: {rel}")
-        f = host_root / rel
+        group_id = str(item.get("group", "main"))
+        if configured_groups and group_id not in configured_groups:
+            raise ValueError(f"server generation file {rel} refers to undeclared group {group_id!r}")
+        if Path(group_id).is_absolute() or ".." in Path(group_id).parts or len(Path(group_id).parts) != 1:
+            raise ValueError(f"server generation group is not a single safe identifier: {group_id!r}")
+        f = host_root / group_id / rel
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(str(item.get("content", "")))
     patch_notes = generation.get("patchNotes", "")
