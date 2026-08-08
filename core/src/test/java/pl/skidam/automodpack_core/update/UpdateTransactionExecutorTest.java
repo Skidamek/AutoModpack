@@ -117,7 +117,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/blocked.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/blocked.jar", true, hash, bytes.length)));
-		Files.writeString(storage.transactionFile(), "active");
+		Files.writeString(storage.transactionFile(), "active", StandardCharsets.UTF_8);
 
 		assertThrows(IOException.class, () -> executor(storage).commit(plan, target));
 		assertTrue(new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).isEmpty());
@@ -158,7 +158,7 @@ class UpdateTransactionExecutorTest {
 		generations.write(second);
 		String malformedId = "0".repeat(40);
 		Files.createDirectories(storage.generationDirectory(malformedId));
-		Files.writeString(storage.generationManifest(malformedId), "{}");
+		Files.writeString(storage.generationManifest(malformedId), "{}", StandardCharsets.UTF_8);
 
 		assertEquals(List.of(second), generations.installedRecords());
 	}
