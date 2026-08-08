@@ -283,6 +283,28 @@ def test_record_only_staging_does_not_replace_active_state(make_ctx):
     assert json.loads(records[0].read_text())["modpackName"] == "Pack B"
 
 
+def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeypatch):
+    ctx = make_ctx()
+    ctx.artifact.write_bytes(b"autotest-artifact")
+    monkeypatch.setattr(runner, "_run_container", lambda **_kwargs: None)
+    monkeypatch.setattr(runner, "_assert_running", lambda _name: None)
+    monkeypatch.setattr(runner, "_jitter_sleep", lambda *_args, **_kwargs: None)
+
+    runner._launch_client(ctx)
+    marker = ctx.game_dir / "automodpack/data-root.json"
+    before = json.loads(marker.read_text())
+
+    runner._v_stage_modpack(ctx, {
+        "recordOnly": True,
+        "packId": "packbbb",
+        "packName": "Pack B",
+        "files": [{"path": "config/b.txt", "content": "b"}],
+    })
+
+    assert before == {"root": "/work/game/automodpack/client/data", "shared": False}
+    assert json.loads(marker.read_text()) == before
+
+
 def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     ctx = make_ctx()
     local = {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"}
