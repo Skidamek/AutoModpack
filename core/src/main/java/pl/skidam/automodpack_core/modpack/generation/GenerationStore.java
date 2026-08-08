@@ -270,7 +270,9 @@ public final class GenerationStore {
 			} catch (RuntimeException e) {
 				throw new IOException("Candidate ownership ledger is invalid", e);
 			}
-			if (previous.metadata().ledgerDigest().equals(candidateLedger.digest())) return publication(PublicationStatus.NO_CHANGES, actualBefore.orElseThrow());
+			if (previous.metadata().ledgerDigest().equals(candidateLedger.digest())
+					&& previous.metadata().patchNotesDigest().equals(GenerationIdentity.patchNotesDigest(patchNotes)))
+				return publication(PublicationStatus.NO_CHANGES, actualBefore.orElseThrow());
 		}
 
 		ensureStoreDirectories();
