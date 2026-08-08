@@ -266,7 +266,7 @@ def _write_server_generation(ctx: Context, index: int) -> None:
         if fixture is not None:
             if not isinstance(fixture, dict):
                 raise ValueError(f"server generation fixture for {rel} must be a mapping")
-            write_valid_mod_fixture(f, fixture)
+            write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
         else:
             f.write_text(str(item.get("content", "")))
     patch_notes = generation.get("patchNotes", "")
@@ -945,7 +945,7 @@ def _v_stage_modpack(ctx: Context, step):
             fixture = item["fixture"]
             if not isinstance(fixture, dict):
                 raise ValueError("stage_modpack fixture must be a mapping")
-            write_valid_mod_fixture(f, fixture)
+            write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
         else:
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text(content)

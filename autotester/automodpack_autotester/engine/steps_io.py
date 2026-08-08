@@ -203,7 +203,7 @@ def seed_unowned_local_file(ctx, step):
     if fixture is not None:
         if not isinstance(fixture, dict):
             raise ValueError("unowned local fixture must be a valid mod fixture mapping")
-        write_valid_mod_fixture(path, fixture)
+        write_valid_mod_fixture(path, fixture, ctx.target.minecraft)
         return
     if path.suffix.lower() == ".jar":
         raise ValueError("unowned local .jar files require a valid mod fixture mapping")
@@ -221,7 +221,7 @@ def seed_same_path_conflict(ctx, step):
     path = ctx.path(raw_path)
     if raw_path.is_absolute() or not path.resolve().is_relative_to(ctx.game_dir.resolve()):
         raise ValueError(f"local fixture path escapes the client game directory: {path}")
-    write_valid_mod_fixture(path, fixture)
+    write_valid_mod_fixture(path, fixture, ctx.target.minecraft)
     ctx.vars["same_path_conflict_path"] = str(ctx.resolve(step["path"]))
     ctx.vars["same_path_conflict_fixture"] = fixture
 
@@ -238,7 +238,7 @@ def seed_mod_fixture(ctx, step):
         raise ValueError(f"mod fixture path escapes the client game directory: {path}")
     if raw_path.parts[:1] != ("mods",) or raw_path.suffix.lower() != ".jar":
         raise ValueError("mod fixtures must use a .jar path under the ordinary mods directory")
-    write_valid_mod_fixture(path, fixture)
+    write_valid_mod_fixture(path, fixture, ctx.target.minecraft)
 
 
 @verb("assert_mod_fixture")
@@ -249,7 +249,7 @@ def assert_mod_fixture(ctx, step):
     if not isinstance(fixture, dict):
         raise ValueError("mod fixture assertion requires a fixture mapping")
     try:
-        assert_valid_mod_fixture(path.read_bytes(), fixture)
+        assert_valid_mod_fixture(path.read_bytes(), fixture, ctx.target.minecraft)
     except (FileNotFoundError, IsADirectoryError, OSError) as error:
         raise AssertionError(f"mod fixture {path} is not readable: {error}") from error
 
@@ -266,7 +266,7 @@ def assert_quarantine_payload(ctx, step):
     for payload in sorted(conflicts.glob("*/payload")):
         try:
             if isinstance(fixture, dict):
-                assert_valid_mod_fixture(payload.read_bytes(), fixture)
+                assert_valid_mod_fixture(payload.read_bytes(), fixture, ctx.target.minecraft)
                 return
             if payload.read_text(encoding="utf-8") == expected:
                 return
