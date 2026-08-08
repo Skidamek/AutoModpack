@@ -487,6 +487,13 @@ def _v_reset_client_generation(ctx: Context, _step):
     ctx.vars["client_generation_reset"] = True
 
 
+@verb("assert_client_objects_absent")
+def _v_assert_client_objects_absent(ctx: Context, _step):
+    objects = _ensure_client_data_root(ctx.game_dir) / "objects"
+    if objects.exists():
+        raise AssertionError(f"fresh-client CAS was not removed: {objects}")
+
+
 @verb("seed_bootstrap")
 def _v_seed_bootstrap(ctx: Context, step):
     """Write a real game-root bootstrap file from the live server state."""
@@ -527,9 +534,7 @@ def _v_seed_bootstrap(ctx: Context, step):
     })
 
 
-@verb("assert_preload_acquired")
-def _v_assert_preload_acquired(ctx: Context, _step):
-    """Assert that Preload acquired every object in the published catalogue into CAS."""
+def _published_objects(ctx: Context) -> dict[str, int]:
     projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
     try:
         projection = json.loads(projection_path.read_text(encoding="utf-8"))
@@ -545,6 +550,33 @@ def _v_assert_preload_acquired(ctx: Context, _step):
             previous_size = expected.setdefault(sha1, size)
             if previous_size != size:
                 raise AssertionError(f"published projection gives object {sha1} conflicting sizes: {previous_size} and {size}")
+    return expected
+
+
+@verb("assert_preload_rejected")
+def _v_assert_preload_rejected(ctx: Context, _step):
+    """Assert that bootstrap import ran without letting an anonymous secret preload the catalogue."""
+    expected = _published_objects(ctx)
+    if not expected:
+        raise AssertionError("published projection contains no object hashes")
+    objects = _ensure_client_data_root(ctx.game_dir) / "objects"
+    present = [sha1 for sha1 in expected if (objects / sha1).is_file()]
+    if present:
+        raise AssertionError(f"anonymous bootstrap preload acquired catalogue objects: count={len(present)}")
+    connection_path = ctx.game_dir / "automodpack" / "client" / "data" / "packs" / str(ctx.vars["bootstrap_modpack_id"]) / "connection.json"
+    try:
+        connection = json.loads(connection_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"bootstrap connection state is not readable: {error}") from error
+    secrets = connection.get("secrets", {})
+    if isinstance(secrets, dict) and secrets.get(str(ctx.vars["bootstrap_origin"])):
+        raise AssertionError("anonymous bootstrap preload unexpectedly persisted a client secret")
+
+
+@verb("assert_preload_acquired")
+def _v_assert_preload_acquired(ctx: Context, _step):
+    """Assert that Preload acquired every object in the published catalogue into CAS."""
+    expected = _published_objects(ctx)
     if not expected:
         raise AssertionError("published projection contains no object hashes")
     objects = _ensure_client_data_root(ctx.game_dir) / "objects"

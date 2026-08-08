@@ -57,6 +57,7 @@ def test_shipped_scenarios_validate():
 
 def test_release_fixture_uses_server_config_and_declared_group_directories(make_ctx):
     scenario = load_scenarios()["all"]
+    assert scenario["topology"]["server"]["automodpack"]["config"]["validateSecrets"] is True
     server_files = parse_server_files(scenario)
     ctx = make_ctx(scenario=scenario, modpack_name=server_files.modpack_name, marker_rel=server_files.marker,
                    scenario_files=server_files.files)

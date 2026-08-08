@@ -35,6 +35,17 @@ def _launch_client(ctx, step):
     if ctx.bridge.exited:
         ctx.bridge.screen = "title"
     ctx.bridge.exited = False  # a fresh client process is running
+    connection_path = ctx.game_dir / "automodpack" / "client" / "data" / "packs" / "packaaa" / "connection.json"
+    try:
+        connection = json.loads(connection_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        connection = {}
+    if (connection.get("secrets", {}) or {}).get(ctx.vars.get("bootstrap_origin")):
+        objects = ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+        objects.mkdir(parents=True, exist_ok=True)
+        for payload in (b"bootstrap-a\n", b"bootstrap-b\n"):
+            (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
+        ctx.vars["fake_preload_logged"] = True
 
 
 @verb("wait_bridge")
@@ -54,27 +65,29 @@ def _seed_bootstrap(ctx, step):
         "bootstrap_connection_mode": "HOLEPUNCH",
     })
     ctx.bridge.bootstrap = True
+    ctx.vars["fake_bootstrap_imported"] = True
     data = ctx.game_dir / "automodpack" / "client" / "data"
     (data / "packs" / "packaaa").mkdir(parents=True, exist_ok=True)
     (ctx.game_dir / "automodpack" / "client-config.json").write_text(json.dumps({"selectedModpackId": "packaaa"}))
     (data / "known-hosts.json").write_text(json.dumps({"hosts": {origin: {
         "fingerprint": str(ctx.vars.get("fingerprint", "")).replace(":", "").lower(), "reason": "SEED",
     }}}))
-    (data / "packs" / "packaaa" / "connection.json").write_text(json.dumps({
+    connection_path = data / "packs" / "packaaa" / "connection.json"
+    previous_connection = {}
+    if connection_path.is_file():
+        previous_connection = json.loads(connection_path.read_text(encoding="utf-8"))
+    connection_path.write_text(json.dumps({
         "connection": {"origin": origin, "endpoint": origin, "connectionMode": "HOLEPUNCH"},
+        "secrets": previous_connection.get("secrets", {}),
     }))
     projection_root = ctx.server_dir / "automodpack" / "server"
     projection_root.mkdir(parents=True, exist_ok=True)
     payloads = {"config/bootstrap-a.txt": b"bootstrap-a\n", "config/bootstrap-b.txt": b"bootstrap-b\n"}
     files = {}
-    objects = data / "objects"
-    objects.mkdir(parents=True, exist_ok=True)
     for path, payload in payloads.items():
         sha1 = hashlib.sha1(payload).hexdigest()
-        (objects / sha1).write_bytes(payload)
         files[path] = {"sha1": sha1, "size": str(len(payload))}
-    (projection_root / "current-projection.json").write_text(json.dumps({"groups": {"main": {"files": files}}}))
-    ctx.logs_provider = lambda _which, _tail=None: "Imported seeded certificate pin for origin amp-server:25565\nPreloaded 2 complete modpack objects in 1ms"
+    (projection_root / "current-projection.json").write_text(json.dumps({"modpackId": "packaaa", "groups": {"main": {"files": files}}}))
 
 
 @verb("connect")
@@ -139,6 +152,24 @@ def _wait_join(ctx, step):
     assert ctx.gui().get("screenClass") is None, "player never reached in-game"
 
 
+@verb("assert_preload_rejected")
+def _assert_preload_rejected(ctx, step):
+    objects = ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+    if objects.is_dir():
+        assert not any(objects.iterdir())
+
+
+@verb("assert_client_objects_absent")
+def _assert_client_objects_absent(ctx, step):
+    objects = ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+    assert not objects.exists()
+
+
+@verb("assert_preload_acquired")
+def _assert_preload_acquired(ctx, step):
+    assert ctx.vars.get("fake_preload_logged")
+
+
 # The verb registry is a process-global; importing the runner elsewhere in the
 # suite (e.g. tests/test_meta.py) registers the *real* Docker lifecycle verbs and
 # clobbers the stubs above. Re-install the stubs before each flow test so these
@@ -149,6 +180,7 @@ _STUBS = {
     "connect": _connect, "quit": _quit, "disconnect": _disconnect,
     "wait_client_exit": _wait_client_exit, "wait_exit": _wait_exit, "reset_client_generation": _reset_client_generation,
     "stage_modpack": _stage_modpack, "publish_server_generation": _publish_server_generation, "wait_join": _wait_join,
+    "assert_preload_rejected": _assert_preload_rejected, "assert_client_objects_absent": _assert_client_objects_absent, "assert_preload_acquired": _assert_preload_acquired,
 }
 
 
@@ -174,7 +206,10 @@ def _ctx_for(make_ctx, scenario: dict):
     ctx.logs_provider = lambda which, tail=None: (
         "[Server thread/INFO]: Certificate fingerprint: AB:CD:EF:01:23"
         if which == "server"
-        else ""
+        else "\n".join(filter(None, [
+            "Imported seeded certificate pin for origin amp-server:25565" if ctx.vars.get("fake_bootstrap_imported") else "",
+            "Preloaded 2 complete modpack objects in 1ms" if ctx.vars.get("fake_preload_logged") else "",
+        ]))
     )
     return ctx
 
