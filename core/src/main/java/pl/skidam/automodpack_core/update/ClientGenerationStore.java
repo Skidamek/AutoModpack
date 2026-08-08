@@ -8,9 +8,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -93,6 +95,36 @@ public final class ClientGenerationStore {
 		try (Stream<Path> paths = Files.list(storage.recordsDirectory())) {
 			return paths.filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)).map(path -> path.getFileName().toString()).sorted().toList();
 		}
+	}
+
+	/**
+	 * Returns the newest valid locally stored generation for each installed modpack.
+	 *
+	 * <p>
+	 * Generation records are immutable and may contain several generations of the same pack.
+	 * The pack manager needs one safe catalogue entry, so malformed records are ignored and the
+	 * newest valid record wins. A missing or damaged record must not prevent the client from opening
+	 * the manager for the other packs.
+	 * </p>
+	 */
+	public List<GenerationRecord> installedRecords() throws IOException {
+		Map<String, GenerationRecord> newest = new TreeMap<>();
+		for (String generationId : generationIds()) {
+			GenerationRecord record;
+			try {
+				record = read(generationId).orElse(null);
+			} catch (IOException | RuntimeException ignored) {
+				continue;
+			}
+			if (record == null) continue;
+			String modpackId = record.manifest().modpackId();
+			GenerationRecord previous = newest.get(modpackId);
+			if (previous == null || record.metadata().createdAt().compareTo(previous.metadata().createdAt()) > 0
+					|| record.metadata().createdAt().equals(previous.metadata().createdAt())
+							&& record.metadata().generationId().compareTo(previous.metadata().generationId()) > 0)
+				newest.put(modpackId, record);
+		}
+		return List.copyOf(newest.values());
 	}
 
 	/** Returns the committed lineage ending at the generation selected by active-state.json. */

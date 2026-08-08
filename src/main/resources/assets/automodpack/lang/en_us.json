@@ -21,6 +21,7 @@
   "automodpack.selection.button": "Modpack settings",
   "automodpack.selection.noGroups": "This modpack has no optional parts.",
   "automodpack.selection.preview": "Preview target",
+  "automodpack.selection.categoryExplanation": "Category buttons select their groups; category tags are not saved separately.",
 
   "automodpack.firstConnect.title": "Set up this modpack",
   "automodpack.firstConnect.description": "Review the default content before downloading.",
@@ -43,6 +44,14 @@
   "automodpack.summary.noRestart": "No restart expected",
   "automodpack.summary.restartRequired": "Restart required",
   "automodpack.summary.restartReason": "Restart reason: %s",
+  "automodpack.packManager.title": "Installed modpacks",
+  "automodpack.packManager.description": "Choose a pack to review its groups. Selecting a row does not activate it.",
+  "automodpack.packManager.empty": "No complete modpack records are available on this client.",
+  "automodpack.packManager.active": "Active pack: %s",
+  "automodpack.packManager.noActive": "No modpack is active",
+  "automodpack.packManager.switch": "Pack manager",
+  "automodpack.packManager.reviewSwitch": "Review pack switch",
+  "automodpack.packManager.switchDescription": "Review this installed pack and its groups before switching to it.",
 
   "automodpack.danger": "This server provides an external modpack!",
   "automodpack.danger.description": "Do you want to download it?",

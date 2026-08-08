@@ -51,7 +51,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		int actionWidth = actionButtonWidth(310, 3);
-		this.changesList = new ListEntryWidget(rows(), this.minecraft, this.width, this.height, LIST_TOP, listBottom(), 18);
+		this.changesList = new ListEntryWidget(rows(), this.minecraft, this.width, this.height, listTop(), listBottom(), 18);
 		this.addRenderableWidget(this.changesList);
 
 		boolean hasPatchNotes = GenerationPatchNoteHistory.containsNotes(preview.patchNotesHistory());
@@ -71,8 +71,19 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		return Math.max(LIST_TOP + 18, this.height - 86);
 	}
 
+	private int listTop() {
+		return preview.conflicts().isEmpty() ? LIST_TOP : LIST_TOP + 12;
+	}
+
 	private List<ListEntryWidget.Row> rows() {
 		List<ListEntryWidget.Row> rows = new ArrayList<>();
+		for (UpdatePlan.Conflict conflict : preview.conflicts()) {
+			String ids = String.join(", ", conflict.modIds());
+			String action = conflict.action() == UpdatePlan.ConflictAction.QUARANTINE
+					? "Local mod " + ids + " will be moved to AutoModpack quarantine (recoverable)."
+					: "AutoModpack-owned duplicate " + ids + " will be removed.";
+			rows.add(new ListEntryWidget.Row(VersionedText.literal(truncateToWidth(this.font, "! " + action, panelWidth(PANEL_WIDTH) - 8)).withStyle(ChatFormatting.YELLOW), null));
+		}
 		for (UpdatePreview.Entry entry : preview.displayEntries()) {
 			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
 			String text = symbol(entry.kind()) + UiFormat.changePath(file) + "  (" + UiFormat.formatSize(entry.size()) + ")";
@@ -151,6 +162,13 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		String selection = staleSelection ? "Some previously selected content is no longer available." : groups.resolvedGroups().size() + " content groups selected";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selection, this.width - 20)).withStyle(staleSelection ? ChatFormatting.RED : ChatFormatting.GRAY), this.width / 2, 72,
 				TextColors.WHITE);
+		if (!preview.conflicts().isEmpty()) {
+			String conflictText = preview.conflicts().stream().anyMatch(conflict -> conflict.action() == UpdatePlan.ConflictAction.QUARANTINE)
+					? "A local same-ID mod will be quarantined and can be recovered from AutoModpack's client/quarantine folder."
+					: "An AutoModpack-owned duplicate will be removed as part of this update.";
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, conflictText, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, 84,
+					TextColors.WHITE);
+		}
 
 		UpdatePreview.Summary summary = preview.summary();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.filesChanged", summary.changedFiles()).withStyle(ChatFormatting.GRAY), this.width / 2,
