@@ -17,6 +17,15 @@ _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")
 _COUNT_FIELDS = ("count", "min_count", "max_count")
 _REMOTE_MOD_FIELDS = {"url", "sha512", "name"}
 _SHA512 = re.compile(r"[0-9a-fA-F]{128}")
+_RELEASE_GATE_CAPABILITIES = frozenset({
+    "bootstrap",
+    "groups",
+    "patch-notes",
+    "multiplayer-settings",
+    "pack-switching",
+    "generation-update",
+    "conflict-preservation",
+})
 
 
 def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None) -> list[str]:
@@ -24,6 +33,13 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
 
     if not isinstance(scenario.get("id"), str) or not scenario["id"].strip():
         problems.append("scenario needs a non-empty string 'id'")
+    if scenario.get("id") == "all":
+        declared = scenario.get("releaseGate", {}).get("covers", [])
+        if not isinstance(declared, list) or set(declared) != _RELEASE_GATE_CAPABILITIES:
+            problems.append(f"release-gate scenario must declare exactly these capabilities: {sorted(_RELEASE_GATE_CAPABILITIES)}")
+        generations = (scenario.get("serverFiles", {}) or {}).get("generations")
+        if not isinstance(generations, list) or len(generations) < 2:
+            problems.append("release-gate scenario needs at least two serverFiles.generations entries")
 
     mode = str(scenario.get("mode", "full")).lower()
     if mode not in _VALID_MODES:
@@ -109,6 +125,20 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                 problems.append(f"unknown verb: {verb!r}")
             if verb == "stage_modpack":
                 _check_stage_modpack(step, problems, scoped_targets, label)
+            elif verb == "publish_server_generation":
+                _check_publish_generation(step, problems, label)
+            elif verb == "assert_generation":
+                _check_generation_assertion(step, problems, label)
+            elif verb in ("assert_file_content", "seed_unowned_local_file", "seed_same_path_conflict", "assert_mod_fixture", "assert_quarantine_payload"):
+                if not isinstance(step.get("path"), str) or not step["path"].strip():
+                    if verb not in ("assert_quarantine_payload",):
+                        problems.append(f"{label}.path: expected a non-empty relative path")
+                if verb in ("seed_same_path_conflict", "assert_mod_fixture", "assert_quarantine_payload"):
+                    _check_mod_fixture(step.get("fixture"), problems, f"{label}.fixture")
+                if verb in ("seed_same_path_conflict", "assert_mod_fixture") and isinstance(step.get("path"), str) and not step["path"].lower().endswith(".jar"):
+                    problems.append(f"{label}.path: valid mod fixtures must use a .jar path")
+                if verb == "assert_quarantine_payload" and (not isinstance(step.get("packId"), str) or not step["packId"].strip()):
+                    problems.append(f"{label}.packId: expected a non-empty pack ID")
 
 
 def _check_duration(value, problems, where):
@@ -192,6 +222,46 @@ def _check_stage_modpack(step, problems, scoped_targets, where):
         name = entry.get("name")
         if name is not None and (not isinstance(name, str) or not name or "/" in name or "\\" in name):
             problems.append(f"{loc}.name: expected a plain filename")
+    if "recordOnly" in step and not isinstance(step["recordOnly"], bool):
+        problems.append(f"{where}.recordOnly: expected a boolean")
+    if "packId" in step and (not isinstance(step["packId"], str) or not step["packId"].strip()):
+        problems.append(f"{where}.packId: expected a non-empty string")
+    files = step.get("files", [])
+    if not isinstance(files, list):
+        problems.append(f"{where}.files: expected a list")
+    else:
+        for index, item in enumerate(files):
+            if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not item["path"].strip():
+                problems.append(f"{where}.files[{index}]: expected a mapping with a non-empty path")
+            elif "fixture" in item:
+                _check_mod_fixture(item["fixture"], problems, f"{where}.files[{index}].fixture")
+                if not item["path"].lower().endswith(".jar"):
+                    problems.append(f"{where}.files[{index}].path: valid mod fixtures must use a .jar path")
+
+
+def _check_mod_fixture(value, problems, where):
+    if not isinstance(value, dict):
+        problems.append(f"{where}: expected a mapping")
+        return
+    for field in ("modId", "version", "marker"):
+        if not isinstance(value.get(field), str) or not value[field].strip():
+            problems.append(f"{where}.{field}: expected a non-empty string")
+
+
+def _check_publish_generation(step, problems, where):
+    value = step.get("generation", 1)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        problems.append(f"{where}.generation: expected a positive integer")
+
+
+def _check_generation_assertion(step, problems, where):
+    groups = step.get("groups", {})
+    if not isinstance(groups, dict):
+        problems.append(f"{where}.groups: expected a mapping")
+        return
+    for group_id, requirements in groups.items():
+        if not isinstance(group_id, str) or not group_id.strip() or not isinstance(requirements, dict):
+            problems.append(f"{where}.groups: expected string IDs mapped to field mappings")
 
 
 def _check_per_target(value, scoped_targets, problems, where, validator):
