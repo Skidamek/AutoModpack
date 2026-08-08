@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from automodpack_autotester.engine import Context
+from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
 
 
 @pytest.fixture
@@ -279,6 +280,21 @@ class FakeBridge:
         return {"ok": True}
 
     # --- helpers ----------------------------------------------------------
+    def _generation_fixture_files(self, index: int) -> list[tuple[Path, bytes]]:
+        generations = self.ctx.scenario.get("serverFiles", {}).get("generations", [])
+        if index >= len(generations):
+            return []
+        return [
+            (Path(str(item["path"])), valid_mod_jar_bytes(item["fixture"]))
+            for item in generations[index].get("files", [])
+            if isinstance(item, dict) and item.get("fixture") is not None
+        ]
+
+    def _remove_generation_fixture_files(self, index: int, root: Path) -> None:
+        for rel, _payload in self._generation_fixture_files(index):
+            (root / rel).unlink(missing_ok=True)
+            self.ctx.path(rel).unlink(missing_ok=True)
+
     def _write_modpack(self) -> None:
         root = self.ctx.game_dir / "automodpack" / "client" / "active"
         if root.exists():
@@ -288,6 +304,7 @@ class FakeBridge:
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text("{}")
         files = self.ctx.scenario_files
+        fixture_files: list[tuple[Path, bytes]] = []
         if self.selected_pack == "B":
             files = self.pack_b_files
         elif self.update_available:
@@ -297,6 +314,18 @@ class FakeBridge:
                      (Path("config/amp-autotest-delta.txt"), "delta-v2\n"),
                      (Path("config/pack-a-only.txt"), "pack-a-v2\n")]
             (root / "config/amp-autotest-gamma.cfg").unlink(missing_ok=True)
+            self._remove_generation_fixture_files(0, root)
+        elif self.ctx.vars.get("client_generation_reset"):
+            files = [
+                (Path(str(item["path"])), str(item.get("content", "")))
+                for item in self.ctx.scenario.get("serverFiles", {}).get("generations", [])[1].get("files", [])
+                if isinstance(item, dict) and item.get("fixture") is None
+            ]
+            (root / "config/amp-autotest-gamma.cfg").unlink(missing_ok=True)
+            self._remove_generation_fixture_files(0, root)
+            fixture_files = self._generation_fixture_files(1)
+        elif self.selected_pack == "A":
+            fixture_files = self._generation_fixture_files(0)
         for rel, content in files:
             f = root / rel
             f.parent.mkdir(parents=True, exist_ok=True)
@@ -304,6 +333,14 @@ class FakeBridge:
                 f.write_bytes(content)
             else:
                 f.write_text(content)
+        for rel, payload in fixture_files:
+            f = root / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(payload)
+            if not self.ctx.vars.get("client_generation_reset"):
+                game_path = self.ctx.path(rel)
+                game_path.parent.mkdir(parents=True, exist_ok=True)
+                game_path.write_bytes(payload)
         self.synced = True
         self.update_available = False
         if self.selected_pack == "B" and self.ctx.vars.get("same_path_conflict_fixture"):

@@ -15,6 +15,7 @@ releaseGate:
     - pack-switching
     - generation-update
     - conflict-preservation
+    - fresh-generation-deletion
 
 flow:
   - use: boot_with_bootstrap
@@ -385,6 +386,43 @@ flow:
   - do: wait_client_exit
     name: wait for final restart
   - use: rejoin
+  - do: assert
+    name: verify the installed-client update removed the published mod
+    that: { file_gone: mods/amp-autotest-removed.jar }
+  - do: quit
+    name: stop the installed client before fresh-client reset
+  - do: wait_client_exit
+    name: wait for the installed client to stop before fresh-client reset
+  - do: reset_client_generation
+    name: reset only fresh-client generation state and CAS
+  - do: seed_mod_fixture
+    name: place the old published mod in a fresh ordinary mods directory
+    path: mods/amp-autotest-removed.jar
+    fixture: { modId: amp_autotest_removed, version: "1.0.0-published", marker: published }
+  - do: seed_bootstrap
+    name: re-bootstrap the fresh client from the live server generation
+  - do: launch_client
+    name: launch the fresh client without generation history or CAS
+  - do: wait_bridge
+    name: wait for the fresh client bridge
+  - do: assert_preload_acquired
+    name: verify the fresh client reacquired current objects into empty CAS
+  - do: connect
+    name: connect the fresh client to the same server
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
+  - do: assert
+    name: verify fresh-client tombstone cleanup removed the old published mod
+    that: { file_gone: mods/amp-autotest-removed.jar }
+  - do: assert_mod_fixture
+    name: verify fresh-client current local content remains intact
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
+  - do: assert_file_content
+    name: verify fresh-client current files are installed
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
   - do: quit
     name: quit the release-gate client
 
@@ -406,7 +444,7 @@ topology:
             description: Required core files
             required: true
             defaultSelected: true
-            syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt"]
+            syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/mods/amp-autotest-removed.jar"]
           visual:
             displayName: Visuals
             description: Default client visuals
@@ -448,6 +486,7 @@ serverFiles:
         - { group: main, path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
         - { group: main, path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
         - { group: main, path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { group: main, path: mods/amp-autotest-removed.jar, fixture: { modId: amp_autotest_removed, version: "1.0.0-published", marker: published } }
         - { group: visual, path: config/amp-autotest-visual.txt, content: "visual-v1\n" }
         - { group: addon, path: config/amp-autotest-addon.txt, content: "addon-v1\n" }
         - { group: alternative, path: config/amp-autotest-alternative.txt, content: "alternative-v1\n" }
