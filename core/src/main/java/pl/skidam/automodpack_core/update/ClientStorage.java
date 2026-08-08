@@ -10,6 +10,7 @@ import static pl.skidam.automodpack_core.Constants.clientDir;
 import static pl.skidam.automodpack_core.Constants.clientHelperDir;
 import static pl.skidam.automodpack_core.Constants.clientIncomingDir;
 import static pl.skidam.automodpack_core.Constants.clientOverlaysDir;
+import static pl.skidam.automodpack_core.Constants.clientQuarantineDir;
 import static pl.skidam.automodpack_core.Constants.clientRecordsDir;
 import static pl.skidam.automodpack_core.Constants.clientRecoveryDir;
 import static pl.skidam.automodpack_core.Constants.clientRestartLoopStateFile;
@@ -75,6 +76,7 @@ public final class ClientStorage {
 	private final Path modpackContentTempFile;
 	private final Path helperDirectory;
 	private final Path recoveryDirectory;
+	private final Path quarantineDirectory;
 	private final Path bootstrapFile;
 	private final Path fileMetadataDirectory;
 	private final Path modMetadataDirectory;
@@ -105,6 +107,7 @@ public final class ClientStorage {
 		this.helperDirectory = this.clientDirectory.resolve(clientHelperDir.getFileName()).normalize();
 		this.bootstrapFile = this.gameDirectory.resolve(Constants.bootstrapFile).normalize();
 		this.recoveryDirectory = this.clientDirectory.resolve(clientRecoveryDir.getFileName()).normalize();
+		this.quarantineDirectory = this.clientDirectory.resolve(clientQuarantineDir.getFileName()).normalize();
 		this.fileMetadataDirectory = dataDirectory.resolve("file-metadata").normalize();
 		this.modMetadataDirectory = dataDirectory.resolve("mod-metadata").normalize();
 		this.packsDirectory = dataDirectory.resolve("packs").normalize();
@@ -219,6 +222,26 @@ public final class ClientStorage {
 
 	public Path recoveryDirectory() {
 		return recoveryDirectory;
+	}
+
+	public Path quarantineDirectory() {
+		return quarantineDirectory;
+	}
+
+	public Path quarantinePackDirectory(String modpackId) {
+		return quarantineDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
+	}
+
+	public Path quarantinePayload(String modpackId, String conflictId) {
+		if (conflictId == null || !conflictId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid conflict ID");
+		Path root = quarantinePackDirectory(modpackId);
+		Path payload = root.resolve("conflicts").resolve(conflictId).resolve("payload").normalize();
+		if (!payload.startsWith(root)) throw new IllegalArgumentException("Quarantine path escaped its modpack root");
+		return payload;
+	}
+
+	public Path quarantineManifest(String modpackId) {
+		return quarantinePackDirectory(modpackId).resolve("manifest.json").normalize();
 	}
 
 	public Path bootstrapFile() {
@@ -349,6 +372,7 @@ public final class ClientStorage {
 		ensureDirectory(incomingDirectory, "client transaction incoming root");
 		ensureDirectory(backupDirectory, "client transaction backup root");
 		ensureDirectory(helperDirectory, "client update helper");
+		ensureDirectory(quarantineDirectory, "client quarantine root");
 	}
 
 	public Jsons.ClientGenerationStateFields readActiveState() throws IOException {
@@ -378,7 +402,7 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile);
 		validateWithin(gameDirectory, bootstrapFile);
-		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, activeDirectory, incomingDirectory, backupDirectory, recoveryDirectory,
+		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, activeDirectory, incomingDirectory, backupDirectory, recoveryDirectory, quarantineDirectory,
 				stateFile, transactionFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
 		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}

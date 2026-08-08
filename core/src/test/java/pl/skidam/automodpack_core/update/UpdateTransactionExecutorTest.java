@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,6 +57,37 @@ class UpdateTransactionExecutorTest {
 		assertEquals(target.manifest().modpackId(), ConfigTools.read(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
 		assertFalse(Files.exists(storage.automodpackDirectory().resolve("modpacks")));
 		assertFalse(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
+	void firstInstallQuarantinesLocalSameIdModBeforeProjectionApply() throws Exception {
+		ClientStorage storage = storage();
+		byte[] serverBytes = "server-sodium".getBytes(StandardCharsets.UTF_8);
+		String serverHash = store(storage, serverBytes);
+		Path local = storage.modsDirectory().resolve("local-sodium.jar");
+		byte[] localBytes = "local-sodium".getBytes(StandardCharsets.UTF_8);
+		Files.write(local, localBytes);
+		String localHash = HashUtils.getHash(local);
+		SelectedModpackTarget target = target("mods/server-sodium.jar", "mod", false, serverHash, serverBytes.length);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/local-sodium.jar"),
+				new UpdatePlan.FileState(localHash, localBytes.length, true, true));
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(),
+				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
+				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), null,
+				clientConfig(target.manifest().modpackId())));
+		UpdateTransaction malformed = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		malformed.plannedConflicts = new ArrayList<>(List.of(plan.conflicts().get(0)));
+		malformed.plannedConflicts.set(0, null);
+		assertThrows(IOException.class, () -> executor(storage).validate(malformed));
+
+		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
+
+		assertTrue(execution.success());
+		assertFalse(Files.exists(local));
+		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
+		Jsons.ClientQuarantineFields quarantine = QuarantineArchive.read(storage, target.manifest().modpackId());
+		assertEquals(1, quarantine.entries.size());
+		assertTrue(SmartFileUtils.isValidFile(storage.quarantinePayload(target.manifest().modpackId(), plan.conflicts().get(0).conflictId()), localBytes.length, localHash));
 	}
 
 	@Test
