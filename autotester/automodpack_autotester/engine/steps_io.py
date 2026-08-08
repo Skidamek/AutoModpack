@@ -5,6 +5,7 @@ dedicated verb is needed for them.
 """
 from __future__ import annotations
 
+import base64
 import json
 from fnmatch import fnmatch
 from pathlib import Path
@@ -130,6 +131,34 @@ def assert_bootstrap_import(ctx, _step):
     for field in ("origin", "endpoint", "connectionMode"):
         if actual.get(field) != expected[field]:
             raise AssertionError(f"bootstrap connection {field} mismatch: expected {expected[field]!r}, got {actual.get(field)!r}")
+
+
+@verb("assert_authenticated_secret")
+def assert_authenticated_secret(ctx, _step):
+    """Assert that authenticated login persisted the same non-anonymous secret on both sides."""
+    modpack_id = str(ctx.vars.get("bootstrap_modpack_id", ""))
+    origin = str(ctx.vars.get("bootstrap_origin", ""))
+    if not modpack_id or not origin:
+        raise AssertionError("bootstrap identity was not captured before authenticated secret assertion")
+    connection_path = ctx.game_dir / "automodpack" / "client" / "data" / "packs" / modpack_id / "connection.json"
+    server_secrets_path = ctx.server_dir / "automodpack" / "server" / "secrets.json"
+    try:
+        connection = json.loads(connection_path.read_text(encoding="utf-8"))
+        server_secrets = json.loads(server_secrets_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"authenticated secret state is not readable: {error}") from error
+    client_secret = (connection.get("secrets", {}) or {}).get(origin)
+    if not isinstance(client_secret, dict):
+        raise AssertionError("authenticated login did not persist a client secret for the bootstrap origin")
+    value = client_secret.get("secret")
+    timestamp = client_secret.get("timestamp")
+    anonymous = base64.urlsafe_b64encode(bytes(32)).decode("ascii").rstrip("=")
+    if not isinstance(value, str) or not value or value == anonymous or not isinstance(timestamp, (int, float)) or timestamp <= 0:
+        raise AssertionError("persisted client secret is missing, anonymous, or has no valid timestamp")
+    matching_server_secrets = [entry for entry in (server_secrets.get("secrets", {}) or {}).values() if isinstance(entry, dict) and entry.get("secret") == value]
+    if not matching_server_secrets:
+        raise AssertionError("server did not persist the secret issued during authenticated login")
+    ctx.vars["authenticated_secret_persisted"] = True
 
 
 @verb("seed_unowned_local_file")

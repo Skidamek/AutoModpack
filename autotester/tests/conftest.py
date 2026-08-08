@@ -5,9 +5,9 @@ exercised end to end without Docker, HeadlessMC, or a real Minecraft server.
 """
 from __future__ import annotations
 
-import types
 import json
 import shutil
+import types
 from pathlib import Path
 
 import pytest
@@ -341,6 +341,16 @@ class FakeBridge:
                 game_path = self.ctx.path(rel)
                 game_path.parent.mkdir(parents=True, exist_ok=True)
                 game_path.write_bytes(payload)
+        connection_path = self.ctx.game_dir / "automodpack" / "client" / "data" / "packs" / "packaaa" / "connection.json"
+        if self.ctx.vars.get("bootstrap_origin"):
+            connection = json.loads(connection_path.read_text(encoding="utf-8")) if connection_path.is_file() else {}
+            secret = "fake-authenticated-secret"
+            connection.setdefault("secrets", {})[self.ctx.vars["bootstrap_origin"]] = {"secret": secret, "timestamp": 1}
+            connection_path.parent.mkdir(parents=True, exist_ok=True)
+            connection_path.write_text(json.dumps(connection))
+            server_secrets = self.ctx.server_dir / "automodpack" / "server" / "secrets.json"
+            server_secrets.parent.mkdir(parents=True, exist_ok=True)
+            server_secrets.write_text(json.dumps({"secrets": {"fake-player": {"secret": secret, "timestamp": 1}}}))
         self.synced = True
         self.update_available = False
         if self.selected_pack == "B" and self.ctx.vars.get("same_path_conflict_fixture"):

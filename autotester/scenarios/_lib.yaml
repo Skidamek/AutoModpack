@@ -37,9 +37,6 @@ boot_with_bootstrap:
     name: wait for client preload and test bridge
   - do: assert_bootstrap_import
     name: verify Preload imported and deleted bootstrap state
-  - do: assert_preload_acquired
-    name: verify Preload acquired every published object into client CAS
-  - use: connect_to_server
 
 # Scrape the one-time certificate fingerprint out of the server log into a var.
 read_server_fingerprint:

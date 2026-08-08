@@ -1,9 +1,9 @@
 id: all
 description: |
-  The release gate: exercise the real client bootstrap, advanced group review,
-  patch-note history, cached pack switching, and a published changed/removed
-  generation in one flow. The focused scenarios remain available for faster
-  diagnosis; this is the default confidence path.
+  The release gate: exercise secure bootstrap authentication, advanced group
+  review, patch-note history, cached pack switching, and a published
+  changed/removed generation in one flow. The focused scenarios remain
+  available for faster diagnosis; this is the default confidence path.
 renderClient: true
 
 releaseGate:
@@ -16,9 +16,12 @@ releaseGate:
     - generation-update
     - conflict-preservation
     - fresh-generation-deletion
+    - secure-bootstrap
 
 flow:
   - use: boot_with_bootstrap
+  - do: assert_preload_rejected
+    name: verify anonymous bootstrap preload cannot bypass secure authentication
   - do: wait_for
     name: verify bootstrap seeded trust without a TOFU prompt
     timeout: 90s
@@ -28,6 +31,7 @@ flow:
             container: client
             matches: 'Imported seeded certificate pin for origin'
             not_matches: 'Received untrusted certificate|Asking user to verify certificate'
+  - use: connect_to_server
   - do: wait_for
     name: show the first connection review
     timeout: 90s
@@ -131,6 +135,8 @@ flow:
     name: wait for the bootstrapped marker
     path: "${active_dir}/${marker}"
     timeout: 300s
+  - do: assert_authenticated_secret
+    name: verify authenticated login persisted the server-issued secret
   - do: assert_generation
     name: verify advanced group metadata and latest notes were installed
     groups:
@@ -392,6 +398,8 @@ flow:
     name: wait for the installed client to stop before fresh-client reset
   - do: reset_client_generation
     name: reset only fresh-client generation state and CAS
+  - do: assert_client_objects_absent
+    name: verify fresh-client CAS is absent before saved-secret preload
   - do: seed_mod_fixture
     name: place the old published mod in a fresh ordinary mods directory
     path: mods/amp-autotest-removed.jar
@@ -430,11 +438,10 @@ topology:
       ENABLE_ROLLING_LOGS: "false"
     automodpack:
       config:
-        # A fresh bootstrap file has no per-client login secret. This isolated
-        # release fixture allows the bootstrap transport to acquire the initial
-        # generation before Minecraft login; production keeps validateSecrets
-        # enabled and obtains its secret during authenticated login.
-        validateSecrets: false
+        # A fresh bootstrap file has no per-client login secret. Secure mode must
+        # reject its anonymous preload and let authenticated login issue the first
+        # usable secret before the modpack download.
+        validateSecrets: true
         groups:
           main:
             displayName: Core
