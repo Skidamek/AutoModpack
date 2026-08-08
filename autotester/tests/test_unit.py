@@ -161,6 +161,29 @@ def test_selector_no_match():
     assert selectors.find_one(GUI, {"text": "nope"}) is None
 
 
+def test_click_timeout_reports_disabled_gui_state(make_ctx, monkeypatch):
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+
+    class SnapshotBridge:
+        def gui(self, timeout=30):
+            return {
+                "screenClass": "TitleScreen",
+                "title": "Minecraft",
+                "buttons": [{"id": 8, "text": "multiplayer", "enabled": False, "visible": True}],
+            }
+
+        def click(self, element_id, **payload):
+            raise AssertionError("click must not be sent for a disabled element")
+
+    ctx.bridge = SnapshotBridge()
+    monkeypatch.setattr(steps_ui, "await_condition", lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError("no element matched")))
+
+    with pytest.raises(TimeoutError, match=r"current screen: 'TitleScreen'.*multiplayer.*enabled.*False"):
+        steps_ui.click(ctx, {"select": {"text": "multiplayer"}})
+
+
 # ── templating ────────────────────────────────────────────────────────────
 
 

@@ -322,10 +322,12 @@ public final class AutoTestBridge {
 		/*? if >=1.21.6 {*/
 		minecraft.level.disconnect(translatable("multiplayer.status.quitting"));
 		minecraft.clearClientLevel(new GenericMessageScreen(translatable("multiplayer.disconnect.generic")));
-		/*?} else {*/
-		/*minecraft.level.disconnect();
-		*//*?}*/
 		ScreenImpl.setScreen(new TitleScreen());
+		/*?} else if >=1.21.1 {*/
+		/*minecraft.disconnect(new TitleScreen());
+		*//*?} else {*/
+		/*minecraft.clearLevel(new TitleScreen());
+		*//*?}*/
 		return ok();
 	}
 
