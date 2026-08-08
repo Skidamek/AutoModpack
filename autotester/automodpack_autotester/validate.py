@@ -27,6 +27,7 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "generation-update",
     "conflict-preservation",
     "fresh-generation-deletion",
+    "secure-bootstrap",
 })
 
 
