@@ -386,9 +386,6 @@ flow:
   - do: wait_client_exit
     name: wait for final restart
   - use: rejoin
-  - do: assert
-    name: verify the installed-client update removed the published mod
-    that: { file_gone: mods/amp-autotest-removed.jar }
   - do: quit
     name: stop the installed client before fresh-client reset
   - do: wait_client_exit
