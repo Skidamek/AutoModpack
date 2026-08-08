@@ -38,6 +38,23 @@ def wait_file(ctx, step):
     )
 
 
+@verb("wait_file_content")
+def wait_file_content(ctx, step):
+    """Wait until a UTF-8 file contains the exact requested content."""
+    template = str(step["path"])
+    expected = str(ctx.resolve(step.get("content", "")))
+    path = ctx.path(template)
+    timeout = parse_duration(step.get("timeout"), default=300)
+
+    def _matches():
+        try:
+            return True if path.read_text(encoding="utf-8") == expected else None
+        except (FileNotFoundError, IsADirectoryError, OSError):
+            return None
+
+    await_condition(_matches, timeout, step.get("poll"), f"file {template} did not contain the expected content")
+
+
 @verb("wait_files")
 def wait_files(ctx, step):
     root = ctx.game_dir / ctx.resolve(str(step.get("root", "")))

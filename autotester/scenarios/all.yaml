@@ -334,9 +334,10 @@ flow:
   - do: click
     name: accept changed and removed generation
     select: { text: Update }
-  - do: wait_file
+  - do: wait_file_content
     name: wait for the changed file
     path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
     timeout: 300s
   - do: assert_file_content
     name: verify changed file contents
