@@ -62,12 +62,18 @@ public final class AutoTestBridge {
 	private static final AtomicBoolean STARTED = new AtomicBoolean(false);
 	private static volatile Path bridgeDir;
 	private static final AtomicBoolean CLIENT_READY = new AtomicBoolean(false);
+	private static final AtomicBoolean RELOAD_FINISHED = new AtomicBoolean(false);
 	private static final Object READY_STATE_LOCK = new Object();
 	private static final AtomicBoolean READY_STATE_PUBLISHED = new AtomicBoolean(false);
 	private static final AtomicBoolean READY_STATE_WRITE_FAILED = new AtomicBoolean(false);
 
 	public static void markReloadFinished() {
+		RELOAD_FINISHED.set(true);
 		onClientReady();
+	}
+
+	public static boolean hasReloadFinished() {
+		return RELOAD_FINISHED.get();
 	}
 
 	public static void start() {
@@ -88,7 +94,7 @@ public final class AutoTestBridge {
 			while (!CLIENT_READY.get()) {
 				try {
 					Thread.sleep(100);
-					if (currentScreen() instanceof TitleScreen) {
+					if (currentScreen() instanceof TitleScreen && hasReloadFinished()) {
 						onClientReady();
 						return;
 					}

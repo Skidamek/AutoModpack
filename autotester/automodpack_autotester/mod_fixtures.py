@@ -9,7 +9,40 @@ import zipfile
 from pathlib import Path
 
 
-def valid_mod_jar_bytes(fixture: dict) -> bytes:
+DEFAULT_MINECRAFT_VERSION = "1.20.1"
+_PACK_METADATA_RECEIPTS = {
+    "1.18.2": {"pack_format": 8},
+    "1.19.2": {"pack_format": 9},
+    "1.20.1": {"pack_format": 15},
+    "1.21": {"pack_format": 34},
+    "1.21.1": {"pack_format": 34},
+    "1.21.4": {"pack_format": 46},
+    "1.21.5": {"pack_format": 55},
+    "1.21.8": {"pack_format": 64},
+    "1.21.9": {"min_format": 69, "max_format": 69},
+    "1.21.10": {"min_format": 69, "max_format": 69},
+    "1.21.11": {"min_format": 75, "max_format": 75},
+    "26.1": {"min_format": 84, "max_format": 84},
+    "26.1.2": {"min_format": 84, "max_format": 84},
+    "26.2": {"min_format": 88, "max_format": 88},
+}
+
+
+def pack_metadata_for(minecraft_version: str) -> dict:
+    """Return the authoritative resource-pack metadata shape for a target.
+
+    Runtime fixture writers must pass ``Target.minecraft``. Direct unit calls
+    may omit it and use the documented 1.20.1 default in the public helpers.
+    """
+    version = str(minecraft_version)
+    try:
+        format_fields = _PACK_METADATA_RECEIPTS[version]
+    except KeyError as error:
+        raise ValueError(f"no pack metadata receipt for Minecraft {version!r}") from error
+    return {"pack": {"description": "AutoModpack autotest fixture", **format_fields}}
+
+
+def valid_mod_jar_bytes(fixture: dict, minecraft_version: str = DEFAULT_MINECRAFT_VERSION) -> bytes:
     """Build a harmless archive recognized by Fabric, Forge, and NeoForge."""
     if not isinstance(fixture, dict):
         raise ValueError("mod fixture must be a mapping")
@@ -26,7 +59,7 @@ def valid_mod_jar_bytes(fixture: dict) -> bytes:
         "environment": "*",
         "depends": {"minecraft": "*"},
     }
-    pack = {"pack": {"pack_format": 15, "description": "AutoModpack autotest fixture"}}
+    pack = pack_metadata_for(minecraft_version)
     def loader_metadata(loader: str) -> bytes:
         return f'''modLoader = "{loader}"
 loaderVersion = "[1,)"
@@ -55,13 +88,13 @@ description = "Harmless metadata-only release-gate fixture"
     return output.getvalue()
 
 
-def write_valid_mod_fixture(path: Path, fixture: dict) -> None:
-    """Write one deterministic fixture archive to an already-resolved path."""
+def write_valid_mod_fixture(path: Path, fixture: dict, minecraft_version: str = DEFAULT_MINECRAFT_VERSION) -> None:
+    """Write one fixture; runtime callers pass their target, unit callers use 1.20.1."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(valid_mod_jar_bytes(fixture))
+    path.write_bytes(valid_mod_jar_bytes(fixture, minecraft_version))
 
 
-def assert_valid_mod_fixture(payload: bytes, fixture: dict) -> None:
+def assert_valid_mod_fixture(payload: bytes, fixture: dict, minecraft_version: str = DEFAULT_MINECRAFT_VERSION) -> None:
     """Validate the metadata and marker that make a fixture a real mod archive."""
     expected_id = str(fixture.get("modId", "amp_autotest_fixture"))
     expected_version = str(fixture.get("version", "1.0.0"))
@@ -77,8 +110,8 @@ def assert_valid_mod_fixture(payload: bytes, fixture: dict) -> None:
         raise AssertionError(f"fixture is not a valid cross-loader mod archive: {error}") from error
     if fabric.get("id") != expected_id or fabric.get("version") != expected_version:
         raise AssertionError("fixture Fabric metadata does not match the expected mod identity")
-    if pack.get("pack", {}).get("pack_format") != 15:
-        raise AssertionError("fixture must include the 1.20.1-compatible pack metadata")
+    if pack != pack_metadata_for(minecraft_version):
+        raise AssertionError(f"fixture pack metadata does not match Minecraft {minecraft_version}")
     for metadata in (forge, neoforge):
         if metadata.get("modLoader") != "lowcodefml" or metadata.get("loaderVersion") != "[1,)":
             raise AssertionError("fixture Forge metadata must use the no-code loader")

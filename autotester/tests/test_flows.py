@@ -135,7 +135,7 @@ def _stage_modpack(ctx, step):
     if step.get("recordOnly") and ctx.bridge is not None:
         ctx.bridge.secondary_pack = True
         ctx.bridge.pack_b_files = [
-            (Path(entry["path"]), valid_mod_jar_bytes(entry["fixture"]) if "fixture" in entry else str(entry.get("content", "")))
+            (Path(entry["path"]), valid_mod_jar_bytes(entry["fixture"], ctx.target.minecraft) if "fixture" in entry else str(entry.get("content", "")))
             for entry in step.get("files", [])
         ]
 
@@ -271,12 +271,12 @@ def test_release_gate_flow(make_ctx):
     assert not (active / "config/pack-b.txt").exists()
     assert_valid_mod_fixture(
         (ctx.game_dir / "mods/local-unowned.jar").read_bytes(),
-        {"modId": "amp_autotest_unowned", "version": "1.0.0-local-unowned", "marker": "unowned-local"},
+        {"modId": "amp_autotest_unowned", "version": "1.0.0-local-unowned", "marker": "unowned-local"}, ctx.target.minecraft,
     )
     quarantine = ctx.game_dir / "automodpack/client/quarantine/packbbb/conflicts/fake-conflict/payload"
     assert_valid_mod_fixture(
         quarantine.read_bytes(),
-        {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"},
+        {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"}, ctx.target.minecraft,
     )
     assert not (ctx.game_dir / "mods/amp-autotest-conflict.jar").exists()
 
