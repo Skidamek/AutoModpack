@@ -26,7 +26,8 @@ def valid_mod_jar_bytes(fixture: dict) -> bytes:
         "environment": "*",
         "depends": {"minecraft": "*"},
     }
-    toml = f'''modLoader = "javafml"
+    def loader_metadata(loader: str) -> bytes:
+        return f'''modLoader = "{loader}"
 loaderVersion = "[1,)"
 license = "MIT"
 
@@ -35,10 +36,10 @@ modId = "{mod_id}"
 version = "{version}"
 displayName = "AutoModpack autotest fixture"
 description = "Harmless metadata-only release-gate fixture"
-'''
+'''.encode("utf-8")
     entries = {
-        "META-INF/mods.toml": toml.encode("utf-8"),
-        "META-INF/neoforge.mods.toml": toml.encode("utf-8"),
+        "META-INF/mods.toml": loader_metadata("lowcodefml"),
+        "META-INF/neoforge.mods.toml": loader_metadata("lowcodefml"),
         "data/automodpack-autotest-fixture.txt": marker.encode("utf-8"),
         "fabric.mod.json": (json.dumps(fabric, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"),
     }
@@ -74,6 +75,8 @@ def assert_valid_mod_fixture(payload: bytes, fixture: dict) -> None:
     if fabric.get("id") != expected_id or fabric.get("version") != expected_version:
         raise AssertionError("fixture Fabric metadata does not match the expected mod identity")
     for metadata in (forge, neoforge):
+        if metadata.get("modLoader") != "lowcodefml" or metadata.get("loaderVersion") != "[1,)":
+            raise AssertionError("fixture Forge metadata must use the no-code loader")
         mods = metadata.get("mods", [])
         if not mods or mods[0].get("modId") != expected_id or mods[0].get("version") != expected_version:
             raise AssertionError("fixture Forge metadata does not match the expected mod identity")

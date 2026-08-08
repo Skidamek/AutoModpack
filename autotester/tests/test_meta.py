@@ -3,10 +3,12 @@ transport/mode selection, and verb discovery."""
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import threading
 import time
 import types
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -133,6 +135,21 @@ def test_unowned_local_fixture_writes_a_valid_cross_loader_archive(make_ctx):
     seed_unowned_local_file(ctx, {"path": "mods/local-unowned.jar", "fixture": fixture})
 
     assert_valid_mod_fixture((ctx.game_dir / "mods/local-unowned.jar").read_bytes(), fixture)
+
+
+def test_metadata_only_fixture_uses_no_code_loader_metadata():
+    fixture = {"modId": "amp_autotest_metadata", "version": "1.0.0", "marker": "metadata"}
+
+    with zipfile.ZipFile(io.BytesIO(valid_mod_jar_bytes(fixture))) as archive:
+        forge = archive.read("META-INF/mods.toml").decode("utf-8")
+        neoforge = archive.read("META-INF/neoforge.mods.toml").decode("utf-8")
+        names = archive.namelist()
+
+    for metadata in (forge, neoforge):
+        assert 'modLoader = "lowcodefml"' in metadata
+        assert 'loaderVersion = "[1,)"' in metadata
+        assert "amp_autotest_metadata" in metadata
+    assert not any(name.endswith(".class") for name in names)
 
 
 def test_validation_rejects_plain_text_unowned_jar_seed():
