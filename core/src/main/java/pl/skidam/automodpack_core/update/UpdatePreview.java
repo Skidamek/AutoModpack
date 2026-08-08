@@ -72,12 +72,61 @@ public record UpdatePreview(
 				.mapToLong(Operation::expectedSize).sum();
 	}
 
+	public Summary summary() {
+		Set<FileKey> changed = new HashSet<>();
+		Set<FileKey> removed = new HashSet<>();
+		Set<FileKey> preserved = new HashSet<>();
+		Set<FileKey> unsafe = new HashSet<>();
+		for (Entry entry : entries) {
+			FileKey key = new FileKey(entry.root, entry.relativePath);
+			switch (entry.kind) {
+				case ADDED, CHANGED, RESTORED_BASELINE -> changed.add(key);
+				case REMOVED -> removed.add(key);
+				case PRESERVED_CAS, PRESERVED_CHANGED, PRESERVED_UNAVAILABLE, PRESERVED_OUTSIDE -> preserved.add(key);
+				case UNSAFE -> unsafe.add(key);
+			}
+		}
+		Set<String> otherEffects = new TreeSet<>();
+		for (RestartReason reason : plan.restartReasons()) otherEffects.add(reason.name());
+		return new Summary(changed.size(), removed.size(), preserved.size(), unsafe.size(), otherEffects.size());
+	}
+
+	/** Returns one row per physical file key, preferring an effective change over preservation information. */
+	public List<Entry> displayEntries() {
+		Map<FileKey, Entry> unique = new TreeMap<>(Comparator.comparing((FileKey key) -> key.root().ordinal()).thenComparing(FileKey::relativePath));
+		for (Entry entry : entries) {
+			FileKey key = new FileKey(entry.root, entry.relativePath);
+			Entry previous = unique.get(key);
+			if (previous == null || displayPriority(entry.kind) < displayPriority(previous.kind)) unique.put(key, entry);
+		}
+		return unique.values().stream().sorted(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
+				.thenComparing(Entry::relativePath)).toList();
+	}
+
+	public String latestPatchNotes() {
+		if (!patchNotes.isBlank()) return patchNotes;
+		for (int index = patchNotesHistory.size() - 1; index >= 0; index--) {
+			String notes = patchNotesHistory.get(index).patchNotes();
+			if (!notes.isBlank()) return notes;
+		}
+		return "";
+	}
+
 	public Set<RestartReason> restartReasons() {
 		return plan.restartReasons();
 	}
 
 	private long bytesOf(Kind kind) {
 		return entries.stream().filter(entry -> entry.kind == kind).mapToLong(Entry::size).sum();
+	}
+
+	private static int displayPriority(Kind kind) {
+		return switch (kind) {
+			case UNSAFE -> 0;
+			case REMOVED -> 1;
+			case ADDED, CHANGED, RESTORED_BASELINE -> 2;
+			case PRESERVED_CHANGED, PRESERVED_UNAVAILABLE, PRESERVED_OUTSIDE, PRESERVED_CAS -> 3;
+		};
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
@@ -187,6 +236,8 @@ public record UpdatePreview(
 			if (size < 0) throw new IllegalArgumentException("Preview size is negative");
 		}
 	}
+
+	public record Summary(int changedFiles, int removedFiles, int preservedFiles, int unsafeFiles, int otherEffects) {}
 
 	public record GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups, Map<String, String> explanations) {
 		public GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups) {

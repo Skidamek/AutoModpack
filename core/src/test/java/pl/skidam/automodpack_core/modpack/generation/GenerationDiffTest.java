@@ -58,6 +58,19 @@ class GenerationDiffTest {
 		assertTrue(GenerationDiff.between(parent, parent).isEmpty());
 	}
 
+	@Test
+	void summaryCountsOneEffectivePathWhenGroupsRepeatIt() {
+		Jsons.CompleteModpackContentFields.GroupFileFields oldFile = file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
+		Jsons.CompleteModpackContentFields.GroupFileFields newFile = file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
+		GroupManifest parent = manifestWithGroups("same", Map.of("main", Map.of("shared.txt", oldFile), "optional", Map.of("shared.txt", oldFile)));
+		GroupManifest child = manifestWithGroups("same", Map.of("main", Map.of("shared.txt", newFile), "optional", Map.of("shared.txt", newFile)));
+
+		GenerationDiff diff = GenerationDiff.between(parent, child);
+
+		assertEquals(2, diff.files().size());
+		assertEquals(new GenerationDiff.Summary(0, 1, 0, 0, 0), diff.summary());
+	}
+
 	private static GroupManifest taggedManifest(String tag) {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";

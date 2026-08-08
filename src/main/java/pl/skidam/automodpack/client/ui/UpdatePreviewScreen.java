@@ -21,7 +21,7 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 
 public final class UpdatePreviewScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 600;
-	private static final int LIST_TOP = 68;
+	private static final int LIST_TOP = 84;
 	private final Screen parent;
 	private final UpdatePreview preview;
 	private final String modpackName;
@@ -55,7 +55,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.addRenderableWidget(this.changesList);
 
 		boolean hasPatchNotes = GenerationPatchNoteHistory.containsNotes(preview.patchNotesHistory());
-		if (hasPatchNotes) this.addRenderableWidget(buttonWidget(this.width / 2 - 75, this.height - 52, 150, 20, VersionedText.literal("Patch notes..."), button -> openPatchNotes()));
+		if (hasPatchNotes) this.addRenderableWidget(buttonWidget(this.width / 2 - 75, this.height - 52, 150, 20,
+				VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
 		this.openMainPageButton = buttonWidget(actionButtonX(310, 3, 1), this.height - 28, actionWidth, 20,
 				VersionedText.literal("Project page"), button -> openSelectedPage());
 		this.openMainPageButton.active = false;
@@ -72,7 +73,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	private List<ListEntryWidget.Row> rows() {
 		List<ListEntryWidget.Row> rows = new ArrayList<>();
-		for (UpdatePreview.Entry entry : preview.entries()) {
+		for (UpdatePreview.Entry entry : preview.displayEntries()) {
 			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
 			String text = symbol(entry.kind()) + UiFormat.changePath(file) + "  (" + UiFormat.formatSize(entry.size()) + ")";
 			ChatFormatting color = switch (entry.kind()) {
@@ -138,26 +139,29 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(removal ? "Review the files that will be removed." : "Review the changes before updating.").withStyle(ChatFormatting.GRAY),
 				this.width / 2, 29, TextColors.WHITE);
-		String patchNotes = preview.patchNotes().isBlank() ? "No patch notes published." : preview.patchNotes();
-		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.literal(truncateToWidth(this.font, "Patch notes: " + patchNotes, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.GRAY), this.width / 2, 44, TextColors.WHITE);
+		String patchNotes = preview.latestPatchNotes();
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.patchNotes.latest").withStyle(ChatFormatting.YELLOW), this.width / 2, 42, TextColors.WHITE);
+		List<String> patchNoteLines = patchNotes.isBlank() ? List.of(VersionedText.translatable("automodpack.patchNotes.none").getString())
+				: wrapToWidth(this.font, patchNotes, Math.max(1, panelWidth(PANEL_WIDTH) - 20), 2);
+		for (int index = 0; index < patchNoteLines.size(); index++)
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(patchNoteLines.get(index)).withStyle(ChatFormatting.WHITE), this.width / 2, 54 + index * 12, TextColors.WHITE);
 
 		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
 		boolean staleSelection = !groups.staleGroups().isEmpty();
 		String selection = staleSelection ? "Some previously selected content is no longer available." : groups.resolvedGroups().size() + " content groups selected";
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(selection).withStyle(staleSelection ? ChatFormatting.RED : ChatFormatting.GRAY), this.width / 2, 56,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selection, this.width - 20)).withStyle(staleSelection ? ChatFormatting.RED : ChatFormatting.GRAY), this.width / 2, 72,
 				TextColors.WHITE);
 
-		long updated = preview.entries().stream().filter(UpdatePreviewScreen::isUpdated).count();
-		long removed = preview.entries().stream().filter(entry -> entry.kind() == UpdatePreview.Kind.REMOVED).count();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(updated + " updated  " + removed + " removed").withStyle(ChatFormatting.GRAY), this.width / 2,
+		UpdatePreview.Summary summary = preview.summary();
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.filesChanged", summary.changedFiles()).withStyle(ChatFormatting.GRAY), this.width / 2,
 				this.height - 80, TextColors.WHITE);
-		String restart = preview.restartReasons().isEmpty() ? "No restart expected" : "Restart required";
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(restart).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 68, TextColors.WHITE);
-	}
-
-	private static boolean isUpdated(UpdatePreview.Entry entry) {
-		return entry.kind() == UpdatePreview.Kind.ADDED || entry.kind() == UpdatePreview.Kind.CHANGED || entry.kind() == UpdatePreview.Kind.RESTORED_BASELINE;
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.filesRemoved", summary.removedFiles()).withStyle(ChatFormatting.GRAY), this.width / 2,
+				this.height - 68, TextColors.WHITE);
+		String otherEffects = summary.otherEffects() == 0 ? "" : VersionedText.translatable("automodpack.summary.otherEffects", summary.otherEffects()).getString();
+		if (!otherEffects.isBlank()) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, otherEffects, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2,
+				this.height - 56, TextColors.WHITE);
+		String restart = preview.restartReasons().isEmpty() ? VersionedText.translatable("automodpack.summary.noRestart").getString() : VersionedText.translatable("automodpack.summary.restartRequired").getString();
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(restart).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 44, TextColors.WHITE);
 	}
 
 	@Override

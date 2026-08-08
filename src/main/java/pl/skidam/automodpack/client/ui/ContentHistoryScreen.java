@@ -10,15 +10,17 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistorySummary;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 
 public final class ContentHistoryScreen extends VersionedScreen {
 	private static final int ENTRY_TOP = 44;
-	private static final int ENTRY_HEIGHT = 46;
+	private static final int ENTRY_HEIGHT = 44;
 
 	private final Screen parent;
-	private final List<GenerationRecord> history;
+	private final List<GenerationHistorySummary.Entry> entries;
 	private final List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
 	private final String modpackName;
 	private final Runnable closedCallback;
@@ -30,7 +32,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			Runnable closedCallback) {
 		super(VersionedText.literal("ContentHistoryScreen"));
 		this.parent = parent;
-		this.history = history;
+		this.entries = GenerationHistorySummary.summarize(history, patchNotesHistory);
 		this.patchNotesHistory = List.copyOf(patchNotesHistory);
 		this.modpackName = modpackName == null ? "" : modpackName;
 		this.closedCallback = closedCallback;
@@ -53,12 +55,14 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		}
 		int bottomButtonCount = hasNotes ? 2 : hasPagination ? 3 : 1;
 		this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, 0), y, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
-		if (hasNotes) this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, 1), y, actionWidth, 20, VersionedText.literal("Notes"), button -> openPatchNotes()));
+		if (hasNotes)
+			this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, 1), y, actionWidth, 20,
+					VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
 	}
 
 	private int pageCount() {
 		int pageSize = rowsPerPage();
-		return Math.max(1, (history.size() + pageSize - 1) / pageSize);
+		return Math.max(1, (entries.size() + pageSize - 1) / pageSize);
 	}
 
 	private int rowsPerPage() {
@@ -90,21 +94,24 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		String title = modpackName.isBlank() ? "Content history" : modpackName + " content history";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Previous server versions of this modpack.").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
-		List<GenerationRecord> entries = history;
 		int pageSize = rowsPerPage();
 		int start = page * pageSize;
 		int end = Math.min(entries.size(), start + pageSize);
 		for (int index = start; index < end; index++) {
-			GenerationRecord entry = entries.get(index);
+			GenerationHistorySummary.Entry entry = entries.get(index);
 			int y = ENTRY_TOP + (index - start) * ENTRY_HEIGHT;
 			boolean current = index == entries.size() - 1;
 			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal(truncateToWidth(this.font, "Generation " + (index + 1) + "  " + entry.metadata().createdAt() + (current ? "  Current" : ""), this.width - 20))
+					VersionedText.literal(truncateToWidth(this.font, "Generation " + entry.number() + "  " + entry.createdAt() + (current ? "  Current" : ""), this.width - 20))
 							.withStyle(current ? ChatFormatting.GREEN : ChatFormatting.WHITE),
 					this.width / 2, y, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Files: " + fileCount(entry)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 12, TextColors.WHITE);
-			String notes = entry.metadata().patchNotes().isBlank() ? "No patch notes" : firstLine(entry.metadata().patchNotes());
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Notes: " + notes, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, y + 26,
+			String notes = entry.patchNotes().isBlank() ? "No patch notes" : firstLine(entry.patchNotes());
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Patch notes: " + notes, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, y + 13,
+					TextColors.WHITE);
+			GenerationDiff.Summary diff = entry.diff().summary();
+			String diffText = "Diff vs previous: +" + diff.addedFiles() + " added, ~" + diff.modifiedFiles() + " changed, -" + diff.removedFiles() + " removed, metadata-only "
+					+ diff.metadataOnlyFiles() + ", other metadata " + diff.metadataChanges();
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 26,
 					TextColors.WHITE);
 		}
 		if (entries.isEmpty())
@@ -113,10 +120,6 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		if (pageCount() > 1)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal((page + 1) + " / " + pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 42,
 					TextColors.WHITE);
-	}
-
-	private int fileCount(GenerationRecord record) {
-		return record.manifest().groups().values().stream().mapToInt(group -> group.files().size()).sum();
 	}
 
 	private String firstLine(String notes) {
