@@ -290,6 +290,27 @@ public class Jsons {
 		}
 	}
 
+	public static class ClientQuarantineFields {
+		public int schemaVersion = 1;
+		public String modpackId = "";
+		public List<EntryFields> entries = List.of();
+
+		public static class EntryFields {
+			public String conflictId = "";
+			public String action = "";
+			public Set<String> modIds = Set.of();
+			public String sourcePath = "";
+			public String sourceHash = "";
+			public long sourceSize = -1;
+			public String targetPath = "";
+			public String targetHash = "";
+			public long targetSize = -1;
+			public String quarantinePath = "";
+			public String sourceGenerationId = "";
+			public String quarantinedAt = "";
+		}
+	}
+
 	public static class ClientOverlayFields {
 		public String modpackId = "";
 		public List<String> deletedPaths = List.of();
