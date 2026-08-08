@@ -262,7 +262,13 @@ def _write_server_generation(ctx: Context, index: int) -> None:
             raise ValueError(f"server generation group is not a single safe identifier: {group_id!r}")
         f = host_root / group_id / rel
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(str(item.get("content", "")))
+        fixture = item.get("fixture")
+        if fixture is not None:
+            if not isinstance(fixture, dict):
+                raise ValueError(f"server generation fixture for {rel} must be a mapping")
+            write_valid_mod_fixture(f, fixture)
+        else:
+            f.write_text(str(item.get("content", "")))
     patch_notes = generation.get("patchNotes", "")
     patch_path = srv_dir / "automodpack" / "server" / "patch-notes.md"
     patch_path.parent.mkdir(parents=True, exist_ok=True)
@@ -463,6 +469,19 @@ def _v_launch_client(ctx: Context, step):
     _remove_container(ctx.cli_name)
     ctx.bridge = None
     _launch_client(ctx)
+
+
+@verb("reset_client_generation")
+def _v_reset_client_generation(ctx: Context, _step):
+    """Reset only test client generation records, projection, and object CAS."""
+    client = ctx.game_dir / "automodpack" / "client"
+    for relative in ("records", "active", "active-state.json", "data/objects"):
+        path = client / relative
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
+    ctx.vars["client_generation_reset"] = True
 
 
 @verb("seed_bootstrap")

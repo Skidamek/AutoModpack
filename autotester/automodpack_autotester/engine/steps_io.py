@@ -166,6 +166,21 @@ def seed_same_path_conflict(ctx, step):
     ctx.vars["same_path_conflict_fixture"] = fixture
 
 
+@verb("seed_mod_fixture")
+def seed_mod_fixture(ctx, step):
+    """Place a valid deterministic mod archive in the ordinary game mods directory."""
+    fixture = ctx.resolve(step.get("fixture"))
+    if not isinstance(fixture, dict):
+        raise ValueError("mod fixture requires a valid fixture mapping")
+    raw_path = Path(str(ctx.resolve(step["path"])))
+    path = ctx.path(raw_path)
+    if raw_path.is_absolute() or not path.resolve().is_relative_to(ctx.game_dir.resolve()):
+        raise ValueError(f"mod fixture path escapes the client game directory: {path}")
+    if raw_path.parts[:1] != ("mods",) or raw_path.suffix.lower() != ".jar":
+        raise ValueError("mod fixtures must use a .jar path under the ordinary mods directory")
+    write_valid_mod_fixture(path, fixture)
+
+
 @verb("assert_mod_fixture")
 def assert_mod_fixture(ctx, step):
     """Assert that a path contains the requested valid cross-loader mod fixture."""
