@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+import time
 import types
 from pathlib import Path
 
@@ -19,7 +21,7 @@ from automodpack_autotester.config import (
 )
 from automodpack_autotester.generation_identity import CanonicalEncoder
 from automodpack_autotester.engine.registry import describe, names
-from automodpack_autotester.engine.steps_io import seed_unowned_local_file
+from automodpack_autotester.engine.steps_io import seed_unowned_local_file, wait_file_content
 from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, valid_mod_jar_bytes
 from automodpack_autotester.validate import validate_scenario
 
@@ -213,6 +215,24 @@ def test_seed_client_options_preserves_existing_settings(tmp_path):
     runner._seed_client_options(tmp_path)
 
     assert options_path.read_text(encoding="utf-8") == "narrator:0\nfoo:bar\nskipMultiplayerWarning:true\n"
+
+
+def test_wait_file_content_waits_for_replaced_payload(make_ctx):
+    ctx = make_ctx()
+    path = ctx.game_dir / "automodpack/client/active/config/update.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("old\n", encoding="utf-8")
+
+    def replace_payload():
+        time.sleep(0.05)
+        path.write_text("new\n", encoding="utf-8")
+
+    writer = threading.Thread(target=replace_payload)
+    writer.start()
+    try:
+        wait_file_content(ctx, {"path": "automodpack/client/active/config/update.txt", "content": "new\n", "timeout": "1s", "poll": "10ms"})
+    finally:
+        writer.join()
 
 
 # ── artifact and staged manifest handling ────────────────────────────────────
