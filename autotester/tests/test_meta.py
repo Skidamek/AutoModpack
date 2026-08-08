@@ -186,6 +186,15 @@ def test_scenario_mode():
     assert runner.scenario_mode({"mode": "client-only"}) == "client-only"
 
 
+def test_seed_client_options_preserves_existing_settings(tmp_path):
+    options_path = tmp_path / "options.txt"
+    options_path.write_text("narrator:0\nfoo:bar\nskipMultiplayerWarning:false\n", encoding="utf-8")
+
+    runner._seed_client_options(tmp_path)
+
+    assert options_path.read_text(encoding="utf-8") == "narrator:0\nfoo:bar\nskipMultiplayerWarning:true\n"
+
+
 # ── artifact and staged manifest handling ────────────────────────────────────
 
 
