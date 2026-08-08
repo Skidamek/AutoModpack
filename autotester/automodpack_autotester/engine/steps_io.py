@@ -98,6 +98,40 @@ def assert_file_content(ctx, step):
         raise AssertionError(f"file {path} contents differ: expected {expected!r}, got {actual!r}")
 
 
+@verb("assert_bootstrap_import")
+def assert_bootstrap_import(ctx, _step):
+    """Assert that Preload imported and consumed the real bootstrap file."""
+    expected = {
+        "origin": str(ctx.vars.get("bootstrap_origin", "")),
+        "endpoint": str(ctx.vars.get("bootstrap_endpoint", "")),
+        "fingerprint": str(ctx.vars.get("bootstrap_fingerprint", "")),
+        "modpackId": str(ctx.vars.get("bootstrap_modpack_id", "")),
+        "connectionMode": str(ctx.vars.get("bootstrap_connection_mode", "")),
+    }
+    if not all(expected.values()):
+        raise AssertionError("bootstrap expectations were not captured by seed_bootstrap")
+    bootstrap_path = ctx.game_dir / "automodpack-bootstrap.json"
+    if bootstrap_path.exists():
+        raise AssertionError(f"Preload did not delete imported bootstrap file: {bootstrap_path}")
+    try:
+        client_config = json.loads((ctx.game_dir / "automodpack" / "client-config.json").read_text(encoding="utf-8"))
+        known_hosts = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "known-hosts.json").read_text(encoding="utf-8"))
+        connection = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "packs" / expected["modpackId"] / "connection.json").read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"Preload did not persist bootstrap state: {error}") from error
+    if client_config.get("selectedModpackId") != expected["modpackId"]:
+        raise AssertionError(f"bootstrap selectedModpackId mismatch: expected {expected['modpackId']!r}, got {client_config.get('selectedModpackId')!r}")
+    host = known_hosts.get("hosts", {}).get(expected["origin"])
+    normalized_expected_fingerprint = expected["fingerprint"].replace(":", "").lower()
+    if (not isinstance(host, dict) or host.get("reason") != "SEED"
+            or str(host.get("fingerprint", "")).replace(":", "").lower() != normalized_expected_fingerprint):
+        raise AssertionError(f"bootstrap trust pin was not seeded for {expected['origin']!r}: {host!r}")
+    actual = connection.get("connection", {})
+    for field in ("origin", "endpoint", "connectionMode"):
+        if actual.get(field) != expected[field]:
+            raise AssertionError(f"bootstrap connection {field} mismatch: expected {expected[field]!r}, got {actual.get(field)!r}")
+
+
 @verb("seed_unowned_local_file")
 def seed_unowned_local_file(ctx, step):
     """Create deterministic local content used to verify non-pack content survives switching."""

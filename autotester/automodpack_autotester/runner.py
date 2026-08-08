@@ -110,6 +110,10 @@ def _assert_running(name):
         )
 
 
+def _is_connecting_screen(screen: str) -> bool:
+    return "FirstConnectScreen" not in screen and any(name in screen for name in ("ConnectScreen", "class_397"))
+
+
 def _inspect_container(name):
     return _container(name).attrs
 
@@ -461,6 +465,87 @@ def _v_launch_client(ctx: Context, step):
     _launch_client(ctx)
 
 
+@verb("seed_bootstrap")
+def _v_seed_bootstrap(ctx: Context, step):
+    """Write a real game-root bootstrap file from the live server state."""
+    fingerprint = str(ctx.vars.get("fingerprint", "")).strip()
+    if not fingerprint:
+        raise RuntimeError("seed_bootstrap requires read_server_fingerprint first")
+    projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
+    config_path = ctx.server_dir / "automodpack" / "server-config.json"
+    try:
+        projection = json.loads(projection_path.read_text(encoding="utf-8"))
+        server_config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"live server bootstrap state is not readable: {error}") from error
+    modpack_id = str(projection.get("modpackId", "")).strip()
+    if not modpack_id:
+        raise RuntimeError(f"live server projection has no modpackId: {projection_path}")
+    origin = str(ctx.resolve(step.get("origin", "${server.host}"))).strip()
+    endpoint = str(ctx.resolve(step.get("endpoint", "${server.host}"))).strip()
+    connection_mode = str(step.get("connectionMode") or server_config.get("connectionMode") or "").strip().upper()
+    if not origin or not endpoint or not connection_mode:
+        raise RuntimeError("bootstrap requires origin, endpoint, and connectionMode")
+    fields = {
+        "origin": origin,
+        "fingerprint": fingerprint,
+        "modpackId": modpack_id,
+        "endpoint": endpoint,
+        "connectionMode": connection_mode,
+    }
+    bootstrap_path = ctx.game_dir / "automodpack-bootstrap.json"
+    bootstrap_path.write_text(json.dumps(fields, indent=2) + "\n", encoding="utf-8")
+    ctx.vars.update({
+        "bootstrap_origin": origin,
+        "bootstrap_endpoint": endpoint,
+        "bootstrap_fingerprint": fingerprint,
+        "bootstrap_modpack_id": modpack_id,
+        "bootstrap_connection_mode": connection_mode,
+        "bootstrap_path": "automodpack-bootstrap.json",
+    })
+
+
+@verb("assert_preload_acquired")
+def _v_assert_preload_acquired(ctx: Context, _step):
+    """Assert that Preload acquired every object in the published catalogue into CAS."""
+    projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
+    try:
+        projection = json.loads(projection_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"published projection is not readable: {error}") from error
+    expected = {}
+    for group in (projection.get("groups", {}) or {}).values():
+        for file in (group.get("files", {}) or {}).values():
+            sha1 = str(file.get("sha1", "")).strip().lower()
+            if not sha1:
+                continue
+            size = int(file["size"])
+            previous_size = expected.setdefault(sha1, size)
+            if previous_size != size:
+                raise AssertionError(f"published projection gives object {sha1} conflicting sizes: {previous_size} and {size}")
+    if not expected:
+        raise AssertionError("published projection contains no object hashes")
+    objects = _ensure_client_data_root(ctx.game_dir) / "objects"
+    missing = []
+    invalid = []
+    for sha1, size in expected.items():
+        object_path = objects / sha1
+        try:
+            if not object_path.is_file() or object_path.stat().st_size != size:
+                missing.append(sha1)
+            elif hashlib.sha1(object_path.read_bytes()).hexdigest() != sha1:
+                invalid.append(sha1)
+        except OSError:
+            missing.append(sha1)
+    if missing or invalid:
+        raise AssertionError(f"preload CAS is incomplete: missing={missing}, invalid={invalid}")
+    log = ctx.container_logs("client")
+    marker = f"Preloaded {len(expected)} complete modpack objects"
+    if marker not in log:
+        raise AssertionError(f"client log did not prove fresh complete preload: {marker!r}")
+    ctx.vars["preloaded_object_count"] = len(expected)
+
+
 @verb("wait_bridge")
 def _v_wait_bridge(ctx: Context, step):
     if ctx.bridge is None:
@@ -498,21 +583,23 @@ def _v_connect(ctx: Context, step):
     timeout = parse_duration(step.get("timeout"), default=90)
     deadline = time.monotonic() + timeout
     _TITLE = ("TitleScreen", "class_442")
-    _CONNECT = ("ConnectScreen", "class_397")
+    last_screen = "<not observed>"
     while time.monotonic() < deadline:
         _assert_running(ctx.cli_name)
         ctx.bridge.connect(host)
         poll_dl = time.monotonic() + min(deadline - time.monotonic(), 45)
         while time.monotonic() < poll_dl:
             screen = str(ctx.bridge.gui().get("screenClass") or "")
+            last_screen = screen or "<none>"
             if any(n in screen for n in _TITLE):
                 break
-            if not any(n in screen for n in _CONNECT):
+            if not _is_connecting_screen(screen):
                 return
             _jitter_sleep(0.5)
         ctx.bridge.request("disconnect")
         _jitter_sleep(1)
-    raise RuntimeError(f"Could not connect to {host} after multiple attempts")
+    log_tail = "\n".join(ctx.container_logs("client").splitlines()[-20:])
+    raise RuntimeError(f"Could not connect to {host} after multiple attempts; last_screen={last_screen!r}\n--- client log tail ---\n{log_tail}")
 
 
 @verb("disconnect")
