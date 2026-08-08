@@ -102,7 +102,7 @@ class FakeBridge:
                 "screenClass": "ModpackSelectionScreen",
                 "buttons": [{"id": 27, "text": "Core", "enabled": False, "visible": True},
                             {"id": 28, "text": "Client", "enabled": True, "visible": True},
-                            {"id": 29, "text": "Visuals", "enabled": True, "visible": True},
+                            {"id": 29, "text": ("[+] Visuals (required by selection)" if self.dependency else "Visuals"), "enabled": True, "visible": True},
                             {"id": 30, "text": "Next >", "enabled": True, "visible": True},
                             {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
                 "textFields": [],
@@ -110,9 +110,10 @@ class FakeBridge:
             "group1": {
                 "screenClass": "ModpackSelectionScreen",
                 "buttons": [{"id": 32, "text": "Extras", "enabled": True, "visible": True},
-                            {"id": 33, "text": ("Addon (required by selection)" if self.dependency else "Addon"), "enabled": True, "visible": True},
+                            {"id": 33, "text": "Addon", "enabled": True, "visible": True},
                             {"id": 34, "text": ("Alternative (conflict)" if self.conflict else "Alternative"), "enabled": True, "visible": True},
                             {"id": 35, "text": "Platform", "enabled": True, "visible": True},
+                            {"id": 39, "text": "< Prev", "enabled": True, "visible": True},
                             {"id": 36, "text": "Next >", "enabled": True, "visible": True},
                             {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
                             {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
@@ -217,6 +218,8 @@ class FakeBridge:
             self.screen = "group1"
         elif element_id == 25 or element_id == 35:
             self.screen = "group1" if self.screen == "group2" else self.screen
+        elif element_id == 39:
+            self.screen = "group0" if self.screen == "group1" else self.screen
         elif element_id == 5:
             if self.screen == "preview":
                 if self.pending_pack is not None:
