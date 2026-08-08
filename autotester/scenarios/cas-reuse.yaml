@@ -20,7 +20,7 @@ flow:
       all:
         - screen: RestartScreen
         - log: { container: client, matches: "No files to download" }
-        - log: { container: client, matches: "Prepared update changes: 8 updated, 0 removed" }
+        - log: { container: client, matches: "Prepared update changes: 8 changed, 0 removed" }
   - do: screenshot
     name: capture the CAS-backed completion summary
     file: cas-update-complete

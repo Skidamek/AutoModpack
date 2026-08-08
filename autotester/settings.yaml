@@ -9,7 +9,7 @@ images:
 
 run:
   target: all
-  scenario: sync
+  scenario: all
   jobs: 3
 
 server:
