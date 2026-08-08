@@ -93,7 +93,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String title = modpackName.isBlank() ? "Content history" : modpackName + " content history";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Previous server versions of this modpack.").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Downloaded generations and their patch notes.").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
 		int pageSize = rowsPerPage();
 		int start = page * pageSize;
 		int end = Math.min(entries.size(), start + pageSize);
@@ -102,7 +102,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			int y = ENTRY_TOP + (index - start) * ENTRY_HEIGHT;
 			boolean current = index == entries.size() - 1;
 			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal(truncateToWidth(this.font, "Generation " + entry.number() + "  " + entry.createdAt() + (current ? "  Current" : ""), this.width - 20))
+					VersionedText.literal(truncateToWidth(this.font, "Generation " + entry.number() + "  " + entry.createdAt() + (current ? "  Latest available" : ""), this.width - 20))
 							.withStyle(current ? ChatFormatting.GREEN : ChatFormatting.WHITE),
 					this.width / 2, y, TextColors.WHITE);
 			String notes = entry.patchNotes().isBlank() ? "No patch notes" : firstLine(entry.patchNotes());

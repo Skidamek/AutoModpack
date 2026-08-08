@@ -67,12 +67,16 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 		List<String> lines = new ArrayList<>();
 		for (int index = 0; index < history.size(); index++) {
 			GenerationPatchNoteHistory.Entry entry = history.get(index);
-			lines.add(truncateToWidth(this.font, "Generation " + (index + 1) + "  " + entry.createdAt(), width));
+			lines.add(truncateToWidth(this.font, "Generation " + shortGenerationId(entry.generationId()) + "  " + entry.createdAt(), width));
 			lines.addAll(wrapToWidth(this.font, entry.patchNotes(), width, Integer.MAX_VALUE));
 			if (index + 1 < history.size()) lines.add("");
 		}
 		if (lines.isEmpty()) lines.add("No patch notes are available.");
 		return lines;
+	}
+
+	private static String shortGenerationId(String generationId) {
+		return generationId.substring(0, Math.min(12, generationId.length()));
 	}
 
 	private void updateNavigation() {

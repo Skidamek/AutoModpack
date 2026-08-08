@@ -28,13 +28,22 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 		original.call();
 		if (!ModpackSelectionScreen.hasModpackManagement()) return;
 
-		int buttonWidth = Math.min(150, Math.max(1, width - 20));
-		int buttonX = (width - buttonWidth) / 2;
-		// Keep the action in the same centered lower control area as multiplayer's vanilla buttons.
-		// The former top-right placement competed with the title and was easy to miss at small GUI scales.
-		int buttonY = Math.max(32, height - 84);
+		int titleLeft = (width - this.font.width(this.title)) / 2;
+		int titleRight = titleLeft + this.font.width(this.title);
+		int leftWidth = Math.max(0, titleLeft - 8);
+		int rightWidth = Math.max(0, width - titleRight - 8);
+		int buttonWidth = Math.min(110, Math.max(leftWidth, rightWidth));
+		// Vanilla owns the entire lower 64-pixel footer and the server list starts immediately below
+		// the title header. Use a side slot only when the complete button fits beside the title. At
+		// very narrow widths neither side is safe, so omit the optional button instead of putting it
+		// over the title or into vanilla's list/footer controls.
+		if (buttonWidth < 64) return;
+		boolean useRight = rightWidth >= leftWidth;
+		int buttonX = useRight ? width - buttonWidth - 4 : 4;
+		int buttonY = 8;
 		Button groupsButton = VersionedScreen.buttonWidget(buttonX, buttonY, buttonWidth, 20,
-				VersionedText.translatable("automodpack.selection.button"), press -> ScreenImpl.setScreen(ModpackSelectionScreen.forSelectedModpack(this)));
+				VersionedText.translatable(buttonWidth < 100 ? "automodpack.selection.shortButton" : "automodpack.selection.button"),
+				press -> ScreenImpl.setScreen(ModpackSelectionScreen.forSelectedModpack(this)));
 		addRenderableWidget(groupsButton);
 	}
 }
