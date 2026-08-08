@@ -74,7 +74,48 @@ def test_release_fixture_uses_server_config_and_declared_group_directories(make_
     assert (host_root / "addon" / "config/amp-autotest-addon.txt").is_file()
     assert (host_root / "alternative" / "config/amp-autotest-alternative.txt").is_file()
     assert (host_root / "windows" / "config/amp-autotest-windows.txt").is_file()
+    assert_valid_mod_fixture(
+        (host_root / "main" / "mods/amp-autotest-removed.jar").read_bytes(),
+        {"modId": "amp_autotest_removed", "version": "1.0.0-published", "marker": "published"},
+    )
     assert not (host_root / "main" / "config/amp-autotest-visual.txt").exists()
+
+
+def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
+    ctx = make_ctx()
+    client = ctx.game_dir / "automodpack/client"
+    (client / "records/old").mkdir(parents=True)
+    (client / "records/old/manifest.json").write_text("{}")
+    (client / "active/config").mkdir(parents=True)
+    (client / "active/config/old.txt").write_text("old")
+    (client / "data/objects").mkdir(parents=True)
+    (client / "data/objects" / ("a" * 40)).write_bytes(b"cached")
+    (client / "active-state.json").write_text("{}")
+    fixture = {"modId": "amp_autotest_removed", "version": "1.0.0-published", "marker": "published"}
+    (ctx.game_dir / "mods/old.jar").write_bytes(valid_mod_jar_bytes(fixture))
+    runner._v_reset_client_generation(ctx, {})
+
+    assert not (client / "records").exists()
+    assert not (client / "active").exists()
+    assert not (client / "data/objects").exists()
+    assert not (client / "active-state.json").exists()
+    assert_valid_mod_fixture((ctx.game_dir / "mods/old.jar").read_bytes(), fixture)
+
+
+def test_validation_rejects_generation_fixture_on_non_jar_path():
+    scenario = {
+        "id": "fixture-validation",
+        "serverFiles": {"generations": [{"files": [{"path": "config/old.txt", "fixture": {"modId": "old", "version": "1", "marker": "old"}}]}]},
+        "flow": [{"do": "quit"}],
+    }
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+    assert any("valid mod fixtures must use a .jar path" in problem for problem in problems)
+
+
+def test_validation_requires_seed_mod_fixture_payload():
+    scenario = {"id": "missing-fixture", "flow": [{"do": "seed_mod_fixture", "path": "mods/old.jar"}]}
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+    assert any("seed_mod_fixture.fixture" in problem for problem in problems)
 
 
 def test_unowned_local_fixture_writes_a_valid_cross_loader_archive(make_ctx):

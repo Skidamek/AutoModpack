@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from urllib.parse import urlparse
 
 from .config import scenario_matches_target
@@ -25,6 +26,7 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "pack-switching",
     "generation-update",
     "conflict-preservation",
+    "fresh-generation-deletion",
 })
 
 
@@ -40,6 +42,13 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
         generations = (scenario.get("serverFiles", {}) or {}).get("generations")
         if not isinstance(generations, list) or len(generations) < 2:
             problems.append("release-gate scenario needs at least two serverFiles.generations entries")
+    generations = (scenario.get("serverFiles", {}) or {}).get("generations")
+    if generations is not None:
+        if not isinstance(generations, list):
+            problems.append("serverFiles.generations must be a list")
+        else:
+            for index, generation in enumerate(generations):
+                _check_generation_files(generation, problems, f"serverFiles.generations[{index}]")
 
     mode = str(scenario.get("mode", "full")).lower()
     if mode not in _VALID_MODES:
@@ -129,20 +138,45 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                 _check_publish_generation(step, problems, label)
             elif verb == "assert_generation":
                 _check_generation_assertion(step, problems, label)
-            elif verb in ("assert_file_content", "wait_file_content", "seed_unowned_local_file", "seed_same_path_conflict", "assert_mod_fixture", "assert_quarantine_payload"):
+            elif verb in ("assert_file_content", "wait_file_content", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_quarantine_payload"):
                 if not isinstance(step.get("path"), str) or not step["path"].strip():
                     if verb not in ("assert_quarantine_payload",):
                         problems.append(f"{label}.path: expected a non-empty relative path")
                 if verb == "wait_file_content" and not isinstance(step.get("content"), str):
                     problems.append(f"{label}.content: expected a string")
-                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "assert_mod_fixture", "assert_quarantine_payload") and step.get("fixture") is not None:
+                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_quarantine_payload") and step.get("fixture") is not None:
                     _check_mod_fixture(step.get("fixture"), problems, f"{label}.fixture")
-                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "assert_mod_fixture") and step.get("fixture") is not None and isinstance(step.get("path"), str) and not step["path"].lower().endswith(".jar"):
+                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture") and step.get("fixture") is not None and isinstance(step.get("path"), str) and not step["path"].lower().endswith(".jar"):
                     problems.append(f"{label}.path: valid mod fixtures must use a .jar path")
                 if verb == "seed_unowned_local_file" and step.get("fixture") is None and isinstance(step.get("path"), str) and step["path"].lower().endswith(".jar"):
                     problems.append(f"{label}.fixture: .jar paths require a valid mod fixture mapping")
+                if verb == "seed_mod_fixture" and step.get("fixture") is None:
+                    problems.append(f"{label}.fixture: this verb requires a valid mod fixture mapping")
                 if verb == "assert_quarantine_payload" and (not isinstance(step.get("packId"), str) or not step["packId"].strip()):
                     problems.append(f"{label}.packId: expected a non-empty pack ID")
+
+
+def _check_generation_files(generation, problems, where):
+    if not isinstance(generation, dict):
+        problems.append(f"{where}: expected a mapping")
+        return
+    files = generation.get("files", [])
+    if not isinstance(files, list):
+        problems.append(f"{where}.files: expected a list")
+        return
+    for index, item in enumerate(files):
+        location = f"{where}.files[{index}]"
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not item["path"].strip():
+            problems.append(f"{location}: expected a mapping with a non-empty path")
+            continue
+        path = Path(item["path"])
+        if path.is_absolute() or ".." in path.parts:
+            problems.append(f"{location}.path: path must stay inside the server modpack")
+        fixture = item.get("fixture")
+        if fixture is not None:
+            _check_mod_fixture(fixture, problems, f"{location}.fixture")
+            if not item["path"].lower().endswith(".jar"):
+                problems.append(f"{location}.path: valid mod fixtures must use a .jar path")
 
 
 def _check_duration(value, problems, where):

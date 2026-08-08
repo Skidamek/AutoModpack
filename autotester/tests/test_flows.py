@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import shutil
 from pathlib import Path
 
 import pytest
@@ -101,6 +102,21 @@ def _wait_exit(ctx, step):
     pass
 
 
+@verb("reset_client_generation")
+def _reset_client_generation(ctx, step):
+    for relative in ("records", "active", "active-state.json", "data/objects"):
+        path = ctx.game_dir / "automodpack" / "client" / relative
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
+    ctx.vars["client_generation_reset"] = True
+    ctx.bridge.synced = False
+    ctx.bridge.bootstrap = True
+    ctx.bridge.update_available = False
+    ctx.bridge.screen = "title"
+
+
 @verb("stage_modpack")
 def _stage_modpack(ctx, step):
     if step.get("recordOnly") and ctx.bridge is not None:
@@ -131,7 +147,7 @@ _STUBS = {
     "launch_server": _noop, "wait_server": _noop,
     "launch_client": _launch_client, "wait_bridge": _wait_bridge, "seed_bootstrap": _seed_bootstrap,
     "connect": _connect, "quit": _quit, "disconnect": _disconnect,
-    "wait_client_exit": _wait_client_exit, "wait_exit": _wait_exit,
+    "wait_client_exit": _wait_client_exit, "wait_exit": _wait_exit, "reset_client_generation": _reset_client_generation,
     "stage_modpack": _stage_modpack, "publish_server_generation": _publish_server_generation, "wait_join": _wait_join,
 }
 
