@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.utils.cache;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -35,6 +36,26 @@ class FileMetadataCacheTest {
 			Files.setLastModifiedTime(file, secondTime);
 
 			assertNotEquals(firstHash, cache.getOrComputeHash(file));
+		}
+	}
+
+	@Test
+	void persistsMetadataAcrossFreshCacheInstance() throws Exception {
+		Path file = temporaryDirectory.resolve("file.bin");
+		Files.writeString(file, "persisted", StandardCharsets.UTF_8);
+		FileTime originalLastModifiedTime = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
+		Files.setLastModifiedTime(file, originalLastModifiedTime);
+		Path cacheDirectory = temporaryDirectory.resolve("file-metadata");
+		String expectedHash;
+
+		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+			expectedHash = cache.getOrComputeHash(file);
+		}
+		Files.writeString(file, "newvalue!", StandardCharsets.UTF_8);
+		Files.setLastModifiedTime(file, originalLastModifiedTime);
+
+		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+			assertEquals(expectedHash, cache.getOrComputeHash(file));
 		}
 	}
 }
