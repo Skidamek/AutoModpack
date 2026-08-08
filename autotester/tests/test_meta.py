@@ -352,6 +352,27 @@ def test_record_only_staging_does_not_replace_active_state(make_ctx):
     assert json.loads(records[0].read_text())["modpackName"] == "Pack B"
 
 
+def test_wait_generation_requires_committed_state_and_matching_record(make_ctx):
+    from automodpack_autotester.engine.steps_io import wait_generation
+
+    ctx = make_ctx()
+    marker = ctx.game_dir / "automodpack/client/active/config/amp-autotest-marker.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("projected\n", encoding="utf-8")
+
+    with pytest.raises(TimeoutError, match="active generation state was not committed"):
+        wait_generation(ctx, {"timeout": "1ms", "poll": "1ms"})
+
+    generation_id = "a" * 40
+    record = ctx.game_dir / "automodpack/client/records" / generation_id / "manifest.json"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({"modpackId": "packaaa", "generation": {"generationId": generation_id}}), encoding="utf-8")
+    state = ctx.game_dir / "automodpack/client/active-state.json"
+    state.write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}), encoding="utf-8")
+
+    wait_generation(ctx, {"timeout": "1s", "poll": "1ms"})
+
+
 def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeypatch):
     ctx = make_ctx()
     ctx.artifact.write_bytes(b"autotest-artifact")
