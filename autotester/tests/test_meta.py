@@ -57,6 +57,20 @@ def test_shipped_scenarios_validate():
         assert validate_scenario(scenario, macros, targets) == [], name
 
 
+def test_legacy_forge_keeps_loader_classes_out_of_nested_mod():
+    project_root = Path(__file__).parents[2]
+    build_script = (project_root / "build.forge.gradle.kts").read_text(encoding="utf-8")
+    modpack_utils = (project_root / "loader/core/src/main/java/pl/skidam/automodpack_loader_core/client/ModpackUtils.java").read_text(encoding="utf-8")
+    early_service_layer = (project_root / "loader/forge/earlyservices/src/main/java/pl/skidam/automodpack_loader_core_forge/EarlyServiceLayer.java").read_text(encoding="utf-8")
+
+    assert 'compileOnly(project(":core")) { isTransitive = false }' in build_script
+    assert 'compileOnly(project(":loader-core")) { isTransitive = false }' in build_script
+    assert 'implementation(project(":loader-core")) { isTransitive = false }' not in build_script
+    assert "ManifestFetchState connectionFailedState = ManifestFetchState.CONNECTION_FAILED;" in modpack_utils
+    assert 'LOGGER.error("Error while connecting to the server modpack host: {}", formatThrowable(cause));' in modpack_utils
+    assert 'using the built-in fallback ({}: {})", t.getClass().getName(), t.getMessage())' in early_service_layer
+
+
 def test_release_fixture_uses_server_config_and_declared_group_directories(make_ctx):
     scenario = load_scenarios()["all"]
     assert scenario["topology"]["server"]["automodpack"]["config"]["validateSecrets"] is True
