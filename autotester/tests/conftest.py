@@ -90,7 +90,7 @@ class FakeBridge:
     # --- snapshot ---------------------------------------------------------
     def gui(self, timeout: float = 30) -> dict:
         snapshots = {
-            "title": {"screenClass": "TitleScreen", "buttons": [{"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}], "textFields": []},
+            "title": {"screenClass": "TitleScreen", "title": "Title Screen", "buttons": [{"id": 6, "text": "Singleplayer", "enabled": True, "visible": True}, {"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}], "textFields": []},
             "cert": {
                 "screenClass": "CertScreen",
                 "buttons": [{"id": 2, "text": "Verify", "enabled": True, "visible": True}],
