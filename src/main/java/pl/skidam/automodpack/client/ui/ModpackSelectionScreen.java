@@ -457,9 +457,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			try {
 				ClientGenerationStore generationStore = new ClientGenerationStore(storage);
 				String generationId = historyGenerationId();
-				List<GenerationRecord> history = generationStore.availableLineage(modpackId, generationId);
 				List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(generationId);
-				new ScreenManager().history(history, modpackName, patchNotesHistory, (Runnable) this::endManagement);
+				ScreenImpl.openPatchNotesHistory(this, patchNotesHistory, modpackName, this::endManagement);
 			} catch (Exception e) {
 				endManagement();
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
@@ -531,7 +530,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		try {
 			ClientGenerationStore generationStore = new ClientGenerationStore(storage);
 			String generationId = historyGenerationId();
-			return generationStore.availableLineage(modpackId, generationId).size() > 1 || GenerationPatchNoteHistory.containsNotes(generationStore.patchNotesHistory(generationId));
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(generationId);
+			return patchNotesHistory.size() > 1 || GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}

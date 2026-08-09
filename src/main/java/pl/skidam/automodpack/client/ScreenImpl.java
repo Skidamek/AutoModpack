@@ -102,6 +102,11 @@ public class ScreenImpl implements ScreenService {
 		Screens.setScreen(screen);
 	}
 
+	/** Opens the server-carried generation lineage; {@link ContentHistoryScreen} remains the local-diff view. */
+	public static void openPatchNotesHistory(Screen parent, List<GenerationPatchNoteHistory.Entry> history, String modpackName, Runnable closed) {
+		executeOnClient(() -> Screens.setScreen(new PatchNotesHistoryScreen(parent, history, modpackName, closed)));
+	}
+
 	public static void multiplayer() {
 		Screens.multiplayer();
 	}
