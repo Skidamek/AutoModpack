@@ -150,6 +150,8 @@ public final class ClientGenerationStore {
 	 * </p>
 	 */
 	public CompactionResult compact() throws IOException {
+		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS))
+			throw new IOException("Cannot compact client storage while an update transaction is active: " + storage.transactionFile());
 		GenerationSnapshot snapshot = validateCompactionSnapshot();
 		ClientObjectStore.validate(storage);
 		FileTotals recordsBefore = generationTotals(snapshot.records().keySet());
