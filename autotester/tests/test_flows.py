@@ -266,6 +266,8 @@ def test_release_gate_flow(make_ctx):
     assert ctx.bridge.exited
     assert not ctx.bridge.secondary_pack
     assert ctx.bridge.screenshots, "release gate must exercise render screenshots"
+    assert "all-local-storage-before" in ctx.bridge.screenshots
+    assert "all-local-storage-after" in ctx.bridge.screenshots
     active = ctx.game_dir / ctx.active_projection_dir()
     assert ctx.bridge.selected_pack == "A"
     assert not (ctx.game_dir / "automodpack/client/active-state.json").exists()
@@ -283,6 +285,7 @@ def test_release_gate_flow(make_ctx):
         (ctx.game_dir / "mods/amp-autotest-conflict.jar").read_bytes(),
         {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"}, ctx.target.minecraft,
     )
+    assert (ctx.game_dir / "config/amp-autotest-baseline.json").read_text(encoding="utf-8") == "local-baseline\n"
 
 
 def test_scenarios_only_reference_known_verbs():

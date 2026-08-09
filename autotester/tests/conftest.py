@@ -83,6 +83,9 @@ class FakeBridge:
         self.dependency = False
         self.conflict = False
         self.quarantine_restored = False
+        self.storage_running = False
+        self.storage_complete = False
+        self.baseline_snapshots: dict[Path, bytes] = {}
 
     # --- snapshot ---------------------------------------------------------
     def gui(self, timeout: float = 30) -> dict:
@@ -159,6 +162,14 @@ class FakeBridge:
             "manager": {
                 "screenClass": "InstalledModpacksScreen",
                 "buttons": self._manager_buttons(),
+                "textFields": [],
+            },
+            "storage": {
+                "screenClass": "ClientStorageMaintenanceScreen",
+                "buttons": [
+                    {"id": 46, "text": "Cleanup complete" if self.storage_complete else "Clean local storage", "enabled": not self.storage_running and not self.storage_complete, "visible": True},
+                    {"id": 47, "text": "Back", "enabled": True, "visible": True},
+                ],
                 "textFields": [],
             },
             "settings": {
@@ -291,6 +302,15 @@ class FakeBridge:
             self.screen = "quarantine"
         elif element_id == 45:
             self.screen = "settings"
+        elif element_id == 46:
+            if self.screen == "manager":
+                self.screen = "storage"
+            else:
+                self.storage_running = True
+                self._compact_local_storage()
+                self.storage_running = False
+        elif element_id == 47:
+            self.screen = "manager"
         return {"ok": True}
 
     def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
@@ -352,7 +372,15 @@ class FakeBridge:
         client_config.write_text(json.dumps(config), encoding="utf-8")
         for rel, _content in self.ctx.scenario_files:
             self.ctx.path(rel).unlink(missing_ok=True)
+        for rel, content in self.baseline_snapshots.items():
+            target = self.ctx.path(rel)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
         self._editable_overlay_path("A").unlink(missing_ok=True)
+
+    def _compact_local_storage(self) -> None:
+        """Keep the fake bridge focused on the UI; scenario assertions prove preservation."""
+        self.storage_complete = True
 
     def _reset_client_generation(self) -> None:
         self.secondary_pack = False
@@ -389,6 +417,7 @@ class FakeBridge:
         elif self.update_available:
             files = [(Path("config/amp-autotest-alpha.txt"), "amp-autotest-alpha-v2\n"),
                      (Path("config/amp-autotest-beta.json"), '{"id":"beta","value":43}'),
+                     (Path("config/amp-autotest-baseline.json"), "server-baseline-v2\n"),
                      (Path("config/amp-autotest-visual.txt"), "visual-v2\n"),
                      (Path("config/amp-autotest-delta.txt"), "delta-v2\n"),
                      (Path("config/pack-a-only.txt"), "pack-a-v2\n")]
@@ -405,6 +434,8 @@ class FakeBridge:
             fixture_files = self._generation_fixture_files(1)
         elif self.selected_pack == "A":
             fixture_files = self._generation_fixture_files(0)
+        if self.selected_pack == "A":
+            self._apply_server_owned_baselines(1 if self.update_available or self.ctx.vars.get("client_generation_reset") else 0)
         for rel, content in files:
             f = root / rel
             f.parent.mkdir(parents=True, exist_ok=True)
@@ -440,6 +471,22 @@ class FakeBridge:
             source.unlink(missing_ok=True)
         self._write_manifest()
 
+    def _apply_server_owned_baselines(self, generation_index: int) -> None:
+        generations = self.ctx.scenario.get("serverFiles", {}).get("generations", [])
+        if not isinstance(generations, list) or generation_index >= len(generations):
+            return
+        generation = generations[generation_index]
+        for item in generation.get("files", []):
+            if not isinstance(item, dict) or item.get("fixture") is not None or "content" not in item:
+                continue
+            relative = Path(str(item["path"]))
+            target = self.ctx.path(relative)
+            if relative not in self.baseline_snapshots and target.is_file():
+                self.baseline_snapshots[relative] = target.read_bytes()
+            if relative in self.baseline_snapshots:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(str(item["content"]), encoding="utf-8")
+
     def _conflict_path(self) -> str | None:
         value = self.ctx.vars.get("same_path_conflict_path")
         return str(value) if value else None
@@ -468,12 +515,14 @@ class FakeBridge:
     def _manager_buttons(self) -> list[dict]:
         if not self.secondary_pack:
             state = "active" if self.selected_pack == "A" else "switch"
-            return [{"id": 9, "text": f"Pack A  [{state}]  connected", "enabled": True, "visible": True}]
+            return [{"id": 9, "text": f"Pack A  [{state}]  connected", "enabled": True, "visible": True},
+                    {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
         a_state = "active" if self.selected_pack == "A" else "switch"
         b_state = "active" if self.selected_pack == "B" else "switch"
         return [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
                 {"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
-                {"id": 11, "text": f"Pack B  [{b_state}]  local record", "enabled": True, "visible": True}]
+                {"id": 11, "text": f"Pack B  [{b_state}]  local record", "enabled": True, "visible": True},
+                {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
 
     def _write_manifest(self) -> None:
         groups = self.ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}).get("config", {}).get("groups", {})

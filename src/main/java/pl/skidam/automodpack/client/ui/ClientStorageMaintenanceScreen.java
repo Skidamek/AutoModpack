@@ -37,9 +37,10 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		super.init();
 		int actionWidth = actionButtonWidth(PANEL_WIDTH, 2);
 		int actionY = this.height - 28;
+		String actionLabel = busy ? "automodpack.storage.runningButton" : result != null ? "automodpack.storage.complete" : "automodpack.storage.confirm";
 		Button maintenance = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 2, 2, 0), actionY, actionWidth, 20,
-				VersionedText.translatable(busy ? "automodpack.storage.runningButton" : "automodpack.storage.confirm"), button -> compact());
-		maintenance.active = !busy && !closed;
+				VersionedText.translatable(actionLabel), button -> compact());
+		maintenance.active = !busy && result == null && !closed;
 		this.addRenderableWidget(maintenance);
 		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 2, 2, 1), actionY, actionWidth, 20,
 				VersionedText.translatable("automodpack.back"), button -> closeToParent()));
