@@ -126,6 +126,23 @@ class ClientGenerationStoreTest {
 	}
 
 	@Test
+	void activeTransactionRefusesCompactionWithoutMutation() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "valid-object");
+		GenerationRecord valid = record(FIRST_PACK, hash, Files.size(storage.objectsDirectory().resolve(hash)), Instant.parse("2026-01-01T00:00:00Z"), null);
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		generations.write(valid);
+		storage.writeActiveState(FIRST_PACK, valid.metadata().generationId());
+		Files.writeString(storage.transactionFile(), "active", StandardCharsets.UTF_8);
+
+		IOException error = assertThrows(IOException.class, generations::compact);
+
+		assertTrue(error.getMessage().contains("update transaction is active"));
+		assertTrue(Files.exists(storage.generationManifest(valid.metadata().generationId())));
+		assertTrue(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
 	void preservesOverlaysBaselinesQuarantineAndLocalFiles() throws Exception {
 		ClientStorage storage = storage();
 		String hash = store(storage, "record-object");
