@@ -41,6 +41,7 @@ import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.update.UpdateReviewPolicy;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
@@ -543,9 +544,9 @@ public class ModpackUpdater implements AutoCloseable {
 				case PREVIEW_SHOWN -> {
 					return;
 				}
-				case APPLIED -> LOGGER.info("Applied a metadata-only generation update without opening a review screen");
-				case DEFERRED -> LOGGER.info("Metadata-only generation update was deferred to the detached helper");
-				case FAILED -> LOGGER.error("Metadata-only generation update failed; the installed generation was not advanced");
+				case APPLIED -> LOGGER.info("Applied an already-authorized no-op update without opening a review screen");
+				case DEFERRED -> LOGGER.info("Already-authorized no-op update was deferred to the detached helper");
+				case FAILED -> LOGGER.error("Already-authorized no-op update failed; the installed generation was not advanced");
 				case PREVIEW_NOT_SHOWN -> LOGGER.warn("Update preview could not be shown; leaving the installed generation unchanged");
 			}
 			close();
@@ -799,15 +800,17 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	/** A review is required for the first install or any plan that changes player-visible state. */
-	private boolean requiresPlayerReview(ClientUpdatePlanBuilder.PreparedPlan prepared, boolean firstInstall) {
-		if (firstInstall) return true;
-		return hasPlanImpact(prepared);
+	/** A review is required for first install, a changed generation identity, or any plan impact. */
+	private boolean requiresPlayerReview(ClientUpdatePlanBuilder.PreparedPlan prepared, boolean firstInstall) throws IOException {
+		ModpackJsons.ModpackContentFields installed = storedTarget();
+		GenerationTarget installedTarget = installed == null ? null : GenerationTarget.fromFlat(installed);
+		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared));
 	}
 
 	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */
 	private boolean requiresReconciliation(ClientUpdatePlanBuilder.PreparedPlan prepared, ModpackJsons.ModpackContentFields installed) {
-		return installed == null || !GenerationTarget.fromFlat(installed).equals(prepared.plan().generationTarget()) || hasPlanImpact(prepared);
+		GenerationTarget installedTarget = installed == null ? null : GenerationTarget.fromFlat(installed);
+		return UpdateReviewPolicy.requiresPlayerReview(false, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared));
 	}
 
 	private boolean hasPlanImpact(ClientUpdatePlanBuilder.PreparedPlan prepared) {
