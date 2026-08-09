@@ -81,6 +81,26 @@ class UpdatePreviewTest {
 	}
 
 	@Test
+	void classifiesKindsForSummaryPrecedenceAndDisplay() {
+		assertEquals(UpdatePreview.SummaryBucket.CHANGED, UpdatePreview.Kind.ADDED.summaryBucket());
+		assertEquals(UpdatePreview.SummaryBucket.CHANGED, UpdatePreview.Kind.RESTORED_BASELINE.summaryBucket());
+		assertEquals(UpdatePreview.SummaryBucket.REMOVED, UpdatePreview.Kind.REMOVED.summaryBucket());
+		assertEquals(UpdatePreview.SummaryBucket.PRESERVED, UpdatePreview.Kind.PRESERVED_CAS.summaryBucket());
+		assertEquals(UpdatePreview.SummaryBucket.UNSAFE, UpdatePreview.Kind.UNSAFE.summaryBucket());
+		assertTrue(UpdatePreview.Kind.PRESERVED_OUTSIDE.isPreserved());
+		assertFalse(UpdatePreview.Kind.CHANGED.isPreserved());
+		assertEquals(UpdatePreview.SortBucket.UNSAFE, UpdatePreview.Kind.UNSAFE.sortBucket());
+		assertEquals(UpdatePreview.SortBucket.REMOVED, UpdatePreview.Kind.REMOVED.sortBucket());
+		assertEquals(UpdatePreview.SortBucket.CHANGED, UpdatePreview.Kind.CHANGED.sortBucket());
+		assertEquals(UpdatePreview.SortBucket.PRESERVED, UpdatePreview.Kind.PRESERVED_CAS.sortBucket());
+		assertEquals("+ ", UpdatePreview.Kind.ADDED.displaySymbol());
+		assertEquals("~ ", UpdatePreview.Kind.CHANGED.displaySymbol());
+		assertEquals("- ", UpdatePreview.Kind.REMOVED.displaySymbol());
+		assertEquals("! ", UpdatePreview.Kind.UNSAFE.displaySymbol());
+		assertEquals("  ", UpdatePreview.Kind.PRESERVED_CAS.displaySymbol());
+	}
+
+	@Test
 	void normalizesTargetPathsBeforeLedgerComparison() {
 		Jsons.ModpackContentFields target = manifest(
 				new Jsons.ModpackContentFields.ModpackContentItem("/config/kept.json", "8", "config", false, false, OLD_HASH, "0"),

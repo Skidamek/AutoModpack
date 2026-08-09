@@ -108,26 +108,12 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		}
 		for (UpdatePreview.Entry entry : preview.displayEntries()) {
 			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
-			String text = symbol(entry.kind()) + UiFormat.changePath(file) + "  (" + UiFormat.formatSize(entry.size()) + ")";
-			ChatFormatting color = switch (entry.kind()) {
-				case PRESERVED_CAS, PRESERVED_CHANGED, PRESERVED_UNAVAILABLE, PRESERVED_OUTSIDE -> ChatFormatting.GRAY;
-				case UNSAFE -> ChatFormatting.RED;
-				default -> ChatFormatting.WHITE;
-			};
+			String text = entry.kind().displaySymbol() + UiFormat.changePath(file) + "  (" + UiFormat.formatSize(entry.size()) + ")";
+			ChatFormatting color = entry.kind().isPreserved() ? ChatFormatting.GRAY : entry.kind() == UpdatePreview.Kind.UNSAFE ? ChatFormatting.RED : ChatFormatting.WHITE;
 			rows.add(new ListEntryWidget.Row(VersionedText.literal(text).withStyle(color), firstUrl(mainPageUrls.get(file))));
 		}
 		if (rows.isEmpty()) rows.add(new ListEntryWidget.Row(VersionedText.literal("No file changes are required.").withStyle(ChatFormatting.GRAY), null));
 		return rows;
-	}
-
-	private static String symbol(UpdatePreview.Kind kind) {
-		return switch (kind) {
-			case ADDED, RESTORED_BASELINE -> "+ ";
-			case CHANGED -> "~ ";
-			case REMOVED -> "- ";
-			case UNSAFE -> "! ";
-			default -> "  ";
-		};
 	}
 
 	private static String firstUrl(List<String> urls) {
