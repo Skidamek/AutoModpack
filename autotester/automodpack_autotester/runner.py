@@ -804,6 +804,7 @@ def _write_staged_generation(
     client_root: Path | None = None,
     modpack_name: str | None = None,
     patch_notes: str = "",
+    editable_paths: set[str] | frozenset[str] = frozenset(),
 ) -> dict:
     files = []
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
@@ -814,7 +815,7 @@ def _write_staged_generation(
             "logicalPath": rel.as_posix(),
             "size": str(path.stat().st_size),
             "type": "mod" if rel.parts and rel.parts[0] == "mods" else "config",
-            "editable": rel == ctx.marker_rel,
+            "editable": rel == ctx.marker_rel or rel.as_posix() in editable_paths,
             "sha1": _sha1(path),
         })
 
@@ -940,6 +941,11 @@ def _v_stage_modpack(ctx: Context, step):
     declared_files = step.get("files")
     if declared_files is None:
         declared_files = [{"path": str(rel), "content": content} for rel, content in ctx.scenario_files]
+    editable_paths = {
+        Path(str(item["path"])).as_posix()
+        for item in declared_files
+        if isinstance(item, dict) and item.get("editable") is True
+    }
     (root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
     (root / ctx.marker_rel).write_text(json.dumps({"marker": modpack_name}) + "\n")
     for item in declared_files:
@@ -985,6 +991,7 @@ def _v_stage_modpack(ctx: Context, step):
         client_root=client_root,
         modpack_name=modpack_name,
         patch_notes=str(step.get("patchNotes", "")),
+        editable_paths=editable_paths,
     )
     if record_only:
         shutil.rmtree(root)

@@ -23,7 +23,7 @@ from automodpack_autotester.config import (
 )
 from automodpack_autotester.generation_identity import CanonicalEncoder
 from automodpack_autotester.engine.registry import describe, names
-from automodpack_autotester.engine.steps_io import seed_unowned_local_file, wait_file_content
+from automodpack_autotester.engine.steps_io import seed_unowned_local_file, wait_file_content, write_file
 from automodpack_autotester.mod_fixtures import assert_valid_mod_fixture, pack_metadata_for, valid_mod_jar_bytes
 from automodpack_autotester.validate import validate_scenario
 
@@ -150,6 +150,29 @@ def test_unowned_local_fixture_writes_a_valid_cross_loader_archive(make_ctx):
     seed_unowned_local_file(ctx, {"path": "mods/local-unowned.jar", "fixture": fixture})
 
     assert_valid_mod_fixture((ctx.game_dir / "mods/local-unowned.jar").read_bytes(), fixture, ctx.target.minecraft)
+
+
+def test_write_file_writes_local_edit(make_ctx):
+    ctx = make_ctx()
+
+    write_file(ctx, {"path": "config/editable.txt", "content": "local edit\n"})
+
+    assert (ctx.game_dir / "config/editable.txt").read_text(encoding="utf-8") == "local edit\n"
+
+
+def test_write_file_rejects_path_escape(make_ctx):
+    ctx = make_ctx()
+
+    with pytest.raises(ValueError, match="escapes the client game directory"):
+        write_file(ctx, {"path": "../outside.txt", "content": "must not escape\n"})
+
+
+def test_validation_requires_write_file_content_string():
+    scenario = {"id": "write-file-validation", "flow": [{"do": "write_file", "path": "config/editable.txt", "content": 7}]}
+
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+
+    assert any("write_file.content: expected a string" in problem for problem in problems)
 
 
 def test_metadata_only_fixture_uses_no_code_loader_metadata():
@@ -413,6 +436,20 @@ def test_staged_generation_uses_actual_file_metadata(make_ctx):
     assert by_path["mods/fixture.jar"]["sha1"] == hashlib.sha1(b"fixture").hexdigest()
     assert by_path["mods/fixture.jar"]["editable"] is False
     assert by_path["config/amp-autotest-marker.json"]["editable"] is True
+
+
+def test_staged_generation_preserves_explicit_editable_file_metadata(make_ctx):
+    ctx = make_ctx()
+    root = ctx.game_dir / "staged"
+    path = root / "config/editable.txt"
+    path.parent.mkdir(parents=True)
+    path.write_text("server default\n", encoding="utf-8")
+
+    data_root = root.parent / "data"
+    generation = runner._write_staged_generation(ctx, root, "fixture8", data_root, editable_paths={"config/editable.txt"})
+
+    manifest = json.loads((root.parent / "records" / generation["generationId"] / "manifest.json").read_text())
+    assert manifest["groups"]["main"]["files"]["config/editable.txt"]["editable"] is True
 
 
 def test_record_only_staging_does_not_replace_active_state(make_ctx):
