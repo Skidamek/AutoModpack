@@ -14,6 +14,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
@@ -60,7 +61,7 @@ class QuarantineArchiveTest {
 				"mods/server.jar", "e".repeat(40), 12, ConflictAction.QUARANTINE);
 		QuarantineArchive.archive(storage, "f".repeat(40), conflict);
 
-		Jsons.ClientQuarantineFields fields = ConfigTools.read(storage.quarantineManifest("abc1234"), Jsons.ClientQuarantineFields.class).orElseThrow();
+		ClientStorageJsons.ClientQuarantineFields fields = ConfigTools.read(storage.quarantineManifest("abc1234"), ClientStorageJsons.ClientQuarantineFields.class).orElseThrow();
 		fields.entries.get(0).sourceHash = "0".repeat(40);
 		ConfigTools.writeAtomic(storage.quarantineManifest("abc1234"), fields);
 

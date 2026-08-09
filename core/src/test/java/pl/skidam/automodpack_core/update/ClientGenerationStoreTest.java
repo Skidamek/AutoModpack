@@ -20,6 +20,7 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
@@ -139,9 +140,9 @@ class ClientGenerationStoreTest {
 		Path overlay = storage.overlayFile(FIRST_PACK, "config/options.txt");
 		Files.createDirectories(overlay.getParent());
 		Files.writeString(overlay, "player-edit", StandardCharsets.UTF_8);
-		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = FIRST_PACK;
-		Jsons.ClientBaselineFields.EntryFields baselineEntry = new Jsons.ClientBaselineFields.EntryFields();
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
 		baselineEntry.logicalPath = "mods/local.jar";
 		baselineEntry.absent = true;
 		baselineEntry.objectHash = "";

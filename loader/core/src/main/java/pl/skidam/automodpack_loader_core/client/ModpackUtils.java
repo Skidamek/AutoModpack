@@ -17,6 +17,7 @@ import java.util.stream.Stream;
 import org.jetbrains.annotations.NotNull;
 
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
@@ -51,7 +52,7 @@ public class ModpackUtils {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
 		Path activeDirectory = storage.activeDirectory();
 		try {
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			if (state == null || !Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) {
 				return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 			}

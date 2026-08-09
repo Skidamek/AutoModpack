@@ -17,6 +17,7 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -220,7 +221,7 @@ public final class ClientObjectStore {
 				throw new IOException("Cannot collect while generation records would remain without their objects; retain every installed generation record");
 			selected.addAll(records.keySet());
 		}
-		Jsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState != null) {
 			GenerationRecord active = records.get(activeState.generationId);
 			if (active == null) throw new IOException("Active client generation record is missing: " + activeState.generationId);
@@ -254,7 +255,7 @@ public final class ClientObjectStore {
 			Path baseline = modpack.resolve("baseline.json");
 			if (!Files.exists(baseline, LinkOption.NOFOLLOW_LINKS)) continue;
 			ensureRegular(baseline, "client baseline");
-			Jsons.ClientBaselineFields fields = readJson(baseline, Jsons.ClientBaselineFields.class, "client baseline");
+			ClientStorageJsons.ClientBaselineFields fields = readJson(baseline, ClientStorageJsons.ClientBaselineFields.class, "client baseline");
 			if (fields.schemaVersion != 1 || !modpackId.equals(fields.modpackId) || fields.entries == null) throw new IOException("Client baseline identity is invalid: " + baseline);
 			for (var entry : fields.entries) {
 				if (entry == null || entry.logicalPath == null || entry.objectHash == null) throw new IOException("Client baseline entry is incomplete: " + baseline);
@@ -296,7 +297,7 @@ public final class ClientObjectStore {
 	private static void collectRecovery(ClientStorage storage, ReferenceSet retained) throws IOException {
 		for (Path modpack : childDirectories(storage.recoveryDirectory(), "client recovery archives")) {
 			requireModpackId(modpack.getFileName().toString(), "client recovery directory");
-			Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(modpack);
+			ClientStorageJsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(modpack);
 			for (var entry : archive.entries) retained.addOptional(entry.sha1, entry.size, "recovery archive");
 		}
 	}
@@ -304,7 +305,7 @@ public final class ClientObjectStore {
 	private static void collectQuarantine(ClientStorage storage, ReferenceSet retained) throws IOException {
 		for (Path modpack : childDirectories(storage.quarantineDirectory(), "client quarantine archives")) {
 			String modpackId = requireModpackId(modpack.getFileName().toString(), "client quarantine directory");
-			Jsons.ClientQuarantineFields archive = QuarantineArchive.read(storage, modpackId);
+			ClientStorageJsons.ClientQuarantineFields archive = QuarantineArchive.read(storage, modpackId);
 			for (var entry : archive.entries) retained.addOptional(entry.sourceHash, entry.sourceSize, "quarantine archive");
 		}
 	}
@@ -341,7 +342,7 @@ public final class ClientObjectStore {
 		}
 	}
 
-	private static void collectActiveProjection(ClientStorage storage, ReferenceSet retained, Jsons.ClientGenerationStateFields activeState) throws IOException {
+	private static void collectActiveProjection(ClientStorage storage, ReferenceSet retained, ClientStorageJsons.ClientGenerationStateFields activeState) throws IOException {
 		if (!Files.exists(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
 		for (Path file : regularFiles(storage.activeDirectory(), "client active projection")) retained.addOptional(HashUtils.getHash(file), Files.size(file), "active projection");
 		if (activeState != null && !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client active projection is not a directory");

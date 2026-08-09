@@ -15,6 +15,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
@@ -127,7 +128,7 @@ class UpdateTransactionExecutorTest {
 		assertTrue(execution.success());
 		assertFalse(Files.exists(local));
 		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
-		Jsons.ClientQuarantineFields quarantine = QuarantineArchive.read(storage, target.manifest().modpackId());
+		ClientStorageJsons.ClientQuarantineFields quarantine = QuarantineArchive.read(storage, target.manifest().modpackId());
 		assertEquals(1, quarantine.entries.size());
 		assertTrue(SmartFileUtils.isValidFile(storage.quarantinePayload(target.manifest().modpackId(), plan.conflicts().get(0).conflictId()), localBytes.length, localHash));
 	}
@@ -237,9 +238,9 @@ class UpdateTransactionExecutorTest {
 				UpdateTransaction.digest(expected), List.of(new GeneratedCopyState.Entry("mods/generated-remove.jar", generatedHash, generatedBytes.length)));
 		generatedCopies.write(storage);
 
-		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = target.manifest().modpackId();
-		Jsons.ClientBaselineFields.EntryFields baselineEntry = new Jsons.ClientBaselineFields.EntryFields();
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
 		baselineEntry.logicalPath = "mods/remove.jar";
 		baselineEntry.absent = true;
 		baselineEntry.objectHash = "";
