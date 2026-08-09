@@ -10,6 +10,7 @@ import static pl.skidam.automodpack_core.Constants.clientDir;
 import static pl.skidam.automodpack_core.Constants.clientGeneratedCopiesDir;
 import static pl.skidam.automodpack_core.Constants.clientHelperDir;
 import static pl.skidam.automodpack_core.Constants.clientIncomingDir;
+import static pl.skidam.automodpack_core.Constants.clientLocalModArchiveDir;
 import static pl.skidam.automodpack_core.Constants.clientOverlaysDir;
 import static pl.skidam.automodpack_core.Constants.clientQuarantineDir;
 import static pl.skidam.automodpack_core.Constants.clientRecordsDir;
@@ -74,6 +75,7 @@ public final class ClientStorage {
 	private final Path helperDirectory;
 	private final Path recoveryDirectory;
 	private final Path quarantineDirectory;
+	private final Path localModArchiveDirectory;
 	private final Path bootstrapFile;
 	private final Path fileMetadataDirectory;
 	private final Path modMetadataDirectory;
@@ -107,6 +109,7 @@ public final class ClientStorage {
 		this.bootstrapFile = this.gameDirectory.resolve(Constants.bootstrapFile).normalize();
 		this.recoveryDirectory = this.clientDirectory.resolve(clientRecoveryDir.getFileName()).normalize();
 		this.quarantineDirectory = this.clientDirectory.resolve(clientQuarantineDir.getFileName()).normalize();
+		this.localModArchiveDirectory = this.clientDirectory.resolve(clientLocalModArchiveDir.getFileName()).normalize();
 		this.fileMetadataDirectory = dataLayout.fileMetadataDirectory();
 		this.modMetadataDirectory = dataLayout.modMetadataDirectory();
 		this.packsDirectory = dataLayout.packsDirectory();
@@ -249,6 +252,25 @@ public final class ClientStorage {
 		return quarantineDirectory;
 	}
 
+	public Path localModArchiveDirectory() {
+		return localModArchiveDirectory;
+	}
+
+	public Path localModArchiveManifest() {
+		return localModArchiveDirectory.resolve("manifest.json");
+	}
+
+	public Path localModArchivePendingFile() {
+		return localModArchiveDirectory.resolve("pending.json");
+	}
+
+	public Path localModArchivePayload(String entryId) {
+		if (entryId == null || !entryId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid local mod archive entry ID");
+		Path payload = localModArchiveDirectory.resolve("payload").resolve(entryId + ".jar").normalize();
+		if (!payload.startsWith(localModArchiveDirectory)) throw new IllegalArgumentException("Local mod archive payload escaped its root");
+		return payload;
+	}
+
 	public Path quarantinePackDirectory(String modpackId) {
 		return quarantineDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
 	}
@@ -382,6 +404,8 @@ public final class ClientStorage {
 		ensureDirectory(backupDirectory, "client transaction backup root");
 		ensureDirectory(helperDirectory, "client update helper");
 		ensureDirectory(quarantineDirectory, "client quarantine root");
+		ensureDirectory(localModArchiveDirectory, "local mod archive root");
+		ensureDirectory(localModArchiveDirectory.resolve("payload"), "local mod archive payload root");
 	}
 
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
@@ -412,6 +436,7 @@ public final class ClientStorage {
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile);
 		validateWithin(gameDirectory, bootstrapFile);
 		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, recoveryDirectory, quarantineDirectory,
+				localModArchiveDirectory,
 				stateFile, transactionFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
 		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}
