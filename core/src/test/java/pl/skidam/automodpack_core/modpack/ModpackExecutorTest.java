@@ -60,6 +60,15 @@ class ModpackExecutorTest {
 			ModpackExecutor.PublishResult root = executor.publish();
 			ModpackExecutor.Published publishedRoot = assertInstanceOf(ModpackExecutor.Published.class, root);
 			String rootDigest = publishedRoot.state().candidateStateDigest();
+			var rootRecord = executor.currentRecord().orElseThrow();
+			assertEquals(rootRecord, assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish()).current());
+
+			Files.writeString(notes, "pending", StandardCharsets.UTF_8);
+			ModpackExecutor.Published publishedNotes = assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+			assertEquals("pending", publishedNotes.current().metadata().patchNotes());
+			assertEquals(rootRecord.metadata().generationId(), publishedNotes.current().metadata().parentGenerationId());
+			assertTrue(Files.notExists(notes));
+			assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish());
 			Files.writeString(notes, "pending", StandardCharsets.UTF_8);
 			assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish());
 			assertTrue(Files.exists(notes));
