@@ -82,9 +82,32 @@ public final class GenerationStore {
 		}
 	}
 
+	/** A deterministic receipt for one explicit server generation-history compaction pass. */
+	public record CompactionResult(String boundaryGenerationId, List<String> supersededGenerationIds, List<String> supersededCatalogueStateDigests,
+			long deletedCatalogueCount, long deletedCommitCount, long deletedDeltaCount) {
+		public CompactionResult {
+			boundaryGenerationId = GenerationMetadata.requireDigest(boundaryGenerationId, "compaction boundary generation ID");
+			supersededGenerationIds = canonicalReceiptIds(supersededGenerationIds, "superseded generation ID");
+			supersededCatalogueStateDigests = canonicalReceiptIds(supersededCatalogueStateDigests, "superseded catalogue state digest");
+			if (List.of(deletedCatalogueCount, deletedCommitCount, deletedDeltaCount).stream().anyMatch(value -> value < 0))
+				throw new IllegalArgumentException("Compaction receipt values cannot be negative");
+			if (supersededGenerationIds.contains(boundaryGenerationId)) throw new IllegalArgumentException("Compaction boundary is superseded");
+		}
+
+		private static List<String> canonicalReceiptIds(List<String> values, String description) {
+			Objects.requireNonNull(values, description);
+			return values.stream().map(value -> GenerationMetadata.requireDigest(value, description)).distinct().sorted().toList();
+		}
+	}
+
 	@FunctionalInterface
 	interface CommitHook {
 		void beforeCurrentPointerReplacement() throws IOException;
+	}
+
+	@FunctionalInterface
+	interface CompactionDeleteHook {
+		void beforeDelete(Path path) throws IOException;
 	}
 
 	@FunctionalInterface
@@ -93,10 +116,12 @@ public final class GenerationStore {
 	}
 
 	private static final CommitHook NOOP_HOOK = () -> {};
+	private static final CompactionDeleteHook NOOP_COMPACTION_DELETE_HOOK = path -> {};
 	private static final Map<Path, ReentrantLock> PUBLICATION_LOCKS = new ConcurrentHashMap<>();
 	private final Path root;
 	private final Path currentPath;
 	private final Path currentProjectionPath;
+	private final Path checkpointPath;
 	private final Path publicationLockPath;
 	private final Path cataloguesDirectory;
 	private final Path commitsDirectory;
@@ -106,23 +131,33 @@ public final class GenerationStore {
 	private final ServerObjectStore objectStore;
 	private final Clock clock;
 	private final CommitHook commitHook;
+	private final CompactionDeleteHook compactionDeleteHook;
 
 	public GenerationStore(Path root) {
-		this(root, root.resolve("objects"), Clock.systemUTC(), NOOP_HOOK);
+		this(root, root.resolve("objects"), Clock.systemUTC(), NOOP_HOOK, NOOP_COMPACTION_DELETE_HOOK);
 	}
 
 	GenerationStore(Path root, Clock clock, CommitHook commitHook) {
-		this(root, root.resolve("objects"), clock, commitHook);
+		this(root, root.resolve("objects"), clock, commitHook, NOOP_COMPACTION_DELETE_HOOK);
+	}
+
+	GenerationStore(Path root, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook) {
+		this(root, root.resolve("objects"), clock, commitHook, compactionDeleteHook);
 	}
 
 	public GenerationStore(Path root, Path objectsDirectory) {
-		this(root, objectsDirectory, Clock.systemUTC(), NOOP_HOOK);
+		this(root, objectsDirectory, Clock.systemUTC(), NOOP_HOOK, NOOP_COMPACTION_DELETE_HOOK);
 	}
 
 	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook) {
+		this(root, objectsDirectory, clock, commitHook, NOOP_COMPACTION_DELETE_HOOK);
+	}
+
+	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
 		this.currentPath = this.root.resolve(Constants.serverCurrentFile.getFileName());
 		this.currentProjectionPath = this.root.resolve(Constants.serverCurrentProjectionFile.getFileName());
+		this.checkpointPath = this.root.resolve(Constants.serverGenerationCheckpointFile.getFileName());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
 		this.cataloguesDirectory = this.root.resolve(Constants.serverCataloguesDir.getFileName());
 		this.commitsDirectory = this.root.resolve(Constants.serverCommitsDir.getFileName());
@@ -131,6 +166,7 @@ public final class GenerationStore {
 		this.stagingDirectory = this.root.resolve(Constants.serverStagingDir.getFileName());
 		this.clock = Objects.requireNonNull(clock);
 		this.commitHook = Objects.requireNonNull(commitHook);
+		this.compactionDeleteHook = Objects.requireNonNull(compactionDeleteHook);
 		this.objectStore = new ServerObjectStore(objectsDirectory, stagingDirectory);
 	}
 
@@ -158,6 +194,14 @@ public final class GenerationStore {
 		}
 	}
 
+	/** Explicitly compacts superseded server generation metadata behind a validated checkpoint. */
+	public CompactionResult compact() throws IOException {
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			return compactLocked();
+		}
+	}
+
 	/** Loads the current materialized projection and verifies only the active target objects. */
 	public Optional<CurrentSnapshot> loadCurrent() throws IOException {
 		return loadCurrent(false, false);
@@ -179,6 +223,7 @@ public final class GenerationStore {
 	private Optional<CurrentSnapshot> loadCurrent(boolean deepVerification, boolean repairProjection) throws IOException {
 		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) requireDirectory(root, "generation store");
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+		readCheckpoint();
 		Jsons.GenerationPointerFields pointer = readCurrentPointer();
 		GenerationRecord record;
 		Path materializedPath = currentProjectionPath;
@@ -337,6 +382,65 @@ public final class GenerationStore {
 		ensureDirectory(stagingDirectory, "generation staging");
 	}
 
+	private CompactionResult compactLocked() throws IOException {
+		Optional<CurrentSnapshot> current = loadCurrentDeep();
+		if (current.isEmpty()) throw new IOException("Cannot compact without a valid current generation");
+		GenerationRecord currentRecord = current.orElseThrow().record();
+		GenerationCheckpoint existingCheckpoint = readCheckpoint().orElse(null);
+		CompactHistory history = readCompactHistory(currentRecord.metadata().generationId());
+		String boundaryGenerationId = currentRecord.metadata().generationId();
+		NavigableSet<String> supersededGenerationIds = new TreeSet<>();
+		NavigableSet<String> supersededCatalogueStateDigests = new TreeSet<>();
+		if (existingCheckpoint != null) {
+			supersededGenerationIds.addAll(existingCheckpoint.supersededGenerationIds());
+			supersededCatalogueStateDigests.addAll(existingCheckpoint.supersededCatalogueStateDigests());
+		}
+		for (GenerationHistoryEntry entry : history.entries()) {
+			if (!entry.metadata().generationId().equals(boundaryGenerationId)) supersededGenerationIds.add(entry.metadata().generationId());
+			if (!entry.metadata().stateDigest().equals(currentRecord.metadata().stateDigest())) supersededCatalogueStateDigests.add(entry.metadata().stateDigest());
+		}
+		supersededGenerationIds.remove(boundaryGenerationId);
+		supersededCatalogueStateDigests.remove(currentRecord.metadata().stateDigest());
+
+		List<Path> oldCataloguePaths = new ArrayList<>();
+		for (String stateDigest : supersededCatalogueStateDigests) oldCataloguePaths.add(cataloguePath(stateDigest));
+		List<Path> oldCommitPaths = new ArrayList<>();
+		for (String generationId : supersededGenerationIds) oldCommitPaths.add(commitPath(generationId));
+		List<Path> oldDeltaPaths = new ArrayList<>();
+		for (String generationId : supersededGenerationIds) oldDeltaPaths.add(deltaPath(generationId));
+		validateDeletionTargets(oldCataloguePaths, "generation catalogue");
+		validateDeletionTargets(oldCommitPaths, "generation commit");
+		validateDeletionTargets(oldDeltaPaths, "generation ownership delta");
+
+		GenerationCheckpoint checkpoint = new GenerationCheckpoint(currentRecord, supersededGenerationIds, supersededCatalogueStateDigests);
+		ConfigTools.writeAtomic(checkpointPath, checkpoint.toFields());
+		GenerationCheckpoint verifiedCheckpoint = readCheckpoint().orElseThrow(() -> new IOException("Generation checkpoint disappeared after publication"));
+		if (!verifiedCheckpoint.equals(checkpoint) || !verifiedCheckpoint.record().equals(currentRecord))
+			throw new IOException("Generation checkpoint does not match the current generation after publication");
+
+		writeCurrentProjection(currentRecord);
+		long deletedCatalogueCount = deleteCompactionFiles(oldCataloguePaths, "generation catalogue");
+		long deletedCommitCount = deleteCompactionFiles(oldCommitPaths, "generation commit");
+		long deletedDeltaCount = deleteCompactionFiles(oldDeltaPaths, "generation ownership delta");
+		return new CompactionResult(boundaryGenerationId, List.copyOf(supersededGenerationIds), List.copyOf(supersededCatalogueStateDigests), deletedCatalogueCount,
+				deletedCommitCount, deletedDeltaCount);
+	}
+
+	private void validateDeletionTargets(List<Path> paths, String description) throws IOException {
+		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) ensureRegular(path, description);
+	}
+
+	private long deleteCompactionFiles(List<Path> paths, String description) throws IOException {
+		long deleted = 0;
+		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+			ensureRegular(path, description);
+			compactionDeleteHook.beforeDelete(path);
+			if (Files.deleteIfExists(path)) deleted = addExact(deleted, 1, "deleted " + description + " count");
+		}
+		if (deleted > 0 && !paths.isEmpty()) forceDirectory(paths.get(0).getParent());
+		return deleted;
+	}
+
 	private StorageReport measureStorageLocked() throws IOException {
 		GenerationRecord current = loadCurrentDeep().map(CurrentSnapshot::record).orElse(null);
 		Map<String, Long> expectedSizes = new TreeMap<>();
@@ -361,7 +465,13 @@ public final class GenerationStore {
 		NavigableSet<String> retained = new TreeSet<>(generationPins);
 		retained.add(currentGenerationId);
 		Map<String, Long> expectedSizes = new TreeMap<>();
-		OwnershipLedger.Builder ledger = OwnershipLedger.builder(history.generations().get(0).commit().modpackId());
+		OwnershipLedger.Builder ledger = history.boundaryRecord() == null
+				? OwnershipLedger.builder(history.generations().get(0).commit().modpackId())
+				: OwnershipLedger.builder(history.boundaryRecord().ownershipLedger());
+		if (history.boundaryRecord() != null && retained.contains(history.boundaryRecord().metadata().generationId())) {
+			addManifestReferences(history.boundaryRecord(), expectedSizes);
+			addLedgerReferences(ledger.entriesView().values(), expectedSizes);
+		}
 		for (CompactGeneration generation : history.generations()) {
 			try {
 				ledger.apply(generation.delta(), generation.commit().generationId());
@@ -373,8 +483,11 @@ public final class GenerationStore {
 				addLedgerReferences(ledger.entriesView().values(), expectedSizes);
 			}
 		}
+		Set<String> availableGenerationIds = new HashSet<>();
+		if (history.boundaryRecord() != null) availableGenerationIds.add(history.boundaryRecord().metadata().generationId());
+		for (CompactGeneration generation : history.generations()) availableGenerationIds.add(generation.commit().generationId());
 		for (String generationId : generationPins) {
-			if (history.generations().stream().noneMatch(generation -> generation.commit().generationId().equals(generationId)))
+			if (!availableGenerationIds.contains(generationId))
 				throw new IOException("Retained generation is not in the current lineage: " + generationId);
 		}
 		verifyObjectReferences(expectedSizes);
@@ -509,6 +622,16 @@ public final class GenerationStore {
 		}
 	}
 
+	private Optional<GenerationCheckpoint> readCheckpoint() throws IOException {
+		if (!Files.exists(checkpointPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+		ensureRegular(checkpointPath, "generation history checkpoint");
+		try {
+			return Optional.of(GenerationCheckpoint.fromFields(ConfigTools.parse(Files.readString(checkpointPath, StandardCharsets.UTF_8), Jsons.GenerationCheckpointFields.class)));
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid generation history checkpoint: " + checkpointPath, e);
+		}
+	}
+
 	private LoadedProjection readProjectionOrCompact(String generationId) throws IOException {
 		IOException projectionFailure = null;
 		if (Files.exists(currentProjectionPath, LinkOption.NOFOLLOW_LINKS)) {
@@ -595,10 +718,16 @@ public final class GenerationStore {
 		requireDirectory(cataloguesDirectory, "generation catalogues");
 		requireDirectory(commitsDirectory, "generation commits");
 		requireDirectory(deltasDirectory, "generation deltas");
+		GenerationCheckpoint checkpoint = readCheckpoint().orElse(null);
 		Set<String> visited = new HashSet<>();
 		List<CompactGeneration> reverse = new ArrayList<>();
 		String currentId = generationId;
+		boolean reachedCheckpoint = false;
 		while (true) {
+			if (checkpoint != null && currentId.equals(checkpoint.boundaryGenerationId())) {
+				reachedCheckpoint = true;
+				break;
+			}
 			if (!visited.add(currentId)) throw new IOException("Generation parent cycle detected at " + currentId);
 			GenerationCommit commit = readCommit(currentId);
 			CatalogueSnapshot snapshot = readCatalogue(commit.stateDigest());
@@ -612,10 +741,21 @@ public final class GenerationStore {
 			if (parent.isEmpty()) break;
 			currentId = parent;
 		}
+		if (checkpoint != null) {
+			if (!reachedCheckpoint) throw new IOException("Generation history checkpoint is not an ancestor of the current generation: " + checkpoint.boundaryGenerationId());
+			validateCheckpointBoundaryFiles(checkpoint);
+		}
 		Collections.reverse(reverse);
-		if (reverse.isEmpty()) throw new IOException("Generation compact parent chain is empty");
 		List<GenerationHistoryEntry> entries = new ArrayList<>();
-		String expectedParent = GenerationMetadata.ROOT_PARENT;
+		if (checkpoint != null) {
+			try {
+				entries.add(new GenerationHistoryEntry(checkpoint.record().manifest(), checkpoint.record().metadata()));
+			} catch (RuntimeException e) {
+				throw new IOException("Generation history checkpoint does not form a valid history entry", e);
+			}
+		}
+		if (checkpoint == null && reverse.isEmpty()) throw new IOException("Generation compact parent chain is empty");
+		String expectedParent = checkpoint == null ? GenerationMetadata.ROOT_PARENT : checkpoint.boundaryGenerationId();
 		for (CompactGeneration compact : reverse) {
 			GenerationCommit commit = compact.commit();
 			if (!commit.parentGenerationId().equals(expectedParent))
@@ -627,37 +767,52 @@ public final class GenerationStore {
 			}
 			expectedParent = commit.generationId();
 		}
-		return new CompactHistory(List.copyOf(reverse), List.copyOf(entries));
+		return new CompactHistory(checkpoint == null ? null : checkpoint.record(), List.copyOf(reverse), List.copyOf(entries));
 	}
 
 	private CompactState readCompactState(String generationId) throws IOException {
 		CompactHistory history = readCompactHistory(generationId);
-		OwnershipLedger.Builder ledger = OwnershipLedger.builder(history.generations().get(0).commit().modpackId());
+		OwnershipLedger.Builder ledger = history.boundaryRecord() == null
+				? OwnershipLedger.builder(history.generations().get(0).commit().modpackId())
+				: OwnershipLedger.builder(history.boundaryRecord().ownershipLedger());
+		GenerationRecord record = history.boundaryRecord();
 		for (CompactGeneration generation : history.generations()) {
 			try {
 				ledger.apply(generation.delta(), generation.commit().generationId());
+				OwnershipLedger materialized = ledger.build();
+				record = new GenerationRecord(generation.snapshot().manifest(), generation.commit().metadata(), materialized);
+				if (!GenerationCommit.from(record, generation.delta()).equals(generation.commit()))
+					throw new IOException("Generation compact commit does not match reconstructed record: " + generation.commit().generationId());
 			} catch (RuntimeException e) {
 				throw new IOException("Generation ownership delta cannot be applied: " + generation.commit().generationId(), e);
 			}
 		}
-		CompactGeneration current = history.generations().get(history.generations().size() - 1);
-		OwnershipLedger materialized;
-		try {
-			materialized = ledger.build();
-		} catch (RuntimeException e) {
-			throw new IOException("Generation ownership ledger cannot be reconstructed from compact metadata", e);
-		}
-		if (!materialized.digest().equals(current.commit().ledgerDigest()))
-			throw new IOException("Current compact ledger digest does not match reconstructed ownership state: " + generationId);
-		GenerationRecord record;
-		try {
-			record = new GenerationRecord(current.snapshot().manifest(), current.commit().metadata(), materialized);
-		} catch (RuntimeException e) {
-			throw new IOException("Current compact metadata does not form a valid record: " + generationId, e);
-		}
-		if (!GenerationCommit.from(record, current.delta()).equals(current.commit()))
-			throw new IOException("Current compact commit does not match reconstructed record: " + generationId);
+		if (record == null) throw new IOException("Generation compact parent chain is empty");
+		if (!record.metadata().generationId().equals(generationId)) throw new IOException("Current compact state identity does not match: " + generationId);
 		return new CompactState(record, history.entries());
+	}
+
+	private void validateCheckpointBoundaryFiles(GenerationCheckpoint checkpoint) throws IOException {
+		GenerationRecord record = checkpoint.record();
+		Path commitFile = commitPath(checkpoint.boundaryGenerationId());
+		if (Files.exists(commitFile, LinkOption.NOFOLLOW_LINKS)) {
+			GenerationCommit commit = readCommit(commitFile);
+			if (!commit.metadata().equals(record.metadata()) || !commit.modpackId().equals(record.manifest().modpackId()))
+				throw new IOException("Generation checkpoint does not match its boundary commit: " + commitFile);
+			Path catalogueFile = cataloguePath(record.metadata().stateDigest());
+			if (Files.exists(catalogueFile, LinkOption.NOFOLLOW_LINKS) && !readCatalogue(catalogueFile).manifest().equals(record.manifest()))
+				throw new IOException("Generation checkpoint does not match its boundary catalogue: " + catalogueFile);
+			Path deltaFile = deltaPath(checkpoint.boundaryGenerationId());
+			if (Files.exists(deltaFile, LinkOption.NOFOLLOW_LINKS)) {
+				OwnershipDelta delta = readDelta(deltaFile);
+				if (!delta.modpackId().equals(record.manifest().modpackId()) || !delta.digest().equals(commit.ownershipDeltaDigest()))
+					throw new IOException("Generation checkpoint does not match its boundary ownership delta: " + deltaFile);
+			}
+		} else {
+			Path catalogueFile = cataloguePath(record.metadata().stateDigest());
+			if (Files.exists(catalogueFile, LinkOption.NOFOLLOW_LINKS) && !readCatalogue(catalogueFile).manifest().equals(record.manifest()))
+				throw new IOException("Generation checkpoint does not match its boundary catalogue: " + catalogueFile);
+		}
 	}
 
 	private NavigableMap<String, Path> verifyActiveTargetObjects(GenerationRecord record) throws IOException {
@@ -744,7 +899,11 @@ public final class GenerationStore {
 
 	private void writeCurrentProjection(GenerationRecord record) throws IOException {
 		Jsons.CompleteModpackContentFields fields = record.toFields();
-		GenerationPatchNoteHistory.writeFields(fields, GenerationPatchNoteHistory.fromHistory(readCompactHistory(record.metadata().generationId()).entries()));
+		CompactHistory history = readCompactHistory(record.metadata().generationId());
+		List<GenerationPatchNoteHistory.Entry> patchNoteHistory = history.compacted()
+				? List.of(GenerationPatchNoteHistory.Entry.fromMetadata(record.metadata()))
+				: GenerationPatchNoteHistory.fromHistory(history.entries());
+		GenerationPatchNoteHistory.writeFields(fields, patchNoteHistory);
 		ConfigTools.writeAtomic(currentProjectionPath, fields);
 	}
 
@@ -827,7 +986,11 @@ public final class GenerationStore {
 
 	private record CompactGeneration(GenerationCommit commit, CatalogueSnapshot snapshot, OwnershipDelta delta) {}
 
-	private record CompactHistory(List<CompactGeneration> generations, List<GenerationHistoryEntry> entries) {}
+	private record CompactHistory(GenerationRecord boundaryRecord, List<CompactGeneration> generations, List<GenerationHistoryEntry> entries) {
+		private boolean compacted() {
+			return boundaryRecord != null;
+		}
+	}
 
 	private record CompactState(GenerationRecord record, List<GenerationHistoryEntry> entries) {}
 

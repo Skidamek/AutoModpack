@@ -75,6 +75,8 @@ public class Commands {
 					.then(literal("history").executes(Commands::generationHistory))
 						.then(literal("storage")
 								.executes(Commands::generationStorage)
+								.then(literal("compact")
+										.then(literal("confirm").executes(Commands::generationStorageCompact)))
 								.then(literal("collect")
 										.then(literal("confirm").executes(Commands::generationStorageCollect))))
 						)))
@@ -416,7 +418,7 @@ public class Commands {
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-state <digest> [notes <text...>]", ChatFormatting.YELLOW, false);
 			send(context, "/automodpack generate revert <generation-id> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
-			send(context, "/automodpack generate history/storage [collect confirm]", ChatFormatting.YELLOW, false);
+			send(context, "/automodpack generate history/storage [compact confirm|collect confirm]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
@@ -606,6 +608,22 @@ public class Commands {
 				send(context, "Failed to collect generation objects: " + e.getMessage(), ChatFormatting.RED, false);
 				return 0;
 			}
+		}
+
+		private static int generationStorageCompact(CommandContext<CommandSourceStack> context) {
+			Util.backgroundExecutor().execute(() -> {
+				try {
+					GenerationStore.CompactionResult result = modpackExecutor.compactHistory();
+					send(context, "Generation history compacted; the deleted ancestry is no longer available", ChatFormatting.GREEN, false);
+					send(context, "Boundary generation", ChatFormatting.WHITE, copyable(result.boundaryGenerationId()), ChatFormatting.YELLOW, false);
+					send(context, "Deleted history", ChatFormatting.WHITE,
+						result.deletedCommitCount() + " commits, " + result.deletedDeltaCount() + " deltas, " + result.deletedCatalogueCount() + " catalogues", ChatFormatting.YELLOW, false);
+					send(context, "Superseded generations", ChatFormatting.WHITE, String.valueOf(result.supersededGenerationIds().size()), ChatFormatting.YELLOW, false);
+				} catch (IOException e) {
+					send(context, "Failed to compact generation history: " + e.getMessage(), ChatFormatting.RED, false);
+				}
+			});
+			return Command.SINGLE_SUCCESS;
 		}
 
 		private static String optionalArgument(CommandContext<CommandSourceStack> context, String name) {
