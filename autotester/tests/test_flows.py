@@ -117,6 +117,7 @@ def _wait_exit(ctx, step):
 
 @verb("reset_client_generation")
 def _reset_client_generation(ctx, step):
+    ctx.bridge._reset_client_generation()
     for relative in ("records", "active", "active-state.json", "data/objects"):
         path = ctx.game_dir / "automodpack" / "client" / relative
         if path.is_dir():
@@ -263,12 +264,15 @@ def test_release_gate_flow(make_ctx):
 
     assert all(r["ok"] for r in results), [r for r in results if not r["ok"]]
     assert ctx.bridge.exited
-    assert ctx.bridge.secondary_pack
+    assert not ctx.bridge.secondary_pack
     assert ctx.bridge.screenshots, "release gate must exercise render screenshots"
     active = ctx.game_dir / ctx.active_projection_dir()
     assert ctx.bridge.selected_pack == "A"
-    assert (active / "config/pack-a-only.txt").read_text(encoding="utf-8") == "pack-a-v2\n"
-    assert not (active / "config/pack-b.txt").exists()
+    assert not (ctx.game_dir / "automodpack/client/active-state.json").exists()
+    assert not (active / "config/amp-autotest-alpha.txt").exists()
+    assert not (ctx.game_dir / "automodpack/client/overlays/packaaa/config/pack-shared-editable.txt").exists()
+    client_config = json.loads((ctx.game_dir / "automodpack/client-config.json").read_text(encoding="utf-8"))
+    assert client_config.get("selectedModpackId") == ""
     assert_valid_mod_fixture(
         (ctx.game_dir / "mods/local-unowned.jar").read_bytes(),
         {"modId": "amp_autotest_unowned", "version": "1.0.0-local-unowned", "marker": "unowned-local"}, ctx.target.minecraft,
