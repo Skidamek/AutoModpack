@@ -243,5 +243,19 @@
   "automodpack.download.acquired": "%s :pǝןᴉɐℲ  %s :pǝɹᴉnbɔ∀",
   "automodpack.error.title": "ɹoɹɹƎ",
   "automodpack.error.titleLine": "¡%s ]ʞɔɐdpoWoʇn∀[",
-  "automodpack.error.removalIncomplete": "ǝʇǝןdɯoɔ ʇou pᴉp ןɐʌoɯǝɹ ʞɔɐdpoɯ ǝɥ┴"
+  "automodpack.error.removalIncomplete": "ǝʇǝןdɯoɔ ʇou pᴉp ןɐʌoɯǝɹ ʞɔɐdpoɯ ǝɥ┴",
+  "automodpack.firstConnect.reviewLocalMods": "Review local mods",
+  "automodpack.management.localMods": "Local mods",
+  "automodpack.localMods.title": "Review local mods",
+  "automodpack.localMods.description1": "Unrelated local mods can conflict with this modpack.",
+  "automodpack.localMods.description2": "Select only the jars you want to move into the recoverable AutoModpack archive. Unselected files stay in mods/.",
+  "automodpack.localMods.empty": "No unrelated local jars were found.",
+  "automodpack.localMods.selected": "Selected: %s",
+  "automodpack.localMods.move": "Move selected",
+  "automodpack.localMods.moving": "Moving selected...",
+  "automodpack.localMods.archiveTitle": "Archived local mods",
+  "automodpack.localMods.archiveDescription": "Restore an archived jar only when its destination is absent or identical.",
+  "automodpack.localMods.archiveEmpty": "No local mods are archived.",
+  "automodpack.localMods.restore": "Restore",
+  "automodpack.localMods.entry": "%s (%s)"
 }
