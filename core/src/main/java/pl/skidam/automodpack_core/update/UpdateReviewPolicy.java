@@ -13,7 +13,14 @@ public final class UpdateReviewPolicy {
 	 * the player must be able to inspect and accept the new generation's metadata and patch notes.
 	 */
 	public static boolean requiresPlayerReview(boolean firstInstall, GenerationTarget installedTarget, GenerationTarget advertisedTarget, boolean planImpact) {
+		return requiresPlayerReview(firstInstall, installedTarget, advertisedTarget, planImpact, false);
+	}
+
+	/** Returns whether the review gate is needed after applying the client-local opt-in. */
+	public static boolean requiresPlayerReview(boolean firstInstall, GenerationTarget installedTarget, GenerationTarget advertisedTarget, boolean planImpact,
+			boolean reviewSuppressed) {
 		Objects.requireNonNull(advertisedTarget, "advertised target");
+		if (reviewSuppressed) return false;
 		return firstInstall || installedTarget == null || !installedTarget.equals(advertisedTarget) || planImpact;
 	}
 }
