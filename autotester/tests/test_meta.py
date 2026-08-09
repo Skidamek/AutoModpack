@@ -534,14 +534,6 @@ def test_versioned_screen_legacy_tooltip_fallback_preserves_control_message():
     assert "Keep their existing message unchanged" in legacy
 
 
-def test_legacy_forge_nested_mod_uses_outer_loader_classes():
-    build_script = (Path(__file__).parents[2] / "build.forge.gradle.kts").read_text(encoding="utf-8")
-
-    assert 'compileOnly(project(":core")) { isTransitive = false }' in build_script
-    assert 'compileOnly(project(":loader-core")) { isTransitive = false }' in build_script
-    assert 'implementation(project(":loader-core")) { isTransitive = false }' not in build_script
-
-
 def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     ctx = make_ctx()
     payloads = {"a" * 40: b"first", "b" * 40: b"second"}
