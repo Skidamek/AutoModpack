@@ -62,6 +62,10 @@ public final class GenerationPatchNoteHistory {
 		return validate(entries, entries.isEmpty() ? null : entries.get(entries.size() - 1).generationId());
 	}
 
+	static List<Entry> validateForGeneration(List<Entry> history, String currentGenerationId) {
+		return validate(history, currentGenerationId);
+	}
+
 	public static List<Entry> fromRecords(List<GenerationRecord> records) {
 		Objects.requireNonNull(records, "generation records");
 		if (records.isEmpty()) return List.of();

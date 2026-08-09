@@ -15,6 +15,7 @@ public class GenerationJsons {
 		public int schemaVersion;
 		public String boundaryGenerationId = "";
 		public ModpackJsons.CompleteModpackContentFields record = new ModpackJsons.CompleteModpackContentFields();
+		public List<ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields> patchNotesHistory = List.of();
 		public List<String> supersededGenerationIds = List.of();
 		public List<String> supersededCatalogueStateDigests = List.of();
 	}

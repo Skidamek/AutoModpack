@@ -28,6 +28,7 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "conflict-preservation",
     "quarantine-restoration",
     "storage-maintenance",
+    "server-history-compaction",
     "fresh-generation-deletion",
     "removal",
     "secure-bootstrap",
