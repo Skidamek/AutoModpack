@@ -52,6 +52,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -68,6 +70,7 @@ public final class AutoTestBridge {
 	private static final AtomicBoolean READY_STATE_PUBLISHED = new AtomicBoolean(false);
 	private static final AtomicBoolean READY_STATE_WRITE_FAILED = new AtomicBoolean(false);
 	private static final AtomicReference<PendingScreenshot> PENDING_SCREENSHOT = new AtomicReference<>();
+	private static final long SCREENSHOT_SETTLE_TIMEOUT_SECONDS = 30;
 
 	public static void markReloadFinished() {
 		RELOAD_FINISHED.set(true);
@@ -267,11 +270,23 @@ public final class AutoTestBridge {
 		CompletableFuture<String> captured = new CompletableFuture<>();
 		Minecraft minecraft = Minecraft.getInstance();
 		minecraft.execute(() -> queueScreenshot(captured, path));
-		return captured.get();
+		try {
+			return captured.get(SCREENSHOT_SETTLE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+		} catch (TimeoutException e) {
+			PendingScreenshot pending = PENDING_SCREENSHOT.get();
+			if (pending != null && pending.captured() == captured && PENDING_SCREENSHOT.compareAndSet(pending, null)) pending.logTimeout();
+			throw new IOException("screenshot did not settle within " + SCREENSHOT_SETTLE_TIMEOUT_SECONDS + " seconds", e);
+		}
 	}
 
 	private static void queueScreenshot(CompletableFuture<String> captured, Path path) {
-		if (!PENDING_SCREENSHOT.compareAndSet(null, new PendingScreenshot(captured, path))) {
+		Screen targetScreen = currentScreen();
+		if (targetScreen == null) {
+			LOGGER.error("AutoModpack autotest screenshot {} rejected: there is no active screen", path.getFileName());
+			captured.completeExceptionally(new IOException("cannot capture a screenshot without an active screen"));
+			return;
+		}
+		if (!PENDING_SCREENSHOT.compareAndSet(null, new PendingScreenshot(captured, path, targetScreen))) {
 			captured.completeExceptionally(new IOException("another screenshot is already pending"));
 		}
 	}
@@ -301,17 +316,26 @@ public final class AutoTestBridge {
 	private static final class PendingScreenshot {
 		private final CompletableFuture<String> captured;
 		private final Path path;
+		private final Screen targetScreen;
+		private volatile RenderedFrameState lastState;
 		private RenderedFrameState previousState;
 
-		private PendingScreenshot(CompletableFuture<String> captured, Path path) {
+		private PendingScreenshot(CompletableFuture<String> captured, Path path, Screen targetScreen) {
 			this.captured = captured;
 			this.path = path;
+			this.targetScreen = targetScreen;
 		}
 
 		private boolean observe(RenderedFrameState state) {
-			boolean settled = state.isSettledAfter(previousState);
+			lastState = state;
+			boolean settled = state.isSettledAfter(previousState, targetScreen);
 			previousState = state;
 			return settled;
+		}
+
+		private void logTimeout() {
+			RenderedFrameState state = lastState;
+			LOGGER.error("AutoModpack autotest screenshot {} did not settle: {}", path.getFileName(), state == null ? "no rendered frame observed" : state.describeFor(targetScreen));
 		}
 
 		private CompletableFuture<String> captured() {
@@ -327,14 +351,19 @@ public final class AutoTestBridge {
 		private static RenderedFrameState capture() {
 			Minecraft minecraft = Minecraft.getInstance();
 			/*? if >=26.2 {*/
-			return new RenderedFrameState(currentScreen(), false);
+			// Since 26.2 Gui owns the render overlay; sample it after GameRenderer rendered the frame.
+			return new RenderedFrameState(currentScreen(), minecraft.gui.overlay() != null);
 			/*?} else {*/
 			/*return new RenderedFrameState(currentScreen(), minecraft.getOverlay() != null);
 			*//*?}*/
 		}
 
-		private boolean isSettledAfter(RenderedFrameState previous) {
-			return previous != null && !overlayVisible && !previous.overlayVisible && screen == previous.screen;
+		private boolean isSettledAfter(RenderedFrameState previous, Screen targetScreen) {
+			return previous != null && screen == targetScreen && previous.screen == targetScreen && !overlayVisible && !previous.overlayVisible && screen == previous.screen;
+		}
+
+		private String describeFor(Screen targetScreen) {
+			return "targetScreen=" + targetScreen.getClass().getName() + ", renderedScreen=" + (screen == null ? "<none>" : screen.getClass().getName()) + ", overlayVisible=" + overlayVisible;
 		}
 	}
 

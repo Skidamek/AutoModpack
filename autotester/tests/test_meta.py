@@ -252,15 +252,49 @@ def test_autotest_bridge_readiness_is_level_triggered():
 
 
 def test_autotest_screenshot_requires_a_settled_render_state():
-    source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java").read_text(encoding="utf-8")
-    mixin = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/mixin/dev/GameRendererMixin.java").read_text(encoding="utf-8")
+    project_root = Path(__file__).parents[2]
+    source = (project_root / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java").read_text(encoding="utf-8")
+    mixin = (project_root / "src/main/java/pl/skidam/automodpack/mixin/dev/GameRendererMixin.java").read_text(encoding="utf-8")
     capture = source[source.index("public static void onFrameRendered()") : source.index("private static void completeScreenshot")]
+    queue = source[source.index("private static void queueScreenshot") : source.index("public static void onFrameRendered()")]
+    screenshot = source[source.index("private static String screenshot") : source.index("private static void queueScreenshot")]
+    overlay_capture = source[source.index("/*? if >=26.2 {*/", source.index("private record RenderedFrameState")) : source.index("/*?} else {*/", source.index("private record RenderedFrameState"))]
+    settled = source[source.index("private boolean isSettledAfter") : source.index("private static void completeScreenshot")]
 
     assert "RenderedFrameState state = RenderedFrameState.capture();" in capture
-    assert "state.isSettledAfter(previousState)" in capture
-    assert "minecraft.getOverlay() != null" in capture
+    assert "state.isSettledAfter(previousState, targetScreen)" in capture
+    assert "Screen targetScreen = currentScreen();" in queue
+    assert "new PendingScreenshot(captured, path, targetScreen)" in queue
+    assert "SCREENSHOT_SETTLE_TIMEOUT_SECONDS, TimeUnit.SECONDS" in screenshot
+    assert "catch (TimeoutException e)" in screenshot
+    assert "pending.logTimeout()" in screenshot
+    assert "did not settle" in source
+    assert "return new RenderedFrameState(currentScreen(), minecraft.gui.overlay() != null);" in overlay_capture
+    assert "return new RenderedFrameState(currentScreen(), false);" not in overlay_capture
+    assert "previous != null" in settled
+    assert "screen == targetScreen && previous.screen == targetScreen" in settled
+    assert "!overlayVisible && !previous.overlayVisible" in settled
+    assert "screen == previous.screen" in settled
     assert "frameObserved" not in capture
     assert mixin.index("original.call(") < mixin.index("AutoTestBridge.onFrameRendered();")
+
+
+def test_autotest_screenshot_generated_26_2_branch_uses_gui_overlay_when_available():
+    project_root = Path(__file__).parents[2]
+    candidates = (
+        project_root / "versions/26.2-fabric/build/generated/stonecutter/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java",
+        project_root / "versions/26.2-fabric/build/stonecutter-cache/sources/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java",
+        project_root / "versions/26.2-neoforge/build/generated/stonecutter/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java",
+        project_root / "versions/26.2-neoforge/build/stonecutter-cache/sources/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java",
+    )
+    generated = next((path for path in candidates if path.is_file()), None)
+    if generated is None:
+        pytest.skip("run ./gradlew -Pautomodpack.autotest :26.2-fabric:compileJava or :26.2-neoforge:compileJava to materialize the generated branch")
+
+    generated_source = generated.read_text(encoding="utf-8")
+    capture = generated_source[generated_source.index("private record RenderedFrameState") : generated_source.index("private static void completeScreenshot")]
+    assert "minecraft.gui.overlay() != null" in capture
+    assert "return new RenderedFrameState(currentScreen(), false);" not in capture
 
 
 def test_validation_rejects_plain_text_unowned_jar_seed():
