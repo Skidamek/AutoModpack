@@ -168,14 +168,21 @@ public class ModpackExecutor {
 				if (expectedStateDigest != null && !expectedStateDigest.equals(stateDigest))
 					return new PublishGuardMismatch(candidateState, "Fresh candidate state does not match the requested guard");
 
+				GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
 				if (parent != null && parent.metadata().stateDigest().equals(stateDigest)) {
-					publication = generationStore.publish(candidate, previous, "");
+					if (notes.source() == GenerationPatchNotes.Source.EMPTY) {
+						publication = generationStore.publish(candidate, previous, parent.metadata().patchNotes());
+						committedState = candidateState;
+						committedResult = finishPublication(publication, committedState, null);
+						return committedResult;
+					}
+					candidateState = candidateState.withPatchNotesSource(notes.source());
+					publication = generationStore.publish(candidate, previous, notes.text());
 					committedState = candidateState;
-					committedResult = finishPublication(publication, committedState, null);
+					committedResult = finishPublication(publication, committedState, notes);
 					return committedResult;
 				}
 
-				GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
 				candidateState = candidateState.withPatchNotesSource(notes.source());
 				publication = generationStore.publish(candidate, previous, notes.text());
 				committedState = candidateState;
@@ -202,7 +209,7 @@ public class ModpackExecutor {
 		postPublication(publication, notes, warnings);
 		if (publication.status() == GenerationStore.PublicationStatus.PUBLISHED)
 			return new Published(state, publication.record(), warnings);
-		return new NoChanges(state, publication.record(), warnings);
+		return new NoChanges(state.withoutPatchNotesSource(), publication.record(), warnings);
 	}
 
 	private void postPublication(GenerationStore.Publication publication, GenerationPatchNotes.Resolution notes, List<String> warnings) {
@@ -355,6 +362,10 @@ public class ModpackExecutor {
 
 		CandidateState withPatchNotesSource(GenerationPatchNotes.Source source) {
 			return new CandidateState(parent, candidateStateDigest, diff, summary, Optional.of(source));
+		}
+
+		CandidateState withoutPatchNotesSource() {
+			return new CandidateState(parent, candidateStateDigest, diff, summary, Optional.empty());
 		}
 	}
 
