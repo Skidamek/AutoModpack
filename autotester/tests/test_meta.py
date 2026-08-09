@@ -522,7 +522,14 @@ def test_seed_bootstrap_writes_live_fields(make_ctx):
 
 def test_connect_screen_classifier_does_not_loop_on_first_connection():
     assert runner._is_connecting_screen("net.minecraft.client.gui.screens.ConnectScreen")
+    assert runner._is_connecting_screen("net.minecraft.client.gui.screens.class_412")
     assert not runner._is_connecting_screen("pl.skidam.automodpack.client.ui.FirstConnectScreen")
+
+
+def test_connection_failure_screen_is_retried_instead_of_reported_as_connected():
+    assert runner._is_connection_failure_screen("net.minecraft.class_419")
+    assert runner._is_connection_failure_screen("net.minecraft.client.gui.screens.DisconnectedScreen")
+    assert not runner._is_connection_failure_screen("pl.skidam.automodpack.client.ui.FirstConnectScreen")
 
 
 def test_legacy_bridge_disconnect_uses_full_client_lifecycle():

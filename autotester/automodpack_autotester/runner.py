@@ -111,7 +111,13 @@ def _assert_running(name):
 
 
 def _is_connecting_screen(screen: str) -> bool:
-    return "FirstConnectScreen" not in screen and any(name in screen for name in ("ConnectScreen", "class_397"))
+    # Fabric 1.20.1's generated intermediary mapping names ConnectScreen class_412.
+    return "FirstConnectScreen" not in screen and any(name in screen for name in ("ConnectScreen", "class_397", "class_412"))
+
+
+def _is_connection_failure_screen(screen: str) -> bool:
+    # Fabric 1.20.1's generated intermediary mapping names DisconnectedScreen class_419.
+    return "DisconnectedScreen" in screen or "class_419" in screen
 
 
 def _inspect_container(name):
@@ -646,6 +652,8 @@ def _v_connect(ctx: Context, step):
             screen = str(ctx.bridge.gui().get("screenClass") or "")
             last_screen = screen or "<none>"
             if any(n in screen for n in _TITLE):
+                break
+            if _is_connection_failure_screen(screen):
                 break
             if not _is_connecting_screen(screen):
                 return
