@@ -125,6 +125,71 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void generatedCopiesAreRemovedOnlyWhenTheirOwnedBytesStillMatch() {
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.GAME_DIR, "mods/nested-old.jar"), new FileState(OLD_HASH, 8, true, true),
+				new FileKey(Root.GAME_DIR, "mods/nested-edited.jar"), new FileState(OTHER_HASH, 8, true, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(TARGET_HASH, 9, true, true));
+		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested-old.jar", OLD_HASH, 8, Set.of("nested-old")),
+				new NestedCopy("mods/nested-edited.jar", OLD_HASH, 8, Set.of("nested-edited")));
+
+		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, previous, List.of());
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/nested-old.jar")
+				&& operation.operation() == OperationType.DELETE && OLD_HASH.equals(operation.expectedExistingHash())));
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/nested-edited.jar")));
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/local.jar")));
+	}
+
+	@Test
+	void generatedCopyReplacementIsPinnedToThePreviouslyOwnedBytes() {
+		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested.jar", OLD_HASH, 8, Set.of("nested")));
+		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("nested")));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OLD_HASH, 8, true, true));
+
+		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, previous, targetCopies);
+
+		Operation operation = plan.operations().stream().filter(value -> value.root() == Root.GAME_DIR && value.relativePath().equals("mods/nested.jar")).findFirst().orElseThrow();
+		assertEquals(OperationType.INSTALL_OBJECT, operation.operation());
+		assertEquals(TARGET_HASH, operation.expectedObjectHash());
+		assertEquals(OLD_HASH, operation.expectedExistingHash());
+	}
+
+	@Test
+	void generatedCopyDoesNotOverwriteAnUnownedLocalFile() {
+		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("nested")));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OTHER_HASH, 8, true, true));
+
+		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, List.of(), targetCopies);
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/nested.jar")));
+	}
+
+	@Test
+	void removalCleansOnlyUnmodifiedGeneratedCopies() {
+		Jsons.ModpackContentFields installed = manifest(Map.of("mods/root.jar", item("mods/root.jar", TARGET_HASH, 9, "mod")),
+				ledger(entry("mods/root.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		baseline.modpackId = installed.modpackId;
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.PROJECTION, "mods/root.jar"), new FileState(TARGET_HASH, 9, true, true),
+				new FileKey(Root.GAME_DIR, "mods/root.jar"), new FileState(TARGET_HASH, 9, true, true),
+				new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OLD_HASH, 8, true, true),
+				new FileKey(Root.GAME_DIR, "mods/nested-edited.jar"), new FileState(OTHER_HASH, 8, true, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(TARGET_HASH, 9, true, true));
+		GeneratedCopyState generated = new GeneratedCopyState(installed.modpackId, installed.targetGenerationId, "3".repeat(40), List.of(
+				new GeneratedCopyState.Entry("mods/nested.jar", OLD_HASH, 8), new GeneratedCopyState.Entry("mods/nested-edited.jar", OLD_HASH, 8)));
+
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), generated, new Jsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/nested.jar")
+				&& operation.operation() == OperationType.DELETE && OLD_HASH.equals(operation.expectedExistingHash())));
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/nested-edited.jar") || operation.relativePath().equals("mods/local.jar")));
+		assertTrue(plan.projectedFinalState().stream().noneMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/nested.jar") && file.present()));
+		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/nested-edited.jar") && file.present()));
+	}
+
+	@Test
 	void cleanupPreservesMismatchesUnsafeTypesAndPlayerLocalPaths() {
 		String localHash = "4444444444444444444444444444444444444444";
 		Jsons.ModpackContentFields target = manifest(Map.of(), ledger(
@@ -212,6 +277,11 @@ class UpdatePlannerTest {
 
 	private static UpdatePlanner.Input input(Jsons.ModpackContentFields target, Map<FileKey, FileState> files) {
 		return new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3());
+	}
+
+	private static UpdatePlan planWithGeneratedCopies(Jsons.ModpackContentFields target, Map<FileKey, FileState> files, List<NestedCopy> previous, List<NestedCopy> generated) {
+		return UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), previous, generated, null,
+				new Jsons.ClientConfigFieldsV3()));
 	}
 
 	private static Jsons.ModpackContentFields manifest(Map<String, Jsons.ModpackContentFields.ModpackContentItem> items,

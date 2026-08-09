@@ -40,6 +40,7 @@ public class Constants {
 	public static final Path clientRecordsDir = clientDir.resolve("records");
 	public static final Path clientOverlaysDir = clientDir.resolve("overlays");
 	public static final Path clientBaselinesDir = clientDir.resolve("baselines");
+	public static final Path clientGeneratedCopiesDir = clientDir.resolve("generated-copies");
 	public static final Path clientActiveDir = clientDir.resolve("active");
 	public static final Path clientIncomingDir = clientDir.resolve("incoming");
 	public static final Path clientBackupDir = clientDir.resolve("backup");
