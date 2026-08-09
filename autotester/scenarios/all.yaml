@@ -676,7 +676,11 @@ flow:
     select: { text: Remove }
   - do: wait_for
     name: return to title after Pack A removal
-    until: { screen: TitleScreen }
+    until:
+      all:
+        - screen: Title Screen
+        - element: { role: button, text: Singleplayer, enabled: true, visible: true }
+        - element: { role: button, text: Multiplayer, enabled: true, visible: true }
   - do: assert
     name: verify Pack A active state was removed
     that: { file_gone: automodpack/client/active-state.json }

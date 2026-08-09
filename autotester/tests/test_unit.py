@@ -219,6 +219,28 @@ def test_condition_screen_and_element(make_ctx):
     assert conditions.evaluate(ctx, {"no_element": {"text": "missing"}}, gui=GUI) is True
 
 
+def test_condition_vanilla_title_screen_uses_semantic_snapshot(make_ctx):
+    ctx = make_ctx()
+    condition = {
+        "all": [
+            {"screen": "Title Screen"},
+            {"element": {"role": "button", "text": "Singleplayer", "enabled": True, "visible": True}},
+            {"element": {"role": "button", "text": "Multiplayer", "enabled": True, "visible": True}},
+        ]
+    }
+    mapped_title = {
+        "screenClass": "net.minecraft.class_442",
+        "title": "Title Screen",
+        "buttons": [
+            {"id": 1, "text": "Singleplayer", "enabled": True, "visible": True},
+            {"id": 2, "text": "Multiplayer", "enabled": True, "visible": True},
+        ],
+    }
+    assert conditions.evaluate(ctx, condition, gui=mapped_title) is True
+    assert conditions.evaluate(ctx, condition, gui={**mapped_title, "title": "Play Multiplayer"}) is False
+    assert conditions.evaluate(ctx, condition, gui={**mapped_title, "buttons": mapped_title["buttons"][1:]}) is False
+
+
 def test_condition_screen_none(make_ctx):
     ctx = make_ctx()
     assert conditions.evaluate(ctx, {"screen_none": True}, gui={"screenClass": None}) is True
