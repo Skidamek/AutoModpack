@@ -91,8 +91,7 @@ public class Preload {
 		UpdateTransactionExecutor.Execution execution = executor.recover(transaction);
 		if (!execution.success()) {
 			DetachedUpdateHelper.launch(transaction);
-			Path projection = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE ? storage.activeDirectory() : null;
-			new ReLauncher(projection, UpdateType.UPDATE, null).restart(true);
+			new ReLauncher(UpdateType.UPDATE, null).restart(true);
 			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
 		}
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
