@@ -261,6 +261,13 @@ def test_release_gate_cannot_drop_a_required_capability():
     assert any("release-gate scenario must declare exactly" in problem for problem in problems)
 
 
+def test_release_gate_cannot_duplicate_a_capability():
+    scenario = load_scenarios()["all"]
+    scenario["releaseGate"]["covers"].append("storage-maintenance")
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+    assert any("release-gate scenario must declare exactly" in problem for problem in problems)
+
+
 def test_canonical_encoder_has_java_parity_vector():
     assert CanonicalEncoder().string("parity").integer(7).long(11).boolean(True).digest() == "74298b52636c03aab0beb88c118b33b03343fd30"
 
