@@ -24,8 +24,9 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -41,8 +42,8 @@ public final class UpdatePlanner {
 	private UpdatePlanner() {}
 
 	public record Input(
-			Jsons.ModpackContentFields installedManifest,
-			Jsons.ModpackContentFields targetManifest,
+			ModpackJsons.ModpackContentFields installedManifest,
+			ModpackJsons.ModpackContentFields targetManifest,
 			Map<FileKey, FileState> files,
 			Map<String, FileState> editableOverlays,
 			Set<String> forceCopyServicePaths,
@@ -51,7 +52,7 @@ public final class UpdatePlanner {
 			List<NestedCopy> previousNestedCopies,
 			List<NestedCopy> nestedCopies,
 			SelectionContext selection,
-			Jsons.ClientConfigFieldsV3 plannedClientConfig) {
+			ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
 		public Input {
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
 			Map<String, FileState> normalizedOverlays = new TreeMap<>();
@@ -66,8 +67,8 @@ public final class UpdatePlanner {
 
 	}
 
-	public record SelectionContext(String previousModpackId, Jsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays) {
-		public SelectionContext(String previousModpackId, Jsons.ModpackContentFields previousManifest) {
+	public record SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays) {
+		public SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest) {
 			this(previousModpackId, previousManifest, Map.of());
 		}
 
@@ -76,8 +77,8 @@ public final class UpdatePlanner {
 		}
 	}
 
-	public record RemovalInput(Jsons.ModpackContentFields installedManifest, ClientStorageJsons.ClientBaselineFields baseline,
-			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, GeneratedCopyState generatedCopies, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
+	public record RemovalInput(ModpackJsons.ModpackContentFields installedManifest, ClientStorageJsons.ClientBaselineFields baseline,
+			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, GeneratedCopyState generatedCopies, ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
 		public RemovalInput {
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
 			Set<String> normalizedObjects = new LinkedHashSet<>();
@@ -88,7 +89,7 @@ public final class UpdatePlanner {
 
 	public static UpdatePlan planRemoval(RemovalInput input) {
 		Objects.requireNonNull(input);
-		Jsons.ModpackContentFields installed = Objects.requireNonNull(input.installedManifest());
+		ModpackJsons.ModpackContentFields installed = Objects.requireNonNull(input.installedManifest());
 		ModpackId.requireValid(installed.modpackId);
 		GenerationTarget generationTarget = GenerationTarget.fromFlat(installed);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(installed.ownershipLedger);
@@ -175,7 +176,7 @@ public final class UpdatePlanner {
 
 	public static UpdatePlan plan(Input input) {
 		Objects.requireNonNull(input);
-		Jsons.ModpackContentFields target = Objects.requireNonNull(input.targetManifest());
+		ModpackJsons.ModpackContentFields target = Objects.requireNonNull(input.targetManifest());
 		ModpackId.requireValid(target.modpackId);
 		GenerationTarget generationTarget = GenerationTarget.fromFlat(target);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
@@ -183,8 +184,8 @@ public final class UpdatePlanner {
 		if (input.installedManifest() != null) GenerationTarget.fromFlat(input.installedManifest());
 		if (target.list == null) throw new IllegalArgumentException("Target manifest list is missing");
 
-		Map<String, Jsons.ModpackContentFields.ModpackContentItem> targetItems = sortedItems(target.list);
-		Map<String, Jsons.ModpackContentFields.ModpackContentItem> installedItems = input.installedManifest() == null
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = sortedItems(target.list);
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> installedItems = input.installedManifest() == null
 				|| input.installedManifest().list == null ? Map.of() : sortedItems(input.installedManifest().list);
 		Map<FileKey, FileState> projected = new HashMap<>(input.files());
 		Set<FileKey> projectedScope = new HashSet<>(input.files().keySet());
@@ -457,14 +458,14 @@ public final class UpdatePlanner {
 				if (candidate.ids().stream().anyMatch(id -> id.equalsIgnoreCase(dependency))) addDependencies(candidate, all, result);
 	}
 
-	private static Map<String, Jsons.ModpackContentFields.ModpackContentItem> sortedItems(Set<Jsons.ModpackContentFields.ModpackContentItem> items) {
+	private static Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> sortedItems(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
 		return items.stream().sorted(Comparator.comparing(UpdatePlanner::normalizedManifestPath)).collect(Collectors.toMap(UpdatePlanner::normalizedManifestPath, Function.identity(),
 				(first, second) -> {
 					throw new IllegalArgumentException("Duplicate normalized manifest path: " + first.file);
 				}, LinkedHashMap::new));
 	}
 
-	private static String normalizedManifestPath(Jsons.ModpackContentFields.ModpackContentItem item) {
+	private static String normalizedManifestPath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {
 		if (item == null) throw new IllegalArgumentException("Manifest item is incomplete");
 		String normalized = normalize(item.file);
 		if (!ModpackPathPolicy.isValidTypeAndPath(normalized, item.type))
@@ -472,7 +473,7 @@ public final class UpdatePlanner {
 		return normalized;
 	}
 
-	private static FileKey liveKey(Jsons.ModpackContentFields.ModpackContentItem item) {
+	private static FileKey liveKey(ModpackJsons.ModpackContentFields.ModpackContentItem item) {
 		String relative = normalize(item.file);
 		return new FileKey(Root.GAME_DIR, relative);
 	}

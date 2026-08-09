@@ -17,8 +17,10 @@ import java.util.stream.Stream;
 import org.jetbrains.annotations.NotNull;
 
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -34,21 +36,21 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public class ModpackUtils {
 
 	// Modpack may require update even if there's no files to update, because some files may need to be deleted
-	public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate,
+	public record UpdateCheckResult(boolean requiresUpdate, Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate,
 			Set<String> changedOverwriteEditableFiles) {}
 
 	public enum ManifestFetchState {
 		SUCCESS, OPERATION_FAILED, CONNECTION_FAILED
 	}
 
-	public record ManifestFetchResult(ManifestFetchState state, Jsons.CompleteModpackContentFields content, DownloadClient client, Throwable failure) {
+	public record ManifestFetchResult(ManifestFetchState state, ModpackJsons.CompleteModpackContentFields content, DownloadClient client, Throwable failure) {
 		public boolean successful() {
 			return state == ManifestFetchState.SUCCESS;
 		}
 	}
 
 	// Fast and friendly method to check if the modpack is up to date without modifying anything on disk
-	public static UpdateCheckResult isUpdate(Jsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
+	public static UpdateCheckResult isUpdate(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
 		Path activeDirectory = storage.activeDirectory();
 		try {
@@ -64,21 +66,21 @@ public class ModpackUtils {
 		LOGGER.info("Verifying content against server list...");
 		var start = System.currentTimeMillis();
 
-		Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
+		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
 		Set<String> changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, activeDirectory);
 
 		// Group & Sort Server Files (Optimizes Disk Seek Pattern)
 		// Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
 		// TreeMap ensures alphabetical order of directories (HDD friendly).
-		Map<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> itemsByDir = serverModpackContent.list.stream()
+		Map<Path, List<ModpackJsons.ModpackContentFields.ModpackContentItem>> itemsByDir = serverModpackContent.list.stream()
 				.collect(Collectors.groupingBy(item -> SmartFileUtils.getPath(activeDirectory, item.file).getParent(), TreeMap::new, Collectors.toList()));
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 
 			// Process Directory by Directory
-			for (Map.Entry<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
+			for (Map.Entry<Path, List<ModpackJsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
 				Path parentDir = entry.getKey();
-				List<Jsons.ModpackContentFields.ModpackContentItem> itemsInDir = entry.getValue();
+				List<ModpackJsons.ModpackContentFields.ModpackContentItem> itemsInDir = entry.getValue();
 
 				// If directory is missing, all items in it are missing.
 				if (!Files.exists(parentDir)) {
@@ -178,7 +180,7 @@ public class ModpackUtils {
 		return new UpdateCheckResult(false, Set.of(), Set.of());
 	}
 
-	static Set<String> findChangedOverwriteEditableFiles(Collection<Jsons.ModpackContentFields.ModpackContentItem> serverItems, Path projection) {
+	static Set<String> findChangedOverwriteEditableFiles(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> serverItems, Path projection) {
 
 		Set<String> overwriteEditablePaths = new HashSet<>();
 		for (var item : serverItems) {
@@ -197,7 +199,7 @@ public class ModpackUtils {
 	}
 
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
-	public static void populateStoreFromCWD(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache, ClientStorage storage) {
+	public static void populateStoreFromCWD(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache, ClientStorage storage) {
 		for (var entry : filesToUpdate) {
 			Path storeFile = storage.objectsDirectory().resolve(entry.sha1);
 			long expectedSize = Long.parseLong(entry.size);
@@ -229,9 +231,9 @@ public class ModpackUtils {
 	}
 
 	// Returns the set of files that are missing or corrupt in the store.
-	public static Set<Jsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck,
+	public static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToCheck,
 			FileMetadataCache cache, ClientStorage storage) {
-		Set<Jsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
+		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
 			Path storeFile = storage.objectsDirectory().resolve(entry.sha1);
 			if (isValidFile(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
@@ -257,24 +259,24 @@ public class ModpackUtils {
 		}
 	}
 
-	public static Jsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, Jsons.ConnectionInfo connectionInfo,
-			Jsons.ClientConfigFieldsV3 currentConfig) {
+	public static ClientConfigJsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, ConnectionJsons.ConnectionInfo connectionInfo,
+			ClientConfigJsons.ClientConfigFieldsV3 currentConfig) {
 		ModpackId.requireValid(modpackId);
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing");
 
-		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(currentConfig);
+		ClientConfigJsons.ClientConfigFieldsV3 updatedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
 		updatedConfig.selectedModpackId = modpackId;
 		return updatedConfig;
 	}
 
-	public static Jsons.ClientConfigFieldsV3 planCachedModpackSelection(String modpackId, Jsons.ClientConfigFieldsV3 currentConfig) {
+	public static ClientConfigJsons.ClientConfigFieldsV3 planCachedModpackSelection(String modpackId, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) {
 		ModpackId.requireValid(modpackId);
-		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(currentConfig);
+		ClientConfigJsons.ClientConfigFieldsV3 updatedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
 		updatedConfig.selectedModpackId = modpackId;
 		return updatedConfig;
 	}
 
-	public static ManifestFetchResult requestServerModpackContent(ClientStorage storage, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser) {
+	public static ManifestFetchResult requestServerModpackContent(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser) {
 		try {
 			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser).get();
 		} catch (Exception e) {
@@ -286,7 +288,7 @@ public class ModpackUtils {
 
 	// ---- Async versions (non-blocking, used by login packet flow) ----
 
-	public static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(ClientStorage storage, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
+	public static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			boolean allowAskingUser) {
 		ManifestFetchState connectionFailedState = ManifestFetchState.CONNECTION_FAILED;
 		if (secret == null) {
@@ -321,7 +323,7 @@ public class ModpackUtils {
 		return trace.toString();
 	}
 
-	private static CompletableFuture<Optional<Jsons.CompleteModpackContentFields>> fetchModpackContentAsync(ClientStorage storage, DownloadClient client,
+	private static CompletableFuture<Optional<ModpackJsons.CompleteModpackContentFields>> fetchModpackContentAsync(ClientStorage storage, DownloadClient client,
 			Function<DownloadClient, CompletableFuture<Path>> operation) {
 		CompletableFuture<Path> operationFuture;
 		try {
@@ -331,7 +333,7 @@ public class ModpackUtils {
 		}
 
 		return operationFuture.thenApplyAsync(path -> {
-			Jsons.CompleteModpackContentFields content = ModpackContentTools.readCompleteFields(path);
+			ModpackJsons.CompleteModpackContentFields content = ModpackContentTools.readCompleteFields(path);
 			return Optional.ofNullable(content);
 		}, DownloadClient.NET_EXECUTOR).whenComplete((content, error) -> {
 			try {
@@ -342,7 +344,7 @@ public class ModpackUtils {
 		});
 	}
 
-	private static CompletableFuture<DownloadClient> createDownloadClient(Jsons.ConnectionInfo connectionInfo, byte[] secret,
+	private static CompletableFuture<DownloadClient> createDownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secret,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
 		return DownloadClient.createAsync(connectionInfo, secret, trustCallback).thenApply(client -> {
 			if (connectionInfo.trustReason != null) {
@@ -362,7 +364,7 @@ public class ModpackUtils {
 				"Presented: " + NetUtils.shortenFingerprint(mismatch.getPresentedFingerprint()), "automodpack.pin.mismatch.help");
 	}
 
-	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(Jsons.ConnectionInfo connectionInfo,
+	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(ConnectionJsons.ConnectionInfo connectionInfo,
 			boolean allowAskingUser) {
 		String originHost = connectionInfo.origin.getHostString();
 		return certificate -> {
@@ -382,7 +384,7 @@ public class ModpackUtils {
 		};
 	}
 
-	private static CompletableFuture<Boolean> askUserAboutCertificateAsync(Jsons.ConnectionInfo connectionInfo, String fingerprint) {
+	private static CompletableFuture<Boolean> askUserAboutCertificateAsync(ConnectionJsons.ConnectionInfo connectionInfo, String fingerprint) {
 		String originHost = connectionInfo.origin.getHostString();
 		LOGGER.info("Asking user to verify certificate for Minecraft server {} from AutoModpack endpoint {}:{}", originHost, connectionInfo.endpoint.getHostString(),
 				connectionInfo.endpoint.getPort());

@@ -12,8 +12,9 @@ import java.util.TreeSet;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -29,9 +30,9 @@ class UpdatePreviewTest {
 
 	@Test
 	void reportsAddsChangesRemovalsAndCasPreservation() {
-		Jsons.ModpackContentFields target = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
-				new Jsons.ModpackContentFields.ModpackContentItem("config/changed.json", "8", "config", false, false, TARGET_HASH, "0"),
+		ModpackJsons.ModpackContentFields target = manifest(
+				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
+				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/changed.json", "8", "config", false, false, TARGET_HASH, "0"),
 				entry("config/new.json", TARGET_HASH, 4, OwnershipLedger.Status.PRESENT),
 				entry("config/changed.json", TARGET_HASH, 8, OwnershipLedger.Status.PRESENT),
 				entry("config/old.json", OLD_HASH, 7, OwnershipLedger.Status.TOMBSTONE));
@@ -40,7 +41,7 @@ class UpdatePreviewTest {
 				new FileKey(Root.GAME_DIR, "config/old.json"), new FileState(OLD_HASH, 7, true, false));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new Jsons.ClientConfigFieldsV3()));
+				new ClientConfigJsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
 		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.ADDED && entry.relativePath().equals("config/new.json")));
@@ -51,11 +52,11 @@ class UpdatePreviewTest {
 
 	@Test
 	void exposesAcquisitionBytesAndPlanRestartReasons() {
-		Jsons.ModpackContentFields target = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
+		ModpackJsons.ModpackContentFields target = manifest(
+				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
 				entry("config/new.json", TARGET_HASH, 4, OwnershipLedger.Status.PRESENT));
 		Map<FileKey, FileState> files = Map.of();
-		UpdatePlan planned = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan planned = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 		UpdatePlan plan = new UpdatePlan(planned.modpackId(), planned.generationTarget(), planned.operations(), planned.projectedFinalState(), planned.plannedClientConfig(),
 				Set.of(RestartReason.CORRECTED_FILE_LOCATIONS), planned.preservations(), planned.baselineCaptures(), planned.conflicts(), planned.generatedCopies());
 
@@ -67,9 +68,9 @@ class UpdatePreviewTest {
 
 	@Test
 	void summaryDeduplicatesLogicalPathsAndLabelsOtherEffects() {
-		Jsons.ModpackContentFields target = manifest();
+		ModpackJsons.ModpackContentFields target = manifest();
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new Jsons.ClientConfigFieldsV3()));
+				new ClientConfigJsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = new UpdatePreview(plan, List.of(
 				new UpdatePreview.Entry(UpdatePreview.Kind.PRESERVED_CAS, Root.GAME_DIR, "config/shared.json", 1),
 				new UpdatePreview.Entry(UpdatePreview.Kind.CHANGED, Root.PROJECTION, "config/shared.json", 2),
@@ -102,13 +103,13 @@ class UpdatePreviewTest {
 
 	@Test
 	void normalizesTargetPathsBeforeLedgerComparison() {
-		Jsons.ModpackContentFields target = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("/config/kept.json", "8", "config", false, false, OLD_HASH, "0"),
+		ModpackJsons.ModpackContentFields target = manifest(
+				new ModpackJsons.ModpackContentFields.ModpackContentItem("/config/kept.json", "8", "config", false, false, OLD_HASH, "0"),
 				entry("config/kept.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 8, true, false));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new Jsons.ClientConfigFieldsV3()));
+				new ClientConfigJsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
 		assertTrue(preview.entries().stream().noneMatch(entry -> entry.relativePath().equals("config/kept.json")
@@ -118,11 +119,11 @@ class UpdatePreviewTest {
 
 	@Test
 	void reportsUnavailableHashWithoutThrowing() {
-		Jsons.ModpackContentFields target = manifest(entry("config/unknown.json", OLD_HASH, 12, OwnershipLedger.Status.TOMBSTONE));
+		ModpackJsons.ModpackContentFields target = manifest(entry("config/unknown.json", OLD_HASH, 12, OwnershipLedger.Status.TOMBSTONE));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/unknown.json"), new FileState(null, 12, true, false));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new Jsons.ClientConfigFieldsV3()));
+				new ClientConfigJsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
 		assertEquals(UpdatePreview.Kind.PRESERVED_UNAVAILABLE, assertSingle(preview, "config/unknown.json").kind());
@@ -130,8 +131,8 @@ class UpdatePreviewTest {
 
 	@Test
 	void removalPreviewShowsDeletionAndCasPreservation() {
-		Jsons.ModpackContentFields installed = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("config/removed.json", "7", "config", false, false, OLD_HASH, "0"),
+		ModpackJsons.ModpackContentFields installed = manifest(
+				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/removed.json", "7", "config", false, false, OLD_HASH, "0"),
 				entry("config/removed.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
 		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = installed.modpackId;
@@ -144,7 +145,7 @@ class UpdatePreviewTest {
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "config/removed.json"), new FileState(OLD_HASH, 7, true, false),
 				new FileKey(Root.GAME_DIR, "config/removed.json"), new FileState(OLD_HASH, 7, true, false));
-		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), null, new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		UpdatePreview preview = UpdatePreview.create(plan, files, installed, null, true);
 
@@ -154,8 +155,8 @@ class UpdatePreviewTest {
 
 	@Test
 	void removalPreviewHidesFilesAlreadyMatchingBaseline() {
-		Jsons.ModpackContentFields installed = manifest(
-				new Jsons.ModpackContentFields.ModpackContentItem("config/kept.json", "7", "config", false, false, OLD_HASH, "0"),
+		ModpackJsons.ModpackContentFields installed = manifest(
+				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/kept.json", "7", "config", false, false, OLD_HASH, "0"),
 				entry("config/kept.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
 		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = installed.modpackId;
@@ -167,7 +168,7 @@ class UpdatePreviewTest {
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "config/kept.json"), new FileState(OLD_HASH, 7, true, false),
 				new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true, false));
-		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(OLD_HASH), null, new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(OLD_HASH), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		UpdatePreview preview = UpdatePreview.create(plan, files, installed, null, true, baseline);
 
@@ -176,10 +177,10 @@ class UpdatePreviewTest {
 
 	@Test
 	void includesExplicitResolvedAndStaleGroupConsequences() {
-		Jsons.ModpackContentFields target = manifest();
+		ModpackJsons.ModpackContentFields target = manifest();
 		Map<FileKey, FileState> files = Map.of();
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new Jsons.ClientConfigFieldsV3()));
+				new ClientConfigJsons.ClientConfigFieldsV3()));
 		ResolvedSelection selection = new ResolvedSelection(new SelectionIntent(Set.of("optional")), new TreeSet<>(Set.of("main", "optional")),
 				new TreeSet<>(Set.of("stale")));
 
@@ -195,11 +196,11 @@ class UpdatePreviewTest {
 		return preview.entries().stream().filter(entry -> entry.relativePath().equals(path)).findFirst().orElseThrow();
 	}
 
-	private static Jsons.ModpackContentFields manifest(Object... values) {
-		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(new LinkedHashSet<>());
+	private static ModpackJsons.ModpackContentFields manifest(Object... values) {
+		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(new LinkedHashSet<>());
 		Map<String, OwnershipLedger.Entry> ledgerEntries = new TreeMap<>();
 		for (Object value : values) {
-			if (value instanceof Jsons.ModpackContentFields.ModpackContentItem item) target.list.add(item);
+			if (value instanceof ModpackJsons.ModpackContentFields.ModpackContentItem item) target.list.add(item);
 			if (value instanceof OwnershipLedger.Entry entry) ledgerEntries.put(entry.logicalPath(), entry);
 		}
 		target.modpackId = "abc1234";

@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import pl.skidam.automodpack_core.config.ConnectionJsons;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
@@ -16,7 +17,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -148,7 +148,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private static boolean hasConnection(ClientStorage storage, String modpackId) {
 		try {
-			Jsons.ConnectionRecordFields fields = ConnectionStore.read(storage, modpackId);
+			ConnectionJsons.ConnectionRecordFields fields = ConnectionStore.read(storage, modpackId);
 			return fields.connection != null && fields.connection.isComplete();
 		} catch (IOException | RuntimeException e) {
 			return false;

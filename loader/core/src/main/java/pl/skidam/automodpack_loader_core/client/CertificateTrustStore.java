@@ -6,7 +6,7 @@ import java.util.Objects;
 
 import pl.skidam.automodpack_core.auth.OriginTrustStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -20,7 +20,7 @@ public final class CertificateTrustStore {
 
 	private CertificateTrustStore() {}
 
-	public static synchronized Jsons.CertificateTrustEntry get(InetSocketAddress origin) {
+	public static synchronized ConnectionJsons.CertificateTrustEntry get(InetSocketAddress origin) {
 		if (origin == null) return null;
 		try {
 			return OriginTrustStore.get(storage(), origin);
@@ -30,7 +30,7 @@ public final class CertificateTrustStore {
 	}
 
 	public static synchronized String getFingerprint(InetSocketAddress origin) {
-		Jsons.CertificateTrustEntry entry = get(origin);
+		ConnectionJsons.CertificateTrustEntry entry = get(origin);
 		return entry == null ? null : entry.fingerprint;
 	}
 
@@ -41,10 +41,10 @@ public final class CertificateTrustStore {
 	public static synchronized void save(InetSocketAddress origin, String fingerprint, Reason reason) {
 		if (origin == null || reason == null) throw new IllegalArgumentException("Origin and trust reason are required");
 		String normalized = NetUtils.normalizeFingerprint(fingerprint);
-		Jsons.CertificateTrustEntry existing = get(origin);
+		ConnectionJsons.CertificateTrustEntry existing = get(origin);
 		if (existing != null && Objects.equals(existing.fingerprint, normalized) && Objects.equals(existing.reason, reason.name())) return;
 		try {
-			OriginTrustStore.save(storage(), origin, new Jsons.CertificateTrustEntry(normalized, reason.name()));
+			OriginTrustStore.save(storage(), origin, new ConnectionJsons.CertificateTrustEntry(normalized, reason.name()));
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save certificate trust", e);
 		}

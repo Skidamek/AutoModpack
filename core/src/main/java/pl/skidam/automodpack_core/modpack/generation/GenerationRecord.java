@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.modpack.generation;
 import java.time.Instant;
 import java.util.Objects;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 
@@ -46,14 +46,14 @@ public record GenerationRecord(GroupManifest manifest, GenerationMetadata metada
 		return new GenerationRecord(manifest, metadata, ledger);
 	}
 
-	public Jsons.CompleteModpackContentFields toFields() {
-		Jsons.CompleteModpackContentFields fields = manifest.toFields();
+	public ModpackJsons.CompleteModpackContentFields toFields() {
+		ModpackJsons.CompleteModpackContentFields fields = manifest.toFields();
 		fields.ownershipLedger = ownershipLedger.toFields();
 		fields.generation = metadata.toFields();
 		return fields;
 	}
 
-	public static GenerationRecord fromFields(Jsons.CompleteModpackContentFields fields) {
+	public static GenerationRecord fromFields(ModpackJsons.CompleteModpackContentFields fields) {
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		GenerationMetadata metadata = GenerationMetadata.fromFields(fields.generation);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(fields.ownershipLedger);

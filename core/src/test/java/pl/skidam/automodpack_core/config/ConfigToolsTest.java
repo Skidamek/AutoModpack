@@ -19,14 +19,14 @@ class ConfigToolsTest {
 	@Test
 	void readDoesNotCreateOrRewriteConfiguration() throws Exception {
 		Path missing = temporaryDirectory.resolve("missing.json");
-		assertTrue(ConfigTools.read(missing, Jsons.ClientConfigFieldsV3.class).isEmpty());
+		assertTrue(ConfigTools.read(missing, ClientConfigJsons.ClientConfigFieldsV3.class).isEmpty());
 		assertFalse(Files.exists(missing));
 
 		Path existing = temporaryDirectory.resolve("client.json");
 		String json = "{\n  \"selectedModpackId\": \"pack\"\n}\n";
 		Files.writeString(existing, json, StandardCharsets.UTF_8);
 
-		assertEquals("pack", ConfigTools.read(existing, Jsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
+		assertEquals("pack", ConfigTools.read(existing, ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
 		assertEquals(json, Files.readString(existing, StandardCharsets.UTF_8));
 	}
 
@@ -35,7 +35,7 @@ class ConfigToolsTest {
 		Path config = temporaryDirectory.resolve("invalid.json");
 		Files.writeString(config, "{ invalid", StandardCharsets.UTF_8);
 
-		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.read(config, Jsons.ClientConfigFieldsV3.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.read(config, ClientConfigJsons.ClientConfigFieldsV3.class));
 		assertEquals("{ invalid", Files.readString(config, StandardCharsets.UTF_8));
 	}
 
@@ -43,13 +43,13 @@ class ConfigToolsTest {
 	void readOrCreateOnlyWritesDefaultsWhenAbsent() throws Exception {
 		Path config = temporaryDirectory.resolve("client.json");
 
-		Jsons.ClientConfigFieldsV3 created = ConfigTools.readOrCreate(config, Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
+		ClientConfigJsons.ClientConfigFieldsV3 created = ConfigTools.readOrCreate(config, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 		assertEquals(3, created.DO_NOT_CHANGE_IT);
 		assertTrue(Files.isRegularFile(config));
 
 		String existing = "{\"selectedModpackId\":\"preserve\"}";
 		Files.writeString(config, existing, StandardCharsets.UTF_8);
-		assertEquals("preserve", ConfigTools.readOrCreate(config, Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new).selectedModpackId);
+		assertEquals("preserve", ConfigTools.readOrCreate(config, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new).selectedModpackId);
 		assertEquals(existing, Files.readString(config, StandardCharsets.UTF_8));
 	}
 
@@ -58,11 +58,11 @@ class ConfigToolsTest {
 		Path config = temporaryDirectory.resolve("client.json");
 		Files.writeString(config, "not-json", StandardCharsets.UTF_8);
 
-		Jsons.ClientConfigFieldsV3 value = new Jsons.ClientConfigFieldsV3();
+		ClientConfigJsons.ClientConfigFieldsV3 value = new ClientConfigJsons.ClientConfigFieldsV3();
 		value.selectedModpackId = "replacement";
 		ConfigTools.writeAtomic(config, value);
 
-		assertEquals("replacement", ConfigTools.read(config, Jsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
+		assertEquals("replacement", ConfigTools.read(config, ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
 		try (var files = Files.list(temporaryDirectory)) {
 			assertFalse(files.anyMatch(path -> path.getFileName().toString().endsWith(".tmp")));
 		}
@@ -82,7 +82,7 @@ class ConfigToolsTest {
 				  }
 				}
 				""";
-		Jsons.ClientConfigFieldsV3 config = ConfigTools.parse(configJson, Jsons.ClientConfigFieldsV3.class);
+		ClientConfigJsons.ClientConfigFieldsV3 config = ConfigTools.parse(configJson, ClientConfigJsons.ClientConfigFieldsV3.class);
 
 		assertEquals("pack", config.selectedModpackId);
 
@@ -95,8 +95,8 @@ class ConfigToolsTest {
 
 	@Test
 	void readsLegacyAdvertisedEndpointAliasesAndWritesOnlyNewNames() {
-		Jsons.ServerConfigFieldsV2 config = ConfigTools.parse("{\"addressToSend\":\"downloads.example.com\",\"portToSend\":24444}",
-				Jsons.ServerConfigFieldsV2.class);
+		ServerConfigJsons.ServerConfigFieldsV2 config = ConfigTools.parse("{\"addressToSend\":\"downloads.example.com\",\"portToSend\":24444}",
+				ServerConfigJsons.ServerConfigFieldsV2.class);
 
 		assertEquals("downloads.example.com", config.advertisedEndpointHost);
 		assertEquals(24444, config.advertisedEndpointPort);
@@ -109,7 +109,7 @@ class ConfigToolsTest {
 
 	@Test
 	void connectionInfoCompletenessRequiresOriginAndEndpoint() {
-		Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo();
+		ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo();
 		assertFalse(connectionInfo.isComplete());
 
 		connectionInfo.origin = AddressHelpers.parseOrigin("play.example.com");
@@ -125,6 +125,6 @@ class ConfigToolsTest {
 	@Test
 	void connectionSchemaRejectsEndpointWithoutPort() {
 		String invalid = "{\"origin\":\"play.example.com\",\"endpoint\":\"downloads.example.com\"}";
-		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse(invalid, Jsons.ConnectionInfo.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse(invalid, ConnectionJsons.ConnectionInfo.class));
 	}
 }

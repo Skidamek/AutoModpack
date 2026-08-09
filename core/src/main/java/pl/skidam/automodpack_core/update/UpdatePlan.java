@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -18,7 +18,7 @@ public record UpdatePlan(
 		GenerationTarget generationTarget,
 		List<Operation> operations,
 		List<ProjectedFile> projectedFinalState,
-		Jsons.ClientConfigFieldsV3 plannedClientConfig,
+		ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig,
 		Set<RestartReason> restartReasons,
 		List<Preservation> preservations,
 		List<BaselineCapture> baselineCaptures,

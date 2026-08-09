@@ -23,7 +23,8 @@ import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
@@ -62,10 +63,10 @@ public class ModpackUpdater implements AutoCloseable {
 	public boolean fullDownload = false;
 	private boolean firstConnection;
 	private SelectedModpackTarget selectedTarget;
-	private Jsons.ModpackContentFields serverModpackContent;
-	private final Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new ConcurrentHashMap<>();
-	private final Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new ConcurrentHashMap<>();
-	private final Jsons.ConnectionInfo connectionInfo;
+	private ModpackJsons.ModpackContentFields serverModpackContent;
+	private final Map<ModpackJsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new ConcurrentHashMap<>();
+	private final Map<ModpackJsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new ConcurrentHashMap<>();
+	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final DownloadClient downloadClient;
 	private final AtomicBoolean closed = new AtomicBoolean();
 	private final AtomicReference<ConfirmationState> confirmationState = new AtomicReference<>(ConfirmationState.INACTIVE);
@@ -155,11 +156,11 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	public Set<Jsons.ModpackContentFields.ModpackContentItem> getModpackFileList() {
+	public Set<ModpackJsons.ModpackContentFields.ModpackContentItem> getModpackFileList() {
 		return serverModpackContent.list;
 	}
 
-	private Jsons.ModpackContentFields storedTarget() throws IOException {
+	private ModpackJsons.ModpackContentFields storedTarget() throws IOException {
 		SelectedModpackTarget target = storedSelectedTarget();
 		return target == null ? null : target.flatTarget();
 	}
@@ -196,14 +197,14 @@ public class ModpackUpdater implements AutoCloseable {
 		if (selectedTarget != null && selectedTarget.flatTarget().list != null)
 			for (var item : selectedTarget.flatTarget().list)
 				addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
-		Jsons.ModpackContentFields installed = storedTarget();
+		ModpackJsons.ModpackContentFields installed = storedTarget();
 		if (installed != null && installed.list != null)
 			for (var item : installed.list)
 				addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
 		sourceFetchManager = newSourceFetchManager(new ArrayList<>(unique.values()));
 	}
 
-	private FetchManager ensureSourceFetch(Collection<Jsons.ModpackContentFields.ModpackContentItem> items) {
+	private FetchManager ensureSourceFetch(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
 		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
 		for (var item : items) addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
 		List<FetchManager.FetchData> fetchData = new ArrayList<>(unique.values());
@@ -231,15 +232,15 @@ public class ModpackUpdater implements AutoCloseable {
 		return "mod".equals(type) || "shader".equals(type) || "resourcepack".equals(type);
 	}
 
-	public ModpackUpdater(SelectedModpackTarget selectedTarget, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
+	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
 		this(selectedTarget, connectionInfo, secret, storage, null);
 	}
 
-	public ModpackUpdater(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
+	public ModpackUpdater(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
 		this(null, connectionInfo, secret, storage, null);
 	}
 
-	public ModpackUpdater(SelectedModpackTarget selectedTarget, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage,
+	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage,
 			DownloadClient downloadClient) {
 		this.selectedTarget = selectedTarget;
 		this.serverModpackContent = selectedTarget == null ? null : selectedTarget.flatTarget();
@@ -301,8 +302,8 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		requireLiveConnection();
-		Jsons.ModpackContentFields preloadTarget = selectedTarget.completeTarget();
-		Collection<Jsons.ModpackContentFields.ModpackContentItem> targetItems = preloadTarget.list == null ? List.of() : preloadTarget.list;
+		ModpackJsons.ModpackContentFields preloadTarget = selectedTarget.completeTarget();
+		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = preloadTarget.list == null ? List.of() : preloadTarget.list;
 		if (targetItems.isEmpty()) {
 			LOGGER.info("Selected modpack target contains no files; preload has nothing to acquire");
 			return;
@@ -310,11 +311,11 @@ public class ModpackUpdater implements AutoCloseable {
 
 		long start = System.currentTimeMillis();
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			Set<Jsons.ModpackContentFields.ModpackContentItem> allTargetItems = new LinkedHashSet<>(targetItems);
+			Set<ModpackJsons.ModpackContentFields.ModpackContentItem> allTargetItems = new LinkedHashSet<>(targetItems);
 			ModpackUtils.populateStoreFromCWD(allTargetItems, cache, storage);
 			planBuilder.populateStoreFromActive(preloadTarget, cache);
-			Set<Jsons.ModpackContentFields.ModpackContentItem> targetSet = uniqueObjects(allTargetItems);
-			Set<Jsons.ModpackContentFields.ModpackContentItem> uncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
+			Set<ModpackJsons.ModpackContentFields.ModpackContentItem> targetSet = uniqueObjects(allTargetItems);
+			Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
 			if (uncached.isEmpty()) {
 				LOGGER.info("Preload reused all {} verified complete modpack objects", targetSet.size());
 				return;
@@ -323,14 +324,14 @@ public class ModpackUpdater implements AutoCloseable {
 			totalBytesToDownload = uncached.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
 			FetchManager fetchManager = ensureSourceFetch(uncached);
 			if (!downloadModpack(uncached, start, fetchManager, false)) throw new IOException("One or more selected modpack objects could not be acquired");
-			Set<Jsons.ModpackContentFields.ModpackContentItem> stillUncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
+			Set<ModpackJsons.ModpackContentFields.ModpackContentItem> stillUncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
 			if (!stillUncached.isEmpty()) throw new IOException("Verified CAS objects are still missing after preload: " + stillUncached.size());
 			LOGGER.info("Preloaded {} complete modpack objects in {}ms", targetSet.size(), System.currentTimeMillis() - start);
 		}
 	}
 
-	private static Set<Jsons.ModpackContentFields.ModpackContentItem> uniqueObjects(Collection<Jsons.ModpackContentFields.ModpackContentItem> items) {
-		Map<String, Jsons.ModpackContentFields.ModpackContentItem> unique = new LinkedHashMap<>();
+	private static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uniqueObjects(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> unique = new LinkedHashMap<>();
 		for (var item : items) unique.putIfAbsent(item.sha1.toLowerCase(Locale.ROOT), item);
 		return new LinkedHashSet<>(unique.values());
 	}
@@ -359,7 +360,7 @@ public class ModpackUpdater implements AutoCloseable {
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(
 					new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, false), cache, modCache);
-			Jsons.ModpackContentFields installed = storedTarget();
+			ModpackJsons.ModpackContentFields installed = storedTarget();
 			return requiresReconciliation(prepared, installed);
 		}
 	}
@@ -403,7 +404,7 @@ public class ModpackUpdater implements AutoCloseable {
 	// so the user can freely add/remove mods (e.g. a binary search) without
 	// AutoModpack restoring or deleting them.
 	public Path recoverDeletedFile(String logicalPath, String sha1, long size) throws IOException {
-		Jsons.ModpackContentFields installed = storedTarget();
+		ModpackJsons.ModpackContentFields installed = storedTarget();
 		String normalizedPath = UpdatePlanner.normalize(logicalPath);
 		if (UpdatePlanner.managedCleanupKey(normalizedPath).isEmpty()) throw new IOException("Recovery path is not managed: " + normalizedPath);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(installed.ownershipLedger);
@@ -417,7 +418,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public RecoverySnapshot recoverySnapshot() throws IOException {
-		Jsons.ModpackContentFields installed = storedTarget();
+		ModpackJsons.ModpackContentFields installed = storedTarget();
 		ClientStorageJsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(recoveryDirectory(installed.modpackId));
 		List<RecoveryFile> archived = new ArrayList<>();
 		for (var entry : archive.entries) archived.add(new RecoveryFile(entry.logicalPath, entry.sha1, entry.size, entry.sourceGenerationId, entry.preservedAt));
@@ -534,7 +535,7 @@ public class ModpackUpdater implements AutoCloseable {
 		MODPACK_LOADER.loadModpack(modpackMods);
 	}
 
-	public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
+	public void startUpdate(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
 		try {
 			requireLiveConnection();
 			new ScreenManager().waiting();
@@ -556,7 +557,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	private void startUpdateAfterPreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
+	private void startUpdateAfterPreview(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
 		long start = System.currentTimeMillis();
 		ClientUpdatePlanBuilder.PreparedPlan finalPlan;
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
@@ -566,7 +567,7 @@ public class ModpackUpdater implements AutoCloseable {
 			var finalFilesToUpdate = ModpackUtils.identifyUncachedFiles(filesToUpdate, cache, storage);
 
 			long startFetching = System.currentTimeMillis();
-			for (Jsons.ModpackContentFields.ModpackContentItem serverItem : finalFilesToUpdate) totalBytesToDownload += Long.parseLong(serverItem.size);
+			for (ModpackJsons.ModpackContentFields.ModpackContentItem serverItem : finalFilesToUpdate) totalBytesToDownload += Long.parseLong(serverItem.size);
 			FetchManager fetchManager = ensureSourceFetch(finalFilesToUpdate);
 
 			// DOWNLOAD
@@ -629,12 +630,12 @@ public class ModpackUpdater implements AutoCloseable {
 		if (downloadClient == null) throw new IOException("Modpack transfer session is unavailable");
 	}
 
-	private boolean downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager)
+	private boolean downloadModpack(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager)
 			throws InterruptedException {
 		return downloadModpack(finalFilesToUpdate, startFetching, fetchManager, true);
 	}
 
-	private boolean downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager,
+	private boolean downloadModpack(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager,
 			boolean playerFacing) throws InterruptedException {
 		int wholeQueue = finalFilesToUpdate.size();
 
@@ -772,7 +773,7 @@ public class ModpackUpdater implements AutoCloseable {
 		return Map.copyOf(resolved);
 	}
 
-	private PreviewRequestResult requestUpdatePreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) throws Exception {
+	private PreviewRequestResult requestUpdatePreview(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(
@@ -805,7 +806,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */
-	private boolean requiresReconciliation(ClientUpdatePlanBuilder.PreparedPlan prepared, Jsons.ModpackContentFields installed) {
+	private boolean requiresReconciliation(ClientUpdatePlanBuilder.PreparedPlan prepared, ModpackJsons.ModpackContentFields installed) {
 		return installed == null || !GenerationTarget.fromFlat(installed).equals(prepared.plan().generationTarget()) || hasPlanImpact(prepared);
 	}
 

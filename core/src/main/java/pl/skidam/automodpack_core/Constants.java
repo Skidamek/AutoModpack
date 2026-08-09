@@ -5,7 +5,8 @@ import java.nio.file.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.loader.GameCallService;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
@@ -33,8 +34,8 @@ public class Constants {
 	public static Path THIS_MOD_JAR;
 	public static ModpackExecutor modpackExecutor;
 	public static NettyServer hostServer;
-	public static Jsons.ServerConfigFieldsV3 serverConfig;
-	public static Jsons.ClientConfigFieldsV3 clientConfig;
+	public static ServerConfigJsons.ServerConfigFieldsV3 serverConfig;
+	public static ClientConfigJsons.ClientConfigFieldsV3 clientConfig;
 	public static final Path automodpackDir = Path.of("automodpack");
 	public static final Path clientDir = automodpackDir.resolve("client");
 	public static final Path clientRecordsDir = clientDir.resolve("records");

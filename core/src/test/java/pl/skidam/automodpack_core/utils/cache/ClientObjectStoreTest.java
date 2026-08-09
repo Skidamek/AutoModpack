@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -139,7 +139,7 @@ class ClientObjectStoreTest {
 	private ClientStorage storage() throws Exception {
 		Path game = temporaryDirectory.resolve("game");
 		Files.createDirectories(game.resolve("automodpack"));
-		Jsons.DataRootFields dataRoot = new Jsons.DataRootFields();
+		StorageJsons.DataRootFields dataRoot = new StorageJsons.DataRootFields();
 		dataRoot.root = temporaryDirectory.resolve("data").toString();
 		dataRoot.shared = false;
 		ConfigTools.writeAtomic(game.resolve("automodpack/data-root.json"), dataRoot);

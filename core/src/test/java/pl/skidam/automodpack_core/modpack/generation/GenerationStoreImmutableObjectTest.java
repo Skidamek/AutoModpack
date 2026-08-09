@@ -12,7 +12,7 @@ import java.util.concurrent.Executor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
@@ -123,7 +123,7 @@ class GenerationStoreImmutableObjectTest {
 	private ModpackCandidate scan() throws Exception {
 		if (!Files.exists(tempDir.resolve("groups/main/config/example.txt"))) source("before publication");
 		Executor direct = Runnable::run;
-		Jsons.GroupDeclaration main = new Jsons.GroupDeclaration();
+		ServerConfigJsons.GroupDeclaration main = new ServerConfigJsons.GroupDeclaration();
 		main.syncedFiles = Set.of();
 		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", tempDir.resolve("server"),
 				tempDir.resolve("groups"), Map.of("main", main), false, false, tempDir.resolve("host-generations/staging"), direct);
