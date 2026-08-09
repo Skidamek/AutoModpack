@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -53,7 +54,7 @@ public final class UpdateTransaction {
 	public List<Preservation> plannedPreservations;
 	public List<BaselineCapture> plannedBaselineCaptures;
 	public List<Conflict> plannedConflicts;
-	public Jsons.ClientGeneratedCopiesFields plannedGeneratedCopies;
+	public ClientStorageJsons.ClientGeneratedCopiesFields plannedGeneratedCopies;
 	public Status resultStatus;
 	public String resultOperation;
 	public String resultPath;

@@ -17,6 +17,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -125,7 +126,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private static List<Entry> loadEntries(ClientStorage storage) {
 		String activeId = "";
 		try {
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			activeId = state == null ? "" : state.modpackId;
 		} catch (IOException | RuntimeException e) {
 			LOGGER.warn("Could not read the active modpack state; showing installed records without an active marker", e);

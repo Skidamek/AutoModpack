@@ -24,6 +24,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -131,7 +132,7 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Builds a reviewable switch plan using only the stored generation and verified local objects. */
 	public UpdatePreview previewCachedSwitch() throws Exception {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Cached modpack target is unavailable");
-		Jsons.ClientGenerationStateFields active = storage.readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)) throw new IllegalArgumentException("Cached switch target is already active");
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			populateStoreFromCachedLocations(selectedTarget.flatTarget(), cache);
@@ -342,7 +343,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private void loadSelectedActiveProjection() throws Exception {
 		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
-		Jsons.ClientGenerationStateFields state = storage.readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return;
 		if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 			LOGGER.warn("Skipping active modpack load after preload because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
@@ -402,13 +403,13 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private RemovalPreparation prepareRemoval() throws Exception {
 		Jsons.ModpackContentFields installed = storedTarget();
-		Jsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState == null || !installed.modpackId.equals(activeState.modpackId)) throw new IOException("Active modpack generation state is missing");
 		Jsons.CompleteModpackContentFields completeFields = new ClientGenerationStore(storage).read(activeState.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing")).toFields();
-		Jsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(installed.modpackId), Jsons.ClientBaselineFields.class)
+		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(installed.modpackId), ClientStorageJsons.ClientBaselineFields.class)
 				.orElseGet(() -> {
-					Jsons.ClientBaselineFields empty = new Jsons.ClientBaselineFields();
+					ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
 					empty.modpackId = installed.modpackId;
 					return empty;
 				});
@@ -455,7 +456,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public RecoverySnapshot recoverySnapshot() throws IOException {
 		Jsons.ModpackContentFields installed = storedTarget();
-		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(recoveryDirectory(installed.modpackId));
+		ClientStorageJsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(recoveryDirectory(installed.modpackId));
 		List<RecoveryFile> archived = new ArrayList<>();
 		for (var entry : archive.entries) archived.add(new RecoveryFile(entry.logicalPath, entry.sha1, entry.size, entry.sourceGenerationId, entry.preservedAt));
 		archived.sort(RECOVERY_FILE_ORDER);
@@ -523,7 +524,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private String updateStateFingerprint(ApplyResult applyResult) {
 		String generationId;
 		try {
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			generationId = state == null ? "none" : state.generationId;
 		} catch (IOException e) {
 			LOGGER.warn("Cannot track rapid modpack restarts because active client state is unavailable", e);
@@ -936,7 +937,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private String installedGenerationId() throws IOException {
-		Jsons.ClientGenerationStateFields state = storage.readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		return state != null && selectedTarget != null && selectedTarget.manifest().modpackId().equals(state.modpackId) ? state.generationId : "";
 	}
 
@@ -1228,7 +1229,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private record RemovalPreparation(UpdatePlan plan, Jsons.CompleteModpackContentFields completeFields, Jsons.ModpackContentFields installed,
-			Jsons.ClientBaselineFields baseline, SelectionIntent expectedPriorIntent, Jsons.ClientConfigFieldsV3 plannedConfig,
+			ClientStorageJsons.ClientBaselineFields baseline, SelectionIntent expectedPriorIntent, Jsons.ClientConfigFieldsV3 plannedConfig,
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files) {
 		private RemovalPreparation {
 			files = Map.copyOf(files);

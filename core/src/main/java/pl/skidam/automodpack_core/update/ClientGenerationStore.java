@@ -16,6 +16,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -114,7 +115,7 @@ public final class ClientGenerationStore {
 	/** Reconstructs the active target from one validated generation record and the persisted selection intent. */
 	public Optional<SelectedModpackTarget> readActiveTarget(ClientPlatform platform) throws IOException {
 		Objects.requireNonNull(platform, "platform");
-		Jsons.ClientGenerationStateFields state = storage.readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return Optional.empty();
 		Jsons.CompleteModpackContentFields fields = readFields(state.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
@@ -246,7 +247,7 @@ public final class ClientGenerationStore {
 			if (previousId == null || newer(entry.getValue(), records.get(previousId))) newest.put(modpackId, entry.getKey());
 		}
 		Set<String> retained = new HashSet<>(newest.values());
-		Jsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState != null) {
 			GenerationRecord active = records.get(activeState.generationId);
 			if (active == null) throw new IOException("Active client generation record is missing: " + activeState.generationId);

@@ -23,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -240,7 +241,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateStoredClientState(UpdateTransaction transaction, GenerationRecord targetRecord) throws IOException {
-		Jsons.ClientGenerationStateFields state = context.storage().readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields state = context.storage().readActiveState();
 		if (state == null) return;
 		if (!ModpackId.isValid(state.modpackId)) throw new IOException("Active client state modpack ID is invalid");
 		if (!SHA1.matcher(state.generationId).matches())
@@ -472,7 +473,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private OwnershipLedger cleanupLedger() throws IOException {
-		Jsons.ClientGenerationStateFields state = context.storage().readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields state = context.storage().readActiveState();
 		if (state == null) return null;
 		GenerationRecord active = new ClientGenerationStore(context.storage()).read(state.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
@@ -741,15 +742,15 @@ public final class UpdateTransactionExecutor {
 	private void captureBaselines(UpdateTransaction transaction) throws IOException {
 		if (transaction.plannedBaselineCaptures.isEmpty()) return;
 		Path baselinePath = context.storage().baselineFile(transaction.modpackId);
-		Jsons.ClientBaselineFields baseline = readBaseline(baselinePath, transaction.modpackId);
-		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
-		for (Jsons.ClientBaselineFields.EntryFields entry : baseline.entries) entries.put(entry.logicalPath, entry);
+		ClientStorageJsons.ClientBaselineFields baseline = readBaseline(baselinePath, transaction.modpackId);
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
+		for (ClientStorageJsons.ClientBaselineFields.EntryFields entry : baseline.entries) entries.put(entry.logicalPath, entry);
 		boolean changed = false;
 		for (BaselineCapture capture : transaction.plannedBaselineCaptures) {
 			String logicalPath = capture.relativePath();
 			if (entries.containsKey(logicalPath)) continue;
 			Path source = resolve(capture.root(), capture.relativePath(), transaction);
-			Jsons.ClientBaselineFields.EntryFields entry = new Jsons.ClientBaselineFields.EntryFields();
+			ClientStorageJsons.ClientBaselineFields.EntryFields entry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
 			entry.logicalPath = logicalPath;
 			entry.baselineGenerationId = transaction.parentGenerationId == null ? "" : transaction.parentGenerationId;
 			if (capture.absent()) {
@@ -773,14 +774,14 @@ public final class UpdateTransactionExecutor {
 		ConfigTools.writeAtomic(baselinePath, baseline);
 	}
 
-	private Jsons.ClientBaselineFields readBaseline(Path path, String modpackId) throws IOException {
+	private ClientStorageJsons.ClientBaselineFields readBaseline(Path path, String modpackId) throws IOException {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			Jsons.ClientBaselineFields empty = new Jsons.ClientBaselineFields();
+			ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
 			empty.modpackId = modpackId;
 			return empty;
 		}
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Baseline state is not a regular file");
-		Jsons.ClientBaselineFields baseline = ConfigTools.read(path, Jsons.ClientBaselineFields.class).orElseThrow(() -> new IOException("Baseline state is empty"));
+		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(path, ClientStorageJsons.ClientBaselineFields.class).orElseThrow(() -> new IOException("Baseline state is empty"));
 		if (baseline.schemaVersion != 1 || !modpackId.equals(baseline.modpackId) || baseline.entries == null) throw new IOException("Baseline state identity is invalid");
 		return baseline;
 	}

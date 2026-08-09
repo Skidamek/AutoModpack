@@ -27,6 +27,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -180,7 +181,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private static GenerationRecord activeGeneration(String modpackId) {
 		try {
 			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			if (state == null || !modpackId.equals(state.modpackId)) return null;
 			return new ClientGenerationStore(storage).read(state.generationId).orElse(null);
 		} catch (IOException | RuntimeException e) {
@@ -538,7 +539,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private String historyGenerationId() throws IOException {
 		if (activeModpack) {
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			if (state == null || !modpackId.equals(state.modpackId)) throw new IOException("Active generation is unavailable");
 			return state.generationId;
 		}
@@ -560,7 +561,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private static boolean activeModpack(ClientStorage storage, String modpackId) {
 		try {
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			return state != null && modpackId.equals(state.modpackId);
 		} catch (IOException | RuntimeException e) {
 			return false;
