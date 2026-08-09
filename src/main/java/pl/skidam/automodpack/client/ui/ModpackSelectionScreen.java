@@ -424,7 +424,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 						(Runnable) () -> {
 							removalUpdater.close();
 							endManagement();
-						}, true, false);
+						}, true, false, Map.of());
 			} catch (Exception e) {
 				removalUpdater.close();
 				endManagement();

@@ -151,7 +151,7 @@ public class ModpackUpdater implements AutoCloseable {
 			restartAfterApply(applyResult);
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Cached modpack switch transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(storage.activeDirectory(), UpdateType.SELECT, changelogs).restart(false);
+			new ReLauncher(UpdateType.SELECT, changelogs).restart(false);
 		} finally {
 			close();
 		}
@@ -289,7 +289,7 @@ public class ModpackUpdater implements AutoCloseable {
 			}
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(storage.activeDirectory(), UpdateType.UPDATE, changelogs).restart(preload);
+			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			close();
 		} catch (Exception e) {
 			LOGGER.error("Error while initializing modpack updater", e);
@@ -482,7 +482,7 @@ public class ModpackUpdater implements AutoCloseable {
 		UpdateType updateType = applyResult.restartReasons().contains(RestartReason.SELECTED_MODPACK)
 				? UpdateType.SELECT
 				: fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
-		new ReLauncher(storage.activeDirectory(), updateType, changelogs).restart(false);
+		new ReLauncher(updateType, changelogs).restart(false);
 	}
 
 	private String updateStateFingerprint(ApplyResult applyResult) {
@@ -615,7 +615,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return ApplyStatus.APPLIED;
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(storage.activeDirectory(), UpdateType.UPDATE, changelogs).restart(preload);
+			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			return ApplyStatus.DEFERRED;
 		} catch (Exception e) {
 			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
