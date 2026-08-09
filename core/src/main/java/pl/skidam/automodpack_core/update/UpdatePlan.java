@@ -22,7 +22,8 @@ public record UpdatePlan(
 		Set<RestartReason> restartReasons,
 		List<Preservation> preservations,
 		List<BaselineCapture> baselineCaptures,
-		List<Conflict> conflicts) {
+		List<Conflict> conflicts,
+		List<NestedCopy> generatedCopies) {
 
 	public UpdatePlan {
 		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
@@ -32,22 +33,23 @@ public record UpdatePlan(
 		preservations = List.copyOf(preservations);
 		baselineCaptures = List.copyOf(baselineCaptures);
 		conflicts = List.copyOf(conflicts);
+		generatedCopies = List.copyOf(generatedCopies);
 	}
 
 	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
 			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, List.of(), List.of());
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, List.of(), List.of(), List.of(), List.of());
 	}
 
 	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
 			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, List.of());
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, List.of(), List.of(), List.of());
 	}
 
 	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
 			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations,
 			List<BaselineCapture> baselineCaptures) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, baselineCaptures, List.of());
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, baselineCaptures, List.of(), List.of());
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
@@ -143,7 +145,10 @@ public record UpdatePlan(
 
 	public record NestedCopy(String relativePath, String sha1, long size, Set<String> ids) {
 		public NestedCopy {
-			relativePath = LogicalPath.normalize(relativePath);
+			relativePath = LogicalPath.requireCanonical(relativePath);
+			if (sha1 == null || !sha1.matches("[0-9a-fA-F]{40}")) throw new IllegalArgumentException("Nested-copy SHA-1 is invalid");
+			sha1 = sha1.toLowerCase(Locale.ROOT);
+			if (size < 0) throw new IllegalArgumentException("Nested-copy size is invalid");
 			ids = stableSet(ids);
 		}
 	}
