@@ -8,8 +8,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Clock;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -118,7 +116,7 @@ public final class GenerationStore {
 
 	private static final CommitHook NOOP_HOOK = () -> {};
 	private static final CompactionDeleteHook NOOP_COMPACTION_DELETE_HOOK = path -> {};
-	private static final Map<Path, ReentrantLock> PUBLICATION_LOCKS = new ConcurrentHashMap<>();
+	private static final PublicationLockRegistry PUBLICATION_LOCKS = new PublicationLockRegistry();
 	private final Path root;
 	private final Path currentPath;
 	private final Path currentProjectionPath;
@@ -339,8 +337,7 @@ public final class GenerationStore {
 	}
 
 	private PublicationGuard acquirePublicationGuard() throws IOException {
-		ReentrantLock jvmLock = PUBLICATION_LOCKS.computeIfAbsent(root, ignored -> new ReentrantLock());
-		jvmLock.lock();
+		PublicationLockRegistry.LockLease jvmLock = PUBLICATION_LOCKS.acquire(root);
 		FileChannel channel = null;
 		try {
 			channel = FileChannel.open(publicationLockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
@@ -352,7 +349,7 @@ public final class GenerationStore {
 			} catch (IOException closeFailure) {
 				e.addSuppressed(closeFailure);
 			}
-			jvmLock.unlock();
+			jvmLock.close();
 			throw e;
 		}
 	}
@@ -984,11 +981,11 @@ public final class GenerationStore {
 	private record FileTotals(long count, long bytes) {}
 
 	private static final class PublicationGuard implements AutoCloseable {
-		private final ReentrantLock jvmLock;
+		private final PublicationLockRegistry.LockLease jvmLock;
 		private final FileChannel channel;
 		private final FileLock fileLock;
 
-		private PublicationGuard(ReentrantLock jvmLock, FileChannel channel, FileLock fileLock) {
+		private PublicationGuard(PublicationLockRegistry.LockLease jvmLock, FileChannel channel, FileLock fileLock) {
 			this.jvmLock = jvmLock;
 			this.channel = channel;
 			this.fileLock = fileLock;
@@ -1002,7 +999,7 @@ public final class GenerationStore {
 				try {
 					channel.close();
 				} finally {
-					jvmLock.unlock();
+					jvmLock.close();
 				}
 			}
 		}
