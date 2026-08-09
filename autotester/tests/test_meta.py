@@ -502,6 +502,20 @@ def test_legacy_bridge_disconnect_uses_full_client_lifecycle():
     assert source.index("/*minecraft.level.disconnect();") < source.index("minecraft.clearLevel(new TitleScreen());")
 
 
+def test_versioned_screen_legacy_tooltip_fallback_preserves_control_message():
+    source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/ui/versioned/VersionedScreen.java").read_text(encoding="utf-8")
+    modern_start = source.index("/*? > 1.19.2 {*/")
+    legacy_start = source.index("/*?} else {*/", modern_start)
+    legacy_end = source.index("*//*?}*/", legacy_start)
+    modern = source[modern_start:legacy_start]
+    legacy = source[legacy_start:legacy_end]
+
+    assert "button.setTooltip(Tooltip.create(tooltip));" in modern
+    assert "public static void setTooltip(Button button, Component tooltip)" in legacy
+    assert "setMessage(tooltip)" not in legacy
+    assert "Keep their existing message unchanged" in legacy
+
+
 def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     ctx = make_ctx()
     payloads = {"a" * 40: b"first", "b" * 40: b"second"}
