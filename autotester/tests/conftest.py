@@ -134,6 +134,11 @@ class FakeBridge:
                             {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True}],
                 "textFields": [],
             },
+            "removal_preview": {
+                "screenClass": "UpdatePreviewScreen",
+                "buttons": [{"id": 42, "text": "Remove", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
             "restart": {
                 "screenClass": "RestartScreen",
                 "buttons": [
@@ -158,7 +163,8 @@ class FakeBridge:
             "settings": {
                 "screenClass": "ModpackSelectionScreen",
                 "buttons": [{"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
-                            {"id": 13, "text": "Save", "enabled": True, "visible": True}],
+                            {"id": 13, "text": "Save", "enabled": True, "visible": True},
+                            *([{"id": 41, "text": "Remove", "enabled": True, "visible": True}] if self.selected_pack == "A" else [])],
                 "textFields": [],
             },
             "selection": {
@@ -240,8 +246,14 @@ class FakeBridge:
             self.screen = "settings"
         elif element_id == 8:
             self.screen = "multiplayer"
-        elif element_id == 9 or element_id == 11:
-            self.pending_pack = "A" if element_id == 9 else "B"
+        elif element_id == 9:
+            if self.selected_pack == "A":
+                self.screen = "settings"
+            else:
+                self.pending_pack = "A"
+                self.screen = "selection"
+        elif element_id == 11:
+            self.pending_pack = "B"
             self.screen = "selection"
         elif element_id == 10:
             self.screen = "manager"
@@ -259,6 +271,11 @@ class FakeBridge:
             self.screen = "patch_history"
         elif element_id == 16:
             self.screen = "restart"
+        elif element_id == 41:
+            self.screen = "removal_preview"
+        elif element_id == 42:
+            self._remove_active_pack()
+            self.screen = "title"
         return {"ok": True}
 
     def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
@@ -303,6 +320,29 @@ class FakeBridge:
         target = self.ctx.path("config/pack-shared-editable.txt")
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(overlay, target)
+
+    def _remove_active_pack(self) -> None:
+        active = self.ctx.game_dir / "automodpack" / "client" / "active"
+        if active.exists():
+            shutil.rmtree(active)
+        client = self.ctx.game_dir / "automodpack" / "client"
+        (client / "active-state.json").unlink(missing_ok=True)
+        client_config = self.ctx.game_dir / "automodpack" / "client-config.json"
+        try:
+            config = json.loads(client_config.read_text(encoding="utf-8")) if client_config.is_file() else {}
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            config = {}
+        config["selectedModpackId"] = ""
+        client_config.parent.mkdir(parents=True, exist_ok=True)
+        client_config.write_text(json.dumps(config), encoding="utf-8")
+        for rel, _content in self.ctx.scenario_files:
+            self.ctx.path(rel).unlink(missing_ok=True)
+        self._editable_overlay_path("A").unlink(missing_ok=True)
+
+    def _reset_client_generation(self) -> None:
+        self.secondary_pack = False
+        self.pending_pack = None
+        self.pack_b_files = []
 
     def _generation_fixture_files(self, index: int) -> list[tuple[Path, bytes]]:
         generations = self.ctx.scenario.get("serverFiles", {}).get("generations", [])

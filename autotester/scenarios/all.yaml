@@ -16,6 +16,7 @@ releaseGate:
     - generation-update
     - conflict-preservation
     - fresh-generation-deletion
+    - removal
     - secure-bootstrap
 
 flow:
@@ -477,6 +478,52 @@ flow:
     name: verify fresh-client current files are installed
     path: "${active_dir}/config/amp-autotest-alpha.txt"
     content: "amp-autotest-alpha-v2\n"
+  - do: disconnect
+    name: return from the server to the vanilla title screen before removal
+  - use: open_multiplayer
+  - do: click
+    name: open modpack settings for the installed Pack A
+    select: { text: Modpack settings }
+  - do: wait_for
+    name: show active Pack A management actions
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: Remove, enabled: true }
+  - do: screenshot
+    name: capture active Pack A removal settings
+    file: all-removal-settings
+  - do: click
+    name: open the Pack A removal review
+    select: { text: Remove }
+  - do: wait_for
+    name: show Pack A removal review
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Remove, enabled: true }
+  - do: screenshot
+    name: capture Pack A removal review
+    file: all-removal-review
+  - do: click
+    name: accept Pack A removal
+    select: { text: Remove }
+  - do: wait_for
+    name: return to title after Pack A removal
+    until: { screen: TitleScreen }
+  - do: assert
+    name: verify Pack A active state was removed
+    that: { file_gone: automodpack/client/active-state.json }
+  - do: assert
+    name: verify Pack A owned projection content was removed
+    that: { file_gone: "${active_dir}/config/amp-autotest-alpha.txt" }
+  - do: assert
+    name: verify Pack A editable overlay was removed
+    that: { file_gone: "automodpack/client/overlays/${bootstrap_modpack_id}/config/pack-shared-editable.txt" }
+  - do: assert_mod_fixture
+    name: verify Pack A removal preserved the unowned local mod
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
   - do: quit
     name: quit the release-gate client
 
