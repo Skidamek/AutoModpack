@@ -77,7 +77,7 @@ class ClientObjectStoreTest {
 	}
 
 	@Test
-	void refusesToLeaveHistoricalGenerationObjectsDangling() throws Exception {
+	void refusesToCollectObjectsRequiredByInstalledGenerationManifests() throws Exception {
 		ClientStorage storage = storage();
 		byte[] activeBytes = "active-object".getBytes(StandardCharsets.UTF_8);
 		byte[] historicalBytes = "historical-object".getBytes(StandardCharsets.UTF_8);
