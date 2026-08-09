@@ -13,7 +13,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -81,15 +81,15 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		this(modpackId, toNavigableMap(entries), digest(modpackId, entries));
 	}
 
-	public Jsons.OwnershipLedgerFields toFields() {
-		Jsons.OwnershipLedgerFields fields = new Jsons.OwnershipLedgerFields();
+	public GenerationJsons.OwnershipLedgerFields toFields() {
+		GenerationJsons.OwnershipLedgerFields fields = new GenerationJsons.OwnershipLedgerFields();
 		fields.modpackId = modpackId;
 		fields.entries = new ArrayList<>();
 		for (Entry entry : entries.values()) {
-			Jsons.OwnershipLedgerFields.EntryFields serialized = new Jsons.OwnershipLedgerFields.EntryFields();
+			GenerationJsons.OwnershipLedgerFields.EntryFields serialized = new GenerationJsons.OwnershipLedgerFields.EntryFields();
 			serialized.logicalPath = entry.logicalPath();
 			serialized.historicalHashes = entry.historicalHashes().stream()
-					.map(value -> new Jsons.OwnershipLedgerFields.ContentFields(value.sha1(), value.size())).toList();
+					.map(value -> new GenerationJsons.OwnershipLedgerFields.ContentFields(value.sha1(), value.size())).toList();
 			serialized.historicalGroupIds = new TreeSet<>(entry.historicalGroupIds());
 			serialized.firstPublishedGenerationId = entry.firstPublishedGenerationId();
 			serialized.lastPublishedGenerationId = entry.lastPublishedGenerationId();
@@ -100,13 +100,13 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		return fields;
 	}
 
-	public static OwnershipLedger fromFields(Jsons.OwnershipLedgerFields fields) {
+	public static OwnershipLedger fromFields(GenerationJsons.OwnershipLedgerFields fields) {
 		if (fields == null || fields.entries == null) throw new IllegalArgumentException("Ownership ledger is missing");
 		Map<String, Entry> entries = new TreeMap<>();
-		for (Jsons.OwnershipLedgerFields.EntryFields serialized : fields.entries) {
+		for (GenerationJsons.OwnershipLedgerFields.EntryFields serialized : fields.entries) {
 			if (serialized == null || serialized.historicalHashes == null) throw new IllegalArgumentException("Ownership ledger entry is incomplete");
 			Set<Content> hashes = new TreeSet<>(CONTENT_ORDER);
-			for (Jsons.OwnershipLedgerFields.ContentFields content : serialized.historicalHashes) {
+			for (GenerationJsons.OwnershipLedgerFields.ContentFields content : serialized.historicalHashes) {
 				if (content == null) throw new IllegalArgumentException("Ownership ledger content is incomplete");
 				hashes.add(new Content(content.sha1, content.size));
 			}

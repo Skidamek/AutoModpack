@@ -4,7 +4,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 
@@ -24,14 +24,14 @@ public record CatalogueSnapshot(GroupManifest manifest, String stateDigest) {
 		return new CatalogueSnapshot(manifest, GenerationIdentity.stateDigest(manifest));
 	}
 
-	public Jsons.CatalogueSnapshotFields toFields() {
-		Jsons.CatalogueSnapshotFields fields = new Jsons.CatalogueSnapshotFields();
+	public GenerationJsons.CatalogueSnapshotFields toFields() {
+		GenerationJsons.CatalogueSnapshotFields fields = new GenerationJsons.CatalogueSnapshotFields();
 		fields.stateDigest = stateDigest;
 		fields.catalogue = manifest.toFields();
 		return fields;
 	}
 
-	public static CatalogueSnapshot fromFields(Jsons.CatalogueSnapshotFields fields) {
+	public static CatalogueSnapshot fromFields(GenerationJsons.CatalogueSnapshotFields fields) {
 		if (fields == null || fields.catalogue == null) throw new IllegalArgumentException("Catalogue snapshot is missing");
 		return new CatalogueSnapshot(GroupManifestValidator.validate(fields.catalogue), fields.stateDigest);
 	}
