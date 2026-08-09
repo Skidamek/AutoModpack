@@ -25,7 +25,6 @@
     "core.ServerDataMixin",
     "core.MusicTrackerMixin",
     "core.JoinMultiplayerScreenMixin",
-    "core.OptionsMixin",
     "dev.MinecraftMixin",
     "dev.ResourceLoadStateTrackerMixin",
     "dev.GameRendererMixin"

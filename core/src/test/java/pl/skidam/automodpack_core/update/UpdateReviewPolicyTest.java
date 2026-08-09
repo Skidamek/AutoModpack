@@ -22,8 +22,13 @@ class UpdateReviewPolicyTest {
 	}
 
 	@Test
-	void explicitLocalPreferenceSuppressesOnlyTheReviewGate() {
-		assertFalse(UpdateReviewPolicy.requiresPlayerReview(true, null, NEXT_GENERATION, true, true));
+	void disabledReviewPreferenceSuppressesOnlyTheReviewGate() {
+		assertFalse(UpdateReviewPolicy.requiresPlayerReview(true, null, NEXT_GENERATION, true, false));
+	}
+
+	@Test
+	void enabledReviewPreferenceKeepsTheReviewGate() {
+		assertTrue(UpdateReviewPolicy.requiresPlayerReview(true, null, NEXT_GENERATION, true, true));
 	}
 
 	private static GenerationTarget target(String modpackId, String generationId) {
