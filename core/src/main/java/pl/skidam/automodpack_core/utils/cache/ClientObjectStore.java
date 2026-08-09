@@ -23,6 +23,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.GeneratedCopyState;
 import pl.skidam.automodpack_core.update.QuarantineArchive;
 import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -94,6 +95,13 @@ public final class ClientObjectStore {
 		}
 	}
 
+	/** A deterministic measurement of validated generated-copy state files. */
+	public record GeneratedCopyReport(long count, long bytes) {
+		public GeneratedCopyReport {
+			if (count < 0 || bytes < 0) throw new IllegalArgumentException("Generated-copy totals cannot be negative");
+		}
+	}
+
 	/** Measures all client state without deleting or writing anything. */
 	public static StorageReport measure(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
@@ -154,6 +162,21 @@ public final class ClientObjectStore {
 		return Set.copyOf(existing);
 	}
 
+	/** Validates all durable client state and all required CAS references without mutating storage. */
+	public static StorageReport validate(ClientStorage storage) throws IOException {
+		Objects.requireNonNull(storage, "storage");
+		ReferenceSet references = collectReferences(storage, null);
+		return measure(storage, references, true);
+	}
+
+	/** Measures generated-copy state after validating its pack, generation, and selection identities. */
+	public static GeneratedCopyReport measureGeneratedCopies(ClientStorage storage) throws IOException {
+		Objects.requireNonNull(storage, "storage");
+		FileTotals totals = new FileTotals(0, 0);
+		for (Path path : generatedCopyFiles(storage)) totals = totals.plus(fileTotals(List.of(path)));
+		return new GeneratedCopyReport(totals.count(), totals.bytes());
+	}
+
 	private static StorageReport measure(ClientStorage storage, ReferenceSet references) throws IOException {
 		return measure(storage, references, false);
 	}
@@ -211,6 +234,7 @@ public final class ClientObjectStore {
 		}
 		collectBaselines(storage, retained);
 		collectOverlays(storage, retained);
+		collectGeneratedCopies(storage, retained);
 		collectRecovery(storage, retained);
 		collectQuarantine(storage, retained);
 		collectTransaction(storage, retained);
@@ -254,6 +278,18 @@ public final class ClientObjectStore {
 					if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.addOptional(HashUtils.getHash(file), Files.size(file), "client overlay");
 				}
 			}
+		}
+	}
+
+	private static void collectGeneratedCopies(ClientStorage storage, ReferenceSet retained) throws IOException {
+		for (Path path : generatedCopyFiles(storage)) {
+			Path generationDirectory = path.getParent();
+			Path packDirectory = generationDirectory.getParent();
+			String modpackId = packDirectory.getFileName().toString();
+			String generationId = generationDirectory.getFileName().toString();
+			String selectionDigest = path.getFileName().toString().substring(0, 40);
+			GeneratedCopyState state = GeneratedCopyState.read(storage, modpackId, generationId, selectionDigest);
+			for (GeneratedCopyState.Entry entry : state.entries()) retained.addOptional(entry.sha1(), entry.size(), "generated-copy state");
 		}
 	}
 
@@ -390,6 +426,39 @@ public final class ClientObjectStore {
 			}
 			return List.copyOf(result);
 		}
+	}
+
+	private static List<Path> generatedCopyFiles(ClientStorage storage) throws IOException {
+		Path root = storage.generatedCopiesDirectory();
+		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
+		ensureDirectory(root, "client generated-copy state");
+		List<Path> result = new ArrayList<>();
+		try (Stream<Path> packs = Files.list(root)) {
+			for (Path pack : packs.sorted().toList()) {
+				ensureNoSymbolicLink(pack, "client generated-copy state");
+				if (!Files.isDirectory(pack, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + pack);
+				requireModpackId(pack.getFileName().toString(), "client generated-copy directory");
+				try (Stream<Path> generations = Files.list(pack)) {
+					for (Path generation : generations.sorted().toList()) {
+						ensureNoSymbolicLink(generation, "client generated-copy state");
+						if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
+						String generationId = generation.getFileName().toString();
+						if (!SHA1.matcher(generationId).matches() || !generationId.equals(generationId.toLowerCase(Locale.ROOT)))
+							throw new IOException("Client generated-copy directory is not canonical: " + generationId);
+						try (Stream<Path> states = Files.list(generation)) {
+							for (Path state : states.sorted().toList()) {
+								ensureNoSymbolicLink(state, "client generated-copy state");
+								String name = state.getFileName().toString();
+								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || !name.matches("[0-9a-f]{40}\\.json"))
+									throw new IOException("Client generated-copy state contains an unsupported entry: " + state);
+								result.add(state);
+							}
+						}
+					}
+				}
+			}
+		}
+		return List.copyOf(result);
 	}
 
 	private static FileTotals fileTotals(List<Path> paths) throws IOException {
