@@ -5,14 +5,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 class LocalModArchiveTest {
@@ -34,7 +39,7 @@ class LocalModArchiveTest {
 		LocalModArchive.Snapshot archived = LocalModArchive.snapshot(storage);
 		assertEquals(1, archived.entries().size());
 		Files.writeString(storage.localModArchivePayload(archived.entries().get(0).entryId()), "tampered", StandardCharsets.UTF_8);
-		assertThrows(java.io.IOException.class, () -> LocalModArchive.snapshot(storage));
+		assertThrows(IOException.class, () -> LocalModArchive.snapshot(storage));
 	}
 
 	@Test
@@ -47,11 +52,41 @@ class LocalModArchiveTest {
 			LocalModArchive.archive(storage, candidate.entries(), cache);
 		}
 		Files.writeString(source, "different", StandardCharsets.UTF_8);
-		assertThrows(java.io.IOException.class, () -> LocalModArchive.restore(storage, candidate.entries().get(0).entryId()));
+		assertThrows(IOException.class, () -> LocalModArchive.restore(storage, candidate.entries().get(0).entryId()));
 		assertEquals(1, LocalModArchive.snapshot(storage).entries().size());
 		Files.writeString(source, "original", StandardCharsets.UTF_8);
 		LocalModArchive.restore(storage, candidate.entries().get(0).entryId());
 		assertTrue(Files.exists(source));
+		assertTrue(LocalModArchive.snapshot(storage).entries().isEmpty());
+	}
+
+	@Test
+	void rejectsManifestMetadataWithAnUnrelatedEntryId() throws Exception {
+		ClientStorage storage = storage();
+		writeMod(storage, "original.jar", "original");
+		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			LocalModArchive.archive(storage, LocalModArchive.candidates(storage, null, cache).entries(), cache);
+		}
+		ClientStorageJsons.ClientLocalModArchiveFields manifest = ConfigTools.read(storage.localModArchiveManifest(), ClientStorageJsons.ClientLocalModArchiveFields.class).orElseThrow();
+		manifest.entries.get(0).originalPath = "mods/redirected.jar";
+		ConfigTools.writeAtomic(storage.localModArchiveManifest(), manifest);
+		assertThrows(IOException.class, () -> LocalModArchive.snapshot(storage));
+	}
+
+	@Test
+	void archiveAndRestoreLeaveOnlyTheCommittedFile() throws Exception {
+		ClientStorage storage = storage();
+		Path source = writeMod(storage, "transaction.jar", "transaction");
+		LocalModArchive.ArchiveEntry candidate;
+		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			candidate = LocalModArchive.candidates(storage, null, cache).entries().get(0);
+			LocalModArchive.archive(storage, List.of(candidate), cache);
+		}
+		assertFalse(Files.exists(source));
+		assertTrue(SmartFileUtils.isValidFile(storage.localModArchivePayload(candidate.entryId()), candidate.size(), candidate.sha1()));
+		LocalModArchive.restore(storage, candidate.entryId());
+		assertTrue(SmartFileUtils.isValidFile(source, candidate.size(), candidate.sha1()));
+		assertFalse(Files.exists(storage.localModArchivePayload(candidate.entryId())));
 		assertTrue(LocalModArchive.snapshot(storage).entries().isEmpty());
 	}
 
@@ -78,7 +113,7 @@ class LocalModArchiveTest {
 		Path payload = storage.localModArchivePayload(archived.entryId());
 		Files.delete(payload);
 		Files.createSymbolicLink(payload, outside);
-		assertThrows(java.io.IOException.class, () -> LocalModArchive.snapshot(storage));
+		assertThrows(IOException.class, () -> LocalModArchive.snapshot(storage));
 		assertFalse(Files.exists(real));
 	}
 

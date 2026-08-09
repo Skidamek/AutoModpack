@@ -32,7 +32,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private final Screen parent;
 	private final ClientStorage storage;
 	private final List<Entry> entries;
-	private final boolean hasLocalModArchive;
+	private boolean hasLocalModArchive;
 	private int page;
 
 	public InstalledModpacksScreen(Screen parent) {
@@ -88,12 +88,19 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		int actionWidth = actionButtonWidth(PANEL_WIDTH, actionCount);
 		int actionY = this.height - 28;
 		if (hasLocalModArchive) this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, 0), actionY, actionWidth, 20,
-				VersionedText.translatable("automodpack.management.localMods"), press -> ScreenImpl.setScreen(new LocalModArchiveScreen(this, storage, () -> {}))));
+				VersionedText.translatable("automodpack.management.localMods"), press -> ScreenImpl.setScreen(new LocalModArchiveScreen(this, storage, this::refreshLocalModArchive))));
 		int storageIndex = hasLocalModArchive ? 1 : 0;
 		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, storageIndex), actionY, actionWidth, 20,
 				VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, storage))));
 		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, actionCount - 1), actionY, actionWidth, 20,
 				VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
+	}
+
+	private void refreshLocalModArchive() {
+		boolean refreshed = hasLocalModArchive(storage);
+		if (refreshed == hasLocalModArchive) return;
+		hasLocalModArchive = refreshed;
+		rebuild();
 	}
 
 	private void open(Entry entry) {
