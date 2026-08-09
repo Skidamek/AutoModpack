@@ -67,12 +67,14 @@ class FakeBridge:
     def __init__(self, ctx: Context):
         self.ctx = ctx
         self.screen = "title"
+        self.rendered_screen = self.screen
         self.fingerprint: str | None = None
         self.synced = False
         self.exited = False
         self.clicks: list[int] = []
         self.typed: dict[int, str] = {}
         self.screenshots: list[str] = []
+        self.rendered_screens: dict[str, str] = {}
         self.secondary_pack = False
         self.selected_pack = "A"
         self.pending_pack: str | None = None
@@ -88,6 +90,9 @@ class FakeBridge:
         self.baseline_snapshots: dict[Path, bytes] = {}
 
     # --- snapshot ---------------------------------------------------------
+    def render_frame(self) -> None:
+        self.rendered_screen = self.screen
+
     def gui(self, timeout: float = 30) -> dict:
         snapshots = {
             "title": {"screenClass": "TitleScreen", "title": "Title Screen", "buttons": [{"id": 6, "text": "Singleplayer", "enabled": True, "visible": True}, {"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}], "textFields": []},
@@ -319,6 +324,8 @@ class FakeBridge:
         return {"ok": True}
 
     def screenshot(self, name: str, timeout: float = 30) -> dict:
+        self.render_frame()
+        self.rendered_screens[name] = self.rendered_screen
         relative = Path("automodpack") / "autotest" / "screenshots" / f"{name}.png"
         path = self.ctx.game_dir / relative
         path.parent.mkdir(parents=True, exist_ok=True)
