@@ -28,7 +28,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.config.ClientOptionsPreference;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -629,7 +628,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				updater = new ModpackUpdater(target, null, null, storage);
 				UpdatePreview preview = updater.previewCachedSwitch();
 				ModpackUpdater finalUpdater = updater;
-				if (ClientOptionsPreference.skipReview()) {
+				if (clientConfig != null && !clientConfig.reviewUpdates) {
 					new ScreenManager().waiting();
 					DownloadClient.NET_EXECUTOR.execute(() -> executeCachedSwitch(finalUpdater));
 				} else {
