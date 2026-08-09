@@ -89,7 +89,8 @@ public final class ClientStorage {
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(this.gameDirectory);
 		this.dataDirectory = dataLocation.root();
 		this.sharedDataDirectory = dataLocation.shared();
-		this.objectsDirectory = dataDirectory.resolve("objects").normalize();
+		DataRootResolver.Layout dataLayout = dataLocation.layout();
+		this.objectsDirectory = dataLayout.objectsDirectory();
 		this.recordsDirectory = this.clientDirectory.resolve(clientRecordsDir.getFileName()).normalize();
 		this.overlaysDirectory = this.clientDirectory.resolve(clientOverlaysDir.getFileName()).normalize();
 		this.baselinesDirectory = this.clientDirectory.resolve(clientBaselinesDir.getFileName()).normalize();
@@ -107,11 +108,11 @@ public final class ClientStorage {
 		this.bootstrapFile = this.gameDirectory.resolve(Constants.bootstrapFile).normalize();
 		this.recoveryDirectory = this.clientDirectory.resolve(clientRecoveryDir.getFileName()).normalize();
 		this.quarantineDirectory = this.clientDirectory.resolve(clientQuarantineDir.getFileName()).normalize();
-		this.fileMetadataDirectory = dataDirectory.resolve("file-metadata").normalize();
-		this.modMetadataDirectory = dataDirectory.resolve("mod-metadata").normalize();
-		this.packsDirectory = dataDirectory.resolve("packs").normalize();
-		this.knownHostsFile = dataDirectory.resolve("known-hosts.json").normalize();
-		this.knownHostsLockFile = dataDirectory.resolve("known-hosts.json.lock").normalize();
+		this.fileMetadataDirectory = dataLayout.fileMetadataDirectory();
+		this.modMetadataDirectory = dataLayout.modMetadataDirectory();
+		this.packsDirectory = dataLayout.packsDirectory();
+		this.knownHostsFile = dataLayout.knownHostsFile();
+		this.knownHostsLockFile = dataLayout.knownHostsLockFile();
 		validateLayout();
 	}
 
@@ -219,6 +220,10 @@ public final class ClientStorage {
 
 	public Path modMetadataDirectory() {
 		return modMetadataDirectory;
+	}
+
+	public Path packsDirectory() {
+		return packsDirectory;
 	}
 
 	public Path knownHostsFile() {
@@ -367,8 +372,8 @@ public final class ClientStorage {
 	public void ensureRoots() throws IOException {
 		ensureDirectory(clientDirectory, "client state root");
 		ensureDirectory(objectsDirectory, "client object store");
-		ensureDirectory(dataDirectory.resolve("file-metadata"), "file metadata cache");
-		ensureDirectory(dataDirectory.resolve("mod-metadata"), "mod metadata cache");
+		ensureDirectory(fileMetadataDirectory, "file metadata cache");
+		ensureDirectory(modMetadataDirectory, "mod metadata cache");
 		ensureDirectory(packsDirectory, "shared pack state");
 		ensureDirectory(recordsDirectory, "client generation records");
 		ensureDirectory(overlaysDirectory, "client overlays");

@@ -594,7 +594,7 @@ public class Commands {
 				Set<String> retainedGenerationIds = new TreeSet<>();
 				for (GenerationHistoryEntry entry : modpackExecutor.technicalHistory()) retainedGenerationIds.add(entry.metadata().generationId());
 				Path serverRoot = SmartFileUtils.CWD.resolve(serverDir).normalize();
-				Path objectRoot = DataRootResolver.resolve(SmartFileUtils.CWD).root().resolve("objects").normalize();
+				Path objectRoot = DataRootResolver.resolve(SmartFileUtils.CWD).layout().objectsDirectory();
 				Set<String> clientObjectPins = ClientObjectStore.existingReferencedHashes(ClientStorage.fromGameDirectory(SmartFileUtils.CWD));
 				GenerationStore.CollectionResult result = new GenerationStore(serverRoot, objectRoot).collectUnreachableObjects(retainedGenerationIds, clientObjectPins);
 				send(context, "Generation objects collected", ChatFormatting.GREEN, false);
