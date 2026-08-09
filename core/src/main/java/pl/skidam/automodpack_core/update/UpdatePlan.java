@@ -36,22 +36,6 @@ public record UpdatePlan(
 		generatedCopies = List.copyOf(generatedCopies);
 	}
 
-	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
-			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, List.of(), List.of(), List.of(), List.of());
-	}
-
-	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
-			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, List.of(), List.of(), List.of());
-	}
-
-	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
-			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations,
-			List<BaselineCapture> baselineCaptures) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, baselineCaptures, List.of(), List.of());
-	}
-
 	private static <T> Set<T> stableSet(Set<T> values) {
 		return Collections.unmodifiableSet(new LinkedHashSet<>(values));
 	}
