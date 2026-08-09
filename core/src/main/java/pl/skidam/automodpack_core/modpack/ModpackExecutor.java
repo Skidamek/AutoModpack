@@ -37,6 +37,7 @@ public class ModpackExecutor {
 	private final Path generationRoot;
 	private final Path patchNotesFile;
 	private final GenerationStore generationStore;
+	private final DataRootResolver.Layout dataLayout;
 	private final CandidateScan candidateScan;
 
 	public ModpackExecutor() {
@@ -44,7 +45,7 @@ public class ModpackExecutor {
 	}
 
 	public ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot) {
-		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).root().resolve("objects")), new ModpackCandidateScanner()::scan,
+		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).layout().objectsDirectory()), new ModpackCandidateScanner()::scan,
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()));
 	}
@@ -56,6 +57,7 @@ public class ModpackExecutor {
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
 		this.patchNotesFile = this.generationRoot.resolve(serverPatchNotesFile.getFileName()).normalize();
 		this.generationStore = Objects.requireNonNull(generationStore);
+		this.dataLayout = new DataRootResolver.Layout(this.generationStore.objectRoot().getParent());
 		this.candidateScan = Objects.requireNonNull(candidateScan);
 		this.creationExecutor = Objects.requireNonNull(creationExecutor);
 	}
@@ -256,9 +258,8 @@ public class ModpackExecutor {
 		validateConfiguration();
 		prepareDirectories();
 		String modpackId = previous.map(snapshot -> ModpackId.requireValid(snapshot.record().manifest().modpackId())).orElseGet(ModpackId::generate);
-		Path cacheRoot = generationStore.objectRoot().getParent();
-		try (FileMetadataCache fileMetadataCache = FileMetadataCache.open(cacheRoot.resolve("file-metadata"));
-				ModFileCache modFileCache = ModFileCache.open(cacheRoot.resolve("mod-metadata"))) {
+		try (FileMetadataCache fileMetadataCache = FileMetadataCache.open(dataLayout.fileMetadataDirectory());
+				ModFileCache modFileCache = ModFileCache.open(dataLayout.modMetadataDirectory())) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
 					LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
 					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(serverStagingDir.getFileName()), creationExecutor,

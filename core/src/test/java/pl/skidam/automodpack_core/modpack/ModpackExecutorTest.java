@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
@@ -113,6 +114,41 @@ class ModpackExecutorTest {
 		} finally {
 			release.countDown();
 			operationExecutor.shutdownNow();
+			executor.stop();
+			snapshot.restore();
+		}
+	}
+
+	@Test
+	void repeatedPreviewsReuseInjectedDataLayoutWithoutResolvingServerRoot() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Path dataRoot = tempDir.resolve("selected-data");
+		Path invalidPinnedRoot = tempDir.resolve("invalid-pinned-root");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
+		Files.writeString(invalidPinnedRoot, "not a directory", StandardCharsets.UTF_8);
+		Files.createDirectories(server.resolve("automodpack"));
+		Jsons.DataRootFields marker = new Jsons.DataRootFields();
+		marker.root = invalidPinnedRoot.toString();
+		ConfigTools.writeAtomic(server.resolve("automodpack/data-root.json"), marker);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		Constants.serverConfig = config();
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, dataRoot.resolve("objects")), new ModpackCandidateScanner()::scan,
+				creation);
+		try {
+			assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview());
+			assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview());
+			assertTrue(Files.isDirectory(dataRoot.resolve("file-metadata")));
+			assertTrue(Files.isDirectory(dataRoot.resolve("mod-metadata")));
+		} finally {
 			executor.stop();
 			snapshot.restore();
 		}

@@ -381,7 +381,7 @@ public final class ClientObjectStore {
 	private static FileTotals metadataTotals(ClientStorage storage) throws IOException {
 		FileTotals total = fileTotals(regularFiles(storage.fileMetadataDirectory(), "client file metadata"));
 		total = total.plus(fileTotals(regularFiles(storage.modMetadataDirectory(), "client mod metadata")));
-		total = total.plus(fileTotals(regularFiles(storage.dataDirectory().resolve("packs"), "client pack metadata")));
+		total = total.plus(fileTotals(regularFiles(storage.packsDirectory(), "client pack metadata")));
 		for (Path file : List.of(storage.stateFile(), storage.selectionFile(), storage.clientConfigFile(), storage.restartLoopStateFile(), storage.modpackContentTempFile()))
 			if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) total = total.plus(fileTotals(List.of(ensureRegular(file, "client metadata"))));
 		return total;
