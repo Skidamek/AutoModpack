@@ -15,6 +15,7 @@ releaseGate:
     - pack-switching
     - generation-update
     - conflict-preservation
+    - quarantine-restoration
     - fresh-generation-deletion
     - removal
     - secure-bootstrap
@@ -364,6 +365,119 @@ flow:
   - do: assert
     name: verify Pack B payload is gone after returning to Pack A
     that: { file_gone: "${active_dir}/config/pack-b.txt" }
+
+  # Publish a newer record for the same Pack B identity without the conflicting
+  # mod. Its old quarantine is now safe to restore because the active target no
+  # longer owns the source path.
+  - do: stage_modpack
+    name: stage Pack B v2 without the conflicting mod
+    recordOnly: true
+    packId: packbbb
+    packName: Pack B
+    patchNotes: "Pack B v2 removes the incompatible mod."
+    files:
+      - { path: config/pack-b.txt, content: "pack-b-v2\n" }
+      - { path: config/pack-shared-editable.txt, content: "pack-b-v2-default\n", editable: true }
+  - do: disconnect
+    name: leave Pack A before the safe quarantine restore switch
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: click
+    name: open the newest Pack B record
+    select: { text: Pack B }
+  - do: click
+    name: review the Pack A to Pack B v2 switch
+    select: { text: Review pack switch }
+  - do: wait_for
+    name: show Pack B v2 switch preview
+    until: { element: { text: Update, enabled: true } }
+  - do: click
+    name: accept the Pack B v2 switch
+    select: { text: Update }
+  - do: wait_for
+    name: wait for Pack B v2 restart
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart into Pack B v2
+    select: { role: button, index: 1 }
+  - do: wait_client_exit
+    name: wait for Pack B v2 restart
+  - do: launch_client
+    name: relaunch Pack B v2 without reconnecting to the Pack A server
+  - do: wait_bridge
+    name: wait for the offline Pack B v2 bridge
+  - use: open_multiplayer
+  - do: click
+    name: open Pack B v2 settings directly from multiplayer
+    select: { text: Modpack settings }
+  - do: wait_for
+    name: show Pack B quarantine action
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: Quarantine, enabled: true }
+  - do: screenshot
+    name: capture Pack B quarantine action
+    file: all-quarantine-settings
+  - do: click
+    name: open the quarantine archive
+    select: { text: Quarantine }
+  - do: wait_for
+    name: show the safe quarantine restore action
+    until:
+      all:
+        - screen: QuarantineArchiveScreen
+        - element: { text: Restore, enabled: true }
+  - do: screenshot
+    name: capture the quarantine restore screen
+    file: all-quarantine-restore
+  - do: click
+    name: restore the no-longer-owned local conflict
+    select: { text: Restore }
+  - do: wait_file
+    name: wait for the restored local mod
+    path: mods/amp-autotest-conflict.jar
+  - do: assert_mod_fixture
+    name: verify quarantine restore returned the original local mod
+    path: mods/amp-autotest-conflict.jar
+    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
+  - do: assert
+    name: verify the restored quarantine record was consumed
+    that: { file_gone: automodpack/client/quarantine/packbbb/conflicts/fake-conflict/payload }
+  - do: click
+    name: return from quarantine to Pack B settings
+    select: { text: Back }
+  - do: wait_for
+    name: return to Pack B settings after restore
+    until: { screen: ModpackSelectionScreen }
+  - do: click
+    name: return to the installed pack manager
+    select: { text: Pack manager }
+  - do: click
+    name: open Pack A before the published update flow
+    select: { text: Pack A }
+  - do: click
+    name: review the Pack B v2 to Pack A switch
+    select: { text: Review pack switch }
+  - do: wait_for
+    name: show the return to Pack A preview
+    until: { element: { text: Update, enabled: true } }
+  - do: click
+    name: accept the return to Pack A
+    select: { text: Update }
+  - do: wait_for
+    name: wait for return to Pack A restart
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart into Pack A before the generation update
+    select: { role: button, index: 1 }
+  - do: wait_client_exit
+    name: wait for return to Pack A restart
+  - use: rejoin
+  - do: assert_mod_fixture
+    name: verify the restored local mod remains unowned after switching back
+    path: mods/amp-autotest-conflict.jar
+    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
 
   - do: publish_server_generation
     name: publish changed and removed files with new patch notes

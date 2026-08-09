@@ -278,11 +278,11 @@ def test_release_gate_flow(make_ctx):
         {"modId": "amp_autotest_unowned", "version": "1.0.0-local-unowned", "marker": "unowned-local"}, ctx.target.minecraft,
     )
     quarantine = ctx.game_dir / "automodpack/client/quarantine/packbbb/conflicts/fake-conflict/payload"
+    assert not quarantine.exists()
     assert_valid_mod_fixture(
-        quarantine.read_bytes(),
+        (ctx.game_dir / "mods/amp-autotest-conflict.jar").read_bytes(),
         {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"}, ctx.target.minecraft,
     )
-    assert not (ctx.game_dir / "mods/amp-autotest-conflict.jar").exists()
 
 
 def test_scenarios_only_reference_known_verbs():

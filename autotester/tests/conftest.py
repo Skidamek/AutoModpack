@@ -82,6 +82,7 @@ class FakeBridge:
         self.history_parent = "restart"
         self.dependency = False
         self.conflict = False
+        self.quarantine_restored = False
 
     # --- snapshot ---------------------------------------------------------
     def gui(self, timeout: float = 30) -> dict:
@@ -164,6 +165,7 @@ class FakeBridge:
                 "screenClass": "ModpackSelectionScreen",
                 "buttons": [{"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
                             {"id": 13, "text": "Save", "enabled": True, "visible": True},
+                            *([{"id": 43, "text": "Quarantine", "enabled": True, "visible": True}] if self._quarantine_available() else []),
                             *([{"id": 41, "text": "Remove", "enabled": True, "visible": True}] if self.selected_pack == "A" else [])],
                 "textFields": [],
             },
@@ -184,7 +186,13 @@ class FakeBridge:
                             {"id": 16, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
-            "ingame": {"screenClass": None, "buttons": [], "textFields": []},
+            "quarantine": {
+                "screenClass": "QuarantineArchiveScreen",
+                "buttons": [{"id": 44, "text": "Restore", "enabled": not self.quarantine_restored, "visible": True},
+                            {"id": 45, "text": "Back", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "ingame": {"screenClass": None, "buttons": [{"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}], "textFields": []},
         }
         snapshot = snapshots[self.screen]
         if self.screen == "preparing":
@@ -276,6 +284,13 @@ class FakeBridge:
         elif element_id == 42:
             self._remove_active_pack()
             self.screen = "title"
+        elif element_id == 43:
+            self.screen = "quarantine"
+        elif element_id == 44:
+            self._restore_quarantine()
+            self.screen = "quarantine"
+        elif element_id == 45:
+            self.screen = "settings"
         return {"ok": True}
 
     def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
@@ -417,15 +432,38 @@ class FakeBridge:
             server_secrets.write_text(json.dumps({"secrets": {"fake-player": {"secret": secret, "timestamp": 1}}}))
         self.synced = True
         self.update_available = False
-        if self.selected_pack == "B" and self.ctx.vars.get("same_path_conflict_fixture"):
-            from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
-
+        if self.selected_pack == "B" and self._pack_b_owns_conflict() and not self.quarantine_restored:
             payload = self.ctx.game_dir / "automodpack" / "client" / "quarantine" / "packbbb" / "conflicts" / "fake-conflict" / "payload"
             payload.parent.mkdir(parents=True, exist_ok=True)
             payload.write_bytes(valid_mod_jar_bytes(self.ctx.vars["same_path_conflict_fixture"], self.ctx.target.minecraft))
             source = self.ctx.path(self.ctx.vars["same_path_conflict_path"])
             source.unlink(missing_ok=True)
         self._write_manifest()
+
+    def _conflict_path(self) -> str | None:
+        value = self.ctx.vars.get("same_path_conflict_path")
+        return str(value) if value else None
+
+    def _pack_b_owns_conflict(self) -> bool:
+        conflict_path = self._conflict_path()
+        return conflict_path is not None and any(str(rel) == conflict_path for rel, _content in self.pack_b_files)
+
+    def _quarantine_payload_path(self) -> Path:
+        return self.ctx.game_dir / "automodpack" / "client" / "quarantine" / "packbbb" / "conflicts" / "fake-conflict" / "payload"
+
+    def _quarantine_available(self) -> bool:
+        return self.selected_pack == "B" and self._quarantine_payload_path().is_file()
+
+    def _restore_quarantine(self) -> None:
+        payload = self._quarantine_payload_path()
+        conflict_path = self._conflict_path()
+        if not payload.is_file() or conflict_path is None:
+            raise AssertionError("fake quarantine restore requested without an available conflict payload")
+        target = self.ctx.path(conflict_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(payload, target)
+        shutil.rmtree(payload.parent, ignore_errors=False)
+        self.quarantine_restored = True
 
     def _manager_buttons(self) -> list[dict]:
         if not self.secondary_pack:
