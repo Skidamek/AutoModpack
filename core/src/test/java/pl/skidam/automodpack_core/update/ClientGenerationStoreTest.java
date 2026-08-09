@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.update;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -22,9 +23,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 
 class ClientGenerationStoreTest {
 	private static final String FIRST_PACK = "abc1234";
@@ -56,6 +59,31 @@ class ClientGenerationStoreTest {
 		assertFalse(Files.exists(storage.generationDirectory(middle.metadata().generationId())));
 		assertEquals(4, result.generationRecordCountBefore());
 		assertEquals(3, result.generationRecordCountAfter());
+	}
+
+	@Test
+	void compactionCollectsReplacedObjectButPreservesHistoricalLedgerMetadata() throws Exception {
+		ClientStorage storage = storage();
+		String oldContent = "old-object";
+		String currentContent = "current-object";
+		String oldHash = store(storage, oldContent);
+		String currentHash = store(storage, currentContent);
+		GenerationRecord old = record(FIRST_PACK, oldHash, oldContent.getBytes(StandardCharsets.UTF_8).length, Instant.parse("2026-01-01T00:00:00Z"), null);
+		GenerationRecord current = record(FIRST_PACK, currentHash, currentContent.getBytes(StandardCharsets.UTF_8).length, Instant.parse("2026-01-02T00:00:00Z"), old);
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		generations.write(old);
+		generations.write(current);
+		storage.writeActiveState(FIRST_PACK, current.metadata().generationId());
+
+		ClientGenerationStore.CompactionResult result = generations.compact();
+
+		assertEquals(1, result.objectCollection().deletedObjectCount());
+		assertFalse(Files.exists(storage.objectsDirectory().resolve(oldHash)));
+		assertTrue(Files.exists(storage.objectsDirectory().resolve(currentHash)));
+		assertDoesNotThrow(() -> ClientObjectStore.validate(storage));
+		GenerationRecord retained = generations.read(current.metadata().generationId()).orElseThrow();
+		assertTrue(retained.ownershipLedger().entries().get("mods/test.jar").historicalHashes().stream()
+				.anyMatch(content -> content.sha1().equals(oldHash) && content.size() == oldContent.getBytes(StandardCharsets.UTF_8).length));
 	}
 
 	@Test
@@ -181,7 +209,13 @@ class ClientGenerationStoreTest {
 	}
 
 	private ClientStorage storage() throws IOException {
-		ClientStorage storage = ClientStorage.fromGameDirectory(temporaryDirectory.resolve("game"));
+		Path game = temporaryDirectory.resolve("game");
+		Files.createDirectories(game.resolve("automodpack"));
+		StorageJsons.DataRootFields dataRoot = new StorageJsons.DataRootFields();
+		dataRoot.root = temporaryDirectory.resolve("data").toString();
+		dataRoot.shared = false;
+		ConfigTools.writeAtomic(game.resolve("automodpack/data-root.json"), dataRoot);
+		ClientStorage storage = ClientStorage.fromGameDirectory(game);
 		storage.ensureRoots();
 		Files.createDirectories(storage.modsDirectory());
 		return storage;
