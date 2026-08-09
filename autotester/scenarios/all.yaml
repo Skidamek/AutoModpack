@@ -137,6 +137,7 @@ flow:
     timeout: 300s
   - do: wait_generation
     name: wait for the committed bootstrapped generation
+    patchNotes: "Initial release: core content and optional client groups."
     timeout: 300s
   - do: assert_authenticated_secret
     name: verify authenticated login persisted the server-issued secret
@@ -373,6 +374,7 @@ flow:
     that: { file_gone: "${active_dir}/config/amp-autotest-gamma.cfg" }
   - do: wait_generation
     name: wait for the committed changed generation
+    patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
     timeout: 300s
   - do: assert_generation
     name: verify the published generation and latest patch notes

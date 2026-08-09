@@ -445,6 +445,24 @@ def test_wait_generation_requires_committed_state_and_matching_record(make_ctx):
     wait_generation(ctx, {"timeout": "1s", "poll": "1ms"})
 
 
+def test_wait_generation_requires_expected_patch_notes(make_ctx):
+    from automodpack_autotester.engine.steps_io import wait_generation
+
+    ctx = make_ctx()
+    generation_id = "b" * 40
+    record = ctx.game_dir / "automodpack/client/records" / generation_id / "manifest.json"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({"modpackId": "packaaa", "generation": {"generationId": generation_id, "patchNotes": "stale"}}), encoding="utf-8")
+    state = ctx.game_dir / "automodpack/client/active-state.json"
+    state.write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}), encoding="utf-8")
+
+    with pytest.raises(TimeoutError, match="active generation state was not committed"):
+        wait_generation(ctx, {"patchNotes": "expected", "timeout": "1ms", "poll": "1ms"})
+
+    record.write_text(json.dumps({"modpackId": "packaaa", "generation": {"generationId": generation_id, "patchNotes": "expected"}}), encoding="utf-8")
+    wait_generation(ctx, {"patchNotes": "expected", "timeout": "1s", "poll": "1ms"})
+
+
 def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeypatch):
     ctx = make_ctx()
     ctx.artifact.write_bytes(b"autotest-artifact")
@@ -514,6 +532,14 @@ def test_versioned_screen_legacy_tooltip_fallback_preserves_control_message():
     assert "public static void setTooltip(Button button, Component tooltip)" in legacy
     assert "setMessage(tooltip)" not in legacy
     assert "Keep their existing message unchanged" in legacy
+
+
+def test_legacy_forge_nested_mod_uses_outer_loader_classes():
+    build_script = (Path(__file__).parents[2] / "build.forge.gradle.kts").read_text(encoding="utf-8")
+
+    assert 'compileOnly(project(":core")) { isTransitive = false }' in build_script
+    assert 'compileOnly(project(":loader-core")) { isTransitive = false }' in build_script
+    assert 'implementation(project(":loader-core")) { isTransitive = false }' not in build_script
 
 
 def test_assert_preload_acquired_checks_complete_projection(make_ctx):
