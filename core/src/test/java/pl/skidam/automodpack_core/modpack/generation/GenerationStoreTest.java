@@ -97,10 +97,14 @@ class GenerationStoreTest {
 
 	@Test
 	void concurrentPublishersFromOneParentCannotBothSucceed() throws Exception {
-		GenerationStore firstStore = store(Instant.parse("2026-01-01T00:00:00Z"));
+		Path firstRoot = tempDir.toAbsolutePath().normalize();
+		Path equalRoot = Path.of(firstRoot.toString());
+		assertEquals(firstRoot, equalRoot);
+		assertNotSame(firstRoot, equalRoot);
+		GenerationStore firstStore = new GenerationStore(firstRoot, Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC), () -> {});
 		firstStore.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot parent = firstStore.loadCurrent().orElseThrow();
-		GenerationStore secondStore = store(Instant.parse("2026-01-02T00:00:00Z"));
+		GenerationStore secondStore = new GenerationStore(equalRoot, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC), () -> {});
 		ExecutorService executor = Executors.newFixedThreadPool(2);
 		try {
 			var first = executor.submit(() -> firstStore.publish(candidate("second"), Optional.of(parent), ""));
