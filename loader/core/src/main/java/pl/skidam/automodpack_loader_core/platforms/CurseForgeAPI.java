@@ -14,6 +14,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash, String sha1Hash) {
 
     public static final String BASE_URL = "https://api.curseforge.com/v1";
+    public static final String CDN_HOST = "edge.forgecdn.net";
 
     // key - sha1, value - murmur
     // https://docs.curseforge.com/?java#get-fingerprints-matches
@@ -79,9 +80,9 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
             return null;
         }
 
-        // Download url may be null if mod author dont allow it
+        // Download url may be null if mod author doesn't allow it. The exact
+        // fingerprint match is still useful for provenance checks, so keep it.
         String downloadUrl = fileJson.get("downloadUrl").isJsonNull() ? null : fileJson.get("downloadUrl").getAsString();
-        if (downloadUrl == null) return null;
         String fileName = fileJson.get("fileName").getAsString();
         String fileVersion = fileJson.get("displayName").getAsString();
         String fileSize = String.valueOf(fileJson.get("fileLength").getAsLong());

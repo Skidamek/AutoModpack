@@ -39,7 +39,7 @@ public class ScreenImpl implements ScreenService {
 
     @Override
     public void danger(Object... args) {
-        Minecraft.getInstance().execute(() -> Screens.danger(args[0], args[1]));
+        Minecraft.getInstance().execute(() -> Screens.danger(args[0], args[1], args.length > 2 ? args[2] : java.util.Set.of()));
     }
 
     @Override
@@ -75,12 +75,20 @@ public class ScreenImpl implements ScreenService {
 
     private static class Screens {
         private static Screen getScreen() {
-            return Minecraft.getInstance().screen;
+            /*? if >=26.2 {*/
+            return Minecraft.getInstance().gui.screen();
+            /*?} else {*/
+            /*return Minecraft.getInstance().screen;
+            *//*?}*/
         }
 
         public static void setScreen(Screen screen) {
             // required for forge to handle it properly
-            Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(screen)));
+            /*? if >=26.2 {*/
+            Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().gui.setScreen(screen)));
+            /*?} else {*/
+            /*Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(screen)));
+            *//*?}*/
         }
 
         public static void download(Object downloadManager, Object header) {
@@ -99,8 +107,9 @@ public class ScreenImpl implements ScreenService {
             Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
         }
 
-        public static void danger(Object parent, Object modpackUpdaterInstance) {
-            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
+        public static void danger(Object parent, Object modpackUpdaterInstance, Object filesToUpdate) {
+            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance,
+                    (java.util.Set<?>) filesToUpdate));
         }
 
         public static void error(String... errors) {

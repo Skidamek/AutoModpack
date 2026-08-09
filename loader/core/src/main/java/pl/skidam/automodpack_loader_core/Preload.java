@@ -14,13 +14,10 @@ import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -102,50 +99,29 @@ public class Preload {
         THIS_MOD_JAR = JarUtils.getJarPath(this.getClass());
         AM_VERSION = FileInspection.getModVersion(THIS_MOD_JAR);
         MODS_DIR = THIS_MOD_JAR.getParent();
-
-        // Get "overrides-automodpack-client.json" zipfile from the AUTOMODPACK_JAR
-        try (ZipInputStream zis = new ZipInputStream(new LockFreeInputStream(THIS_MOD_JAR))) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                if (entry.getName().equals(clientConfigFileOverrideResource)) {
-                    clientConfigOverride = new String(zis.readAllBytes(), StandardCharsets.UTF_8);
-                    break;
-                }
-            }
-        } catch (IOException e) {
-            LOGGER.error("Failed to read overrides from jar", e);
-        }
     }
 
     private void loadConfigs() {
         long startTime = System.currentTimeMillis();
 
         // load client config
-        if (clientConfigOverride == null) {
-            var clientConfigVersion = ConfigTools.softLoad(clientConfigFile, Jsons.VersionConfigField.class);
-            if (clientConfigVersion != null) {
-                if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
-                    // Update the configs schemes to not crash the game if loaded with old config!
-                    var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
-                    if (clientConfigV1 != null) { // update to V2 - just delete the installedModpacks
-                        clientConfigVersion.DO_NOT_CHANGE_IT = 2;
-                        clientConfigV1.DO_NOT_CHANGE_IT = 2;
-                        clientConfigV1.installedModpacks = null;
-                    }
-
-                    ConfigTools.save(clientConfigFile, clientConfigV1);
-                    LOGGER.info("Updated client config version to {}", clientConfigVersion.DO_NOT_CHANGE_IT);
+        var clientConfigVersion = ConfigTools.softLoad(clientConfigFile, Jsons.VersionConfigField.class);
+        if (clientConfigVersion != null) {
+            if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
+                // Update the configs schemes to not crash the game if loaded with old config!
+                var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
+                if (clientConfigV1 != null) { // update to V2 - just delete the installedModpacks
+                    clientConfigVersion.DO_NOT_CHANGE_IT = 2;
+                    clientConfigV1.DO_NOT_CHANGE_IT = 2;
+                    clientConfigV1.installedModpacks = null;
                 }
-            }
 
-            clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV2.class);
-        } else {
-            // TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
-            LOGGER.warn("You are using unofficial {} mod", MOD_ID);
-            LOGGER.warn("Using client config overrides! Editing the {} file will have no effect", clientConfigFile);
-            LOGGER.warn("Remove the {} file from inside the jar or remove and download fresh {} mod jar from modrinth/curseforge", clientConfigFileOverrideResource, MOD_ID);
-            clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV2.class);
+                ConfigTools.save(clientConfigFile, clientConfigV1);
+                LOGGER.info("Updated client config version to {}", clientConfigVersion.DO_NOT_CHANGE_IT);
+            }
         }
+
+        clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV2.class);
 
         var serverConfigVersion = ConfigTools.softLoad(serverConfigFile, Jsons.VersionConfigField.class);
         if (serverConfigVersion != null) {

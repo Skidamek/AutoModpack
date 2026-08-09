@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
+import pl.skidam.automodpack_core.utils.AutoModpackProtocol;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_loader_core.SelfUpdater;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
@@ -33,7 +34,11 @@ public class HandshakeC2SPacket {
 
             updateIfNeededMod(handler, serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
 
-            HandshakePacket clientHandshakePacket = new HandshakePacket(Set.of(loader), AM_VERSION, MC_VERSION);
+            String handshakeVersion = AutoModpackProtocol.getHandshakeVersion(
+                    serverHandshakePacket.amVersion,
+                    AM_VERSION
+            );
+            HandshakePacket clientHandshakePacket = new HandshakePacket(Set.of(loader), handshakeVersion, MC_VERSION);
             outBuf.writeUtf(clientHandshakePacket.toJson(), Short.MAX_VALUE);
 
             return CompletableFuture.completedFuture(outBuf);
@@ -56,8 +61,24 @@ public class HandshakeC2SPacket {
         if (AM_VERSION.equals(serverAMVersion)) {
             LOGGER.info("Versions match {}", AM_VERSION);
             return;
-        } else {
-            LOGGER.warn("Versions mismatch. Server: {}: Client: {}", serverAMVersion, AM_VERSION);
+        }
+
+        SemanticVersion currentVersion;
+        SemanticVersion serverVersion;
+        try {
+            currentVersion = SemanticVersion.parse(AM_VERSION);
+            serverVersion = SemanticVersion.parse(serverAMVersion);
+        } catch (IllegalArgumentException exception) {
+            LOGGER.warn("Cannot compare AutoModpack versions. Server: {}: Client: {}", serverAMVersion, AM_VERSION);
+            return;
+        }
+
+        LOGGER.warn("Versions mismatch. Server: {}: Client: {}", serverAMVersion, AM_VERSION);
+
+        if (serverVersion.compareTo(currentVersion) <= 0) {
+            LOGGER.info("Keeping installed AutoModpack {}. The server cannot downgrade this client to {}.",
+                    AM_VERSION, serverAMVersion);
+            return;
         }
 
         LOGGER.info("Syncing AutoModpack to server version: {}", serverAMVersion);

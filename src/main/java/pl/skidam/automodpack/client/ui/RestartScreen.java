@@ -56,7 +56,7 @@ public class RestartScreen extends VersionedScreen {
             20,
             VersionedText.translatable("automodpack.restart.cancel"),
             button -> {
-                this.minecraft.setScreen(null);
+                this.minecraft.gui.setScreen(null);
             }
         );
 

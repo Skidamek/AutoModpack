@@ -4,7 +4,9 @@ import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.Json;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_loader_core.platforms.CurseForgeAPI;
 
 import java.io.*;
 import java.net.*;
@@ -191,16 +193,56 @@ public class DownloadManager {
     }
 
     private URLConnection getHttpConnection(String url) throws IOException {
-
         LOGGER.info("Downloading from {}", url);
 
         URL connectionUrl = new URL(url);
-        URLConnection connection = connectionUrl.openConnection();
+        if (!isCurseForgeCdn(connectionUrl)) {
+            return openHttpConnection(connectionUrl, false);
+        }
+
+        boolean authenticate = true;
+        for (int redirects = 0; redirects < 5; redirects++) {
+            HttpURLConnection connection = (HttpURLConnection) openHttpConnection(connectionUrl, authenticate);
+            connection.setInstanceFollowRedirects(false);
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode < 300 || responseCode >= 400) {
+                return connection;
+            }
+
+            String location = connection.getHeaderField("Location");
+            connection.disconnect();
+            if (location == null || location.isBlank()) {
+                throw new IOException("CurseForge CDN redirect has no location");
+            }
+
+            connectionUrl = new URL(connectionUrl, location);
+            if (!"https".equalsIgnoreCase(connectionUrl.getProtocol())) {
+                throw new IOException("Refusing CurseForge CDN redirect to non-HTTPS URL");
+            }
+            authenticate = false;
+        }
+
+        throw new IOException("Too many CurseForge CDN redirects");
+    }
+
+    private URLConnection openHttpConnection(URL url, boolean authenticateCurseForge) throws IOException {
+        URLConnection connection = url.openConnection();
         connection.addRequestProperty("Accept-Encoding", "gzip");
         connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
+        if (authenticateCurseForge) {
+            connection.addRequestProperty("x-api-key", Json.getCurseForgeApiKey());
+        }
         connection.setConnectTimeout(10000);
         connection.setReadTimeout(10000);
         return connection;
+    }
+
+    private static boolean isCurseForgeCdn(URL url) {
+        return "https".equalsIgnoreCase(url.getProtocol())
+                && CurseForgeAPI.CDN_HOST.equalsIgnoreCase(url.getHost())
+                && url.getUserInfo() == null
+                && (url.getPort() == -1 || url.getPort() == 443);
     }
 
 

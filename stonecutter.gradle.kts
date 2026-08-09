@@ -1,9 +1,10 @@
 plugins {
     id("dev.kikugie.stonecutter")
     kotlin("jvm") version "2.3.0" apply false
-    id("fabric-loom") version "1.14-SNAPSHOT" apply false
-    id("net.neoforged.moddev") version "2.0.139" apply false
-    id("com.gradleup.shadow") version "9.3.0" apply false
+    id("net.fabricmc.fabric-loom-remap") version "1.17-SNAPSHOT" apply false
+    id("net.fabricmc.fabric-loom") version "1.17-SNAPSHOT" apply false
+    id("net.neoforged.moddev") version "2.0.142" apply false
+    id("com.gradleup.shadow") version "9.6.1" apply false
     id("org.moddedmc.wiki.toolkit") version "0.4+"
 }
 
@@ -13,10 +14,13 @@ wiki {
     }
 }
 
-stonecutter active "1.21.11-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "26.2-fabric" /* [SC] DO NOT EDIT */
 
 stonecutter.parameters {
-    constants.match(node.metadata.project.substringAfterLast('-'), "fabric", "neoforge", "forge")
+    val (version, loader) = current.project.split('-', limit = 2)
+
+    constants.match(loader, "fabric", "neoforge", "forge")
+    properties.tags(version, loader)
 
     replacements {
         string(current.parsed >= "1.20.2") {
@@ -25,12 +29,17 @@ stonecutter.parameters {
         }
 
         regex(current.parsed >= "1.21.11") {
-            replace("\\bResourceLocation\\b" to "Identifier", "\\bIdentifier\\b" to "ResourceLocation")
+            replace("\\bResourceLocation\\b", "Identifier", "\\bIdentifier\\b", "ResourceLocation")
         }
 
         string(current.parsed >= "1.21.11") {
             replace("net.minecraft.Util", "net.minecraft.util.Util")
             replace("source.hasPermission(3))", "source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))")
+        }
+
+        string(current.parsed >= "26.2") {
+            replace("minecraft.setScreen(", "minecraft.gui.setScreen(")
+            replace("minecraft.getToastManager()", "minecraft.gui.toastManager()")
         }
     }
 }

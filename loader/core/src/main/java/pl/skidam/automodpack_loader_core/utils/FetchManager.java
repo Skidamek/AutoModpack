@@ -20,9 +20,11 @@ public class FetchManager {
     public record FetchedData (List<String> urls, List<String> mainPageUrls) { }
     public record Datas(FetchData fetchData, FetchedData fetchedData) { }
     private final Map<String, Datas> fetchDatas = new HashMap<>();
+    private final Set<String> publiclyMatchedHashes = new HashSet<>();
+
     public FetchManager(List<FetchData> fetchDatas) {
         for (FetchData fetchData : fetchDatas) {
-            this.fetchDatas.put(fetchData.sha1, new Datas(fetchData, new FetchedData(new ArrayList<>(), new ArrayList<>())));
+            this.fetchDatas.put(key(fetchData.sha1), new Datas(fetchData, new FetchedData(new ArrayList<>(), new ArrayList<>())));
         }
     }
 
@@ -65,11 +67,15 @@ public class FetchManager {
         if (modrinthFileInfos == null) return;
         for (ModrinthAPI modrinthFileInfo : modrinthFileInfos) {
             String sha1 = modrinthFileInfo.SHA1Hash();
-            final Datas datas = fetchDatas.get(sha1);
+            final Datas datas = fetchDatas.get(key(sha1));
+            if (datas == null) continue;
+
+            publiclyMatchedHashes.add(key(sha1));
             String mainPageUrl = ModrinthAPI.getMainPageUrl(modrinthFileInfo.modrinthID(), datas.fetchData.fileType);
-            datas.fetchedData().urls().add(modrinthFileInfo.downloadUrl());
+            if (modrinthFileInfo.downloadUrl() != null && !modrinthFileInfo.downloadUrl().isBlank()) {
+                datas.fetchedData().urls().add(modrinthFileInfo.downloadUrl());
+            }
             datas.fetchedData().mainPageUrls().add(mainPageUrl);
-            fetchDatas.put(sha1, datas);
             fetchesDone++;
         }
     }
@@ -79,14 +85,30 @@ public class FetchManager {
         if (cfFileInfos == null) return;
         for (CurseForgeAPI cfFileInfo : cfFileInfos) {
             String sha1 = cfFileInfo.sha1Hash();
-            final Datas datas = fetchDatas.get(sha1);
-            datas.fetchedData().urls().add(cfFileInfo.downloadUrl());
-            fetchDatas.put(sha1, datas);
+            final Datas datas = fetchDatas.get(key(sha1));
+            if (datas == null) continue;
+
+            publiclyMatchedHashes.add(key(sha1));
+            if (cfFileInfo.downloadUrl() != null && !cfFileInfo.downloadUrl().isBlank()) {
+                datas.fetchedData().urls().add(cfFileInfo.downloadUrl());
+            }
             fetchesDone++;
         }
     }
 
     public Map<String, Datas> getFetchDatas() {
         return fetchDatas;
+    }
+
+    public Datas getFetchData(String sha1) {
+        return fetchDatas.get(key(sha1));
+    }
+
+    public boolean hasPublicMatch(String sha1) {
+        return publiclyMatchedHashes.contains(key(sha1));
+    }
+
+    private static String key(String sha1) {
+        return sha1 == null ? "" : sha1.toLowerCase(Locale.ROOT);
     }
 }

@@ -31,9 +31,11 @@ import net.minecraft.client.gui.components.Tooltip;
 /*import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.gui.GuiComponent;
-*//*?} else {*/
-import net.minecraft.client.gui.GuiGraphics;
-/*?}*/
+*//*?} elif >=26.1 {*/
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+/*?} else {*/
+/*import net.minecraft.client.gui.GuiGraphics;
+*//*?}*/
 
 import pl.skidam.automodpack.init.Common;
 
@@ -45,22 +47,28 @@ public class VersionedScreen extends Screen {
 
 	/*? if <1.20 {*/
 	/*@Override
-    public void render(PoseStack matrix, int mouseX, int mouseY, float delta) {
-        VersionedMatrices matrices = new VersionedMatrices();
-	*//*?} else {*/
+	public void render(PoseStack matrix, int mouseX, int mouseY, float delta) {
+		VersionedMatrices matrices = new VersionedMatrices();
+	*//*?} elif >=26.1 {*/
 	@Override
+	public void extractRenderState(GuiGraphicsExtractor matrix, int mouseX, int mouseY, float delta) {
+		VersionedMatrices matrices = new VersionedMatrices(matrix);
+	/*?} else {*/
+	/*@Override
 	public void render(GuiGraphics matrix, int mouseX, int mouseY, float delta) {
 		VersionedMatrices matrices = new VersionedMatrices(matrix);
-	/*?}*/
+	*//*?}*/
 
 		// Render background
 		/*? if <1.20.2 {*/
         /*super.renderBackground(matrices.getContext());
 		*//*?} elif <1.20.6 {*/
         /*super.renderBackground(matrices.getContext(), mouseX, mouseY, delta);
-		*//*?} else {*/
-		super.render(matrix, mouseX, mouseY, delta);
-		/*?}*/
+		*//*?} elif >=26.1 {*/
+		super.extractRenderState(matrix, mouseX, mouseY, delta);
+		/*?} else {*/
+		/*super.render(matrix, mouseX, mouseY, delta);
+		*//*?}*/
 
 		// Render the rest of our screen
 		versionedRender(matrices, mouseX, mouseY, delta);
@@ -86,7 +94,11 @@ public class VersionedScreen extends Screen {
 
 	/*? if >=1.20 {*/
 	public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
-		matrices.getContext().drawCenteredString(textRenderer, text, centerX, y, color);
+		/*? if >=26.1 {*/
+		matrices.getContext().text(textRenderer, text, centerX - textRenderer.width(text) / 2, y, color, true);
+		/*?} else {*/
+		/*matrices.getContext().drawCenteredString(textRenderer, text, centerX, y, color);
+		*//*?}*/
 	}
 	/*?} else {*/
 	/*public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
@@ -128,7 +140,7 @@ public class VersionedScreen extends Screen {
     *//*?}*/
 
     /*? if <=1.20 {*/
-	/*public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+	/*public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/^? if <=1.16.5 {^/
 		/^Minecraft.getInstance().getTextureManager().bindTexture(textureID);
 		^//^?} else {^/
@@ -141,7 +153,7 @@ public class VersionedScreen extends Screen {
 		/*? if >=1.21.6 {*/
 		matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		/*?} elif >=1.21.2 {*/
-		/*Function<ResourceLocation, RenderType> RenderTypes = RenderType::guiTextured;
+		/*Function<Identifier, RenderType> RenderTypes = RenderType::guiTextured;
 		matrices.getContext().blit(RenderTypes, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		*//*?} else {*/
 		/*matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);

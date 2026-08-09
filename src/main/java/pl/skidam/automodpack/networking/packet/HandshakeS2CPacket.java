@@ -18,6 +18,8 @@ import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.utils.AutoModpackProtocol;
+import pl.skidam.automodpack_core.utils.SemanticVersion;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -88,7 +90,12 @@ public class HandshakeS2CPacket {
                 }
             }
 
-            if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
+            boolean isAcceptedVersion = AutoModpackProtocol.acceptsClient(
+                    AM_VERSION,
+                    clientHandshakePacket.amVersion
+            );
+
+            if (!isAcceptedLoader || !isAcceptedVersion) {
                 Component reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " to play on this server!");
                 if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
                     reason = VersionedText.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
@@ -134,22 +141,10 @@ public class HandshakeS2CPacket {
 
 
     private static boolean isClientVersionHigher(String clientVersion) {
-        String versionPattern = "\\d+\\.\\d+\\.\\d+";
-        if (!clientVersion.matches(versionPattern)) {
+        try {
+            return SemanticVersion.parse(clientVersion).compareTo(SemanticVersion.parse(AM_VERSION)) > 0;
+        } catch (IllegalArgumentException exception) {
             return false;
         }
-
-        if (!clientVersion.equals(AM_VERSION)) {
-            String[] clientVersionComponents = clientVersion.split("\\.");
-            String[] serverVersionComponents = AM_VERSION.split("\\.");
-
-            for (int i = 0, n = clientVersionComponents.length; i < n; i++) {
-                if (clientVersionComponents[i].compareTo(serverVersionComponents[i]) > 0) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 }

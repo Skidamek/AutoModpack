@@ -83,7 +83,7 @@ public class ChangelogScreen extends VersionedScreen {
             140,
             20,
             VersionedText.translatable("automodpack.back"),
-            button -> this.minecraft.setScreen(this.parent)
+            button -> this.minecraft.gui.setScreen(this.parent)
         );
 
         this.openMainPageButton = buttonWidget(
@@ -107,12 +107,14 @@ public class ChangelogScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        this.listEntryWidget.render(
+		/*? if <26.1 {*/
+        /*this.listEntryWidget.render(
             matrices.getContext(),
             mouseX,
             mouseY,
             delta
         );
+		*//*?}*/
 
         ListEntry selectedEntry = listEntryWidget.getSelected();
         if (selectedEntry != null) {
@@ -191,7 +193,7 @@ public class ChangelogScreen extends VersionedScreen {
     @Override
     public boolean shouldCloseOnEsc() {
         assert this.minecraft != null;
-        this.minecraft.setScreen(this.parent);
+        this.minecraft.gui.setScreen(this.parent);
         return false;
     }
 }

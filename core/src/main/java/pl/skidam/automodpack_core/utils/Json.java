@@ -10,6 +10,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Base64;
 import java.util.List;
 
 import static pl.skidam.automodpack_core.GlobalVariables.AM_VERSION;
@@ -17,6 +18,13 @@ import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 @SuppressWarnings("deprecation")
 public class Json {
+    private static final String CURSEFORGE_API_KEY = "JDJhJDEwJHNrbDRkNFkyTVI2Yy5uWmhWM3VWSy5HQmVLZDNNTDRSS3lNbnM4RFpxajkxSGpmL0hZcmNT";
+    private static final String CURSEFORGE_API_HOST = "api.curseforge.com";
+
+    public static String getCurseForgeApiKey() {
+        return new String(Base64.getDecoder().decode(CURSEFORGE_API_KEY), StandardCharsets.UTF_8);
+    }
+
     public static JsonArray fromUrlAsArray(String url) {
         JsonElement element = null;
 
@@ -146,10 +154,17 @@ public class Json {
 
         HttpURLConnection connection;
         URL url = new URL(requestUrl);
+        if (!"https".equalsIgnoreCase(url.getProtocol())
+                || !CURSEFORGE_API_HOST.equalsIgnoreCase(url.getHost())
+                || url.getUserInfo() != null
+                || (url.getPort() != -1 && url.getPort() != 443)) {
+            throw new IOException("Refusing to send the CurseForge API key to an untrusted endpoint");
+        }
         connection = (HttpURLConnection) url.openConnection();
+        connection.setInstanceFollowRedirects(false);
         connection.addRequestProperty("Content-Type", "application/json");
         connection.addRequestProperty("Accept", "application/json");
-        connection.addRequestProperty("x-api-key", "$2a$10$skl4d4Y2MR6c.nZhV3uVK.GBeKd3ML4RKyMns8DZqj91Hjf/HYrcS");
+        connection.addRequestProperty("x-api-key", getCurseForgeApiKey());
         connection.setConnectTimeout(3000);
         connection.setReadTimeout(10000);
         connection.setRequestMethod("POST");

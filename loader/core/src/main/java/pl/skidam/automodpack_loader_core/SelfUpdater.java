@@ -3,26 +3,15 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-import java.util.jar.JarEntry;
-import java.util.jar.JarFile;
-import java.util.jar.JarOutputStream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -110,6 +99,14 @@ public class SelfUpdater {
             // Version Comparison
             int comparison = remoteVersion.compareTo(currentVersion);
 
+            // Never replace a newer installed client with the server's older
+            // AutoModpack jar. The server may be an old compatible 4.0.x server.
+            if (gettingServerVersion && comparison <= 0) {
+                LOGGER.info("Keeping installed AutoModpack {} instead of server version {}.",
+                        AM_VERSION, rawRemoteVersion);
+                return false;
+            }
+
             // If we are NOT forced to sync to server, and remote is older or equal
             if (!gettingServerVersion && comparison <= 0) {
                 if (comparison == 0) {
@@ -181,8 +178,6 @@ public class SelfUpdater {
             downloadManager.joinAll();
             downloadManager.cancelAllAndShutdown();
 
-            addOverridesToJar(automodpackUpdateJar);
-
             newAutomodpackJar = THIS_MOD_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
 
             var updateType = UpdateType.AUTOMODPACK;
@@ -200,60 +195,5 @@ public class SelfUpdater {
         } catch (Exception e) {
             LOGGER.error("Failed to update! " + e);
         }
-    }
-
-    public static Optional<InputStream> getJarEntryInputStream(Path jarFilePath, String entryName) throws IOException {
-        try (InputStream fileStream = new LockFreeInputStream(jarFilePath);
-            ZipInputStream zipStream = new ZipInputStream(fileStream)) {
-            ZipEntry entry;
-            while ((entry = zipStream.getNextEntry()) != null) {
-                if (entry.getName().equals(entryName)) {
-                    return Optional.of(zipStream);
-                }
-            }
-        }
-
-        return Optional.empty();
-    }
-
-    public static void addOverridesToJar(Path jarFilePath) throws IOException {
-        if (clientConfigOverride == null || clientConfigOverride.isBlank()) {
-            return;
-        }
-
-        if (!Files.isRegularFile(jarFilePath) || !Files.isRegularFile(THIS_MOD_JAR)) {
-            LOGGER.error("Jar file of updated AutoModpack not found!");
-            return;
-        }
-
-        Path tempJarPath = Files.createTempFile("tempAutoModpackJar", ".jar");
-
-        try (JarFile jarFile = new JarFile(jarFilePath.toFile());
-             JarOutputStream tempJarOutputStream = new JarOutputStream(Files.newOutputStream(tempJarPath))) {
-
-            jarFile.stream().forEach(entry -> {
-                try {
-                    JarEntry newEntry = new JarEntry(entry.getName());
-                    tempJarOutputStream.putNextEntry(newEntry);
-                    try (InputStream entryInputStream = jarFile.getInputStream(entry)) {
-                        entryInputStream.transferTo(tempJarOutputStream);
-                    }
-                    tempJarOutputStream.closeEntry();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
-
-            Optional<InputStream> txtInputStreamOpt = getJarEntryInputStream(THIS_MOD_JAR, clientConfigFileOverrideResource);
-            if (txtInputStreamOpt.isPresent()) {
-                JarEntry newTxtEntry = new JarEntry(clientConfigFileOverrideResource);
-                tempJarOutputStream.putNextEntry(newTxtEntry);
-                txtInputStreamOpt.get().transferTo(tempJarOutputStream);
-                tempJarOutputStream.closeEntry();
-            }
-        }
-
-        Files.move(tempJarPath, jarFilePath, StandardCopyOption.REPLACE_EXISTING);
-        LOGGER.info("Added config overrides to the updated AutoModpack JAR");
     }
 }

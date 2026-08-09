@@ -312,7 +312,7 @@ public class ModpackContent {
 
         // For CF API
         String murmur = null;
-        if (type.equals("mod") || type.equals("shader") || type.equals("resourcepack")) {
+        if (file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")) {
             // get murmur hash from previousContent.list of item with same sha1
             murmur = sha1MurmurMapPreviousContent.get(sha1);
             if (murmur == null) {

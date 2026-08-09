@@ -33,6 +33,8 @@ public class ModpackUpdater {
     private String serverModpackContentJson; // TODO: remove this variable and use serverModpackContent directly
     public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
+    private Set<String> preparedFiles = Set.of();
+    private Set<Jsons.ModpackContentFields.ModpackContentItem> unverifiedJarFiles = Set.of();
     private final Jsons.ModpackAddresses modpackAddresses;
     private final Secrets.Secret modpackSecret;
     private Path modpackDir;
@@ -44,6 +46,10 @@ public class ModpackUpdater {
 
     public Set<Jsons.ModpackContentFields.ModpackContentItem> getModpackFileList() {
         return serverModpackContent.list;
+    }
+
+    public Set<Jsons.ModpackContentFields.ModpackContentItem> getUnverifiedJarFiles() {
+        return unverifiedJarFiles;
     }
 
     public ModpackUpdater(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
@@ -59,6 +65,7 @@ public class ModpackUpdater {
 
     public void processModpackUpdate(ModpackUtils.UpdateCheckResult result) {
         try {
+            Object parentScreen = new ScreenManager().getScreen().orElse(null);
             modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
 
             // Handle the case where serverModpackContent is null
@@ -77,11 +84,16 @@ public class ModpackUpdater {
 
             // Handle new modpack
             if (!Files.exists(modpackContentFile)) {
+                prepareFetchData(serverModpackContent.list);
                 if (preload) {
-                    startUpdate(serverModpackContent.list);
+                    if (hasUnverifiedJars()) {
+                        abortPreloadUpdate();
+                    } else {
+                        startUpdate(serverModpackContent.list);
+                    }
                 } else {
                     fullDownload = true;
-                    new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
+                    showDangerScreen(parentScreen, serverModpackContent.list);
                 }
             } else {
                 // Handle existing modpack
@@ -95,7 +107,15 @@ public class ModpackUpdater {
 
                 // Update or load the modpack
                 if (result.requiresUpdate()) {
-                    startUpdate(result.filesToUpdate());
+                    Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = result.filesToUpdate();
+                    prepareFetchData(filesToUpdate);
+                    if (preload && hasUnverifiedJars()) {
+                        abortPreloadUpdate();
+                    } else if (hasUnverifiedJars()) {
+                        showDangerScreen(parentScreen, filesToUpdate);
+                    } else {
+                        startUpdate(filesToUpdate);
+                    }
                 } else {
                     Files.writeString(modpackContentFile, serverModpackContentJson);
                     CheckAndLoadModpack();
@@ -104,6 +124,65 @@ public class ModpackUpdater {
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
         }
+    }
+
+    private void showDangerScreen(Object parentScreen, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
+        new ScreenManager().danger(parentScreen, this, filesToUpdate);
+    }
+
+    private boolean hasUnverifiedJars() {
+        return !unverifiedJarFiles.isEmpty();
+    }
+
+    private void abortPreloadUpdate() {
+        LOGGER.warn("Preload update stopped because it contains {} JAR file(s) without a public Modrinth or CurseForge match", unverifiedJarFiles.size());
+        try {
+            if (Files.exists(modpackContentFile)) {
+                CheckAndLoadModpack();
+            } else {
+                LOGGER.warn("No existing modpack is available to load after stopping the preload update");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to load the current modpack after stopping the preload update", e);
+        }
+    }
+
+    private void prepareFetchData(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck) {
+        long start = System.currentTimeMillis();
+        Set<String> files = filesToCheck.stream()
+                .map(item -> item.file + "\u0000" + item.sha1)
+                .collect(Collectors.toUnmodifiableSet());
+
+        if (files.equals(preparedFiles) && fetchManager != null) {
+            return;
+        }
+
+        List<FetchManager.FetchData> fetchDatas = new LinkedList<>();
+        for (Jsons.ModpackContentFields.ModpackContentItem item : filesToCheck) {
+            String fileType = isJar(item.file) ? "mod" : item.type;
+            if (isJar(item.file) || fileType.equals("mod") || fileType.equals("shader") || fileType.equals("resourcepack")) {
+                fetchDatas.add(new FetchManager.FetchData(item.file, item.sha1, item.murmur, item.size, fileType));
+            }
+        }
+
+        fetchManager = new FetchManager(fetchDatas);
+        preparedFiles = files;
+        unverifiedJarFiles = Set.of();
+
+        if (!fetchDatas.isEmpty()) {
+            new ScreenManager().fetch(fetchManager);
+            fetchManager.fetch();
+
+            unverifiedJarFiles = filesToCheck.stream()
+                    .filter(item -> isJar(item.file) && !fetchManager.hasPublicMatch(item.sha1))
+                    .collect(Collectors.toUnmodifiableSet());
+        }
+
+        LOGGER.info("Finished checking public file matches in {}ms ({} matches)", System.currentTimeMillis() - start, fetchManager.fetchesDone);
+    }
+
+    private static boolean isJar(String file) {
+        return file != null && file.toLowerCase(Locale.ROOT).endsWith(".jar");
     }
 
     private void CheckAndLoadModpack() throws Exception {
@@ -164,6 +243,8 @@ public class ModpackUpdater {
             return;
         }
 
+        prepareFetchData(filesToUpdate);
+
         new ScreenManager().download(downloadManager, getModpackName());
         long start = System.currentTimeMillis();
 
@@ -172,27 +253,13 @@ public class ModpackUpdater {
             modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
             modpackContentFile = modpackDir.resolve(modpackContentFile.getFileName());
 
-            // FETCH
-
+            // FETCH is completed before this method is called so that the client can
+            // decide whether a JAR needs the stronger confirmation screen.
             long startFetching = System.currentTimeMillis();
-            List<FetchManager.FetchData> fetchDatas = new LinkedList<>();
-
             for (Jsons.ModpackContentFields.ModpackContentItem serverItem : filesToUpdate) {
-
                 totalBytesToDownload += Long.parseLong(serverItem.size);
-
-                String fileType = serverItem.type;
-
-                // Check if the file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
-                if (fileType.equals("mod") || fileType.equals("shader") || fileType.equals("resourcepack")) {
-                    fetchDatas.add(new FetchManager.FetchData(serverItem.file, serverItem.sha1, serverItem.murmur, serverItem.size, fileType));
-                }
             }
-
-            fetchManager = new FetchManager(fetchDatas);
-            new ScreenManager().fetch(fetchManager);
-            fetchManager.fetch();
-            LOGGER.info("Finished fetching urls in {}ms", System.currentTimeMillis() - startFetching);
+            LOGGER.info("Finished preparing download urls in {}ms", System.currentTimeMillis() - startFetching);
 
 
             // DOWNLOAD
@@ -226,8 +293,8 @@ public class ModpackUpdater {
                     }
 
                     List<String> urls = new ArrayList<>();
-                    if (fetchManager.getFetchDatas().containsKey(serverHash)) {
-                        urls.addAll(fetchManager.getFetchDatas().get(serverHash).fetchedData().urls());
+                    if (fetchManager.getFetchData(serverHash) != null) {
+                        urls.addAll(fetchManager.getFetchData(serverHash).fetchedData().urls());
                     }
 
                     Runnable failureCallback = () -> {
@@ -236,8 +303,8 @@ public class ModpackUpdater {
 
                     Runnable successCallback = () -> {
                         List<String> mainPageUrls = new LinkedList<>();
-                        if (fetchManager != null && fetchManager.getFetchDatas().get(serverHash) != null) {
-                            mainPageUrls = fetchManager.getFetchDatas().get(serverHash).fetchedData().mainPageUrls();
+                        if (fetchManager != null && fetchManager.getFetchData(serverHash) != null) {
+                            mainPageUrls = fetchManager.getFetchData(serverHash).fetchedData().mainPageUrls();
                         }
 
                         changelogs.changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrls);
