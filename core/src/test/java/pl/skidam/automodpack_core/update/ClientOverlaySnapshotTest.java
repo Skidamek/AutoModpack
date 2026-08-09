@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,14 +25,15 @@ class ClientOverlaySnapshotTest {
 		ClientStorage storage = storage();
 		storage.writeOverlayState("abcdefg", Set.of("config/deleted.txt"));
 		Path stateFile = storage.overlayStateFile("abcdefg");
+		String equivalentState = "{\n  \"modpackId\": \"abcdefg\",\n  \"deletedPaths\": [\"config/deleted.txt\"],\n  \"sentinel\": \"must-survive\"\n}\n";
+		Files.writeString(stateFile, equivalentState, StandardCharsets.UTF_8);
 		BasicFileAttributes before = Files.readAttributes(stateFile, BasicFileAttributes.class);
 		byte[] contents = Files.readAllBytes(stateFile);
 
 		storage.writeOverlayState("abcdefg", Set.of("config/deleted.txt"));
 
 		BasicFileAttributes after = Files.readAttributes(stateFile, BasicFileAttributes.class);
-		assertNotNull(before.fileKey());
-		assertEquals(before.fileKey(), after.fileKey());
+		if (before.fileKey() != null && after.fileKey() != null) assertEquals(before.fileKey(), after.fileKey());
 		assertArrayEquals(contents, Files.readAllBytes(stateFile));
 	}
 
