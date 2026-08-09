@@ -284,6 +284,20 @@ def test_screenshot_verb_records_artifact(make_ctx):
     assert ctx.vars["screenshot"].endswith("first-connect.png")
 
 
+def test_screenshot_verb_captures_the_currently_rendered_screen(make_ctx):
+    from automodpack_autotester.engine.steps_ui import screenshot
+    from .conftest import FakeBridge
+
+    ctx = make_ctx()
+    ctx.bridge = FakeBridge(ctx)
+    ctx.bridge.screen = "settings"
+    assert ctx.bridge.rendered_screen == "title"
+
+    screenshot(ctx, {"file": "settings"})
+
+    assert ctx.bridge.rendered_screens["settings"] == "settings"
+
+
 # ── executor ──────────────────────────────────────────────────────────────
 
 

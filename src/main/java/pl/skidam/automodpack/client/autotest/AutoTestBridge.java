@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.imageio.ImageIO;
 
@@ -66,6 +67,7 @@ public final class AutoTestBridge {
 	private static final Object READY_STATE_LOCK = new Object();
 	private static final AtomicBoolean READY_STATE_PUBLISHED = new AtomicBoolean(false);
 	private static final AtomicBoolean READY_STATE_WRITE_FAILED = new AtomicBoolean(false);
+	private static final AtomicReference<PendingScreenshot> PENDING_SCREENSHOT = new AtomicReference<>();
 
 	public static void markReloadFinished() {
 		RELOAD_FINISHED.set(true);
@@ -264,22 +266,67 @@ public final class AutoTestBridge {
 		Path path = screenshots.resolve(name + ".png");
 		CompletableFuture<String> captured = new CompletableFuture<>();
 		Minecraft minecraft = Minecraft.getInstance();
-		minecraft.execute(() -> {
-			try {
-				/*? if >=26.2 {*/
-				Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), 1, image -> completeScreenshot(captured, path, image));
-			/*?} else if >=1.21.6 {*/
-			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), 1, image -> completeScreenshot(captured, path, image));
-			*//*?} else if >=1.21.5 {*/
-			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), image -> completeScreenshot(captured, path, image));
-			*//*?} else {*/
-				/*completeScreenshot(captured, path, Screenshot.takeScreenshot(minecraft.getMainRenderTarget()));
-				*//*?}*/
-			} catch (Exception e) {
-				captured.completeExceptionally(e);
-			}
-		});
+		minecraft.execute(() -> queueScreenshot(captured, path));
 		return captured.get();
+	}
+
+	private static void queueScreenshot(CompletableFuture<String> captured, Path path) {
+		if (!PENDING_SCREENSHOT.compareAndSet(null, new PendingScreenshot(captured, path))) {
+			captured.completeExceptionally(new IOException("another screenshot is already pending"));
+		}
+	}
+
+	public static void onFrameRendered() {
+		PendingScreenshot pending = PENDING_SCREENSHOT.get();
+		if (pending == null) return;
+		// The bridge command can arrive after this frame started rendering. Consume one complete
+		// frame before sampling, so the screenshot is taken from the following frame's render target.
+		if (!pending.frameObserved()) {
+			pending.markFrameObserved();
+			return;
+		}
+		if (!PENDING_SCREENSHOT.compareAndSet(pending, null)) return;
+		try {
+			Minecraft minecraft = Minecraft.getInstance();
+			/*? if >=26.2 {*/
+			Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), 1, image -> completeScreenshot(pending.captured(), pending.path(), image));
+		/*?} else if >=1.21.6 {*/
+			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), 1, image -> completeScreenshot(pending.captured(), pending.path(), image));
+			*//*?} else if >=1.21.5 {*/
+			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), image -> completeScreenshot(pending.captured(), pending.path(), image));
+			*//*?} else {*/
+			/*completeScreenshot(pending.captured(), pending.path(), Screenshot.takeScreenshot(minecraft.getMainRenderTarget()));
+			*//*?}*/
+		} catch (Exception e) {
+			pending.captured().completeExceptionally(e);
+		}
+	}
+
+	private static final class PendingScreenshot {
+		private final CompletableFuture<String> captured;
+		private final Path path;
+		private boolean frameObserved;
+
+		private PendingScreenshot(CompletableFuture<String> captured, Path path) {
+			this.captured = captured;
+			this.path = path;
+		}
+
+		private boolean frameObserved() {
+			return frameObserved;
+		}
+
+		private void markFrameObserved() {
+			frameObserved = true;
+		}
+
+		private CompletableFuture<String> captured() {
+			return captured;
+		}
+
+		private Path path() {
+			return path;
+		}
 	}
 
 	private static void completeScreenshot(CompletableFuture<String> captured, Path path, NativeImage source) {
