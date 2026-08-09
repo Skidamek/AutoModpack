@@ -17,6 +17,7 @@ releaseGate:
     - conflict-preservation
     - quarantine-restoration
     - storage-maintenance
+    - server-history-compaction
     - fresh-generation-deletion
     - removal
     - secure-bootstrap
@@ -587,6 +588,9 @@ flow:
   - do: assert_generation
     name: verify the published generation and latest patch notes
     patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
+  - do: compact_server_history
+    name: compact server history and verify retained patch notes and deleted metadata
+    timeout: 180s
   - do: wait_for
     name: wait for changed generation restart
     until: { screen: RestartScreen }

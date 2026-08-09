@@ -57,6 +57,13 @@ def test_shipped_scenarios_validate():
         assert validate_scenario(scenario, macros, targets) == [], name
 
 
+def test_server_history_compaction_uses_registered_command():
+    source = (Path(__file__).parents[1] / "automodpack_autotester/runner.py").read_text(encoding="utf-8")
+
+    assert '["rcon-cli", "automodpack", "generate", "storage", "compact", "confirm"]' in source
+    assert '["rcon-cli", "automodpack", "generate", "history", "storage", "compact", "confirm"]' not in source
+
+
 def test_legacy_forge_keeps_loader_classes_out_of_nested_mod():
     project_root = Path(__file__).parents[2]
     build_script = (project_root / "build.forge.gradle.kts").read_text(encoding="utf-8")

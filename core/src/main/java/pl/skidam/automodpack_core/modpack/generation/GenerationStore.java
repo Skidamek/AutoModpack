@@ -413,7 +413,7 @@ public final class GenerationStore {
 		validateDeletionTargets(oldCommitPaths, "generation commit");
 		validateDeletionTargets(oldDeltaPaths, "generation ownership delta");
 
-		GenerationCheckpoint checkpoint = new GenerationCheckpoint(currentRecord, supersededGenerationIds, supersededCatalogueStateDigests);
+		GenerationCheckpoint checkpoint = new GenerationCheckpoint(currentRecord, history.patchNotesHistory(), supersededGenerationIds, supersededCatalogueStateDigests);
 		ConfigTools.writeAtomic(checkpointPath, checkpoint.toFields());
 		GenerationCheckpoint verifiedCheckpoint = readCheckpoint().orElseThrow(() -> new IOException("Generation checkpoint disappeared after publication"));
 		if (!verifiedCheckpoint.equals(checkpoint) || !verifiedCheckpoint.record().equals(currentRecord))
@@ -446,7 +446,7 @@ public final class GenerationStore {
 		GenerationRecord current = loadCurrentDeep().map(CurrentSnapshot::record).orElse(null);
 		Map<String, Long> expectedSizes = new TreeMap<>();
 		long objectReferences = 0;
-		if (current != null) objectReferences = addExact(objectReferences, addReferences(current, expectedSizes), "object reference count");
+		if (current != null) objectReferences = addExact(objectReferences, addManifestReferences(current, expectedSizes), "object reference count");
 		long referencedObjectBytes = verifyObjectReferences(expectedSizes);
 		FileTotals catalogueFiles = fileTotals(regularFiles(cataloguesDirectory, "generation catalogues"));
 		FileTotals commitFiles = fileTotals(regularFiles(commitsDirectory, "generation commits"));
@@ -471,7 +471,6 @@ public final class GenerationStore {
 				: OwnershipLedger.builder(history.boundaryRecord().ownershipLedger());
 		if (history.boundaryRecord() != null && retained.contains(history.boundaryRecord().metadata().generationId())) {
 			addManifestReferences(history.boundaryRecord(), expectedSizes);
-			addLedgerReferences(ledger.entriesView().values(), expectedSizes);
 		}
 		for (CompactGeneration generation : history.generations()) {
 			try {
@@ -481,7 +480,6 @@ public final class GenerationStore {
 			}
 			if (retained.contains(generation.commit().generationId())) {
 				addManifestReferences(generation.snapshot().manifest(), expectedSizes);
-				addLedgerReferences(ledger.entriesView().values(), expectedSizes);
 			}
 		}
 		Set<String> availableGenerationIds = new HashSet<>();
@@ -543,23 +541,6 @@ public final class GenerationStore {
 		long count = 0;
 		for (var group : manifest.groups().values()) for (var file : group.files().values()) {
 			addExpectedSize(expectedSizes, file.sha1().toLowerCase(Locale.ROOT), file.size());
-			count = addExact(count, 1, "object reference count");
-		}
-		return count;
-	}
-
-	private long addReferences(GenerationRecord record, Map<String, Long> expectedSizes) throws IOException {
-		long count = addManifestReferences(record, expectedSizes);
-		return addLedgerReferences(record.ownershipLedger().entries().values(), expectedSizes, count);
-	}
-
-	private long addLedgerReferences(Collection<OwnershipLedger.Entry> entries, Map<String, Long> expectedSizes) throws IOException {
-		return addLedgerReferences(entries, expectedSizes, 0);
-	}
-
-	private long addLedgerReferences(Collection<OwnershipLedger.Entry> entries, Map<String, Long> expectedSizes, long count) throws IOException {
-		for (var entry : entries) for (var content : entry.historicalHashes()) {
-			addExpectedSize(expectedSizes, content.sha1(), content.size());
 			count = addExact(count, 1, "object reference count");
 		}
 		return count;
@@ -768,7 +749,15 @@ public final class GenerationStore {
 			}
 			expectedParent = commit.generationId();
 		}
-		return new CompactHistory(checkpoint == null ? null : checkpoint.record(), List.copyOf(reverse), List.copyOf(entries));
+		List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
+		if (checkpoint == null) {
+			patchNotesHistory = GenerationPatchNoteHistory.fromHistory(entries);
+		} else {
+			List<GenerationPatchNoteHistory.Entry> patchNotes = new ArrayList<>(checkpoint.patchNotesHistory());
+			for (int index = 1; index < entries.size(); index++) patchNotes.add(GenerationPatchNoteHistory.Entry.fromMetadata(entries.get(index).metadata()));
+			patchNotesHistory = GenerationPatchNoteHistory.validateForGeneration(patchNotes, generationId);
+		}
+		return new CompactHistory(checkpoint == null ? null : checkpoint.record(), List.copyOf(reverse), List.copyOf(entries), patchNotesHistory);
 	}
 
 	private CompactState readCompactState(String generationId) throws IOException {
@@ -837,7 +826,7 @@ public final class GenerationStore {
 
 	private void verifyAllReferencedObjects(GenerationRecord record) throws IOException {
 		TreeMap<String, Long> expectedSizes = new TreeMap<>();
-		addReferences(record, expectedSizes);
+		addManifestReferences(record, expectedSizes);
 		verifyObjectReferences(expectedSizes);
 	}
 
@@ -901,9 +890,7 @@ public final class GenerationStore {
 	private void writeCurrentProjection(GenerationRecord record) throws IOException {
 		ModpackJsons.CompleteModpackContentFields fields = record.toFields();
 		CompactHistory history = readCompactHistory(record.metadata().generationId());
-		List<GenerationPatchNoteHistory.Entry> patchNoteHistory = history.compacted()
-				? List.of(GenerationPatchNoteHistory.Entry.fromMetadata(record.metadata()))
-				: GenerationPatchNoteHistory.fromHistory(history.entries());
+		List<GenerationPatchNoteHistory.Entry> patchNoteHistory = history.patchNotesHistory();
 		GenerationPatchNoteHistory.writeFields(fields, patchNoteHistory);
 		ConfigTools.writeAtomic(currentProjectionPath, fields);
 	}
@@ -987,11 +974,8 @@ public final class GenerationStore {
 
 	private record CompactGeneration(GenerationCommit commit, CatalogueSnapshot snapshot, OwnershipDelta delta) {}
 
-	private record CompactHistory(GenerationRecord boundaryRecord, List<CompactGeneration> generations, List<GenerationHistoryEntry> entries) {
-		private boolean compacted() {
-			return boundaryRecord != null;
-		}
-	}
+	private record CompactHistory(GenerationRecord boundaryRecord, List<CompactGeneration> generations, List<GenerationHistoryEntry> entries,
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {}
 
 	private record CompactState(GenerationRecord record, List<GenerationHistoryEntry> entries) {}
 

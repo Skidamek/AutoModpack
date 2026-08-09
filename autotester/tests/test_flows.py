@@ -148,6 +148,11 @@ def _publish_server_generation(ctx, step):
         ctx.bridge.update_available = True
 
 
+@verb("compact_server_history")
+def _compact_server_history(ctx, step):
+    pass
+
+
 @verb("wait_join")
 def _wait_join(ctx, step):
     assert ctx.gui().get("screenClass") is None, "player never reached in-game"
@@ -180,7 +185,7 @@ _STUBS = {
     "launch_client": _launch_client, "wait_bridge": _wait_bridge, "seed_bootstrap": _seed_bootstrap,
     "connect": _connect, "quit": _quit, "disconnect": _disconnect,
     "wait_client_exit": _wait_client_exit, "wait_exit": _wait_exit, "reset_client_generation": _reset_client_generation,
-    "stage_modpack": _stage_modpack, "publish_server_generation": _publish_server_generation, "wait_join": _wait_join,
+    "stage_modpack": _stage_modpack, "publish_server_generation": _publish_server_generation, "compact_server_history": _compact_server_history, "wait_join": _wait_join,
     "assert_preload_rejected": _assert_preload_rejected, "assert_client_objects_absent": _assert_client_objects_absent, "assert_preload_acquired": _assert_preload_acquired,
 }
 
