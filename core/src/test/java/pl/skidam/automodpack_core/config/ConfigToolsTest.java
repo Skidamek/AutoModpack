@@ -54,6 +54,22 @@ class ConfigToolsTest {
 	}
 
 	@Test
+	void reviewUpdatesDefaultsToTrueAndSurvivesCopies() {
+		ClientConfigJsons.ClientConfigFieldsV3 defaults = new ClientConfigJsons.ClientConfigFieldsV3();
+		assertTrue(defaults.reviewUpdates);
+
+		defaults.reviewUpdates = false;
+		ClientConfigJsons.ClientConfigFieldsV3 copy = new ClientConfigJsons.ClientConfigFieldsV3(defaults);
+		assertFalse(copy.reviewUpdates);
+	}
+
+	@Test
+	void missingReviewUpdatesUsesTheSafeDefault() {
+		ClientConfigJsons.ClientConfigFieldsV3 config = ConfigTools.parse("{\"selectedModpackId\":\"pack\"}", ClientConfigJsons.ClientConfigFieldsV3.class);
+		assertTrue(config.reviewUpdates);
+	}
+
+	@Test
 	void writeAtomicReplacesExistingConfiguration() throws Exception {
 		Path config = temporaryDirectory.resolve("client.json");
 		Files.writeString(config, "not-json", StandardCharsets.UTF_8);

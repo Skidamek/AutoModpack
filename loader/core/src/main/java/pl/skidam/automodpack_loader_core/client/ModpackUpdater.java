@@ -21,7 +21,6 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.config.ClientOptionsPreference;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
@@ -281,7 +280,7 @@ public class ModpackUpdater implements AutoCloseable {
 				fullDownload = true;
 				startSourceFetch();
 				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
-				if (ClientOptionsPreference.skipReview()) startConfirmedUpdate();
+				if (!clientConfig.reviewUpdates) startConfirmedUpdate();
 				else new ScreenManager().welcome(this);
 			} else {
 				// Handle existing modpack
@@ -802,11 +801,11 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	/** A review is required for first install, a changed generation identity, or any plan impact. */
+	/** A review is required for first install, a changed generation identity, or any plan impact when enabled by the client. */
 	private boolean requiresPlayerReview(ClientUpdatePlanBuilder.PreparedPlan prepared, boolean firstInstall) throws IOException {
 		ModpackJsons.ModpackContentFields installed = storedTarget();
 		GenerationTarget installedTarget = installed == null ? null : GenerationTarget.fromFlat(installed);
-		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared), ClientOptionsPreference.skipReview());
+		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared), clientConfig.reviewUpdates);
 	}
 
 	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */
@@ -852,11 +851,6 @@ public class ModpackUpdater implements AutoCloseable {
 			} catch (IOException e) {
 				throw new IOException("Modpack generation committed but connection state could not be saved", e);
 			}
-		}
-		try {
-			ClientOptionsPreference.persistConfiguredFile();
-		} catch (IOException e) {
-			LOGGER.warn("Modpack update committed, but the local review preference could not be restored in options.txt", e);
 		}
 		clientConfig = plan.plannedClientConfig();
 	}
