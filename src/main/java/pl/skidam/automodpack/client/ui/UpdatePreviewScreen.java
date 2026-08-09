@@ -36,7 +36,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, boolean returnToSelection, Runnable continueAction,
 			Runnable cancelAction, Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
-		super(VersionedText.literal(removal ? "ModpackRemovalScreen" : "UpdatePreviewScreen"));
+		super(VersionedText.translatable(removal ? "automodpack.update.removalTitle" : "automodpack.update.title"));
 		this.parent = parent;
 		this.preview = preview;
 		this.modpackName = modpackName == null ? "" : modpackName;
@@ -59,13 +59,13 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		if (hasPatchNotes) this.addRenderableWidget(buttonWidget(this.width / 2 - 75, this.layout.patchNotesButtonY(), 150, 20,
 				VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
 		this.openMainPageButton = buttonWidget(actionButtonX(310, 3, 1), this.height - 28, actionWidth, 20,
-				VersionedText.literal("Project page"), button -> openSelectedPage());
+			VersionedText.translatable("automodpack.changelog.noPage"), button -> openSelectedPage());
 		this.openMainPageButton.active = false;
 		this.addRenderableWidget(this.openMainPageButton);
 		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 0), this.height - 28, actionWidth, 20,
 				returnToSelection ? VersionedText.translatable("automodpack.back") : VersionedText.translatable("automodpack.cancel"), button -> cancel()));
 		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 2), this.height - 28, actionWidth, 20,
-				VersionedText.literal(removal ? "Remove" : "Update"), button -> continueUpdate()));
+		VersionedText.translatable(removal ? "automodpack.update.remove" : "automodpack.update.apply"), button -> continueUpdate()));
 	}
 
 	private int listBottom() {
@@ -101,9 +101,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		List<ListEntryWidget.Row> rows = new ArrayList<>();
 		for (UpdatePlan.Conflict conflict : preview.conflicts()) {
 			String ids = String.join(", ", conflict.modIds());
-			String action = conflict.action() == UpdatePlan.ConflictAction.QUARANTINE
-					? "Local mod " + ids + " will be moved to AutoModpack quarantine (recoverable)."
-					: "AutoModpack-owned duplicate " + ids + " will be removed.";
+			String action = VersionedText.translatable(conflict.action() == UpdatePlan.ConflictAction.QUARANTINE ? "automodpack.update.localConflict" : "automodpack.update.ownedConflict", ids).getString();
 			rows.add(new ListEntryWidget.Row(VersionedText.literal(truncateToWidth(this.font, "! " + action, panelWidth(PANEL_WIDTH) - 8)).withStyle(ChatFormatting.YELLOW), null));
 		}
 		for (UpdatePreview.Entry entry : preview.displayEntries()) {
@@ -112,7 +110,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			ChatFormatting color = entry.kind().isPreserved() ? ChatFormatting.GRAY : entry.kind() == UpdatePreview.Kind.UNSAFE ? ChatFormatting.RED : ChatFormatting.WHITE;
 			rows.add(new ListEntryWidget.Row(VersionedText.literal(text).withStyle(color), firstUrl(mainPageUrls.get(file))));
 		}
-		if (rows.isEmpty()) rows.add(new ListEntryWidget.Row(VersionedText.literal("No file changes are required.").withStyle(ChatFormatting.GRAY), null));
+		if (rows.isEmpty()) rows.add(new ListEntryWidget.Row(VersionedText.translatable("automodpack.update.noChanges").withStyle(ChatFormatting.GRAY), null));
 		return rows;
 	}
 
@@ -149,14 +147,16 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		/*this.changesList.render(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?}*/
 		ListEntry selected = changesList.getSelected();
-		this.openMainPageButton.active = selected != null && selected.getMainPageUrl() != null;
+		boolean hasMainPage = selected != null && selected.getMainPageUrl() != null;
+		this.openMainPageButton.active = hasMainPage;
+		this.openMainPageButton.setMessage(VersionedText.translatable(hasMainPage ? "automodpack.changelog.openPage" : "automodpack.changelog.noPage"));
 
 		String title = removal
-				? (modpackName.isBlank() ? "Remove modpack" : "Remove " + modpackName)
-				: (modpackName.isBlank() ? "Review update" : "Update " + modpackName);
+				? VersionedText.translatable(modpackName.isBlank() ? "automodpack.update.removalTitle" : "automodpack.update.removeNamed", modpackName).getString()
+				: VersionedText.translatable(modpackName.isBlank() ? "automodpack.update.title" : "automodpack.update.updateNamed", modpackName).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, 14,
 				TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(removal ? "Review the files that will be removed." : "Review the changes before updating.").withStyle(ChatFormatting.GRAY),
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(removal ? "automodpack.update.reviewRemoval" : "automodpack.update.reviewUpdate").withStyle(ChatFormatting.GRAY),
 				this.width / 2, 29, TextColors.WHITE);
 		Layout layout = this.layout;
 		String patchNotes = preview.latestPatchNotes();
@@ -168,13 +168,12 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
 		boolean staleSelection = !groups.staleGroups().isEmpty();
-		String selection = staleSelection ? "Some previously selected content is no longer available." : groups.resolvedGroups().size() + " content groups selected";
+		String selection = staleSelection ? VersionedText.translatable("automodpack.update.staleSelection").getString() : VersionedText.translatable("automodpack.update.groupsSelected", groups.resolvedGroups().size()).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selection, this.width - 20)).withStyle(staleSelection ? ChatFormatting.RED : ChatFormatting.GRAY), this.width / 2, layout.selectionY(),
 				TextColors.WHITE);
 		if (!preview.conflicts().isEmpty()) {
-			String conflictText = preview.conflicts().stream().anyMatch(conflict -> conflict.action() == UpdatePlan.ConflictAction.QUARANTINE)
-					? "A local same-ID mod will be quarantined and can be recovered from AutoModpack's client/quarantine folder."
-					: "An AutoModpack-owned duplicate will be removed as part of this update.";
+			String conflictText = VersionedText.translatable(preview.conflicts().stream().anyMatch(conflict -> conflict.action() == UpdatePlan.ConflictAction.QUARANTINE)
+					? "automodpack.update.quarantineConflict" : "automodpack.update.ownedConflictSummary").getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, conflictText, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, layout.conflictY(),
 					TextColors.WHITE);
 		}

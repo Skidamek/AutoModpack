@@ -29,7 +29,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 	private int ticksRemaining;
 
 	public SkipVerificationScreen(Screen verificationScreen, Runnable validatedCallback) {
-		super(VersionedText.literal("SkipVerificationScreen"));
+		super(VersionedText.translatable("automodpack.validation.skip.title"));
 		this.verificationScreen = verificationScreen;
 		this.validatedCallback = validatedCallback;
 		this.ticksRemaining = TIMER_SECONDS * 20; // 20 ticks per second

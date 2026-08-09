@@ -62,18 +62,18 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			int pageY = listBottom + 4;
 			int pageWidth = actionButtonWidth(PANEL_WIDTH, 3);
 			this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 0), pageY, pageWidth, 20,
-					VersionedText.literal("< Prev"), press -> {
+					VersionedText.translatable("automodpack.ui.previous"), press -> {
 						if (page > 0) {
 							page--;
 							rebuild();
 						}
 					}));
 			Button pageLabel = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 1), pageY, pageWidth, 20,
-					VersionedText.literal((page + 1) + " / " + pageCount), press -> {});
+					VersionedText.translatable("automodpack.ui.page", page + 1, pageCount), press -> {});
 			pageLabel.active = false;
 			this.addRenderableWidget(pageLabel);
 			this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 2), pageY, pageWidth, 20,
-					VersionedText.literal("Next >"), press -> {
+				VersionedText.translatable("automodpack.ui.next"), press -> {
 						if (page < pageCount - 1) {
 							page++;
 							rebuild();
@@ -105,9 +105,9 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private MutableComponent rowLabel(Entry entry) {
 		String name = entry.record().manifest().modpackName().isBlank() ? entry.record().manifest().modpackId() : entry.record().manifest().modpackName();
-		String state = entry.active() ? "  [active]" : "  [review switch]";
-		String connection = entry.connectionAvailable() ? "  connected" : "  local record";
-		return VersionedText.literal(truncateToWidth(this.font, name + state + connection, panelWidth(PANEL_WIDTH) - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
+		String state = VersionedText.translatable(entry.active() ? "automodpack.packManager.activeMarker" : "automodpack.packManager.reviewMarker").getString();
+		String connection = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.connected" : "automodpack.packManager.localRecord").getString();
+		return VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.packManager.row", name, state, connection).getString(), panelWidth(PANEL_WIDTH) - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
 	}
 
 	@Override

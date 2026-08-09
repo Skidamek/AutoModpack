@@ -26,7 +26,7 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 	private int page;
 
 	public PatchNotesHistoryScreen(Screen parent, List<GenerationPatchNoteHistory.Entry> history, String modpackName) {
-		super(VersionedText.literal("PatchNotesHistoryScreen"));
+		super(VersionedText.translatable("automodpack.patchNotes.title"));
 		this.parent = parent;
 		this.history = history.stream().filter(entry -> !entry.patchNotes().isBlank()).toList();
 		this.modpackName = modpackName == null ? "" : modpackName;
@@ -39,8 +39,8 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 		int y = this.height - 28;
 		int buttonWidth = actionButtonWidth(310, 3);
 		boolean hasPagination = pageCount() > 1;
-		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), y, buttonWidth, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
-		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), y, buttonWidth, 20, VersionedText.literal("Next >"), button -> changePage(1));
+		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), y, buttonWidth, 20, VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1));
+		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), y, buttonWidth, 20, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
 		if (hasPagination) {
 			this.addRenderableWidget(this.previousButton);
 			this.addRenderableWidget(this.nextButton);
@@ -67,11 +67,11 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 		List<String> lines = new ArrayList<>();
 		for (int index = 0; index < history.size(); index++) {
 			GenerationPatchNoteHistory.Entry entry = history.get(index);
-			lines.add(truncateToWidth(this.font, "Generation " + shortGenerationId(entry.generationId()) + "  " + entry.createdAt(), width));
+			lines.add(truncateToWidth(this.font, VersionedText.translatable("automodpack.patchNotes.generation", shortGenerationId(entry.generationId()), entry.createdAt()).getString(), width));
 			lines.addAll(wrapToWidth(this.font, entry.patchNotes(), width, Integer.MAX_VALUE));
 			if (index + 1 < history.size()) lines.add("");
 		}
-		if (lines.isEmpty()) lines.add("No patch notes are available.");
+		if (lines.isEmpty()) lines.add(VersionedText.translatable("automodpack.patchNotes.empty").getString());
 		return lines;
 	}
 
@@ -97,21 +97,22 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		int left = panelLeft(PANEL_WIDTH) + CONTENT_PADDING;
-		String title = modpackName.isBlank() ? "Patch-note history" : modpackName + " patch-note history";
+		String title = VersionedText.translatable(modpackName.isBlank() ? "automodpack.patchNotes.title" : "automodpack.patchNotes.titleNamed", modpackName).getString();
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH) - CONTENT_PADDING * 2)).withStyle(ChatFormatting.BOLD), left, 16,
 				TextColors.WHITE);
-		drawTextWithShadow(matrices, this.font, VersionedText.literal("All received generation notes").withStyle(ChatFormatting.GRAY), left, 31, TextColors.WHITE);
+		drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.patchNotes.description").withStyle(ChatFormatting.GRAY), left, 31, TextColors.WHITE);
 		List<String> lines = displayLines();
 		int pageSize = pageSize();
 		int start = page * pageSize;
 		int end = Math.min(lines.size(), start + pageSize);
 		for (int index = start; index < end; index++) {
 			String line = lines.get(index);
-			ChatFormatting color = line.startsWith("Generation ") ? ChatFormatting.YELLOW : ChatFormatting.WHITE;
+			String generationPrefix = VersionedText.translatable("automodpack.patchNotes.generation", "", "").getString().stripTrailing();
+			ChatFormatting color = line.startsWith(generationPrefix) ? ChatFormatting.YELLOW : ChatFormatting.WHITE;
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(color), left, 50 + (index - start) * LINE_HEIGHT, TextColors.WHITE);
 		}
 		if (pageCount() > 1)
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal((page + 1) + " / " + pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 42,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 42,
 					TextColors.WHITE);
 	}
 
