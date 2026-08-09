@@ -626,28 +626,46 @@ flow:
     fixture: { modId: amp_autotest_removed, version: "1.0.0-published", marker: published }
   - do: seed_bootstrap
     name: re-bootstrap the fresh client from the live server generation
+  - do: write_file
+    name: opt the fresh client into client-owned preload application
+    path: automodpack/client-config.json
+    content: |
+      {
+        "DO_NOT_CHANGE_IT": 3,
+        "selectedModpackId": "${bootstrap_modpack_id}",
+        "updateSelectedModpackOnLaunch": true,
+        "reviewUpdates": false
+      }
   - do: launch_client
     name: launch the fresh client without generation history or CAS
   - do: wait_bridge
     name: wait for the fresh client bridge
   - do: assert_preload_acquired
     name: verify the fresh client reacquired current objects into empty CAS
-  - do: connect
-    name: connect the fresh client to the same server
-  - use: download_modpack
-  - use: restart_client
-  - use: rejoin
+  - do: wait_for
+    name: verify preload applied through the normal transaction path
+    until:
+      log:
+        container: client
+        matches: 'Preload applied the selected target transaction successfully'
+  - do: wait_generation
+    name: verify preload committed the advertised generation metadata
+    patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
+    timeout: 300s
+  - do: assert_generation
+    name: verify preload committed the generation record and patch notes
+    patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
+  - do: assert_file_content
+    name: verify preload committed current files before any normal download
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
   - do: assert
-    name: verify fresh-client tombstone cleanup removed the old published mod
+    name: verify preload applied the published tombstone before any normal download
     that: { file_gone: mods/amp-autotest-removed.jar }
   - do: assert_mod_fixture
     name: verify fresh-client current local content remains intact
     path: mods/local-unowned.jar
     fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
-  - do: assert_file_content
-    name: verify fresh-client current files are installed
-    path: "${active_dir}/config/amp-autotest-alpha.txt"
-    content: "amp-autotest-alpha-v2\n"
   - do: disconnect
     name: return from the server to the vanilla title screen before removal
   - use: open_multiplayer

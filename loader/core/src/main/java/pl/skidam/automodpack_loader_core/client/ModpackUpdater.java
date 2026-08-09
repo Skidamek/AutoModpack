@@ -262,8 +262,11 @@ public class ModpackUpdater implements AutoCloseable {
 		if (preload) {
 			try {
 				preloadAcquireTarget();
+			} catch (UpdateDeferredException e) {
+				LOGGER.warn("Preload transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+				new ReLauncher(UpdateType.UPDATE, changelogs).restart(true);
 			} catch (Exception e) {
-				LOGGER.error("Failed to preload the selected modpack objects; keeping the active projection unchanged", e);
+				LOGGER.error("Failed to preload or apply the selected modpack target; no projection changes were made outside the existing transaction guarantees", e);
 			} finally {
 				try {
 					loadSelectedActiveProjection();
@@ -312,10 +315,6 @@ public class ModpackUpdater implements AutoCloseable {
 		requireLiveConnection();
 		ModpackJsons.ModpackContentFields preloadTarget = selectedTarget.completeTarget();
 		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = preloadTarget.list == null ? List.of() : preloadTarget.list;
-		if (targetItems.isEmpty()) {
-			LOGGER.info("Selected modpack target contains no files; preload has nothing to acquire");
-			return;
-		}
 
 		long start = System.currentTimeMillis();
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
@@ -326,16 +325,33 @@ public class ModpackUpdater implements AutoCloseable {
 			Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
 			if (uncached.isEmpty()) {
 				LOGGER.info("Preload reused all {} verified complete modpack objects", targetSet.size());
-				return;
+			} else {
+				totalBytesToDownload = uncached.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
+				FetchManager fetchManager = ensureSourceFetch(uncached);
+				if (!downloadModpack(uncached, start, fetchManager, false)) throw new IOException("One or more selected modpack objects could not be acquired");
+				Set<ModpackJsons.ModpackContentFields.ModpackContentItem> stillUncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
+				if (!stillUncached.isEmpty()) throw new IOException("Verified CAS objects are still missing after preload: " + stillUncached.size());
+				LOGGER.info("Preloaded {} complete modpack objects in {}ms", targetSet.size(), System.currentTimeMillis() - start);
 			}
-
-			totalBytesToDownload = uncached.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-			FetchManager fetchManager = ensureSourceFetch(uncached);
-			if (!downloadModpack(uncached, start, fetchManager, false)) throw new IOException("One or more selected modpack objects could not be acquired");
-			Set<ModpackJsons.ModpackContentFields.ModpackContentItem> stillUncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
-			if (!stillUncached.isEmpty()) throw new IOException("Verified CAS objects are still missing after preload: " + stillUncached.size());
-			LOGGER.info("Preloaded {} complete modpack objects in {}ms", targetSet.size(), System.currentTimeMillis() - start);
 		}
+		if (clientConfig.reviewUpdates) {
+			LOGGER.info("Preload acquired the complete selected target but kept the active projection unchanged because reviewUpdates=true");
+			return;
+		}
+		applyPreloadedTarget(start);
+	}
+
+	private void applyPreloadedTarget(long start) throws Exception {
+		ClientUpdatePlanBuilder.PreparedPlan prepared;
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+			prepared = planBuilder.buildPlan(new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, true), cache, modCache);
+		}
+		LOGGER.info("Preload reviewUpdates=false; applying the prepared selected-target update before the game starts");
+		recordChangelogs(prepared, selectedTarget);
+		ApplyResult applyResult = applyPreparedPlan(prepared, selectedTarget);
+		changelogs.setRestartReasons(applyResult.reasonDescriptions());
+		LOGGER.info("Preload applied the selected target transaction successfully; required restart: {} took {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
+		restartAfterApply(applyResult);
 	}
 
 	private static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uniqueObjects(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
