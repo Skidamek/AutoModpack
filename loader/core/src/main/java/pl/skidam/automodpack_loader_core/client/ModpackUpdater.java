@@ -36,6 +36,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.LocalModArchive;
 import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -111,6 +112,29 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public SelectedModpackTarget getSelectedTarget() {
 		return Objects.requireNonNull(selectedTarget, "Selected modpack target is unavailable");
+	}
+
+	/** The explicit local-mod review is available only before the first generation exists. */
+	public boolean isFreshInstall() {
+		try {
+			return storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS);
+		} catch (IOException e) {
+			throw new IllegalStateException("Could not determine whether this is a fresh modpack install", e);
+		}
+	}
+
+	public LocalModArchive.Snapshot localModCandidates() throws IOException {
+		if (!isFreshInstall()) return new LocalModArchive.Snapshot(List.of());
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			return LocalModArchive.candidates(storage, THIS_MOD_JAR, cache);
+		}
+	}
+
+	public void archiveLocalMods(List<LocalModArchive.ArchiveEntry> selected) throws IOException {
+		if (!isFreshInstall()) throw new IOException("Local mod cleanup is available only during a fresh modpack install");
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			LocalModArchive.archive(storage, selected, cache);
+		}
 	}
 
 	public String getPatchNotes() {

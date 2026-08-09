@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
@@ -17,6 +18,8 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.LocalModArchive;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -25,6 +28,9 @@ public final class FirstConnectScreen extends VersionedScreen {
 	private final ModpackUpdater updater;
 	private final SelectedModpackTarget target;
 	private boolean finished;
+	private LocalModArchive.Snapshot localModCandidates;
+	private Future<?> localModWork;
+	private boolean localModsLoaded;
 
 	public FirstConnectScreen(ModpackUpdater updater) {
 		super(VersionedText.translatable("automodpack.firstConnect.title"));
@@ -35,6 +41,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
+		if (!localModsLoaded && localModWork == null) loadLocalModCandidates();
 		int actionY = this.height - 28;
 		int twoButtonWidth = actionButtonWidth(310, 2);
 		this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 0), actionY, twoButtonWidth, 20,
@@ -43,9 +50,46 @@ public final class FirstConnectScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
 		int optionalY = actionY - 26;
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
-		if (GenerationPatchNoteHistory.containsNotes(target.patchNotesHistory())) {
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY - 26, 150, 20, VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
+		if (localModsLoaded && !localModCandidates.entries().isEmpty()) {
+			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY - 26, 150, 20,
+					VersionedText.translatable("automodpack.firstConnect.reviewLocalMods"), button -> reviewLocalMods()));
 		}
+		if (GenerationPatchNoteHistory.containsNotes(target.patchNotesHistory())) {
+			int patchNotesY = optionalY - 26 - (localModsLoaded && !localModCandidates.entries().isEmpty() ? 26 : 0);
+			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, patchNotesY, 150, 20, VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
+		}
+	}
+
+	private void loadLocalModCandidates() {
+		localModWork = DownloadClient.NET_EXECUTOR.submit(() -> {
+			try {
+				LocalModArchive.Snapshot candidates = updater.localModCandidates();
+				this.minecraft.execute(() -> {
+					localModCandidates = candidates;
+					localModsLoaded = true;
+					localModWork = null;
+					rebuild();
+				});
+			} catch (Exception exception) {
+				this.minecraft.execute(() -> {
+					localModCandidates = new LocalModArchive.Snapshot(List.of());
+					localModsLoaded = true;
+					localModWork = null;
+					rebuild();
+				});
+			}
+		});
+	}
+
+	private void reloadLocalModCandidates() {
+		localModsLoaded = false;
+		localModWork = null;
+		loadLocalModCandidates();
+	}
+
+	private void reviewLocalMods() {
+		if (!localModsLoaded || localModCandidates.entries().isEmpty()) return;
+		ScreenImpl.setScreen(new LocalModReviewScreen(this, updater, localModCandidates, this::reloadLocalModCandidates));
 	}
 
 	private void continueWithDefaults() {
@@ -84,6 +128,15 @@ public final class FirstConnectScreen extends VersionedScreen {
 
 	private void openPatchNotes() {
 		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, target.patchNotesHistory(), target.manifest().modpackName()));
+	}
+
+	private void rebuild() {
+		/*? if >=1.19.2 {*/
+		this.rebuildWidgets();
+		/*?} else {*/
+		/*
+		this.init(this.minecraft, this.width, this.height);
+		*//*?}*/
 	}
 
 	@Override

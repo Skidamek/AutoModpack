@@ -47,6 +47,7 @@ public class Constants {
 	public static final Path clientBackupDir = clientDir.resolve("backup");
 	public static final Path clientRecoveryDir = clientDir.resolve("recovery");
 	public static final Path clientQuarantineDir = clientDir.resolve("quarantine");
+	public static final Path clientLocalModArchiveDir = clientDir.resolve("local-mod-archive");
 	public static final Path clientActiveStateFile = clientDir.resolve("active-state.json");
 	public static final Path clientSelectionFile = clientDir.resolve("selections.json");
 	public static final Path clientRestartLoopStateFile = clientDir.resolve("restart-state.json");

@@ -73,6 +73,26 @@ public class ClientStorageJsons {
 		}
 	}
 
+	public static class ClientLocalModArchiveFields {
+		public int schemaVersion = 1;
+		public List<EntryFields> entries = List.of();
+
+		public static class EntryFields {
+			public String entryId = "";
+			public String originalPath = "";
+			public String archivePath = "";
+			public String sha1 = "";
+			public long size = -1;
+			public String archivedAt = "";
+		}
+
+		public static class PendingFields {
+			public int schemaVersion = 1;
+			public String operation = "";
+			public EntryFields entry = new EntryFields();
+		}
+	}
+
 	public static class ClientOverlayFields {
 		public String modpackId = "";
 		public List<String> deletedPaths = List.of();
