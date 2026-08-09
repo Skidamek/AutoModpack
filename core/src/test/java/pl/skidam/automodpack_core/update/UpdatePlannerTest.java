@@ -33,7 +33,7 @@ class UpdatePlannerTest {
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(),
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
-				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), null, new Jsons.ClientConfigFieldsV3()));
+				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3()));
 
 		assertEquals(1, plan.conflicts().size());
 		assertEquals(ConflictAction.QUARANTINE, plan.conflicts().get(0).action());
@@ -50,7 +50,7 @@ class UpdatePlannerTest {
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(),
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
-				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())), List.of(), null, new Jsons.ClientConfigFieldsV3()));
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3()));
 
 		assertEquals(1, plan.conflicts().size());
 		assertEquals(OperationType.DELETE, plan.operations().stream().filter(operation -> operation.root() == Root.GAME_DIR).findFirst().orElseThrow().operation());
@@ -76,16 +76,16 @@ class UpdatePlannerTest {
 		Map<FileKey, FileState> initial = Map.of(new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(local, 1, true, true));
 		Map<String, FileState> aOverlay = Map.of("config/shared.json", new FileState(editedA, 1, true, false));
 		UpdatePlan first = UpdatePlanner.plan(new UpdatePlanner.Input(null, a, initial, aOverlay, Set.of(),
-				List.of(mod("mods/shared.jar", sharedA, "shared"), mod("mods/a.jar", aOnly, "a")), List.of(mod("mods/local.jar", local, "local")), List.of(), null,
+				List.of(mod("mods/shared.jar", sharedA, "shared"), mod("mods/a.jar", aOnly, "a")), List.of(mod("mods/local.jar", local, "local")), List.of(), List.of(), null,
 				config("packaa1")));
 		Map<FileKey, FileState> afterA = projectedFiles(first);
 		Map<FileKey, FileState> beforeB = withoutOverlays(afterA);
 		UpdatePlan second = UpdatePlanner.plan(new UpdatePlanner.Input(a, b, beforeB, Map.of(), Set.of(),
-				List.of(mod("mods/shared.jar", sharedB, "shared"), mod("mods/b.jar", bOnly, "b")), List.of(mod("mods/local.jar", local, "local")), List.of(),
+				List.of(mod("mods/shared.jar", sharedB, "shared"), mod("mods/b.jar", bOnly, "b")), List.of(mod("mods/local.jar", local, "local")), List.of(), List.of(),
 				new UpdatePlanner.SelectionContext("packaa1", a, aOverlay), config("packbb1")));
 		Map<FileKey, FileState> beforeAAgain = withoutOverlays(projectedFiles(second));
 		UpdatePlan third = UpdatePlanner.plan(new UpdatePlanner.Input(b, a, beforeAAgain, aOverlay, Set.of(),
-				List.of(mod("mods/shared.jar", sharedA, "shared"), mod("mods/a.jar", aOnly, "a")), List.of(mod("mods/local.jar", local, "local")), List.of(),
+				List.of(mod("mods/shared.jar", sharedA, "shared"), mod("mods/a.jar", aOnly, "a")), List.of(mod("mods/local.jar", local, "local")), List.of(), List.of(),
 				new UpdatePlanner.SelectionContext("packbb1", b, Map.of()), config("packaa1")));
 
 		assertTrue(second.operations().stream().anyMatch(operation -> operation.root() == Root.PROJECTION && operation.relativePath().equals("mods/a.jar")
@@ -113,7 +113,7 @@ class UpdatePlannerTest {
 
 		Jsons.ModpackContentFields installed = manifest(Map.of("mods/old.jar", item("mods/old.jar", OLD_HASH, 8, "mod")),
 				ledger(entry("mods/old.jar", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 
 		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR
@@ -220,7 +220,7 @@ class UpdatePlannerTest {
 		Jsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/sodium.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/sodium.jar"), new FileState(OTHER_HASH, 8, true, true));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/sodium.jar")
@@ -263,7 +263,7 @@ class UpdatePlannerTest {
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(editedTargetHash, 7, true, false),
 				new FileKey(Root.PROJECTION, "config/settings.json"), new FileState(editedTargetHash, 7, true, false));
 		UpdatePlanner.Input input = new UpdatePlanner.Input(null, target, files,
-				Map.of("config/settings.json", new FileState(editedOldHash, 6, true, false)), Set.of(), List.of(), List.of(), List.of(),
+				Map.of("config/settings.json", new FileState(editedOldHash, 6, true, false)), Set.of(), List.of(), List.of(), List.of(), List.of(),
 				new UpdatePlanner.SelectionContext("old1234", previous), new Jsons.ClientConfigFieldsV3());
 
 		UpdatePlan plan = UpdatePlanner.plan(input);
@@ -276,7 +276,7 @@ class UpdatePlannerTest {
 	}
 
 	private static UpdatePlanner.Input input(Jsons.ModpackContentFields target, Map<FileKey, FileState> files) {
-		return new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3());
+		return new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3());
 	}
 
 	private static UpdatePlan planWithGeneratedCopies(Jsons.ModpackContentFields target, Map<FileKey, FileState> files, List<NestedCopy> previous, List<NestedCopy> generated) {
