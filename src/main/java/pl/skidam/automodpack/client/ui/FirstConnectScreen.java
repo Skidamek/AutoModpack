@@ -44,7 +44,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		int optionalY = actionY - 26;
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
 		if (GenerationPatchNoteHistory.containsNotes(target.patchNotesHistory())) {
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY - 26, 150, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
+			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY - 26, 150, 20, VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
 		}
 	}
 
@@ -122,8 +122,8 @@ public final class FirstConnectScreen extends VersionedScreen {
 
 		y += 19;
 		long bytes = target.flatTarget().list.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		String summary = truncateToWidth(this.font, "Selected groups: " + selection.selectedGroups().size() + "  Files: " + target.flatTarget().list.size() + "  Content size: " + UiFormat.formatSize(bytes),
-				this.width - 20);
+		String summary = truncateToWidth(this.font,
+				VersionedText.translatable("automodpack.firstConnect.selectedSummary", selection.selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(bytes)).getString(), this.width - 20);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
 		y += 16;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.bundleExplanation").withStyle(ChatFormatting.GRAY), this.width / 2, y,
@@ -134,11 +134,13 @@ public final class FirstConnectScreen extends VersionedScreen {
 				TextColors.WHITE);
 		y += 14;
 		String groups = names(target.manifest().groups(), selection.selectedGroups());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Included groups: " + groups, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
+		drawCenteredTextWithShadow(matrices, this.font,
+				VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.firstConnect.includedGroups", groups).getString(), this.width - 20)).withStyle(ChatFormatting.WHITE),
+				this.width / 2, y,
 				TextColors.WHITE);
 		if (!selection.staleRequestedGroups().isEmpty()) {
 			y += 14;
-			String stale = "Unavailable old choices: " + names(target.manifest().groups(), selection.staleRequestedGroups());
+			String stale = VersionedText.translatable("automodpack.firstConnect.unavailableOldChoices", names(target.manifest().groups(), selection.staleRequestedGroups())).getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, stale, this.width - 20)).withStyle(ChatFormatting.RED), this.width / 2, y,
 					TextColors.WHITE);
 		}
@@ -159,7 +161,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 			else display = id;
 			names.add(display);
 		}
-		if (names.isEmpty()) return "none";
+		if (names.isEmpty()) return VersionedText.translatable("automodpack.ui.none").getString();
 		String joined = String.join(", ", names);
 		return truncateToWidth(this.font, joined, Math.max(1, this.width - 20));
 	}
