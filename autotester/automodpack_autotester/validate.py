@@ -26,6 +26,7 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "pack-switching",
     "generation-update",
     "conflict-preservation",
+    "quarantine-restoration",
     "fresh-generation-deletion",
     "removal",
     "secure-bootstrap",
