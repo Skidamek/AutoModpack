@@ -271,6 +271,20 @@ public class Jsons {
 		}
 	}
 
+	public static class ClientGeneratedCopiesFields {
+		public int schemaVersion = 1;
+		public String modpackId = "";
+		public String generationId = "";
+		public String selectionDigest = "";
+		public List<EntryFields> entries = List.of();
+
+		public static class EntryFields {
+			public String logicalPath = "";
+			public String sha1 = "";
+			public long size = -1;
+		}
+	}
+
 	public static class ClientGenerationStateFields {
 		public String modpackId = "";
 		public String generationId = "";

@@ -60,6 +60,30 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void commitsGeneratedCopyOwnershipWithTheGenerationTransaction() throws Exception {
+		ClientStorage storage = storage();
+		byte[] rootBytes = "root-object".getBytes(StandardCharsets.UTF_8);
+		byte[] nestedBytes = "nested-object".getBytes(StandardCharsets.UTF_8);
+		String rootHash = store(storage, rootBytes);
+		String nestedHash = store(storage, nestedBytes);
+		SelectedModpackTarget target = target("mods/root.jar", "mod", false, rootHash, rootBytes.length);
+		UpdatePlan.NestedCopy generated = new UpdatePlan.NestedCopy("mods/nested.jar", nestedHash, nestedBytes.length, Set.of("nested"));
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), List.of(
+				new Operation(Root.PROJECTION, "mods/root.jar", OperationType.INSTALL_OBJECT, rootHash, rootBytes.length, null),
+				new Operation(Root.GAME_DIR, "mods/nested.jar", OperationType.INSTALL_OBJECT, nestedHash, nestedBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/root.jar", true, rootHash, rootBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "mods/nested.jar", true, nestedHash, nestedBytes.length)),
+				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated));
+
+		assertTrue(executor(storage).commit(plan, target).success());
+
+		GeneratedCopyState state = GeneratedCopyState.read(storage, target.manifest().modpackId(), target.generationTarget().targetGenerationId(),
+				UpdateTransaction.digest(target.selection().intent()));
+		assertEquals(List.of(new GeneratedCopyState.Entry("mods/nested.jar", nestedHash, nestedBytes.length)), state.entries());
+		assertTrue(SmartFileUtils.isValidFile(storage.modsDirectory().resolve("nested.jar"), nestedBytes.length, nestedHash));
+	}
+
+	@Test
 	void metadataOnlyUpdateKeepsProjectionAndDoesNotRequireCasObject() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "metadata-only-projection".getBytes(StandardCharsets.UTF_8);
@@ -204,6 +228,14 @@ class UpdateTransactionExecutorTest {
 		executor.commit(install, target);
 		Path live = storage.gameDirectory().resolve("mods/remove.jar");
 		Files.write(live, bytes);
+		Path generatedLive = storage.gameDirectory().resolve("mods/generated-remove.jar");
+		byte[] generatedBytes = "generated-removable-object".getBytes(StandardCharsets.UTF_8);
+		Files.write(generatedLive, generatedBytes);
+		String generatedHash = HashUtils.getHash(generatedLive);
+		SelectionIntent expected = target.selection().intent();
+		GeneratedCopyState generatedCopies = new GeneratedCopyState(target.manifest().modpackId(), target.generationTarget().targetGenerationId(),
+				UpdateTransaction.digest(expected), List.of(new GeneratedCopyState.Entry("mods/generated-remove.jar", generatedHash, generatedBytes.length)));
+		generatedCopies.write(storage);
 
 		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
 		baseline.modpackId = target.manifest().modpackId();
@@ -215,16 +247,20 @@ class UpdateTransactionExecutorTest {
 		baseline.entries = List.of(baselineEntry);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
 				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true),
-				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true));
+				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true),
+				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/generated-remove.jar"), new UpdatePlan.FileState(generatedHash, generatedBytes.length, true, true));
 		Jsons.ClientConfigFieldsV3 removalConfig = new Jsons.ClientConfigFieldsV3();
-		UpdatePlan removal = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), removalConfig));
+		UpdatePlan removal = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), generatedCopies, removalConfig));
 		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, "mods/remove.jar", hash, bytes.length)), removal.preservations());
-		SelectionIntent expected = target.selection().intent();
+		assertTrue(removal.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/generated-remove.jar")
+				&& operation.operation() == OperationType.DELETE && generatedHash.equals(operation.expectedExistingHash())));
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(removal, ClientPlatform.LINUX, expected, storage.overlayDigest(target.manifest().modpackId()));
 		Files.delete(storage.objectsDirectory().resolve(hash));
 
 		assertTrue(executor.commit(transaction).success());
 		assertFalse(Files.exists(live));
+		assertFalse(Files.exists(generatedLive));
+		assertFalse(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.generationTarget().targetGenerationId(), UpdateTransaction.digest(expected))));
 		assertTrue(SmartFileUtils.isValidFile(storage.objectsDirectory().resolve(hash), bytes.length, hash));
 		assertTrue(Files.isDirectory(storage.activeDirectory()));
 		try (var paths = Files.list(storage.activeDirectory())) {
