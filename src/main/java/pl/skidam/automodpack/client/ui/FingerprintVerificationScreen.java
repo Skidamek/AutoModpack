@@ -91,7 +91,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		// Wiki button (icon button aligned to the right of text field)
 		this.wikiButton = iconButtonWidget(this.width / 2 + 22 + 150, this.height / 2 + 15, 20, 16,
 				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
-				"link");
+				"link", VersionedText.translatable("automodpack.learnmore"));
 
 		setTooltip(wikiButton, VersionedText.translatable("automodpack.learnmore"));
 	}
