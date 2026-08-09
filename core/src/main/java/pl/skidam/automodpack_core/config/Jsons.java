@@ -230,6 +230,14 @@ public class Jsons {
 		public String generationId = "";
 	}
 
+	public static class GenerationCheckpointFields {
+		public int schemaVersion;
+		public String boundaryGenerationId = "";
+		public CompleteModpackContentFields record = new CompleteModpackContentFields();
+		public List<String> supersededGenerationIds = List.of();
+		public List<String> supersededCatalogueStateDigests = List.of();
+	}
+
 	public static class OwnershipLedgerFields {
 		public String modpackId = "";
 		public List<EntryFields> entries = List.of();

@@ -55,6 +55,7 @@ public class Constants {
 	public static final Path serverDir = automodpackDir.resolve("server");
 	public static final Path serverCurrentFile = serverDir.resolve("current.json");
 	public static final Path serverCurrentProjectionFile = serverDir.resolve("current-projection.json");
+	public static final Path serverGenerationCheckpointFile = serverDir.resolve("checkpoint.json");
 	public static final Path serverCataloguesDir = serverDir.resolve("catalogues");
 	public static final Path serverCommitsDir = serverDir.resolve("commits");
 	public static final Path serverDeltasDir = serverDir.resolve("deltas");
