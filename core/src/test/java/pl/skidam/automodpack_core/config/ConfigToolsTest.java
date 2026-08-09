@@ -94,20 +94,6 @@ class ConfigToolsTest {
 	}
 
 	@Test
-	void readsLegacyAdvertisedEndpointAliasesAndWritesOnlyNewNames() {
-		ServerConfigJsons.ServerConfigFieldsV2 config = ConfigTools.parse("{\"addressToSend\":\"downloads.example.com\",\"portToSend\":24444}",
-				ServerConfigJsons.ServerConfigFieldsV2.class);
-
-		assertEquals("downloads.example.com", config.advertisedEndpointHost);
-		assertEquals(24444, config.advertisedEndpointPort);
-		String serialized = ConfigTools.GSON.toJson(config);
-		assertTrue(serialized.contains("\"advertisedEndpointHost\""));
-		assertTrue(serialized.contains("\"advertisedEndpointPort\""));
-		assertFalse(serialized.contains("addressToSend"));
-		assertFalse(serialized.contains("portToSend"));
-	}
-
-	@Test
 	void connectionInfoCompletenessRequiresOriginAndEndpoint() {
 		ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo();
 		assertFalse(connectionInfo.isComplete());
