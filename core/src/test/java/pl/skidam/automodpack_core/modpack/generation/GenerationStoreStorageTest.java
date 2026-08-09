@@ -44,6 +44,7 @@ class GenerationStoreStorageTest {
 		long deltaBytes = directoryBytes(tempDir.resolve("deltas"));
 		long objectBytes = Files.size(store.objectRoot().resolve(first.record().manifest().groups().get("main").files().get("config/example.txt").sha1()))
 				+ Files.size(store.objectRoot().resolve(second.record().manifest().groups().get("main").files().get("config/example.txt").sha1()));
+		long currentObjectBytes = Files.size(store.objectRoot().resolve(second.record().manifest().groups().get("main").files().get("config/example.txt").sha1()));
 
 		assertEquals(2, report.catalogueCount());
 		assertEquals(catalogueBytes, report.catalogueBytes());
@@ -55,10 +56,10 @@ class GenerationStoreStorageTest {
 		assertEquals(objectBytes, report.immutableObjectBytes());
 		assertEquals(1, report.stagingFileCount());
 		assertEquals(Files.size(stagingFile), report.stagingBytes());
-		assertEquals(2, report.referencedObjectCount());
-		assertEquals(objectBytes, report.referencedObjectBytes());
-		assertEquals(3, report.objectReferenceCount());
-		assertEquals(2d / 3d, report.uniqueObjectReferenceRatio().orElseThrow());
+		assertEquals(1, report.referencedObjectCount());
+		assertEquals(currentObjectBytes, report.referencedObjectBytes());
+		assertEquals(1, report.objectReferenceCount());
+		assertEquals(1d, report.uniqueObjectReferenceRatio().orElseThrow());
 	}
 
 	@Test
@@ -109,9 +110,9 @@ class GenerationStoreStorageTest {
 		assertTrue(Files.exists(store.objectRoot().resolve(pinnedHash)));
 
 		GenerationStore.CollectionResult unpinnedGeneration = store.collectUnreachableObjects(Set.of(), Set.of(pinnedHash));
-		assertEquals(0, unpinnedGeneration.deletedObjectCount());
+		assertEquals(1, unpinnedGeneration.deletedObjectCount());
 		assertTrue(Files.exists(store.objectRoot().resolve(pinnedHash)));
-		assertTrue(Files.exists(store.objectRoot().resolve(first.record().manifest().groups().get("main").files().get("config/example.txt").sha1())));
+		assertFalse(Files.exists(store.objectRoot().resolve(first.record().manifest().groups().get("main").files().get("config/example.txt").sha1())));
 	}
 
 	@Test
@@ -126,9 +127,12 @@ class GenerationStoreStorageTest {
 
 		GenerationStore.CollectionResult result = store.collectUnreachableObjects(Set.of(), Set.of());
 
-		assertEquals(1, result.deletedObjectCount());
+		assertEquals(2, result.deletedObjectCount());
 		assertFalse(Files.exists(store.objectRoot().resolve(orphanHash)));
-		assertTrue(Files.exists(store.objectRoot().resolve(historicalHash)));
+		assertFalse(Files.exists(store.objectRoot().resolve(historicalHash)));
+		assertDoesNotThrow(() -> store.loadCurrentDeep().orElseThrow());
+		assertTrue(store.loadCurrentDeep().orElseThrow().record().ownershipLedger().entries().get("config/example.txt").historicalHashes().stream()
+				.anyMatch(content -> content.sha1().equals(historicalHash)));
 	}
 
 	@Test

@@ -188,7 +188,7 @@ class GenerationStoreTest {
 	}
 
 	@Test
-	void deepVerificationRejectsMissingHistoricalObject() throws Exception {
+	void deepVerificationAllowsCollectedHistoricalObject() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
@@ -197,7 +197,7 @@ class GenerationStoreTest {
 		Files.delete(tempDir.resolve("objects").resolve(historicalHash));
 
 		assertDoesNotThrow(() -> store.loadCurrent().orElseThrow());
-		assertThrows(IOException.class, store::loadCurrentDeep);
+		assertDoesNotThrow(() -> store.loadCurrentDeep().orElseThrow());
 	}
 
 	@Test
@@ -327,6 +327,9 @@ class GenerationStoreTest {
 		assertTrue(Files.exists(tempDir.resolve("checkpoint.json")));
 		assertTrue(Files.exists(tempDir.resolve("commits").resolve(third.record().metadata().generationId() + ".json")));
 		assertFalse(Files.exists(tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json")));
+		ModpackJsons.CompleteModpackContentFields compactedFields = ConfigTools.read(tempDir.resolve("current-projection.json"), ModpackJsons.CompleteModpackContentFields.class).orElseThrow();
+		assertEquals(List.of("first notes", "second notes", "third notes"), GenerationPatchNoteHistory.fromFields(compactedFields).stream()
+				.map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
 		GenerationStore.CompactionResult retry = store.compact();
 		assertEquals(result.supersededGenerationIds(), retry.supersededGenerationIds());
 		assertEquals(0, retry.deletedCommitCount());
@@ -338,6 +341,10 @@ class GenerationStoreTest {
 		assertEquals(third.record(), reloaded.loadCurrentDeep().orElseThrow().record());
 		assertEquals(List.of(third.record().metadata().generationId()), reloaded.currentHistory().stream().map(entry -> entry.metadata().generationId()).toList());
 		assertEquals("third notes", reloaded.loadCurrent().orElseThrow().record().metadata().patchNotes());
+		reloaded.loadCurrentAndRepair().orElseThrow();
+		ModpackJsons.CompleteModpackContentFields reloadedFields = ConfigTools.read(tempDir.resolve("current-projection.json"), ModpackJsons.CompleteModpackContentFields.class).orElseThrow();
+		assertEquals(List.of("first notes", "second notes", "third notes"), GenerationPatchNoteHistory.fromFields(reloadedFields).stream()
+				.map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
 	}
 
 	@Test
