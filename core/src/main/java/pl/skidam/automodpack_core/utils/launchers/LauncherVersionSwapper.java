@@ -13,10 +13,14 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 
 public class LauncherVersionSwapper {
 
-	public static boolean requiresLoaderVersionSwap(String serverLoaderType, String serverLoaderVersion) {
-		if (!clientConfig.syncLoaderVersion) return false;
-		if (serverLoaderType == null || serverLoaderVersion == null || !serverLoaderType.equalsIgnoreCase(LOADER)) return false;
+	public static boolean requiresLoaderVersionSwap(String serverLoaderType, String serverLoaderVersion, boolean syncLoaderVersion, String loaderType) {
+		if (!syncLoaderVersion) return false;
+		if (serverLoaderType == null || serverLoaderVersion == null || !serverLoaderType.equalsIgnoreCase(loaderType)) return false;
 		return MultiMCMeta.requiresLoaderVersionUpdate(serverLoaderType, serverLoaderVersion) || PandoraMeta.requiresLoaderVersionUpdate(serverLoaderVersion);
+	}
+
+	public static boolean requiresLoaderVersionSwap(String serverLoaderType, String serverLoaderVersion) {
+		return requiresLoaderVersionSwap(serverLoaderType, serverLoaderVersion, clientConfig.syncLoaderVersion, LOADER);
 	}
 
 	public static boolean swapLoaderVersion(String serverLoaderType, String serverLoaderVersion) throws IOException {
