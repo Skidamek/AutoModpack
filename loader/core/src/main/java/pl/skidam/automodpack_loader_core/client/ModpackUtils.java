@@ -257,18 +257,19 @@ public class ModpackUtils {
 		}
 	}
 
-	public static Jsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, Jsons.ConnectionInfo connectionInfo) {
+	public static Jsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, Jsons.ConnectionInfo connectionInfo,
+			Jsons.ClientConfigFieldsV3 currentConfig) {
 		ModpackId.requireValid(modpackId);
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing");
 
-		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
+		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(currentConfig);
 		updatedConfig.selectedModpackId = modpackId;
 		return updatedConfig;
 	}
 
-	public static Jsons.ClientConfigFieldsV3 planCachedModpackSelection(String modpackId) {
+	public static Jsons.ClientConfigFieldsV3 planCachedModpackSelection(String modpackId, Jsons.ClientConfigFieldsV3 currentConfig) {
 		ModpackId.requireValid(modpackId);
-		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
+		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(currentConfig);
 		updatedConfig.selectedModpackId = modpackId;
 		return updatedConfig;
 	}
