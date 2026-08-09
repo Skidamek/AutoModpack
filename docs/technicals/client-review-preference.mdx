@@ -1,0 +1,11 @@
+# Client review preference
+
+Players who explicitly want automatic modpack installation and updates can add this line to the client-local `options.txt`:
+
+```text
+automodpack.skipReview:true
+```
+
+AutoModpack keeps this value locally and preserves it when Minecraft or a modpack update rewrites `options.txt`. The default is `false`. The value suppresses the install consent screen, update review screen, and cached installed-pack switch review. It does not suppress certificate verification, trust prompts, pin mismatch handling, or the warning shown for an untrusted certificate.
+
+The server cannot set this preference through modpack metadata or connection settings. Remove the line or set it to `false` to restore the review screens.
