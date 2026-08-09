@@ -18,7 +18,7 @@ import java.util.TreeMap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -180,11 +180,11 @@ class GenerationStoreStorageTest {
 	}
 
 	private static GroupManifest manifest(String description, String hash, long size, String modpackId) {
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = modpackId;
-		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
-		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, false, hash, null));
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, false, hash, null));
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}

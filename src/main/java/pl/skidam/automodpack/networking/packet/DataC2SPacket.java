@@ -15,7 +15,7 @@ import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -47,7 +47,7 @@ public class DataC2SPacket {
 			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.HOST_ERROR));
 		}
 
-		Jsons.ConnectionInfo connectionInfo;
+		ConnectionJsons.ConnectionInfo connectionInfo;
 		try {
 			// Get actual address of the server client have connected to and format it.
 			// Transports such as e4mc expose their own SocketAddress implementation, thus we need to fallback.
@@ -74,7 +74,7 @@ public class DataC2SPacket {
 
 			LOGGER.info("AutoModpack endpoint: {}:{} ({})", endpoint.getHostString(), endpoint.getPort(), connectionMode);
 
-			connectionInfo = new Jsons.ConnectionInfo(connectionAttempt.origin(), endpoint, connectionMode, connectionAttempt.expectedFingerprint(), connectionAttempt.trustReason());
+			connectionInfo = new ConnectionJsons.ConnectionInfo(connectionAttempt.origin(), endpoint, connectionMode, connectionAttempt.expectedFingerprint(), connectionAttempt.trustReason());
 		} catch (Exception e) {
 			LOGGER.error("Error preparing AutoModpack endpoint from data packet", e);
 			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.HOST_ERROR));

@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 
@@ -26,7 +27,6 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -622,7 +622,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			ModpackUpdater updater = null;
 			try {
 				ClientGenerationStore generationStore = new ClientGenerationStore(storage);
-				Jsons.CompleteModpackContentFields fields = generationStore.readFields(localRecord.metadata().generationId())
+				ModpackJsons.CompleteModpackContentFields fields = generationStore.readFields(localRecord.metadata().generationId())
 						.orElseThrow(() -> new IOException("Installed modpack generation record is missing"));
 				SelectedModpackTarget target = SelectedModpackTarget.prepare(fields, expectedSelection, targetIntent, ClientPlatform.current());
 				updater = new ModpackUpdater(target, null, null, storage);

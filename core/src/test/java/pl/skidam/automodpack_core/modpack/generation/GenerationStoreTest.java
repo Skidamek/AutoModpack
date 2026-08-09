@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -75,7 +75,7 @@ class GenerationStoreTest {
 		assertEquals(List.of(first.record().metadata().generationId(), changedNotes.record().metadata().generationId()), history.stream()
 				.map(entry -> entry.metadata().generationId()).toList());
 		assertEquals(List.of("First generation notes", "Updated generation notes"), history.stream().map(entry -> entry.metadata().patchNotes()).toList());
-		Jsons.CompleteModpackContentFields fields = ConfigTools.read(tempDir.resolve("current-projection.json"), Jsons.CompleteModpackContentFields.class).orElseThrow();
+		ModpackJsons.CompleteModpackContentFields fields = ConfigTools.read(tempDir.resolve("current-projection.json"), ModpackJsons.CompleteModpackContentFields.class).orElseThrow();
 		assertEquals(List.of("First generation notes", "Updated generation notes"), GenerationPatchNoteHistory.fromFields(fields).stream()
 				.map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
 	}
@@ -87,7 +87,7 @@ class GenerationStoreTest {
 		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "Second generation notes");
 
-		Jsons.CompleteModpackContentFields fields = ConfigTools.read(tempDir.resolve("current-projection.json"), Jsons.CompleteModpackContentFields.class).orElseThrow();
+		ModpackJsons.CompleteModpackContentFields fields = ConfigTools.read(tempDir.resolve("current-projection.json"), ModpackJsons.CompleteModpackContentFields.class).orElseThrow();
 		List<GenerationPatchNoteHistory.Entry> history = GenerationPatchNoteHistory.fromFields(fields);
 		assertEquals(List.of("First generation notes", "Second generation notes"), history.stream().map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
 		assertEquals(List.of("Second generation notes"), GenerationPatchNoteHistory.after(history, first.record().metadata().generationId()).stream()
@@ -467,19 +467,19 @@ class GenerationStoreTest {
 	}
 
 	private static GroupManifest manifest(String description, String hash, long size) {
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
-		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, false, hash, null));
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, false, hash, null));
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}
 
 	private static GroupManifest emptyManifest(String description) {
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
 		group.files = Map.of();
 		fields.groups = Map.of("main", group);

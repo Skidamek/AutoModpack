@@ -16,7 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
@@ -158,12 +158,12 @@ class QuarantineArchiveTest {
 	private void installActiveRecord(ClientStorage storage, String path) throws Exception {
 		byte[] bytes = "active-mod".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(Files.write(storage.gamePath(path), bytes));
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.modpackName = "Test";
-		Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.required = true;
-		Jsons.CompleteModpackContentFields.GroupFileFields file = new Jsons.CompleteModpackContentFields.GroupFileFields();
+		ModpackJsons.CompleteModpackContentFields.GroupFileFields file = new ModpackJsons.CompleteModpackContentFields.GroupFileFields();
 		file.size = String.valueOf(bytes.length);
 		file.type = "mod";
 		file.sha1 = hash;

@@ -9,7 +9,7 @@ import java.util.Locale;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.StorageJsons;
 
 /** Resolves the one shared-or-local AutoModpack data root for an instance. */
 public final class DataRootResolver {
@@ -81,7 +81,7 @@ public final class DataRootResolver {
 	private static Location loadPinned(Path marker) throws IOException {
 		if (Files.isSymbolicLink(marker) || !Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("AutoModpack data-root marker is not a regular file: " + marker);
-		Jsons.DataRootFields fields = ConfigTools.read(marker, Jsons.DataRootFields.class).orElseThrow(() -> new IOException("AutoModpack data-root marker is empty"));
+		StorageJsons.DataRootFields fields = ConfigTools.read(marker, StorageJsons.DataRootFields.class).orElseThrow(() -> new IOException("AutoModpack data-root marker is empty"));
 		if (fields.root == null || fields.root.isBlank()) throw new IOException("AutoModpack data-root marker has no root");
 		Path root = Path.of(fields.root).toAbsolutePath().normalize();
 		if (!probe(root)) throw new IOException("Pinned AutoModpack data root is unavailable: " + root);
@@ -89,7 +89,7 @@ public final class DataRootResolver {
 	}
 
 	private static void writePinned(Path marker, Location location) throws IOException {
-		Jsons.DataRootFields fields = new Jsons.DataRootFields();
+		StorageJsons.DataRootFields fields = new StorageJsons.DataRootFields();
 		fields.root = location.root().toString();
 		fields.shared = location.shared();
 		ConfigTools.writeAtomic(marker, fields);

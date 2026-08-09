@@ -14,7 +14,7 @@ public class GenerationJsons {
 	public static class GenerationCheckpointFields {
 		public int schemaVersion;
 		public String boundaryGenerationId = "";
-		public Jsons.CompleteModpackContentFields record = new Jsons.CompleteModpackContentFields();
+		public ModpackJsons.CompleteModpackContentFields record = new ModpackJsons.CompleteModpackContentFields();
 		public List<String> supersededGenerationIds = List.of();
 		public List<String> supersededCatalogueStateDigests = List.of();
 	}
@@ -62,7 +62,7 @@ public class GenerationJsons {
 
 	public static class CatalogueSnapshotFields {
 		public String stateDigest = "";
-		public Jsons.CompleteModpackContentFields catalogue = new Jsons.CompleteModpackContentFields();
+		public ModpackJsons.CompleteModpackContentFields catalogue = new ModpackJsons.CompleteModpackContentFields();
 	}
 
 	public static class GenerationCommitFields {

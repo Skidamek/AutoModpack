@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
@@ -20,18 +20,18 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 public final class OriginTrustStore {
 	private OriginTrustStore() {}
 
-	public static Jsons.CertificateTrustEntry get(ClientStorage storage, InetSocketAddress origin) throws IOException {
+	public static ConnectionJsons.CertificateTrustEntry get(ClientStorage storage, InetSocketAddress origin) throws IOException {
 		if (origin == null) return null;
 		return withLock(storage, () -> readUnlocked(storage.knownHostsFile()).hosts.get(AddressHelpers.formatAddress(origin)));
 	}
 
-	public static void save(ClientStorage storage, InetSocketAddress origin, Jsons.CertificateTrustEntry trust) throws IOException {
+	public static void save(ClientStorage storage, InetSocketAddress origin, ConnectionJsons.CertificateTrustEntry trust) throws IOException {
 		if (origin == null || trust == null) throw new IllegalArgumentException("Origin and trust entry are required");
 		String key = AddressHelpers.formatAddress(origin);
 		withLock(storage, () -> {
 			Path file = storage.knownHostsFile();
-			Jsons.KnownHostsFields fields = readUnlocked(file);
-			Jsons.CertificateTrustEntry existing = fields.hosts.put(key, trust);
+			ConnectionJsons.KnownHostsFields fields = readUnlocked(file);
+			ConnectionJsons.CertificateTrustEntry existing = fields.hosts.put(key, trust);
 			if (existing == null || !Objects.equals(existing.fingerprint, trust.fingerprint) || !Objects.equals(existing.reason, trust.reason)) {
 				Files.createDirectories(file.getParent());
 				ConfigTools.writeAtomic(file, fields);
@@ -44,7 +44,7 @@ public final class OriginTrustStore {
 		if (origin == null) return;
 		withLock(storage, () -> {
 			Path file = storage.knownHostsFile();
-			Jsons.KnownHostsFields fields = readUnlocked(file);
+			ConnectionJsons.KnownHostsFields fields = readUnlocked(file);
 			if (fields.hosts.remove(AddressHelpers.formatAddress(origin)) != null) {
 				Files.createDirectories(file.getParent());
 				ConfigTools.writeAtomic(file, fields);
@@ -53,10 +53,10 @@ public final class OriginTrustStore {
 		});
 	}
 
-	private static Jsons.KnownHostsFields readUnlocked(Path file) throws IOException {
-		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new Jsons.KnownHostsFields();
+	private static ConnectionJsons.KnownHostsFields readUnlocked(Path file) throws IOException {
+		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new ConnectionJsons.KnownHostsFields();
 		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Known-hosts file is not a regular file: " + file);
-		Jsons.KnownHostsFields fields = ConfigTools.read(file, Jsons.KnownHostsFields.class)
+		ConnectionJsons.KnownHostsFields fields = ConfigTools.read(file, ConnectionJsons.KnownHostsFields.class)
 				.orElseThrow(() -> new IOException("Known-hosts file is empty: " + file));
 		if (fields.hosts == null) fields.hosts = new HashMap<>();
 		return fields;

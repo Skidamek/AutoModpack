@@ -18,7 +18,7 @@ import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
@@ -85,10 +85,10 @@ public final class ClientGenerationStore {
 		Objects.requireNonNull(patchNotesHistory, "patchNotesHistory");
 		storage.ensureRoots();
 		Path path = storage.generationManifest(record.metadata().generationId());
-		Jsons.CompleteModpackContentFields fields = record.toFields();
+		ModpackJsons.CompleteModpackContentFields fields = record.toFields();
 		GenerationPatchNoteHistory.writeFields(fields, patchNotesHistory);
 		if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			Jsons.CompleteModpackContentFields existingFields = readFields(path).orElseThrow(() -> new IOException("Stored client generation is invalid: " + path));
+			ModpackJsons.CompleteModpackContentFields existingFields = readFields(path).orElseThrow(() -> new IOException("Stored client generation is invalid: " + path));
 			GenerationRecord existing = GenerationRecord.fromFields(existingFields);
 			if (!existing.equals(record)) throw new IOException("Client generation record already exists with different content: " + path);
 			if (!GenerationPatchNoteHistory.fromFields(existingFields).equals(patchNotesHistory)) {
@@ -108,7 +108,7 @@ public final class ClientGenerationStore {
 		return readFields(generationId).map(GenerationRecord::fromFields);
 	}
 
-	public Optional<Jsons.CompleteModpackContentFields> readFields(String generationId) throws IOException {
+	public Optional<ModpackJsons.CompleteModpackContentFields> readFields(String generationId) throws IOException {
 		return readFields(storage.generationManifest(generationId));
 	}
 
@@ -117,7 +117,7 @@ public final class ClientGenerationStore {
 		Objects.requireNonNull(platform, "platform");
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return Optional.empty();
-		Jsons.CompleteModpackContentFields fields = readFields(state.generationId)
+		ModpackJsons.CompleteModpackContentFields fields = readFields(state.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
 		GenerationRecord record = GenerationRecord.fromFields(fields);
 		if (!Objects.equals(state.modpackId, record.manifest().modpackId()))
@@ -300,11 +300,11 @@ public final class ClientGenerationStore {
 						&& candidate.metadata().generationId().compareTo(current.metadata().generationId()) > 0;
 	}
 
-	private static Optional<Jsons.CompleteModpackContentFields> readFields(Path path) throws IOException {
+	private static Optional<ModpackJsons.CompleteModpackContentFields> readFields(Path path) throws IOException {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generation manifest is not a regular file: " + path);
 		try {
-			return ConfigTools.read(path, Jsons.CompleteModpackContentFields.class).map(fields -> {
+			return ConfigTools.read(path, ModpackJsons.CompleteModpackContentFields.class).map(fields -> {
 				GenerationRecord.fromFields(fields);
 				GenerationPatchNoteHistory.fromFields(fields);
 				return fields;
@@ -315,7 +315,7 @@ public final class ClientGenerationStore {
 	}
 
 	private static void verify(Path path, GenerationRecord record, List<GenerationPatchNoteHistory.Entry> patchNotesHistory) throws IOException {
-		Jsons.CompleteModpackContentFields fields = readFields(path).orElseThrow(() -> new IOException("Stored client generation could not be verified: " + path));
+		ModpackJsons.CompleteModpackContentFields fields = readFields(path).orElseThrow(() -> new IOException("Stored client generation could not be verified: " + path));
 		if (!GenerationRecord.fromFields(fields).equals(record)) throw new IOException("Stored client generation verification failed: " + path);
 		if (!GenerationPatchNoteHistory.fromFields(fields).equals(patchNotesHistory)) throw new IOException("Stored client patch-note history verification failed: " + path);
 	}

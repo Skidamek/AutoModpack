@@ -10,7 +10,7 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ConfigUtils {
 
-	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV3 config, boolean saveAfter) {
+	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config, boolean saveAfter) {
 		normalizeServerConfig(config);
 		if (saveAfter) {
 			try {
@@ -21,7 +21,7 @@ public class ConfigUtils {
 		}
 	}
 
-	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV3 config) {
+	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.defaultFor(MC_VERSION, LOADER);
 		if (config.connectionMode == ModpackConnectionMode.HOLEPUNCH && !ModpackConnectionMode.isHolepunchAvailable(MC_VERSION, LOADER)) {
 			config.connectionMode = ModpackConnectionMode.MAGIC_PACKET;
