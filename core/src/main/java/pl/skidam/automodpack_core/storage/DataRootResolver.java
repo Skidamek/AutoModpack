@@ -13,9 +13,43 @@ import pl.skidam.automodpack_core.config.Jsons;
 
 /** Resolves the one shared-or-local AutoModpack data root for an instance. */
 public final class DataRootResolver {
+	public record Layout(Path root) {
+		public Layout {
+			root = Objects.requireNonNull(root, "data root").toAbsolutePath().normalize();
+		}
+
+		public Path objectsDirectory() {
+			return root.resolve("objects").normalize();
+		}
+
+		public Path fileMetadataDirectory() {
+			return root.resolve("file-metadata").normalize();
+		}
+
+		public Path modMetadataDirectory() {
+			return root.resolve("mod-metadata").normalize();
+		}
+
+		public Path packsDirectory() {
+			return root.resolve("packs").normalize();
+		}
+
+		public Path knownHostsFile() {
+			return root.resolve("known-hosts.json").normalize();
+		}
+
+		public Path knownHostsLockFile() {
+			return root.resolve("known-hosts.json.lock").normalize();
+		}
+	}
+
 	public record Location(Path root, boolean shared) {
 		public Location {
 			root = Objects.requireNonNull(root, "root").toAbsolutePath().normalize();
+		}
+
+		public Layout layout() {
+			return new Layout(root);
 		}
 	}
 
