@@ -14,6 +14,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
@@ -146,17 +147,17 @@ public record UpdatePreview(
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
-			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline) {
+			ResolvedSelection selection, boolean removal, ClientStorageJsons.ClientBaselineFields baseline) {
 		return create(plan, originalFiles, target, selection, removal, baseline, "", List.of());
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
-			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline, String patchNotes) {
+			ResolvedSelection selection, boolean removal, ClientStorageJsons.ClientBaselineFields baseline, String patchNotes) {
 		return create(plan, originalFiles, target, selection, removal, baseline, patchNotes, List.of());
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
-			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline, String patchNotes,
+			ResolvedSelection selection, boolean removal, ClientStorageJsons.ClientBaselineFields baseline, String patchNotes,
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(originalFiles, "originalFiles");
@@ -165,7 +166,7 @@ public record UpdatePreview(
 				.collect(Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), operation -> operation));
 		Set<FileKey> preserved = new HashSet<>();
 		for (Preservation preservation : plan.preservations()) preserved.add(new FileKey(preservation.root(), preservation.relativePath()));
-		Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries = baselineEntries(baseline);
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries = baselineEntries(baseline);
 		List<Entry> entries = new ArrayList<>();
 		for (Operation operation : plan.operations()) {
 			FileKey key = new FileKey(operation.root(), operation.relativePath());
@@ -220,16 +221,16 @@ public record UpdatePreview(
 		return new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), explanations);
 	}
 
-	private static Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries(Jsons.ClientBaselineFields baseline) {
+	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
 		if (baseline == null || baseline.entries == null) return Map.of();
-		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new HashMap<>();
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new HashMap<>();
 		for (var entry : baseline.entries) {
 			if (entry != null && entry.logicalPath != null) entries.put(UpdatePlanner.normalize(entry.logicalPath), entry);
 		}
 		return entries;
 	}
 
-	private static boolean baselineMatches(FileState current, Jsons.ClientBaselineFields.EntryFields baseline) {
+	private static boolean baselineMatches(FileState current, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
 		return baseline != null && !baseline.absent && baseline.objectHash != null && baseline.objectHash.matches("[0-9a-fA-F]{40}")
 				&& baseline.size >= 0 && current.regularFile() && baseline.size == current.size() && baseline.objectHash.equalsIgnoreCase(current.sha1());
 	}

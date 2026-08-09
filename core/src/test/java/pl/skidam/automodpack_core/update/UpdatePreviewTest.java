@@ -12,6 +12,7 @@ import java.util.TreeSet;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
@@ -112,9 +113,9 @@ class UpdatePreviewTest {
 		Jsons.ModpackContentFields installed = manifest(
 				new Jsons.ModpackContentFields.ModpackContentItem("config/removed.json", "7", "config", false, false, OLD_HASH, "0"),
 				entry("config/removed.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
-		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = installed.modpackId;
-		Jsons.ClientBaselineFields.EntryFields baselineEntry = new Jsons.ClientBaselineFields.EntryFields();
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
 		baselineEntry.logicalPath = "config/removed.json";
 		baselineEntry.objectHash = "";
 		baselineEntry.size = -1;
@@ -136,9 +137,9 @@ class UpdatePreviewTest {
 		Jsons.ModpackContentFields installed = manifest(
 				new Jsons.ModpackContentFields.ModpackContentItem("config/kept.json", "7", "config", false, false, OLD_HASH, "0"),
 				entry("config/kept.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
-		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = installed.modpackId;
-		Jsons.ClientBaselineFields.EntryFields baselineEntry = new Jsons.ClientBaselineFields.EntryFields();
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
 		baselineEntry.logicalPath = "config/kept.json";
 		baselineEntry.objectHash = OLD_HASH;
 		baselineEntry.size = 7;

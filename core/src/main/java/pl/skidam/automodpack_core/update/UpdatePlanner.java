@@ -24,6 +24,7 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
@@ -75,7 +76,7 @@ public final class UpdatePlanner {
 		}
 	}
 
-	public record RemovalInput(Jsons.ModpackContentFields installedManifest, Jsons.ClientBaselineFields baseline,
+	public record RemovalInput(Jsons.ModpackContentFields installedManifest, ClientStorageJsons.ClientBaselineFields baseline,
 			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, GeneratedCopyState generatedCopies, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
 		public RemovalInput {
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
@@ -99,7 +100,7 @@ public final class UpdatePlanner {
 			throw new IllegalArgumentException("Removal baseline identity is invalid");
 		if (input.plannedClientConfig() == null) throw new IllegalArgumentException("Removal client config is missing");
 
-		Map<String, Jsons.ClientBaselineFields.EntryFields> baselines = new TreeMap<>();
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselines = new TreeMap<>();
 		for (var entry : input.baseline().entries) {
 			if (entry == null || entry.logicalPath == null || !normalize(entry.logicalPath).equals(entry.logicalPath)
 					|| baselines.put(entry.logicalPath, entry) != null)
@@ -143,7 +144,7 @@ public final class UpdatePlanner {
 			if (state == null || !state.regularFile() || state.sha1() == null) continue;
 			OwnershipLedger.Content current = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!ledgerEntry.historicalHashes().contains(current)) continue;
-			Jsons.ClientBaselineFields.EntryFields baseline = baselines.get(ledgerEntry.logicalPath());
+			ClientStorageJsons.ClientBaselineFields.EntryFields baseline = baselines.get(ledgerEntry.logicalPath());
 			if (baseline == null) continue;
 			if (baseline.absent) {
 				preservations.add(new Preservation(key.root(), key.relativePath(), current.sha1(), current.size()));

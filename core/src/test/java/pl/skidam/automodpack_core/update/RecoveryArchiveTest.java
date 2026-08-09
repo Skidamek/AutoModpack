@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -31,7 +32,7 @@ class RecoveryArchiveTest {
 
 		assertEquals(archived, repeated);
 		assertArrayEquals(Files.readAllBytes(object), Files.readAllBytes(archived));
-		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(recovery);
+		ClientStorageJsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(recovery);
 		assertEquals(1, archive.entries.size());
 		assertEquals("config/old.json", archive.entries.get(0).logicalPath);
 		assertEquals(hash, archive.entries.get(0).sha1);
@@ -53,7 +54,7 @@ class RecoveryArchiveTest {
 
 		RecoveryArchive.archive(store, recovery, "config/old.json", hash, Files.size(object), generationId, preservedAt);
 
-		Jsons.ClientRecoveryArchiveFields.EntryFields entry = RecoveryArchive.read(recovery).entries.get(0);
+		ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields entry = RecoveryArchive.read(recovery).entries.get(0);
 		assertEquals(generationId, entry.sourceGenerationId);
 		assertEquals(preservedAt, entry.preservedAt);
 	}

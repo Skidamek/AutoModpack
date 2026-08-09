@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -44,7 +45,7 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return new GeneratedCopyState(modpackId, generationId, selectionDigest, List.of());
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Generated-copy state is not a regular file: " + path);
 		try {
-			Jsons.ClientGeneratedCopiesFields fields = ConfigTools.read(path, Jsons.ClientGeneratedCopiesFields.class)
+			ClientStorageJsons.ClientGeneratedCopiesFields fields = ConfigTools.read(path, ClientStorageJsons.ClientGeneratedCopiesFields.class)
 					.orElseThrow(() -> new IOException("Generated-copy state is empty: " + path));
 			GeneratedCopyState state = fromFields(fields);
 			if (!state.modpackId().equals(ModpackId.requireValid(modpackId)) || !state.generationId().equals(requireDigest(generationId, "generation ID"))
@@ -58,7 +59,7 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 
 	public void write(ClientStorage storage) throws IOException {
 		storage.ensureRoots();
-		Jsons.ClientGeneratedCopiesFields fields = toFields();
+		ClientStorageJsons.ClientGeneratedCopiesFields fields = toFields();
 		Path path = storage.generatedCopiesFile(modpackId, generationId, selectionDigest);
 		Files.createDirectories(path.getParent());
 		ConfigTools.writeAtomic(path, fields);
@@ -68,13 +69,13 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 		Files.deleteIfExists(storage.generatedCopiesFile(modpackId, generationId, selectionDigest));
 	}
 
-	public Jsons.ClientGeneratedCopiesFields toFields() {
-		Jsons.ClientGeneratedCopiesFields fields = new Jsons.ClientGeneratedCopiesFields();
+	public ClientStorageJsons.ClientGeneratedCopiesFields toFields() {
+		ClientStorageJsons.ClientGeneratedCopiesFields fields = new ClientStorageJsons.ClientGeneratedCopiesFields();
 		fields.modpackId = modpackId;
 		fields.generationId = generationId;
 		fields.selectionDigest = selectionDigest;
 		fields.entries = entries.stream().map(entry -> {
-			Jsons.ClientGeneratedCopiesFields.EntryFields value = new Jsons.ClientGeneratedCopiesFields.EntryFields();
+			ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields value = new ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields();
 			value.logicalPath = entry.logicalPath();
 			value.sha1 = entry.sha1();
 			value.size = entry.size();
@@ -83,10 +84,10 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 		return fields;
 	}
 
-	public static GeneratedCopyState fromFields(Jsons.ClientGeneratedCopiesFields fields) {
+	public static GeneratedCopyState fromFields(ClientStorageJsons.ClientGeneratedCopiesFields fields) {
 		if (fields == null || fields.schemaVersion != 1 || fields.entries == null) throw new IllegalArgumentException("Generated-copy state fields are incomplete");
 		List<Entry> entries = new ArrayList<>();
-		for (Jsons.ClientGeneratedCopiesFields.EntryFields value : fields.entries) {
+		for (ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields value : fields.entries) {
 			if (value == null) throw new IllegalArgumentException("Generated-copy state contains a null entry");
 			entries.add(new Entry(value.logicalPath, value.sha1, value.size));
 		}
