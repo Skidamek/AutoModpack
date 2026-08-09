@@ -15,8 +15,8 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 class ConfigUtilsTest {
 	@Test
 	void preservesPathRuleOrder() {
-		Jsons.ServerConfigFieldsV3 config = new Jsons.ServerConfigFieldsV3();
-		Jsons.GroupDeclaration group = new Jsons.GroupDeclaration();
+		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
+		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.syncedFiles = new LinkedHashSet<>(List.of("/third", "/first", "/second"));
 		group.allowEditsInFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
 		group.overwriteEditableFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
@@ -34,7 +34,7 @@ class ConfigUtilsTest {
 		String previousVersion = Constants.MC_VERSION;
 		String previousLoader = Constants.LOADER;
 		try {
-			Jsons.ServerConfigFieldsV3 config = new Jsons.ServerConfigFieldsV3();
+			ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 			config.bindPort = 24444;
 
 			Constants.MC_VERSION = "1.20.1";

@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 
 /** The ordered, compact patch-note projection carried with a current generation target. */
 public final class GenerationPatchNoteHistory {
@@ -29,8 +29,8 @@ public final class GenerationPatchNoteHistory {
 			return new Entry(metadata.schemaVersion(), metadata.generationId(), metadata.parentGenerationId(), metadata.createdAt(), metadata.patchNotes(), metadata.patchNotesDigest());
 		}
 
-		public Jsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields toFields() {
-			Jsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields fields = new Jsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields();
+		public ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields toFields() {
+			ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields fields = new ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields();
 			fields.schemaVersion = schemaVersion;
 			fields.generationId = generationId;
 			fields.parentGenerationId = parentGenerationId;
@@ -40,7 +40,7 @@ public final class GenerationPatchNoteHistory {
 			return fields;
 		}
 
-		public static Entry fromFields(Jsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields fields) {
+		public static Entry fromFields(ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields fields) {
 			if (fields == null) throw new IllegalArgumentException("Patch-note history entry is missing");
 			String createdAtText = Objects.requireNonNull(fields.createdAt, "Patch-note history creation timestamp is missing");
 			Instant createdAt;
@@ -70,19 +70,19 @@ public final class GenerationPatchNoteHistory {
 		return validate(entries, entries.isEmpty() ? null : entries.get(entries.size() - 1).generationId());
 	}
 
-	public static List<Entry> fromFields(Jsons.CompleteModpackContentFields fields) {
+	public static List<Entry> fromFields(ModpackJsons.CompleteModpackContentFields fields) {
 		Objects.requireNonNull(fields, "complete generation fields");
 		Entry current = Entry.fromMetadata(GenerationMetadata.fromFields(fields.generation));
 		if (fields.patchNotesHistory == null || fields.patchNotesHistory.isEmpty()) return List.of(current);
 		List<Entry> entries = new ArrayList<>(fields.patchNotesHistory.size());
-		for (Jsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields entry : fields.patchNotesHistory) entries.add(Entry.fromFields(entry));
+		for (ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields entry : fields.patchNotesHistory) entries.add(Entry.fromFields(entry));
 		if (isPartialCurrentEntry(entries, current)) return List.of(current);
 		List<Entry> validated = validate(entries, current.generationId());
 		if (!validated.get(validated.size() - 1).equals(current)) throw new IllegalArgumentException("Patch-note history current entry does not match generation metadata");
 		return validated;
 	}
 
-	public static void writeFields(Jsons.CompleteModpackContentFields fields, List<Entry> history) {
+	public static void writeFields(ModpackJsons.CompleteModpackContentFields fields, List<Entry> history) {
 		Objects.requireNonNull(fields, "complete generation fields");
 		Entry current = Entry.fromMetadata(GenerationMetadata.fromFields(fields.generation));
 		if (history != null && history.size() == 1 && current.equals(history.get(0)) && !current.parentGenerationId().isEmpty()) {

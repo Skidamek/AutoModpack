@@ -15,18 +15,18 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 
 import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 
 class ProtocolServerHandlerTest {
-	private Jsons.ServerConfigFieldsV3 previousConfig;
+	private ServerConfigJsons.ServerConfigFieldsV3 previousConfig;
 
 	@BeforeEach
 	void setUp() {
 		previousConfig = Constants.serverConfig;
-		Constants.serverConfig = new Jsons.ServerConfigFieldsV3();
+		Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
 	}
 
 	@AfterEach

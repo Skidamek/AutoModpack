@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.client;
 
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack.client.ui.*;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -110,7 +110,7 @@ public class ScreenImpl implements ScreenService {
 		Screens.multiplayer();
 	}
 
-	public static void repairSelection(Jsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+	public static void repairSelection(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
 		executeOnClient(() -> Screens.repairSelection(fields, savedSelection, selectionAction, cancelAction));
 	}
 
@@ -221,7 +221,7 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(ModpackSelectionScreen.forSelectedModpack((Screen) parent));
 		}
 
-		public static void repairSelection(Jsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+		public static void repairSelection(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
 			GroupManifest manifest = GenerationRecord.fromFields(fields).manifest();
 			Screens.setScreen(ModpackSelectionScreen.repair(multiplayerScreen(), manifest, savedSelection, selectionAction, cancelAction));
 		}

@@ -11,9 +11,11 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -46,8 +48,8 @@ final class ClientUpdatePlanBuilder {
 		this.loaderType = Objects.requireNonNull(loaderType, "loaderType");
 	}
 
-	record Input(SelectedModpackTarget selectedTarget, Jsons.ModpackContentFields target, Jsons.ConnectionInfo connectionInfo,
-			Jsons.ClientConfigFieldsV3 currentConfig, boolean prepareObjects) {
+	record Input(SelectedModpackTarget selectedTarget, ModpackJsons.ModpackContentFields target, ConnectionJsons.ConnectionInfo connectionInfo,
+			ClientConfigJsons.ClientConfigFieldsV3 currentConfig, boolean prepareObjects) {
 		Input {
 			Objects.requireNonNull(selectedTarget, "selectedTarget");
 			Objects.requireNonNull(target, "target");
@@ -62,9 +64,9 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	record RemovalPreparation(UpdatePlan plan, Jsons.CompleteModpackContentFields completeFields, Jsons.ModpackContentFields installed,
-			ClientStorageJsons.ClientBaselineFields baseline, SelectionIntent expectedPriorIntent, Jsons.ClientConfigFieldsV3 currentConfig,
-			Jsons.ClientConfigFieldsV3 plannedConfig, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files) {
+	record RemovalPreparation(UpdatePlan plan, ModpackJsons.CompleteModpackContentFields completeFields, ModpackJsons.ModpackContentFields installed,
+			ClientStorageJsons.ClientBaselineFields baseline, SelectionIntent expectedPriorIntent, ClientConfigJsons.ClientConfigFieldsV3 currentConfig,
+			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files) {
 		RemovalPreparation {
 			files = Map.copyOf(files);
 		}
@@ -72,7 +74,7 @@ final class ClientUpdatePlanBuilder {
 
 	PreparedPlan buildPlan(Input input, FileMetadataCache cache, ModFileCache modCache) throws Exception {
 		captureActiveEditableOverlays(cache);
-		Jsons.ModpackContentFields installed = storedTarget();
+		ModpackJsons.ModpackContentFields installed = storedTarget();
 		Map<String, ClientOverlaySnapshot> overlaySnapshots = new HashMap<>();
 		ClientOverlaySnapshot targetOverlay = storage.overlaySnapshot(input.target().modpackId, cache);
 		overlaySnapshots.put(input.target().modpackId, targetOverlay);
@@ -87,7 +89,7 @@ final class ClientUpdatePlanBuilder {
 		List<UpdatePlan.NestedCopy> nestedCopies = input.prepareObjects()
 				? inspectNestedCopies(input.target(), cache)
 				: readGeneratedCopyState(input.target(), input.selectedTarget().selection().intent()).nestedCopies();
-		Jsons.ClientConfigFieldsV3 plannedConfig = input.connectionInfo() == null || !input.connectionInfo().isComplete()
+		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = input.connectionInfo() == null || !input.connectionInfo().isComplete()
 				? ModpackUtils.planCachedModpackSelection(input.target().modpackId, input.currentConfig())
 				: ModpackUtils.planModpackSelection(input.target().modpackId, input.connectionInfo(), input.currentConfig());
 		Map<String, UpdatePlan.FileState> editableOverlays = files.entrySet().stream().filter(entry -> entry.getKey().root() == UpdatePlan.Root.OVERLAY)
@@ -106,10 +108,10 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	RemovalPreparation prepareRemoval() throws Exception {
-		Jsons.ModpackContentFields installed = storedTarget();
+		ModpackJsons.ModpackContentFields installed = storedTarget();
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState == null || !installed.modpackId.equals(activeState.modpackId)) throw new IOException("Active modpack generation state is missing");
-		Jsons.CompleteModpackContentFields completeFields = new ClientGenerationStore(storage).read(activeState.generationId)
+		ModpackJsons.CompleteModpackContentFields completeFields = new ClientGenerationStore(storage).read(activeState.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing")).toFields();
 		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(installed.modpackId), ClientStorageJsons.ClientBaselineFields.class)
 				.orElseGet(() -> {
@@ -117,9 +119,9 @@ final class ClientUpdatePlanBuilder {
 					empty.modpackId = installed.modpackId;
 					return empty;
 				});
-		Jsons.ClientConfigFieldsV3 currentConfig = ConfigTools.read(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class)
-				.orElseGet(Jsons.ClientConfigFieldsV3::new);
-		Jsons.ClientConfigFieldsV3 plannedConfig = new Jsons.ClientConfigFieldsV3(currentConfig);
+		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
 		if (installed.modpackId.equals(plannedConfig.selectedModpackId)) plannedConfig.selectedModpackId = "";
 		SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
 		GeneratedCopyState generatedCopies = expectedPriorIntent == null ? null : readGeneratedCopyState(installed, expectedPriorIntent);
@@ -139,17 +141,17 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	void populateStoreFromActive(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
+	void populateStoreFromActive(ModpackJsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
 		populateStoreFromSources(target, cache, item -> List.of(SmartFileUtils.getPath(storage.activeDirectory(), item.file)));
 	}
 
-	void populateStoreFromCachedLocations(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
+	void populateStoreFromCachedLocations(ModpackJsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
 		populateStoreFromSources(target, cache,
 				item -> List.of(SmartFileUtils.getPath(storage.activeDirectory(), item.file), livePath(item)));
 	}
 
-	void ensurePlanObjects(UpdatePlan plan, Jsons.ModpackContentFields targetManifest) throws IOException {
-		Map<String, Jsons.ModpackContentFields.ModpackContentItem> itemsByHash = targetManifest.list.stream()
+	void ensurePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest) throws IOException {
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> itemsByHash = targetManifest.list.stream()
 				.collect(Collectors.toMap(item -> item.sha1.toLowerCase(Locale.ROOT), item -> item, (first, second) -> first));
 		for (UpdatePlan.Operation operation : plan.operations()) {
 			if (operation.operation() != UpdatePlan.OperationType.INSTALL_OBJECT) continue;
@@ -173,7 +175,7 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private Jsons.ModpackContentFields storedTarget() throws IOException {
+	private ModpackJsons.ModpackContentFields storedTarget() throws IOException {
 		return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).map(SelectedModpackTarget::flatTarget).orElse(null);
 	}
 
@@ -181,11 +183,11 @@ final class ClientUpdatePlanBuilder {
 		return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
 	}
 
-	private UpdatePlanner.SelectionContext selectionContext(Jsons.ClientConfigFieldsV3 currentConfig, FileMetadataCache cache,
+	private UpdatePlanner.SelectionContext selectionContext(ClientConfigJsons.ClientConfigFieldsV3 currentConfig, FileMetadataCache cache,
 			Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
 		String previousId = currentConfig.selectedModpackId;
 		if (previousId == null || previousId.isBlank() || !ModpackId.isValid(previousId)) return null;
-		Jsons.ModpackContentFields previousManifest = storedTarget();
+		ModpackJsons.ModpackContentFields previousManifest = storedTarget();
 		ClientOverlaySnapshot snapshot = overlaySnapshots.get(previousId);
 		if (snapshot == null) {
 			snapshot = storage.overlaySnapshot(previousId, cache);
@@ -228,12 +230,12 @@ final class ClientUpdatePlanBuilder {
 		storage.writeOverlayState(activeTarget.manifest().modpackId(), deletedPaths);
 	}
 
-	private Path livePath(Jsons.ModpackContentFields.ModpackContentItem item) {
+	private Path livePath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {
 		return storage.gameDirectory().resolve(UpdatePlanner.normalize(item.file));
 	}
 
-	private void populateStoreFromSources(Jsons.ModpackContentFields target, FileMetadataCache cache,
-			Function<Jsons.ModpackContentFields.ModpackContentItem, List<Path>> sourceResolver) throws IOException {
+	private void populateStoreFromSources(ModpackJsons.ModpackContentFields target, FileMetadataCache cache,
+			Function<ModpackJsons.ModpackContentFields.ModpackContentItem, List<Path>> sourceResolver) throws IOException {
 		if (target.list == null) return;
 		for (var item : target.list) {
 			Path object = storage.objectsDirectory().resolve(item.sha1);
@@ -250,7 +252,7 @@ final class ClientUpdatePlanBuilder {
 		return true;
 	}
 
-	private Map<UpdatePlan.FileKey, UpdatePlan.FileState> inspectFiles(Jsons.ModpackContentFields target, Jsons.ModpackContentFields installed,
+	private Map<UpdatePlan.FileKey, UpdatePlan.FileState> inspectFiles(ModpackJsons.ModpackContentFields target, ModpackJsons.ModpackContentFields installed,
 			UpdatePlanner.SelectionContext selection, List<UpdatePlan.NestedCopy> previousGeneratedCopies, FileMetadataCache cache,
 			Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = new HashMap<>();
@@ -298,12 +300,12 @@ final class ClientUpdatePlanBuilder {
 		return files;
 	}
 
-	private GeneratedCopyState readGeneratedCopyState(Jsons.ModpackContentFields manifest, UpdatePlanner.SelectionContext selection) throws IOException {
+	private GeneratedCopyState readGeneratedCopyState(ModpackJsons.ModpackContentFields manifest, UpdatePlanner.SelectionContext selection) throws IOException {
 		SelectionIntent intent = selection == null ? null : new ClientSelectionStore(storage.selectionFile()).get(manifest.modpackId).orElse(null);
 		return intent == null ? null : readGeneratedCopyState(manifest, intent);
 	}
 
-	private GeneratedCopyState readGeneratedCopyState(Jsons.ModpackContentFields manifest, SelectionIntent intent) throws IOException {
+	private GeneratedCopyState readGeneratedCopyState(ModpackJsons.ModpackContentFields manifest, SelectionIntent intent) throws IOException {
 		String digest = UpdateTransaction.digest(intent);
 		if (digest.isEmpty()) throw new IOException("Cannot read generated-copy state without a selected group intent");
 		return GeneratedCopyState.read(storage, manifest.modpackId, manifest.targetGenerationId, digest);
@@ -322,7 +324,7 @@ final class ClientUpdatePlanBuilder {
 		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true, FileInspection.isMod(path)));
 	}
 
-	private List<UpdatePlan.ModInfo> inspectTargetMods(Jsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache) {
+	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
 		for (var item : target.list.stream().filter(value -> "mod".equals(value.type)).sorted(Comparator.comparing(value -> value.file)).toList()) {
 			long size = Long.parseLong(item.size);
@@ -350,7 +352,7 @@ final class ClientUpdatePlanBuilder {
 		return mods;
 	}
 
-	private List<UpdatePlan.NestedCopy> inspectNestedCopies(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
+	private List<UpdatePlan.NestedCopy> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
 		Files.createDirectories(storage.incomingDirectory());
 		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
@@ -382,12 +384,12 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private Set<String> getForceCopyMods(Jsons.ModpackContentFields modpackContentFields) throws IOException {
+	private Set<String> getForceCopyMods(ModpackJsons.ModpackContentFields modpackContentFields) throws IOException {
 		Set<String> forceCopyServices = modpackLoader.forceCopyServices();
 		Set<String> forceCopyMods = new HashSet<>();
 		if (forceCopyServices.isEmpty()) return forceCopyMods;
 
-		for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
+		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
 			if (!item.type.equals("mod")) continue;
 			long size = Long.parseLong(item.size);
 			Path modPath = storage.objectsDirectory().resolve(item.sha1);

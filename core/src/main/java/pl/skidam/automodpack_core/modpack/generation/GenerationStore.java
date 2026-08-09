@@ -14,7 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -656,7 +656,7 @@ public final class GenerationStore {
 	private GenerationRecord readProjection(Path path) throws IOException {
 		ensureRegular(path, "current generation projection");
 		try {
-			Jsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CompleteModpackContentFields.class);
+			ModpackJsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), ModpackJsons.CompleteModpackContentFields.class);
 			GenerationPatchNoteHistory.fromFields(fields);
 			return GenerationRecord.fromFields(fields);
 		} catch (RuntimeException e) {
@@ -899,7 +899,7 @@ public final class GenerationStore {
 	}
 
 	private void writeCurrentProjection(GenerationRecord record) throws IOException {
-		Jsons.CompleteModpackContentFields fields = record.toFields();
+		ModpackJsons.CompleteModpackContentFields fields = record.toFields();
 		CompactHistory history = readCompactHistory(record.metadata().generationId());
 		List<GenerationPatchNoteHistory.Entry> patchNoteHistory = history.compacted()
 				? List.of(GenerationPatchNoteHistory.Entry.fromMetadata(record.metadata()))

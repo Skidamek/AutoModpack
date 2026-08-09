@@ -18,7 +18,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
@@ -130,7 +131,7 @@ class ModpackExecutorTest {
 		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
 		Files.writeString(invalidPinnedRoot, "not a directory", StandardCharsets.UTF_8);
 		Files.createDirectories(server.resolve("automodpack"));
-		Jsons.DataRootFields marker = new Jsons.DataRootFields();
+		StorageJsons.DataRootFields marker = new StorageJsons.DataRootFields();
 		marker.root = invalidPinnedRoot.toString();
 		ConfigTools.writeAtomic(server.resolve("automodpack/data-root.json"), marker);
 
@@ -154,9 +155,9 @@ class ModpackExecutorTest {
 		}
 	}
 
-	private static Jsons.ServerConfigFieldsV3 config() {
-		Jsons.ServerConfigFieldsV3 config = new Jsons.ServerConfigFieldsV3();
-		Jsons.GroupDeclaration main = new Jsons.GroupDeclaration();
+	private static ServerConfigJsons.ServerConfigFieldsV3 config() {
+		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
+		ServerConfigJsons.GroupDeclaration main = new ServerConfigJsons.GroupDeclaration();
 		main.required = true;
 		main.syncedFiles = Set.of();
 		config.groups = Map.of("main", main);
@@ -166,7 +167,7 @@ class ModpackExecutorTest {
 	}
 
 	private static final class ConstantsSnapshot {
-		private final Jsons.ServerConfigFieldsV3 serverConfig = Constants.serverConfig;
+		private final ServerConfigJsons.ServerConfigFieldsV3 serverConfig = Constants.serverConfig;
 		private final String amVersion = Constants.AM_VERSION;
 		private final String loader = Constants.LOADER;
 		private final String loaderVersion = Constants.LOADER_VERSION;

@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.modpack.group;
 import java.util.List;
 import java.util.Objects;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
@@ -13,7 +13,7 @@ public record SelectedModpackTarget(
 		SelectionIntent expectedPriorIntent,
 		ResolvedSelection selection,
 		ClientPlatform platform,
-		Jsons.ModpackContentFields flatTarget,
+		ModpackJsons.ModpackContentFields flatTarget,
 		List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
 	public SelectedModpackTarget {
 		generationRecord = Objects.requireNonNull(generationRecord);
@@ -29,14 +29,14 @@ public record SelectedModpackTarget(
 		return generationRecord.manifest();
 	}
 
-	public Jsons.CompleteModpackContentFields completeFields() {
-		Jsons.CompleteModpackContentFields fields = generationRecord.toFields();
+	public ModpackJsons.CompleteModpackContentFields completeFields() {
+		ModpackJsons.CompleteModpackContentFields fields = generationRecord.toFields();
 		GenerationPatchNoteHistory.writeFields(fields, patchNotesHistory);
 		return fields;
 	}
 
 	/** Returns the complete catalogue flattened for preloading, without changing the selected projection. */
-	public Jsons.ModpackContentFields completeTarget() {
+	public ModpackJsons.ModpackContentFields completeTarget() {
 		return SelectedTreeComposer.composeAll(manifest(), GenerationTarget.from(generationRecord));
 	}
 
@@ -44,7 +44,7 @@ public record SelectedModpackTarget(
 		return GenerationTarget.from(generationRecord);
 	}
 
-	public static SelectedModpackTarget prepare(Jsons.CompleteModpackContentFields fields, ClientSelectionStore store, ClientPlatform platform) {
+	public static SelectedModpackTarget prepare(ModpackJsons.CompleteModpackContentFields fields, ClientSelectionStore store, ClientPlatform platform) {
 		GenerationRecord record = GenerationRecord.fromFields(fields);
 		List<GenerationPatchNoteHistory.Entry> patchNotesHistory = GenerationPatchNoteHistory.fromFields(fields);
 		SelectionIntent existing = store.get(record.manifest().modpackId()).orElse(null);
@@ -52,12 +52,12 @@ public record SelectedModpackTarget(
 		return prepare(record, existing, existing, platform, patchNotesHistory);
 	}
 
-	public static SelectedModpackTarget prepareDefault(Jsons.CompleteModpackContentFields fields, ClientPlatform platform) {
+	public static SelectedModpackTarget prepareDefault(ModpackJsons.CompleteModpackContentFields fields, ClientPlatform platform) {
 		GenerationRecord record = GenerationRecord.fromFields(fields);
 		return prepareResolved(record, null, GroupSelectionResolver.resolveDefault(record.manifest(), platform), platform, GenerationPatchNoteHistory.fromFields(fields));
 	}
 
-	public static SelectedModpackTarget prepare(Jsons.CompleteModpackContentFields fields, SelectionIntent expectedPriorIntent, SelectionIntent intent,
+	public static SelectedModpackTarget prepare(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent expectedPriorIntent, SelectionIntent intent,
 			ClientPlatform platform) {
 		return prepare(GenerationRecord.fromFields(fields), expectedPriorIntent, intent, platform, GenerationPatchNoteHistory.fromFields(fields));
 	}
@@ -76,7 +76,7 @@ public record SelectedModpackTarget(
 	private static SelectedModpackTarget prepareResolved(GenerationRecord record, SelectionIntent expectedPriorIntent, ResolvedSelection resolved, ClientPlatform platform,
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
 		GroupManifest manifest = record.manifest();
-		Jsons.ModpackContentFields flatTarget = SelectedTreeComposer.compose(manifest, resolved, GenerationTarget.from(record));
+		ModpackJsons.ModpackContentFields flatTarget = SelectedTreeComposer.compose(manifest, resolved, GenerationTarget.from(record));
 		flatTarget.ownershipLedger = record.ownershipLedger().toFields();
 		return new SelectedModpackTarget(record, expectedPriorIntent, resolved, platform, flatTarget, patchNotesHistory);
 	}
