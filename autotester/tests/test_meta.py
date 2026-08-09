@@ -244,6 +244,18 @@ def test_autotest_bridge_readiness_is_level_triggered():
     assert run.count("publishReadyState();") >= 2
 
 
+def test_autotest_screenshot_requires_a_settled_render_state():
+    source = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java").read_text(encoding="utf-8")
+    mixin = (Path(__file__).parents[2] / "src/main/java/pl/skidam/automodpack/mixin/dev/GameRendererMixin.java").read_text(encoding="utf-8")
+    capture = source[source.index("public static void onFrameRendered()") : source.index("private static void completeScreenshot")]
+
+    assert "RenderedFrameState state = RenderedFrameState.capture();" in capture
+    assert "state.isSettledAfter(previousState)" in capture
+    assert "minecraft.getOverlay() != null" in capture
+    assert "frameObserved" not in capture
+    assert mixin.index("original.call(") < mixin.index("AutoTestBridge.onFrameRendered();")
+
+
 def test_validation_rejects_plain_text_unowned_jar_seed():
     scenario = load_scenarios()["all"]
     seed = next(step for step in scenario["flow"] if isinstance(step, dict) and step.get("do") == "seed_unowned_local_file")
