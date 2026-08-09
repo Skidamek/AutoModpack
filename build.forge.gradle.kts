@@ -29,8 +29,11 @@ legacyForge {
 }
 
 dependencies {
-	implementation(project(":core")) { isTransitive = false }
-	implementation(project(":loader-core")) { isTransitive = false }
+	// The merged Forge loader jar owns these shared classes. Keeping them out of the nested mod jar
+	// gives legacy Forge one classloader owner for the loader package; its SERVICE module otherwise
+	// loads ModpackUtils while the duplicate nested package can hide ManifestFetchState.
+	compileOnly(project(":core")) { isTransitive = false }
+	compileOnly(project(":loader-core")) { isTransitive = false }
 
 	compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:$mixinExtrasVersion")!!)
 	implementation(jarJar("io.github.llamalad7:mixinextras-forge:$mixinExtrasVersion")!!)

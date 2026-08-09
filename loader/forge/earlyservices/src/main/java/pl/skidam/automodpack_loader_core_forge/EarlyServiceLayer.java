@@ -114,7 +114,7 @@ public final class EarlyServiceLayer {
 				}
 			}
 		} catch (Throwable t) {
-			LOGGER.warn("[AutoModpack] Could not read the loader's early-service list; using the built-in fallback", t);
+			LOGGER.warn("[AutoModpack] Could not read the loader's early-service list; using the built-in fallback ({}: {})", t.getClass().getName(), t.getMessage());
 			excluded.add(CANDIDATE_LOCATOR_SERVICE);
 			excluded.add(TRANSFORMATION_SERVICE);
 		}
