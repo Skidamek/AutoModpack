@@ -142,7 +142,7 @@ public final class ClientObjectStore {
 		return new CollectionResult(before, after, deletedCount, deletedBytes);
 	}
 
-	/** Returns every CAS hash named by all validated client state. */
+	/** Returns every CAS hash referenced by validated client state, excluding historical ownership metadata. */
 	public static Set<String> referencedHashes(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
 		return collectReferences(storage, null).hashes();
@@ -244,7 +244,7 @@ public final class ClientObjectStore {
 
 	private static void addRecordReferences(ReferenceSet retained, GenerationRecord record) throws IOException {
 		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) retained.addRequired(file.sha1(), file.size(), "generation manifest");
-		for (var entry : record.ownershipLedger().entries().values()) for (var content : entry.historicalHashes()) retained.addRequired(content.sha1(), content.size(), "ownership ledger");
+		// Historical ledger hashes are ownership-proof metadata, not current materialized file objects.
 	}
 
 	private static void collectBaselines(ClientStorage storage, ReferenceSet retained) throws IOException {
