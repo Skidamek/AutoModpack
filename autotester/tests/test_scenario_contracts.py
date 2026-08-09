@@ -118,6 +118,28 @@ def test_release_gate_cannot_duplicate_a_capability():
     )
 
 
+def test_release_gate_requires_real_server_maintenance_coverage():
+    scenario = load_scenarios()["all"]
+    scenario["flow"] = [
+        step for step in scenario["flow"]
+        if not isinstance(step, dict) or step.get("do") != "collect_server_objects"
+    ]
+
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+
+    assert any("server-object-gc" in problem for problem in problems)
+
+
+def test_release_gate_runs_server_maintenance_after_client_removal_and_in_order():
+    flow = load_scenarios()["all"]["flow"]
+    rollback = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "rollback_server_generation")
+    compact = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "compact_server_history")
+    collect = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "collect_server_objects")
+    removal = max(index for index, step in enumerate(flow) if isinstance(step, dict) and "Pack A removal" in str(step.get("name", "")))
+
+    assert removal < rollback < compact < collect
+
+
 def test_canonical_encoder_has_java_parity_vector():
     assert (
         CanonicalEncoder().string("parity").integer(7).long(11).boolean(True).digest()

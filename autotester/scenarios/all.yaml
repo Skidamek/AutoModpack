@@ -2,7 +2,8 @@ id: all
 description: |
   The release gate: exercise secure bootstrap authentication, advanced group
   review, patch-note history, cached pack switching, and a published
-  changed/removed generation in one flow. The focused scenarios remain
+  changed/removed generation, server rollback, history compaction, and server
+  object collection in one flow. The focused scenarios remain
   available for faster diagnosis; this is the default confidence path.
 renderClient: true
 
@@ -18,6 +19,8 @@ releaseGate:
     - quarantine-restoration
     - storage-maintenance
     - server-history-compaction
+    - server-generation-rollback
+    - server-object-gc
     - fresh-generation-deletion
     - removal
     - secure-bootstrap
@@ -39,6 +42,14 @@ flow:
     name: seed an ordinary local baseline before the first server-owned install
     path: config/amp-autotest-baseline.json
     content: "local-baseline\n"
+  - do: seed_mod_fixture
+    name: seed a local mod before the first install for explicit cleanup review
+    path: mods/amp-autotest-local-archive.jar
+    fixture: { modId: amp_autotest_local_archive, version: "1.0.0-local-archive", marker: local-archive }
+  - do: seed_mod_fixture
+    name: seed a second local mod that the user will leave in place
+    path: mods/amp-autotest-local-keep.jar
+    fixture: { modId: amp_autotest_local_keep, version: "1.0.0-local-keep", marker: local-keep }
   - use: connect_to_server
   - do: wait_for
     name: show the first connection review
@@ -47,6 +58,34 @@ flow:
       all:
         - screen: FirstConnectScreen
         - no_element: { text: verify }
+  - do: click
+    name: open explicit local mod cleanup review
+    select: { text: Review local mods }
+  - do: wait_for
+    name: show local mod cleanup choices
+    until:
+      all:
+        - screen: LocalModReviewScreen
+        - element: { text: amp-autotest-local-archive.jar }
+        - element: { text: amp-autotest-local-keep.jar }
+  - do: screenshot
+    name: capture local mod cleanup review
+    file: all-local-mod-review
+  - do: click
+    name: choose only the conflicting local mod for the recoverable archive
+    select: { text: amp-autotest-local-archive.jar }
+  - do: click
+    name: move the selected local mod out of the live mods directory
+    select: { text: Move selected }
+  - do: wait_for
+    name: return to first connection review after local mod cleanup
+    timeout: 120s
+    until:
+      all:
+        - screen: FirstConnectScreen
+        - file_gone: mods/amp-autotest-local-archive.jar
+        - file: automodpack/client/local-mod-archive/manifest.json
+        - file: mods/amp-autotest-local-keep.jar
   - do: click
     name: open advanced group selection
     select: { text: customize groups }
@@ -197,6 +236,38 @@ flow:
   - do: wait_client_exit
     name: wait for bootstrap restart
   - use: rejoin
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: click
+    name: open the global archived local-mod manager
+    select: { text: Local mods }
+  - do: wait_for
+    name: show the archived local-mod restore action
+    until:
+      all:
+        - screen: LocalModArchiveScreen
+        - element: { text: amp-autotest-local-archive.jar }
+        - element: { text: Restore, enabled: true }
+  - do: screenshot
+    name: capture archived local-mod management
+    file: all-local-mod-archive
+  - do: click
+    name: restore the explicitly archived local mod
+    select: { text: Restore }
+  - do: wait_for
+    name: verify the archive is empty after restore
+    timeout: 120s
+    until:
+      all:
+        - screen: LocalModArchiveScreen
+        - element: { text: No local mods are archived. }
+        - file: mods/amp-autotest-local-archive.jar
+  - do: click
+    name: leave local-mod management
+    select: { text: Back }
+  - do: wait_for
+    name: return to the installed pack manager after local-mod restore
+    until: { screen: InstalledModpacksScreen }
 
   - do: seed_unowned_local_file
     name: seed an unowned local file for preservation coverage
@@ -588,9 +659,6 @@ flow:
   - do: assert_generation
     name: verify the published generation and latest patch notes
     patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
-  - do: compact_server_history
-    name: compact server history and verify retained patch notes and deleted metadata
-    timeout: 180s
   - do: wait_for
     name: wait for changed generation restart
     until: { screen: RestartScreen }
@@ -716,6 +784,18 @@ flow:
     name: verify Pack A removal preserved the unowned local mod
     path: mods/local-unowned.jar
     fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
+  # Rollback must precede compaction so the runner can select and verify a
+  # durable ancestor. Both server-maintenance steps run after client assertions.
+  - do: rollback_server_generation
+    name: roll back through the real RCON command to a retained server ancestor
+    notes: "Release gate rollback: restore the retained ancestor."
+    timeout: 180s
+  - do: compact_server_history
+    name: compact the rolled-back server lineage and verify retained patch notes
+    timeout: 180s
+  - do: collect_server_objects
+    name: collect a valid orphan from the mounted server object store through RCON
+    timeout: 120s
   - do: quit
     name: quit the release-gate client
 

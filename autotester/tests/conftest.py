@@ -88,6 +88,8 @@ class FakeBridge:
         self.storage_running = False
         self.storage_complete = False
         self.baseline_snapshots: dict[Path, bytes] = {}
+        self.local_mod_selected: str | None = None
+        self.local_archive_payload: Path | None = None
 
     # --- snapshot ---------------------------------------------------------
     def render_frame(self) -> None:
@@ -104,9 +106,20 @@ class FakeBridge:
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "first_connection": {
                 "screenClass": "FirstConnectScreen",
-                "buttons": [{"id": 3, "text": "Continue", "enabled": True, "visible": True},
-                            {"id": 18, "text": "Customize groups", "enabled": True, "visible": True},
-                            {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
+                "buttons": ([{"id": 48, "text": "Review local mods", "enabled": True, "visible": True}]
+                            if self._local_mod_candidates() else [])
+                           + [{"id": 3, "text": "Continue", "enabled": True, "visible": True},
+                              {"id": 18, "text": "Customize groups", "enabled": True, "visible": True},
+                              {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "local_mod_review": {
+                "screenClass": "LocalModReviewScreen",
+                "buttons": ([
+                    {"id": 60 + index, "text": path.name, "enabled": True, "visible": True}
+                    for index, path in enumerate(self._local_mod_candidates())
+                ] + [{"id": 50, "text": "Move selected", "enabled": self.local_mod_selected is not None, "visible": True},
+                     {"id": 51, "text": "Back", "enabled": True, "visible": True}]),
                 "textFields": [],
             },
             "group0": {
@@ -177,6 +190,15 @@ class FakeBridge:
                 ],
                 "textFields": [],
             },
+            "local_archive": {
+                "screenClass": "LocalModArchiveScreen",
+                "buttons": ([{"id": 55, "text": "amp-autotest-local-archive.jar", "enabled": False, "visible": True},
+                             {"id": 53, "text": "Restore", "enabled": self.local_archive_payload is not None, "visible": True}]
+                            if self.local_archive_payload is not None
+                            else [{"id": 56, "text": "No local mods are archived.", "enabled": False, "visible": True}])
+                           + [{"id": 54, "text": "Back", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
             "settings": {
                 "screenClass": "ModpackSelectionScreen",
                 "buttons": [{"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
@@ -226,6 +248,18 @@ class FakeBridge:
         self.clicks.append(element_id)
         if element_id == 2 and self.fingerprint:
             self.screen = "preparing"
+        elif element_id == 48:
+            self.screen = "local_mod_review"
+        elif element_id == 50 and self.screen == "local_mod_review":
+            self._move_selected_local_mod()
+            self.screen = "first_connection"
+        elif element_id >= 60 and self.screen == "local_mod_review":
+            candidates = self._local_mod_candidates()
+            index = element_id - 60
+            if 0 <= index < len(candidates):
+                self.local_mod_selected = candidates[index].name
+        elif element_id == 51:
+            self.screen = "first_connection"
         elif element_id == 3:
             self.screen = "preview"
         elif element_id == 18:
@@ -316,6 +350,12 @@ class FakeBridge:
                 self.storage_running = False
         elif element_id == 47:
             self.screen = "manager"
+        elif element_id == 52:
+            self.screen = "local_archive"
+        elif element_id == 53:
+            self._restore_archived_local_mod()
+        elif element_id == 54:
+            self.screen = "manager"
         return {"ok": True}
 
     def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
@@ -388,6 +428,37 @@ class FakeBridge:
     def _compact_local_storage(self) -> None:
         """Keep the fake bridge focused on the UI; scenario assertions prove preservation."""
         self.storage_complete = True
+
+    def _local_mod_candidates(self) -> list[Path]:
+        mods = self.ctx.game_dir / "mods"
+        return sorted(path for path in mods.glob("*.jar") if path.name != "automodpack.jar")
+
+    def _move_selected_local_mod(self) -> None:
+        if self.local_mod_selected is None:
+            raise AssertionError("fake local-mod move requested without a selected entry")
+        source = self.ctx.game_dir / "mods" / self.local_mod_selected
+        if not source.is_file():
+            raise AssertionError(f"fake local-mod source is missing: {source}")
+        archive = self.ctx.game_dir / "automodpack" / "client" / "local-mod-archive"
+        payload = archive / "payload" / self.local_mod_selected
+        payload.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(source, payload)
+        (archive / "manifest.json").write_text(
+            json.dumps({"entries": [{"originalPath": f"mods/{self.local_mod_selected}", "archivePath": str(payload.relative_to(archive))}]}),
+            encoding="utf-8",
+        )
+        self.local_archive_payload = payload
+        self.local_mod_selected = None
+
+    def _restore_archived_local_mod(self) -> None:
+        if self.local_archive_payload is None or not self.local_archive_payload.is_file():
+            raise AssertionError("fake local-mod restore requested without an archived payload")
+        target = self.ctx.game_dir / "mods" / self.local_archive_payload.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(self.local_archive_payload, target)
+        archive = self.ctx.game_dir / "automodpack" / "client" / "local-mod-archive"
+        shutil.rmtree(archive, ignore_errors=True)
+        self.local_archive_payload = None
 
     def _reset_client_generation(self) -> None:
         self.secondary_pack = False
@@ -522,8 +593,11 @@ class FakeBridge:
     def _manager_buttons(self) -> list[dict]:
         if not self.secondary_pack:
             state = "active" if self.selected_pack == "A" else "switch"
-            return [{"id": 9, "text": f"Pack A  [{state}]  connected", "enabled": True, "visible": True},
-                    {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
+            buttons = [{"id": 9, "text": f"Pack A  [{state}]  connected", "enabled": True, "visible": True},
+                       {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
+            if self.local_archive_payload is not None:
+                buttons.append({"id": 52, "text": "Local mods", "enabled": True, "visible": True})
+            return buttons
         a_state = "active" if self.selected_pack == "A" else "switch"
         b_state = "active" if self.selected_pack == "B" else "switch"
         return [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
