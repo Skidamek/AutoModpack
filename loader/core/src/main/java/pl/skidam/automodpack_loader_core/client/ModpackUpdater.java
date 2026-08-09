@@ -21,6 +21,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.config.ClientOptionsPreference;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
@@ -280,7 +281,8 @@ public class ModpackUpdater implements AutoCloseable {
 				fullDownload = true;
 				startSourceFetch();
 				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
-				new ScreenManager().welcome(this);
+				if (ClientOptionsPreference.skipReview()) startConfirmedUpdate();
+				else new ScreenManager().welcome(this);
 			} else {
 				// Handle existing modpack
 				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, storage);
@@ -804,7 +806,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private boolean requiresPlayerReview(ClientUpdatePlanBuilder.PreparedPlan prepared, boolean firstInstall) throws IOException {
 		ModpackJsons.ModpackContentFields installed = storedTarget();
 		GenerationTarget installedTarget = installed == null ? null : GenerationTarget.fromFlat(installed);
-		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared));
+		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared), ClientOptionsPreference.skipReview());
 	}
 
 	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */
@@ -850,6 +852,11 @@ public class ModpackUpdater implements AutoCloseable {
 			} catch (IOException e) {
 				throw new IOException("Modpack generation committed but connection state could not be saved", e);
 			}
+		}
+		try {
+			ClientOptionsPreference.persistConfiguredFile();
+		} catch (IOException e) {
+			LOGGER.warn("Modpack update committed, but the local review preference could not be restored in options.txt", e);
 		}
 		clientConfig = plan.plannedClientConfig();
 	}
