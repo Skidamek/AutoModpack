@@ -31,6 +31,8 @@ public final class FirstConnectScreen extends VersionedScreen {
 	private LocalModArchive.Snapshot localModCandidates;
 	private Future<?> localModWork;
 	private boolean localModsLoaded;
+	private boolean active;
+	private long localModScanGeneration;
 
 	public FirstConnectScreen(ModpackUpdater updater) {
 		super(VersionedText.translatable("automodpack.firstConnect.title"));
@@ -41,6 +43,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
+		active = true;
 		if (!localModsLoaded && localModWork == null) loadLocalModCandidates();
 		int actionY = this.height - 28;
 		int twoButtonWidth = actionButtonWidth(310, 2);
@@ -61,10 +64,12 @@ public final class FirstConnectScreen extends VersionedScreen {
 	}
 
 	private void loadLocalModCandidates() {
+		long scanGeneration = ++localModScanGeneration;
 		localModWork = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
 				LocalModArchive.Snapshot candidates = updater.localModCandidates();
 				this.minecraft.execute(() -> {
+					if (!active || scanGeneration != localModScanGeneration) return;
 					localModCandidates = candidates;
 					localModsLoaded = true;
 					localModWork = null;
@@ -72,6 +77,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 				});
 			} catch (Exception exception) {
 				this.minecraft.execute(() -> {
+					if (!active || scanGeneration != localModScanGeneration) return;
 					localModCandidates = new LocalModArchive.Snapshot(List.of());
 					localModsLoaded = true;
 					localModWork = null;
@@ -222,5 +228,15 @@ public final class FirstConnectScreen extends VersionedScreen {
 	@Override
 	public boolean shouldCloseOnEsc() {
 		return false;
+	}
+
+	@Override
+	public void removed() {
+		active = false;
+		localModScanGeneration++;
+		Future<?> current = localModWork;
+		if (current != null && !current.isDone()) current.cancel(false);
+		localModWork = null;
+		super.removed();
 	}
 }
