@@ -91,7 +91,7 @@ class UpdateTransactionExecutorTest {
 		String hash = HashUtils.getHash(Files.write(storage.activePath("mods/existing.jar"), bytes));
 		SelectedModpackTarget target = target("mods/existing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), List.of(),
-				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of());
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of());
 
 		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
 
@@ -115,7 +115,7 @@ class UpdateTransactionExecutorTest {
 				new UpdatePlan.FileState(localHash, localBytes.length, true, true));
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(),
 				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
-				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), null,
+				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId())));
 		UpdateTransaction malformed = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
 		malformed.plannedConflicts = new ArrayList<>(List.of(plan.conflicts().get(0)));
@@ -321,7 +321,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private static UpdatePlan plan(SelectedModpackTarget target, Jsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {
-		return new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), operations, finalState, config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK));
+		return new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), operations, finalState, config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of());
 	}
 
 	private static SelectedModpackTarget target(String path, String type, boolean editable, String hash, long size) {

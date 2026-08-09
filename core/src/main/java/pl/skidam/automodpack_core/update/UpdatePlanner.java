@@ -63,23 +63,6 @@ public final class UpdatePlanner {
 			nestedCopies = List.copyOf(nestedCopies);
 		}
 
-		public Input(Jsons.ModpackContentFields installedManifest, Jsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
-				Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods, List<NestedCopy> previousNestedCopies, List<NestedCopy> nestedCopies,
-				SelectionContext selection, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
-			this(installedManifest, targetManifest, files, Map.of(), forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCopies, selection, plannedClientConfig);
-		}
-
-		public Input(Jsons.ModpackContentFields installedManifest, Jsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
-				Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods, List<NestedCopy> nestedCopies,
-				SelectionContext selection, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
-			this(installedManifest, targetManifest, files, Map.of(), forceCopyServicePaths, targetMods, standardMods, List.of(), nestedCopies, selection, plannedClientConfig);
-		}
-
-		public Input(Jsons.ModpackContentFields installedManifest, Jsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
-				Map<String, FileState> editableOverlays, Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods,
-				List<NestedCopy> nestedCopies, SelectionContext selection, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
-			this(installedManifest, targetManifest, files, editableOverlays, forceCopyServicePaths, targetMods, standardMods, List.of(), nestedCopies, selection, plannedClientConfig);
-		}
 	}
 
 	public record SelectionContext(String previousModpackId, Jsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays) {
@@ -186,7 +169,7 @@ public final class UpdatePlanner {
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
 		return new UpdatePlan(installed.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
-				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(), List.of());
+				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(), List.of(), List.of(), List.of());
 	}
 
 	public static UpdatePlan plan(Input input) {

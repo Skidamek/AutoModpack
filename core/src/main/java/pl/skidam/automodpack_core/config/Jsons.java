@@ -527,7 +527,6 @@ public class Jsons {
 		public Map<String, ModpackSelection> selections = new HashMap<>();
 
 		public static class ModpackSelection {
-			@SerializedName(value = "requestedGroups", alternate = "selectedGroups")
 			public Set<String> requestedGroups = new HashSet<>();
 			public Set<String> excludedGroups = new HashSet<>();
 

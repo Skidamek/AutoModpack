@@ -38,7 +38,7 @@ class UpdatePreviewTest {
 				new FileKey(Root.GAME_DIR, "config/changed.json"), new FileState(OTHER_HASH, 8, true, false),
 				new FileKey(Root.GAME_DIR, "config/old.json"), new FileState(OLD_HASH, 7, true, false));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
@@ -54,9 +54,9 @@ class UpdatePreviewTest {
 				new Jsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
 				entry("config/new.json", TARGET_HASH, 4, OwnershipLedger.Status.PRESENT));
 		Map<FileKey, FileState> files = Map.of();
-		UpdatePlan planned = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3()));
+		UpdatePlan planned = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, new Jsons.ClientConfigFieldsV3()));
 		UpdatePlan plan = new UpdatePlan(planned.modpackId(), planned.generationTarget(), planned.operations(), planned.projectedFinalState(), planned.plannedClientConfig(),
-				Set.of(RestartReason.CORRECTED_FILE_LOCATIONS), planned.preservations(), planned.baselineCaptures());
+				Set.of(RestartReason.CORRECTED_FILE_LOCATIONS), planned.preservations(), planned.baselineCaptures(), planned.conflicts(), planned.generatedCopies());
 
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
@@ -67,7 +67,7 @@ class UpdatePreviewTest {
 	@Test
 	void summaryDeduplicatesLogicalPathsAndLabelsOtherEffects() {
 		Jsons.ModpackContentFields target = manifest();
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Set.of(), List.of(), List.of(), List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = new UpdatePreview(plan, List.of(
 				new UpdatePreview.Entry(UpdatePreview.Kind.PRESERVED_CAS, Root.GAME_DIR, "config/shared.json", 1),
@@ -86,7 +86,7 @@ class UpdatePreviewTest {
 				entry("config/kept.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 8, true, false));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
@@ -100,7 +100,7 @@ class UpdatePreviewTest {
 		Jsons.ModpackContentFields target = manifest(entry("config/unknown.json", OLD_HASH, 12, OwnershipLedger.Status.TOMBSTONE));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/unknown.json"), new FileState(null, 12, true, false));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
@@ -157,7 +157,7 @@ class UpdatePreviewTest {
 	void includesExplicitResolvedAndStaleGroupConsequences() {
 		Jsons.ModpackContentFields target = manifest();
 		Map<FileKey, FileState> files = Map.of();
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Set.of(), List.of(), List.of(), List.of(), null,
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new Jsons.ClientConfigFieldsV3()));
 		ResolvedSelection selection = new ResolvedSelection(new SelectionIntent(Set.of("optional")), new TreeSet<>(Set.of("main", "optional")),
 				new TreeSet<>(Set.of("stale")));
