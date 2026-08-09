@@ -139,11 +139,11 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                 _check_publish_generation(step, problems, label)
             elif verb == "assert_generation":
                 _check_generation_assertion(step, problems, label)
-            elif verb in ("assert_file_content", "wait_file_content", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_quarantine_payload"):
+            elif verb in ("assert_file_content", "wait_file_content", "write_file", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_quarantine_payload"):
                 if not isinstance(step.get("path"), str) or not step["path"].strip():
                     if verb not in ("assert_quarantine_payload",):
                         problems.append(f"{label}.path: expected a non-empty relative path")
-                if verb == "wait_file_content" and not isinstance(step.get("content"), str):
+                if verb in ("wait_file_content", "write_file") and not isinstance(step.get("content"), str):
                     problems.append(f"{label}.content: expected a string")
                 if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_quarantine_payload") and step.get("fixture") is not None:
                     _check_mod_fixture(step.get("fixture"), problems, f"{label}.fixture")
@@ -276,6 +276,8 @@ def _check_stage_modpack(step, problems, scoped_targets, where):
                 _check_mod_fixture(item["fixture"], problems, f"{where}.files[{index}].fixture")
                 if not item["path"].lower().endswith(".jar"):
                     problems.append(f"{where}.files[{index}].path: valid mod fixtures must use a .jar path")
+            if isinstance(item, dict) and "editable" in item and not isinstance(item["editable"], bool):
+                problems.append(f"{where}.files[{index}].editable: expected a boolean")
 
 
 def _check_mod_fixture(value, problems, where):
