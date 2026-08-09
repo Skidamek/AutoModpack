@@ -20,16 +20,22 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 	private final Screen parent;
 	private final List<GenerationPatchNoteHistory.Entry> history;
 	private final String modpackName;
+	private final Runnable closedCallback;
 	private List<String> displayLines;
 	private Button previousButton;
 	private Button nextButton;
 	private int page;
 
 	public PatchNotesHistoryScreen(Screen parent, List<GenerationPatchNoteHistory.Entry> history, String modpackName) {
+		this(parent, history, modpackName, () -> {});
+	}
+
+	public PatchNotesHistoryScreen(Screen parent, List<GenerationPatchNoteHistory.Entry> history, String modpackName, Runnable closedCallback) {
 		super(VersionedText.translatable("automodpack.patchNotes.title"));
 		this.parent = parent;
-		this.history = history.stream().filter(entry -> !entry.patchNotes().isBlank()).toList();
+		this.history = List.copyOf(history);
 		this.modpackName = modpackName == null ? "" : modpackName;
+		this.closedCallback = closedCallback == null ? () -> {} : closedCallback;
 	}
 
 	@Override
@@ -68,7 +74,8 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 		for (int index = 0; index < history.size(); index++) {
 			GenerationPatchNoteHistory.Entry entry = history.get(index);
 			lines.add(truncateToWidth(this.font, VersionedText.translatable("automodpack.patchNotes.generation", shortGenerationId(entry.generationId()), entry.createdAt()).getString(), width));
-			lines.addAll(wrapToWidth(this.font, entry.patchNotes(), width, Integer.MAX_VALUE));
+			String notes = entry.patchNotes().isBlank() ? VersionedText.translatable("automodpack.patchNotes.none").getString() : entry.patchNotes();
+			lines.addAll(wrapToWidth(this.font, notes, width, Integer.MAX_VALUE));
 			if (index + 1 < history.size()) lines.add("");
 		}
 		if (lines.isEmpty()) lines.add(VersionedText.translatable("automodpack.patchNotes.empty").getString());
@@ -91,6 +98,7 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 	}
 
 	private void back() {
+		closedCallback.run();
 		ScreenImpl.setScreen(parent);
 	}
 
