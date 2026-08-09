@@ -192,8 +192,30 @@ def _publish_server_generation(ctx, step):
 
 
 def _compact_server_history(ctx, step):
-    """Record the fake action; this is not proof of real server compaction."""
-    ctx.vars["fake_server_history_compacted"] = True
+    """Record an explicit fake receipt; Docker remains runtime authority."""
+    ctx.vars["fake_server_history_compacted"] = {
+        "receipt": "fake-only",
+        "runtimeAuthority": "Docker runner",
+    }
+
+
+def _rollback_server_generation(ctx, step):
+    """Record a fake receipt; Docker remains runtime authority for rollback."""
+    ctx.vars["fake_server_generation_rollback"] = {
+        "receipt": "fake-only",
+        "runtimeAuthority": "Docker runner",
+        "command": ["rcon-cli", "automodpack", "generate", "revert", "<ancestor>", "confirm", "notes", step.get("notes", "")],
+        "notes": step.get("notes", ""),
+    }
+
+
+def _collect_server_objects(ctx, step):
+    """Record a fake receipt; Docker remains runtime authority for object GC."""
+    ctx.vars["fake_server_object_gc"] = {
+        "receipt": "fake-only",
+        "runtimeAuthority": "Docker runner",
+        "command": ["rcon-cli", "automodpack", "generate", "storage", "collect", "confirm"],
+    }
 
 
 def _wait_join(ctx, step):
@@ -256,6 +278,8 @@ _FAKE_VERBS = {
     "stage_modpack": _stage_modpack,
     "publish_server_generation": _publish_server_generation,
     "compact_server_history": _compact_server_history,
+    "rollback_server_generation": _rollback_server_generation,
+    "collect_server_objects": _collect_server_objects,
     "wait_join": _wait_join,
     "assert_preload_rejected": _assert_preload_rejected,
     "assert_client_objects_absent": _assert_client_objects_absent,
@@ -369,7 +393,17 @@ def test_release_gate_flow(make_ctx, flow_verbs):
 
     assert all(r["ok"] for r in results), [r for r in results if not r["ok"]]
     assert ctx.bridge.exited
-    assert ctx.vars.get("fake_server_history_compacted") is True
+    assert ctx.vars.get("fake_server_history_compacted") == {
+        "receipt": "fake-only",
+        "runtimeAuthority": "Docker runner",
+    }
+    assert ctx.vars["fake_server_generation_rollback"] == {
+        "receipt": "fake-only",
+        "runtimeAuthority": "Docker runner",
+        "command": ["rcon-cli", "automodpack", "generate", "revert", "<ancestor>", "confirm", "notes", "Release gate rollback: restore the retained ancestor."],
+        "notes": "Release gate rollback: restore the retained ancestor.",
+    }
+    assert ctx.vars["fake_server_object_gc"]["command"] == ["rcon-cli", "automodpack", "generate", "storage", "collect", "confirm"]
     assert not ctx.bridge.secondary_pack
     assert ctx.bridge.screenshots, "release gate must exercise render screenshots"
     assert "all-local-storage-before" in ctx.bridge.screenshots
