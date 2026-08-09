@@ -133,6 +133,17 @@ def assert_file_content(ctx, step):
         raise AssertionError(f"file {path} contents differ: expected {expected!r}, got {actual!r}")
 
 
+@verb("write_file")
+def write_file(ctx, step):
+    """Write deterministic local content under the client game directory."""
+    raw_path = Path(str(ctx.resolve(step["path"])))
+    path = ctx.path(raw_path)
+    if raw_path.is_absolute() or not path.resolve().is_relative_to(ctx.game_dir.resolve()):
+        raise ValueError(f"local file path escapes the client game directory: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(ctx.resolve(step.get("content", ""))), encoding="utf-8")
+
+
 @verb("assert_bootstrap_import")
 def assert_bootstrap_import(ctx, _step):
     """Assert that Preload imported and consumed the real bootstrap file."""

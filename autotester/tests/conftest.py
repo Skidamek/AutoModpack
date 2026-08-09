@@ -225,9 +225,11 @@ class FakeBridge:
         elif element_id == 5:
             if self.screen == "preview":
                 if self.pending_pack is not None:
+                    self._capture_editable_overlay(self.selected_pack)
                     self.selected_pack = self.pending_pack
                     self.pending_pack = None
                 self._write_modpack()
+                self._restore_editable_overlay(self.selected_pack)
                 self.screen = "restart"
         elif element_id == 4:
             self.exited = True
@@ -280,6 +282,28 @@ class FakeBridge:
         return {"ok": True}
 
     # --- helpers ----------------------------------------------------------
+    def _pack_id(self, pack: str) -> str:
+        return {"A": "packaaa", "B": "packbbb"}[pack]
+
+    def _editable_overlay_path(self, pack: str) -> Path:
+        return self.ctx.game_dir / "automodpack" / "client" / "overlays" / self._pack_id(pack) / "config" / "pack-shared-editable.txt"
+
+    def _capture_editable_overlay(self, pack: str) -> None:
+        source = self.ctx.path("config/pack-shared-editable.txt")
+        if not source.is_file():
+            return
+        overlay = self._editable_overlay_path(pack)
+        overlay.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, overlay)
+
+    def _restore_editable_overlay(self, pack: str) -> None:
+        overlay = self._editable_overlay_path(pack)
+        if not overlay.is_file():
+            return
+        target = self.ctx.path("config/pack-shared-editable.txt")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(overlay, target)
+
     def _generation_fixture_files(self, index: int) -> list[tuple[Path, bytes]]:
         generations = self.ctx.scenario.get("serverFiles", {}).get("generations", [])
         if index >= len(generations):

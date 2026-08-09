@@ -204,6 +204,7 @@ flow:
     patchNotes: "Cached Pack B fixture."
     files:
       - { path: config/pack-b.txt, content: "pack-b\n" }
+      - { path: config/pack-shared-editable.txt, content: "pack-b-default\n", editable: true }
       # This is a real metadata-only archive with the same mod ID as the local
       # seed below. It carries Fabric, Forge, and NeoForge metadata so the
       # FileInspection planner recognizes it on every supported loader.
@@ -213,6 +214,18 @@ flow:
     name: seed the local payload at the server-owned mods path
     path: mods/amp-autotest-conflict.jar
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
+  - do: write_file
+    name: make a Pack A local edit to the shared editable config
+    path: config/pack-shared-editable.txt
+    content: "pack-a-local\n"
+  - do: assert_file_content
+    name: verify the Pack A local edit is live before switching
+    path: config/pack-shared-editable.txt
+    content: "pack-a-local\n"
+  - do: assert_file_content
+    name: verify Pack A projection still contains its server default
+    path: "${active_dir}/config/pack-shared-editable.txt"
+    content: "pack-a-default\n"
   - do: disconnect
     name: leave the active pack without changing it
   - use: open_multiplayer
@@ -282,6 +295,18 @@ flow:
   - do: assert
     name: verify Pack A only payload is gone while Pack B is active
     that: { file_gone: "${active_dir}/config/pack-a-only.txt" }
+  - do: write_file
+    name: make a Pack B local edit to the shared editable config
+    path: config/pack-shared-editable.txt
+    content: "pack-b-local\n"
+  - do: assert_file_content
+    name: verify the Pack B local edit is live before switching back
+    path: config/pack-shared-editable.txt
+    content: "pack-b-local\n"
+  - do: assert_file_content
+    name: verify Pack B projection still contains its server default
+    path: "${active_dir}/config/pack-shared-editable.txt"
+    content: "pack-b-default\n"
   - use: open_multiplayer
   - use: open_pack_manager
   - do: click
@@ -319,6 +344,22 @@ flow:
     name: verify the Pack A only payload is restored after the reverse switch
     path: "${active_dir}/config/pack-a-only.txt"
     content: "pack-a\n"
+  - do: assert_file_content
+    name: verify switching back restored the Pack A local edit
+    path: config/pack-shared-editable.txt
+    content: "pack-a-local\n"
+  - do: assert_file_content
+    name: verify Pack A overlay remains isolated from Pack B
+    path: "automodpack/client/overlays/${bootstrap_modpack_id}/config/pack-shared-editable.txt"
+    content: "pack-a-local\n"
+  - do: assert_file_content
+    name: verify Pack B overlay preserved its own local edit
+    path: automodpack/client/overlays/packbbb/config/pack-shared-editable.txt
+    content: "pack-b-local\n"
+  - do: assert_file_content
+    name: verify Pack A projection contains its server default beneath the overlay
+    path: "${active_dir}/config/pack-shared-editable.txt"
+    content: "pack-a-default\n"
   - do: assert
     name: verify Pack B payload is gone after returning to Pack A
     that: { file_gone: "${active_dir}/config/pack-b.txt" }
@@ -456,7 +497,8 @@ topology:
             description: Required core files
             required: true
             defaultSelected: true
-            syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/mods/amp-autotest-removed.jar"]
+            allowEditsInFiles: ["/config/pack-shared-editable.txt"]
+            syncedFiles: ["/config/amp-autotest-alpha.txt", "/config/amp-autotest-beta.json", "/config/amp-autotest-gamma.cfg", "/config/amp-autotest-delta.txt", "/config/amp-autotest-marker.json", "/config/pack-a-only.txt", "/config/pack-shared-editable.txt", "/mods/amp-autotest-removed.jar"]
           visual:
             displayName: Visuals
             description: Default client visuals
@@ -492,6 +534,7 @@ serverFiles:
     - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
     - { path: config/amp-autotest-visual.txt, content: "visual-v1\n" }
     - { path: config/pack-a-only.txt, content: "pack-a\n" }
+    - { path: config/pack-shared-editable.txt, content: "pack-a-default\n" }
   generations:
     - patchNotes: "Initial release: core content and optional client groups."
       files:
@@ -504,6 +547,7 @@ serverFiles:
         - { group: alternative, path: config/amp-autotest-alternative.txt, content: "alternative-v1\n" }
         - { group: windows, path: config/amp-autotest-windows.txt, content: "windows-v1\n" }
         - { group: main, path: config/pack-a-only.txt, content: "pack-a\n" }
+        - { group: main, path: config/pack-shared-editable.txt, content: "pack-a-default\n" }
     - patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
       files:
         - { group: main, path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v2\n" }
@@ -514,3 +558,4 @@ serverFiles:
         - { group: alternative, path: config/amp-autotest-alternative.txt, content: "alternative-v2\n" }
         - { group: windows, path: config/amp-autotest-windows.txt, content: "windows-v2\n" }
         - { group: main, path: config/pack-a-only.txt, content: "pack-a-v2\n" }
+        - { group: main, path: config/pack-shared-editable.txt, content: "pack-a-default\n" }
