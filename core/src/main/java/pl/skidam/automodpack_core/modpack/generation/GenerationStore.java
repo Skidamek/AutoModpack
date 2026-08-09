@@ -13,6 +13,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
@@ -224,7 +225,7 @@ public final class GenerationStore {
 		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) requireDirectory(root, "generation store");
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		readCheckpoint();
-		Jsons.GenerationPointerFields pointer = readCurrentPointer();
+		GenerationJsons.GenerationPointerFields pointer = readCurrentPointer();
 		GenerationRecord record;
 		Path materializedPath = currentProjectionPath;
 		LoadedProjection loaded = null;
@@ -330,7 +331,7 @@ public final class GenerationStore {
 		writeCurrentProjection(record);
 		hosting.put("", currentProjectionPath);
 		Publication publication = new Publication(PublicationStatus.PUBLISHED, record, currentProjectionPath, hosting);
-		Jsons.GenerationPointerFields nextPointer = pointer(record);
+		GenerationJsons.GenerationPointerFields nextPointer = pointer(record);
 		commitHook.beforeCurrentPointerReplacement();
 		ensureCurrentStillMatches(expectedCurrent);
 		ConfigTools.writeAtomic(currentPath, nextPointer);
@@ -608,10 +609,10 @@ public final class GenerationStore {
 		return !Files.isSymbolicLink(object) && Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && name.equals(HashUtils.getHash(object));
 	}
 
-	private Jsons.GenerationPointerFields readCurrentPointer() throws IOException {
+	private GenerationJsons.GenerationPointerFields readCurrentPointer() throws IOException {
 		ensureRegular(currentPath, "current generation pointer");
 		try {
-			Jsons.GenerationPointerFields pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), Jsons.GenerationPointerFields.class);
+			GenerationJsons.GenerationPointerFields pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), GenerationJsons.GenerationPointerFields.class);
 			if (pointer.schemaVersion != CURRENT_POINTER_SCHEMA_VERSION || !isDigest(pointer.generationId))
 				throw new IOException("Invalid current generation pointer metadata: " + currentPath);
 			return pointer;
@@ -626,7 +627,7 @@ public final class GenerationStore {
 		if (!Files.exists(checkpointPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		ensureRegular(checkpointPath, "generation history checkpoint");
 		try {
-			return Optional.of(GenerationCheckpoint.fromFields(ConfigTools.parse(Files.readString(checkpointPath, StandardCharsets.UTF_8), Jsons.GenerationCheckpointFields.class)));
+			return Optional.of(GenerationCheckpoint.fromFields(ConfigTools.parse(Files.readString(checkpointPath, StandardCharsets.UTF_8), GenerationJsons.GenerationCheckpointFields.class)));
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid generation history checkpoint: " + checkpointPath, e);
 		}
@@ -670,7 +671,7 @@ public final class GenerationStore {
 	private OwnershipDelta readDelta(Path path) throws IOException {
 		ensureRegular(path, "generation ownership delta");
 		try {
-			return OwnershipDelta.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.OwnershipDeltaFields.class));
+			return OwnershipDelta.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.OwnershipDeltaFields.class));
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid generation ownership delta: " + path, e);
 		}
@@ -683,7 +684,7 @@ public final class GenerationStore {
 	private CatalogueSnapshot readCatalogue(Path path) throws IOException {
 		ensureRegular(path, "generation catalogue snapshot");
 		try {
-			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CatalogueSnapshotFields.class));
+			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.CatalogueSnapshotFields.class));
 			if (!snapshot.stateDigest().equals(catalogueStateDigest(path))) throw new IOException("Catalogue snapshot filename does not match its identity: " + path);
 			return snapshot;
 		} catch (IOException e) {
@@ -700,7 +701,7 @@ public final class GenerationStore {
 	private GenerationCommit readCommit(Path path) throws IOException {
 		ensureRegular(path, "generation commit");
 		try {
-			GenerationCommit commit = GenerationCommit.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.GenerationCommitFields.class));
+			GenerationCommit commit = GenerationCommit.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.GenerationCommitFields.class));
 			if (!commit.generationId().equals(commitGenerationId(path))) throw new IOException("Generation commit filename does not match its identity: " + path);
 			return commit;
 		} catch (IOException e) {
@@ -890,8 +891,8 @@ public final class GenerationStore {
 		return generationId;
 	}
 
-	private static Jsons.GenerationPointerFields pointer(GenerationRecord record) {
-		Jsons.GenerationPointerFields pointer = new Jsons.GenerationPointerFields();
+	private static GenerationJsons.GenerationPointerFields pointer(GenerationRecord record) {
+		GenerationJsons.GenerationPointerFields pointer = new GenerationJsons.GenerationPointerFields();
 		pointer.schemaVersion = CURRENT_POINTER_SCHEMA_VERSION;
 		pointer.generationId = record.metadata().generationId();
 		return pointer;

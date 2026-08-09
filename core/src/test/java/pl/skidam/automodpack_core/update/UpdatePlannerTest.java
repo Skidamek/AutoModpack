@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
@@ -286,7 +287,7 @@ class UpdatePlannerTest {
 	}
 
 	private static Jsons.ModpackContentFields manifest(Map<String, Jsons.ModpackContentFields.ModpackContentItem> items,
-			Jsons.OwnershipLedgerFields ownershipLedger) {
+			GenerationJsons.OwnershipLedgerFields ownershipLedger) {
 		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(new LinkedHashSet<>(items.values()));
 		target.modpackId = "abc1234";
 		target.targetGenerationId = "1".repeat(40);
@@ -341,11 +342,11 @@ class UpdatePlannerTest {
 				.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (first, second) -> first, LinkedHashMap::new));
 	}
 
-	private static Jsons.OwnershipLedgerFields ledger(OwnershipLedger.Entry... entries) {
+	private static GenerationJsons.OwnershipLedgerFields ledger(OwnershipLedger.Entry... entries) {
 		return ledgerFor("abc1234", entries);
 	}
 
-	private static Jsons.OwnershipLedgerFields ledgerFor(String modpackId, OwnershipLedger.Entry... entries) {
+	private static GenerationJsons.OwnershipLedgerFields ledgerFor(String modpackId, OwnershipLedger.Entry... entries) {
 		Map<String, OwnershipLedger.Entry> values = new TreeMap<>();
 		for (OwnershipLedger.Entry entry : entries) values.put(entry.logicalPath(), entry);
 		return new OwnershipLedger(modpackId, values).toFields();

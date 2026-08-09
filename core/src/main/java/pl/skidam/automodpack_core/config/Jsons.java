@@ -225,79 +225,6 @@ public class Jsons {
 		public ModpackConnectionMode connectionMode;
 	}
 
-	public static class GenerationPointerFields {
-		public int schemaVersion;
-		public String generationId = "";
-	}
-
-	public static class GenerationCheckpointFields {
-		public int schemaVersion;
-		public String boundaryGenerationId = "";
-		public CompleteModpackContentFields record = new CompleteModpackContentFields();
-		public List<String> supersededGenerationIds = List.of();
-		public List<String> supersededCatalogueStateDigests = List.of();
-	}
-
-	public static class OwnershipLedgerFields {
-		public String modpackId = "";
-		public List<EntryFields> entries = List.of();
-		public String digest = "";
-
-		public static class EntryFields {
-			public String logicalPath = "";
-			public List<ContentFields> historicalHashes = List.of();
-			public Set<String> historicalGroupIds = Set.of();
-			public String firstPublishedGenerationId = "";
-			public String lastPublishedGenerationId = "";
-			public String currentStatus = "";
-		}
-
-		public static class ContentFields {
-			public String sha1 = "";
-			public long size;
-
-			public ContentFields() {}
-
-			public ContentFields(String sha1, long size) {
-				this.sha1 = sha1;
-				this.size = size;
-			}
-		}
-	}
-
-	public static class OwnershipDeltaFields {
-		public String modpackId = "";
-		public List<ChangeFields> changes = List.of();
-		public String digest = "";
-
-		public static class ChangeFields {
-			public String logicalPath = "";
-			public String kind = "";
-			public OwnershipLedgerFields.ContentFields content;
-			public List<OwnershipLedgerFields.ContentFields> contents = List.of();
-			public Set<String> groupIds = Set.of();
-		}
-	}
-
-	public static class CatalogueSnapshotFields {
-		public String stateDigest = "";
-		public CompleteModpackContentFields catalogue = new CompleteModpackContentFields();
-	}
-
-	public static class GenerationCommitFields {
-		public int schemaVersion;
-		public String generationId = "";
-		public String parentGenerationId = "";
-		public String modpackId = "";
-		public String createdAt = "";
-		public String stateDigest = "";
-		public String ledgerDigest = "";
-		public String ownershipDeltaDigest = "";
-		public String patchNotes = "";
-		public String patchNotesDigest = "";
-		public String rollbackTargetGenerationId = "";
-	}
-
 	public static class CompleteModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
@@ -306,7 +233,7 @@ public class Jsons {
 		public String loaderVersion = "";
 		public String mcVersion = "";
 		public Map<String, ModpackGroupFields> groups = Map.of();
-		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
+		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
 		public GenerationFields generation;
 		public List<PatchNotesHistoryEntryFields> patchNotesHistory = List.of();
 
@@ -373,7 +300,7 @@ public class Jsons {
 		public String mcVersion = "";
 		public Set<ModpackContentItem> list;
 		public Set<String> selectedGroups = Set.of();
-		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
+		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
 		public String targetGenerationId = "";
 		public String parentGenerationId = "";
 		public String stateDigest = "";

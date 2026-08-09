@@ -5,7 +5,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 
 /** Durable complete generation state at the intentional boundary of compacted history. */
 public record GenerationCheckpoint(int schemaVersion, String boundaryGenerationId, GenerationRecord record,
@@ -25,8 +25,8 @@ public record GenerationCheckpoint(int schemaVersion, String boundaryGenerationI
 		this(CURRENT_SCHEMA_VERSION, record.metadata().generationId(), record, supersededGenerationIds, supersededCatalogueStateDigests);
 	}
 
-	public Jsons.GenerationCheckpointFields toFields() {
-		Jsons.GenerationCheckpointFields fields = new Jsons.GenerationCheckpointFields();
+	public GenerationJsons.GenerationCheckpointFields toFields() {
+		GenerationJsons.GenerationCheckpointFields fields = new GenerationJsons.GenerationCheckpointFields();
 		fields.schemaVersion = schemaVersion;
 		fields.boundaryGenerationId = boundaryGenerationId;
 		fields.record = record.toFields();
@@ -35,7 +35,7 @@ public record GenerationCheckpoint(int schemaVersion, String boundaryGenerationI
 		return fields;
 	}
 
-	public static GenerationCheckpoint fromFields(Jsons.GenerationCheckpointFields fields) {
+	public static GenerationCheckpoint fromFields(GenerationJsons.GenerationCheckpointFields fields) {
 		if (fields == null || fields.record == null) throw new IllegalArgumentException("Generation checkpoint is missing");
 		if (fields.record.patchNotesHistory != null && !fields.record.patchNotesHistory.isEmpty())
 			throw new IllegalArgumentException("Generation checkpoint must contain the exact generation record without patch-note history");
