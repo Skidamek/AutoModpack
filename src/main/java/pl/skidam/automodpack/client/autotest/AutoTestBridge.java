@@ -279,12 +279,8 @@ public final class AutoTestBridge {
 	public static void onFrameRendered() {
 		PendingScreenshot pending = PENDING_SCREENSHOT.get();
 		if (pending == null) return;
-		// The bridge command can arrive after this frame started rendering. Consume one complete
-		// frame before sampling, so the screenshot is taken from the following frame's render target.
-		if (!pending.frameObserved()) {
-			pending.markFrameObserved();
-			return;
-		}
+		RenderedFrameState state = RenderedFrameState.capture();
+		if (!pending.observe(state)) return;
 		if (!PENDING_SCREENSHOT.compareAndSet(pending, null)) return;
 		try {
 			Minecraft minecraft = Minecraft.getInstance();
@@ -305,19 +301,17 @@ public final class AutoTestBridge {
 	private static final class PendingScreenshot {
 		private final CompletableFuture<String> captured;
 		private final Path path;
-		private boolean frameObserved;
+		private RenderedFrameState previousState;
 
 		private PendingScreenshot(CompletableFuture<String> captured, Path path) {
 			this.captured = captured;
 			this.path = path;
 		}
 
-		private boolean frameObserved() {
-			return frameObserved;
-		}
-
-		private void markFrameObserved() {
-			frameObserved = true;
+		private boolean observe(RenderedFrameState state) {
+			boolean settled = state.isSettledAfter(previousState);
+			previousState = state;
+			return settled;
 		}
 
 		private CompletableFuture<String> captured() {
@@ -326,6 +320,21 @@ public final class AutoTestBridge {
 
 		private Path path() {
 			return path;
+		}
+	}
+
+	private record RenderedFrameState(Screen screen, boolean overlayVisible) {
+		private static RenderedFrameState capture() {
+			Minecraft minecraft = Minecraft.getInstance();
+			/*? if >=26.2 {*/
+			return new RenderedFrameState(currentScreen(), false);
+			/*?} else {*/
+			/*return new RenderedFrameState(currentScreen(), minecraft.getOverlay() != null);
+			*//*?}*/
+		}
+
+		private boolean isSettledAfter(RenderedFrameState previous) {
+			return previous != null && !overlayVisible && !previous.overlayVisible && screen == previous.screen;
 		}
 	}
 
