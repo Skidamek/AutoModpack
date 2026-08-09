@@ -30,7 +30,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	public ContentHistoryScreen(Screen parent, List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory,
 			Runnable closedCallback) {
-		super(VersionedText.literal("ContentHistoryScreen"));
+		super(VersionedText.translatable("automodpack.history.title"));
 		this.parent = parent;
 		this.entries = GenerationHistorySummary.summarize(history, patchNotesHistory);
 		this.patchNotesHistory = List.copyOf(patchNotesHistory);
@@ -46,8 +46,9 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		boolean hasNotes = GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
 		boolean hasPagination = pageCount() > 1;
 		int navigationY = hasNotes && hasPagination ? y - 26 : y;
-		this.previousButton = buttonWidget(hasNotes ? centeredActionButtonX(310, 3, 2, 0) : actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
-		this.nextButton = buttonWidget(hasNotes ? centeredActionButtonX(310, 3, 2, 1) : actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.literal("Next >"), button -> changePage(1));
+		this.previousButton = buttonWidget(hasNotes ? centeredActionButtonX(310, 3, 2, 0) : actionButtonX(310, 3, 1), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.previous"),
+				button -> changePage(-1));
+		this.nextButton = buttonWidget(hasNotes ? centeredActionButtonX(310, 3, 2, 1) : actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
 		updateNavigation();
 		if (hasPagination) {
 			this.addRenderableWidget(this.previousButton);
@@ -91,9 +92,9 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = modpackName.isBlank() ? "Content history" : modpackName + " content history";
+		String title = VersionedText.translatable(modpackName.isBlank() ? "automodpack.history.title" : "automodpack.history.titleNamed", modpackName).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Downloaded generations and their patch notes.").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.description").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
 		int pageSize = rowsPerPage();
 		int start = page * pageSize;
 		int end = Math.min(entries.size(), start + pageSize);
@@ -102,23 +103,28 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			int y = ENTRY_TOP + (index - start) * ENTRY_HEIGHT;
 			boolean current = index == entries.size() - 1;
 			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal(truncateToWidth(this.font, "Generation " + entry.number() + "  " + entry.createdAt() + (current ? "  Latest available" : ""), this.width - 20))
+					VersionedText
+							.literal(truncateToWidth(this.font,
+									VersionedText.translatable("automodpack.history.generation", entry.number(), entry.createdAt()).getString()
+											+ (current ? "  " + VersionedText.translatable("automodpack.history.latest").getString() : ""),
+									this.width - 20))
 							.withStyle(current ? ChatFormatting.GREEN : ChatFormatting.WHITE),
 					this.width / 2, y, TextColors.WHITE);
-			String notes = entry.patchNotes().isBlank() ? "No patch notes" : firstLine(entry.patchNotes());
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Patch notes: " + notes, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, y + 13,
+			String notes = entry.patchNotes().isBlank() ? VersionedText.translatable("automodpack.history.noPatchNotes").getString() : firstLine(entry.patchNotes());
+			drawCenteredTextWithShadow(matrices, this.font,
+					VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", notes).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2,
+					y + 13,
 					TextColors.WHITE);
 			GenerationDiff.Summary diff = entry.diff().summary();
-			String diffText = "Diff vs previous: +" + diff.addedFiles() + " added, ~" + diff.modifiedFiles() + " changed, -" + diff.removedFiles() + " removed, metadata-only "
-					+ diff.metadataOnlyFiles() + ", other metadata " + diff.metadataChanges();
+			String diffText = VersionedText.translatable("automodpack.history.diff", diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles(), diff.metadataOnlyFiles(), diff.metadataChanges()).getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 26,
 					TextColors.WHITE);
 		}
 		if (entries.isEmpty())
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("No content history is available.").withStyle(ChatFormatting.GRAY), this.width / 2, 82,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 82,
 					TextColors.WHITE);
 		if (pageCount() > 1)
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal((page + 1) + " / " + pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 42,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 42,
 					TextColors.WHITE);
 	}
 

@@ -9,12 +9,12 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 public class PreparingScreen extends VersionedScreen {
 
 	public PreparingScreen() {
-		super(VersionedText.literal("PreparingScreen"));
+		super(VersionedText.translatable("automodpack.preparing.title"));
 	}
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Preparing update").withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 12,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.preparing.title").withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 12,
 				TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.wait").withStyle(ChatFormatting.GRAY), this.width / 2, this.height / 2 + 6,
 				TextColors.WHITE);
