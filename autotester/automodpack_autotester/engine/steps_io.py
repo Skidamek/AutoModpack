@@ -86,7 +86,7 @@ def verify_mods(ctx, step):
     await_condition(_all, timeout, step.get("poll"), "expected mods missing")
 
 
-def _read_active_generation(ctx):
+def _read_active_generation(ctx, expected_patch_notes=None):
     state_path = ctx.game_dir / "automodpack" / "client" / "active-state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(state, dict):
@@ -100,6 +100,8 @@ def _read_active_generation(ctx):
     generation = manifest.get("generation") if isinstance(manifest, dict) else None
     if not isinstance(generation, dict) or manifest.get("modpackId") != modpack_id or generation.get("generationId") != generation_id:
         raise ValueError("active generation state does not match its immutable record")
+    if expected_patch_notes is not None and generation.get("patchNotes") != expected_patch_notes:
+        raise ValueError("active generation patch notes are not committed")
     return state, manifest
 
 
@@ -107,10 +109,11 @@ def _read_active_generation(ctx):
 def wait_generation(ctx, step):
     """Wait until active-state.json and its immutable generation record are committed."""
     timeout = parse_duration(step.get("timeout"), default=300)
+    expected_patch_notes = str(ctx.resolve(step["patchNotes"])) if "patchNotes" in step else None
 
     def _committed():
         try:
-            return _read_active_generation(ctx)
+            return _read_active_generation(ctx, expected_patch_notes)
         except (FileNotFoundError, IsADirectoryError, OSError, TypeError, ValueError, json.JSONDecodeError):
             return None
 
