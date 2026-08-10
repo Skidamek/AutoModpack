@@ -211,6 +211,7 @@ class UpdatePlannerTest {
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/nested-edited.jar") || operation.relativePath().equals("mods/local.jar")));
 		assertTrue(plan.projectedFinalState().stream().noneMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/nested.jar") && file.present()));
 		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/nested-edited.jar") && file.present()));
+		assertTrue(plan.restartReasons().contains(RestartReason.SELECTED_MODPACK));
 	}
 
 	@Test
@@ -250,6 +251,41 @@ class UpdatePlannerTest {
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/sodium.jar")
 				&& operation.operation() == OperationType.DELETE));
 		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/sodium.jar") && file.present()));
+	}
+
+	@Test
+	void disabledGroupFileIsOutsideClientCleanupScope() {
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("config/connector.json")));
+		assertTrue(plan.preservations().isEmpty());
+	}
+
+	@Test
+	void deselectedGroupFileAlreadyMatchingBaselineIsLeftAlone() {
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("config/connector.json", item("config/connector.json", OLD_HASH, 8, "config")),
+				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
+		baseline.modpackId = installed.modpackId;
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = "config/connector.json";
+		baselineEntry.objectHash = OLD_HASH;
+		baselineEntry.size = 8;
+		baseline.entries = List.of(baselineEntry);
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true));
+		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(OLD_HASH));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), selection,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("config/connector.json")));
+		assertTrue(plan.preservations().isEmpty());
 	}
 
 	@Test

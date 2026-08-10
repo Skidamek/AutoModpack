@@ -75,6 +75,8 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
+	private record AvailableBaseline(ClientStorageJsons.ClientBaselineFields fields, Set<String> objectHashes) {}
+
 	PreparedPlan buildPlan(Input input, FileMetadataCache cache, ModFileCache modCache) throws Exception {
 		captureActiveEditableOverlays(cache);
 		ModpackJsons.ModpackContentFields installed = storedTarget();
@@ -116,12 +118,8 @@ final class ClientUpdatePlanBuilder {
 		if (activeState == null || !installed.modpackId.equals(activeState.modpackId)) throw new IOException("Active modpack generation state is missing");
 		ModpackJsons.CompleteModpackContentFields completeFields = new ClientGenerationStore(storage).read(activeState.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing")).toFields();
-		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(installed.modpackId), ClientStorageJsons.ClientBaselineFields.class)
-				.orElseGet(() -> {
-					ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
-					empty.modpackId = installed.modpackId;
-					return empty;
-				});
+		AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId);
+		ClientStorageJsons.ClientBaselineFields baseline = availableBaseline.fields();
 		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
@@ -134,13 +132,7 @@ final class ClientUpdatePlanBuilder {
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null,
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
-			Set<String> availableBaselineObjects = new HashSet<>();
-			if (baseline.entries != null) for (var entry : baseline.entries) {
-				if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
-				String hash = entry.objectHash.toLowerCase(Locale.ROOT);
-				if (FileIntegrity.matches(storage.objectsDirectory().resolve(hash), entry.size, hash)) availableBaselineObjects.add(hash);
-			}
-			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaselineObjects, generatedCopies, plannedConfig));
+			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaseline.objectHashes(), generatedCopies, plannedConfig));
 			return new RemovalPreparation(plan, completeFields, installed, baseline, expectedPriorIntent, currentConfig, plannedConfig, files);
 		}
 	}
@@ -197,7 +189,23 @@ final class ClientUpdatePlanBuilder {
 			snapshot = storage.overlaySnapshot(previousId, cache);
 			overlaySnapshots.put(previousId, snapshot);
 		}
-		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files());
+		AvailableBaseline baseline = readAvailableBaseline(previousId);
+		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), baseline.fields(), baseline.objectHashes());
+	}
+
+	private AvailableBaseline readAvailableBaseline(String modpackId) throws IOException {
+		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(modpackId), ClientStorageJsons.ClientBaselineFields.class).orElseGet(() -> {
+			ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
+			empty.modpackId = modpackId;
+			return empty;
+		});
+		Set<String> availableObjects = new HashSet<>();
+		if (baseline.entries != null) for (var entry : baseline.entries) {
+			if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
+			String hash = entry.objectHash.toLowerCase(Locale.ROOT);
+			if (FileIntegrity.matches(storage.objectsDirectory().resolve(hash), entry.size, hash)) availableObjects.add(hash);
+		}
+		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
 	}
 
 	private void captureActiveEditableOverlays(FileMetadataCache cache) throws IOException {

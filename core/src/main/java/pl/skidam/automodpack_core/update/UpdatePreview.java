@@ -25,25 +25,26 @@ import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileState;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
-import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-public record UpdatePreview(
-		UpdatePlan plan,
-		List<Entry> entries,
-		GroupConsequences groupConsequences,
-		String patchNotes,
-		List<GenerationPatchNoteHistory.Entry> patchNotesHistory,
-		Mode mode) {
-	public UpdatePreview {
-		plan = Objects.requireNonNull(plan, "plan");
-		entries = List.copyOf(entries);
-		groupConsequences = Objects.requireNonNull(groupConsequences, "groupConsequences");
-		patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
-		patchNotesHistory = List.copyOf(Objects.requireNonNull(patchNotesHistory, "patchNotesHistory"));
-		mode = Objects.requireNonNull(mode, "mode");
+public final class UpdatePreview {
+	private final UpdatePlan plan;
+	private final List<Entry> entries;
+	private final GroupConsequences groupConsequences;
+	private final String patchNotes;
+	private final List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
+	private final Mode mode;
+
+	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences, String patchNotes,
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Mode mode) {
+		this.plan = Objects.requireNonNull(plan, "plan");
+		this.entries = logicalEntries(entries);
+		this.groupConsequences = Objects.requireNonNull(groupConsequences, "groupConsequences");
+		this.patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
+		this.patchNotesHistory = List.copyOf(Objects.requireNonNull(patchNotesHistory, "patchNotesHistory"));
+		this.mode = Objects.requireNonNull(mode, "mode");
 	}
 
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences) {
@@ -52,6 +53,31 @@ public record UpdatePreview(
 
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences, String patchNotes) {
 		this(plan, entries, groupConsequences, patchNotes, List.of(), Mode.UPDATE);
+	}
+
+	public UpdatePlan plan() {
+		return plan;
+	}
+
+	/** The one canonical, user-visible change set shared by preview and changelog consumers. */
+	public List<Entry> entries() {
+		return entries;
+	}
+
+	public GroupConsequences groupConsequences() {
+		return groupConsequences;
+	}
+
+	public String patchNotes() {
+		return patchNotes;
+	}
+
+	public List<GenerationPatchNoteHistory.Entry> patchNotesHistory() {
+		return patchNotesHistory;
+	}
+
+	public Mode mode() {
+		return mode;
 	}
 
 	public long addedBytes() {
@@ -94,19 +120,32 @@ public record UpdatePreview(
 		return new Summary(changed.size(), removed.size(), preserved.size(), unsafe.size(), otherEffects.size());
 	}
 
-	/** Collapses identical projection and live-copy effects into one user-facing logical file row. */
-	public List<Entry> displayEntries() {
-		Map<DisplayKey, Entry> unique = new TreeMap<>(Comparator.comparing(DisplayKey::relativePath).thenComparing(key -> key.kind().ordinal()).thenComparingLong(DisplayKey::size));
-		for (Entry entry : entries) {
-			DisplayKey key = new DisplayKey(entry.kind, entry.relativePath, entry.size);
-			Entry previous = unique.get(key);
-			if (previous == null || entry.root.ordinal() < previous.root.ordinal()) unique.put(key, entry);
-		}
+	private static List<Entry> logicalEntries(List<Entry> entries) {
+		Map<String, Entry> unique = new TreeMap<>();
+		for (Entry entry : List.copyOf(entries)) unique.merge(entry.relativePath(), entry, UpdatePreview::mergeLogicalEntry);
 		return unique.values().stream().sorted(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
 				.thenComparing(Entry::relativePath)).toList();
 	}
 
-	private record DisplayKey(Kind kind, String relativePath, long size) {}
+	private static Entry mergeLogicalEntry(Entry first, Entry second) {
+		List<Entry> entries = List.of(first, second);
+		Kind kind;
+		if (entries.stream().anyMatch(entry -> entry.kind == Kind.UNSAFE)) kind = Kind.UNSAFE;
+		else
+			if (entries.stream().anyMatch(entry -> entry.kind == Kind.CHANGED)
+					|| entries.stream().anyMatch(entry -> entry.kind == Kind.ADDED) && entries.stream().anyMatch(entry -> entry.kind == Kind.REMOVED))
+				kind = Kind.CHANGED;
+			else
+				if (entries.stream().anyMatch(entry -> entry.kind == Kind.ADDED)) kind = Kind.ADDED;
+				else if (entries.stream().anyMatch(entry -> entry.kind == Kind.REMOVED)) kind = Kind.REMOVED;
+				else if (entries.stream().anyMatch(entry -> entry.kind == Kind.PRESERVED_CHANGED)) kind = Kind.PRESERVED_CHANGED;
+				else if (entries.stream().anyMatch(entry -> entry.kind == Kind.PRESERVED_UNAVAILABLE)) kind = Kind.PRESERVED_UNAVAILABLE;
+				else kind = Kind.PRESERVED_OUTSIDE;
+		Entry sizeSource = entries.stream().filter(entry -> entry.kind == kind).findFirst()
+				.orElseGet(() -> entries.stream().filter(entry -> entry.kind == Kind.ADDED || entry.kind == Kind.CHANGED).findFirst().orElse(first));
+		Root root = first.root.ordinal() <= second.root.ordinal() ? first.root : second.root;
+		return new Entry(kind, root, first.relativePath, sizeSource.size);
+	}
 
 	public String latestPatchNotes() {
 		if (!patchNotes.isBlank()) return patchNotes;
@@ -162,8 +201,6 @@ public record UpdatePreview(
 		boolean removal = mode != Mode.UPDATE;
 		Map<FileKey, Operation> operations = plan.operations().stream()
 				.collect(Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), operation -> operation));
-		Set<FileKey> preserved = new HashSet<>();
-		for (Preservation preservation : plan.preservations()) preserved.add(new FileKey(preservation.root(), preservation.relativePath()));
 		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries = baselineEntries(baseline);
 		List<Entry> entries = new ArrayList<>();
 		for (Operation operation : plan.operations()) {
@@ -175,7 +212,6 @@ public record UpdatePreview(
 			} else if (operation.operation() == OperationType.DELETE) {
 				long size = previous == null ? 0 : Math.max(0, previous.size());
 				entries.add(new Entry(Kind.REMOVED, key.root(), key.relativePath(), size));
-				if (preserved.contains(key)) entries.add(new Entry(Kind.PRESERVED_CAS, key.root(), key.relativePath(), size));
 			}
 		}
 
@@ -273,7 +309,6 @@ public record UpdatePreview(
 		ADDED(SummaryBucket.CHANGED, SortBucket.CHANGED, "+ "),
 		CHANGED(SummaryBucket.CHANGED, SortBucket.CHANGED, "~ "),
 		REMOVED(SummaryBucket.REMOVED, SortBucket.REMOVED, "- "),
-		PRESERVED_CAS(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
 		PRESERVED_CHANGED(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
 		PRESERVED_UNAVAILABLE(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
 		PRESERVED_OUTSIDE(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
