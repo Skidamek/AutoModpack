@@ -1,15 +1,10 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
@@ -44,7 +39,7 @@ public final class LocalModArchive {
 			if (sha1 == null || !sha1.matches("[0-9a-fA-F]{40}")) throw new IllegalArgumentException("Local mod archive SHA-1 is invalid");
 			sha1 = sha1.toLowerCase(Locale.ROOT);
 			if (size < 0) throw new IllegalArgumentException("Local mod archive size is invalid");
-			if (!entryId.equals(entryId(originalPath, sha1, size))) throw new IllegalArgumentException("Local mod archive entry ID does not match its metadata");
+			if (!entryId.equals(buildEntryId(originalPath, sha1, size))) throw new IllegalArgumentException("Local mod archive entry ID does not match its metadata");
 			archivedAt = archivedAt == null ? "" : archivedAt;
 		}
 	}
@@ -70,7 +65,7 @@ public final class LocalModArchive {
 				String sha1 = cache == null ? HashUtils.getHash(path) : cache.getOrComputeHash(path);
 				if (sha1 == null) throw new IOException("Could not verify local mod: " + path);
 				String originalPath = relativePath(storage, path);
-				entries.add(new ArchiveEntry(entryId(originalPath, sha1, size), originalPath, sha1, size, ""));
+				entries.add(new ArchiveEntry(buildEntryId(originalPath, sha1, size), originalPath, sha1, size, ""));
 			}
 			return new Snapshot(entries);
 		}
@@ -131,7 +126,8 @@ public final class LocalModArchive {
 		if (!isDirectJar(storage, source) || !matches(source, candidate.size(), candidate.sha1(), cache)) throw new IOException("Local mod changed before archiving: " + source);
 		ClientStorageJsons.ClientLocalModArchiveFields.EntryFields archived = toFields(storage, candidate, Instant.now().toString());
 		writePending(storage, ARCHIVE_OPERATION, archived);
-		moveIntoArchive(source, payload, candidate.size(), candidate.sha1());
+		SmartFileUtils.copyVerifiedAtomic(source, payload, candidate.size(), candidate.sha1());
+		Files.delete(source);
 		manifest.entries = appendSorted(manifest.entries, archived);
 		writeManifest(storage, manifest);
 		Files.deleteIfExists(storage.localModArchivePendingFile());
@@ -154,7 +150,8 @@ public final class LocalModArchive {
 			return;
 		}
 		Path payload = storage.localModArchivePayload(entry.entryId);
-		moveOutOfArchive(storage, payload, destination, entry.size, entry.sha1);
+		SmartFileUtils.copyVerifiedAtomic(payload, destination, entry.size, entry.sha1);
+		Files.delete(payload);
 		removeEntryAndPayload(storage, manifest, entry);
 		Files.deleteIfExists(storage.localModArchivePendingFile());
 	}
@@ -223,7 +220,8 @@ public final class LocalModArchive {
 			removeEntryAndPayload(storage, manifest, entry);
 		} else {
 			Path payload = storage.localModArchivePayload(entry.entryId);
-			moveOutOfArchive(storage, payload, destination, entry.size, entry.sha1);
+			SmartFileUtils.copyVerifiedAtomic(payload, destination, entry.size, entry.sha1);
+			Files.delete(payload);
 			removeEntryAndPayload(storage, manifest, entry);
 		}
 		Files.deleteIfExists(storage.localModArchivePendingFile());
@@ -239,62 +237,6 @@ public final class LocalModArchive {
 		if (Files.exists(payload, LinkOption.NOFOLLOW_LINKS)) {
 			Files.delete(payload);
 		}
-	}
-
-	private static void moveIntoArchive(Path source, Path payload, long size, String sha1) throws IOException {
-		try {
-			Files.move(source, payload, StandardCopyOption.ATOMIC_MOVE);
-		} catch (FileSystemException failure) {
-			if (!isMoveFallback(failure)) throw failure;
-			copyVerifiedToTarget(source, payload, size, sha1);
-			Files.delete(source);
-		}
-		if (!SmartFileUtils.isValidFile(payload, size, sha1)) throw new IOException("Archived local mod failed verification: " + payload);
-	}
-
-	private static void moveOutOfArchive(ClientStorage storage, Path payload, Path destination, long size, String sha1) throws IOException {
-		validateArchivePath(storage, payload);
-		validateGamePath(storage, destination);
-		Path parent = destination.getParent();
-		if (parent == null) throw new IOException("Restore destination has no parent: " + destination);
-		Files.createDirectories(parent);
-		try {
-			Files.move(payload, destination, StandardCopyOption.ATOMIC_MOVE);
-		} catch (FileSystemException failure) {
-			if (!isMoveFallback(failure)) throw failure;
-			copyVerifiedToTarget(payload, destination, size, sha1);
-		}
-		if (!SmartFileUtils.isValidFile(destination, size, sha1)) throw new IOException("Restored local mod failed verification: " + destination);
-	}
-
-	private static void copyVerifiedToTarget(Path source, Path target, long size, String sha1) throws IOException {
-		if (!SmartFileUtils.isValidFile(source, size, sha1)) throw new IOException("Source file failed size/SHA-1 verification: " + source);
-		Path parent = target.toAbsolutePath().normalize().getParent();
-		if (parent == null) throw new IOException("Target path has no parent: " + target);
-		Files.createDirectories(parent);
-		Path temporary = Files.createTempFile(parent, "." + target.getFileName() + ".", ".tmp");
-		try {
-			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
-			try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
-				channel.force(true);
-			}
-			if (!SmartFileUtils.isValidFile(temporary, size, sha1)) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
-			try {
-				Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-			} catch (AtomicMoveNotSupportedException unsupported) {
-				Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
-			}
-		} finally {
-			Files.deleteIfExists(temporary);
-		}
-	}
-
-	private static boolean isMoveFallback(FileSystemException failure) {
-		if (failure instanceof AtomicMoveNotSupportedException) return true;
-		String reason = failure.getReason();
-		String message = failure.getMessage();
-		String text = ((reason == null ? "" : reason) + " " + (message == null ? "" : message)).toLowerCase(Locale.ROOT);
-		return text.contains("cross-device") || text.contains("cross device") || text.contains("exdev");
 	}
 
 	private static ClientStorageJsons.ClientLocalModArchiveFields readManifest(ClientStorage storage, boolean verifyPayload) throws IOException {
@@ -343,7 +285,7 @@ public final class LocalModArchive {
 			throw new IOException("Local mod archive entry metadata is invalid");
 		String originalPath = canonicalPath(entry.originalPath);
 		if (!entry.originalPath.equals(originalPath)) throw new IOException("Local mod archive source path is invalid");
-		if (!entry.entryId.equals(entryId(originalPath, entry.sha1, entry.size))) throw new IOException("Local mod archive entry ID does not match its metadata");
+		if (!entry.entryId.equals(buildEntryId(originalPath, entry.sha1, entry.size))) throw new IOException("Local mod archive entry ID does not match its metadata");
 		String expectedArchivePath = archivePath(storage, entry.entryId);
 		if (!expectedArchivePath.equals(entry.archivePath)) throw new IOException("Local mod archive payload path is invalid");
 		if (entry.archivedAt == null || entry.archivedAt.isBlank()) throw new IOException("Local mod archive timestamp is invalid");
@@ -450,7 +392,7 @@ public final class LocalModArchive {
 		}
 	}
 
-	private static String entryId(String originalPath, String sha1, long size) {
+	private static String buildEntryId(String originalPath, String sha1, long size) {
 		try {
 			MessageDigest digest = MessageDigest.getInstance("SHA-1");
 			String value = originalPath + "\n" + sha1.toLowerCase(Locale.ROOT) + "\n" + size;
