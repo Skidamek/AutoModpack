@@ -193,6 +193,7 @@
   "automodpack.management.update": "Aktualisieren",
   "automodpack.management.upToDate": "Aktuell",
   "automodpack.management.deactivate": "Deaktivieren",
+  "automodpack.management.activate": "Aktivieren",
   "automodpack.management.recovery": "Erholung",
   "automodpack.management.quarantine": "Quarantäne",
   "automodpack.management.history": "Geschichte",

@@ -158,16 +158,35 @@ flow:
     name: open the retained inactive pack directly
     select: { text: Pack manager }
   - do: wait_for
-    name: verify deactivation retained the installed pack with only removal available
+    name: verify deactivation retained an activatable installed pack
     until:
       all:
         - screen: InstalledModpacksScreen
         - element: { text: Note-only Test P }
         - element: { text: Update, enabled: false }
-        - element: { text: Deactivate, enabled: false }
+        - element: { text: Activate, enabled: true }
         - element: { text: Remove, enabled: true }
+  - do: click
+    name: activate the retained pack again
+    select: { text: Activate }
+  - do: wait_for
+    name: show the cached activation preview
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: accept the cached activation
+    select: { text: Update }
+  - do: wait_for
+    name: wait for the reactivated pack restart
+    until: { screen: RestartScreen }
+  - do: assert_file_content
+    name: verify reactivation restored the retained pack file
+    path: config/amp-note-only.txt
+    content: "unchanged\n"
   - do: quit
-    name: quit after the deactivation flow completed
+    name: quit after the reactivation flow completed
 
 topology:
   server:

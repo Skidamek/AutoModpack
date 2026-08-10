@@ -193,6 +193,7 @@
   "automodpack.management.update": "업데이트",
   "automodpack.management.upToDate": "최신 상태",
   "automodpack.management.deactivate": "비활성화",
+  "automodpack.management.activate": "활성화",
   "automodpack.management.recovery": "회복",
   "automodpack.management.quarantine": "격리",
   "automodpack.management.history": "역사",

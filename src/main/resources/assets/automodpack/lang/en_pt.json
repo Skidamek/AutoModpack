@@ -193,6 +193,7 @@
   "automodpack.management.update": "Check fer updates",
   "automodpack.management.upToDate": "Up to date",
   "automodpack.management.deactivate": "Deactivate",
+  "automodpack.management.activate": "Activate, arrr",
   "automodpack.management.recovery": "Recovery, arrr",
   "automodpack.management.quarantine": "Quarantine, arrr",
   "automodpack.management.history": "History, matey",

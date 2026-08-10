@@ -193,6 +193,7 @@
   "automodpack.management.update": "Обновить",
   "automodpack.management.upToDate": "Обновлено",
   "automodpack.management.deactivate": "Отключить",
+  "automodpack.management.activate": "Активировать",
   "automodpack.management.recovery": "Восстановление",
   "automodpack.management.quarantine": "Карантин",
   "automodpack.management.history": "История",

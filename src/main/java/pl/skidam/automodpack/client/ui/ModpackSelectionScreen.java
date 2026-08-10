@@ -1,12 +1,12 @@
 package pl.skidam.automodpack.client.ui;
 
-import pl.skidam.automodpack_core.config.ModpackJsons;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -16,7 +16,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Consumer;
-import java.nio.file.Path;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
@@ -36,14 +35,12 @@ import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
-import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.QuarantineArchive;
-import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -628,38 +625,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private void startCachedSwitch(SelectionIntent targetIntent) {
 		if (switchInFlight) return;
 		switchInFlight = true;
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			ModpackUpdater updater = null;
-			try {
-				ClientGenerationStore generationStore = new ClientGenerationStore(storage);
-				ModpackJsons.CompleteModpackContentFields fields = generationStore.readFields(localRecord.metadata().generationId())
-						.orElseThrow(() -> new IOException("Installed modpack generation record is missing"));
-				SelectedModpackTarget target = SelectedModpackTarget.prepare(fields, expectedSelection, targetIntent, ClientPlatform.current());
-				updater = new ModpackUpdater(target, null, null, storage);
-				UpdatePreview preview = updater.previewCachedSwitch();
-				ModpackUpdater finalUpdater = updater;
-				new ScreenManager().preview(preview, modpackName,
-						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeCachedSwitch(finalUpdater)),
-						(Runnable) () -> {
-							finalUpdater.close();
-							switchInFlight = false;
-						}, true, Map.of());
-			} catch (Exception e) {
-				if (updater != null) updater.close();
-				switchInFlight = false;
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
-			}
-		});
-	}
-
-	private void executeCachedSwitch(ModpackUpdater updater) {
-		try {
-			updater.applyCachedSwitch();
-		} catch (Exception e) {
-			updater.close();
-			switchInFlight = false;
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
-		}
+		CachedModpackSwitch.start(storage, localRecord, expectedSelection, targetIntent, modpackName, true, () -> switchInFlight = false);
 	}
 
 	private void back() {
