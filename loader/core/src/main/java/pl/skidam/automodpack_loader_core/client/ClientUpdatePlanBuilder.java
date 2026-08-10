@@ -329,7 +329,8 @@ final class ClientUpdatePlanBuilder {
 
 	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
-		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(value.file, value.type)).sorted(Comparator.comparing(value -> value.file)).toList()) {
+		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type))
+				.sorted(Comparator.comparing(value -> value.file)).toList()) {
 			long size = Long.parseLong(item.size);
 			Path source = storage.objectsDirectory().resolve(item.sha1);
 			if (!FileIntegrity.matches(source, size, item.sha1)) source = storage.activePath(item.file);
@@ -359,7 +360,7 @@ final class ClientUpdatePlanBuilder {
 		Files.createDirectories(storage.incomingDirectory());
 		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
-			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(value.file, value.type)).toList()) {
+			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type)).toList()) {
 				Path source = storage.objectsDirectory().resolve(item.sha1);
 				if (!FileIntegrity.matches(source, Long.parseLong(item.size), item.sha1)) source = storage.activePath(item.file);
 				if (!FileIntegrity.matches(source, Long.parseLong(item.size), item.sha1)) continue;
@@ -395,7 +396,7 @@ final class ClientUpdatePlanBuilder {
 		if (forceCopyServices.isEmpty()) return forceCopyMods;
 
 		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
-			if (!ModpackPathPolicy.isActiveMod(item.file, item.type)) continue;
+			if (!ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(item.file), item.type)) continue;
 			long size = Long.parseLong(item.size);
 			Path modPath = storage.objectsDirectory().resolve(item.sha1);
 			if (!FileIntegrity.matches(modPath, size, item.sha1)) modPath = storage.activePath(item.file);

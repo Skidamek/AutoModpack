@@ -114,7 +114,7 @@ public final class GroupManifestValidator {
 				for (String path : group.files().keySet()) {
 					if (platform == ClientPlatform.WINDOWS) validateWindowsPath(groupId, path, errors);
 					aliases.computeIfAbsent(platformPathKey(path, platform), ignored -> new ArrayList<>()).add(new PathOwner(groupId, path));
-					if (ModpackContentType.MOD.equals(group.files().get(path).type()))
+					if (ModpackPathPolicy.isActiveMod(path, group.files().get(path).type()))
 						modBasenameAliases.computeIfAbsent(platformPathKey(path.substring(path.lastIndexOf('/') + 1), platform), ignored -> new ArrayList<>())
 								.add(new PathOwner(groupId, path));
 				}

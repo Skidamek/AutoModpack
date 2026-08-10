@@ -172,7 +172,7 @@ public final class StableSourceSnapshotter {
 	}
 
 	private static String fileType(Path staged, String logicalPath, FileInspection.Mod cachedMod) {
-		if ((cachedMod != null || FileInspection.isMod(staged)) && ModpackPathPolicy.isActiveMod(logicalPath, ModpackContentType.MOD)) return ModpackContentType.MOD;
+		if (cachedMod != null || FileInspection.isMod(staged)) return ModpackContentType.MOD;
 		return ModpackPathPolicy.typeForPath(logicalPath);
 	}
 
