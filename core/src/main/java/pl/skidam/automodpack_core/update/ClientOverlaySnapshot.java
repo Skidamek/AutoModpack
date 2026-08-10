@@ -6,7 +6,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HexFormat;
@@ -24,7 +23,7 @@ public record ClientOverlaySnapshot(Map<String, UpdatePlan.FileState> files, Str
 
 	public ClientOverlaySnapshot {
 		files = Map.copyOf(files);
-		if (digest == null || !digest.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Overlay digest is invalid");
+		if (!HashUtils.isCanonicalSha1(digest)) throw new IllegalArgumentException("Overlay digest is invalid");
 	}
 
 	public static ClientOverlaySnapshot capture(ClientStorage storage, String modpackId, FileMetadataCache cache) throws IOException {
@@ -47,21 +46,13 @@ public record ClientOverlaySnapshot(Map<String, UpdatePlan.FileState> files, Str
 				}
 			}
 		}
-		MessageDigest digest = sha1();
+		MessageDigest digest = HashUtils.newSha1Digest();
 		for (String deletedPath : overlayState.deletedPaths) {
 			files.put(deletedPath, new UpdatePlan.FileState(null, -1, false));
 			digest.update(("D\0" + deletedPath + "\n").getBytes(StandardCharsets.UTF_8));
 		}
 		for (OverlayFile file : physicalFiles) digest.update((file.relativePath + "\0" + file.size + "\0" + file.sha1.toLowerCase(Locale.ROOT) + "\n").getBytes(StandardCharsets.UTF_8));
 		return new ClientOverlaySnapshot(files, HexFormat.of().formatHex(digest.digest()));
-	}
-
-	private static MessageDigest sha1() {
-		try {
-			return MessageDigest.getInstance("SHA-1");
-		} catch (NoSuchAlgorithmException e) {
-			throw new AssertionError("SHA-1 is required by the client protocol", e);
-		}
 	}
 
 	private record OverlayFile(String relativePath, String sha1, long size) {}

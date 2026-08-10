@@ -8,10 +8,9 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.Objects;
+
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Resolves the bounded, optional notes input for a generation operation. */
 public final class GenerationPatchNotes {
@@ -140,11 +139,7 @@ public final class GenerationPatchNotes {
 	}
 
 	private static String digest(byte[] bytes) {
-		try {
-			return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-1").digest(bytes));
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException("SHA-1 is unavailable", e);
-		}
+		return HashUtils.sha1(bytes);
 	}
 
 	private record RawFile(byte[] bytes, String digest) {}

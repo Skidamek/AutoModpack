@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.update;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -25,6 +24,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** The single write-ahead record for one client update. It stores intent and operations, never filesystem paths or duplicated manifests. */
 public final class UpdateTransaction {
@@ -186,15 +186,11 @@ public final class UpdateTransaction {
 
 	public static String digest(SelectionIntent intent) {
 		if (intent == null) return "";
-		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-1");
-			digest.update("automodpack-selection-v1\n".getBytes(StandardCharsets.UTF_8));
-			for (String value : intent.requestedGroups().stream().sorted().toList()) digest.update(("group=" + value + "\n").getBytes(StandardCharsets.UTF_8));
-			for (String value : intent.excludedGroups().stream().sorted().toList()) digest.update(("excluded=" + value + "\n").getBytes(StandardCharsets.UTF_8));
-			return HexFormat.of().formatHex(digest.digest());
-		} catch (NoSuchAlgorithmException e) {
-			throw new AssertionError("SHA-1 is required by the client protocol", e);
-		}
+		MessageDigest digest = HashUtils.newSha1Digest();
+		digest.update("automodpack-selection-v1\n".getBytes(StandardCharsets.UTF_8));
+		for (String value : intent.requestedGroups().stream().sorted().toList()) digest.update(("group=" + value + "\n").getBytes(StandardCharsets.UTF_8));
+		for (String value : intent.excludedGroups().stream().sorted().toList()) digest.update(("excluded=" + value + "\n").getBytes(StandardCharsets.UTF_8));
+		return HexFormat.of().formatHex(digest.digest());
 	}
 
 	public enum Phase {

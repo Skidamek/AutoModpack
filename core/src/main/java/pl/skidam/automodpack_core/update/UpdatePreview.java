@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public record UpdatePreview(
 		UpdatePlan plan,
@@ -187,7 +188,7 @@ public record UpdatePreview(
 				continue;
 			}
 			String currentHash = current.sha1();
-			if (currentHash == null || !currentHash.matches("[0-9a-fA-F]{40}") || current.size() < 0) {
+			if (!HashUtils.isSha1(currentHash) || current.size() < 0) {
 				entries.add(new Entry(Kind.PRESERVED_UNAVAILABLE, key.root(), key.relativePath(), Math.max(0, current.size())));
 				continue;
 			}
@@ -219,7 +220,7 @@ public record UpdatePreview(
 	}
 
 	private static boolean baselineMatches(FileState current, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
-		return baseline != null && !baseline.absent && baseline.objectHash != null && baseline.objectHash.matches("[0-9a-fA-F]{40}")
+		return baseline != null && !baseline.absent && HashUtils.isSha1(baseline.objectHash)
 				&& baseline.size >= 0 && current.regularFile() && baseline.size == current.size() && baseline.objectHash.equalsIgnoreCase(current.sha1());
 	}
 

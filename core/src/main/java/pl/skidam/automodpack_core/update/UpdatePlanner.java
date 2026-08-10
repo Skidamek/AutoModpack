@@ -1,8 +1,5 @@
 package pl.skidam.automodpack_core.update;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -10,7 +7,6 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,6 +29,7 @@ import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class UpdatePlanner {
 	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
@@ -109,7 +106,7 @@ public final class UpdatePlanner {
 			if (entry.absent) {
 				if (entry.objectHash == null || !entry.objectHash.isEmpty() || entry.size != -1)
 					throw new IllegalArgumentException("Absent removal baseline contains file metadata");
-			} else if (entry.objectHash == null || !entry.objectHash.matches("[0-9a-fA-F]{40}") || entry.size < 0) {
+			} else if (!HashUtils.isSha1(entry.objectHash) || entry.size < 0) {
 				throw new IllegalArgumentException("Removal baseline file metadata is invalid");
 			}
 		}
@@ -153,7 +150,7 @@ public final class UpdatePlanner {
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 				continue;
 			}
-			if (baseline.objectHash == null || !baseline.objectHash.matches("[0-9a-fA-F]{40}") || baseline.size < 0) continue;
+			if (!HashUtils.isSha1(baseline.objectHash) || baseline.size < 0) continue;
 			String baselineHash = baseline.objectHash.toLowerCase(Locale.ROOT);
 			if (!input.availableBaselineObjects().contains(baselineHash)) continue;
 			if (matches(state, baselineHash, baseline.size)) continue;
@@ -438,15 +435,10 @@ public final class UpdatePlanner {
 	}
 
 	private static String conflictId(ModInfo target, ModInfo standard) {
-		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-1");
-			String value = String.join("\n", normalize(target.relativePath()), target.sha1().toLowerCase(Locale.ROOT), normalize(standard.relativePath()),
-					standard.sha1().toLowerCase(Locale.ROOT), String.join(",", new TreeSet<>(target.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()),
-					String.join(",", new TreeSet<>(standard.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()));
-			return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-		} catch (NoSuchAlgorithmException e) {
-			throw new AssertionError("SHA-1 is required by the client protocol", e);
-		}
+		String value = String.join("\n", normalize(target.relativePath()), target.sha1().toLowerCase(Locale.ROOT), normalize(standard.relativePath()),
+				standard.sha1().toLowerCase(Locale.ROOT), String.join(",", new TreeSet<>(target.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()),
+				String.join(",", new TreeSet<>(standard.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()));
+		return HashUtils.sha1(value);
 	}
 
 	private static void addDependencies(ModInfo mod, List<ModInfo> all, Set<ModInfo> result) {
