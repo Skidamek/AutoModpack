@@ -241,7 +241,10 @@ public final class ClientObjectStore {
 	}
 
 	private static void addRecordReferences(ReferenceSet retained, GenerationRecord record) throws IOException {
-		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) retained.addRequired(file.sha1(), file.size(), "generation manifest");
+		// A generation record is the complete selectable catalogue. Clients acquire only their
+		// resolved selection, so absent objects from unselected groups are valid. Cached catalogue
+		// objects remain pinned for later offline selection changes.
+		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) retained.addOptional(file.sha1(), file.size(), "generation catalogue");
 		// Historical ledger hashes are ownership-proof metadata, not current materialized file objects.
 	}
 

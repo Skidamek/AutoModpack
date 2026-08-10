@@ -25,7 +25,9 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 
@@ -84,6 +86,36 @@ class ClientGenerationStoreTest {
 		GenerationRecord retained = generations.read(current.metadata().generationId()).orElseThrow();
 		assertTrue(retained.ownershipLedger().entries().get("mods/test.jar").historicalHashes().stream()
 				.anyMatch(content -> content.sha1().equals(oldHash) && content.size() == oldContent.getBytes(StandardCharsets.UTF_8).length));
+	}
+
+	@Test
+	void deactivatedPackCompactsWhenUnselectedCatalogueObjectWasNeverCached() throws Exception {
+		ClientStorage storage = storage();
+		String selectedHash = store(storage, "selected-object");
+		String orphanHash = store(storage, "orphan-object");
+		String uncachedOptionalHash = "f".repeat(40);
+		GroupManifest.GroupFile selectedFile = new GroupManifest.GroupFile(Files.size(storage.objectsDirectory().resolve(selectedHash)), "mod", false, false,
+				selectedHash, null);
+		GroupManifest.GroupFile optionalFile = new GroupManifest.GroupFile(176, "config", false, false, uncachedOptionalHash, null);
+		GroupManifest.Group selectedGroup = new GroupManifest.Group("Core", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				new TreeMap<>(Map.of("mods/test.jar", selectedFile)));
+		GroupManifest.Group optionalGroup = new GroupManifest.Group("Optional", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				new TreeMap<>(Map.of("config/optional.json", optionalFile)));
+		GenerationRecord record = GenerationRecord.create(
+				new GroupManifest(FIRST_PACK, "Test", "", "", "", "", new TreeMap<>(Map.of("main", selectedGroup, "optional", optionalGroup))), null,
+				Instant.parse("2026-01-01T00:00:00Z"), "notes");
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		generations.write(record);
+		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of()));
+		storage.writeActiveState(FIRST_PACK, record.metadata().generationId());
+		storage.clearActiveState();
+
+		ClientGenerationStore.CompactionResult result = generations.compact();
+
+		assertEquals(1, result.objectCollection().deletedObjectCount());
+		assertTrue(Files.exists(storage.objectsDirectory().resolve(selectedHash)));
+		assertFalse(Files.exists(storage.objectsDirectory().resolve(orphanHash)));
+		assertFalse(Files.exists(storage.objectsDirectory().resolve(uncachedOptionalHash)));
 	}
 
 	@Test

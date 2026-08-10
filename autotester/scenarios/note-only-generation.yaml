@@ -222,6 +222,28 @@ flow:
         - screen: InstalledModpacksScreen
         - element: { text: Activate, enabled: true }
   - do: click
+    name: open local storage after deactivation
+    select: { text: Local storage }
+  - do: click
+    name: compact CAS with an uncached optional catalogue object
+    select: { text: Clean local storage }
+  - do: wait_for
+    name: complete inactive-pack CAS compaction
+    timeout: 120s
+    until:
+      all:
+        - screen: ClientStorageMaintenanceScreen
+        - element: { text: Cleanup complete, enabled: false }
+  - do: click
+    name: return to the inactive pack manager after compaction
+    select: { text: Back }
+  - do: wait_for
+    name: keep the deactivated pack available after compaction
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Activate, enabled: true }
+  - do: click
     name: activate the retained pack again
     select: { text: Activate }
   - do: wait_for
@@ -248,6 +270,17 @@ topology:
     memory: 2G
     env:
       ENABLE_ROLLING_LOGS: "false"
+    automodpack:
+      config:
+        groups:
+          main:
+            displayName: Core
+            required: true
+            defaultSelected: true
+            syncedFiles: ["/config/amp-note-only.txt"]
+          optional:
+            displayName: Optional Feature
+            syncedFiles: ["/config/amp-note-only-optional.txt"]
 
 serverFiles:
   modpackName: Note-only Test Pack
@@ -255,7 +288,9 @@ serverFiles:
   generations:
     - patchNotes: "Initial note-only fixture."
       files:
-        - { path: config/amp-note-only.txt, content: "unchanged\n" }
+        - { group: main, path: config/amp-note-only.txt, content: "unchanged\n" }
+        - { group: optional, path: config/amp-note-only-optional.txt, content: "never selected\n" }
     - patchNotes: "Second release with notes only."
       files:
-        - { path: config/amp-note-only.txt, content: "unchanged\n" }
+        - { group: main, path: config/amp-note-only.txt, content: "unchanged\n" }
+        - { group: optional, path: config/amp-note-only-optional.txt, content: "never selected\n" }
