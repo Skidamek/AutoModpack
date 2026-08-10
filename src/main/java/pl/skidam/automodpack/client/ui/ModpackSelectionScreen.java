@@ -47,6 +47,7 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.utils.PageLayout;
 
 /**
  * Lets the player pick which optional groups of a modpack they want. Deliberately built out of
@@ -59,6 +60,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private static final int ROW_HEIGHT = 24;
 	private static final int ROW_WIDTH = 320;
+	private static final int BOTTOM_CONTROLS_GAP = 8;
 
 	private final Screen parent;
 	private final GroupManifest manifest;
@@ -86,7 +88,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final List<Row> rows = new ArrayList<>();
 
 	private int page = 0;
-	private int rowsPerPage = 1;
 	private boolean saved = false;
 	private boolean closed;
 	private boolean managementInFlight;
@@ -232,23 +233,27 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int listTop = 64;
 		List<ManagementAction> managementActions = selectionAction == null ? managementActions() : List.of();
 		int managementRows = managementRowCount(managementActions.size());
-		int actionY = this.height - 28;
+		// Move the complete bottom control block down with the larger list gap. This preserves the
+		// minimum-height page capacity while giving the configurable rows more visual separation.
+		int actionY = this.height - 24;
 		int managementTop = actionY - managementRows * ROW_HEIGHT;
-		int listBottomWithoutPagination = managementTop - 4;
+		int listBottomWithoutPagination = managementTop - BOTTOM_CONTROLS_GAP;
 		int rowsWithoutPagination = Math.max(1, (listBottomWithoutPagination - listTop) / ROW_HEIGHT);
 		boolean showPagination = rows.size() > rowsWithoutPagination;
 		int paginationY = showPagination ? managementTop - ROW_HEIGHT : -1;
-		int listBottom = showPagination ? paginationY - 4 : listBottomWithoutPagination;
-		rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
+		int listBottom = showPagination ? paginationY - BOTTOM_CONTROLS_GAP : listBottomWithoutPagination;
+		int rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
+		List<PageLayout.Range> pages = PageLayout.paginate(rows.size(), rowsPerPage, categoryRanges());
 
-		int pageCount = Math.max(1, (int) Math.ceil((double) rows.size() / rowsPerPage));
+		int pageCount = pages.size();
 		if (page >= pageCount) page = pageCount - 1;
 
 		int rowWidth = panelWidth(ROW_WIDTH);
 		int x = panelLeft(ROW_WIDTH);
-		int start = page * rowsPerPage;
+		PageLayout.Range visibleRows = pages.get(page);
+		int start = visibleRows.start();
 
-		for (int i = start; i < Math.min(rows.size(), start + rowsPerPage); i++) {
+		for (int i = start; i < visibleRows.endExclusive(); i++) {
 			Row row = rows.get(i);
 			int y = listTop + (i - start) * ROW_HEIGHT;
 			if (row.groupId() == null) {
@@ -674,6 +679,18 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			rows.add(new Row(categoryLabel(category), null, category));
 			for (var entry : groups.entrySet()) if (category.equals(entry.getValue().tag())) rows.add(new Row("", entry.getKey(), category));
 		}
+	}
+
+	private List<PageLayout.Range> categoryRanges() {
+		List<PageLayout.Range> ranges = new ArrayList<>();
+		for (int start = 0; start < rows.size(); start++) {
+			Row row = rows.get(start);
+			if (row.groupId() != null || row.tagId() == null) continue;
+			int end = start + 1;
+			while (end < rows.size() && rows.get(end).groupId() != null && row.tagId().equals(rows.get(end).tagId())) end++;
+			ranges.add(new PageLayout.Range(start, end));
+		}
+		return List.copyOf(ranges);
 	}
 
 	private MutableComponent sectionLabel(Row row) {
