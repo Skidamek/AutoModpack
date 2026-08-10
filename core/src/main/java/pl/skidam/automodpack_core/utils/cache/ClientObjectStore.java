@@ -14,7 +14,6 @@ import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -32,7 +31,6 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Measures and explicitly maintains the client shared object store. */
 public final class ClientObjectStore {
-	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
 
 	private ClientObjectStore() {}
 
@@ -128,7 +126,7 @@ public final class ClientObjectStore {
 		long deletedBytes = 0;
 		for (Path object : objects) {
 			String name = object.getFileName().toString();
-			if (!object.getParent().equals(storage.objectsDirectory()) || !name.equals(name.toLowerCase(Locale.ROOT)) || !SHA1.matcher(name).matches()
+			if (!object.getParent().equals(storage.objectsDirectory()) || !HashUtils.isCanonicalSha1(name)
 					|| references.hashes().contains(name))
 				continue;
 			if (!isValidCanonicalObject(object, name.toLowerCase(Locale.ROOT))) continue;
@@ -204,7 +202,7 @@ public final class ClientObjectStore {
 		List<String> generationIds = generationIds(storage);
 		Map<String, GenerationRecord> records = new TreeMap<>();
 		for (String generationId : generationIds) {
-			if (!SHA1.matcher(generationId).matches() || !generationId.equals(generationId.toLowerCase(Locale.ROOT))) throw new IOException("Client generation directory is not canonical: " + generationId);
+			if (!HashUtils.isCanonicalSha1(generationId)) throw new IOException("Client generation directory is not canonical: " + generationId);
 			GenerationRecord record;
 			try {
 				record = generations.read(generationId).orElseThrow(() -> new IOException("Client generation record is missing: " + generationId));
@@ -443,13 +441,14 @@ public final class ClientObjectStore {
 						ensureNoSymbolicLink(generation, "client generated-copy state");
 						if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
 						String generationId = generation.getFileName().toString();
-						if (!SHA1.matcher(generationId).matches() || !generationId.equals(generationId.toLowerCase(Locale.ROOT)))
+						if (!HashUtils.isCanonicalSha1(generationId))
 							throw new IOException("Client generated-copy directory is not canonical: " + generationId);
 						try (Stream<Path> states = Files.list(generation)) {
 							for (Path state : states.sorted().toList()) {
 								ensureNoSymbolicLink(state, "client generated-copy state");
 								String name = state.getFileName().toString();
-								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || !name.matches("[0-9a-f]{40}\\.json"))
+								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || name.length() != 45 || !name.endsWith(".json")
+										|| !HashUtils.isCanonicalSha1(name.substring(0, 40)))
 									throw new IOException("Client generated-copy state contains an unsupported entry: " + state);
 								result.add(state);
 							}
@@ -515,7 +514,7 @@ public final class ClientObjectStore {
 	}
 
 	public static String normalizeHash(String sha1) {
-		if (sha1 == null || !SHA1.matcher(sha1).matches()) throw new IllegalArgumentException("Invalid client object SHA-1");
+		if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Invalid client object SHA-1");
 		return sha1.toLowerCase(Locale.ROOT);
 	}
 

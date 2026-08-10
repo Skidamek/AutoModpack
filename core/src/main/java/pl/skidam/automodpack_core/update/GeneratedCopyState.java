@@ -10,16 +10,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** The validated client-owned projection of nested copies for one pack generation and group selection. */
 public record GeneratedCopyState(String modpackId, String generationId, String selectionDigest, List<Entry> entries) {
-	private static final Pattern DIGEST = Pattern.compile("[0-9a-fA-F]{40}");
 	private static final Comparator<Entry> ENTRY_ORDER = Comparator.comparing(Entry::logicalPath);
 
 	public GeneratedCopyState {
@@ -101,14 +100,14 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 		public Entry {
 			logicalPath = LogicalPath.requireCanonical(logicalPath);
 			if (!logicalPath.startsWith("mods/")) throw new IllegalArgumentException("Generated-copy path is outside the mods directory");
-			if (sha1 == null || !DIGEST.matcher(sha1).matches()) throw new IllegalArgumentException("Generated-copy SHA-1 is invalid");
+			if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Generated-copy SHA-1 is invalid");
 			sha1 = sha1.toLowerCase(Locale.ROOT);
 			if (size < 0) throw new IllegalArgumentException("Generated-copy size is invalid");
 		}
 	}
 
 	private static String requireDigest(String value, String description) {
-		if (value == null || !DIGEST.matcher(value).matches()) throw new IllegalArgumentException("Invalid " + description);
+		if (!HashUtils.isSha1(value)) throw new IllegalArgumentException("Invalid " + description);
 		return value.toLowerCase(Locale.ROOT);
 	}
 }

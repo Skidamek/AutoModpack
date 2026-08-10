@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -29,7 +30,7 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
@@ -73,7 +74,7 @@ public class ModpackUtils {
 		// Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
 		// TreeMap ensures alphabetical order of directories (HDD friendly).
 		Map<Path, List<ModpackJsons.ModpackContentFields.ModpackContentItem>> itemsByDir = serverModpackContent.list.stream()
-				.collect(Collectors.groupingBy(item -> SmartFileUtils.getPath(activeDirectory, item.file).getParent(), TreeMap::new, Collectors.toList()));
+				.collect(Collectors.groupingBy(item -> storage.activePath(item.file).getParent(), TreeMap::new, Collectors.toList()));
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 
@@ -191,7 +192,7 @@ public class ModpackUtils {
 		Set<String> changedPaths = new HashSet<>();
 		for (var item : serverItems) {
 			if (!item.editable || !item.overwriteEditable) continue;
-			Path path = SmartFileUtils.getPath(projection, item.file);
+			Path path = LogicalPath.resolve(projection, item.file);
 			String installedHash = HashUtils.getHash(path);
 			if (!item.sha1.equalsIgnoreCase(installedHash)) changedPaths.add(item.file);
 		}
@@ -218,11 +219,11 @@ public class ModpackUtils {
 				continue;
 			}
 
-			Path fileInCWD = SmartFileUtils.getPathFromCWD(entry.file);
+			Path fileInCWD = storage.gamePath(entry.file);
 			if (isValidFile(fileInCWD, expectedSize, entry.sha1, cache)) {
 				LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
 				try {
-					SmartFileUtils.copyVerifiedAtomic(fileInCWD, storeFile, expectedSize, entry.sha1);
+					VerifiedFileTransfer.copyAtomic(fileInCWD, storeFile, expectedSize, entry.sha1);
 				} catch (IOException e) {
 					LOGGER.error("Failed to copy file from CWD to store: {}", entry.file, e);
 				}

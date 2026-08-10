@@ -1,22 +1,6 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.clientActiveDir;
-import static pl.skidam.automodpack_core.Constants.clientActiveStateFile;
-import static pl.skidam.automodpack_core.Constants.clientBackupDir;
-import static pl.skidam.automodpack_core.Constants.clientBaselinesDir;
-import static pl.skidam.automodpack_core.Constants.clientConfigFile;
-import static pl.skidam.automodpack_core.Constants.clientContentTempFile;
-import static pl.skidam.automodpack_core.Constants.clientDir;
-import static pl.skidam.automodpack_core.Constants.clientGeneratedCopiesDir;
-import static pl.skidam.automodpack_core.Constants.clientHelperDir;
-import static pl.skidam.automodpack_core.Constants.clientIncomingDir;
-import static pl.skidam.automodpack_core.Constants.clientOverlaysDir;
-import static pl.skidam.automodpack_core.Constants.clientQuarantineDir;
-import static pl.skidam.automodpack_core.Constants.clientRecordsDir;
-import static pl.skidam.automodpack_core.Constants.clientRecoveryDir;
-import static pl.skidam.automodpack_core.Constants.clientRestartLoopStateFile;
-import static pl.skidam.automodpack_core.Constants.clientSelectionFile;
-import static pl.skidam.automodpack_core.Constants.clientTransactionFile;
+import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -30,13 +14,12 @@ import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /**
@@ -83,30 +66,30 @@ public final class ClientStorage {
 
 	public ClientStorage(Path gameDirectory) {
 		this.gameDirectory = requireDirectoryPath(gameDirectory, "game directory");
-		this.automodpackDirectory = this.gameDirectory.resolve(automodpackDirName()).normalize();
-		this.clientDirectory = this.gameDirectory.resolve(clientDir).normalize();
+		this.automodpackDirectory = this.gameDirectory.resolve(AUTOMODPACK_DIR).normalize();
+		this.clientDirectory = this.gameDirectory.resolve(CLIENT_DIR).normalize();
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(this.gameDirectory);
 		this.dataDirectory = dataLocation.root();
 		this.sharedDataDirectory = dataLocation.shared();
 		DataRootResolver.Layout dataLayout = dataLocation.layout();
 		this.objectsDirectory = dataLayout.objectsDirectory();
-		this.recordsDirectory = this.clientDirectory.resolve(clientRecordsDir.getFileName()).normalize();
-		this.overlaysDirectory = this.clientDirectory.resolve(clientOverlaysDir.getFileName()).normalize();
-		this.baselinesDirectory = this.clientDirectory.resolve(clientBaselinesDir.getFileName()).normalize();
-		this.generatedCopiesDirectory = this.clientDirectory.resolve(clientGeneratedCopiesDir.getFileName()).normalize();
-		this.activeDirectory = this.clientDirectory.resolve(clientActiveDir.getFileName()).normalize();
-		this.incomingDirectory = this.clientDirectory.resolve(clientIncomingDir.getFileName()).normalize();
-		this.backupDirectory = this.clientDirectory.resolve(clientBackupDir.getFileName()).normalize();
-		this.stateFile = this.clientDirectory.resolve(clientActiveStateFile.getFileName()).normalize();
-		this.transactionFile = this.clientDirectory.resolve(clientTransactionFile.getFileName()).normalize();
-		this.selectionFile = this.clientDirectory.resolve(clientSelectionFile.getFileName()).normalize();
-		this.restartLoopStateFile = this.clientDirectory.resolve(clientRestartLoopStateFile.getFileName()).normalize();
-		this.clientConfigFile = this.gameDirectory.resolve(Constants.clientConfigFile).normalize();
-		this.modpackContentTempFile = this.clientDirectory.resolve(clientContentTempFile.getFileName()).normalize();
-		this.helperDirectory = this.clientDirectory.resolve(clientHelperDir.getFileName()).normalize();
-		this.bootstrapFile = this.gameDirectory.resolve(Constants.bootstrapFile).normalize();
-		this.recoveryDirectory = this.clientDirectory.resolve(clientRecoveryDir.getFileName()).normalize();
-		this.quarantineDirectory = this.clientDirectory.resolve(clientQuarantineDir.getFileName()).normalize();
+		this.recordsDirectory = this.clientDirectory.resolve(CLIENT_RECORDS_DIR.getFileName()).normalize();
+		this.overlaysDirectory = this.clientDirectory.resolve(CLIENT_OVERLAYS_DIR.getFileName()).normalize();
+		this.baselinesDirectory = this.clientDirectory.resolve(CLIENT_BASELINES_DIR.getFileName()).normalize();
+		this.generatedCopiesDirectory = this.clientDirectory.resolve(CLIENT_GENERATED_COPIES_DIR.getFileName()).normalize();
+		this.activeDirectory = this.clientDirectory.resolve(CLIENT_ACTIVE_DIR.getFileName()).normalize();
+		this.incomingDirectory = this.clientDirectory.resolve(CLIENT_INCOMING_DIR.getFileName()).normalize();
+		this.backupDirectory = this.clientDirectory.resolve(CLIENT_BACKUP_DIR.getFileName()).normalize();
+		this.stateFile = this.clientDirectory.resolve(CLIENT_ACTIVE_STATE_FILE.getFileName()).normalize();
+		this.transactionFile = this.clientDirectory.resolve(CLIENT_TRANSACTION_FILE.getFileName()).normalize();
+		this.selectionFile = this.clientDirectory.resolve(CLIENT_SELECTION_FILE.getFileName()).normalize();
+		this.restartLoopStateFile = this.clientDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE.getFileName()).normalize();
+		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
+		this.modpackContentTempFile = this.clientDirectory.resolve(CLIENT_CONTENT_TEMP_FILE.getFileName()).normalize();
+		this.helperDirectory = this.clientDirectory.resolve(CLIENT_HELPER_DIR.getFileName()).normalize();
+		this.bootstrapFile = this.gameDirectory.resolve(BOOTSTRAP_FILE).normalize();
+		this.recoveryDirectory = this.clientDirectory.resolve(CLIENT_RECOVERY_DIR.getFileName()).normalize();
+		this.quarantineDirectory = this.clientDirectory.resolve(CLIENT_QUARANTINE_DIR.getFileName()).normalize();
 		this.fileMetadataDirectory = dataLayout.fileMetadataDirectory();
 		this.modMetadataDirectory = dataLayout.modMetadataDirectory();
 		this.packsDirectory = dataLayout.packsDirectory();
@@ -340,7 +323,7 @@ public final class ClientStorage {
 	}
 
 	public void clearOverlay(String modpackId) throws IOException {
-		SmartFileUtils.deleteTree(overlayDirectory(modpackId));
+		FileTrees.delete(overlayDirectory(modpackId));
 		Files.deleteIfExists(overlayStateFile(modpackId));
 	}
 
@@ -443,13 +426,7 @@ public final class ClientStorage {
 	}
 
 	private static Path resolveLogical(Path root, String logicalPath) {
-		Path resolved = root.resolve(requireLogicalPath(logicalPath)).normalize();
-		if (!resolved.startsWith(root)) throw new IllegalArgumentException("Logical path escapes its root: " + logicalPath);
-		return resolved;
-	}
-
-	private static String automodpackDirName() {
-		return "automodpack";
+		return LogicalPath.resolve(root, logicalPath);
 	}
 
 	private static void ensureDirectory(Path directory, String description) throws IOException {

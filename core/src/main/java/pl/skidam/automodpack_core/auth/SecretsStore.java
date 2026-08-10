@@ -8,9 +8,9 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.AuthJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
 public class SecretsStore {
@@ -56,7 +56,7 @@ public class SecretsStore {
 
 	}
 
-	private static final SecretsCache hostSecrets = new SecretsCache(Constants.serverSecretsFile);
+	private static final SecretsCache hostSecrets = new SecretsCache(StoragePaths.SERVER_SECRETS_FILE);
 
 	public static Map.Entry<String, Secrets.Secret> getHostSecret(String secret) {
 		hostSecrets.load();

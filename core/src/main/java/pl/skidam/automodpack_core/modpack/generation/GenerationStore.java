@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class GenerationStore {
@@ -154,15 +155,15 @@ public final class GenerationStore {
 
 	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
-		this.currentPath = this.root.resolve(Constants.serverCurrentFile.getFileName());
-		this.currentProjectionPath = this.root.resolve(Constants.serverCurrentProjectionFile.getFileName());
-		this.checkpointPath = this.root.resolve(Constants.serverGenerationCheckpointFile.getFileName());
+		this.currentPath = this.root.resolve(StoragePaths.SERVER_CURRENT_FILE.getFileName());
+		this.currentProjectionPath = this.root.resolve(StoragePaths.SERVER_CURRENT_PROJECTION_FILE.getFileName());
+		this.checkpointPath = this.root.resolve(StoragePaths.SERVER_GENERATION_CHECKPOINT_FILE.getFileName());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
-		this.cataloguesDirectory = this.root.resolve(Constants.serverCataloguesDir.getFileName());
-		this.commitsDirectory = this.root.resolve(Constants.serverCommitsDir.getFileName());
-		this.deltasDirectory = this.root.resolve(Constants.serverDeltasDir.getFileName());
+		this.cataloguesDirectory = this.root.resolve(StoragePaths.SERVER_CATALOGUES_DIR.getFileName());
+		this.commitsDirectory = this.root.resolve(StoragePaths.SERVER_COMMITS_DIR.getFileName());
+		this.deltasDirectory = this.root.resolve(StoragePaths.SERVER_DELTAS_DIR.getFileName());
 		this.objectsDirectory = Objects.requireNonNull(objectsDirectory).toAbsolutePath().normalize();
-		this.stagingDirectory = this.root.resolve(Constants.serverStagingDir.getFileName());
+		this.stagingDirectory = this.root.resolve(StoragePaths.SERVER_STAGING_DIR.getFileName());
 		this.clock = Objects.requireNonNull(clock);
 		this.commitHook = Objects.requireNonNull(commitHook);
 		this.compactionDeleteHook = Objects.requireNonNull(compactionDeleteHook);
@@ -966,7 +967,7 @@ public final class GenerationStore {
 	}
 
 	private static boolean isDigest(String value) {
-		return value != null && value.matches("[0-9a-f]{40}");
+		return HashUtils.isCanonicalSha1(value);
 	}
 
 	private record CompactGeneration(GenerationCommit commit, CatalogueSnapshot snapshot, OwnershipDelta delta) {}

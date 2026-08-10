@@ -48,7 +48,7 @@ import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
@@ -444,7 +444,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (targetPaths.contains(ledgerEntry.logicalPath()) || UpdatePlanner.managedCleanupKey(ledgerEntry.logicalPath()).isEmpty()) continue;
 			for (OwnershipLedger.Content content : ledgerEntry.historicalHashes()) {
 				String hash = content.sha1().toLowerCase(Locale.ROOT);
-				if (!SmartFileUtils.isValidFile(storeRoot.resolve(hash), content.size(), hash)) continue;
+				if (!FileIntegrity.matches(storeRoot.resolve(hash), content.size(), hash)) continue;
 				RecoveryFile file = new RecoveryFile(ledgerEntry.logicalPath(), hash, content.size(), ledgerEntry.lastPublishedGenerationId(), "");
 				if (!archivedKeys.contains(recoveryKey(file))) available.add(file);
 			}
@@ -652,7 +652,7 @@ public class ModpackUpdater implements AutoCloseable {
 			String serverFileHash = serverItem.sha1;
 			long serverFileSize = Long.parseLong(serverItem.size);
 
-			Path downloadFile = SmartFileUtils.getPath(storage.activeDirectory(), serverFilePath);
+			Path downloadFile = storage.activePath(serverFilePath);
 
 			List<DownloadSource> sources = new ArrayList<>();
 			if (fetchManager != null && fetchManager.getFetchDatas().containsKey(serverFileHash)) {

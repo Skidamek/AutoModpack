@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.modpack;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,8 +23,8 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
@@ -40,7 +41,7 @@ public class ModpackExecutor {
 	private final CandidateScan candidateScan;
 
 	public ModpackExecutor() {
-		this(SmartFileUtils.CWD, hostModpackDir, SmartFileUtils.CWD.resolve(serverDir));
+		this(GameDirectory.current(), HOST_MODPACK_DIR, GameDirectory.current().resolve(SERVER_DIR));
 	}
 
 	public ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot) {
@@ -54,7 +55,7 @@ public class ModpackExecutor {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
-		this.patchNotesFile = this.generationRoot.resolve(serverPatchNotesFile.getFileName()).normalize();
+		this.patchNotesFile = this.generationRoot.resolve(SERVER_PATCH_NOTES_FILE.getFileName()).normalize();
 		this.generationStore = Objects.requireNonNull(generationStore);
 		this.dataLayout = new DataRootResolver.Layout(this.generationStore.objectRoot().getParent());
 		this.candidateScan = Objects.requireNonNull(candidateScan);
@@ -268,7 +269,7 @@ public class ModpackExecutor {
 				ModFileCache modFileCache = ModFileCache.open(dataLayout.modMetadataDirectory())) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
 					LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
-					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(serverStagingDir.getFileName()), creationExecutor,
+					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
 					generationStore.objectRoot(), fileMetadataCache, modFileCache);
 			return candidateScan.scan(request);
 		}
@@ -290,7 +291,7 @@ public class ModpackExecutor {
 	}
 
 	private void cleanupLegacyCatalogue() throws IOException {
-		Path legacyCatalogue = groupRoot.resolve(modpackContentFileName).normalize();
+		Path legacyCatalogue = groupRoot.resolve(MODPACK_CONTENT_FILE).normalize();
 		if (Files.deleteIfExists(legacyCatalogue)) LOGGER.debug("Removed stale generated catalogue");
 	}
 

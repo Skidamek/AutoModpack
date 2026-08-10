@@ -4,15 +4,56 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-public class HashUtils {
+public final class HashUtils {
+	private static final String SHA_1 = "SHA-1";
+	private static final Pattern SHA1_PATTERN = Pattern.compile("[0-9a-fA-F]{40}");
+
+	private HashUtils() {}
+
+	/** Returns a SHA-1 digest encoded as lowercase hexadecimal. */
+	public static String sha1(byte[] bytes) {
+		try {
+			return HexFormat.of().formatHex(MessageDigest.getInstance(SHA_1).digest(bytes));
+		} catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("SHA-1 is unavailable", e);
+		}
+	}
+
+	/** Returns the SHA-1 digest of the UTF-8 representation of {@code value}. */
+	public static String sha1(String value) {
+		return sha1(value.getBytes(StandardCharsets.UTF_8));
+	}
+
+	/** Creates a SHA-1 digest for callers that need to update it incrementally. */
+	public static MessageDigest newSha1Digest() {
+		try {
+			return MessageDigest.getInstance(SHA_1);
+		} catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("SHA-1 is unavailable", e);
+		}
+	}
+
+	/** Returns whether {@code value} is a 40-character hexadecimal SHA-1 digest. */
+	public static boolean isSha1(String value) {
+		return value != null && SHA1_PATTERN.matcher(value).matches();
+	}
+
+	/** Returns whether {@code value} is a lowercase 40-character hexadecimal SHA-1 digest. */
+	public static boolean isCanonicalSha1(String value) {
+		return isSha1(value) && value.equals(value.toLowerCase(Locale.ROOT));
+	}
 
 	/** The {@link #getHash} of every {@code .jar} file directly in {@code dir}; empty if it isn't a directory. */
 	public static Set<String> getJarHashes(Path dir) {
@@ -31,8 +72,8 @@ public class HashUtils {
 
 	public static String getHash(Path path) {
 		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-1");
-			try (InputStream is = new LockFreeInputStream(path)) {
+			MessageDigest digest = newSha1Digest();
+			try (InputStream is = Files.newInputStream(path)) {
 				byte[] buffer = new byte[64 * 1024];
 				int bytesRead;
 				while ((bytesRead = is.read(buffer)) != -1) {
@@ -64,7 +105,7 @@ public class HashUtils {
 		long validLength = 0;
 		byte[] buffer = new byte[64 * 1024];
 
-		try (InputStream is = new LockFreeInputStream(file)) {
+		try (InputStream is = Files.newInputStream(file)) {
 			int bytesRead;
 			while ((bytesRead = is.read(buffer)) != -1) {
 				for (int i = 0; i < bytesRead; i++) {
@@ -78,7 +119,7 @@ public class HashUtils {
 		long k = 0;
 		int shift = 0;
 
-		try (InputStream is = new LockFreeInputStream(file)) {
+		try (InputStream is = Files.newInputStream(file)) {
 			int bytesRead;
 			while ((bytesRead = is.read(buffer)) != -1) {
 				for (int i = 0; i < bytesRead; i++) {
