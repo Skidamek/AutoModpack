@@ -609,10 +609,12 @@ public final class UpdateTransactionExecutor {
 			if (operation.operation() != OperationType.DELETE || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
-			if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) continue;
-			if (operation.expectedExistingHash() != null && !operation.expectedExistingHash().equalsIgnoreCase(HashUtils.getHash(target)))
-				throw new IOException("Deletion target changed after planning: " + target);
-			Files.delete(target);
+			if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+				if (operation.expectedExistingHash() != null && !operation.expectedExistingHash().equalsIgnoreCase(HashUtils.getHash(target)))
+					throw new IOException("Deletion target changed after planning: " + target);
+				Files.delete(target);
+			}
+			FileTrees.pruneEmptyAncestors(target, root(operation.root(), transaction));
 		}
 	}
 
