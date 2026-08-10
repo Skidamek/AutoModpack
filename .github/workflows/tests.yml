@@ -7,7 +7,7 @@ permissions:
 
 jobs:
   tests:
-    name: Windows core tests (JDK 25)
+    name: Windows core tests
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
