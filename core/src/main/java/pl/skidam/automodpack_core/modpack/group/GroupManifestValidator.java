@@ -12,7 +12,6 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class GroupManifestValidator {
 	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
-	private static final Set<String> FILE_TYPES = Set.of("mod", "config", "shader", "resourcepack", "mc_options", "other");
 
 	private GroupManifestValidator() {}
 
@@ -78,7 +77,7 @@ public final class GroupManifestValidator {
 			} catch (RuntimeException e) {
 				errors.add("Group '" + groupId + "' file '" + path + "' has invalid size");
 			}
-			if (file.type == null || !FILE_TYPES.contains(file.type)) errors.add("Group '" + groupId + "' file '" + path + "' has invalid type");
+			if (file.type == null || !ModpackContentType.ALL.contains(file.type)) errors.add("Group '" + groupId + "' file '" + path + "' has invalid type");
 			else
 				if (!ModpackPathPolicy.isValidTypeAndPath(path, file.type))
 					errors.add("Group '" + groupId + "' file '" + path + "' has an invalid type/path combination: " + file.type);
@@ -115,7 +114,7 @@ public final class GroupManifestValidator {
 				for (String path : group.files().keySet()) {
 					if (platform == ClientPlatform.WINDOWS) validateWindowsPath(groupId, path, errors);
 					aliases.computeIfAbsent(platformPathKey(path, platform), ignored -> new ArrayList<>()).add(new PathOwner(groupId, path));
-					if ("mod".equals(group.files().get(path).type()))
+					if (ModpackContentType.MOD.equals(group.files().get(path).type()))
 						modBasenameAliases.computeIfAbsent(platformPathKey(path.substring(path.lastIndexOf('/') + 1), platform), ignored -> new ArrayList<>())
 								.add(new PathOwner(groupId, path));
 				}

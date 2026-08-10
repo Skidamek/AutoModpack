@@ -7,19 +7,19 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.FileTrees;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /**
@@ -33,8 +33,6 @@ import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
  * </p>
  */
 public final class ClientStorage {
-	private static final Pattern DIGEST = Pattern.compile("[0-9a-fA-F]{40}");
-
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
 	private final Path clientDirectory;
@@ -237,7 +235,7 @@ public final class ClientStorage {
 	}
 
 	public Path quarantinePayload(String modpackId, String conflictId) {
-		if (conflictId == null || !conflictId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid conflict ID");
+		if (!HashUtils.isCanonicalSha1(conflictId)) throw new IllegalArgumentException("Invalid conflict ID");
 		Path root = quarantinePackDirectory(modpackId);
 		Path payload = root.resolve("conflicts").resolve(conflictId).resolve("payload").normalize();
 		if (!payload.startsWith(root)) throw new IllegalArgumentException("Quarantine path escaped its modpack root");
@@ -253,7 +251,7 @@ public final class ClientStorage {
 	}
 
 	public Path modsDirectory() {
-		return gamePath("mods");
+		return gamePath(ModpackPathPolicy.MODS_ROOT);
 	}
 
 	public Path generationDirectory(String generationId) {
@@ -373,7 +371,7 @@ public final class ClientStorage {
 			throw new IOException("Client active state is not a regular file");
 		ClientStorageJsons.ClientGenerationStateFields state = ConfigTools.read(stateFile, ClientStorageJsons.ClientGenerationStateFields.class)
 				.orElseThrow(() -> new IOException("Client active state is empty"));
-		if (!ModpackId.isValid(state.modpackId) || !DIGEST.matcher(state.generationId).matches() || !"ACTIVE".equals(state.status))
+		if (!ModpackId.isValid(state.modpackId) || !HashUtils.isSha1(state.generationId) || !"ACTIVE".equals(state.status))
 			throw new IOException("Client active state identity is invalid");
 		return state;
 	}
@@ -409,8 +407,8 @@ public final class ClientStorage {
 	}
 
 	private static String requireDigest(String value, String description) {
-		if (value == null || !DIGEST.matcher(value).matches()) throw new IllegalArgumentException("Invalid " + description);
-		return value.toLowerCase(Locale.ROOT);
+		if (!HashUtils.isSha1(value)) throw new IllegalArgumentException("Invalid " + description);
+		return HashUtils.normalizeSha1(value);
 	}
 
 	private static String requireTransactionId(String value) {

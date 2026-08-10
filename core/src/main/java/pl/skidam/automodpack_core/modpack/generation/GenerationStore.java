@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.storage.StoragePaths;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class GenerationStore {
@@ -499,7 +500,7 @@ public final class GenerationStore {
 		long deletedBytes = 0;
 		for (Path object : beforeFiles) {
 			String name = object.getFileName().toString();
-			if (!isDigest(name) || reachable.contains(name) || !isValidCanonicalObject(object, name)) continue;
+			if (!isDigest(name) || reachable.contains(name) || !FileIntegrity.matchesCanonicalSha1(object, name)) continue;
 			long size = Files.size(object);
 			if (Files.deleteIfExists(object)) {
 				deletedCount = addExact(deletedCount, 1, "deleted object count");
@@ -582,10 +583,6 @@ public final class GenerationStore {
 		} catch (ArithmeticException e) {
 			throw new IOException("Overflow while measuring " + description, e);
 		}
-	}
-
-	private boolean isValidCanonicalObject(Path object, String name) {
-		return !Files.isSymbolicLink(object) && Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && name.equals(HashUtils.getHash(object));
 	}
 
 	private GenerationJsons.GenerationPointerFields readCurrentPointer() throws IOException {
@@ -864,16 +861,16 @@ public final class GenerationStore {
 
 	private String catalogueStateDigest(Path path) throws IOException {
 		String filename = path.getFileName().toString();
-		if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation catalogue path: " + path);
-		String stateDigest = filename.substring(0, 40);
+		if (filename.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !filename.endsWith(".json")) throw new IOException("Invalid generation catalogue path: " + path);
+		String stateDigest = filename.substring(0, HashUtils.SHA1_HEX_LENGTH);
 		if (!isDigest(stateDigest)) throw new IOException("Invalid generation catalogue filename: " + path);
 		return stateDigest;
 	}
 
 	private String commitGenerationId(Path path) throws IOException {
 		String filename = path.getFileName().toString();
-		if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation commit path: " + path);
-		String generationId = filename.substring(0, 40);
+		if (filename.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !filename.endsWith(".json")) throw new IOException("Invalid generation commit path: " + path);
+		String generationId = filename.substring(0, HashUtils.SHA1_HEX_LENGTH);
 		if (!isDigest(generationId)) throw new IOException("Invalid generation commit filename: " + path);
 		return generationId;
 	}

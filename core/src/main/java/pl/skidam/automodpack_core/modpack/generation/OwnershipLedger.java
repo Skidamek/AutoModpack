@@ -22,7 +22,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 /** Immutable cumulative ownership projection for one modpack lineage. */
 public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entries, String digest) {
 	private static final Comparator<Content> CONTENT_ORDER = Comparator.comparing(Content::sha1).thenComparingLong(Content::size);
-	private static final String PROVISIONAL_GENERATION = "0".repeat(40);
+	private static final String PROVISIONAL_GENERATION = "0".repeat(HashUtils.SHA1_HEX_LENGTH);
 
 	public enum Status {
 		PRESENT, TOMBSTONE

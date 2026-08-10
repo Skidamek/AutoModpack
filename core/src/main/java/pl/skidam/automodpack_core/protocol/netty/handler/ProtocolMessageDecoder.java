@@ -8,11 +8,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
+import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
 
 public class ProtocolMessageDecoder extends ByteToMessageDecoder {
-	private static final int COMMON_HEADER_LENGTH = 2 + 32;
+	private static final int COMMON_HEADER_LENGTH = 2 * Byte.BYTES + Secrets.BYTE_LENGTH;
 
 	@Override
 	protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
@@ -21,7 +22,7 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
 		in.markReaderIndex();
 		byte version = in.readByte();
 		byte type = in.readByte();
-		byte[] secret = new byte[32];
+		byte[] secret = new byte[Secrets.BYTE_LENGTH];
 		in.readBytes(secret);
 
 		switch (type) {

@@ -129,7 +129,7 @@ public record UpdatePlan(
 		public NestedCopy {
 			relativePath = LogicalPath.requireCanonical(relativePath);
 			if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Nested-copy SHA-1 is invalid");
-			sha1 = sha1.toLowerCase(Locale.ROOT);
+			sha1 = HashUtils.normalizeSha1(sha1);
 			if (size < 0) throw new IllegalArgumentException("Nested-copy size is invalid");
 			ids = stableSet(ids);
 		}

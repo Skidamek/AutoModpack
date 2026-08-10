@@ -7,7 +7,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
@@ -15,6 +14,7 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** The validated client-owned projection of nested copies for one pack generation and group selection. */
@@ -99,15 +99,15 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 	public record Entry(String logicalPath, String sha1, long size) {
 		public Entry {
 			logicalPath = LogicalPath.requireCanonical(logicalPath);
-			if (!logicalPath.startsWith("mods/")) throw new IllegalArgumentException("Generated-copy path is outside the mods directory");
+			if (!ModpackPathPolicy.isModPath(logicalPath)) throw new IllegalArgumentException("Generated-copy path is outside the mods directory");
 			if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Generated-copy SHA-1 is invalid");
-			sha1 = sha1.toLowerCase(Locale.ROOT);
+			sha1 = HashUtils.normalizeSha1(sha1);
 			if (size < 0) throw new IllegalArgumentException("Generated-copy size is invalid");
 		}
 	}
 
 	private static String requireDigest(String value, String description) {
 		if (!HashUtils.isSha1(value)) throw new IllegalArgumentException("Invalid " + description);
-		return value.toLowerCase(Locale.ROOT);
+		return HashUtils.normalizeSha1(value);
 	}
 }

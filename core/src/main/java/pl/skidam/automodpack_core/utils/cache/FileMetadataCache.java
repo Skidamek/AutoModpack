@@ -12,7 +12,6 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -29,13 +28,11 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  */
 public class FileMetadataCache implements AutoCloseable {
 
-	private static final Map<Path, FileMetadataCache> INSTANCES = new HashMap<>();
-	private static final Object GLOBAL_LOCK = new Object();
+	private static final SharedCacheRegistry<FileMetadataCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final String RECORD_SUFFIX = ".json";
 
 	private final Path recordsDirectory;
 	private final Map<String, CachedFile> hotRecords = new HashMap<>();
-	private final AtomicInteger refCount = new AtomicInteger(1);
 	private final Object[] locks = new Object[64];
 
 	public static final class CachedFile {
@@ -93,19 +90,7 @@ public class FileMetadataCache implements AutoCloseable {
 	private record ComputedHash(String hash, BasicFileAttributes attributes) {}
 
 	public static FileMetadataCache open(Path path) throws IOException {
-		Path absPath = path.toAbsolutePath().normalize();
-		Files.createDirectories(absPath);
-		synchronized (GLOBAL_LOCK) {
-			FileMetadataCache existing = INSTANCES.get(absPath);
-			if (existing != null) {
-				existing.refCount.incrementAndGet();
-				return existing;
-			}
-
-			FileMetadataCache newCache = new FileMetadataCache(absPath);
-			INSTANCES.put(absPath, newCache);
-			return newCache;
-		}
+		return REGISTRY.acquire(path, FileMetadataCache::new);
 	}
 
 	private FileMetadataCache(Path recordsDirectory) {
@@ -273,11 +258,6 @@ public class FileMetadataCache implements AutoCloseable {
 
 	@Override
 	public void close() {
-		synchronized (GLOBAL_LOCK) {
-			if (refCount.decrementAndGet() <= 0) {
-				hotRecords.clear();
-				INSTANCES.remove(recordsDirectory, this);
-			}
-		}
+		if (REGISTRY.release(recordsDirectory, this)) hotRecords.clear();
 	}
 }
