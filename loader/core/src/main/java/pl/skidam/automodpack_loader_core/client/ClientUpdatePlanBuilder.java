@@ -321,7 +321,7 @@ final class ClientUpdatePlanBuilder {
 			if (hash == null) throw new IOException("Failed to hash live file: " + path);
 			cache.overwriteCache(path, hash);
 		}
-		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true, FileInspection.isMod(path)));
+		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true));
 	}
 
 	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache) {

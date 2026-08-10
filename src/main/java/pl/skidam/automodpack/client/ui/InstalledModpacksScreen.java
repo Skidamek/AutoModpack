@@ -21,7 +21,6 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.LocalModArchive;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 /** Lists locally installed packs without changing the active projection. */
@@ -32,7 +31,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private final Screen parent;
 	private final ClientStorage storage;
 	private final List<Entry> entries;
-	private boolean hasLocalModArchive;
 	private int page;
 
 	public InstalledModpacksScreen(Screen parent) {
@@ -40,7 +38,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		this.parent = parent;
 		this.storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
 		this.entries = loadEntries(storage);
-		this.hasLocalModArchive = hasLocalModArchive(storage);
 	}
 
 	@Override
@@ -84,23 +81,13 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 					}));
 		}
 
-		int actionCount = hasLocalModArchive ? 3 : 2;
+		int actionCount = 2;
 		int actionWidth = actionButtonWidth(PANEL_WIDTH, actionCount);
 		int actionY = this.height - 28;
-		if (hasLocalModArchive) this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, 0), actionY, actionWidth, 20,
-				VersionedText.translatable("automodpack.management.localMods"), press -> ScreenImpl.setScreen(new LocalModArchiveScreen(this, storage, this::refreshLocalModArchive))));
-		int storageIndex = hasLocalModArchive ? 1 : 0;
-		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, storageIndex), actionY, actionWidth, 20,
+		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, 0), actionY, actionWidth, 20,
 				VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, storage))));
 		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, actionCount - 1), actionY, actionWidth, 20,
 				VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
-	}
-
-	private void refreshLocalModArchive() {
-		boolean refreshed = hasLocalModArchive(storage);
-		if (refreshed == hasLocalModArchive) return;
-		hasLocalModArchive = refreshed;
-		rebuild();
 	}
 
 	private void open(Entry entry) {
@@ -165,15 +152,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			ConnectionJsons.ConnectionRecordFields fields = ConnectionStore.read(storage, modpackId);
 			return fields.connection != null && fields.connection.isComplete();
 		} catch (IOException | RuntimeException e) {
-			return false;
-		}
-	}
-
-	private static boolean hasLocalModArchive(ClientStorage storage) {
-		try {
-			return LocalModArchive.hasEntries(storage);
-		} catch (IOException | RuntimeException e) {
-			LOGGER.warn("Could not read the local mod archive", e);
 			return false;
 		}
 	}

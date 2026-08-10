@@ -59,13 +59,7 @@ def _launch_client(ctx, step):
         for payload in (b"bootstrap-a\n", b"bootstrap-b\n"):
             (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
         ctx.vars["fake_preload_logged"] = True
-        try:
-            client_config = json.loads((ctx.game_dir / "automodpack" / "client-config.json").read_text(encoding="utf-8"))
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
-            client_config = {}
-        if ctx.vars.get("client_generation_reset") and client_config.get("reviewUpdates") is False:
-            ctx.bridge._write_modpack()
-            ctx.vars["fake_preload_applied"] = True
+        ctx.vars["fake_preload_review_logged"] = True
 
 
 def _wait_bridge(ctx, step):
@@ -333,8 +327,8 @@ def _ctx_for(make_ctx, scenario: dict):
                     "Preloaded 2 complete modpack objects in 1ms"
                     if ctx.vars.get("fake_preload_logged")
                     else "",
-                    "Preload applied the selected target transaction successfully"
-                    if ctx.vars.get("fake_preload_applied")
+                    "Preload acquired the complete selected target; active projection remains unchanged until player review"
+                    if ctx.vars.get("fake_preload_review_logged")
                     else "",
                 ],
             )

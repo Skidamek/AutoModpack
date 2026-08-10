@@ -5,7 +5,6 @@ import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -53,7 +52,6 @@ import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 /** Validates and applies the one journaled client operation plan. */
 public final class UpdateTransactionExecutor {
-	private static final int COPY_CONCURRENCY = 3;
 	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
 	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
 			.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
@@ -178,7 +176,6 @@ public final class UpdateTransactionExecutor {
 			switch (operation.operation()) {
 				case INSTALL_OBJECT -> validateInstall(operation, projected);
 				case DELETE -> validateDelete(operation, projected);
-				case CREATE_DIRECTORY, REMOVE_EMPTY_DIRECTORY -> validateDirectoryOperation(operation);
 			}
 		}
 		validateBaselineCaptures(transaction);
@@ -482,7 +479,6 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateInstall(Operation operation, ProjectedFile projected) throws IOException {
-		if (operation.root() == Root.STORE_DIR) throw new IOException("Transactions may not mutate the content-addressed store");
 		validateHash(operation.expectedObjectHash(), "install SHA-1");
 		if (operation.expectedExistingHash() != null) validateHash(operation.expectedExistingHash(), "install expected SHA-1");
 		if (operation.expectedSize() < 0 || (projected != null && (!projected.present() || operation.expectedSize() != projected.expectedSize()
@@ -494,14 +490,9 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private static void validateDelete(Operation operation, ProjectedFile projected) throws IOException {
-		if (operation.root() == Root.STORE_DIR || operation.expectedObjectHash() != null || operation.expectedSize() != -1 || (projected != null && projected.present()))
+		if (operation.expectedObjectHash() != null || operation.expectedSize() != -1 || (projected != null && projected.present()))
 			throw new IOException("Invalid delete operation metadata");
 		if (operation.expectedExistingHash() != null) validateHash(operation.expectedExistingHash(), "deletion expected SHA-1");
-	}
-
-	private static void validateDirectoryOperation(Operation operation) throws IOException {
-		if (operation.root() == Root.STORE_DIR || operation.expectedObjectHash() != null || operation.expectedExistingHash() != null || operation.expectedSize() != -1)
-			throw new IOException("Invalid directory operation metadata");
 	}
 
 	private void validateManifestProjection(ModpackJsons.ModpackContentFields manifest, Map<FileKey, ProjectedFile> finalState) throws IOException {
@@ -602,11 +593,6 @@ public final class UpdateTransactionExecutor {
 
 	private void applyOperations(UpdateTransaction transaction, AtomicReference<Operation> current) throws IOException {
 		for (Operation operation : transaction.operations) {
-			if (operation.operation() != OperationType.CREATE_DIRECTORY) continue;
-			current.set(operation);
-			Files.createDirectories(resolve(operation, transaction));
-		}
-		for (Operation operation : transaction.operations) {
 			if (operation.operation() != OperationType.INSTALL_OBJECT || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
@@ -626,12 +612,6 @@ public final class UpdateTransactionExecutor {
 			if (operation.expectedExistingHash() != null && !operation.expectedExistingHash().equalsIgnoreCase(HashUtils.getHash(target)))
 				throw new IOException("Deletion target changed after planning: " + target);
 			Files.delete(target);
-		}
-		for (Operation operation : transaction.operations) {
-			if (operation.operation() != OperationType.REMOVE_EMPTY_DIRECTORY) continue;
-			current.set(operation);
-			Path target = resolve(operation, transaction);
-			if (SmartFileUtils.isEmptyDirectory(target)) Files.deleteIfExists(target);
 		}
 	}
 
@@ -819,7 +799,6 @@ public final class UpdateTransactionExecutor {
 			case PROJECTION -> context.storage().activeDirectory();
 			case OVERLAY -> context.storage().overlayDirectory(transaction.modpackId);
 			case GAME_DIR -> context.storage().gameDirectory();
-			case STORE_DIR -> context.storage().objectsDirectory();
 		};
 	}
 
@@ -834,7 +813,6 @@ public final class UpdateTransactionExecutor {
 		Path game = context.storage().gameDirectory();
 		Path automodpack = context.storage().automodpackDirectory();
 		if (root == Root.GAME_DIR && resolved.startsWith(automodpack)) throw new IOException("GAME_DIR operation uses a narrower root");
-		if (root == Root.STORE_DIR) throw new IOException("STORE_DIR is read-only");
 		if (root == Root.OVERLAY && !isModpackPurpose(purpose)) throw new IOException("OVERLAY is restricted to modpack transactions");
 		if (root == Root.PROJECTION && !isModpackPurpose(purpose)) throw new IOException("PROJECTION is restricted to modpack transactions");
 		if (!resolved.startsWith(game)) throw new IOException("Transaction target escaped the game directory");

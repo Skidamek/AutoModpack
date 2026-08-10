@@ -21,16 +21,6 @@ class UpdateReviewPolicyTest {
 				() -> assertFalse(UpdateReviewPolicy.requiresPlayerReview(false, INSTALLED, INSTALLED, false)));
 	}
 
-	@Test
-	void disabledReviewPreferenceSuppressesOnlyTheReviewGate() {
-		assertFalse(UpdateReviewPolicy.requiresPlayerReview(true, null, NEXT_GENERATION, true, false));
-	}
-
-	@Test
-	void enabledReviewPreferenceKeepsTheReviewGate() {
-		assertTrue(UpdateReviewPolicy.requiresPlayerReview(true, null, NEXT_GENERATION, true, true));
-	}
-
 	private static GenerationTarget target(String modpackId, String generationId) {
 		return new GenerationTarget(modpackId, generationId, "", "6666666666666666666666666666666666666666", "7777777777777777777777777777777777777777");
 	}

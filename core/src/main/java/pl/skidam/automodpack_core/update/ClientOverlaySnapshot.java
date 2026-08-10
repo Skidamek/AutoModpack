@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
@@ -43,14 +42,14 @@ public record ClientOverlaySnapshot(Map<String, UpdatePlan.FileState> files, Str
 					String hash = cache == null ? HashUtils.getHash(path) : cache.getOrComputeHash(path);
 					if (hash == null) throw new IOException("Cannot hash client overlay file: " + path);
 					long size = Files.size(path);
-					files.put(relative, new UpdatePlan.FileState(hash, size, true, FileInspection.isMod(path)));
+					files.put(relative, new UpdatePlan.FileState(hash, size, true));
 					physicalFiles.add(new OverlayFile(relative, hash, size));
 				}
 			}
 		}
 		MessageDigest digest = sha1();
 		for (String deletedPath : overlayState.deletedPaths) {
-			files.put(deletedPath, new UpdatePlan.FileState(null, -1, false, false));
+			files.put(deletedPath, new UpdatePlan.FileState(null, -1, false));
 			digest.update(("D\0" + deletedPath + "\n").getBytes(StandardCharsets.UTF_8));
 		}
 		for (OverlayFile file : physicalFiles) digest.update((file.relativePath + "\0" + file.size + "\0" + file.sha1.toLowerCase(Locale.ROOT) + "\n").getBytes(StandardCharsets.UTF_8));

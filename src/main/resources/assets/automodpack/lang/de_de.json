@@ -243,19 +243,5 @@
   "automodpack.download.acquired": "Erworben: %s Fehlgeschlagen: %s",
   "automodpack.error.title": "Fehler",
   "automodpack.error.titleLine": "[AutoModpack] %s!",
-  "automodpack.error.removalIncomplete": "Die Entfernung des Modpacks wurde nicht abgeschlossen",
-  "automodpack.firstConnect.reviewLocalMods": "Review local mods",
-  "automodpack.management.localMods": "Local mods",
-  "automodpack.localMods.title": "Review local mods",
-  "automodpack.localMods.description1": "Unrelated local mods can conflict with this modpack.",
-  "automodpack.localMods.description2": "Select only the jars you want to move into the recoverable AutoModpack archive. Unselected files stay in mods/.",
-  "automodpack.localMods.empty": "No unrelated local jars were found.",
-  "automodpack.localMods.selected": "Selected: %s",
-  "automodpack.localMods.move": "Move selected",
-  "automodpack.localMods.moving": "Moving selected...",
-  "automodpack.localMods.archiveTitle": "Archived local mods",
-  "automodpack.localMods.archiveDescription": "Restore an archived jar only when its destination is absent or identical.",
-  "automodpack.localMods.archiveEmpty": "No local mods are archived.",
-  "automodpack.localMods.restore": "Restore",
-  "automodpack.localMods.entry": "%s (%s)"
+  "automodpack.error.removalIncomplete": "Die Entfernung des Modpacks wurde nicht abgeschlossen"
 }

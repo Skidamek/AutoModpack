@@ -162,9 +162,7 @@ public record UpdatePreview(
 			FileKey key = new FileKey(operation.root(), operation.relativePath());
 			FileState previous = originalFiles.get(key);
 			if (operation.operation() == OperationType.INSTALL_OBJECT) {
-				Kind kind = operation.expectedExistingHash() != null
-						? Kind.RESTORED_BASELINE
-						: previous == null || !previous.regularFile() ? Kind.ADDED : Kind.CHANGED;
+				Kind kind = previous == null || !previous.regularFile() ? Kind.ADDED : Kind.CHANGED;
 				entries.add(new Entry(kind, key.root(), key.relativePath(), operation.expectedSize()));
 			} else if (operation.operation() == OperationType.DELETE) {
 				long size = previous == null ? 0 : Math.max(0, previous.size());
@@ -265,8 +263,7 @@ public record UpdatePreview(
 		PRESERVED_CHANGED(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
 		PRESERVED_UNAVAILABLE(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
 		PRESERVED_OUTSIDE(SummaryBucket.PRESERVED, SortBucket.PRESERVED, "  "),
-		UNSAFE(SummaryBucket.UNSAFE, SortBucket.UNSAFE, "! "),
-		RESTORED_BASELINE(SummaryBucket.CHANGED, SortBucket.CHANGED, "+ ");
+		UNSAFE(SummaryBucket.UNSAFE, SortBucket.UNSAFE, "! ");
 
 		private final SummaryBucket summaryBucket;
 		private final SortBucket sortBucket;

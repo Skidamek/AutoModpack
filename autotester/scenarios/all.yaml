@@ -42,14 +42,6 @@ flow:
     name: seed an ordinary local baseline before the first server-owned install
     path: config/amp-autotest-baseline.json
     content: "local-baseline\n"
-  - do: seed_mod_fixture
-    name: seed a local mod before the first install for explicit cleanup review
-    path: mods/amp-autotest-local-archive.jar
-    fixture: { modId: amp_autotest_local_archive, version: "1.0.0-local-archive", marker: local-archive }
-  - do: seed_mod_fixture
-    name: seed a second local mod that the user will leave in place
-    path: mods/amp-autotest-local-keep.jar
-    fixture: { modId: amp_autotest_local_keep, version: "1.0.0-local-keep", marker: local-keep }
   - use: connect_to_server
   - do: wait_for
     name: show the first connection review
@@ -58,34 +50,6 @@ flow:
       all:
         - screen: FirstConnectScreen
         - no_element: { text: verify }
-  - do: click
-    name: open explicit local mod cleanup review
-    select: { text: Review local mods }
-  - do: wait_for
-    name: show local mod cleanup choices
-    until:
-      all:
-        - screen: LocalModReviewScreen
-        - element: { text: amp-autotest-local-archive.jar }
-        - element: { text: amp-autotest-local-keep.jar }
-  - do: screenshot
-    name: capture local mod cleanup review
-    file: all-local-mod-review
-  - do: click
-    name: choose only the conflicting local mod for the recoverable archive
-    select: { text: amp-autotest-local-archive.jar }
-  - do: click
-    name: move the selected local mod out of the live mods directory
-    select: { text: Move selected }
-  - do: wait_for
-    name: return to first connection review after local mod cleanup
-    timeout: 120s
-    until:
-      all:
-        - screen: FirstConnectScreen
-        - file_gone: mods/amp-autotest-local-archive.jar
-        - file: automodpack/client/local-mod-archive/manifest.json
-        - file: mods/amp-autotest-local-keep.jar
   - do: click
     name: open advanced group selection
     select: { text: customize groups }
@@ -236,39 +200,10 @@ flow:
   - do: wait_client_exit
     name: wait for bootstrap restart
   - use: rejoin
+  - do: disconnect
+    name: return to the vanilla title screen before opening multiplayer
   - use: open_multiplayer
   - use: open_pack_manager
-  - do: click
-    name: open the global archived local-mod manager
-    select: { text: Local mods }
-  - do: wait_for
-    name: show the archived local-mod restore action
-    until:
-      all:
-        - screen: LocalModArchiveScreen
-        - element: { text: amp-autotest-local-archive.jar }
-        - element: { text: Restore, enabled: true }
-  - do: screenshot
-    name: capture archived local-mod management
-    file: all-local-mod-archive
-  - do: click
-    name: restore the explicitly archived local mod
-    select: { text: Restore }
-  - do: wait_for
-    name: verify the archive is empty after restore
-    timeout: 120s
-    until:
-      all:
-        - screen: LocalModArchiveScreen
-        - element: { text: No local mods are archived. }
-        - file: mods/amp-autotest-local-archive.jar
-  - do: click
-    name: leave local-mod management
-    select: { text: Back }
-  - do: wait_for
-    name: return to the installed pack manager after local-mod restore
-    until: { screen: InstalledModpacksScreen }
-
   - do: seed_unowned_local_file
     name: seed an unowned local file for preservation coverage
     path: mods/local-unowned.jar
@@ -492,7 +427,35 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
+        - element: { text: History, enabled: true }
         - element: { text: Quarantine, enabled: true }
+  - do: click
+    name: open Pack B generation history from multiplayer settings
+    select: { text: History }
+  - do: wait_for
+    name: show Pack B generation history and attached notes
+    until: { screen: ContentHistoryScreen }
+  - do: screenshot
+    name: capture Pack B generation history
+    file: all-content-history
+  - do: click
+    name: open all Pack B patch notes from content history
+    select: { text: View all patch notes }
+  - do: wait_for
+    name: show all Pack B patch notes
+    until: { screen: PatchNotesHistoryScreen }
+  - do: click
+    name: return to Pack B content history
+    select: { text: Back }
+  - do: wait_for
+    name: return to Pack B content history after all notes
+    until: { screen: ContentHistoryScreen }
+  - do: click
+    name: leave Pack B content history
+    select: { text: Back }
+  - do: wait_for
+    name: return to Pack B settings after history
+    until: { screen: ModpackSelectionScreen }
   - do: screenshot
     name: capture Pack B quarantine action
     file: all-quarantine-settings
@@ -695,14 +658,13 @@ flow:
   - do: seed_bootstrap
     name: re-bootstrap the fresh client from the live server generation
   - do: write_file
-    name: opt the fresh client into client-owned preload application
+    name: keep the fresh client on the mandatory review path
     path: automodpack/client-config.json
     content: |
       {
         "DO_NOT_CHANGE_IT": 3,
         "selectedModpackId": "${bootstrap_modpack_id}",
-        "updateSelectedModpackOnLaunch": true,
-        "reviewUpdates": false
+        "updateSelectedModpackOnLaunch": true
       }
   - do: launch_client
     name: launch the fresh client without generation history or CAS
@@ -711,24 +673,33 @@ flow:
   - do: assert_preload_acquired
     name: verify the fresh client reacquired current objects into empty CAS
   - do: wait_for
-    name: verify preload applied through the normal transaction path
+    name: verify preload left direct mod cleanup for the review path
     until:
       log:
         container: client
-        matches: 'Preload applied the selected target transaction successfully'
+        matches: 'Preload acquired the complete selected target; active projection remains unchanged until player review'
+  - do: assert_mod_fixture
+    name: verify preload left the direct mod untouched before review
+    path: mods/amp-autotest-removed.jar
+    fixture: { modId: amp_autotest_removed, version: "1.0.0-published", marker: published }
+  - do: connect
+    name: connect the fresh client for the normal review flow
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
   - do: wait_generation
-    name: verify preload committed the advertised generation metadata
+    name: verify the fresh client committed the advertised generation metadata
     patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
     timeout: 300s
   - do: assert_generation
-    name: verify preload committed the generation record and patch notes
+    name: verify the fresh client committed the generation record and patch notes
     patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
   - do: assert_file_content
-    name: verify preload committed current files before any normal download
+    name: verify the fresh client committed current files after the normal update path
     path: "${active_dir}/config/amp-autotest-alpha.txt"
     content: "amp-autotest-alpha-v2\n"
   - do: assert
-    name: verify preload applied the published tombstone before any normal download
+    name: verify the deferred published tombstone was removed after loader discovery
     that: { file_gone: mods/amp-autotest-removed.jar }
   - do: assert_mod_fixture
     name: verify fresh-client current local content remains intact
