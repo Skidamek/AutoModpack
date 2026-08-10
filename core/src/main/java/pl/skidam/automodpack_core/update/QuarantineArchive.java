@@ -1,12 +1,9 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -149,7 +146,7 @@ public final class QuarantineArchive {
 				if (!SmartFileUtils.isValidFile(destination, entry.sourceSize, entry.sourceHash))
 					throw new IOException("Restore destination contains different bytes: " + destination);
 			} else {
-				copyVerifiedCreateOnly(storage.gameDirectory(), payload, destination, entry.sourceSize, entry.sourceHash);
+				SmartFileUtils.copyVerifiedCreateOnly(payload, destination, entry.sourceSize, entry.sourceHash);
 				validateDestinationPath(storage.gameDirectory(), destination);
 				if (!SmartFileUtils.isValidFile(destination, entry.sourceSize, entry.sourceHash))
 					throw new IOException("Restored destination failed verification: " + destination);
@@ -179,37 +176,6 @@ public final class QuarantineArchive {
 		if (ledgerEntry == null || ledgerEntry.currentStatus() != OwnershipLedger.Status.PRESENT)
 			throw new IOException("Active target and ownership ledger disagree about " + logicalPath);
 		return true;
-	}
-
-	private static void copyVerifiedCreateOnly(Path root, Path source, Path destination, long expectedSize, String expectedHash) throws IOException {
-		Path parent = destination.toAbsolutePath().normalize().getParent();
-		if (parent == null) throw new IOException("Restore destination has no parent: " + destination);
-		validateDestinationPath(root, destination);
-		Files.createDirectories(parent);
-		Path temporary = Files.createTempFile(parent, "." + destination.getFileName() + ".", ".restore.tmp");
-		try {
-			validateDestinationPath(root, destination);
-			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
-			if (!SmartFileUtils.isValidFile(temporary, expectedSize, expectedHash)) throw new IOException("Restored temporary file failed verification: " + temporary);
-			try {
-				moveCreateOnly(temporary, destination);
-			} catch (FileAlreadyExistsException raced) {
-				validateDestinationPath(root, destination);
-				if (!SmartFileUtils.isValidFile(destination, expectedSize, expectedHash)) throw new IOException("Restore destination contains different bytes: " + destination, raced);
-			}
-			validateDestinationPath(root, destination);
-			if (!SmartFileUtils.isValidFile(destination, expectedSize, expectedHash)) throw new IOException("Restored destination failed verification: " + destination);
-		} finally {
-			Files.deleteIfExists(temporary);
-		}
-	}
-
-	private static void moveCreateOnly(Path temporary, Path destination) throws IOException {
-		try {
-			Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE);
-		} catch (AtomicMoveNotSupportedException unsupported) {
-			Files.move(temporary, destination);
-		}
 	}
 
 	private static void cleanupConsumedPayload(ClientStorage storage, String modpackId, Path payload, long expectedSize, String expectedHash) throws IOException {

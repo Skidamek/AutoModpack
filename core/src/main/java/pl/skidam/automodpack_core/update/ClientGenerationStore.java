@@ -30,7 +30,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 
-/** Persistent immutable client copies of complete server generation records. */
+/** Persistent immutable client snapshots of downloaded generation records. The server store is compact; client snapshots remain complete so local history and cached switching work without server access. */
 public final class ClientGenerationStore {
 	private final ClientStorage storage;
 

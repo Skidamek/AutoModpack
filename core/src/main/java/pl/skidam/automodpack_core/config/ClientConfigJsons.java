@@ -10,7 +10,6 @@ public class ClientConfigJsons {
 		public boolean syncAutoModpackVersion = true;
 		public boolean syncLoaderVersion = true;
 		public boolean playMusic = true;
-		public boolean reviewUpdates = true;
 
 		public ClientConfigFieldsV3() {}
 
@@ -21,7 +20,6 @@ public class ClientConfigJsons {
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
 			this.syncLoaderVersion = source.syncLoaderVersion;
 			this.playMusic = source.playMusic;
-			this.reviewUpdates = source.reviewUpdates;
 		}
 	}
 }

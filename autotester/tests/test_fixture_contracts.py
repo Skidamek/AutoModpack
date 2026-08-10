@@ -272,6 +272,38 @@ def test_record_only_staging_does_not_replace_active_state(make_ctx):
     assert json.loads(records[0].read_text())["modpackName"] == "Pack B"
 
 
+def test_record_only_staging_links_same_pack_history(make_ctx):
+    ctx = make_ctx(modpack_name="Pack B", marker_rel=Path("config/marker.json"))
+    runner._v_stage_modpack(
+        ctx,
+        {
+            "recordOnly": True,
+            "packId": "packbbb",
+            "packName": "Pack B",
+            "patchNotes": "Pack B root.",
+            "files": [{"path": "config/b.txt", "content": "b"}],
+        },
+    )
+    runner._v_stage_modpack(
+        ctx,
+        {
+            "recordOnly": True,
+            "packId": "packbbb",
+            "packName": "Pack B",
+            "patchNotes": "Pack B update.",
+            "files": [{"path": "config/b.txt", "content": "b2"}],
+        },
+    )
+
+    records = [
+        json.loads(path.read_text())
+        for path in (ctx.game_dir / "automodpack/client/records").glob("*/manifest.json")
+    ]
+    records.sort(key=lambda manifest: manifest["generation"]["createdAt"])
+    assert records[1]["generation"]["parentGenerationId"] == records[0]["generation"]["generationId"]
+    assert [entry["patchNotes"] for entry in records[1]["patchNotesHistory"]] == ["Pack B root.", "Pack B update."]
+
+
 def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     ctx = make_ctx()
     local = {

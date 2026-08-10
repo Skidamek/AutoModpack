@@ -38,7 +38,6 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.LocalModArchive;
 import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -116,29 +115,6 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public SelectedModpackTarget getSelectedTarget() {
 		return Objects.requireNonNull(selectedTarget, "Selected modpack target is unavailable");
-	}
-
-	/** The explicit local-mod review is available only before the first generation exists. */
-	public boolean isFreshInstall() {
-		try {
-			return storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS);
-		} catch (IOException e) {
-			throw new IllegalStateException("Could not determine whether this is a fresh modpack install", e);
-		}
-	}
-
-	public LocalModArchive.Snapshot localModCandidates() throws IOException {
-		if (!isFreshInstall()) return new LocalModArchive.Snapshot(List.of());
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			return LocalModArchive.candidates(storage, THIS_MOD_JAR, cache);
-		}
-	}
-
-	public void archiveLocalMods(List<LocalModArchive.ArchiveEntry> selected) throws IOException {
-		if (!isFreshInstall()) throw new IOException("Local mod cleanup is available only during a fresh modpack install");
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			LocalModArchive.archive(storage, selected, cache);
-		}
 	}
 
 	public String getPatchNotes() {
@@ -313,8 +289,7 @@ public class ModpackUpdater implements AutoCloseable {
 				fullDownload = true;
 				startSourceFetch();
 				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
-				if (!clientConfig.reviewUpdates) startConfirmedUpdate();
-				else new ScreenManager().welcome(this);
+				new ScreenManager().welcome(this);
 			} else {
 				// Handle existing modpack
 				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, storage);
@@ -358,24 +333,7 @@ public class ModpackUpdater implements AutoCloseable {
 				LOGGER.info("Preloaded {} complete modpack objects in {}ms", targetSet.size(), System.currentTimeMillis() - start);
 			}
 		}
-		if (clientConfig.reviewUpdates) {
-			LOGGER.info("Preload acquired the complete selected target but kept the active projection unchanged because reviewUpdates=true");
-			return;
-		}
-		applyPreloadedTarget(start);
-	}
-
-	private void applyPreloadedTarget(long start) throws Exception {
-		ClientUpdatePlanBuilder.PreparedPlan prepared;
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
-			prepared = planBuilder.buildPlan(new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, true), cache, modCache);
-		}
-		LOGGER.info("Preload reviewUpdates=false; applying the prepared selected-target update before the game starts");
-		recordChangelogs(prepared, selectedTarget);
-		ApplyResult applyResult = applyPreparedPlan(prepared, selectedTarget);
-		changelogs.setRestartReasons(applyResult.reasonDescriptions());
-		LOGGER.info("Preload applied the selected target transaction successfully; required restart: {} took {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
-		restartAfterApply(applyResult);
+		LOGGER.info("Preload acquired the complete selected target; active projection remains unchanged until player review");
 	}
 
 	private static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uniqueObjects(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
@@ -773,7 +731,7 @@ public class ModpackUpdater implements AutoCloseable {
 		for (UpdatePreview.Entry entry : applied.entries()) {
 			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
 			switch (entry.kind()) {
-				case ADDED, CHANGED, RESTORED_BASELINE -> changelogs.recordChanged(file, mainPageUrls.getOrDefault(file, List.of()));
+				case ADDED, CHANGED -> changelogs.recordChanged(file, mainPageUrls.getOrDefault(file, List.of()));
 				case REMOVED -> changelogs.recordRemoved(file, mainPageUrls.getOrDefault(file, List.of()));
 				default -> {
 				}
@@ -859,11 +817,11 @@ public class ModpackUpdater implements AutoCloseable {
 				: PreviewRequestResult.PREVIEW_NOT_SHOWN;
 	}
 
-	/** A review is required for first install, a changed generation identity, or any plan impact when enabled by the client. */
+	/** A review is required for first install, a changed generation identity, or any plan impact. */
 	private boolean requiresPlayerReview(ClientUpdatePlanBuilder.PreparedPlan prepared, boolean firstInstall) throws IOException {
 		ModpackJsons.ModpackContentFields installed = storedTarget();
 		GenerationTarget installedTarget = installed == null ? null : GenerationTarget.fromFlat(installed);
-		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared), clientConfig.reviewUpdates);
+		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared));
 	}
 
 	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */

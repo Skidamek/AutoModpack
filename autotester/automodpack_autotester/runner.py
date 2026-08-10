@@ -1048,14 +1048,21 @@ def _sha1(path: Path) -> str:
         return hashlib.file_digest(f, "sha1").hexdigest()
 
 
-def _staged_generation_id(modpack_id: str, created_at: str, state_digest: str, ledger_digest: str, patch_notes: str = "") -> str:
+def _staged_generation_id(
+    modpack_id: str,
+    created_at: str,
+    state_digest: str,
+    ledger_digest: str,
+    patch_notes: str = "",
+    parent_generation_id: str = "",
+) -> str:
     notes_digest = hashlib.sha1(patch_notes.encode("utf-8")).hexdigest()
     return (
         CanonicalEncoder()
         .string("automodpack-generation-v1")
         .integer(1)
         .string(modpack_id)
-        .string("")
+        .string(parent_generation_id)
         .string(created_at)
         .string(state_digest)
         .string(ledger_digest)
@@ -1116,6 +1123,7 @@ def _write_staged_generation(
     client_root: Path | None = None,
     modpack_name: str | None = None,
     patch_notes: str = "",
+    parent_generation_id: str = "",
     editable_paths: set[str] | frozenset[str] = frozenset(),
 ) -> dict:
     files = []
@@ -1147,7 +1155,8 @@ def _write_staged_generation(
     state_digest = _staged_state_digest(ctx, modpack_id, files, modpack_name)
     provisional_ledger_digest = _staged_ledger_digest(modpack_id, ledger_entries)
     created_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
-    generation_id = _staged_generation_id(modpack_id, created_at, state_digest, provisional_ledger_digest, patch_notes)
+    client_root = client_root or root.parent
+    generation_id = _staged_generation_id(modpack_id, created_at, state_digest, provisional_ledger_digest, patch_notes, parent_generation_id)
     for entry in ledger_entries:
         entry["firstPublishedGenerationId"] = generation_id
         entry["lastPublishedGenerationId"] = generation_id
@@ -1190,7 +1199,7 @@ def _write_staged_generation(
         "generation": {
             "schemaVersion": 1,
             "generationId": generation_id,
-            "parentGenerationId": "",
+            "parentGenerationId": parent_generation_id,
             "createdAt": created_at,
             "stateDigest": state_digest,
             "ledgerDigest": provisional_ledger_digest,
@@ -1199,7 +1208,12 @@ def _write_staged_generation(
             "rollbackTargetGenerationId": "",
         },
     }
-    client_root = client_root or root.parent
+    if parent_generation_id:
+        parent_manifest_path = client_root / "records" / parent_generation_id / "manifest.json"
+        parent_manifest = json.loads(parent_manifest_path.read_text(encoding="utf-8"))
+        parent_generation = parent_manifest["generation"]
+        parent_history = parent_manifest.get("patchNotesHistory") or [_staged_patch_note_entry(parent_generation)]
+        manifest["patchNotesHistory"] = [*parent_history, _staged_patch_note_entry(manifest["generation"])]
     generation_path = client_root / "records" / generation_id / "manifest.json"
     generation_path.parent.mkdir(parents=True, exist_ok=True)
     generation_path.write_text(json.dumps(manifest, indent=2) + "\n")
@@ -1210,6 +1224,34 @@ def _write_staged_generation(
         if not object_path.is_file():
             shutil.copy2(root / entry["logicalPath"], object_path)
     return {"generationId": generation_id, "stateDigest": state_digest, "ledgerDigest": provisional_ledger_digest}
+
+
+def _staged_patch_note_entry(generation: dict) -> dict:
+    return {
+        "schemaVersion": generation["schemaVersion"],
+        "generationId": generation["generationId"],
+        "parentGenerationId": generation["parentGenerationId"],
+        "createdAt": generation["createdAt"],
+        "patchNotes": generation["patchNotes"],
+        "patchNotesDigest": generation["patchNotesDigest"],
+    }
+
+
+def _latest_staged_generation_id(client_root: Path, modpack_id: str) -> str:
+    records_root = client_root / "records"
+    candidates = []
+    if not records_root.is_dir():
+        return ""
+    for path in records_root.glob("*/manifest.json"):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            generation = manifest.get("generation")
+            generation_id = str(generation.get("generationId", "")) if isinstance(generation, dict) else ""
+            if manifest.get("modpackId") == modpack_id and generation_id:
+                candidates.append((str(generation.get("createdAt", "")), generation_id))
+        except (OSError, ValueError, TypeError):
+            continue
+    return max(candidates)[1] if candidates else ""
 
 
 @verb("stage_modpack")
@@ -1235,6 +1277,7 @@ def _v_stage_modpack(ctx: Context, step):
     client_root = automodpack / "client"
     data_root = _ensure_client_data_root(game)
     root = client_root / "staging" / modpack_id if record_only else client_root / "active"
+    parent_generation_id = _latest_staged_generation_id(client_root, modpack_id) if record_only else ""
     if root.exists():
         shutil.rmtree(root)
     if not record_only:
@@ -1303,6 +1346,7 @@ def _v_stage_modpack(ctx: Context, step):
         client_root=client_root,
         modpack_name=modpack_name,
         patch_notes=str(step.get("patchNotes", "")),
+        parent_generation_id=parent_generation_id,
         editable_paths=editable_paths,
     )
     if record_only:

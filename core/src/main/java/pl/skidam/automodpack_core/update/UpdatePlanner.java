@@ -158,7 +158,7 @@ public final class UpdatePlanner {
 			if (!input.availableBaselineObjects().contains(baselineHash)) continue;
 			if (matches(state, baselineHash, baseline.size)) continue;
 			operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, baselineHash, baseline.size, current.sha1()));
-			projected.put(key, new FileState(baselineHash, baseline.size, true, state.mod()));
+			projected.put(key, new FileState(baselineHash, baseline.size, true));
 			restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
 
@@ -229,11 +229,11 @@ public final class UpdatePlanner {
 			boolean overwriteEditable = item.editable && item.overwriteEditable && installedHashChanged;
 			FileState overlay = item.editable && !overwriteEditable ? input.editableOverlays().get(relative) : null;
 			if (overlay != null && overlay.regularFile() && !matches(projected.get(new FileKey(Root.OVERLAY, relative)), overlay.sha1(), overlay.size()))
-				install(operations, projected, new FileKey(Root.OVERLAY, relative), overlay.sha1(), overlay.size(), overlay.mod());
+				install(operations, projected, new FileKey(Root.OVERLAY, relative), overlay.sha1(), overlay.size());
 			if (overlay == null && projected.containsKey(new FileKey(Root.OVERLAY, relative)))
 				delete(operations, projected, new FileKey(Root.OVERLAY, relative), projected.get(new FileKey(Root.OVERLAY, relative)).sha1());
 			if (!matches(existing, item.sha1, parseSize(item.size)))
-				install(operations, projected, modpackKey, item.sha1, parseSize(item.size), activeMod);
+				install(operations, projected, modpackKey, item.sha1, parseSize(item.size));
 
 			boolean copyToLive = !activeMod || forceCopyPaths.contains(relative) || overlay != null;
 			FileKey liveKey = liveKey(item);
@@ -245,7 +245,7 @@ public final class UpdatePlanner {
 					String liveHash = overlay == null ? item.sha1 : overlay.sha1();
 					long liveSize = overlay == null ? parseSize(item.size) : overlay.size();
 					if (!matches(live, liveHash, liveSize)) {
-						install(operations, projected, liveKey, liveHash, liveSize, activeMod);
+						install(operations, projected, liveKey, liveHash, liveSize);
 						if (activeMod) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
 					}
 				}
@@ -364,7 +364,7 @@ public final class UpdatePlanner {
 					continue;
 				}
 				String expectedExistingHash = previous == null ? null : previous.sha1();
-				install(operations, projected, key, copy.sha1(), copy.size(), true, expectedExistingHash);
+				install(operations, projected, key, copy.sha1(), copy.size(), expectedExistingHash);
 				restartReasons.add(RestartReason.FIXED_NESTED_MODS);
 			}
 		}
@@ -395,7 +395,6 @@ public final class UpdatePlanner {
 		Set<ModInfo> keep = new HashSet<>();
 		for (ModInfo standard : sortedStandard) if (!duplicates.containsValue(standard)) addDependencies(standard, sortedStandard, keep);
 		Set<String> idsToKeep = keep.stream().flatMap(mod -> mod.ids().stream()).collect(Collectors.toSet());
-		Set<String> pathsToKeep = keep.stream().map(mod -> normalize(mod.relativePath())).collect(Collectors.toSet());
 		List<Conflict> conflicts = new ArrayList<>();
 
 		for (var duplicate : duplicates.entrySet()) {
@@ -409,10 +408,8 @@ public final class UpdatePlanner {
 			boolean sourceNeedsDisposition = !oldKey.equals(targetKey) || !keepStandard || !targetAlreadyMatches;
 			if (sourceNeedsDisposition) conflicts.add(conflict(modpackId, target, standard, owned ? ConflictAction.REMOVE_OWNED : ConflictAction.QUARANTINE));
 			if (keepStandard) {
-				String targetPath = normalize(target.relativePath());
-				pathsToKeep.add(targetPath);
 				if (!targetAlreadyMatches) {
-					install(operations, projected, targetKey, target.sha1(), target.size(), true,
+					install(operations, projected, targetKey, target.sha1(), target.size(),
 							oldKey.equals(targetKey) ? standard.sha1() : null);
 					restartReasons.add(RestartReason.REMOVED_DUPLICATE_MODS);
 				}
@@ -479,14 +476,14 @@ public final class UpdatePlanner {
 		return new FileKey(Root.GAME_DIR, relative);
 	}
 
-	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size, boolean mod) {
-		install(operations, projected, key, hash, size, mod, null);
+	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size) {
+		install(operations, projected, key, hash, size, null);
 	}
 
-	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size, boolean mod,
+	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size,
 			String expectedExistingHash) {
 		operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, hash, size, expectedExistingHash));
-		projected.put(key, new FileState(hash, size, true, mod));
+		projected.put(key, new FileState(hash, size, true));
 	}
 
 	private static void delete(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String expectedHash) {
