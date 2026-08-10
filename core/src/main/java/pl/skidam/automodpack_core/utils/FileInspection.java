@@ -143,7 +143,7 @@ public class FileInspection {
 	}
 
 	private static boolean nestedModHasAnyId(Path path, Set<String> rootIds) {
-		try (InputStream is = FileStreams.open(path)) {
+		try (InputStream is = Files.newInputStream(path)) {
 			Mod nested = readModFromStream(path, is);
 			return nested != null && !Collections.disjoint(rootIds, nested.IDs());
 		} catch (IOException e) {
@@ -159,7 +159,7 @@ public class FileInspection {
 	private static boolean isJarInvalid(Path file) {
 		if (file == null || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return true;
 		if (file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")) return false;
-		try (InputStream input = FileStreams.open(file)) {
+		try (InputStream input = Files.newInputStream(file)) {
 			int first = input.read();
 			int second = input.read();
 			int third = input.read();
@@ -187,7 +187,7 @@ public class FileInspection {
 		try (Stream<Path> walk = Files.walk(parentFs.getPath("/"))) {
 			for (Path path : walk.toList()) {
 				if (path.toString().endsWith(".jar") && !path.equals(parentFs.getPath("/"))) {
-					try (InputStream is = FileStreams.open(path)) {
+					try (InputStream is = Files.newInputStream(path)) {
 						Mod nested = readModFromStream(path, is);
 						if (nested != null) nestedMods.add(nested);
 					} catch (IOException e) {
@@ -445,7 +445,7 @@ public class FileInspection {
 	}
 
 	private static void collectNestedJarServices(Path nestedJarPath, Set<String> known, Set<String> found, boolean stopAtFirst) {
-		try (InputStream is = FileStreams.open(nestedJarPath);
+		try (InputStream is = Files.newInputStream(nestedJarPath);
 				BufferedInputStream bis = new BufferedInputStream(is);
 				ZipInputStream zip = new ZipInputStream(bis)) {
 
