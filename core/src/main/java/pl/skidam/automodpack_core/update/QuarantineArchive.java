@@ -18,6 +18,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.ConflictAction;
@@ -256,7 +257,7 @@ public final class QuarantineArchive {
 			throw new IOException("Client quarantine mod IDs are not canonical");
 		if (entry.sourcePath == null || !UpdatePlanner.normalize(entry.sourcePath).equals(entry.sourcePath) || entry.targetPath == null || !UpdatePlanner.normalize(entry.targetPath).equals(entry.targetPath))
 			throw new IOException("Client quarantine paths are invalid");
-		if (!entry.sourcePath.startsWith("mods/") || !entry.targetPath.startsWith("mods/")) throw new IOException("Client quarantine path is outside the mods directory");
+		if (!ModpackPathPolicy.isModPath(entry.sourcePath) || !ModpackPathPolicy.isModPath(entry.targetPath)) throw new IOException("Client quarantine path is outside the mods directory");
 		validateHash(entry.sourceHash, "quarantine source hash");
 		validateHash(entry.targetHash, "quarantine target hash");
 		if (entry.sourceSize < 0 || entry.targetSize < 0 || entry.sourceGenerationId == null || (!entry.sourceGenerationId.isEmpty() && !HashUtils.isCanonicalSha1(entry.sourceGenerationId)))

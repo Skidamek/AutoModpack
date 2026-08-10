@@ -13,12 +13,11 @@ import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class HashUtils {
+	public static final int SHA1_HEX_LENGTH = 40;
 	private static final String SHA_1 = "SHA-1";
-	private static final Pattern SHA1_PATTERN = Pattern.compile("[0-9a-fA-F]{40}");
 
 	private HashUtils() {}
 
@@ -47,7 +46,12 @@ public final class HashUtils {
 
 	/** Returns whether {@code value} is a 40-character hexadecimal SHA-1 digest. */
 	public static boolean isSha1(String value) {
-		return value != null && SHA1_PATTERN.matcher(value).matches();
+		if (value == null || value.length() != SHA1_HEX_LENGTH) return false;
+		for (int index = 0; index < value.length(); index++) {
+			char character = value.charAt(index);
+			if (!(character >= '0' && character <= '9') && !(character >= 'a' && character <= 'f') && !(character >= 'A' && character <= 'F')) return false;
+		}
+		return true;
 	}
 
 	/** Returns whether {@code value} is a lowercase 40-character hexadecimal SHA-1 digest. */
@@ -55,12 +59,18 @@ public final class HashUtils {
 		return isSha1(value) && value.equals(value.toLowerCase(Locale.ROOT));
 	}
 
+	/** Validates and returns the lowercase canonical representation of a SHA-1 digest. */
+	public static String normalizeSha1(String value) {
+		if (!isSha1(value)) throw new IllegalArgumentException("Invalid SHA-1 digest");
+		return value.toLowerCase(Locale.ROOT);
+	}
+
 	/** The {@link #getHash} of every {@code .jar} file directly in {@code dir}; empty if it isn't a directory. */
 	public static Set<String> getJarHashes(Path dir) {
 		Set<String> hashes = new HashSet<>();
 		if (dir == null || !Files.isDirectory(dir)) return hashes;
 		try (Stream<Path> stream = Files.list(dir)) {
-			stream.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().toLowerCase().endsWith(".jar")).forEach(jar -> {
+			stream.filter(JarUtils::isRegularJar).forEach(jar -> {
 				String hash = getHash(jar);
 				if (hash != null) hashes.add(hash);
 			});

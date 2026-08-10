@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -151,7 +152,7 @@ public final class UpdatePlanner {
 				continue;
 			}
 			if (!HashUtils.isSha1(baseline.objectHash) || baseline.size < 0) continue;
-			String baselineHash = baseline.objectHash.toLowerCase(Locale.ROOT);
+			String baselineHash = HashUtils.normalizeSha1(baseline.objectHash);
 			if (!input.availableBaselineObjects().contains(baselineHash)) continue;
 			if (matches(state, baselineHash, baseline.size)) continue;
 			operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, baselineHash, baseline.size, current.sha1()));
@@ -231,7 +232,7 @@ public final class UpdatePlanner {
 			if (!matches(existing, item.sha1, parseSize(item.size)))
 				install(operations, projected, modpackKey, item.sha1, parseSize(item.size));
 
-			boolean copyToLive = !"mod".equals(item.type) || forceCopyPaths.contains(relative) || overlay != null;
+			boolean copyToLive = !ModpackContentType.MOD.equals(item.type) || forceCopyPaths.contains(relative) || overlay != null;
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {
 				FileState live = projected.get(liveKey);
@@ -242,7 +243,7 @@ public final class UpdatePlanner {
 					long liveSize = overlay == null ? parseSize(item.size) : overlay.size();
 					if (!matches(live, liveHash, liveSize)) {
 						install(operations, projected, liveKey, liveHash, liveSize);
-						if ("mod".equals(item.type)) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
+						if (ModpackContentType.MOD.equals(item.type)) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
 					}
 				}
 			}

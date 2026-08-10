@@ -30,6 +30,8 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -47,6 +49,8 @@ import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
@@ -86,11 +90,11 @@ public class ModpackUpdater implements AutoCloseable {
 
 		public RecoveryFile {
 			logicalPath = UpdatePlanner.normalize(logicalPath);
-			if (sha1 == null || !sha1.matches("[0-9a-fA-F]{40}")) throw new IllegalArgumentException("Recovery file SHA-1 is invalid");
-			sha1 = sha1.toLowerCase(Locale.ROOT);
+			if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Recovery file SHA-1 is invalid");
+			sha1 = HashUtils.normalizeSha1(sha1);
 			if (size < 0) throw new IllegalArgumentException("Recovery file size is invalid");
 			sourceGenerationId = sourceGenerationId == null ? "" : sourceGenerationId;
-			if (!sourceGenerationId.isEmpty() && !sourceGenerationId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Recovery source generation ID is invalid");
+			if (!sourceGenerationId.isEmpty() && !HashUtils.isCanonicalSha1(sourceGenerationId)) throw new IllegalArgumentException("Recovery source generation ID is invalid");
 			preservedAt = preservedAt == null ? "" : preservedAt;
 			if (!preservedAt.isEmpty()) Instant.parse(preservedAt);
 		}
@@ -225,12 +229,8 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private static void addSourceFetchData(Map<String, FetchManager.FetchData> unique, String file, String sha1, String murmur, String size, String type) {
-		if (!isSourceFetchType(type) || sha1 == null || sha1.isBlank()) return;
+		if (!ModpackContentType.isSourceFetchable(type) || sha1 == null || sha1.isBlank()) return;
 		unique.putIfAbsent(sha1, new FetchManager.FetchData(file, sha1, murmur, size, type));
-	}
-
-	private static boolean isSourceFetchType(String type) {
-		return "mod".equals(type) || "shader".equals(type) || "resourcepack".equals(type);
 	}
 
 	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
@@ -509,7 +509,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 		// 1. Collect hashes of existing standard mods into a Set for fast lookup
 		try (Stream<Path> standardModsStream = Files.list(storage.modsDirectory())) {
-			standardModsHashes = standardModsStream.filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")) // Check extension/type before
+			standardModsHashes = standardModsStream.filter(JarUtils::isRegularJar) // Check extension/type before
 					.map(cache::getHashOrNull) // Safe wrapper for IOException
 					.filter(Objects::nonNull).collect(Collectors.toSet()); // Use Set for O(1) performance
 		} catch (IOException e) {
@@ -518,11 +518,11 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 
 		// 2. Filter modpack mods excluding those already present in standard mods
-		Path activeModsDirectory = storage.activePath("mods");
+		Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
 		if (Files.exists(activeModsDirectory)) {
 			try (Stream<Path> activeMods = Files.list(activeModsDirectory)) {
 				final Set<String> finalStandardModsHashes = standardModsHashes;
-				modpackMods = activeMods.filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")).filter(mod -> {
+				modpackMods = activeMods.filter(JarUtils::isRegularJar).filter(mod -> {
 					String modHash = cache.getHashOrNull(mod);
 					// Only load if hash is valid AND not found in standard set
 					return modHash != null && !finalStandardModsHashes.contains(modHash);

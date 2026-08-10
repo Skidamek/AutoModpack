@@ -20,7 +20,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -33,6 +32,7 @@ import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectedTreeComposer;
@@ -50,11 +50,11 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 /** Validates and applies the one journaled client operation plan. */
 public final class UpdateTransactionExecutor {
-	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
 	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
 			.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
 	private final Context context;
@@ -244,7 +244,7 @@ public final class UpdateTransactionExecutor {
 		ClientStorageJsons.ClientGenerationStateFields state = context.storage().readActiveState();
 		if (state == null) return;
 		if (!ModpackId.isValid(state.modpackId)) throw new IOException("Active client state modpack ID is invalid");
-		if (!SHA1.matcher(state.generationId).matches())
+		if (!HashUtils.isSha1(state.generationId))
 			throw new IOException("Active client state identity is invalid");
 		GenerationRecord stateRecord = new ClientGenerationStore(context.storage()).read(state.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
@@ -304,8 +304,8 @@ public final class UpdateTransactionExecutor {
 			if (operation.root() != Root.GAME_DIR || (operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE))
 				throw new IOException("Self-update operations are restricted to JAR replacement in the mods directory");
 			Path relative = Path.of(normalizeOperationPath(operation.relativePath()));
-			if (relative.getNameCount() != 2 || !relative.getName(0).toString().equalsIgnoreCase("mods")
-					|| !relative.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+			if (relative.getNameCount() != 2 || !relative.getName(0).toString().equalsIgnoreCase(ModpackPathPolicy.MODS_ROOT)
+					|| !JarUtils.hasJarExtension(relative))
 				throw new IOException("Self-update target must be a direct JAR child of the mods directory");
 		} else if (purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			if (operation.root() != Root.PROJECTION && operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR)
@@ -344,8 +344,8 @@ public final class UpdateTransactionExecutor {
 			if (entry == null || entry.root() == null) throw new IOException("Incomplete projected final-state entry");
 			if (purpose == UpdateTransaction.Purpose.SELF_UPDATE) {
 				Path selfUpdatePath = Path.of(normalizeOperationPath(entry.relativePath()));
-				if (entry.root() != Root.GAME_DIR || selfUpdatePath.getNameCount() != 2 || !selfUpdatePath.getName(0).toString().equalsIgnoreCase("mods")
-						|| !selfUpdatePath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+				if (entry.root() != Root.GAME_DIR || selfUpdatePath.getNameCount() != 2 || !selfUpdatePath.getName(0).toString().equalsIgnoreCase(ModpackPathPolicy.MODS_ROOT)
+						|| !JarUtils.hasJarExtension(selfUpdatePath))
 					throw new IOException("Self-update projected state is restricted to direct JAR children of the mods directory");
 			}
 			String relative = normalizeOperationPath(entry.relativePath());
@@ -439,7 +439,7 @@ public final class UpdateTransactionExecutor {
 		for (Conflict conflict : sorted) {
 			if (conflict == null || conflict.action() == null || !transaction.modpackId.equals(conflict.modpackId()) || !conflictIds.add(conflict.conflictId()))
 				throw new IOException("Conflict identity is invalid");
-			if (!conflict.sourcePath().startsWith("mods/") || !conflict.targetPath().startsWith("mods/") || !targetPaths.contains(conflict.targetPath()))
+			if (!ModpackPathPolicy.isModPath(conflict.sourcePath()) || !ModpackPathPolicy.isModPath(conflict.targetPath()) || !targetPaths.contains(conflict.targetPath()))
 				throw new IOException("Conflict path is outside the selected target mods");
 			validateHash(conflict.sourceHash(), "conflict source SHA-1");
 			validateHash(conflict.targetHash(), "conflict target SHA-1");
@@ -867,7 +867,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private static void validateHash(String hash, String description) throws IOException {
-		if (hash == null || !SHA1.matcher(hash).matches()) throw new IOException("Invalid " + description);
+		if (!HashUtils.isSha1(hash)) throw new IOException("Invalid " + description);
 	}
 
 	private static int compareFileKeys(FileKey first, FileKey second) {

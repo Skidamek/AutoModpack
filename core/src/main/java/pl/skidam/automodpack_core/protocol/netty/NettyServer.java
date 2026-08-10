@@ -35,6 +35,7 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public class NettyServer {
 
@@ -85,22 +86,13 @@ public class NettyServer {
 	public Optional<Path> getPath(String requestKey) {
 		if (requestKey == null) return Optional.empty();
 		if (requestKey.isEmpty()) return regularPath(paths.get(""));
-		if (!isSha1(requestKey)) return Optional.empty();
+		if (!HashUtils.isSha1(requestKey)) return Optional.empty();
 
-		return regularPath(paths.get(requestKey.toLowerCase(Locale.ROOT)));
+		return regularPath(paths.get(HashUtils.normalizeSha1(requestKey)));
 	}
 
 	private static Optional<Path> regularPath(Path path) {
 		return path != null && !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ? Optional.of(path) : Optional.empty();
-	}
-
-	private static boolean isSha1(String value) {
-		if (value.length() != 40) return false;
-		for (int i = 0; i < value.length(); i++) {
-			char c = value.charAt(i);
-			if (!(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') && !(c >= 'A' && c <= 'F')) return false;
-		}
-		return true;
 	}
 
 	public synchronized Optional<ChannelFuture> start() {

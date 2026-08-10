@@ -11,7 +11,6 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -21,29 +20,15 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 /** A shared content-keyed mod inspection cache backed by immutable loose records. */
 public class ModFileCache implements AutoCloseable {
 
-	private static final Map<Path, ModFileCache> INSTANCES = new HashMap<>();
-	private static final Object GLOBAL_LOCK = new Object();
+	private static final SharedCacheRegistry<ModFileCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final String RECORD_SUFFIX = ".json";
 
 	private final Path recordsDirectory;
 	private final Map<String, ModRecord> hotRecords = new HashMap<>();
-	private final AtomicInteger refCount = new AtomicInteger(1);
 	private final Object[] locks = new Object[64];
 
 	public static ModFileCache open(Path path) throws IOException {
-		Path absPath = path.toAbsolutePath().normalize();
-		Files.createDirectories(absPath);
-		synchronized (GLOBAL_LOCK) {
-			ModFileCache existing = INSTANCES.get(absPath);
-			if (existing != null) {
-				existing.refCount.incrementAndGet();
-				return existing;
-			}
-
-			ModFileCache newCache = new ModFileCache(absPath);
-			INSTANCES.put(absPath, newCache);
-			return newCache;
-		}
+		return REGISTRY.acquire(path, ModFileCache::new);
 	}
 
 	private ModFileCache(Path recordsDirectory) {
@@ -134,12 +119,7 @@ public class ModFileCache implements AutoCloseable {
 
 	@Override
 	public void close() {
-		synchronized (GLOBAL_LOCK) {
-			if (refCount.decrementAndGet() <= 0) {
-				hotRecords.clear();
-				INSTANCES.remove(recordsDirectory, this);
-			}
-		}
+		if (REGISTRY.release(recordsDirectory, this)) hotRecords.clear();
 	}
 
 	private static final class ModRecord {

@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.utils;
 
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,7 +41,7 @@ public record SemanticVersion(int major, int minor, int patch, String label, int
 		int preVer = 1; // Default to 1 if no number (e.g. "beta")
 
 		if (preMatcher.find()) {
-			label = preMatcher.group(1).toLowerCase();
+			label = preMatcher.group(1).toLowerCase(Locale.ROOT);
 			String numPart = preMatcher.group(2);
 			if (numPart != null) preVer = Integer.parseInt(numPart);
 		}

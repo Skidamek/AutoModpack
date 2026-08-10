@@ -63,7 +63,7 @@ public final class DetachedUpdateHelper {
 		if (!guard.safe()) return;
 		try (Stream<Path> files = Files.list(directory)) {
 			for (Path file : files.filter(path -> path.getFileName().toString().startsWith("automodpack-update-helper-")
-					&& path.getFileName().toString().endsWith(".jar")
+					&& JarUtils.hasJarExtension(path)
 					&& (guard.pendingTransactionId() == null || !path.getFileName().toString().contains(guard.pendingTransactionId()))).toList()) {
 				try {
 					Files.deleteIfExists(file);
