@@ -232,6 +232,23 @@ def test_error_screen_dispatch_requires_a_logged_throwable():
     )
 
     assert "public void error(Throwable throwable, String... args)" in screen_manager
-    assert 'LOGGER.error("Displaying AutoModpack error screen: {}",' in screen_manager
+    assert 'report(throwable, "Displaying AutoModpack error screen: " + Arrays.toString(args));' in screen_manager
+    assert screen_manager.count("LOGGER.error(") == 1
     assert "new ScreenManager().error(\"" not in dispatch_sources
     assert "ScreenManager.INSTANCE" not in dispatch_sources
+
+
+def test_inline_storage_cleanup_failure_is_logged_with_its_throwable():
+    project_root = Path(__file__).parents[2]
+    screen_manager = (
+        project_root
+        / "loader/core/src/main/java/pl/skidam/automodpack_loader_core/screen/ScreenManager.java"
+    ).read_text(encoding="utf-8")
+    storage_screen = (
+        project_root
+        / "src/main/java/pl/skidam/automodpack/client/ui/ClientStorageMaintenanceScreen.java"
+    ).read_text(encoding="utf-8")
+
+    assert "public void report(Throwable throwable, String context)" in screen_manager
+    assert 'LOGGER.error("AutoModpack client failure: {}", context, throwable);' in screen_manager
+    assert 'new ScreenManager().report(exception, "Client storage cleanup failed");' in storage_screen
