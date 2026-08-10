@@ -138,14 +138,23 @@ flow:
     name: deactivate while keeping the installed pack
     select: { text: Deactivate }
   - do: wait_for
-    name: return to the title after deactivation
-    until: { screen: Title Screen }
+    name: require a restart after deactivation
+    until: { screen: RestartScreen }
   - do: assert
     name: verify deactivation cleared active state
     that: { file_gone: automodpack/client/active-state.json }
   - do: assert
     name: verify deactivation restored the live client file
     that: { file_gone: config/amp-note-only.txt }
+  - do: click
+    name: accept the required deactivation restart
+    select: { role: button, index: 1 }
+  - do: wait_client_exit
+    name: wait for the deactivated client to close
+  - do: launch_client
+    name: relaunch without an active modpack
+  - do: wait_bridge
+    name: wait for the relaunched client test bridge
   - use: open_multiplayer
   - do: wait_for
     name: replace settings with the direct pack-manager entry while inactive

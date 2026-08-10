@@ -138,7 +138,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.chosenTags.addAll(initial.requestedTags());
 		this.excluded.addAll(initial.excludedGroups());
 		try {
-			this.resolution = expectedSelection == null && (initialSelection == null || pendingUpdater != null)
+		this.resolution = this.expectedSelection == null && initialSelection == null
 					? GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.current())
 					: GroupSelectionResolver.resolve(manifest, initial, ClientPlatform.current());
 		} catch (SelectionResolutionException e) {
@@ -230,11 +230,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int listTop = 64;
 		List<ManagementAction> managementActions = selectionAction == null ? managementActions() : List.of();
 		int managementRows = managementRowCount(managementActions.size());
-		// Move the complete bottom control block down with the larger list gap. This preserves the
-		// minimum-height page capacity while giving the configurable rows more visual separation.
+		int reservedManagementRows = Math.max(1, managementRows);
+		// Keep page breaks and list-to-control spacing stable when a flow hides the management row.
 		int actionY = this.height - 24;
 		int managementTop = actionY - managementRows * ROW_HEIGHT;
-		int listBottomWithoutPagination = managementTop - BOTTOM_CONTROLS_GAP;
+		int listBottomWithoutPagination = actionY - reservedManagementRows * ROW_HEIGHT - BOTTOM_CONTROLS_GAP;
 		int rowsWithoutPagination = Math.max(1, (listBottomWithoutPagination - listTop) / ROW_HEIGHT);
 		boolean showPagination = rows.size() > rowsWithoutPagination;
 		int paginationY = showPagination ? managementTop - ROW_HEIGHT : -1;
@@ -608,7 +608,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			}
 			return;
 		}
-		if (managerEntry && !activeModpack && localRecord != null) {
+		if (localRecord != null) {
 			startCachedSwitch(target);
 			return;
 		}

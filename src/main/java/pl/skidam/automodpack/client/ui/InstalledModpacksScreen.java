@@ -250,8 +250,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private void executeActiveRemovalLike(ModpackUpdater updater, boolean deactivation) {
 		try {
-			if ((deactivation ? updater.deactivateModpack() : updater.removeModpack()).success()) new ScreenManager().title();
-			else new ScreenManager().error("automodpack.error.critical", deactivation ? "automodpack.error.deactivationIncomplete" : "automodpack.error.removalIncomplete", "automodpack.error.logs");
+			if (!(deactivation ? updater.deactivateModpack() : updater.removeModpack()).success())
+				new ScreenManager().error("automodpack.error.critical", deactivation ? "automodpack.error.deactivationIncomplete" : "automodpack.error.removalIncomplete", "automodpack.error.logs");
 		} catch (Exception e) {
 			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 		} finally {

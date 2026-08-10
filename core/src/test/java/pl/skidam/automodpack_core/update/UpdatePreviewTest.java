@@ -49,7 +49,6 @@ class UpdatePreviewTest {
 		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.ADDED && entry.relativePath().equals("config/new.json")));
 		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.CHANGED && entry.relativePath().equals("config/changed.json")));
 		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.REMOVED && entry.relativePath().equals("config/old.json")));
-		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.PRESERVED_CAS && entry.relativePath().equals("config/old.json")));
 	}
 
 	@Test
@@ -62,9 +61,22 @@ class UpdatePreviewTest {
 
 		UpdatePreview preview = UpdatePreview.create(plan, Map.of(), target, null, false);
 
-		assertEquals(2, preview.entries().size());
-		assertEquals(List.of(new UpdatePreview.Entry(UpdatePreview.Kind.ADDED, Root.PROJECTION, "test/video.mp4", 9)), preview.displayEntries());
+		assertEquals(List.of(new UpdatePreview.Entry(UpdatePreview.Kind.ADDED, Root.PROJECTION, "test/video.mp4", 9)), preview.entries());
 		assertEquals(1, preview.summary().changedFiles());
+	}
+
+	@Test
+	void combinesDifferentPhysicalEffectsForOneLogicalPath() {
+		ModpackJsons.ModpackContentFields target = manifest();
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		UpdatePreview preview = new UpdatePreview(plan, List.of(
+				new UpdatePreview.Entry(UpdatePreview.Kind.REMOVED, Root.PROJECTION, "config/shared.json", 4),
+				new UpdatePreview.Entry(UpdatePreview.Kind.CHANGED, Root.GAME_DIR, "config/shared.json", 8)),
+				new UpdatePreview.GroupConsequences(Set.of(), Set.of(), Set.of()));
+
+		assertEquals(List.of(new UpdatePreview.Entry(UpdatePreview.Kind.CHANGED, Root.PROJECTION, "config/shared.json", 8)), preview.entries());
 	}
 
 	@Test
@@ -112,32 +124,32 @@ class UpdatePreviewTest {
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new ClientConfigJsons.ClientConfigFieldsV3()));
 		UpdatePreview preview = new UpdatePreview(plan, List.of(
-				new UpdatePreview.Entry(UpdatePreview.Kind.PRESERVED_CAS, Root.GAME_DIR, "config/shared.json", 1),
+				new UpdatePreview.Entry(UpdatePreview.Kind.PRESERVED_CHANGED, Root.GAME_DIR, "config/preserved.json", 1),
 				new UpdatePreview.Entry(UpdatePreview.Kind.CHANGED, Root.PROJECTION, "config/shared.json", 2),
 				new UpdatePreview.Entry(UpdatePreview.Kind.REMOVED, Root.GAME_DIR, "config/removed.json", 3)),
 				new UpdatePreview.GroupConsequences(Set.of("optional"), Set.of("main"), Set.of("stale")));
 
 		assertEquals(new UpdatePreview.Summary(1, 1, 1, 0, 1), preview.summary());
-		assertEquals(List.of(UpdatePreview.Kind.CHANGED, UpdatePreview.Kind.REMOVED, UpdatePreview.Kind.PRESERVED_CAS), preview.displayEntries().stream().map(UpdatePreview.Entry::kind).toList());
+		assertEquals(List.of(UpdatePreview.Kind.CHANGED, UpdatePreview.Kind.REMOVED, UpdatePreview.Kind.PRESERVED_CHANGED), preview.entries().stream().map(UpdatePreview.Entry::kind).toList());
 	}
 
 	@Test
 	void classifiesKindsForSummaryPrecedenceAndDisplay() {
 		assertEquals(UpdatePreview.SummaryBucket.CHANGED, UpdatePreview.Kind.ADDED.summaryBucket());
 		assertEquals(UpdatePreview.SummaryBucket.REMOVED, UpdatePreview.Kind.REMOVED.summaryBucket());
-		assertEquals(UpdatePreview.SummaryBucket.PRESERVED, UpdatePreview.Kind.PRESERVED_CAS.summaryBucket());
+		assertEquals(UpdatePreview.SummaryBucket.PRESERVED, UpdatePreview.Kind.PRESERVED_CHANGED.summaryBucket());
 		assertEquals(UpdatePreview.SummaryBucket.UNSAFE, UpdatePreview.Kind.UNSAFE.summaryBucket());
 		assertTrue(UpdatePreview.Kind.PRESERVED_OUTSIDE.isPreserved());
 		assertFalse(UpdatePreview.Kind.CHANGED.isPreserved());
 		assertEquals(UpdatePreview.SortBucket.UNSAFE, UpdatePreview.Kind.UNSAFE.sortBucket());
 		assertEquals(UpdatePreview.SortBucket.REMOVED, UpdatePreview.Kind.REMOVED.sortBucket());
 		assertEquals(UpdatePreview.SortBucket.CHANGED, UpdatePreview.Kind.CHANGED.sortBucket());
-		assertEquals(UpdatePreview.SortBucket.PRESERVED, UpdatePreview.Kind.PRESERVED_CAS.sortBucket());
+		assertEquals(UpdatePreview.SortBucket.PRESERVED, UpdatePreview.Kind.PRESERVED_CHANGED.sortBucket());
 		assertEquals("+ ", UpdatePreview.Kind.ADDED.displaySymbol());
 		assertEquals("~ ", UpdatePreview.Kind.CHANGED.displaySymbol());
 		assertEquals("- ", UpdatePreview.Kind.REMOVED.displaySymbol());
 		assertEquals("! ", UpdatePreview.Kind.UNSAFE.displaySymbol());
-		assertEquals("  ", UpdatePreview.Kind.PRESERVED_CAS.displaySymbol());
+		assertEquals("  ", UpdatePreview.Kind.PRESERVED_CHANGED.displaySymbol());
 	}
 
 	@Test
@@ -189,7 +201,7 @@ class UpdatePreviewTest {
 		UpdatePreview preview = UpdatePreview.create(plan, files, installed, null, true);
 
 		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.REMOVED && entry.relativePath().equals("config/removed.json")));
-		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.PRESERVED_CAS && entry.relativePath().equals("config/removed.json")));
+		assertEquals(0, preview.summary().preservedFiles());
 	}
 
 	@Test
