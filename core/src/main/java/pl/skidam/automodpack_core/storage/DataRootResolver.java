@@ -57,7 +57,7 @@ public final class DataRootResolver {
 
 	public static Location resolve(Path gameDirectory) {
 		Path gameRoot = Objects.requireNonNull(gameDirectory, "game directory").toAbsolutePath().normalize();
-		Path automodpackDirectory = gameRoot.resolve("automodpack").normalize();
+		Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
 		Path marker = automodpackDirectory.resolve("data-root.json").normalize();
 		try {
 			if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) return loadPinned(marker);

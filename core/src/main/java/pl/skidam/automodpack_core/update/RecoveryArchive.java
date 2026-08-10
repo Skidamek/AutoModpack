@@ -12,16 +12,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 /** A manifest of user-recoverable paths whose bytes are copied into an independent recovery archive. */
 public final class RecoveryArchive {
-	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
 	private static final Comparator<ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields> ENTRY_ORDER = Comparator
 			.comparing((ClientStorageJsons.ClientRecoveryArchiveFields.EntryFields entry) -> entry.logicalPath)
 			.thenComparing(entry -> entry.sha1).thenComparingLong(entry -> entry.size);
@@ -44,11 +44,11 @@ public final class RecoveryArchive {
 		Path archiveObjects = archiveRoot.resolve("objects").normalize();
 		Path archivedObject = archiveObjects.resolve(normalizedHash).normalize();
 		validateNoSymbolicLinkDescendants(archiveRoot, archivedObject);
-		if (!SmartFileUtils.isValidFile(archivedObject, size, normalizedHash)) {
+		if (!FileIntegrity.matches(archivedObject, size, normalizedHash)) {
 			Path object = storeRoot.resolve(normalizedHash).normalize();
 			validateNoSymbolicLinkDescendants(storeRoot, object);
-			if (!SmartFileUtils.isValidFile(object, size, normalizedHash)) throw new IOException("Recovery object is missing or corrupt: " + normalizedHash);
-			SmartFileUtils.copyVerifiedAtomic(object, archivedObject, size, normalizedHash);
+			if (!FileIntegrity.matches(object, size, normalizedHash)) throw new IOException("Recovery object is missing or corrupt: " + normalizedHash);
+			VerifiedFileTransfer.copyAtomic(object, archivedObject, size, normalizedHash);
 		}
 
 		ClientStorageJsons.ClientRecoveryArchiveFields archive = read(archiveRoot);
@@ -101,7 +101,7 @@ public final class RecoveryArchive {
 				throw new IOException("Recovery archive entry metadata is invalid");
 			Path object = archiveObjects.resolve(hash).normalize();
 			validateNoSymbolicLinkDescendants(archiveRoot, object);
-			if (!SmartFileUtils.isValidFile(object, entry.size, hash)) throw new IOException("Archived recovery object is missing or corrupt: " + hash);
+			if (!FileIntegrity.matches(object, entry.size, hash)) throw new IOException("Archived recovery object is missing or corrupt: " + hash);
 		}
 		sorted.sort(ENTRY_ORDER);
 		List<String> actualOrder = archive.entries.stream().map(entry -> entry.logicalPath + "\0" + entry.sha1.toLowerCase(Locale.ROOT) + "\0" + entry.size).toList();
@@ -126,7 +126,7 @@ public final class RecoveryArchive {
 
 	private static String requireOptionalGeneration(String value) throws IOException {
 		if (value == null || value.isEmpty()) return "";
-		if (!SHA1.matcher(value).matches() || !value.equals(value.toLowerCase(Locale.ROOT))) throw new IOException("Recovery source generation ID is invalid");
+		if (!HashUtils.isCanonicalSha1(value)) throw new IOException("Recovery source generation ID is invalid");
 		return value;
 	}
 
@@ -150,7 +150,7 @@ public final class RecoveryArchive {
 	}
 
 	private static String requireHash(String sha1) throws IOException {
-		if (sha1 == null || !SHA1.matcher(sha1).matches()) throw new IOException("Recovery object SHA-1 is invalid");
+		if (!HashUtils.isSha1(sha1)) throw new IOException("Recovery object SHA-1 is invalid");
 		return sha1.toLowerCase(Locale.ROOT);
 	}
 

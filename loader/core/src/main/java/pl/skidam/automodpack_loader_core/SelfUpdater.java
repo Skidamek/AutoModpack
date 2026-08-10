@@ -10,14 +10,15 @@ import java.util.List;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -162,7 +163,7 @@ public class SelfUpdater {
 
 	public static void installModVersion(ModrinthAPI automodpack) {
 		try {
-			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 			Path currentJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 			Path modsDirectory = storage.modsDirectory().toAbsolutePath().normalize();
 			if (!currentJar.getParent().equals(modsDirectory)) throw new IllegalStateException("Loaded AutoModpack JAR is not a direct child of the mods directory");
@@ -177,7 +178,7 @@ public class SelfUpdater {
 			downloadManager.cancelAllAndShutdown();
 
 			Path storeObject = storage.objectsDirectory().resolve(automodpack.SHA1Hash());
-			if (!SmartFileUtils.isValidFile(storeObject, automodpack.fileSize(), automodpack.SHA1Hash()))
+			if (!FileIntegrity.matches(storeObject, automodpack.fileSize(), automodpack.SHA1Hash()))
 				throw new IllegalStateException("Downloaded official AutoModpack JAR failed verification");
 			String currentHash = HashUtils.getHash(currentJar);
 			if (currentHash == null || !Files.isRegularFile(currentJar)) throw new IllegalStateException("Loaded AutoModpack JAR cannot be verified");

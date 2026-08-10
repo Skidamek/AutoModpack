@@ -13,9 +13,9 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.Preload;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
@@ -51,7 +51,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			new Preload();
 			progress.complete();
 
-			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 			Path activeModsDirectory = storage.activePath("mods");
 			if (!Files.isDirectory(activeModsDirectory)) return;
 

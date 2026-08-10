@@ -26,9 +26,6 @@ import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 
-import pl.skidam.automodpack_core.utils.LockFreeInputStream;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
-
 public class NetUtils {
 
 	// Magic numbers
@@ -142,13 +139,13 @@ public class NetUtils {
 
 	public static void saveCertificate(X509Certificate cert, Path path) throws Exception {
 		String certPem = "-----BEGIN CERTIFICATE-----\n" + formatBase64(cert.getEncoded()) + "-----END CERTIFICATE-----\n";
-		SmartFileUtils.createParentDirs(path);
+		if (path.getParent() != null) Files.createDirectories(path.getParent());
 		Files.writeString(path, certPem);
 	}
 
 	public static X509Certificate loadCertificate(Path path) throws Exception {
 		if (!Files.exists(path)) return null;
-		try (InputStream in = new LockFreeInputStream(path)) {
+		try (InputStream in = Files.newInputStream(path)) {
 			CertificateFactory cf = CertificateFactory.getInstance("X.509");
 			return (X509Certificate) cf.generateCertificate(in);
 		}
@@ -157,7 +154,7 @@ public class NetUtils {
 	public static void savePrivateKey(PrivateKey key, Path path) throws Exception {
 		PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(key.getEncoded());
 		String keyPem = "-----BEGIN PRIVATE KEY-----\n" + formatBase64(keySpec.getEncoded()) + "-----END PRIVATE KEY-----\n";
-		SmartFileUtils.createParentDirs(path);
+		if (path.getParent() != null) Files.createDirectories(path.getParent());
 		Files.writeString(path, keyPem);
 	}
 

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol.netty;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -192,17 +193,17 @@ public class NettyServer {
 			return;
 		}
 
-		if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
+		if (!Files.exists(SERVER_CERT_FILE) || !Files.exists(SERVER_PRIVATE_KEY_FILE)) {
 			KeyPair keyPair = NetUtils.generateKeyPair();
 			X509Certificate cert = NetUtils.selfSign(keyPair);
-			NetUtils.saveCertificate(cert, serverCertFile);
-			NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+			NetUtils.saveCertificate(cert, SERVER_CERT_FILE);
+			NetUtils.savePrivateKey(keyPair.getPrivate(), SERVER_PRIVATE_KEY_FILE);
 		}
 
-		X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
+		X509Certificate cert = NetUtils.loadCertificate(SERVER_CERT_FILE);
 		if (cert == null) throw new IllegalStateException("Server certificate couldn't be loaded");
 
-		sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
+		sslCtx = SslContextBuilder.forServer(SERVER_CERT_FILE.toFile(), SERVER_PRIVATE_KEY_FILE.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
 				.ciphers(Arrays.asList("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256")).sessionTimeout(1800).build();
 		certificateFingerprint = NetUtils.getFingerprint(cert);
 		if (certificateFingerprint != null) LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
@@ -220,7 +221,7 @@ public class NettyServer {
 		}
 
 		try {
-			ConfigTools.writeAtomic(serverConfigFile, serverConfig);
+			ConfigTools.writeAtomic(SERVER_CONFIG_FILE, serverConfig);
 		} catch (Exception e) {
 			LOGGER.error("Failed to save updated advertised endpoint", e);
 		}

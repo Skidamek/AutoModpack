@@ -42,10 +42,10 @@ import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
@@ -163,7 +163,7 @@ public final class EarlyServiceLayer {
 		if (!BOOTSTRAPPED.compareAndSet(false, true)) return;
 
 		try {
-			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 			Path activeModsDirectory = storage.activePath("mods");
 			if (!Files.isDirectory(activeModsDirectory)) return;
 

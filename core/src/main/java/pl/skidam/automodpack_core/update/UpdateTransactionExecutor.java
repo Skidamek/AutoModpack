@@ -47,8 +47,10 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.PreservationProof;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 /** Validates and applies the one journaled client operation plan. */
 public final class UpdateTransactionExecutor {
@@ -485,7 +487,7 @@ public final class UpdateTransactionExecutor {
 				|| !operation.expectedObjectHash().equalsIgnoreCase(projected.expectedHash()))))
 			throw new IOException("Install operation does not match projected final state");
 		Path source = context.storage().objectsDirectory().resolve(operation.expectedObjectHash()).normalize();
-		if (!source.startsWith(context.storage().objectsDirectory()) || !SmartFileUtils.isValidFile(source, operation.expectedSize(), operation.expectedObjectHash()))
+		if (!source.startsWith(context.storage().objectsDirectory()) || !FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash()))
 			throw new IOException("Required CAS object is missing or corrupt: " + operation.expectedObjectHash());
 	}
 
@@ -543,7 +545,7 @@ public final class UpdateTransactionExecutor {
 					GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies).write(context.storage());
 					context.storage().writeActiveState(transaction.modpackId, generation.targetGenerationId());
 				} else {
-					SmartFileUtils.deleteTree(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.targetGenerationId));
+					FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.targetGenerationId));
 					context.storage().clearActiveState();
 					Files.deleteIfExists(context.storage().baselineFile(transaction.modpackId));
 				}
@@ -596,13 +598,13 @@ public final class UpdateTransactionExecutor {
 			if (operation.operation() != OperationType.INSTALL_OBJECT || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
-			if (SmartFileUtils.isValidFile(target, operation.expectedSize(), operation.expectedObjectHash())) continue;
+			if (FileIntegrity.matches(target, operation.expectedSize(), operation.expectedObjectHash())) continue;
 			if (operation.expectedExistingHash() != null && Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
 				long size = Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) ? Files.size(target) : -1;
-				if (!SmartFileUtils.isValidFile(target, size, operation.expectedExistingHash())) throw new IOException("Restore target changed after planning: " + target);
+				if (!FileIntegrity.matches(target, size, operation.expectedExistingHash())) throw new IOException("Restore target changed after planning: " + target);
 			}
 			Path source = context.storage().objectsDirectory().resolve(operation.expectedObjectHash());
-			SmartFileUtils.copyVerifiedAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash());
+			VerifiedFileTransfer.copyAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash());
 		}
 		for (Operation operation : transaction.operations) {
 			if (operation.operation() != OperationType.DELETE || operation.root() == Root.PROJECTION) continue;
@@ -621,12 +623,12 @@ public final class UpdateTransactionExecutor {
 			Path source = resolve(preservation.root(), preservation.relativePath(), transaction);
 			Path object = objects.resolve(preservation.expectedHash().toLowerCase(Locale.ROOT)).normalize();
 			validateNoSymbolicLinkDescendants(objects, object);
-			if (!SmartFileUtils.isValidFile(object, preservation.expectedSize(), preservation.expectedHash())) {
-				if (!SmartFileUtils.isValidFile(source, preservation.expectedSize(), preservation.expectedHash()))
+			if (!FileIntegrity.matches(object, preservation.expectedSize(), preservation.expectedHash())) {
+				if (!FileIntegrity.matches(source, preservation.expectedSize(), preservation.expectedHash()))
 					throw new IOException("Preservation source changed after planning: " + source);
-				SmartFileUtils.copyVerifiedAtomic(source, object, preservation.expectedSize(), preservation.expectedHash());
+				VerifiedFileTransfer.copyAtomic(source, object, preservation.expectedSize(), preservation.expectedHash());
 			}
-			if (!SmartFileUtils.isValidFile(object, preservation.expectedSize(), preservation.expectedHash()))
+			if (!FileIntegrity.matches(object, preservation.expectedSize(), preservation.expectedHash()))
 				throw new IOException("Preserved object verification failed: " + object);
 		}
 	}
@@ -641,21 +643,21 @@ public final class UpdateTransactionExecutor {
 			if (projected.root() == Root.PROJECTION) continue;
 			Path target = resolve(projected.root(), projected.relativePath(), transaction);
 			if (projected.present()) {
-				if (!SmartFileUtils.isValidFile(target, projected.expectedSize(), projected.expectedHash())) throw new IOException("Projected target verification failed: " + target);
+				if (!FileIntegrity.matches(target, projected.expectedSize(), projected.expectedHash())) throw new IOException("Projected target verification failed: " + target);
 			} else if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Projected absent target exists: " + target);
 		}
 	}
 
 	private void buildIncomingProjection(UpdateTransaction transaction) throws IOException {
 		Path incoming = context.storage().incomingTransactionDirectory(transaction.transactionId);
-		SmartFileUtils.deleteTree(incoming);
+		FileTrees.delete(incoming);
 		Files.createDirectories(incoming);
 		for (ProjectedFile projected : transaction.projectedFinalState) {
 			if (projected.root() != Root.PROJECTION || !projected.present()) continue;
 			Path source = context.storage().objectsDirectory().resolve(projected.expectedHash());
 			Path target = incoming.resolve(normalizeOperationPath(projected.relativePath())).normalize();
 			if (!target.startsWith(incoming)) throw new IOException("Projection path escapes incoming directory");
-			SmartFileUtils.linkVerifiedAtomic(source, target, projected.expectedSize(), projected.expectedHash());
+			VerifiedFileTransfer.linkAtomic(source, target, projected.expectedSize(), projected.expectedHash());
 		}
 		verifyProjection(incoming, transaction.projectedFinalState);
 	}
@@ -666,20 +668,20 @@ public final class UpdateTransactionExecutor {
 		Path backup = context.storage().backupTransactionDirectory(transaction.transactionId);
 		if (Files.exists(active, LinkOption.NOFOLLOW_LINKS) && Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 			if (verifyProjectionQuietly(active, transaction.projectedFinalState)) {
-				SmartFileUtils.deleteTree(incoming);
-				SmartFileUtils.deleteTree(backup);
+				FileTrees.delete(incoming);
+				FileTrees.delete(backup);
 				return;
 			}
 			throw new IOException("Client projection swap has two non-final directories");
 		}
 		if (!Files.exists(incoming, LinkOption.NOFOLLOW_LINKS)) buildIncomingProjection(transaction);
-		if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) SmartFileUtils.moveDirectoryAtomic(active, backup);
+		if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) FileTrees.moveAtomic(active, backup);
 		try {
-			SmartFileUtils.moveDirectoryAtomic(incoming, active);
+			FileTrees.moveAtomic(incoming, active);
 		} catch (IOException e) {
 			if (!Files.exists(active, LinkOption.NOFOLLOW_LINKS) && Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 				try {
-					SmartFileUtils.moveDirectoryAtomic(backup, active);
+					FileTrees.moveAtomic(backup, active);
 				} catch (IOException restoreFailure) {
 					e.addSuppressed(restoreFailure);
 				}
@@ -699,7 +701,7 @@ public final class UpdateTransactionExecutor {
 				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				String relative = normalizeOperationPath(projection.relativize(path).toString());
 				ProjectedFile expectedFile = expected.remove(relative);
-				if (expectedFile == null || !SmartFileUtils.isValidFile(path, expectedFile.expectedSize(), expectedFile.expectedHash()))
+				if (expectedFile == null || !FileIntegrity.matches(path, expectedFile.expectedSize(), expectedFile.expectedHash()))
 					throw new IOException("Client projection file verification failed: " + path);
 			}
 		}
@@ -716,8 +718,8 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void cleanupTransactionDirectories(UpdateTransaction transaction) throws IOException {
-		SmartFileUtils.deleteTree(context.storage().incomingTransactionDirectory(transaction.transactionId));
-		SmartFileUtils.deleteTree(context.storage().backupTransactionDirectory(transaction.transactionId));
+		FileTrees.delete(context.storage().incomingTransactionDirectory(transaction.transactionId));
+		FileTrees.delete(context.storage().backupTransactionDirectory(transaction.transactionId));
 	}
 
 	private void captureBaselines(UpdateTransaction transaction) throws IOException {
@@ -740,9 +742,9 @@ public final class UpdateTransactionExecutor {
 				entry.objectHash = "";
 				entry.size = -1;
 			} else {
-				if (!SmartFileUtils.isValidFile(source, capture.expectedSize(), capture.expectedHash())) throw new IOException("Baseline source changed: " + source);
+				if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash())) throw new IOException("Baseline source changed: " + source);
 				Path object = context.storage().objectsDirectory().resolve(capture.expectedHash());
-				SmartFileUtils.copyVerifiedAtomic(source, object, capture.expectedSize(), capture.expectedHash());
+				VerifiedFileTransfer.copyAtomic(source, object, capture.expectedSize(), capture.expectedHash());
 				entry.objectHash = capture.expectedHash().toLowerCase(Locale.ROOT);
 				entry.size = capture.expectedSize();
 			}

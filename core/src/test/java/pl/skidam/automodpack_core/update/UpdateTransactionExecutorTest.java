@@ -30,8 +30,8 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 class UpdateTransactionExecutorTest {
 	@TempDir
@@ -51,7 +51,7 @@ class UpdateTransactionExecutorTest {
 		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
 
 		assertTrue(execution.success());
-		assertTrue(SmartFileUtils.isValidFile(projectionFile, bytes.length, hash));
+		assertTrue(FileIntegrity.matches(projectionFile, bytes.length, hash));
 		assertVerifiedObjectProjection(storage.objectsDirectory().resolve(hash), projectionFile, bytes.length, hash);
 		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
 		assertEquals(target.generationRecord(), new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).orElseThrow());
@@ -82,7 +82,7 @@ class UpdateTransactionExecutorTest {
 		GeneratedCopyState state = GeneratedCopyState.read(storage, target.manifest().modpackId(), target.generationTarget().targetGenerationId(),
 				UpdateTransaction.digest(target.selection().intent()));
 		assertEquals(List.of(new GeneratedCopyState.Entry("mods/nested.jar", nestedHash, nestedBytes.length)), state.entries());
-		assertTrue(SmartFileUtils.isValidFile(storage.modsDirectory().resolve("nested.jar"), nestedBytes.length, nestedHash));
+		assertTrue(FileIntegrity.matches(storage.modsDirectory().resolve("nested.jar"), nestedBytes.length, nestedHash));
 	}
 
 	@Test
@@ -98,7 +98,7 @@ class UpdateTransactionExecutorTest {
 		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
 
 		assertTrue(execution.success());
-		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/existing.jar"), bytes.length, hash));
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
 		assertFalse(Files.exists(storage.objectsDirectory().resolve(hash)));
 		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
 	}
@@ -128,10 +128,10 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(execution.success());
 		assertFalse(Files.exists(local));
-		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
 		ClientStorageJsons.ClientQuarantineFields quarantine = QuarantineArchive.read(storage, target.manifest().modpackId());
 		assertEquals(1, quarantine.entries.size());
-		assertTrue(SmartFileUtils.isValidFile(storage.quarantinePayload(target.manifest().modpackId(), plan.conflicts().get(0).conflictId()), localBytes.length, localHash));
+		assertTrue(FileIntegrity.matches(storage.quarantinePayload(target.manifest().modpackId(), plan.conflicts().get(0).conflictId()), localBytes.length, localHash));
 	}
 
 	@Test
@@ -211,10 +211,10 @@ class UpdateTransactionExecutorTest {
 		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/settings.json");
 		Path live = storage.gameDirectory().resolve("config/settings.json");
 		assertTrue(execution.success());
-		assertTrue(SmartFileUtils.isValidFile(overlay, editedBytes.length, editedHash));
+		assertTrue(FileIntegrity.matches(overlay, editedBytes.length, editedHash));
 		assertFalse(Files.isSameFile(storage.objectsDirectory().resolve(editedHash), live));
 		assertArrayEquals(editedBytes, Files.readAllBytes(live));
-		assertTrue(SmartFileUtils.isValidFile(storage.activePath("config/settings.json"), baseBytes.length, baseHash));
+		assertTrue(FileIntegrity.matches(storage.activePath("config/settings.json"), baseBytes.length, baseHash));
 	}
 
 	@Test
@@ -263,7 +263,7 @@ class UpdateTransactionExecutorTest {
 		assertFalse(Files.exists(live));
 		assertFalse(Files.exists(generatedLive));
 		assertFalse(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.generationTarget().targetGenerationId(), UpdateTransaction.digest(expected))));
-		assertTrue(SmartFileUtils.isValidFile(storage.objectsDirectory().resolve(hash), bytes.length, hash));
+		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(hash), bytes.length, hash));
 		assertTrue(Files.isDirectory(storage.activeDirectory()));
 		try (var paths = Files.list(storage.activeDirectory())) {
 			assertEquals(List.of(), paths.toList());
@@ -287,7 +287,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(executor(storage).commit(transaction).success());
 		assertFalse(Files.exists(current));
-		assertTrue(SmartFileUtils.isValidFile(replacementPath, replacement.length, replacementHash));
+		assertTrue(FileIntegrity.matches(replacementPath, replacement.length, replacementHash));
 		assertNull(storage.readActiveState());
 
 		UpdateTransaction invalid = UpdateTransaction.createSelfUpdate(currentPath, "../outside.jar", replacementHash, replacement.length, currentHash);
@@ -311,14 +311,14 @@ class UpdateTransactionExecutorTest {
 		String hash = HashUtils.getHash(temporary);
 		Path destination = storage.objectsDirectory().resolve(hash);
 		if (Files.exists(destination)) {
-			assertTrue(SmartFileUtils.isValidFile(destination, bytes.length, hash));
+			assertTrue(FileIntegrity.matches(destination, bytes.length, hash));
 			Files.delete(temporary);
 		} else Files.move(temporary, destination);
 		return hash;
 	}
 
 	private static void assertVerifiedObjectProjection(Path object, Path projection, long size, String hash) throws Exception {
-		assertTrue(SmartFileUtils.isValidFile(projection, size, hash));
+		assertTrue(FileIntegrity.matches(projection, size, hash));
 		if (Files.getFileStore(object).equals(Files.getFileStore(projection))) assertTrue(Files.isSameFile(object, projection));
 	}
 

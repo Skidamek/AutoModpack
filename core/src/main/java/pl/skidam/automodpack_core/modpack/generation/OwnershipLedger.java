@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Immutable cumulative ownership projection for one modpack lineage. */
 public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entries, String digest) {
@@ -29,7 +30,7 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 
 	public record Content(String sha1, long size) {
 		public Content {
-			if (sha1 == null || !sha1.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid ledger SHA-1");
+			if (!HashUtils.isCanonicalSha1(sha1)) throw new IllegalArgumentException("Invalid ledger SHA-1");
 			if (size < 0) throw new IllegalArgumentException("Negative ledger content size");
 		}
 	}
@@ -258,7 +259,7 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 	}
 
 	private static String requireGenerationReference(String value, String name) {
-		if (value == null || !value.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid " + name);
+		if (!HashUtils.isCanonicalSha1(value)) throw new IllegalArgumentException("Invalid " + name);
 		return value;
 	}
 
