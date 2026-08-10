@@ -215,6 +215,24 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void removalDeletesExactInstalledLiveCopyWhenBaselineEntryIsMissing() {
+		String path = "test/server-owned.mp4";
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of(path, item(path, TARGET_HASH, 9, "other")),
+				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
+		baseline.modpackId = installed.modpackId;
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.PROJECTION, path), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, path), new FileState(TARGET_HASH, 9, true));
+
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
+				&& operation.operation() == OperationType.DELETE && TARGET_HASH.equals(operation.expectedExistingHash())));
+	}
+
+	@Test
 	void cleanupPreservesMismatchesUnsafeTypesAndPlayerLocalPaths() {
 		String localHash = "4444444444444444444444444444444444444444";
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(

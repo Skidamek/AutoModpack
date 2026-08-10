@@ -1,7 +1,11 @@
 package pl.skidam.automodpack_loader_core.screen;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
@@ -13,78 +17,70 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
-public class ScreenManager implements ScreenService {
+public final class ScreenManager {
 
-	public static ScreenService INSTANCE = new PreloadScreenImpl();
+	private static volatile ScreenService instance = new PreloadScreenImpl();
 
-	@Override
+	public static void install(ScreenService screenService) {
+		instance = Objects.requireNonNull(screenService, "screenService");
+	}
+
 	public void download(DownloadManager downloadManager, String modpackName) {
-		INSTANCE.download(downloadManager, modpackName);
+		instance.download(downloadManager, modpackName);
 	}
 
-	@Override
 	public void changelog(Object parent, Changelogs changelogs) {
-		INSTANCE.changelog(parent, changelogs);
+		instance.changelog(parent, changelogs);
 	}
 
-	@Override
 	public void restart(UpdateType updateType, Changelogs changelogs) {
-		INSTANCE.restart(updateType, changelogs);
+		instance.restart(updateType, changelogs);
 	}
 
-	@Override
 	public void completeWithoutRestart() {
-		INSTANCE.completeWithoutRestart();
+		instance.completeWithoutRestart();
 	}
 
-	@Override
 	public void welcome(ModpackUpdater modpackUpdater) {
-		INSTANCE.welcome(modpackUpdater);
+		instance.welcome(modpackUpdater);
 	}
 
-	@Override
 	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
 			Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
-		return INSTANCE.preview(preview, modpackName, continueAction, cancelAction, returnToSelection, mainPageUrls);
+		return instance.preview(preview, modpackName, continueAction, cancelAction, returnToSelection, mainPageUrls);
 	}
 
-	@Override
 	public void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed) {
-		INSTANCE.recovery(modpackUpdater, recoverySnapshot, modpackName, closed);
+		instance.recovery(modpackUpdater, recoverySnapshot, modpackName, closed);
 	}
 
-	@Override
 	public void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed) {
-		INSTANCE.history(history, modpackName, patchNotesHistory, closed);
+		instance.history(history, modpackName, patchNotesHistory, closed);
 	}
 
-	@Override
-	public void error(String... args) {
-		INSTANCE.error(args);
+	public void error(Throwable throwable, String... args) {
+		Objects.requireNonNull(throwable, "throwable");
+		LOGGER.error("Displaying AutoModpack error screen: {}", Arrays.toString(args), throwable);
+		instance.error(args);
 	}
 
-	@Override
 	public void title() {
-		INSTANCE.title();
+		instance.title();
 	}
 
-	@Override
 	public void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {
-		INSTANCE.validation(parent, fingerprint, validated, canceled);
+		instance.validation(parent, fingerprint, validated, canceled);
 	}
 
-	@Override
 	public void waiting() {
-		INSTANCE.waiting();
+		instance.waiting();
 	}
 
-	@Override
 	public Optional<String> getScreenString() {
-		return INSTANCE.getScreenString();
+		return instance.getScreenString();
 	}
 
-	@Override
 	public Optional<Object> getScreen() {
-		return INSTANCE.getScreen();
+		return instance.getScreen();
 	}
 }

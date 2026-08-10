@@ -119,6 +119,34 @@ flow:
     name: capture per-pack lifecycle actions
     file: note-only-pack-actions
   - do: click
+    name: review the installed pack from its manager
+    select: { text: Note-only Test P }
+  - do: wait_for
+    name: return to the existing settings route for the same pack
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: Pack manager, enabled: true }
+        - element: { text: Back, enabled: true }
+  - do: click
+    name: leave the original settings route
+    select: { text: Back }
+  - do: wait_for
+    name: return to the multiplayer parent
+    until: { screen: Play Multiplayer }
+  - do: click
+    name: reopen active modpack settings
+    select: { text: Modpack settings }
+  - do: click
+    name: reopen per-pack lifecycle actions
+    select: { text: Pack manager }
+  - do: wait_for
+    name: restore the pack manager actions
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Update, enabled: true }
+  - do: click
     name: check manually for another update
     select: { text: Update }
   - do: wait_for
@@ -175,6 +203,24 @@ flow:
         - element: { text: Update, enabled: false }
         - element: { text: Activate, enabled: true }
         - element: { text: Remove, enabled: true }
+  - do: click
+    name: review a pack from the top-level manager
+    select: { text: Note-only Test P }
+  - do: wait_for
+    name: keep the pack manager action available in its child
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: Pack manager, enabled: true }
+  - do: click
+    name: return to the top-level manager with its normal action
+    select: { text: Pack manager }
+  - do: wait_for
+    name: restore the inactive pack actions
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Activate, enabled: true }
   - do: click
     name: activate the retained pack again
     select: { text: Activate }

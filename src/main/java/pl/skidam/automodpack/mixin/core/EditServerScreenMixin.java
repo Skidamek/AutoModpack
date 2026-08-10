@@ -73,7 +73,7 @@ public abstract class EditServerScreenMixin extends Screen {
 	private void automodpack$rejectMalformedPin(CallbackInfo ci) {
 		ServerAddressPin.Parsed parsed = ServerAddressPin.parse(ipEdit.getValue());
 		if (!parsed.isMalformed()) return;
-		new ScreenManager().error("automodpack.pin.invalid", parsed.error());
+		new ScreenManager().error(new IllegalArgumentException(parsed.error()), "automodpack.pin.invalid", parsed.error());
 		ci.cancel();
 	}
 
