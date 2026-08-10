@@ -34,6 +34,7 @@ import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -381,9 +382,7 @@ final class ClientUpdatePlanBuilder {
 			}
 			return copies;
 		} finally {
-			try (Stream<Path> stream = Files.walk(inspectionDirectory)) {
-				for (Path path : stream.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
-			}
+			FileTrees.delete(inspectionDirectory);
 		}
 	}
 
