@@ -193,6 +193,7 @@
   "automodpack.management.update": "Frissítés",
   "automodpack.management.upToDate": "Naprakész",
   "automodpack.management.deactivate": "Kikapcsolás",
+  "automodpack.management.activate": "Aktiválás",
   "automodpack.management.recovery": "Helyreállítás",
   "automodpack.management.quarantine": "Karantén",
   "automodpack.management.history": "Történelem",

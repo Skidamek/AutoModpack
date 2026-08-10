@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -91,14 +92,18 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			int updateX = x + labelWidth + BUTTON_GAP;
 			Button update = buttonWidget(updateX, y, actionWidth, 20,
 					VersionedText.translatable(upToDate.contains(entry.modpackId()) ? "automodpack.management.upToDate" : "automodpack.management.update"), press -> requestUpdate(entry));
-			Button deactivate = buttonWidget(updateX + actionWidth + BUTTON_GAP, y, actionWidth, 20,
-					VersionedText.translatable("automodpack.management.deactivate"), press -> requestActiveRemovalLike(entry, true));
+			Button activeToggle = buttonWidget(updateX + actionWidth + BUTTON_GAP, y, actionWidth, 20,
+					VersionedText.translatable(entry.active() ? "automodpack.management.deactivate" : "automodpack.management.activate"),
+					press -> {
+						if (entry.active()) requestActiveRemovalLike(entry, true);
+						else requestActivation(entry);
+					});
 			Button remove = buttonWidget(updateX + (actionWidth + BUTTON_GAP) * 2, y, actionWidth, 20,
 					VersionedText.translatable("automodpack.management.remove"), press -> requestRemoval(entry));
 			this.addRenderableWidget(update);
-			this.addRenderableWidget(deactivate);
+			this.addRenderableWidget(activeToggle);
 			this.addRenderableWidget(remove);
-			rowActions.add(new RowActions(entry, update, deactivate, remove));
+			rowActions.add(new RowActions(entry, update, activeToggle, remove));
 		}
 		updateManagementButtons();
 
@@ -189,6 +194,18 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		else requestInactiveRemoval(entry);
 	}
 
+	private void requestActivation(Entry entry) {
+		if (entry.active() || !beginManagement()) return;
+		try {
+			SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(entry.modpackId()).orElse(null);
+			SelectionIntent targetSelection = savedSelection == null ? GroupSelectionResolver.defaultIntent(entry.record().manifest()) : savedSelection;
+			CachedModpackSwitch.start(storage, entry.record(), savedSelection, targetSelection, entry.name(), false, this::endManagement);
+		} catch (RuntimeException e) {
+			endManagement();
+			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+		}
+	}
+
 	private void requestActiveRemovalLike(Entry entry, boolean deactivation) {
 		if (!entry.active() || !beginManagement()) return;
 		ModpackUpdater updater;
@@ -267,7 +284,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private void updateManagementButtons() {
 		for (RowActions actions : rowActions) {
 			actions.update().active = !managementInFlight && actions.entry().active() && actions.entry().connectionAvailable();
-			actions.deactivate().active = !managementInFlight && actions.entry().active();
+			actions.activeToggle().active = !managementInFlight;
 			actions.remove().active = !managementInFlight;
 		}
 	}
@@ -345,5 +362,5 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		}
 	}
 
-	private record RowActions(Entry entry, Button update, Button deactivate, Button remove) {}
+	private record RowActions(Entry entry, Button update, Button activeToggle, Button remove) {}
 }

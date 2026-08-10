@@ -193,6 +193,7 @@
   "automodpack.management.update": "更新",
   "automodpack.management.upToDate": "已是最新版本",
   "automodpack.management.deactivate": "停用",
+  "automodpack.management.activate": "啟用",
   "automodpack.management.recovery": "恢復",
   "automodpack.management.quarantine": "檢疫",
   "automodpack.management.history": "歷史",

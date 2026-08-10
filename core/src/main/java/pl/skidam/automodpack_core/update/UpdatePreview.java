@@ -77,17 +77,16 @@ public record UpdatePreview(
 	}
 
 	public Summary summary() {
-		Set<FileKey> changed = new HashSet<>();
-		Set<FileKey> removed = new HashSet<>();
-		Set<FileKey> preserved = new HashSet<>();
-		Set<FileKey> unsafe = new HashSet<>();
+		Set<String> changed = new HashSet<>();
+		Set<String> removed = new HashSet<>();
+		Set<String> preserved = new HashSet<>();
+		Set<String> unsafe = new HashSet<>();
 		for (Entry entry : entries) {
-			FileKey key = new FileKey(entry.root, entry.relativePath);
 			switch (entry.kind.summaryBucket()) {
-				case CHANGED -> changed.add(key);
-				case REMOVED -> removed.add(key);
-				case PRESERVED -> preserved.add(key);
-				case UNSAFE -> unsafe.add(key);
+				case CHANGED -> changed.add(entry.relativePath);
+				case REMOVED -> removed.add(entry.relativePath);
+				case PRESERVED -> preserved.add(entry.relativePath);
+				case UNSAFE -> unsafe.add(entry.relativePath);
 			}
 		}
 		Set<String> otherEffects = new TreeSet<>();
@@ -95,17 +94,19 @@ public record UpdatePreview(
 		return new Summary(changed.size(), removed.size(), preserved.size(), unsafe.size(), otherEffects.size());
 	}
 
-	/** Returns one row per physical file key, preferring an effective change over preservation information. */
+	/** Collapses identical projection and live-copy effects into one user-facing logical file row. */
 	public List<Entry> displayEntries() {
-		Map<FileKey, Entry> unique = new TreeMap<>(Comparator.comparing((FileKey key) -> key.root().ordinal()).thenComparing(FileKey::relativePath));
+		Map<DisplayKey, Entry> unique = new TreeMap<>(Comparator.comparing(DisplayKey::relativePath).thenComparing(key -> key.kind().ordinal()).thenComparingLong(DisplayKey::size));
 		for (Entry entry : entries) {
-			FileKey key = new FileKey(entry.root, entry.relativePath);
+			DisplayKey key = new DisplayKey(entry.kind, entry.relativePath, entry.size);
 			Entry previous = unique.get(key);
-			if (previous == null || entry.kind.sortBucket().compareTo(previous.kind.sortBucket()) < 0) unique.put(key, entry);
+			if (previous == null || entry.root.ordinal() < previous.root.ordinal()) unique.put(key, entry);
 		}
 		return unique.values().stream().sorted(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
 				.thenComparing(Entry::relativePath)).toList();
 	}
+
+	private record DisplayKey(Kind kind, String relativePath, long size) {}
 
 	public String latestPatchNotes() {
 		if (!patchNotes.isBlank()) return patchNotes;
