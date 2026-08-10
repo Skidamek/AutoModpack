@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
+import static pl.skidam.automodpack_core.Constants.AM_VERSION;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -27,6 +29,7 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 
 public class NetUtils {
+	public static final String USER_AGENT = "github/skidamek/automodpack/" + AM_VERSION;
 
 	// Magic numbers
 	public static final int MAGIC_AMMH = 0x414D4D48;

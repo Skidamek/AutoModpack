@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
@@ -142,7 +143,7 @@ public final class EarlyServiceLayer {
 			eligible = !services.isEmpty() && HANDLEABLE_SERVICES.containsAll(services);
 			standalone = Files.exists(fs.getPath("META-INF/neoforge.mods.toml")) && !FileInspection.hasNestedModWithSameId(fs);
 			if (Files.exists(fs.getPath(GRAPHICS_BOOTSTRAPPER_SERVICE))) {
-				impls.put(GRAPHICS_BOOTSTRAPPER_SERVICE, readServiceImpls(fs, GRAPHICS_BOOTSTRAPPER_SERVICE));
+				impls.put(GRAPHICS_BOOTSTRAPPER_SERVICE, LoaderServiceFiles.readImplementations(fs, GRAPHICS_BOOTSTRAPPER_SERVICE));
 			}
 		} catch (Exception e) {
 			LOGGER.warn("[AutoModpack] Could not inspect {}; not handling it in place", jar.getFileName(), e);
@@ -163,21 +164,4 @@ public final class EarlyServiceLayer {
 		return info(jar).standalone();
 	}
 
-	private static List<String> readServiceImpls(FileSystem fs, String serviceFile) {
-		List<String> impls = new ArrayList<>();
-		Path service = fs.getPath(serviceFile);
-		if (!Files.exists(service)) return impls;
-		try (InputStream is = Files.newInputStream(service); BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-			String line;
-			while ((line = reader.readLine()) != null) {
-				int comment = line.indexOf('#');
-				if (comment >= 0) line = line.substring(0, comment);
-				line = line.trim();
-				if (!line.isEmpty()) impls.add(line);
-			}
-		} catch (Exception e) {
-			LOGGER.error("[AutoModpack] Failed to read {}", serviceFile, e);
-		}
-		return impls;
-	}
 }

@@ -41,7 +41,9 @@ import cpw.mods.modlauncher.api.ITransformer;
 import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
@@ -164,7 +166,7 @@ public final class EarlyServiceLayer {
 
 		try {
 			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
-			Path activeModsDirectory = storage.activePath("mods");
+			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
 			if (!Files.isDirectory(activeModsDirectory)) return;
 
 			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
@@ -299,7 +301,7 @@ public final class EarlyServiceLayer {
 			for (String service : ACTIVELY_RUN_SERVICES) {
 				if (Files.exists(fs.getPath(service))) {
 					activelyRun = true;
-					impls.put(service, readServiceImpls(fs, service));
+					impls.put(service, LoaderServiceFiles.readImplementations(fs, service));
 				}
 			}
 		} catch (Exception e) {
@@ -710,21 +712,4 @@ public final class EarlyServiceLayer {
 		}
 	}
 
-	private static List<String> readServiceImpls(FileSystem fs, String serviceFile) {
-		List<String> impls = new ArrayList<>();
-		Path service = fs.getPath(serviceFile);
-		if (!Files.exists(service)) return impls;
-		try (InputStream is = Files.newInputStream(service); BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-			String line;
-			while ((line = reader.readLine()) != null) {
-				int comment = line.indexOf('#');
-				if (comment >= 0) line = line.substring(0, comment);
-				line = line.trim();
-				if (!line.isEmpty()) impls.add(line);
-			}
-		} catch (Exception e) {
-			LOGGER.error("[AutoModpack] Failed to read {}", serviceFile, e);
-		}
-		return impls;
-	}
 }

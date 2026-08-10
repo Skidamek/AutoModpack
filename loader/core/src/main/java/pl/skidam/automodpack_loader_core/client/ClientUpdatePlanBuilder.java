@@ -62,7 +62,7 @@ final class ClientUpdatePlanBuilder {
 	record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles, String overlayDigest) {
 		PreparedPlan {
 			originalFiles = Map.copyOf(originalFiles);
-			if (overlayDigest == null || !overlayDigest.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Prepared overlay digest is invalid");
+			if (!HashUtils.isCanonicalSha1(overlayDigest)) throw new IllegalArgumentException("Prepared overlay digest is invalid");
 		}
 	}
 

@@ -22,9 +22,11 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNotes;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
@@ -102,7 +104,7 @@ public class ModpackExecutor {
 	}
 
 	public PublishResult publishIfState(String expectedStateDigest, String inlineNotes) {
-		if (expectedStateDigest == null || !expectedStateDigest.matches("[0-9a-f]{40}"))
+		if (!HashUtils.isCanonicalSha1(expectedStateDigest))
 			return new PublishInvalidGuard("Guard digest must be a canonical 40-character lowercase SHA-1");
 		return publishInternal(expectedStateDigest, inlineNotes);
 	}
@@ -112,7 +114,7 @@ public class ModpackExecutor {
 	}
 
 	public RevertResult revert(String targetGenerationId, String inlineNotes) {
-		if (targetGenerationId == null || !targetGenerationId.matches("[0-9a-f]{40}"))
+		if (!HashUtils.isCanonicalSha1(targetGenerationId))
 			return new RevertInvalidTarget("Rollback target must be a canonical 40-character lowercase SHA-1");
 		if (!acquire(true)) return new RevertBusy("Another modpack operation is already in progress");
 		GenerationStore.Publication publication = null;
@@ -321,10 +323,10 @@ public class ModpackExecutor {
 		for (Path groupDirectory : groupDirectories.values()) Files.createDirectories(groupDirectory);
 		Path main = groupDirectories.get("main");
 		if (main == null) return;
-		Files.createDirectories(main.resolve("mods"));
-		Files.createDirectories(main.resolve("config"));
-		Files.createDirectories(main.resolve("shaderpacks"));
-		Files.createDirectories(main.resolve("resourcepacks"));
+		Files.createDirectories(main.resolve(ModpackPathPolicy.MODS_ROOT));
+		Files.createDirectories(main.resolve(ModpackPathPolicy.CONFIG_ROOT));
+		Files.createDirectories(main.resolve(ModpackPathPolicy.SHADERPACKS_ROOT));
+		Files.createDirectories(main.resolve(ModpackPathPolicy.RESOURCEPACKS_ROOT));
 	}
 
 	public boolean isGenerating() {
@@ -355,7 +357,7 @@ public class ModpackExecutor {
 			Optional<GenerationPatchNotes.Source> patchNotesSource) {
 		public CandidateState {
 			parent = parent == null ? Optional.empty() : parent;
-			if (candidateStateDigest == null || !candidateStateDigest.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid candidate state digest");
+			if (!HashUtils.isCanonicalSha1(candidateStateDigest)) throw new IllegalArgumentException("Invalid candidate state digest");
 			diff = Objects.requireNonNull(diff);
 			summary = Objects.requireNonNull(summary);
 			patchNotesSource = patchNotesSource == null ? Optional.empty() : patchNotesSource;
@@ -396,7 +398,7 @@ public class ModpackExecutor {
 	public record Reverted(GenerationRecord current, String targetGenerationId, List<String> warnings) implements RevertResult {
 		public Reverted {
 			current = Objects.requireNonNull(current);
-			if (targetGenerationId == null || !targetGenerationId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid rollback target generation ID");
+			if (!HashUtils.isCanonicalSha1(targetGenerationId)) throw new IllegalArgumentException("Invalid rollback target generation ID");
 			warnings = warnings == null ? List.of() : List.copyOf(warnings);
 			if (!targetGenerationId.equals(current.metadata().rollbackTargetGenerationId())) throw new IllegalArgumentException("Revert result target does not match current metadata");
 		}

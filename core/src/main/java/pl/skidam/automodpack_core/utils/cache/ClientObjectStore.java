@@ -7,7 +7,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalDouble;
@@ -27,6 +26,7 @@ import pl.skidam.automodpack_core.update.QuarantineArchive;
 import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Measures and explicitly maintains the client shared object store. */
@@ -129,7 +129,7 @@ public final class ClientObjectStore {
 			if (!object.getParent().equals(storage.objectsDirectory()) || !HashUtils.isCanonicalSha1(name)
 					|| references.hashes().contains(name))
 				continue;
-			if (!isValidCanonicalObject(object, name.toLowerCase(Locale.ROOT))) continue;
+			if (!FileIntegrity.matchesCanonicalSha1(object, name)) continue;
 			long size = Files.size(object);
 			if (Files.deleteIfExists(object)) {
 				deletedCount = addExact(deletedCount, 1, "deleted object count");
@@ -285,7 +285,7 @@ public final class ClientObjectStore {
 			Path packDirectory = generationDirectory.getParent();
 			String modpackId = packDirectory.getFileName().toString();
 			String generationId = generationDirectory.getFileName().toString();
-			String selectionDigest = path.getFileName().toString().substring(0, 40);
+			String selectionDigest = path.getFileName().toString().substring(0, HashUtils.SHA1_HEX_LENGTH);
 			GeneratedCopyState state = GeneratedCopyState.read(storage, modpackId, generationId, selectionDigest);
 			for (GeneratedCopyState.Entry entry : state.entries()) retained.addOptional(entry.sha1(), entry.size(), "generated-copy state");
 		}
@@ -447,8 +447,8 @@ public final class ClientObjectStore {
 							for (Path state : states.sorted().toList()) {
 								ensureNoSymbolicLink(state, "client generated-copy state");
 								String name = state.getFileName().toString();
-								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || name.length() != 45 || !name.endsWith(".json")
-										|| !HashUtils.isCanonicalSha1(name.substring(0, 40)))
+								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || name.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !name.endsWith(".json")
+										|| !HashUtils.isCanonicalSha1(name.substring(0, HashUtils.SHA1_HEX_LENGTH)))
 									throw new IOException("Client generated-copy state contains an unsupported entry: " + state);
 								result.add(state);
 							}
@@ -464,10 +464,6 @@ public final class ClientObjectStore {
 		long bytes = 0;
 		for (Path path : paths) bytes = addExact(bytes, Files.size(path), "client storage bytes");
 		return new FileTotals(paths.size(), bytes);
-	}
-
-	private static boolean isValidCanonicalObject(Path object, String hash) {
-		return !Files.isSymbolicLink(object) && Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && hash.equals(HashUtils.getHash(object));
 	}
 
 	private static <T> T readJson(Path path, Class<T> type, String description) throws IOException {
@@ -515,7 +511,7 @@ public final class ClientObjectStore {
 
 	public static String normalizeHash(String sha1) {
 		if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Invalid client object SHA-1");
-		return sha1.toLowerCase(Locale.ROOT);
+		return HashUtils.normalizeSha1(sha1);
 	}
 
 	private static long addExact(long first, long second, String description) throws IOException {

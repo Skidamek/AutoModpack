@@ -17,4 +17,9 @@ public final class FileIntegrity {
 			return false;
 		}
 	}
+
+	/** Returns whether a regular non-symlink file has the exact canonical SHA-1. */
+	public static boolean matchesCanonicalSha1(Path file, String expectedSha1) {
+		return HashUtils.isCanonicalSha1(expectedSha1) && Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && expectedSha1.equals(HashUtils.getHash(file));
+	}
 }

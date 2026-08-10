@@ -151,7 +151,7 @@ public final class RecoveryArchive {
 
 	private static String requireHash(String sha1) throws IOException {
 		if (!HashUtils.isSha1(sha1)) throw new IOException("Recovery object SHA-1 is invalid");
-		return sha1.toLowerCase(Locale.ROOT);
+		return HashUtils.normalizeSha1(sha1);
 	}
 
 	private static void validateNoSymbolicLinkDescendants(Path constrainedRoot, Path target) throws IOException {

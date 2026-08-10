@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -151,7 +152,7 @@ public final class UpdatePlanner {
 				continue;
 			}
 			if (!HashUtils.isSha1(baseline.objectHash) || baseline.size < 0) continue;
-			String baselineHash = baseline.objectHash.toLowerCase(Locale.ROOT);
+			String baselineHash = HashUtils.normalizeSha1(baseline.objectHash);
 			if (!input.availableBaselineObjects().contains(baselineHash)) continue;
 			if (matches(state, baselineHash, baseline.size)) continue;
 			operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, baselineHash, baseline.size, current.sha1()));

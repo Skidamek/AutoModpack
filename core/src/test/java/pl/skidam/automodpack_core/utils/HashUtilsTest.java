@@ -30,6 +30,8 @@ class HashUtilsTest {
 		assertTrue(HashUtils.isSha1("16883D77E42FCB574C70E31CDA49B3F955A48BE8"));
 		assertTrue(HashUtils.isCanonicalSha1("16883d77e42fcb574c70e31cda49b3f955a48be8"));
 		assertFalse(HashUtils.isCanonicalSha1("16883D77E42FCB574C70E31CDA49B3F955A48BE8"));
+		assertEquals("16883d77e42fcb574c70e31cda49b3f955a48be8", HashUtils.normalizeSha1("16883D77E42FCB574C70E31CDA49B3F955A48BE8"));
+		assertThrows(IllegalArgumentException.class, () -> HashUtils.normalizeSha1("not-a-sha1"));
 		assertFalse(HashUtils.isSha1("not-a-sha1"));
 	}
 

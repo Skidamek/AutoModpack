@@ -44,7 +44,7 @@ public final class ModpackCandidateScanner {
 				throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
 			for (var file : walk(groupDirectory).entrySet()) {
 				CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.GROUP_DIRECTORY, file.getValue(), null);
-				sources.computeIfAbsent(key(groupId, file.getKey()), ignored -> new SourcePair()).explicit = source;
+				sources.computeIfAbsent(ModpackCandidate.provenanceKey(groupId, file.getKey()), ignored -> new SourcePair()).explicit = source;
 			}
 		}
 
@@ -67,7 +67,7 @@ public final class ModpackCandidateScanner {
 							ruleExclusions.add(new ExcludedCandidate(source, ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + decision.decisiveRule()));
 							continue;
 						}
-						SourcePair pair = sources.computeIfAbsent(key(groupId, file.getKey()), ignored -> new SourcePair());
+						SourcePair pair = sources.computeIfAbsent(ModpackCandidate.provenanceKey(groupId, file.getKey()), ignored -> new SourcePair());
 						if (pair.synced != null && !pair.synced.sourcePath().equals(source.sourcePath()))
 							throw new CandidateBuildException("Multiple synchronized sources resolve to group '" + groupId + "' path '" + file.getKey() + "'");
 						pair.synced = source;
@@ -276,10 +276,6 @@ public final class ModpackCandidateScanner {
 
 	private static Set<String> sortedSet(Set<String> values) {
 		return values == null ? Set.of() : new LinkedHashSet<>(new TreeSet<>(values));
-	}
-
-	private static String key(String groupId, String logicalPath) {
-		return groupId + '\0' + logicalPath;
 	}
 
 	private record GroupRules(
