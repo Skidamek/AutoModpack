@@ -27,7 +27,8 @@ import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.storage.StoragePaths;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -275,15 +276,16 @@ public class Commands {
 	}
 
 	private static int writeBootstrap(CommandContext<CommandSourceStack> context, ConnectionJsons.KnownHostsBootstrapFields fields, boolean install) {
+		Path bootstrapPath = GameDirectory.current().resolve(StoragePaths.BOOTSTRAP_FILE).normalize();
 		try {
-			ConfigTools.writeAtomic(bootstrapFile, fields);
+			ConfigTools.writeAtomic(bootstrapPath, fields);
 		} catch (IOException e) {
 			LOGGER.error("Failed to export bootstrap file", e);
 			send(context, "Failed to write bootstrap file: " + e.getMessage(), ChatFormatting.RED, false);
 			return 0;
 		}
 
-		String absolutePath = bootstrapFile.toAbsolutePath().normalize().toString();
+		String absolutePath = bootstrapPath.toAbsolutePath().normalize().toString();
 		send(context, "Bootstrap file exported", ChatFormatting.GREEN, copyable(absolutePath), ChatFormatting.YELLOW, false);
 		send(context, "Package it on clients at", ChatFormatting.WHITE, copyable("automodpack-bootstrap.json"), ChatFormatting.YELLOW, false);
 		if (install && serverConfig.validateSecrets) {
@@ -330,7 +332,8 @@ public class Commands {
 
 	private static int reload(CommandContext<CommandSourceStack> context) {
 		Util.backgroundExecutor().execute(() -> {
-			var tempServerConfig = ConfigTools.read(serverConfigFile, ServerConfigJsons.ServerConfigFieldsV3.class).orElse(null);
+			Path serverConfigPath = GameDirectory.current().resolve(StoragePaths.SERVER_CONFIG_FILE).normalize();
+			var tempServerConfig = ConfigTools.read(serverConfigPath, ServerConfigJsons.ServerConfigFieldsV3.class).orElse(null);
 			if (tempServerConfig != null) {
 				ConfigUtils.normalizeServerConfig(tempServerConfig, true);
 				boolean restartRequired = connectionRuntimeChanged(serverConfig, tempServerConfig);
@@ -597,9 +600,10 @@ public class Commands {
 			try {
 				Set<String> retainedGenerationIds = new TreeSet<>();
 				for (GenerationHistoryEntry entry : modpackExecutor.technicalHistory()) retainedGenerationIds.add(entry.metadata().generationId());
-				Path serverRoot = SmartFileUtils.CWD.resolve(serverDir).normalize();
-				Path objectRoot = DataRootResolver.resolve(SmartFileUtils.CWD).layout().objectsDirectory();
-				Set<String> clientObjectPins = ClientObjectStore.existingReferencedHashes(ClientStorage.fromGameDirectory(SmartFileUtils.CWD));
+				Path gameDirectory = GameDirectory.current();
+				Path serverRoot = gameDirectory.resolve(StoragePaths.SERVER_DIR).normalize();
+				Path objectRoot = DataRootResolver.resolve(gameDirectory).layout().objectsDirectory();
+				Set<String> clientObjectPins = ClientObjectStore.existingReferencedHashes(ClientStorage.fromGameDirectory(gameDirectory));
 				GenerationStore.CollectionResult result = new GenerationStore(serverRoot, objectRoot).collectUnreachableObjects(retainedGenerationIds, clientObjectPins);
 				send(context, "Generation objects collected", ChatFormatting.GREEN, false);
 				send(context, "Retained generations", ChatFormatting.WHITE, String.valueOf(retainedGenerationIds.size()), ChatFormatting.YELLOW, false);

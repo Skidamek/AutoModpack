@@ -44,7 +44,7 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.QuarantineArchive;
 import pl.skidam.automodpack_core.update.UpdatePreview;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
@@ -118,7 +118,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.modpackId = manifest.modpackId();
 		this.modpackName = manifest.modpackName();
 		this.groups = manifest.groups();
-		this.storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+		this.storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 		this.selectionStore = new ClientSelectionStore(storage.selectionFile());
 		this.expectedSelection = expectedSelection == null && initialSelection == null
 				? selectionStore.get(modpackId).orElse(null)
@@ -180,7 +180,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private static GenerationRecord activeGeneration(String modpackId) {
 		try {
-			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			if (state == null || !modpackId.equals(state.modpackId)) return null;
 			return new ClientGenerationStore(storage).read(state.generationId).orElse(null);

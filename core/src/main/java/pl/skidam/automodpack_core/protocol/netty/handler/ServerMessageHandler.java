@@ -5,13 +5,11 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.io.IOException;
 import java.net.SocketAddress;
-import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 import io.netty.buffer.ByteBuf;
@@ -27,6 +25,7 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
+import pl.skidam.automodpack_core.utils.FileStreams;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
@@ -120,7 +119,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		ReadableByteChannel channel = null;
 
 		try {
-			channel = FileChannel.open(path, StandardOpenOption.READ);
+			channel = FileStreams.openChannel(path);
 			ChunkedNioStream chunkedStream = new ChunkedNioStream(channel, this.chunkSize);
 
 			ctx.writeAndFlush(chunkedStream).addListener((ChannelFutureListener) future -> {

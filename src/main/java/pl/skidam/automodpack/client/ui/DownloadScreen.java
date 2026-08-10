@@ -17,8 +17,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.SpeedFormatter;
 
@@ -60,7 +60,7 @@ public class DownloadScreen extends VersionedScreen {
 
 	private void saveClientConfig() {
 		try {
-			ConfigTools.writeAtomic(ClientStorage.fromGameDirectory(SmartFileUtils.CWD).clientConfigFile(), clientConfig);
+			ConfigTools.writeAtomic(ClientStorage.fromGameDirectory(GameDirectory.current()).clientConfigFile(), clientConfig);
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save client configuration", e);
 		}

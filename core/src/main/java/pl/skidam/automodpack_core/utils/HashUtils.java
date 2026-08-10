@@ -73,7 +73,7 @@ public final class HashUtils {
 	public static String getHash(Path path) {
 		try {
 			MessageDigest digest = newSha1Digest();
-			try (InputStream is = Files.newInputStream(path)) {
+			try (InputStream is = FileStreams.open(path)) {
 				byte[] buffer = new byte[64 * 1024];
 				int bytesRead;
 				while ((bytesRead = is.read(buffer)) != -1) {
@@ -105,7 +105,7 @@ public final class HashUtils {
 		long validLength = 0;
 		byte[] buffer = new byte[64 * 1024];
 
-		try (InputStream is = Files.newInputStream(file)) {
+		try (InputStream is = FileStreams.open(file)) {
 			int bytesRead;
 			while ((bytesRead = is.read(buffer)) != -1) {
 				for (int i = 0; i < bytesRead; i++) {
@@ -119,7 +119,7 @@ public final class HashUtils {
 		long k = 0;
 		int shift = 0;
 
-		try (InputStream is = Files.newInputStream(file)) {
+		try (InputStream is = FileStreams.open(file)) {
 			int bytesRead;
 			while ((bytesRead = is.read(buffer)) != -1) {
 				for (int i = 0; i < bytesRead; i++) {
