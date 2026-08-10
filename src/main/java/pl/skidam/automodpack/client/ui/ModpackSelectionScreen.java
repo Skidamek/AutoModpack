@@ -42,7 +42,6 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.LocalModArchive;
 import pl.skidam.automodpack_core.update.QuarantineArchive;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
@@ -94,7 +93,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private Button recoveryButton;
 	private Button quarantineButton;
 	private Button historyButton;
-	private Button localModsButton;
 
 	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
 		this(parent, manifest, null, null, null, () -> {}, null, false, null);
@@ -283,7 +281,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				if (action.kind() == ManagementKind.REMOVE) this.removeButton = button;
 				if (action.kind() == ManagementKind.RECOVERY) this.recoveryButton = button;
 				if (action.kind() == ManagementKind.QUARANTINE) this.quarantineButton = button;
-				if (action.kind() == ManagementKind.LOCAL_MODS) this.localModsButton = button;
 				if (action.kind() == ManagementKind.HISTORY) this.historyButton = button;
 			}
 			updateManagementButtons();
@@ -460,8 +457,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			try {
 				ClientGenerationStore generationStore = new ClientGenerationStore(storage);
 				String generationId = historyGenerationId();
+				List<GenerationRecord> availableLineage = generationStore.availableLineage(modpackId, generationId);
 				List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(generationId);
-				ScreenImpl.openPatchNotesHistory(this, patchNotesHistory, modpackName, this::endManagement);
+				new ScreenManager().history(availableLineage, modpackName, patchNotesHistory, this::endManagement);
 			} catch (Exception e) {
 				endManagement();
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
@@ -472,11 +470,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private void requestQuarantine() {
 		if (!beginManagement()) return;
 		ScreenImpl.setScreen(new QuarantineArchiveScreen(this, storage, modpackId, modpackName, activeModpack, this::endManagement));
-	}
-
-	private void requestLocalMods() {
-		if (!beginManagement()) return;
-		ScreenImpl.setScreen(new LocalModArchiveScreen(this, storage, this::endManagement));
 	}
 
 	private boolean beginManagement() {
@@ -496,7 +489,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (recoveryButton != null) recoveryButton.active = !managementInFlight;
 		if (quarantineButton != null) quarantineButton.active = !managementInFlight;
 		if (historyButton != null) historyButton.active = !managementInFlight;
-		if (localModsButton != null) localModsButton.active = !managementInFlight;
 	}
 
 	private List<ManagementAction> managementActions() {
@@ -506,9 +498,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			if (hasRecoveryArchive()) actions.add(new ManagementAction(ManagementKind.RECOVERY, VersionedText.translatable("automodpack.management.recovery"), this::requestRecovery));
 		}
 		if (hasQuarantineArchive()) actions.add(new ManagementAction(ManagementKind.QUARANTINE, VersionedText.translatable("automodpack.management.quarantine"), this::requestQuarantine));
-		if (hasLocalModArchive()) actions.add(new ManagementAction(ManagementKind.LOCAL_MODS, VersionedText.translatable("automodpack.management.localMods"), this::requestLocalMods));
 		if (hasHistory()) actions.add(new ManagementAction(ManagementKind.HISTORY, VersionedText.translatable("automodpack.management.history"), this::requestHistory));
-		if (hasOtherInstalledPacks()) actions.add(new ManagementAction(ManagementKind.MANAGER, VersionedText.translatable("automodpack.packManager.switch"), this::requestPackManager));
+		if (hasInstalledPacks()) actions.add(new ManagementAction(ManagementKind.MANAGER, VersionedText.translatable("automodpack.packManager.switch"), this::requestPackManager));
 		return List.copyOf(actions);
 	}
 
@@ -532,14 +523,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 	}
 
-	private boolean hasLocalModArchive() {
-		try {
-			return LocalModArchive.hasEntries(storage);
-		} catch (IOException | RuntimeException e) {
-			return false;
-		}
-	}
-
 	private static int managementRowCount(int actionCount) {
 		return actionCount == 0 ? 0 : (actionCount + 2) / 3;
 	}
@@ -548,8 +531,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		try {
 			ClientGenerationStore generationStore = new ClientGenerationStore(storage);
 			String generationId = historyGenerationId();
+			List<GenerationRecord> availableLineage = generationStore.availableLineage(modpackId, generationId);
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(generationId);
-			return patchNotesHistory.size() > 1 || GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
+			return availableLineage.size() > 1 || GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
@@ -565,9 +549,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return localRecord.metadata().generationId();
 	}
 
-	private boolean hasOtherInstalledPacks() {
+	private boolean hasInstalledPacks() {
 		try {
-			return new ClientGenerationStore(storage).installedRecords().stream().anyMatch(record -> !modpackId.equals(record.manifest().modpackId()));
+			return !new ClientGenerationStore(storage).installedRecords().isEmpty();
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
@@ -646,17 +630,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				updater = new ModpackUpdater(target, null, null, storage);
 				UpdatePreview preview = updater.previewCachedSwitch();
 				ModpackUpdater finalUpdater = updater;
-				if (clientConfig != null && !clientConfig.reviewUpdates) {
-					new ScreenManager().waiting();
-					DownloadClient.NET_EXECUTOR.execute(() -> executeCachedSwitch(finalUpdater));
-				} else {
-					new ScreenManager().preview(preview, modpackName,
-							(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeCachedSwitch(finalUpdater)),
-							(Runnable) () -> {
-								finalUpdater.close();
-								switchInFlight = false;
-							}, false, true, Map.of());
-				}
+				new ScreenManager().preview(preview, modpackName,
+						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeCachedSwitch(finalUpdater)),
+						(Runnable) () -> {
+							finalUpdater.close();
+							switchInFlight = false;
+						}, false, true, Map.of());
 			} catch (Exception e) {
 				if (updater != null) updater.close();
 				switchInFlight = false;
@@ -875,5 +854,5 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private record ManagementAction(ManagementKind kind, MutableComponent label, Runnable action) {}
 
-	private enum ManagementKind { REMOVE, RECOVERY, QUARANTINE, LOCAL_MODS, HISTORY, MANAGER }
+	private enum ManagementKind { REMOVE, RECOVERY, QUARANTINE, HISTORY, MANAGER }
 }

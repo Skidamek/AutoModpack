@@ -101,4 +101,18 @@ class SmartFileUtilsTest {
 		assertTrue(SmartFileUtils.copyVerifiedAtomic(source, target, size, hash));
 		assertTrue(SmartFileUtils.isValidFile(target, size, hash));
 	}
+
+	@Test
+	void verifiedCreateOnlyCopyNeverReplacesDifferentTargetBytes() throws IOException {
+		Path source = Files.writeString(tempDir.resolve("create-only-source"), "verified content");
+		Path target = tempDir.resolve("mods/create-only.jar");
+		String hash = HashUtils.getHash(source);
+		long size = Files.size(source);
+
+		assertTrue(SmartFileUtils.copyVerifiedCreateOnly(source, target, size, hash));
+		assertFalse(SmartFileUtils.copyVerifiedCreateOnly(source, target, size, hash));
+		Files.writeString(target, "different");
+		assertThrows(IOException.class, () -> SmartFileUtils.copyVerifiedCreateOnly(source, target, size, hash));
+		assertEquals("different", Files.readString(target));
+	}
 }

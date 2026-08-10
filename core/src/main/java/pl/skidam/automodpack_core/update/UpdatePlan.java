@@ -43,15 +43,12 @@ public record UpdatePlan(
 	public enum Root {
 		PROJECTION,
 		OVERLAY,
-		GAME_DIR,
-		STORE_DIR
+		GAME_DIR
 	}
 
 	public enum OperationType {
-		CREATE_DIRECTORY,
 		INSTALL_OBJECT,
-		DELETE,
-		REMOVE_EMPTY_DIRECTORY
+		DELETE
 	}
 
 	public enum RestartReason {
@@ -118,7 +115,7 @@ public record UpdatePlan(
 
 	public record FileKey(Root root, String relativePath) {}
 
-	public record FileState(String sha1, long size, boolean regularFile, boolean mod) {}
+	public record FileState(String sha1, long size, boolean regularFile) {}
 
 	public record ModInfo(String relativePath, String sha1, long size, Set<String> ids, Set<String> dependencies) {
 		public ModInfo {

@@ -25,7 +25,6 @@ final class UiFormat {
 			case PROJECTION -> "active";
 			case OVERLAY -> "editable";
 			case GAME_DIR -> "game";
-			case STORE_DIR -> "cas";
 		};
 	}
 }

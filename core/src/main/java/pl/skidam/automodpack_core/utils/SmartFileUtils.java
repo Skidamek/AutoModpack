@@ -43,6 +43,33 @@ public class SmartFileUtils {
 		}
 	}
 
+	/** Copies a verified file without replacing a destination created by another operation. */
+	public static boolean copyVerifiedCreateOnly(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
+		if (isValidFile(targetFile, expectedSize, expectedSha1)) return false;
+		if (Files.exists(targetFile, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Target file already exists with different bytes: " + targetFile);
+		if (!isValidFile(sourceFile, expectedSize, expectedSha1)) throw new IOException("Source file failed size/SHA-1 verification: " + sourceFile);
+
+		createParentDirs(targetFile);
+		Path parent = targetFile.toAbsolutePath().normalize().getParent();
+		if (parent == null) throw new IOException("Target path has no parent: " + targetFile);
+		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
+		try {
+			Files.copy(sourceFile, temporary, StandardCopyOption.REPLACE_EXISTING);
+			forceFile(temporary);
+			if (!isValidFile(temporary, expectedSize, expectedSha1)) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
+			try {
+				moveCreateOnly(temporary, targetFile);
+			} catch (FileAlreadyExistsException raced) {
+				if (!isValidFile(targetFile, expectedSize, expectedSha1)) throw new IOException("Target file was created with different bytes: " + targetFile, raced);
+				return false;
+			}
+			if (!isValidFile(targetFile, expectedSize, expectedSha1)) throw new IOException("Created file failed size/SHA-1 verification: " + targetFile);
+			return true;
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
+	}
+
 	/** Installs an immutable CAS object as a hard link, with verified-copy fallback for filesystems that cannot link it. */
 	public static boolean linkVerifiedAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
 		if (isValidFile(targetFile, expectedSize, expectedSha1)) return false;
@@ -194,6 +221,14 @@ public class SmartFileUtils {
 		Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
 	}
 
+	private static void moveCreateOnly(Path sourceFile, Path targetFile) throws IOException {
+		try {
+			Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE);
+		} catch (AtomicMoveNotSupportedException unsupported) {
+			Files.move(sourceFile, targetFile);
+		}
+	}
+
 	private static void forceFile(Path file) throws IOException {
 		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
 			channel.force(true);
@@ -212,13 +247,6 @@ public class SmartFileUtils {
 			createParentDirs(file);
 		} catch (IOException e) {
 			LOGGER.error("Failed to create parent dirs", e);
-		}
-	}
-
-	public static boolean isEmptyDirectory(Path parentPath) throws IOException {
-		if (!Files.isDirectory(parentPath)) return false;
-		try (Stream<Path> pathStream = Files.list(parentPath)) {
-			return pathStream.findAny().isEmpty();
 		}
 	}
 
