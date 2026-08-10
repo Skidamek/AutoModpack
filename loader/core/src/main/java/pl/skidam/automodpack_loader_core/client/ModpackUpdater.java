@@ -131,7 +131,9 @@ public class ModpackUpdater implements AutoCloseable {
 	public UpdatePreview previewCachedSwitch() throws Exception {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Cached modpack target is unavailable");
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
-		if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)) throw new IllegalArgumentException("Cached switch target is already active");
+		if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)
+				&& Objects.equals(selectedTarget.expectedPriorIntent(), selectedTarget.selection().intent()))
+			throw new IllegalArgumentException("Cached modpack target and group selection are already active");
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			planBuilder.populateStoreFromCachedLocations(selectedTarget.flatTarget(), cache);
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(
@@ -382,23 +384,31 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public UpdateTransactionExecutor.Execution deactivateModpack() throws Exception {
-		ClientUpdatePlanBuilder.RemovalPreparation preparation = planBuilder.prepareRemoval();
-		clientConfig = preparation.currentConfig();
-		UpdateTransaction transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
-		if (execution.success()) clientConfig = preparation.plannedConfig();
-		return execution;
+		return applyRemovalLike(false);
 	}
 
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
 	public UpdateTransactionExecutor.Execution removeModpack() throws Exception {
+		return applyRemovalLike(true);
+	}
+
+	private UpdateTransactionExecutor.Execution applyRemovalLike(boolean remove) throws Exception {
 		ClientUpdatePlanBuilder.RemovalPreparation preparation = planBuilder.prepareRemoval();
 		clientConfig = preparation.currentConfig();
-		UpdateTransaction transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
+		UpdateTransaction transaction = remove
+				? UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId))
+				: UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 		if (execution.success()) {
 			clientConfig = preparation.plannedConfig();
-			new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
+			if (remove) new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
+			UpdatePreview applied = UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation),
+					remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION, preparation.baseline(),
+					preparation.completeFields().generation == null ? "" : preparation.completeFields().generation.patchNotes, List.of());
+			changelogs.replaceWith(applied, Map.of());
+			ApplyResult applyResult = applyResult(preparation.plan());
+			changelogs.setRestartReasons(applyResult.reasonDescriptions());
+			restartAfterApply(applyResult);
 		}
 		return execution;
 	}
@@ -736,31 +746,22 @@ public class ModpackUpdater implements AutoCloseable {
 	// this is run every time we modpack is updated
 	private ApplyResult applyPreparedPlan(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws Exception {
 		executePlan(prepared, target);
-		UpdatePlan plan = prepared.plan();
-
-		EnumSet<RestartReason> restartReasons = plan.restartReasons().stream().map(reason -> RestartReason.valueOf(reason.name()))
-				.collect(Collectors.toCollection(() -> EnumSet.noneOf(RestartReason.class)));
-		ApplyResult result = new ApplyResult(restartReasons);
+		ApplyResult result = applyResult(prepared.plan());
 		changelogs.setRestartReasons(result.reasonDescriptions());
 		if (result.requiresRestart()) LOGGER.info("Restart required because: {}", String.join(", ", result.reasonDescriptions()));
 		return result;
 	}
 
+	private static ApplyResult applyResult(UpdatePlan plan) {
+		EnumSet<RestartReason> restartReasons = plan.restartReasons().stream().map(reason -> RestartReason.valueOf(reason.name()))
+				.collect(Collectors.toCollection(() -> EnumSet.noneOf(RestartReason.class)));
+		return new ApplyResult(restartReasons);
+	}
+
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) {
 		UpdatePreview applied = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), target.flatTarget(), target.selection(), false, null,
 				target.generationRecord().metadata().patchNotes(), target.patchNotesHistory());
-		Map<UpdatePlan.FileKey, List<String>> mainPageUrls = resolveMainPageUrls(prepared);
-		changelogs.clear();
-		changelogs.setPatchNotes(applied.latestPatchNotes(), applied.patchNotesHistory());
-		for (UpdatePreview.Entry entry : applied.entries()) {
-			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
-			switch (entry.kind()) {
-				case ADDED, CHANGED -> changelogs.recordChanged(file, mainPageUrls.getOrDefault(file, List.of()));
-				case REMOVED -> changelogs.recordRemoved(file, mainPageUrls.getOrDefault(file, List.of()));
-				default -> {
-				}
-			}
-		}
+		changelogs.replaceWith(applied, resolveMainPageUrls(prepared));
 		LOGGER.info("Prepared update changes: {} changed, {} removed", changelogs.changedFiles().size(), changelogs.removedFiles().size());
 	}
 

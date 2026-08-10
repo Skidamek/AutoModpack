@@ -17,7 +17,7 @@ final class UiFormat {
 	}
 
 	static String changePath(UpdatePlan.FileKey file) {
-		return file.root() == UpdatePlan.Root.PROJECTION ? file.relativePath() : filePath(file);
+		return file.relativePath();
 	}
 
 	static String rootLabel(UpdatePlan.Root root) {

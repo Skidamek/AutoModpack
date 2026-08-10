@@ -104,7 +104,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			String action = VersionedText.translatable(conflict.action() == UpdatePlan.ConflictAction.QUARANTINE ? "automodpack.update.localConflict" : "automodpack.update.ownedConflict", ids).getString();
 			rows.add(new ListEntryWidget.Row(VersionedText.literal(truncateToWidth(this.font, "! " + action, panelWidth(PANEL_WIDTH) - 8)).withStyle(ChatFormatting.YELLOW), null));
 		}
-		for (UpdatePreview.Entry entry : preview.displayEntries()) {
+		for (UpdatePreview.Entry entry : preview.entries()) {
 			UpdatePlan.FileKey file = new UpdatePlan.FileKey(entry.root(), entry.relativePath());
 			String text = entry.kind().displaySymbol() + UiFormat.changePath(file) + "  (" + UiFormat.formatSize(entry.size()) + ")";
 			ChatFormatting color = entry.kind().isPreserved() ? ChatFormatting.GRAY : entry.kind() == UpdatePreview.Kind.UNSAFE ? ChatFormatting.RED : ChatFormatting.WHITE;

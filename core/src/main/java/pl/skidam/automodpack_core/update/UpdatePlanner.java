@@ -63,13 +63,22 @@ public final class UpdatePlanner {
 
 	}
 
-	public record SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays) {
+	public record SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays,
+			ClientStorageJsons.ClientBaselineFields baseline, Set<String> availableBaselineObjects) {
 		public SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest) {
-			this(previousModpackId, previousManifest, Map.of());
+			this(previousModpackId, previousManifest, Map.of(), null, Set.of());
+		}
+
+		public SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays) {
+			this(previousModpackId, previousManifest, previousEditableOverlays, null, Set.of());
 		}
 
 		public SelectionContext {
 			previousEditableOverlays = Collections.unmodifiableMap(new TreeMap<>(previousEditableOverlays == null ? Map.of() : previousEditableOverlays));
+			Set<String> normalizedObjects = new LinkedHashSet<>();
+			for (String value : availableBaselineObjects == null ? Set.<String>of() : availableBaselineObjects)
+				if (value != null) normalizedObjects.add(value.toLowerCase(Locale.ROOT));
+			availableBaselineObjects = Collections.unmodifiableSet(normalizedObjects);
 		}
 	}
 
@@ -114,6 +123,7 @@ public final class UpdatePlanner {
 		Map<FileKey, Operation> operations = new HashMap<>();
 		List<Preservation> preservations = new ArrayList<>();
 		EnumSet<RestartReason> restartReasons = EnumSet.noneOf(RestartReason.class);
+		restartReasons.add(RestartReason.SELECTED_MODPACK);
 
 		if (installed.list != null) for (var item : installed.list) {
 			FileKey key = new FileKey(Root.PROJECTION, normalize(item.file));
@@ -142,20 +152,8 @@ public final class UpdatePlanner {
 			OwnershipLedger.Content current = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!ledgerEntry.historicalHashes().contains(current)) continue;
 			ClientStorageJsons.ClientBaselineFields.EntryFields baseline = baselines.get(ledgerEntry.logicalPath());
-			if (baseline == null) continue;
-			if (baseline.absent) {
-				preservations.add(new Preservation(key.root(), key.relativePath(), current.sha1(), current.size()));
-				delete(operations, projected, key, current.sha1());
+			if (restoreBaseline(key, state, baseline, input.availableBaselineObjects(), projected, operations, preservations))
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
-				continue;
-			}
-			if (!HashUtils.isSha1(baseline.objectHash) || baseline.size < 0) continue;
-			String baselineHash = HashUtils.normalizeSha1(baseline.objectHash);
-			if (!input.availableBaselineObjects().contains(baselineHash)) continue;
-			if (matches(state, baselineHash, baseline.size)) continue;
-			operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, baselineHash, baseline.size, current.sha1()));
-			projected.put(key, new FileState(baselineHash, baseline.size, true));
-			restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
 
 		List<Operation> ordered = operations.values().stream().sorted(OPERATION_ORDER).toList();
@@ -209,7 +207,7 @@ public final class UpdatePlanner {
 			}
 		}
 
-		if (installedLedger != null) planLedgerCleanup(installedLedger, targetItems.keySet(), projected, operations, preservations, restartReasons);
+		if (installedLedger != null) planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), input.selection(), projected, operations, preservations, restartReasons);
 		else planServerKnownCleanup(ledger, targetItems.keySet(), projected, operations, preservations, restartReasons);
 		if (input.installedManifest() != null && !Objects.equals(input.installedManifest().selectedGroups, target.selectedGroups))
 			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
@@ -286,10 +284,11 @@ public final class UpdatePlanner {
 		captures.addAll(planned.values());
 	}
 
-	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> targetPaths, Map<FileKey, FileState> projected,
+	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> installedPaths, Set<String> targetPaths, SelectionContext selection, Map<FileKey, FileState> projected,
 			Map<FileKey, Operation> operations, List<Preservation> preservations, EnumSet<RestartReason> restartReasons) {
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselines = selection == null ? Map.of() : baselineEntries(selection.baseline(), ledger.modpackId());
 		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
-			if (targetPaths.contains(entry.logicalPath())) continue;
+			if (!installedPaths.contains(entry.logicalPath()) || targetPaths.contains(entry.logicalPath())) continue;
 			Optional<FileKey> candidateKey = managedCleanupKey(entry.logicalPath());
 			if (candidateKey.isEmpty()) continue;
 			FileKey key = candidateKey.get();
@@ -297,10 +296,44 @@ public final class UpdatePlanner {
 			if (state == null || !state.regularFile() || state.sha1() == null) continue;
 			OwnershipLedger.Content content = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!entry.historicalHashes().contains(content)) continue;
-			preservations.add(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size()));
-			delete(operations, projected, key, state.sha1());
-			restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
+			ClientStorageJsons.ClientBaselineFields.EntryFields baseline = baselines.get(entry.logicalPath());
+			if (selection == null || selection.baseline() == null) {
+				preservations.add(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size()));
+				delete(operations, projected, key, state.sha1());
+				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
+				continue;
+			}
+			if (restoreBaseline(key, state, baseline, selection.availableBaselineObjects(), projected, operations, preservations))
+				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
+	}
+
+	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline, String modpackId) {
+		if (baseline == null || !Objects.equals(modpackId, baseline.modpackId) || baseline.entries == null) return Map.of();
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
+		for (var entry : baseline.entries) if (entry != null && entry.logicalPath != null) entries.put(normalize(entry.logicalPath), entry);
+		return entries;
+	}
+
+	private static boolean baselineMatches(FileState state, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
+		return !baseline.absent && HashUtils.isSha1(baseline.objectHash) && baseline.size >= 0 && matches(state, baseline.objectHash, baseline.size);
+	}
+
+	private static boolean restoreBaseline(FileKey key, FileState state, ClientStorageJsons.ClientBaselineFields.EntryFields baseline,
+			Set<String> availableBaselineObjects, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, List<Preservation> preservations) {
+		if (baseline == null || baselineMatches(state, baseline)) return false;
+		String currentHash = state.sha1().toLowerCase(Locale.ROOT);
+		if (baseline.absent) {
+			preservations.add(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
+			delete(operations, projected, key, currentHash);
+			return true;
+		}
+		if (!HashUtils.isSha1(baseline.objectHash) || baseline.size < 0) return false;
+		String baselineHash = HashUtils.normalizeSha1(baseline.objectHash);
+		if (!availableBaselineObjects.contains(baselineHash)) return false;
+		preservations.add(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
+		install(operations, projected, key, baselineHash, baseline.size, currentHash);
+		return true;
 	}
 
 	private static void planServerKnownCleanup(OwnershipLedger ledger, Set<String> targetPaths, Map<FileKey, FileState> projected,
