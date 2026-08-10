@@ -26,6 +26,8 @@ import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 
+import pl.skidam.automodpack_core.utils.FileStreams;
+
 public class NetUtils {
 
 	// Magic numbers
@@ -145,7 +147,7 @@ public class NetUtils {
 
 	public static X509Certificate loadCertificate(Path path) throws Exception {
 		if (!Files.exists(path)) return null;
-		try (InputStream in = Files.newInputStream(path)) {
+		try (InputStream in = FileStreams.open(path)) {
 			CertificateFactory cf = CertificateFactory.getInstance("X.509");
 			return (X509Certificate) cf.generateCertificate(in);
 		}

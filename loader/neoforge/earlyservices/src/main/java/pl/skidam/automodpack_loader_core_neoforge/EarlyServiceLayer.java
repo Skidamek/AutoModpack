@@ -21,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.FileStreams;
 
 /**
  * NeoForge 21.6+ ("FML 10.x"/"11.x") drops ModLauncher/securejarhandler entirely: early-service
@@ -167,7 +168,7 @@ public final class EarlyServiceLayer {
 		List<String> impls = new ArrayList<>();
 		Path service = fs.getPath(serviceFile);
 		if (!Files.exists(service)) return impls;
-		try (InputStream is = Files.newInputStream(service); BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+		try (InputStream is = FileStreams.open(service); BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
 			String line;
 			while ((line = reader.readLine()) != null) {
 				int comment = line.indexOf('#');

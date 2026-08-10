@@ -17,9 +17,9 @@ import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public class DataC2SPacket {
 	public static CompletableFuture<FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
@@ -80,7 +80,7 @@ public class DataC2SPacket {
 			return CompletableFuture.completedFuture(buildResponse(LoginUpdateResponse.HOST_ERROR));
 		}
 
-		ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+		ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 		return ClientLoginUpdateFlow.reconcile(handler, connectionInfo, secret, storage).thenApply(DataC2SPacket::buildResponse);
 	}
 
