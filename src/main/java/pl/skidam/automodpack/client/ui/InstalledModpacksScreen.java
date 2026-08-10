@@ -21,7 +21,7 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 
 /** Lists locally installed packs without changing the active projection. */
 public final class InstalledModpacksScreen extends VersionedScreen {
@@ -36,7 +36,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	public InstalledModpacksScreen(Screen parent) {
 		super(VersionedText.translatable("automodpack.packManager.title"));
 		this.parent = parent;
-		this.storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+		this.storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 		this.entries = loadEntries(storage);
 	}
 

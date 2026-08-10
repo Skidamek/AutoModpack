@@ -10,6 +10,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 
+import pl.skidam.automodpack_core.utils.FileStreams;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Resolves the bounded, optional notes input for a generation operation. */
@@ -115,7 +116,7 @@ public final class GenerationPatchNotes {
 	private static byte[] readBytes(Path path, long expectedSize) throws IOException {
 		if (expectedSize > Integer.MAX_VALUE) throw new IOException("Patch notes are too large");
 		byte[] bytes = new byte[(int) expectedSize];
-		try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+		try (FileChannel channel = FileStreams.openChannelNoFollow(path)) {
 			ByteBuffer buffer = ByteBuffer.wrap(bytes);
 			while (buffer.hasRemaining() && channel.read(buffer) >= 0) {
 			}
