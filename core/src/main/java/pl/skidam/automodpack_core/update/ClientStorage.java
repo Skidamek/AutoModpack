@@ -158,6 +158,10 @@ public final class ClientStorage {
 		return root;
 	}
 
+	public Path generatedCopiesPackDirectory(String modpackId) {
+		return generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
+	}
+
 	public Path activeDirectory() {
 		return activeDirectory;
 	}
@@ -264,6 +268,10 @@ public final class ClientStorage {
 
 	public Path connectionFile(String modpackId) {
 		return packsDirectory.resolve(ModpackId.requireValid(modpackId)).resolve("connection.json").normalize();
+	}
+
+	public Path connectionDirectory(String modpackId) {
+		return packsDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
 	}
 
 	public Path connectionLockFile(String modpackId) {

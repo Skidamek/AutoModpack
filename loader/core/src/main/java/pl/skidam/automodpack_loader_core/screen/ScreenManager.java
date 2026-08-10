@@ -33,14 +33,19 @@ public class ScreenManager implements ScreenService {
 	}
 
 	@Override
+	public void completeWithoutRestart() {
+		INSTANCE.completeWithoutRestart();
+	}
+
+	@Override
 	public void welcome(ModpackUpdater modpackUpdater) {
 		INSTANCE.welcome(modpackUpdater);
 	}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean removal, boolean returnToSelection,
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
 			Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
-		return INSTANCE.preview(preview, modpackName, continueAction, cancelAction, removal, returnToSelection, mainPageUrls);
+		return INSTANCE.preview(preview, modpackName, continueAction, cancelAction, returnToSelection, mainPageUrls);
 	}
 
 	@Override

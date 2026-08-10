@@ -113,7 +113,7 @@ class FakeBridge:
                 "screenClass": "ModpackSelectionScreen",
                 "buttons": [{"id": 27, "text": "Core", "enabled": False, "visible": True},
                             {"id": 28, "text": "Client", "enabled": True, "visible": True},
-                            {"id": 29, "text": ("[+] Visuals (required by selection)" if self.dependency else "Visuals"), "enabled": True, "visible": True},
+							{"id": 29, "text": ("[+] Visuals (required by Addon)" if self.dependency else "Visuals"), "enabled": True, "visible": True},
                             {"id": 30, "text": "Next >", "enabled": True, "visible": True},
                             {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
                 "textFields": [],
@@ -182,8 +182,8 @@ class FakeBridge:
                 "buttons": [{"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
                             {"id": 13, "text": "Save", "enabled": True, "visible": True},
                             {"id": 57, "text": "History", "enabled": True, "visible": True},
-                            *([{"id": 43, "text": "Quarantine", "enabled": True, "visible": True}] if self._quarantine_available() else []),
-                            *([{"id": 41, "text": "Remove", "enabled": True, "visible": True}] if self.selected_pack == "A" else [])],
+                            {"id": 66, "text": "Files", "enabled": True, "visible": True},
+                            *([{"id": 43, "text": "Quarantine", "enabled": True, "visible": True}] if self._quarantine_available() else [])],
                 "textFields": [],
             },
             "selection": {
@@ -199,12 +199,13 @@ class FakeBridge:
             },
             "content_history": {
                 "screenClass": "ContentHistoryScreen",
-                "buttons": [{"id": 60, "text": "Generation 1", "enabled": False, "visible": True},
+                "buttons": [{"id": 60, "text": "Generation 1", "enabled": True, "visible": True},
                             {"id": 61, "text": "Cached Pack B fixture.", "enabled": False, "visible": True},
-                            {"id": 62, "text": "Generation 2", "enabled": False, "visible": True},
+                            {"id": 62, "text": "Generation 2", "enabled": True, "visible": True},
                             {"id": 63, "text": "Pack B v2 removes the incompatible mod.", "enabled": False, "visible": True},
                             {"id": 58, "text": "Back", "enabled": True, "visible": True},
-                            {"id": 59, "text": "View all patch notes", "enabled": True, "visible": True}],
+                            {"id": 59, "text": "View all patch notes", "enabled": True, "visible": True},
+                            {"id": 66, "text": "Files", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "content_patch_history": {
@@ -548,10 +549,16 @@ class FakeBridge:
         if not self.secondary_pack:
             state = "active" if self.selected_pack == "A" else "switch"
             return [{"id": 9, "text": f"Pack A  [{state}]  connected", "enabled": True, "visible": True},
+                    {"id": 70, "text": "Update", "enabled": self.selected_pack == "A", "visible": True},
+                    {"id": 71, "text": "Deactivate", "enabled": self.selected_pack == "A", "visible": True},
+                    {"id": 41, "text": "Remove", "enabled": True, "visible": True},
                     {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
         a_state = "active" if self.selected_pack == "A" else "switch"
         b_state = "active" if self.selected_pack == "B" else "switch"
         return [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
+                {"id": 70, "text": "Update", "enabled": self.selected_pack == "A", "visible": True},
+                {"id": 71, "text": "Deactivate", "enabled": self.selected_pack == "A", "visible": True},
+                {"id": 41, "text": "Remove", "enabled": True, "visible": True},
                 {"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
                 {"id": 11, "text": f"Pack B  [{b_state}]  local record", "enabled": True, "visible": True},
                 {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]

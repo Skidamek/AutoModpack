@@ -44,8 +44,10 @@ public final class UpdateTransaction {
 	public String overlayDigest;
 	public boolean expectedPriorSelectionPresent;
 	public List<String> expectedPriorRequestedGroups;
+	public List<String> expectedPriorRequestedTags;
 	public List<String> expectedPriorExcludedGroups;
 	public List<String> requestedGroups;
+	public List<String> requestedTags;
 	public List<String> excludedGroups;
 	public List<Operation> operations;
 	public List<ProjectedFile> projectedFinalState;
@@ -75,8 +77,10 @@ public final class UpdateTransaction {
 		transaction.targetPlatform = target.platform().id();
 		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
 		transaction.expectedPriorRequestedGroups = intentValues(target.expectedPriorIntent(), IntentPart.GROUPS);
+		transaction.expectedPriorRequestedTags = intentValues(target.expectedPriorIntent(), IntentPart.TAGS);
 		transaction.expectedPriorExcludedGroups = intentValues(target.expectedPriorIntent(), IntentPart.EXCLUDED);
 		transaction.requestedGroups = new ArrayList<>(target.selection().intent().requestedGroups());
+		transaction.requestedTags = new ArrayList<>(target.selection().intent().requestedTags());
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.selectionDigest = digest(target.selection().intent());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
@@ -86,15 +90,25 @@ public final class UpdateTransaction {
 	}
 
 	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
+		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, overlayDigest);
+	}
+
+	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
+		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, overlayDigest);
+	}
+
+	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(platform, "platform");
-		UpdateTransaction transaction = base(Purpose.MODPACK_REMOVAL);
+		UpdateTransaction transaction = base(purpose);
 		fillGeneration(transaction, plan.generationTarget());
 		transaction.targetPlatform = platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
 		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
+		transaction.expectedPriorRequestedTags = intentValues(expectedPriorIntent, IntentPart.TAGS);
 		transaction.expectedPriorExcludedGroups = intentValues(expectedPriorIntent, IntentPart.EXCLUDED);
 		transaction.requestedGroups = List.of();
+		transaction.requestedTags = List.of();
 		transaction.excludedGroups = List.of();
 		transaction.selectionDigest = digest(expectedPriorIntent);
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
@@ -157,13 +171,14 @@ public final class UpdateTransaction {
 	}
 
 	private enum IntentPart {
-		GROUPS, EXCLUDED
+		GROUPS, TAGS, EXCLUDED
 	}
 
 	private static List<String> intentValues(SelectionIntent intent, IntentPart part) {
 		if (intent == null) return List.of();
 		return switch (part) {
 			case GROUPS -> new ArrayList<>(intent.requestedGroups());
+			case TAGS -> new ArrayList<>(intent.requestedTags());
 			case EXCLUDED -> new ArrayList<>(intent.excludedGroups());
 		};
 	}
@@ -177,18 +192,19 @@ public final class UpdateTransaction {
 	}
 
 	public SelectionIntent expectedPriorIntent() {
-		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups, expectedPriorExcludedGroups) : null;
+		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups, expectedPriorRequestedTags, expectedPriorExcludedGroups) : null;
 	}
 
 	public SelectionIntent targetIntent() {
-		return new SelectionIntent(requestedGroups, excludedGroups);
+		return new SelectionIntent(requestedGroups, requestedTags, excludedGroups);
 	}
 
 	public static String digest(SelectionIntent intent) {
 		if (intent == null) return "";
 		MessageDigest digest = HashUtils.newSha1Digest();
-		digest.update("automodpack-selection-v1\n".getBytes(StandardCharsets.UTF_8));
+		digest.update("automodpack-selection-v2\n".getBytes(StandardCharsets.UTF_8));
 		for (String value : intent.requestedGroups().stream().sorted().toList()) digest.update(("group=" + value + "\n").getBytes(StandardCharsets.UTF_8));
+		for (String value : intent.requestedTags().stream().sorted().toList()) digest.update(("tag=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		for (String value : intent.excludedGroups().stream().sorted().toList()) digest.update(("excluded=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		return HexFormat.of().formatHex(digest.digest());
 	}
@@ -204,6 +220,7 @@ public final class UpdateTransaction {
 
 	public enum Purpose {
 		MODPACK_UPDATE,
+		MODPACK_DEACTIVATION,
 		MODPACK_REMOVAL,
 		SELF_UPDATE
 	}

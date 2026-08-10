@@ -712,14 +712,24 @@ flow:
     name: open modpack settings for the installed Pack A
     select: { text: Modpack settings }
   - do: wait_for
-    name: show active Pack A management actions
+    name: show Pack A settings without lifecycle actions
     until:
       all:
         - screen: ModpackSelectionScreen
+        - element: { text: Pack manager, enabled: true }
+        - no_element: { text: Remove }
+  - do: click
+    name: open the Pack A manager
+    select: { text: Pack manager }
+  - do: wait_for
+    name: show active Pack A lifecycle actions
+    until:
+      all:
+        - screen: InstalledModpacksScreen
         - element: { text: Remove, enabled: true }
   - do: screenshot
-    name: capture active Pack A removal settings
-    file: all-removal-settings
+    name: capture active Pack A manager actions
+    file: all-pack-manager-actions
   - do: click
     name: open the Pack A removal review
     select: { text: Remove }

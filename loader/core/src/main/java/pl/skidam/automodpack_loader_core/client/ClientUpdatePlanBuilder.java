@@ -130,6 +130,7 @@ final class ClientUpdatePlanBuilder {
 		GeneratedCopyState generatedCopies = expectedPriorIntent == null ? null : readGeneratedCopyState(installed, expectedPriorIntent);
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			captureActiveEditableOverlays(cache);
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null,
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));

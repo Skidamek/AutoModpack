@@ -170,6 +170,34 @@ class ClientGenerationStoreTest {
 	}
 
 	@Test
+	void forgetModpackDeletesOnlyTheInactivePacksRetainedState() throws Exception {
+		ClientStorage storage = storage();
+		String firstHash = store(storage, "first-object");
+		String secondHash = store(storage, "second-object");
+		GenerationRecord first = record(FIRST_PACK, firstHash, Files.size(storage.objectsDirectory().resolve(firstHash)), Instant.parse("2026-01-01T00:00:00Z"), null);
+		GenerationRecord second = record(SECOND_PACK, secondHash, Files.size(storage.objectsDirectory().resolve(secondHash)), Instant.parse("2026-01-01T00:00:00Z"), null);
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		generations.write(first);
+		generations.write(second);
+		storage.writeActiveState(SECOND_PACK, second.metadata().generationId());
+		Path overlay = storage.overlayFile(FIRST_PACK, "config/options.txt");
+		Files.createDirectories(overlay.getParent());
+		Files.writeString(overlay, "edit", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.connectionDirectory(FIRST_PACK));
+		Files.writeString(storage.connectionDirectory(FIRST_PACK).resolve("connection.json"), "{}", StandardCharsets.UTF_8);
+
+		generations.forgetModpack(FIRST_PACK);
+
+		assertTrue(generations.read(first.metadata().generationId()).isEmpty());
+		assertEquals(second, generations.read(second.metadata().generationId()).orElseThrow());
+		assertFalse(Files.exists(storage.overlayDirectory(FIRST_PACK)));
+		assertFalse(Files.exists(storage.connectionDirectory(FIRST_PACK)));
+		assertFalse(Files.exists(storage.objectsDirectory().resolve(firstHash)));
+		assertTrue(Files.exists(storage.objectsDirectory().resolve(secondHash)));
+		assertEquals(second.metadata().generationId(), storage.readActiveState().generationId);
+	}
+
+	@Test
 	void preservesOverlaysBaselinesQuarantineAndLocalFiles() throws Exception {
 		ClientStorage storage = storage();
 		String hash = store(storage, "record-object");
