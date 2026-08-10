@@ -4,7 +4,6 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.lang.reflect.Method;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.Locale;
@@ -21,7 +20,7 @@ public class JarUtils {
 	}
 
 	public static boolean isRegularJar(Path path) {
-		return hasJarExtension(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
+		return hasJarExtension(path) && Files.isRegularFile(path);
 	}
 
 	public static Path getJarPath(Class<?> clazz) {

@@ -74,8 +74,9 @@ public class ModpackExecutor {
 	}
 
 	public PreviewResult preview(String inlineNotes) {
-		if (!acquire(false)) return new PreviewBusy("Another modpack operation is already in progress");
-		try {
+		OperationLease operation = acquire(false);
+		if (operation == null) return new PreviewBusy("Another modpack operation is already in progress");
+		try (operation) {
 			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
 			try (ModpackCandidate candidate = buildCandidate(previous)) {
 				GenerationDiff diff = GenerationDiff.between(previous.map(snapshot -> snapshot.record().manifest()).orElse(null), candidate.manifest());
@@ -86,8 +87,6 @@ public class ModpackExecutor {
 		} catch (Exception e) {
 			LOGGER.error("Failed to preview modpack generation", e);
 			return new PreviewFailed(e);
-		} finally {
-			scanActive.set(false);
 		}
 	}
 
@@ -116,9 +115,10 @@ public class ModpackExecutor {
 	public RevertResult revert(String targetGenerationId, String inlineNotes) {
 		if (!HashUtils.isCanonicalSha1(targetGenerationId))
 			return new RevertInvalidTarget("Rollback target must be a canonical 40-character lowercase SHA-1");
-		if (!acquire(true)) return new RevertBusy("Another modpack operation is already in progress");
+		OperationLease operation = acquire(true);
+		if (operation == null) return new RevertBusy("Another modpack operation is already in progress");
 		GenerationStore.Publication publication = null;
-		try {
+		try (operation) {
 			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
 			GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
 			publication = generationStore.publishRevert(targetGenerationId, previous, notes.text());
@@ -129,9 +129,6 @@ public class ModpackExecutor {
 			if (publication != null) return new Reverted(publication.record(), targetGenerationId, List.of("Revert published, but post-publication cleanup was incomplete"));
 			LOGGER.error("Failed to publish modpack revert", e);
 			return new RevertFailed(e);
-		} finally {
-			publicationActive.set(false);
-			scanActive.set(false);
 		}
 	}
 
@@ -144,21 +141,20 @@ public class ModpackExecutor {
 	}
 
 	public GenerationStore.CompactionResult compactHistory() throws IOException {
-		if (!acquire(true)) throw new IOException("Another modpack operation is already in progress");
-		try {
+		OperationLease operation = acquire(true);
+		if (operation == null) throw new IOException("Another modpack operation is already in progress");
+		try (operation) {
 			return generationStore.compact();
-		} finally {
-			publicationActive.set(false);
-			scanActive.set(false);
 		}
 	}
 
 	private PublishResult publishInternal(String expectedStateDigest, String inlineNotes) {
-		if (!acquire(true)) return new PublishBusy("Another modpack operation is already in progress");
+		OperationLease operation = acquire(true);
+		if (operation == null) return new PublishBusy("Another modpack operation is already in progress");
 		GenerationStore.Publication publication = null;
 		PublishResult committedResult = null;
 		CandidateState committedState = null;
-		try {
+		try (operation) {
 			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
 			if (expectedStateDigest != null && previous.isEmpty())
 				return new PublishGuardUnsupported("A state guard is unavailable before the root generation is published");
@@ -201,9 +197,6 @@ public class ModpackExecutor {
 			}
 			LOGGER.error("Failed to publish modpack generation", e);
 			return new PublishFailed(e);
-		} finally {
-			publicationActive.set(false);
-			scanActive.set(false);
 		}
 	}
 
@@ -235,8 +228,9 @@ public class ModpackExecutor {
 	}
 
 	public LoadResult loadLast() {
-		if (!acquire(false)) return new LoadBusy("Another modpack operation is already in progress");
-		try {
+		OperationLease operation = acquire(false);
+		if (operation == null) return new LoadBusy("Another modpack operation is already in progress");
+		try (operation) {
 			GenerationStore.CurrentSnapshot current = generationStore.loadCurrentAndRepair().orElseThrow(() -> new IOException("No current generation pointer exists"));
 			try {
 				replaceHosting(current.hostingPaths());
@@ -249,8 +243,6 @@ public class ModpackExecutor {
 		} catch (Exception e) {
 			LOGGER.error("Failed to load the current modpack generation", e);
 			return new LoadFailed(e);
-		} finally {
-			scanActive.set(false);
 		}
 	}
 
@@ -277,13 +269,30 @@ public class ModpackExecutor {
 		}
 	}
 
-	private boolean acquire(boolean publication) {
-		if (!scanActive.compareAndSet(false, true)) return false;
+	private OperationLease acquire(boolean publication) {
+		if (!scanActive.compareAndSet(false, true)) return null;
 		if (publication && !publicationActive.compareAndSet(false, true)) {
 			scanActive.set(false);
-			return false;
+			return null;
 		}
-		return true;
+		return new OperationLease(publication);
+	}
+
+	private final class OperationLease implements AutoCloseable {
+		private final boolean publication;
+		private boolean closed;
+
+		private OperationLease(boolean publication) {
+			this.publication = publication;
+		}
+
+		@Override
+		public void close() {
+			if (closed) return;
+			closed = true;
+			if (publication) publicationActive.set(false);
+			scanActive.set(false);
+		}
 	}
 
 	private void replaceHosting(GenerationHosting paths) {
