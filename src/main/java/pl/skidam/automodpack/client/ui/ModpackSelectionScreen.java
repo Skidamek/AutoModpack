@@ -72,6 +72,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final Runnable cancelAction;
 	private final ModpackUpdater pendingUpdater;
 	private final boolean managerEntry;
+	private final boolean openedFromManager;
 	private final boolean activeModpack;
 	private final GenerationRecord localRecord;
 
@@ -96,23 +97,24 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private Button saveButton;
 
 	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
-		this(parent, manifest, null, null, null, () -> {}, null, false, null);
+		this(parent, manifest, null, null, null, () -> {}, null, false, false, null);
 	}
 
 	public ModpackSelectionScreen(Screen parent, ModpackUpdater updater, Consumer<SelectionIntent> selectionAction) {
-		this(parent, updater.getSelectedTarget().manifest(), updater.getSelectedTarget().expectedPriorIntent(), updater.getSelectedTarget().selection().intent(), selectionAction, () -> {}, updater, false, null);
+		this(parent, updater.getSelectedTarget().manifest(), updater.getSelectedTarget().expectedPriorIntent(), updater.getSelectedTarget().selection().intent(), selectionAction, () -> {}, updater, false, false, null);
 	}
 
 	public static ModpackSelectionScreen repair(Screen parent, GroupManifest manifest, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
-		return new ModpackSelectionScreen(parent, manifest, savedSelection, savedSelection, selectionAction, cancelAction, null, false, null);
+		return new ModpackSelectionScreen(parent, manifest, savedSelection, savedSelection, selectionAction, cancelAction, null, false, false, null);
 	}
 
 	public static ModpackSelectionScreen forInstalledRecord(Screen parent, GenerationRecord record, boolean managerEntry) {
-		return new ModpackSelectionScreen(parent, record.manifest(), null, null, null, () -> {}, null, managerEntry, record);
+		return new ModpackSelectionScreen(parent, record.manifest(), null, null, null, () -> {}, null, managerEntry, true, record);
 	}
 
 	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, SelectionIntent expectedSelection, SelectionIntent initialSelection,
-			Consumer<SelectionIntent> selectionAction, Runnable cancelAction, ModpackUpdater pendingUpdater, boolean managerEntry, GenerationRecord localRecord) {
+			Consumer<SelectionIntent> selectionAction, Runnable cancelAction, ModpackUpdater pendingUpdater, boolean managerEntry, boolean openedFromManager,
+			GenerationRecord localRecord) {
 		super(VersionedText.translatable("automodpack.selection.title"));
 		this.parent = parent;
 		this.manifest = Objects.requireNonNull(manifest);
@@ -128,6 +130,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.cancelAction = cancelAction;
 		this.pendingUpdater = pendingUpdater;
 		this.managerEntry = managerEntry;
+		this.openedFromManager = openedFromManager;
 		this.activeModpack = activeModpack(storage, modpackId);
 		this.localRecord = localRecord;
 		SelectionIntent initial = initialSelection != null
@@ -169,7 +172,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return parent;
 		}
 
-		return new ModpackSelectionScreen(parent, manifest, null, null, null, () -> {}, null, false, record);
+		return new ModpackSelectionScreen(parent, manifest, null, null, null, () -> {}, null, false, false, record);
 	}
 
 	public static boolean hasModpackManagement() {
@@ -441,7 +444,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		try {
 			return new ModpackUpdater(null, null, storage);
 		} catch (RuntimeException e) {
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			return null;
 		}
 	}
@@ -459,7 +462,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			} catch (Exception e) {
 				recoveryUpdater.close();
 				endManagement();
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
 	}
@@ -475,7 +478,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				new ScreenManager().history(availableLineage, modpackName, patchNotesHistory, this::endManagement);
 			} catch (Exception e) {
 				endManagement();
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
 	}
@@ -590,21 +593,21 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void requestPackManager() {
-		ScreenImpl.setScreen(new InstalledModpacksScreen(this));
+		ScreenImpl.setScreen(openedFromManager ? parent : new InstalledModpacksScreen(this, modpackId));
 	}
 
 	private void save() {
 		SelectionIntent target = currentIntent();
 		if (!resolutionErrors.isEmpty()) {
-			new ScreenManager().error("automodpack.error.critical", resolutionErrors.get(0), "automodpack.error.logs");
+			String error = resolutionErrors.get(0);
+			new ScreenManager().error(new IllegalStateException(error), "automodpack.error.critical", error, "automodpack.error.logs");
 			return;
 		}
 		if (selectionAction != null) {
 			try {
 				selectionAction.accept(target);
 			} catch (RuntimeException e) {
-				LOGGER.error("Failed to prepare the selected modpack target", e);
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 			return;
 		}
@@ -617,15 +620,14 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			saved = true;
 			rebuild();
 		} catch (IOException e) {
-			LOGGER.error("Failed to save group selection for modpack {}", modpackId, e);
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 		}
 	}
 
 	private void startCachedSwitch(SelectionIntent targetIntent) {
 		if (switchInFlight) return;
 		switchInFlight = true;
-		CachedModpackSwitch.start(storage, localRecord, expectedSelection, targetIntent, modpackName, true, () -> switchInFlight = false);
+		InstalledModpackSwitch.start(storage, localRecord, expectedSelection, targetIntent, modpackName, true, () -> switchInFlight = false);
 	}
 
 	private void back() {

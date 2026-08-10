@@ -152,7 +152,7 @@ public final class UpdatePlanner {
 			OwnershipLedger.Content current = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!ledgerEntry.historicalHashes().contains(current)) continue;
 			ClientStorageJsons.ClientBaselineFields.EntryFields baseline = baselines.get(ledgerEntry.logicalPath());
-			if (restoreBaseline(key, state, baseline, input.availableBaselineObjects(), projected, operations, preservations))
+			if (restoreOwnedLiveFile(key, state, baseline, input.availableBaselineObjects(), projected, operations, preservations))
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
 
@@ -304,7 +304,7 @@ public final class UpdatePlanner {
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 				continue;
 			}
-			if (restoreBaseline(key, state, baseline, selection.availableBaselineObjects(), projected, operations, preservations))
+			if (restoreOwnedLiveFile(key, state, baseline, selection.availableBaselineObjects(), projected, operations, preservations))
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
 	}
@@ -320,11 +320,13 @@ public final class UpdatePlanner {
 		return !baseline.absent && HashUtils.isSha1(baseline.objectHash) && baseline.size >= 0 && matches(state, baseline.objectHash, baseline.size);
 	}
 
-	private static boolean restoreBaseline(FileKey key, FileState state, ClientStorageJsons.ClientBaselineFields.EntryFields baseline,
+	private static boolean restoreOwnedLiveFile(FileKey key, FileState state, ClientStorageJsons.ClientBaselineFields.EntryFields baseline,
 			Set<String> availableBaselineObjects, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, List<Preservation> preservations) {
-		if (baseline == null || baselineMatches(state, baseline)) return false;
+		if (baseline != null && baselineMatches(state, baseline)) return false;
 		String currentHash = state.sha1().toLowerCase(Locale.ROOT);
-		if (baseline.absent) {
+		// Callers prove these exact bytes belong to the installed selection before a missing
+		// baseline is interpreted as no pre-install file to restore.
+		if (baseline == null || baseline.absent) {
 			preservations.add(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
 			delete(operations, projected, key, currentHash);
 			return true;

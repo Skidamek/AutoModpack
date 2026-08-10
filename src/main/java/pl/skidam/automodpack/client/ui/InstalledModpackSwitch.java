@@ -12,10 +12,12 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
-final class CachedModpackSwitch {
-	private CachedModpackSwitch() {}
+/** Switches an installed generation, reusing local objects and connecting only when the selected target needs more. */
+final class InstalledModpackSwitch {
+	private InstalledModpackSwitch() {}
 
 	static void start(ClientStorage storage, GenerationRecord record, SelectionIntent expectedSelection, SelectionIntent targetSelection,
 			String modpackName, boolean returnToSelection, Runnable release) {
@@ -25,8 +27,8 @@ final class CachedModpackSwitch {
 				var fields = new ClientGenerationStore(storage).readFields(record.metadata().generationId())
 						.orElseThrow(() -> new IOException("Installed modpack generation record is missing"));
 				SelectedModpackTarget target = SelectedModpackTarget.prepare(fields, expectedSelection, targetSelection, ClientPlatform.current());
-				updater = new ModpackUpdater(target, null, null, storage);
-				UpdatePreview preview = updater.previewCachedSwitch();
+				updater = updater(storage, target);
+				UpdatePreview preview = updater.previewInstalledSwitch();
 				ModpackUpdater finalUpdater = updater;
 				new ScreenManager().preview(preview, modpackName,
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> apply(finalUpdater, release)),
@@ -37,18 +39,28 @@ final class CachedModpackSwitch {
 			} catch (Exception e) {
 				if (updater != null) updater.close();
 				release.run();
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
 	}
 
+	private static ModpackUpdater updater(ClientStorage storage, SelectedModpackTarget target) throws Exception {
+		ModpackUpdater local = new ModpackUpdater(target, null, null, storage);
+		if (!local.requiresSelectedTargetDownload()) return local;
+		local.close();
+
+		try (StoredModpackConnection connection = StoredModpackConnection.open(storage, target.manifest().modpackId(), true)) {
+			return connection.newUpdater(target, storage);
+		}
+	}
+
 	private static void apply(ModpackUpdater updater, Runnable release) {
 		try {
-			updater.applyCachedSwitch();
+			updater.applyInstalledSwitch();
 		} catch (Exception e) {
 			updater.close();
 			release.run();
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 		}
 	}
 }

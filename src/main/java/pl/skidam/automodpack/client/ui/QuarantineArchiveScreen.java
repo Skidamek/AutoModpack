@@ -142,7 +142,7 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 		if (closed) return;
 		busy = false;
 		closeToParent();
-		new ScreenManager().error("automodpack.error.critical", String.valueOf(exception.getMessage()), "automodpack.error.logs");
+		new ScreenManager().error(exception, "automodpack.error.critical", String.valueOf(exception.getMessage()), "automodpack.error.logs");
 	}
 
 	private void closeToParent() {
