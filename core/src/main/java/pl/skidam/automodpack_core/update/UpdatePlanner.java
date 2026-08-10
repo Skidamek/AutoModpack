@@ -26,7 +26,6 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -231,7 +230,8 @@ public final class UpdatePlanner {
 			if (!matches(existing, item.sha1, parseSize(item.size)))
 				install(operations, projected, modpackKey, item.sha1, parseSize(item.size));
 
-			boolean copyToLive = !ModpackContentType.MOD.equals(item.type) || forceCopyPaths.contains(relative) || overlay != null;
+			boolean activeMod = ModpackPathPolicy.isActiveMod(relative, item.type);
+			boolean copyToLive = !activeMod || forceCopyPaths.contains(relative) || overlay != null;
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {
 				FileState live = projected.get(liveKey);
@@ -242,7 +242,7 @@ public final class UpdatePlanner {
 					long liveSize = overlay == null ? parseSize(item.size) : overlay.size();
 					if (!matches(live, liveHash, liveSize)) {
 						install(operations, projected, liveKey, liveHash, liveSize);
-						if (ModpackContentType.MOD.equals(item.type)) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
+						if (activeMod) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
 					}
 				}
 			}
