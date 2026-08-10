@@ -20,8 +20,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
-import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
@@ -37,9 +35,9 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
-import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
+import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Lists locally installed packs and keeps each pack's lifecycle actions beside its row. */
@@ -50,6 +48,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private static final int MAX_ACTION_WIDTH = 60;
 
 	private final Screen parent;
+	private final String returnModpackId;
 	private final ClientStorage storage;
 	private final Set<String> upToDate = new HashSet<>();
 	private final List<RowActions> rowActions = new ArrayList<>();
@@ -58,8 +57,13 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private boolean managementInFlight;
 
 	public InstalledModpacksScreen(Screen parent) {
+		this(parent, null);
+	}
+
+	InstalledModpacksScreen(Screen parent, String returnModpackId) {
 		super(VersionedText.translatable("automodpack.packManager.title"));
 		this.parent = parent;
+		this.returnModpackId = returnModpackId;
 		this.storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 		this.entries = loadEntries(storage);
 	}
@@ -141,6 +145,10 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	}
 
 	private void open(Entry entry) {
+		if (entry.modpackId().equals(returnModpackId)) {
+			ScreenImpl.setScreen(parent);
+			return;
+		}
 		ScreenImpl.setScreen(ModpackSelectionScreen.forInstalledRecord(this, entry.record(), entries.size() > 1));
 	}
 
@@ -149,25 +157,16 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		upToDate.remove(entry.modpackId());
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			ModpackUpdater updater = null;
-			DownloadClient downloadClient = null;
 			try {
-				ConnectionJsons.ConnectionInfo stored = ConnectionStore.getConnection(storage, entry.modpackId());
-				if (stored.connectionMode == null || stored.origin == null || stored.endpoint == null) throw new IOException("Saved modpack connection is unavailable");
-				ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(stored.origin, stored.endpoint, stored.connectionMode,
-						CertificateTrustStore.getFingerprint(stored.origin), null);
-				Secrets.Secret secret = SecretsStore.getClientSecret(storage, entry.modpackId(), stored.origin);
-				if (secret == null) secret = Secrets.anonymousSecret();
-				ModpackUtils.ManifestFetchResult result = ModpackUtils.requestServerModpackContent(storage, connection, secret, true);
-				if (!result.successful()) throw new IOException(result.failure() == null ? "Could not fetch the latest modpack generation" : result.failure().getMessage(), result.failure());
-				downloadClient = result.client();
-				GenerationRecord downloaded = GenerationRecord.fromFields(result.content());
-				if (!entry.modpackId().equals(downloaded.manifest().modpackId())) throw new IOException("Downloaded modpack identity does not match the installed pack");
-				SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(entry.modpackId()).orElse(null);
-				SelectedModpackTarget target = savedSelection == null
-						? SelectedModpackTarget.prepareDefault(result.content(), ClientPlatform.current())
-						: SelectedModpackTarget.prepare(result.content(), savedSelection, savedSelection, ClientPlatform.current());
-				updater = new ModpackUpdater(target, connection, secret, storage, downloadClient);
-				downloadClient = null;
+				SelectedModpackTarget target;
+				try (StoredModpackConnection connection = StoredModpackConnection.open(storage, entry.modpackId(), true)) {
+					GenerationRecord downloaded = connection.advertisedRecord();
+					SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(entry.modpackId()).orElse(null);
+					target = savedSelection == null
+							? SelectedModpackTarget.prepareDefault(downloaded.toFields(), ClientPlatform.current())
+							: SelectedModpackTarget.prepare(downloaded.toFields(), savedSelection, savedSelection, ClientPlatform.current());
+					updater = connection.newUpdater(target, storage);
+				}
 				ModpackUtils.UpdateCheckResult updateResult = ModpackUtils.isUpdate(target.flatTarget(), storage);
 				if (!updater.requiresUpdateBeforeLogin(updateResult)) {
 					updater.close();
@@ -182,9 +181,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 				endManagement();
 			} catch (Exception e) {
 				if (updater != null) updater.close();
-				if (downloadClient != null) downloadClient.close();
 				endManagement();
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
 	}
@@ -199,10 +197,10 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		try {
 			SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(entry.modpackId()).orElse(null);
 			SelectionIntent targetSelection = savedSelection == null ? GroupSelectionResolver.defaultIntent(entry.record().manifest()) : savedSelection;
-			CachedModpackSwitch.start(storage, entry.record(), savedSelection, targetSelection, entry.name(), false, this::endManagement);
+			InstalledModpackSwitch.start(storage, entry.record(), savedSelection, targetSelection, entry.name(), false, this::endManagement);
 		} catch (RuntimeException e) {
 			endManagement();
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 		}
 	}
 
@@ -213,7 +211,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			updater = new ModpackUpdater(null, null, storage);
 		} catch (RuntimeException e) {
 			endManagement();
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			return;
 		}
 		DownloadClient.NET_EXECUTOR.execute(() -> {
@@ -228,7 +226,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			} catch (Exception e) {
 				updater.close();
 				endManagement();
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
 	}
@@ -244,16 +242,18 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 					(Runnable) this::endManagement, false, Map.of());
 		} catch (Exception e) {
 			endManagement();
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 		}
 	}
 
 	private void executeActiveRemovalLike(ModpackUpdater updater, boolean deactivation) {
 		try {
-			if (!(deactivation ? updater.deactivateModpack() : updater.removeModpack()).success())
-				new ScreenManager().error("automodpack.error.critical", deactivation ? "automodpack.error.deactivationIncomplete" : "automodpack.error.removalIncomplete", "automodpack.error.logs");
+			if (!(deactivation ? updater.deactivateModpack() : updater.removeModpack()).success()) {
+				String error = deactivation ? "automodpack.error.deactivationIncomplete" : "automodpack.error.removalIncomplete";
+				new ScreenManager().error(new IllegalStateException(error), "automodpack.error.critical", error, "automodpack.error.logs");
+			}
 		} catch (Exception e) {
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 		} finally {
 			updater.close();
 		}
@@ -265,7 +265,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			this.minecraft.execute(() -> ScreenImpl.setScreen(new InstalledModpacksScreen(parent)));
 		} catch (Exception e) {
 			endManagement();
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 		}
 	}
 

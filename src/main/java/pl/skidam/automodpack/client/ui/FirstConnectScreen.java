@@ -68,7 +68,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 				updater.startConfirmedUpdate();
 			} catch (RuntimeException e) {
 				finished = false;
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		};
 		ScreenImpl.setScreen(new ModpackSelectionScreen(this, updater, action));

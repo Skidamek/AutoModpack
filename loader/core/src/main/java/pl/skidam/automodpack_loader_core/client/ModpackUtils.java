@@ -360,7 +360,7 @@ public class ModpackUtils {
 		CertificatePinMismatchException mismatch = DownloadClient.findCause(throwable, CertificatePinMismatchException.class);
 		if (mismatch == null) return;
 
-		new ScreenManager().error("automodpack.pin.mismatch", "Origin: " + mismatch.getOrigin(),
+		new ScreenManager().error(mismatch, "automodpack.pin.mismatch", "Origin: " + mismatch.getOrigin(),
 				"Expected: " + NetUtils.shortenFingerprint(mismatch.getExpectedFingerprint()),
 				"Presented: " + NetUtils.shortenFingerprint(mismatch.getPresentedFingerprint()), "automodpack.pin.mismatch.help");
 	}

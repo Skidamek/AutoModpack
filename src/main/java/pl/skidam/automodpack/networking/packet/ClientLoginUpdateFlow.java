@@ -45,8 +45,7 @@ final class ClientLoginUpdateFlow {
 				savedSelection = selections.get(record.manifest().modpackId()).orElse(null);
 			} catch (RuntimeException e) {
 				downloadClient.close();
-				LOGGER.error("Failed to read the server modpack catalogue or saved group selection", e);
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 				disconnectImmediately(handler);
 				return LoginUpdateResponse.UPDATE_REQUIRED;
 			}
@@ -66,22 +65,19 @@ final class ClientLoginUpdateFlow {
 								continueReconcile(handler, connectionInfo, secret, storage, downloadClient, repaired, true);
 							} catch (RuntimeException repairError) {
 								downloadClient.close();
-								LOGGER.error("Failed to repair the saved modpack group selection", repairError);
-								new ScreenManager().error("automodpack.error.critical", String.valueOf(repairError.getMessage()), "automodpack.error.logs");
+								new ScreenManager().error(repairError, "automodpack.error.critical", String.valueOf(repairError.getMessage()), "automodpack.error.logs");
 							}
 						});
 					}, downloadClient::close);
 					return LoginUpdateResponse.UPDATE_REQUIRED;
 				}
 				downloadClient.close();
-				LOGGER.error("Failed to resolve the server modpack catalogue and group selection", e);
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 				disconnectImmediately(handler);
 				return LoginUpdateResponse.UPDATE_REQUIRED;
 			} catch (RuntimeException e) {
 				downloadClient.close();
-				LOGGER.error("Failed to resolve the server modpack catalogue and group selection", e);
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 				disconnectImmediately(handler);
 				return LoginUpdateResponse.UPDATE_REQUIRED;
 			}
@@ -111,8 +107,7 @@ final class ClientLoginUpdateFlow {
 			SecretsStore.saveClientSecret(storage, serverModpackContent.modpackId, connectionInfo.origin, secret);
 		} catch (Exception e) {
 			downloadClient.close();
-			LOGGER.error("Failed to persist client secret", e);
-			new ScreenManager().error("automodpack.error.critical", "Failed to persist client secret", "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", "Failed to persist client secret", "automodpack.error.logs");
 			if (!alreadyDisconnected) disconnectImmediately(handler);
 			return LoginUpdateResponse.UPDATE_REQUIRED;
 		}
@@ -130,8 +125,7 @@ final class ClientLoginUpdateFlow {
 			return LoginUpdateResponse.UPDATE_REQUIRED;
 		} catch (Exception e) {
 			updater.close();
-			LOGGER.error("Failed to reconcile stable modpack installation", e);
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			if (!alreadyDisconnected) disconnectImmediately(handler);
 			return LoginUpdateResponse.UPDATE_REQUIRED;
 		}

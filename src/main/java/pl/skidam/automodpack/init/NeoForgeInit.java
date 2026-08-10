@@ -22,7 +22,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 public class NeoForgeInit {
 	public NeoForgeInit(IEventBus eventBus) {
 		preload = false;
-		ScreenManager.INSTANCE = new ScreenImpl();
+		ScreenManager.install(new ScreenImpl());
 
 		long start = System.currentTimeMillis();
 		LOGGER.info("Launching AutoModpack...");
