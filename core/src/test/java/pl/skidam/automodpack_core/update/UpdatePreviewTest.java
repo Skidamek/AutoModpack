@@ -53,6 +53,21 @@ class UpdatePreviewTest {
 	}
 
 	@Test
+	void displaysManagedProjectionAndLiveCopyAsOneLogicalFile() {
+		ModpackJsons.ModpackContentFields target = manifest(
+				new ModpackJsons.ModpackContentFields.ModpackContentItem("test/video.mp4", "9", "other", false, false, TARGET_HASH, "0"),
+				entry("test/video.mp4", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT));
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		UpdatePreview preview = UpdatePreview.create(plan, Map.of(), target, null, false);
+
+		assertEquals(2, preview.entries().size());
+		assertEquals(List.of(new UpdatePreview.Entry(UpdatePreview.Kind.ADDED, Root.PROJECTION, "test/video.mp4", 9)), preview.displayEntries());
+		assertEquals(1, preview.summary().changedFiles());
+	}
+
+	@Test
 	void exposesAcquisitionBytesAndPlanRestartReasons() {
 		ModpackJsons.ModpackContentFields target = manifest(
 				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
