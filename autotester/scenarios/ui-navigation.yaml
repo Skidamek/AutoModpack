@@ -2,6 +2,7 @@ id: ui-navigation
 description: |
   Exercise first-connection group editing and preview the selection twice. This
   catches previews that consume the confirmation state when the player goes back.
+renderClient: true
 
 flow:
   - use: boot
@@ -15,7 +16,55 @@ flow:
     select: { text: customize groups }
   - do: wait_for
     name: wait for group customization
-    until: { screen: ModpackSelectionScreen }
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: Prev, enabled: false }
+        - element: { text: Next, enabled: true }
+  - do: click
+    name: open the last group page
+    select: { text: Next }
+  - do: wait_for
+    name: disable next at the last page and show the single-child tag
+    until:
+      all:
+        - element: { text: Prev, enabled: true }
+        - element: { text: Next, enabled: false }
+        - element: { text: Client }
+        - element: { text: Visuals }
+  - do: click
+    name: select only the child group
+    select: { text: Visuals }
+  - do: wait_for
+    name: keep the single-child tag explicitly unselected
+    until:
+      all:
+        - element: { text: "[x] Visuals" }
+        - element: { text: "[ ] Client" }
+  - do: screenshot
+    name: capture explicit child selection and pagination bounds
+    file: ui-navigation-explicit-child
+  - do: click
+    name: select the tag explicitly
+    select: { text: Client }
+  - do: wait_for
+    name: show the explicit tag separately from its derived child
+    until:
+      all:
+        - element: { text: "[x] Client" }
+        - element: { text: "[+] Visuals" }
+  - do: click
+    name: restore defaults before checking a named dependency
+    select: { text: Defaults }
+  - do: click
+    name: select a group that requires Visuals
+    select: { text: Extra Five }
+  - do: wait_for
+    name: name the group that requires Visuals
+    until: { element: { text: "[+] Visuals (required by Extra Five)" } }
+  - do: screenshot
+    name: capture the named dependency selection
+    file: ui-navigation-named-dependency
   - do: click
     name: preview the customized selection
     select: { text: preview target }
@@ -72,6 +121,34 @@ topology:
     memory: 2G
     env:
       ENABLE_ROLLING_LOGS: "false"
+    automodpack:
+      config:
+        groups:
+          main:
+            displayName: Core
+            required: true
+            defaultSelected: true
+            syncedFiles: ["/config/amp-autotest-navigation.txt"]
+          extra1:
+            displayName: Extra One
+            syncedFiles: ["/config/amp-navigation-extra-1.txt"]
+          extra2:
+            displayName: Extra Two
+            syncedFiles: ["/config/amp-navigation-extra-2.txt"]
+          extra3:
+            displayName: Extra Three
+            syncedFiles: ["/config/amp-navigation-extra-3.txt"]
+          extra4:
+            displayName: Extra Four
+            syncedFiles: ["/config/amp-navigation-extra-4.txt"]
+          extra5:
+            displayName: Extra Five
+            requires: [visual]
+            syncedFiles: ["/config/amp-navigation-extra-5.txt"]
+          visual:
+            displayName: Visuals
+            tag: client
+            syncedFiles: ["/config/amp-navigation-visual.txt"]
 
 serverFiles:
   modpackName: amp-autotest
@@ -79,3 +156,9 @@ serverFiles:
   files:
     - path: config/amp-autotest-navigation.txt
       content: "navigation\n"
+    - { path: config/amp-navigation-extra-1.txt, content: "extra-1\n" }
+    - { path: config/amp-navigation-extra-2.txt, content: "extra-2\n" }
+    - { path: config/amp-navigation-extra-3.txt, content: "extra-3\n" }
+    - { path: config/amp-navigation-extra-4.txt, content: "extra-4\n" }
+    - { path: config/amp-navigation-extra-5.txt, content: "extra-5\n" }
+    - { path: config/amp-navigation-visual.txt, content: "visual\n" }

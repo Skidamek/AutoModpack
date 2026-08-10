@@ -274,6 +274,51 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void deactivationRestoresTheClientAndKeepsPackState() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "deactivated-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		SelectedModpackTarget target = target("mods/deactivate.jar", "mod", false, hash, bytes.length);
+		UpdateTransactionExecutor executor = executor(storage);
+		executor.commit(plan(target, clientConfig(target.manifest().modpackId()),
+				List.of(new Operation(Root.PROJECTION, "mods/deactivate.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/deactivate.jar", true, hash, bytes.length))), target);
+		Path live = Files.write(storage.gameDirectory().resolve("mods/deactivate.jar"), bytes);
+		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/options.txt");
+		Files.createDirectories(overlay.getParent());
+		Files.writeString(overlay, "player-edit", StandardCharsets.UTF_8);
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
+		baseline.modpackId = target.manifest().modpackId();
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = "mods/deactivate.jar";
+		baselineEntry.absent = true;
+		baselineEntry.objectHash = "";
+		baselineEntry.size = -1;
+		baseline.entries = List.of(baselineEntry);
+		ConfigTools.writeAtomic(storage.baselineFile(target.manifest().modpackId()), baseline);
+		SelectionIntent expected = target.selection().intent();
+		GeneratedCopyState generatedCopies = new GeneratedCopyState(target.manifest().modpackId(), target.generationTarget().targetGenerationId(),
+				UpdateTransaction.digest(expected), List.of());
+		generatedCopies.write(storage);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
+				new UpdatePlan.FileKey(Root.PROJECTION, "mods/deactivate.jar"), new UpdatePlan.FileState(hash, bytes.length, true),
+				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/deactivate.jar"), new UpdatePlan.FileState(hash, bytes.length, true));
+		UpdatePlan deactivation = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), generatedCopies,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(executor.commit(UpdateTransaction.createDeactivation(deactivation, ClientPlatform.LINUX, expected,
+				storage.overlayDigest(target.manifest().modpackId()))).success());
+
+		assertFalse(Files.exists(live));
+		assertNull(storage.readActiveState());
+		assertTrue(new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).isPresent());
+		assertEquals(expected, new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
+		assertTrue(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.generationTarget().targetGenerationId(), UpdateTransaction.digest(expected))));
+		assertTrue(Files.exists(storage.baselineFile(target.manifest().modpackId())));
+		assertEquals("player-edit", Files.readString(overlay, StandardCharsets.UTF_8));
+	}
+
+	@Test
 	void selfUpdateRemainsAConstrainedCasOperation() throws Exception {
 		ClientStorage storage = storage();
 		Path current = Files.writeString(storage.modsDirectory().resolve("automodpack-old.jar"), "old", StandardCharsets.UTF_8);

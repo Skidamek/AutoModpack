@@ -196,6 +196,28 @@ public final class ClientGenerationStore {
 		return List.copyOf(newest.values());
 	}
 
+	/** Deletes every retained local artifact for one inactive modpack and collects objects no longer referenced by another pack. */
+	public void forgetModpack(String modpackId) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot forget a modpack while an update transaction is active");
+		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		if (activeState != null && normalizedModpackId.equals(activeState.modpackId)) throw new IOException("Cannot forget the active modpack");
+
+		List<String> matchingGenerationIds = new ArrayList<>();
+		for (String generationId : generationIds()) {
+			GenerationRecord record = read(generationId).orElseThrow(() -> new IOException("Client generation record is missing: " + generationId));
+			if (normalizedModpackId.equals(record.manifest().modpackId())) matchingGenerationIds.add(generationId);
+		}
+		for (String generationId : matchingGenerationIds) FileTrees.delete(storage.generationDirectory(generationId));
+		FileTrees.delete(storage.generatedCopiesPackDirectory(normalizedModpackId));
+		storage.clearOverlay(normalizedModpackId);
+		FileTrees.delete(storage.baselineFile(normalizedModpackId).getParent());
+		FileTrees.delete(storage.recoveryDirectory(normalizedModpackId));
+		FileTrees.delete(storage.quarantinePackDirectory(normalizedModpackId));
+		FileTrees.delete(storage.connectionDirectory(normalizedModpackId));
+		ClientObjectStore.collectUnreachableObjects(storage, Set.copyOf(generationIds()), Set.of());
+	}
+
 	/** Returns the committed lineage ending at the generation selected by active-state.json. */
 	public List<GenerationRecord> lineage(String modpackId, String generationId) throws IOException {
 		return readLineage(modpackId, generationId, false);

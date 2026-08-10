@@ -1,0 +1,187 @@
+id: note-only-generation
+description: |
+  Publish a generation whose files are identical and whose patch notes changed.
+  After approval, the committed no-restart update must leave the transient
+  preparing screen.
+renderClient: true
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: wait_generation
+    name: wait for the initial generation
+    patchNotes: "Initial note-only fixture."
+    timeout: 300s
+  - use: restart_client
+  - use: rejoin
+  - do: publish_server_generation
+    name: publish identical files with new patch notes
+    generation: 1
+  - do: disconnect
+    name: leave before checking the note-only generation
+  - do: connect
+    name: connect to the note-only generation
+  - do: wait_for
+    name: show the note-only generation review
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+        - element: { text: View all patch notes, enabled: true }
+  - do: click
+    name: accept the note-only generation
+    select: { text: Update }
+  - do: wait_generation
+    name: commit the note-only generation
+    patchNotes: "Second release with notes only."
+    timeout: 90s
+  - do: wait_for
+    name: leave the transient preparing screen after the no-restart update
+    timeout: 10s
+    until: { screen: Play Multiplayer }
+  - do: click
+    name: open the active modpack settings
+    select: { text: Modpack settings }
+  - do: wait_for
+    name: keep lifecycle actions out of settings and align an unchanged disabled save action
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: Pack manager, enabled: true }
+        - element: { text: Files, enabled: true }
+        - element: { text: Save, enabled: false }
+        - no_element: { text: Deactivate }
+        - no_element: { text: Remove }
+  - do: screenshot
+    name: capture the aligned settings rows
+    file: note-only-settings-aligned
+  - do: click
+    name: open downloaded generation history
+    select: { text: History }
+  - do: wait_for
+    name: show clickable generation rows and the complete file catalogue action
+    until:
+      all:
+        - screen: ContentHistoryScreen
+        - element: { text: Generation 1, enabled: true }
+        - element: { text: Generation 2, enabled: true }
+        - element: { text: Files, enabled: true }
+  - do: screenshot
+    name: capture clickable generation history
+    file: note-only-clickable-history
+  - do: click
+    name: open the first generation catalogue diff
+    select: { text: Generation 1 }
+  - do: wait_for
+    name: show the complete generation diff
+    until:
+      all:
+        - screen: PagedTextScreen
+        - element: { text: Back, enabled: true }
+  - do: screenshot
+    name: capture the git-like generation diff
+    file: note-only-generation-diff
+  - do: click
+    name: return to generation history
+    select: { text: Back }
+  - do: click
+    name: open the complete modpack-owned file catalogue
+    select: { text: Files }
+  - do: wait_for
+    name: show all installed modpack-owned files
+    until:
+      all:
+        - screen: PagedTextScreen
+        - element: { text: Back, enabled: true }
+  - do: screenshot
+    name: capture the complete owned-file catalogue
+    file: note-only-owned-files
+  - do: click
+    name: return to generation history from owned files
+    select: { text: Back }
+  - do: click
+    name: return to modpack settings from history
+    select: { text: Back }
+  - do: click
+    name: open per-pack lifecycle actions
+    select: { text: Pack manager }
+  - do: wait_for
+    name: show compact actions beside the active pack
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Update, enabled: true }
+        - element: { text: Deactivate, enabled: true }
+        - element: { text: Remove, enabled: true }
+  - do: screenshot
+    name: capture per-pack lifecycle actions
+    file: note-only-pack-actions
+  - do: click
+    name: check manually for another update
+    select: { text: Update }
+  - do: wait_for
+    name: report that the installed generation is current
+    timeout: 30s
+    until: { element: { text: Up to date } }
+  - do: click
+    name: preview deactivation
+    select: { text: Deactivate }
+  - do: wait_for
+    name: show the deactivation review
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Deactivate, enabled: true }
+  - do: click
+    name: deactivate while keeping the installed pack
+    select: { text: Deactivate }
+  - do: wait_for
+    name: return to the title after deactivation
+    until: { screen: Title Screen }
+  - do: assert
+    name: verify deactivation cleared active state
+    that: { file_gone: automodpack/client/active-state.json }
+  - do: assert
+    name: verify deactivation restored the live client file
+    that: { file_gone: config/amp-note-only.txt }
+  - use: open_multiplayer
+  - do: wait_for
+    name: replace settings with the direct pack-manager entry while inactive
+    until:
+      all:
+        - screen: Play Multiplayer
+        - element: { text: Pack manager, enabled: true }
+        - no_element: { text: Modpack settings }
+  - do: click
+    name: open the retained inactive pack directly
+    select: { text: Pack manager }
+  - do: wait_for
+    name: verify deactivation retained the installed pack with only removal available
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Note-only Test P }
+        - element: { text: Update, enabled: false }
+        - element: { text: Deactivate, enabled: false }
+        - element: { text: Remove, enabled: true }
+  - do: quit
+    name: quit after the deactivation flow completed
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+
+serverFiles:
+  modpackName: Note-only Test Pack
+  marker: config/amp-note-only-marker.json
+  generations:
+    - patchNotes: "Initial note-only fixture."
+      files:
+        - { path: config/amp-note-only.txt, content: "unchanged\n" }
+    - patchNotes: "Second release with notes only."
+      files:
+        - { path: config/amp-note-only.txt, content: "unchanged\n" }

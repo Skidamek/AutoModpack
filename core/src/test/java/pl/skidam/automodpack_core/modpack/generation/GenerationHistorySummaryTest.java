@@ -29,6 +29,20 @@ class GenerationHistorySummaryTest {
 		assertEquals(second.metadata().generationId(), summaries.get(1).generationId());
 	}
 
+	@Test
+	void carriesTheLatestNonEmptyNoteAcrossSkippedAndEmptyGenerations() {
+		GenerationRecord first = GenerationRecord.create(manifest("first", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8"), null,
+				Instant.parse("2026-01-01T00:00:00Z"), "First generation");
+		GenerationRecord skipped = GenerationRecord.create(manifest("skipped", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98"), first,
+				Instant.parse("2026-01-02T00:00:00Z"), "Latest installed notes");
+		GenerationRecord current = GenerationRecord.create(manifest("current", "84a516841ba77a5b4648de2cd0dfcb30ea46dbb4"), skipped,
+				Instant.parse("2026-01-03T00:00:00Z"), "");
+
+		List<GenerationHistorySummary.Entry> summaries = GenerationHistorySummary.summarize(List.of(first, current), GenerationPatchNoteHistory.fromRecords(List.of(first, skipped, current)));
+
+		assertEquals(List.of("First generation", "Latest installed notes"), summaries.stream().map(GenerationHistorySummary.Entry::patchNotes).toList());
+	}
+
 	private static GroupManifest manifest(String name, String hash) {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";

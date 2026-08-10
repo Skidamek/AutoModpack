@@ -68,6 +68,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final ClientStorage storage;
 	private final ClientSelectionStore selectionStore;
 	private final SelectionIntent expectedSelection;
+	private final SelectionIntent initialSelection;
 	private final Consumer<SelectionIntent> selectionAction;
 	private final Runnable cancelAction;
 	private final ModpackUpdater pendingUpdater;
@@ -78,6 +79,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	// What the player has actually ticked; resolved is what that implies once required groups,
 	// dependencies, conflicts and platform rules are applied.
 	private final Set<String> chosen = new LinkedHashSet<>();
+	private final Set<String> chosenTags = new LinkedHashSet<>();
 	private final Set<String> excluded = new LinkedHashSet<>();
 	private ResolvedSelection resolution;
 	private List<String> resolutionErrors = List.of();
@@ -89,10 +91,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private boolean closed;
 	private boolean managementInFlight;
 	private boolean switchInFlight;
-	private Button removeButton;
 	private Button recoveryButton;
 	private Button quarantineButton;
 	private Button historyButton;
+	private Button filesButton;
+	private Button saveButton;
 
 	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
 		this(parent, manifest, null, null, null, () -> {}, null, false, null);
@@ -132,7 +135,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		SelectionIntent initial = initialSelection != null
 				? initialSelection
 				: this.expectedSelection == null ? GroupSelectionResolver.defaultIntent(manifest) : this.expectedSelection;
+		this.initialSelection = initial;
 		this.chosen.addAll(initial.requestedGroups());
+		this.chosenTags.addAll(initial.requestedTags());
 		this.excluded.addAll(initial.excludedGroups());
 		try {
 			this.resolution = expectedSelection == null && (initialSelection == null || pendingUpdater != null)
@@ -166,11 +171,29 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return parent;
 		}
 
-		return new ModpackSelectionScreen(parent, manifest);
+		return new ModpackSelectionScreen(parent, manifest, null, null, null, () -> {}, null, false, record);
 	}
 
 	public static boolean hasModpackManagement() {
+		return hasActiveModpackManagement() || hasInstalledModpacks();
+	}
+
+	public static boolean hasActiveModpackManagement() {
 		return modpackHasGeneration(clientConfig == null ? null : clientConfig.selectedModpackId);
+	}
+
+	public static Screen managementScreen(Screen parent) {
+		return hasActiveModpackManagement() ? forSelectedModpack(parent) : new InstalledModpacksScreen(parent);
+	}
+
+	private static boolean hasInstalledModpacks() {
+		try {
+			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			return !new ClientGenerationStore(storage).installedRecords().isEmpty();
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Could not enumerate installed modpacks", e);
+			return false;
+		}
 	}
 
 	private static boolean modpackHasGeneration(String modpackId) {
@@ -209,8 +232,13 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int listTop = 64;
 		List<ManagementAction> managementActions = selectionAction == null ? managementActions() : List.of();
 		int managementRows = managementRowCount(managementActions.size());
-		int managementTop = this.height - 80 - Math.max(0, managementRows - 1) * 28;
-		int listBottom = this.height - (selectionAction == null ? (managementActions.isEmpty() ? 80 : 108 + Math.max(0, managementRows - 1) * 28) : 60);
+		int actionY = this.height - 28;
+		int managementTop = actionY - managementRows * ROW_HEIGHT;
+		int listBottomWithoutPagination = managementTop - 4;
+		int rowsWithoutPagination = Math.max(1, (listBottomWithoutPagination - listTop) / ROW_HEIGHT);
+		boolean showPagination = rows.size() > rowsWithoutPagination;
+		int paginationY = showPagination ? managementTop - ROW_HEIGHT : -1;
+		int listBottom = showPagination ? paginationY - 4 : listBottomWithoutPagination;
 		rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
 
 		int pageCount = Math.max(1, (int) Math.ceil((double) rows.size() / rowsPerPage));
@@ -247,25 +275,28 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			this.addRenderableWidget(inspect);
 		}
 
-		if (pageCount > 1) {
+		if (showPagination) {
 			int paginationWidth = actionButtonWidth(ROW_WIDTH, 3);
-			int paginationY = listBottom + 4;
-			this.addRenderableWidget(buttonWidget(centeredActionButtonX(ROW_WIDTH, 3, 3, 0), paginationY, paginationWidth, 20, VersionedText.translatable("automodpack.ui.previous"), press -> {
+			Button previous = buttonWidget(centeredActionButtonX(ROW_WIDTH, 3, 3, 0), paginationY, paginationWidth, 20, VersionedText.translatable("automodpack.ui.previous"), press -> {
 				if (page > 0) {
 					page--;
 					rebuild();
 				}
-			}));
+			});
+			previous.active = page > 0;
+			this.addRenderableWidget(previous);
 			Button pageLabel = buttonWidget(centeredActionButtonX(ROW_WIDTH, 3, 3, 1), paginationY, paginationWidth, 20,
 					VersionedText.translatable("automodpack.ui.page", page + 1, pageCount), press -> {});
 			pageLabel.active = false;
 			this.addRenderableWidget(pageLabel);
-			this.addRenderableWidget(buttonWidget(centeredActionButtonX(ROW_WIDTH, 3, 3, 2), paginationY, paginationWidth, 20, VersionedText.translatable("automodpack.ui.next"), press -> {
+			Button next = buttonWidget(centeredActionButtonX(ROW_WIDTH, 3, 3, 2), paginationY, paginationWidth, 20, VersionedText.translatable("automodpack.ui.next"), press -> {
 				if (page < pageCount - 1) {
 					page++;
 					rebuild();
 				}
-			}));
+			});
+			next.active = page < pageCount - 1;
+			this.addRenderableWidget(next);
 		}
 
 		if (!managementActions.isEmpty()) {
@@ -275,32 +306,34 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				int rowStart = row * 3;
 				int rowCount = Math.min(3, managementActions.size() - rowStart);
 				int managementWidth = actionButtonWidth(ROW_WIDTH, rowCount);
-				Button button = buttonWidget(centeredActionButtonX(ROW_WIDTH, rowCount, rowCount, index - rowStart), managementTop + row * 28,
+				Button button = buttonWidget(centeredActionButtonX(ROW_WIDTH, rowCount, rowCount, index - rowStart), managementTop + row * ROW_HEIGHT,
 						managementWidth, 20, action.label(), press -> action.action().run());
 				this.addRenderableWidget(button);
-				if (action.kind() == ManagementKind.REMOVE) this.removeButton = button;
 				if (action.kind() == ManagementKind.RECOVERY) this.recoveryButton = button;
 				if (action.kind() == ManagementKind.QUARANTINE) this.quarantineButton = button;
 				if (action.kind() == ManagementKind.HISTORY) this.historyButton = button;
+				if (action.kind() == ManagementKind.FILES) this.filesButton = button;
 			}
 			updateManagementButtons();
 		}
 
-		int actionWidth = actionButtonWidth(310, 3);
-		int actionY = this.height - 28;
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 0), actionY, actionWidth, 20, VersionedText.translatable("automodpack.selection.cancel"), press -> back()));
+		int actionWidth = actionButtonWidth(ROW_WIDTH, 3);
+		this.addRenderableWidget(buttonWidget(actionButtonX(ROW_WIDTH, 3, 0), actionY, actionWidth, 20, VersionedText.translatable("automodpack.selection.cancel"), press -> back()));
 
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 1), actionY, actionWidth, 20, VersionedText.translatable("automodpack.selection.reset"), press -> {
+		this.addRenderableWidget(buttonWidget(actionButtonX(ROW_WIDTH, 3, 1), actionY, actionWidth, 20, VersionedText.translatable("automodpack.selection.reset"), press -> {
 			SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
 			chosen.clear();
 			chosen.addAll(defaults.requestedGroups());
+			chosenTags.clear();
 			excluded.clear();
 			reresolveDefault();
 		}));
 
 		String saveLabel = selectionAction != null ? "automodpack.selection.preview" : managerEntry && !activeModpack ? "automodpack.packManager.reviewSwitch" : "automodpack.selection.save";
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 2), actionY, actionWidth, 20,
-				VersionedText.translatable(saveLabel).withStyle(ChatFormatting.BOLD), press -> save()));
+		this.saveButton = buttonWidget(actionButtonX(ROW_WIDTH, 3, 2), actionY, actionWidth, 20,
+				VersionedText.translatable(saveLabel).withStyle(ChatFormatting.BOLD), press -> save());
+		this.saveButton.active = canSave();
+		this.addRenderableWidget(this.saveButton);
 	}
 
 	public boolean isUpdateFlow() {
@@ -330,7 +363,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	/** Toggling a category requests or removes its optional groups through the persisted group intent. */
 	private void toggleCategory(String category) {
-		SelectionIntent previous = new SelectionIntent(chosen, excluded);
+		SelectionIntent previous = currentIntent();
 		ResolvedSelection previousResolution = resolution;
 		try {
 			SelectionIntent next = GroupSelectionResolver.preferCategory(manifest, previous, category, ClientPlatform.current());
@@ -350,10 +383,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		GroupManifest.Group group = groups.get(groupId);
 		if (group == null) return;
 		if (isMandatory(manifest, group)) return;
-		SelectionIntent previous = new SelectionIntent(chosen, excluded);
+		SelectionIntent previous = currentIntent();
 		ResolvedSelection previousResolution = resolution;
 		try {
-			SelectionIntent next = GroupSelectionResolver.prefer(previous, groupId);
+			SelectionIntent next = GroupSelectionResolver.prefer(manifest, previous, groupId, ClientPlatform.current());
 			applyIntent(next);
 			reresolve();
 		} catch (SelectionResolutionException e) {
@@ -365,6 +398,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private void applyIntent(SelectionIntent intent) {
 		chosen.clear();
 		chosen.addAll(intent.requestedGroups());
+		chosenTags.clear();
+		chosenTags.addAll(intent.requestedTags());
 		excluded.clear();
 		excluded.addAll(intent.excludedGroups());
 	}
@@ -376,7 +411,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void reresolve() {
-		resolution = GroupSelectionResolver.resolve(manifest, new SelectionIntent(chosen, excluded), ClientPlatform.current());
+		resolution = GroupSelectionResolver.resolve(manifest, currentIntent(), ClientPlatform.current());
 		resolutionErrors = List.of();
 		rebuild();
 	}
@@ -407,30 +442,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			return null;
 		}
-	}
-
-	private void requestRemoval() {
-		if (!beginManagement()) return;
-		ModpackUpdater removalUpdater = createUpdater();
-		if (removalUpdater == null) {
-			endManagement();
-			return;
-		}
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			try {
-				UpdatePreview preview = removalUpdater.previewRemoval();
-				new ScreenManager().preview(preview, modpackName,
-						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeRemoval(removalUpdater)),
-						(Runnable) () -> {
-							removalUpdater.close();
-							endManagement();
-						}, true, false, Map.of());
-			} catch (Exception e) {
-				removalUpdater.close();
-				endManagement();
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
-			}
-		});
 	}
 
 	private void requestRecovery() {
@@ -472,6 +483,14 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		ScreenImpl.setScreen(new QuarantineArchiveScreen(this, storage, modpackId, modpackName, activeModpack, this::endManagement));
 	}
 
+	private void requestFiles() {
+		GenerationRecord generation = localRecord == null ? activeGeneration(modpackId) : localRecord;
+		if (generation == null) return;
+		ScreenImpl.setScreen(new PagedTextScreen(this,
+				VersionedText.translatable("automodpack.files.title", modpackName),
+				VersionedText.translatable("automodpack.files.description"), GenerationCatalogueLines.files(generation)));
+	}
+
 	private boolean beginManagement() {
 		if (managementInFlight) return false;
 		managementInFlight = true;
@@ -485,20 +504,18 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void updateManagementButtons() {
-		if (removeButton != null) removeButton.active = !managementInFlight;
 		if (recoveryButton != null) recoveryButton.active = !managementInFlight;
 		if (quarantineButton != null) quarantineButton.active = !managementInFlight;
 		if (historyButton != null) historyButton.active = !managementInFlight;
+		if (filesButton != null) filesButton.active = !managementInFlight;
 	}
 
 	private List<ManagementAction> managementActions() {
 		List<ManagementAction> actions = new ArrayList<>();
-		if (activeModpack) {
-			if (modpackHasGeneration(modpackId)) actions.add(new ManagementAction(ManagementKind.REMOVE, VersionedText.translatable("automodpack.management.remove"), this::requestRemoval));
-			if (hasRecoveryArchive()) actions.add(new ManagementAction(ManagementKind.RECOVERY, VersionedText.translatable("automodpack.management.recovery"), this::requestRecovery));
-		}
+		if (activeModpack && hasRecoveryArchive()) actions.add(new ManagementAction(ManagementKind.RECOVERY, VersionedText.translatable("automodpack.management.recovery"), this::requestRecovery));
 		if (hasQuarantineArchive()) actions.add(new ManagementAction(ManagementKind.QUARANTINE, VersionedText.translatable("automodpack.management.quarantine"), this::requestQuarantine));
 		if (hasHistory()) actions.add(new ManagementAction(ManagementKind.HISTORY, VersionedText.translatable("automodpack.management.history"), this::requestHistory));
+		if (localRecord != null || activeGeneration(modpackId) != null) actions.add(new ManagementAction(ManagementKind.FILES, VersionedText.translatable("automodpack.management.files"), this::requestFiles));
 		if (hasInstalledPacks()) actions.add(new ManagementAction(ManagementKind.MANAGER, VersionedText.translatable("automodpack.packManager.switch"), this::requestPackManager));
 		return List.copyOf(actions);
 	}
@@ -574,22 +591,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		ScreenImpl.setScreen(new InstalledModpacksScreen(this));
 	}
 
-	private void executeRemoval(ModpackUpdater updater) {
-		try {
-			if (updater.removeModpack().success()) {
-				new ScreenManager().title();
-			} else {
-				new ScreenManager().error("automodpack.error.critical", "automodpack.error.removalIncomplete", "automodpack.error.logs");
-			}
-		} catch (Exception e) {
-			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
-		} finally {
-			updater.close();
-		}
-	}
-
 	private void save() {
-		SelectionIntent target = new SelectionIntent(chosen, excluded);
+		SelectionIntent target = currentIntent();
 		if (!resolutionErrors.isEmpty()) {
 			new ScreenManager().error("automodpack.error.critical", resolutionErrors.get(0), "automodpack.error.logs");
 			return;
@@ -635,7 +638,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 						(Runnable) () -> {
 							finalUpdater.close();
 							switchInFlight = false;
-						}, false, true, Map.of());
+						}, true, Map.of());
 			} catch (Exception e) {
 				if (updater != null) updater.close();
 				switchInFlight = false;
@@ -676,7 +679,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private MutableComponent sectionLabel(Row row) {
 		if (row.tagId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
 		String title = categoryLabel(row.tagId());
-		return VersionedText.literal(truncateToWidth(this.font, (categorySelected(row.tagId()) ? "[x] " : "[ ] ") + title, panelWidth(ROW_WIDTH) - 12)).withStyle(ChatFormatting.BOLD);
+		boolean selected = categorySelected(row.tagId());
+		return VersionedText.literal(truncateToWidth(this.font, (selected ? "[x] " : "[ ] ") + title, panelWidth(ROW_WIDTH) - 12))
+				.withStyle(ChatFormatting.BOLD, selected ? ChatFormatting.GREEN : ChatFormatting.GRAY);
 	}
 
 	/** The group's metadata and the resolver explanation, shown on hover. */
@@ -685,17 +690,18 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		StringBuilder tooltip = new StringBuilder();
 		if (!group.description().isBlank()) tooltip.append(group.description());
 		GroupResolution explanation = resolution.explanation(groupId);
-		if (explanation != null) appendTooltipLine(tooltip, explanation.explanation());
-		if (explanation != null && !explanation.relatedGroups().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.related", names(explanation.relatedGroups())).getString());
+		boolean dependency = resolution.dependencyGroups().contains(groupId);
+		if (explanation != null && dependency) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.dependencyNamed", names(explanation.relatedGroups())).getString());
+		else if (explanation != null) appendTooltipLine(tooltip, explanation.explanation());
+		if (explanation != null && !dependency && !explanation.relatedGroups().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.related", names(explanation.relatedGroups())).getString());
 		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.category", tagLabel(group)).getString());
 		if (group.required()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requiredAlways").getString());
 		if (group.defaultSelected()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.defaultSelected").getString());
 		if (resolution.forcedGroups().contains(groupId)) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.forced").getString());
-		if (resolution.dependencyGroups().contains(groupId)) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.dependency").getString());
 		if (!group.requires().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requires", names(group.requires())).getString());
 		if (!group.breaksWith().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.conflicts", names(group.breaksWith())).getString());
 		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.files", group.files().size(), UiFormat.formatSize(groupBytes(group))).getString());
-		appendTooltipLine(tooltip, VersionedText.translatable(group.supports(ClientPlatform.current()) ? "automodpack.selection.availableOn" : "automodpack.selection.unavailableOn", ClientPlatform.current().id()).getString());
+		if (!group.supports(ClientPlatform.current())) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.unavailableOn", ClientPlatform.current().id()).getString());
 		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
 	}
 
@@ -728,7 +734,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (resolution.selectedGroups().contains(groupId)) {
 			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics, VersionedText.translatable("automodpack.selection.status.selected").getString()), ChatFormatting.GREEN);
 			if (resolution.dependencyGroups().contains(groupId))
-				return rowLabel(formatRowLabel("[+] ", name, metrics, VersionedText.translatable("automodpack.selection.status.requiredBySelection").getString()), ChatFormatting.AQUA);
+				return rowLabel(formatRowLabel("[+] ", name, metrics, VersionedText.translatable("automodpack.selection.status.requiredBySelection", names(explanation.relatedGroups())).getString()), ChatFormatting.AQUA);
 			return rowLabel(formatRowLabel("[+] ", name, metrics, null), ChatFormatting.AQUA);
 		}
 		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel("[>] ", name, metrics, VersionedText.translatable("automodpack.selection.status.forced").getString()), ChatFormatting.AQUA);
@@ -780,9 +786,15 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private boolean categorySelected(String category) {
-		return hasOptionalCategoryGroups(category) && groups.entrySet().stream()
-				.filter(entry -> category.equals(entry.getValue().tag()) && !entry.getValue().required())
-				.allMatch(entry -> chosen.contains(entry.getKey()));
+		return chosenTags.contains(category);
+	}
+
+	private SelectionIntent currentIntent() {
+		return new SelectionIntent(chosen, chosenTags, excluded);
+	}
+
+	private boolean canSave() {
+		return resolutionErrors.isEmpty() && (selectionAction != null || managerEntry && !activeModpack || !initialSelection.equals(currentIntent()));
 	}
 
 	private static String categoryLabel(String category) {
@@ -854,5 +866,5 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private record ManagementAction(ManagementKind kind, MutableComponent label, Runnable action) {}
 
-	private enum ManagementKind { REMOVE, RECOVERY, QUARANTINE, HISTORY, MANAGER }
+	private enum ManagementKind { RECOVERY, QUARANTINE, HISTORY, FILES, MANAGER }
 }
