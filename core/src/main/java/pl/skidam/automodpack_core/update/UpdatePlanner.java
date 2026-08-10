@@ -26,7 +26,6 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -232,6 +231,7 @@ public final class UpdatePlanner {
 			if (!matches(existing, item.sha1, parseSize(item.size)))
 				install(operations, projected, modpackKey, item.sha1, parseSize(item.size));
 
+			boolean activeMod = ModpackPathPolicy.isActiveMod(relative, item.type);
 			boolean copyToLive = !activeMod || forceCopyPaths.contains(relative) || overlay != null;
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {

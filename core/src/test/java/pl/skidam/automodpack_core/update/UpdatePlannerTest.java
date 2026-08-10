@@ -28,6 +28,27 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void modShapedFileOutsideModsIsInstalledAtItsDeclaredPath() {
+		String path = "resourcepacks/mod-shaped-pack.jar";
+		UpdatePlan plan = UpdatePlanner.plan(input(manifest(Map.of(path, item(path, TARGET_HASH, 9, "mod")),
+				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT))), Map.of()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
+				&& operation.operation() == OperationType.INSTALL_OBJECT && TARGET_HASH.equals(operation.expectedObjectHash())));
+		assertFalse(plan.restartReasons().contains(RestartReason.CORRECTED_FILE_LOCATIONS));
+	}
+
+	@Test
+	void genericFileInsideModsIsInstalledAtItsDeclaredPath() {
+		String path = "mods/README.txt";
+		UpdatePlan plan = UpdatePlanner.plan(input(manifest(Map.of(path, item(path, TARGET_HASH, 9, "other")),
+				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT))), Map.of()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
+				&& operation.operation() == OperationType.INSTALL_OBJECT && TARGET_HASH.equals(operation.expectedObjectHash())));
+	}
+
+	@Test
 	void firstInstallQuarantinesAnUnownedSameIdMod() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
