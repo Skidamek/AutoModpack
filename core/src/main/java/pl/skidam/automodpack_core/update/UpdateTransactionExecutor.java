@@ -138,7 +138,7 @@ public final class UpdateTransactionExecutor {
 			throw new IOException("Generated-copy state is only valid for modpack update transactions");
 
 		ModpackJsons.ModpackContentFields target = null;
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
+		if (isModpackPurpose(transaction.purpose)) {
 			ModpackId.requireValid(transaction.modpackId);
 			GenerationRecord record = storedRecord(transaction);
 			target = resolvedTarget(transaction, record).flatTarget();
@@ -250,12 +250,14 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateSelectionMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorExcludedGroups == null
-				|| transaction.requestedGroups == null || transaction.excludedGroups == null)
+		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorRequestedTags == null
+				|| transaction.expectedPriorExcludedGroups == null || transaction.requestedGroups == null || transaction.requestedTags == null || transaction.excludedGroups == null)
 			throw new IOException("Selection metadata is incomplete");
 		if (!isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
+				|| !isCanonicalIntentList(transaction.expectedPriorRequestedTags)
 				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups)
-				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.excludedGroups))
+				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.requestedTags)
+				|| !isCanonicalIntentList(transaction.excludedGroups))
 			throw new IOException("Selection metadata is not canonical");
 		try {
 			if (!transaction.selectionDigest.equals(UpdateTransaction.digest(transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
@@ -283,8 +285,8 @@ public final class UpdateTransactionExecutor {
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
 		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
 				|| transaction.ledgerDigest != null || transaction.targetPlatform != null || transaction.selectionDigest != null || transaction.overlayDigest != null
-				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null
-				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.excludedGroups != null
+				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.expectedPriorRequestedTags != null
+				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.requestedTags != null || transaction.excludedGroups != null
 				|| transaction.plannedClientConfig != null || transaction.plannedGeneratedCopies != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty()
 				|| !transaction.plannedBaselineCaptures.isEmpty() || !transaction.plannedConflicts.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
@@ -302,7 +304,7 @@ public final class UpdateTransactionExecutor {
 			if (relative.getNameCount() != 2 || !relative.getName(0).toString().equalsIgnoreCase(ModpackPathPolicy.MODS_ROOT)
 					|| !JarUtils.hasJarExtension(relative))
 				throw new IOException("Self-update target must be a direct JAR child of the mods directory");
-		} else if (purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
+		} else if (isModpackPurpose(purpose)) {
 			if (operation.root() != Root.PROJECTION && operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR)
 				throw new IOException("Modpack operations are restricted to projection, overlays, and managed live files");
 		} else throw new IOException("Unsupported transaction purpose");
@@ -380,7 +382,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
-		boolean removal = transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
+		boolean removal = transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL || transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION;
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !removal) {
 			if (!transaction.plannedPreservations.isEmpty()) throw new IOException("Only modpack transactions can preserve deleted files");
 			return;
@@ -539,10 +541,12 @@ public final class UpdateTransactionExecutor {
 					GenerationTarget generation = transaction.generationTarget();
 					GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies).write(context.storage());
 					context.storage().writeActiveState(transaction.modpackId, generation.targetGenerationId());
-				} else {
+				} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 					FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.targetGenerationId));
 					context.storage().clearActiveState();
 					Files.deleteIfExists(context.storage().baselineFile(transaction.modpackId));
+				} else {
+					context.storage().clearActiveState();
 				}
 				claimSelection(transaction);
 			} else applyOperations(transaction, current);
@@ -580,7 +584,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private boolean isModpackTransaction(UpdateTransaction transaction) {
-		return transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
+		return isModpackPurpose(transaction.purpose);
 	}
 
 	private void setPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) throws IOException {
@@ -768,14 +772,16 @@ public final class UpdateTransactionExecutor {
 		if (!isModpackTransaction(transaction)) return;
 		ClientSelectionStore selections = new ClientSelectionStore(context.storage().selectionFile());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) selections.compareAndSet(transaction.modpackId, transaction.expectedPriorIntent(), transaction.targetIntent());
-		else selections.remove(transaction.modpackId, transaction.expectedPriorIntent());
+		else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) selections.remove(transaction.modpackId, transaction.expectedPriorIntent());
 	}
 
 	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {
 		if (!isModpackTransaction(transaction)) return;
 		SelectionIntent current = new ClientSelectionStore(context.storage().selectionFile()).get(transaction.modpackId).orElse(null);
 		SelectionIntent expected = transaction.expectedPriorIntent();
-		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE ? Objects.equals(current, transaction.targetIntent()) : current == null;
+		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+				? Objects.equals(current, transaction.targetIntent())
+				: transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL ? current == null : Objects.equals(current, expected);
 		if (!Objects.equals(current, expected) && !alreadyCommitted) throw new IOException("Group selection changed after planning for modpack " + transaction.modpackId);
 	}
 
@@ -817,7 +823,8 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private static boolean isModpackPurpose(UpdateTransaction.Purpose purpose) {
-		return purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
+		return purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION
+				|| purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
 	}
 
 	public static void validateNoSymbolicLinkDescendants(Path constrainedRoot, Path target) throws IOException {

@@ -50,11 +50,7 @@ public class Changelogs {
 
 	public String latestPatchNotes() {
 		if (!latestPatchNotes.isBlank()) return latestPatchNotes;
-		for (int index = patchNotesHistory.size() - 1; index >= 0; index--) {
-			String notes = patchNotesHistory.get(index).patchNotes();
-			if (!notes.isBlank()) return notes;
-		}
-		return "";
+		return GenerationPatchNoteHistory.latestNotes(patchNotesHistory);
 	}
 
 	public List<GenerationPatchNoteHistory.Entry> patchNotesHistory() {

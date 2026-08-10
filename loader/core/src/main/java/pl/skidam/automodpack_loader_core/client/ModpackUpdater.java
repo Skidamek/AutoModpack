@@ -120,7 +120,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public String getPatchNotes() {
-		return getSelectedTarget().generationRecord().metadata().patchNotes();
+		return GenerationPatchNoteHistory.latestNotes(getSelectedTarget().patchNotesHistory());
 	}
 
 	public SourceAvailability getSourceAvailability() {
@@ -371,11 +371,34 @@ public class ModpackUpdater implements AutoCloseable {
 
 	// Build the removal plan without changing the installed files.
 	public UpdatePreview previewRemoval() throws Exception {
+		return previewRemovalLike(UpdatePreview.Mode.REMOVAL);
+	}
+
+	public UpdatePreview previewDeactivation() throws Exception {
+		return previewRemovalLike(UpdatePreview.Mode.DEACTIVATION);
+	}
+
+	private UpdatePreview previewRemovalLike(UpdatePreview.Mode mode) throws Exception {
 		ClientUpdatePlanBuilder.RemovalPreparation preparation = planBuilder.prepareRemoval();
 		clientConfig = preparation.currentConfig();
 		reviewedRemovalPlan = ReviewedClientPlan.pending(preparation, preparation.plan());
-		return UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation), true, preparation.baseline(),
-				preparation.completeFields().generation == null ? "" : preparation.completeFields().generation.patchNotes);
+		return UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation), mode, preparation.baseline(),
+				preparation.completeFields().generation == null ? "" : preparation.completeFields().generation.patchNotes, List.of());
+	}
+
+	public UpdateTransactionExecutor.Execution deactivateModpack() throws Exception {
+		ReviewedClientPlan<ClientUpdatePlanBuilder.RemovalPreparation> reviewed = reviewedRemovalPlan;
+		if (reviewed == null) throw new IllegalStateException("Modpack deactivation was not prepared");
+		if (!reviewed.isApproved()) reviewed.approve();
+		ClientUpdatePlanBuilder.RemovalPreparation preparation = reviewed.prepared();
+		clientConfig = preparation.currentConfig();
+		UpdateTransaction transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
+		if (execution.success()) {
+			reviewed.complete();
+			clientConfig = preparation.plannedConfig();
+		}
+		return execution;
 	}
 
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
@@ -390,11 +413,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (execution.success()) {
 			reviewed.complete();
 			clientConfig = preparation.plannedConfig();
-			try {
-				storage.clearOverlay(preparation.installed().modpackId);
-			} catch (IOException e) {
-				LOGGER.warn("Modpack removal committed, but its editable overlay could not be removed", e);
-			}
+			new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
 		}
 		return execution;
 	}
@@ -477,6 +496,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private void restartAfterApply(ApplyResult applyResult) {
 		if (!applyResult.requiresRestart()) {
 			updateLoopDetector.clear();
+			new ScreenManager().completeWithoutRestart();
 			return;
 		}
 		String fingerprint = updateStateFingerprint(applyResult);
@@ -836,7 +856,7 @@ public class ModpackUpdater implements AutoCloseable {
 		List<GenerationPatchNoteHistory.Entry> missedPatchNotes = GenerationPatchNoteHistory.after(selectedTarget.patchNotesHistory(), installedGenerationId());
 		UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, null, getPatchNotes(), missedPatchNotes);
 		return new ScreenManager().preview(preview, getModpackName(),
-				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, false, returnToSelection, resolveMainPageUrls(prepared));
+				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, returnToSelection, resolveMainPageUrls(prepared));
 	}
 
 	private String installedGenerationId() throws IOException {

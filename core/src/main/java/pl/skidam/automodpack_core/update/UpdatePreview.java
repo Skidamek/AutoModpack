@@ -35,21 +35,23 @@ public record UpdatePreview(
 		List<Entry> entries,
 		GroupConsequences groupConsequences,
 		String patchNotes,
-		List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
+		List<GenerationPatchNoteHistory.Entry> patchNotesHistory,
+		Mode mode) {
 	public UpdatePreview {
 		plan = Objects.requireNonNull(plan, "plan");
 		entries = List.copyOf(entries);
 		groupConsequences = Objects.requireNonNull(groupConsequences, "groupConsequences");
 		patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
 		patchNotesHistory = List.copyOf(Objects.requireNonNull(patchNotesHistory, "patchNotesHistory"));
+		mode = Objects.requireNonNull(mode, "mode");
 	}
 
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences) {
-		this(plan, entries, groupConsequences, "", List.of());
+		this(plan, entries, groupConsequences, "", List.of(), Mode.UPDATE);
 	}
 
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences, String patchNotes) {
-		this(plan, entries, groupConsequences, patchNotes, List.of());
+		this(plan, entries, groupConsequences, patchNotes, List.of(), Mode.UPDATE);
 	}
 
 	public long addedBytes() {
@@ -107,11 +109,7 @@ public record UpdatePreview(
 
 	public String latestPatchNotes() {
 		if (!patchNotes.isBlank()) return patchNotes;
-		for (int index = patchNotesHistory.size() - 1; index >= 0; index--) {
-			String notes = patchNotesHistory.get(index).patchNotes();
-			if (!notes.isBlank()) return notes;
-		}
-		return "";
+		return GenerationPatchNoteHistory.latestNotes(patchNotesHistory);
 	}
 
 	public Set<RestartReason> restartReasons() {
@@ -150,9 +148,17 @@ public record UpdatePreview(
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal, ClientStorageJsons.ClientBaselineFields baseline, String patchNotes,
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
+		return create(plan, originalFiles, target, selection, removal ? Mode.REMOVAL : Mode.UPDATE, baseline, patchNotes, patchNotesHistory);
+	}
+
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
+			ResolvedSelection selection, Mode mode, ClientStorageJsons.ClientBaselineFields baseline, String patchNotes,
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(originalFiles, "originalFiles");
 		Objects.requireNonNull(target, "target");
+		Objects.requireNonNull(mode, "mode");
+		boolean removal = mode != Mode.UPDATE;
 		Map<FileKey, Operation> operations = plan.operations().stream()
 				.collect(Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), operation -> operation));
 		Set<FileKey> preserved = new HashSet<>();
@@ -201,7 +207,7 @@ public record UpdatePreview(
 
 		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal()).thenComparing(Entry::relativePath));
 		GroupConsequences consequences = selection == null ? new GroupConsequences(Set.of(), Set.of(), Set.of()) : consequences(selection);
-		return new UpdatePreview(plan, entries, consequences, patchNotes, patchNotesHistory);
+		return new UpdatePreview(plan, entries, consequences, patchNotes, patchNotesHistory, mode);
 	}
 
 	private static GroupConsequences consequences(ResolvedSelection selection) {
@@ -254,6 +260,12 @@ public record UpdatePreview(
 		private static Map<String, String> immutableMap(Map<String, String> values) {
 			return Map.copyOf(new TreeMap<>(values == null ? Map.of() : values));
 		}
+	}
+
+	public enum Mode {
+		UPDATE,
+		DEACTIVATION,
+		REMOVAL
 	}
 
 	public enum Kind {
