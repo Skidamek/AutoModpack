@@ -107,6 +107,7 @@ afterEvaluate {
 			target("src/main/java/**/*.java", "core/src/**/*.java", "loader/**/src/**/*.java")
 			targetExclude("versions/**", stonecutterJava)
 			eclipse().configFile("config/format/eclipse-java.xml")
+			removeUnusedImports()
 			importOrder("java", "javax", "org", "com", "", "pl.skidam")
 			trimTrailingWhitespace()
 			endWithNewline()
