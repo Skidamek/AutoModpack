@@ -59,9 +59,15 @@ public final class ScreenManager {
 	}
 
 	public void error(Throwable throwable, String... args) {
-		Objects.requireNonNull(throwable, "throwable");
-		LOGGER.error("Displaying AutoModpack error screen: {}", Arrays.toString(args), throwable);
+		report(throwable, "Displaying AutoModpack error screen: " + Arrays.toString(args));
 		instance.error(args);
+	}
+
+	/** Records a client-facing failure while allowing its screen to choose between inline and dedicated error presentation. */
+	public void report(Throwable throwable, String context) {
+		Objects.requireNonNull(throwable, "throwable");
+		Objects.requireNonNull(context, "context");
+		LOGGER.error("AutoModpack client failure: {}", context, throwable);
 	}
 
 	public void title() {
