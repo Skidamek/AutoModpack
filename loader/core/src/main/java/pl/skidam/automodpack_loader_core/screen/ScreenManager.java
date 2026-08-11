@@ -7,9 +7,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
@@ -54,9 +51,8 @@ public final class ScreenManager {
 		instance.recovery(modpackUpdater, recoverySnapshot, modpackName, closed);
 	}
 
-	public void history(GenerationHistoryIndex historyIndex, List<GenerationRecord> availableHistory, String modpackName,
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, HistoricalCatalogueLoader catalogueLoader, Runnable closed) {
-		instance.history(historyIndex, availableHistory, modpackName, patchNotesHistory, catalogueLoader, closed);
+	public void history(HistoryViewRequest request) {
+		instance.history(Objects.requireNonNull(request, "history request"));
 	}
 
 	/** Logs and presents an operational failure exactly once through the installed screen adapter. */
