@@ -140,7 +140,25 @@ public final class ClientGenerationStore {
 		Objects.requireNonNull(entry, "history entry");
 		Objects.requireNonNull(destination, "destination");
 		if (!entry.detailsAvailable()) return CompletableFuture.failedFuture(new IOException("Historical catalogue details were compacted: " + entry.generationId()));
-		return client.downloadHistoricalCatalogue(entry.stateDigest(), destination, chunkCallback).thenApply(path -> readHistoricalCatalogue(path, entry));
+		try {
+			Files.createDirectories(destination.toAbsolutePath().normalize().getParent());
+		} catch (IOException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		return client.downloadHistoricalCatalogue(entry.stateDigest(), destination, chunkCallback).thenApply(path -> readHistoricalCatalogue(path, entry)).handle((snapshot, failure) -> {
+			IOException cleanupFailure = null;
+			try {
+				Files.deleteIfExists(destination);
+			} catch (IOException e) {
+				cleanupFailure = e;
+			}
+			if (failure != null) {
+				if (cleanupFailure != null) failure.addSuppressed(cleanupFailure);
+				throw failure instanceof CompletionException completionException ? completionException : new CompletionException(failure);
+			}
+			if (cleanupFailure != null) throw new CompletionException(cleanupFailure);
+			return snapshot;
+		});
 	}
 
 	private static CatalogueSnapshot readHistoricalCatalogue(Path path, GenerationHistoryIndex.Entry entry) {

@@ -1,14 +1,21 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Owns one authenticated transfer session opened from a stored per-modpack route. */
@@ -17,14 +24,16 @@ public final class StoredModpackConnection implements AutoCloseable {
 	private final ConnectionJsons.ConnectionInfo connection;
 	private final Secrets.Secret secret;
 	private final GenerationRecord advertisedRecord;
+	private final ClientStorage storage;
 	private DownloadClient client;
 
 	private StoredModpackConnection(String modpackId, ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, GenerationRecord advertisedRecord,
-			DownloadClient client) {
+			ClientStorage storage, DownloadClient client) {
 		this.modpackId = modpackId;
 		this.connection = connection;
 		this.secret = secret;
 		this.advertisedRecord = advertisedRecord;
+		this.storage = storage;
 		this.client = client;
 	}
 
@@ -43,7 +52,7 @@ public final class StoredModpackConnection implements AutoCloseable {
 		try {
 			GenerationRecord advertisedRecord = GenerationRecord.fromFields(result.content());
 			if (!modpackId.equals(advertisedRecord.manifest().modpackId())) throw new IOException("Connected modpack identity does not match the installed pack");
-			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, advertisedRecord, client);
+			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, advertisedRecord, storage, client);
 			client = null;
 			return session;
 		} finally {
@@ -53,6 +62,24 @@ public final class StoredModpackConnection implements AutoCloseable {
 
 	public GenerationRecord advertisedRecord() {
 		return advertisedRecord;
+	}
+
+	/** Downloads and validates one historical catalogue through this authenticated session. */
+	public CompletableFuture<CatalogueSnapshot> downloadHistoricalCatalogue(GenerationHistoryIndex.Entry entry) {
+		Objects.requireNonNull(entry, "history entry");
+		DownloadClient currentClient;
+		synchronized (this) {
+			if (client == null) return CompletableFuture.failedFuture(new IOException("Stored modpack transfer session was already consumed"));
+			currentClient = client;
+		}
+		Path destination = storage.helperDirectory().resolve("history-catalogue-" + entry.stateDigest() + ".json").normalize();
+		if (!destination.startsWith(storage.helperDirectory())) return CompletableFuture.failedFuture(new IOException("Historical catalogue path escaped client storage"));
+		try {
+			Files.createDirectories(storage.helperDirectory());
+		} catch (IOException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		return new ClientGenerationStore(storage).downloadHistoricalCatalogue(currentClient, entry, destination, null);
 	}
 
 	/** Transfers this session's client ownership to an updater. This connection becomes empty. */

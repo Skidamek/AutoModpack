@@ -531,18 +531,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private void requestHistory() {
 		if (!beginManagement()) return;
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			try {
-				ClientGenerationStore generationStore = new ClientGenerationStore(storage);
-				String generationId = historyGenerationId();
-				List<GenerationRecord> availableLineage = generationStore.availableLineage(modpackId, generationId);
-				List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(generationId);
-				new ScreenManager().history(availableLineage, modpackName, patchNotesHistory, this::endManagement);
-			} catch (Exception e) {
-				endManagement();
-				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
-			}
-		});
+		try {
+			GenerationHistoryController.open(storage, modpackId, historyGenerationId(), modpackName, this::endManagement);
+		} catch (Exception e) {
+			endManagement();
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
+		}
 	}
 
 	private void requestQuarantine() {
