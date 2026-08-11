@@ -118,6 +118,15 @@ public final class UpdatePreview {
 		return patchNotes;
 	}
 
+	public Optional<GenerationPatchNoteHistory.Entry> featuredPatchNotes() {
+		if (patchNotes.isBlank()) return Optional.empty();
+		for (int index = patchNotesHistory.size() - 1; index >= 0; index--) {
+			GenerationPatchNoteHistory.Entry entry = patchNotesHistory.get(index);
+			if (entry.patchNotes().equals(patchNotes)) return Optional.of(entry);
+		}
+		return Optional.empty();
+	}
+
 	public Set<RestartReason> restartReasons() {
 		return plan.restartReasons();
 	}
