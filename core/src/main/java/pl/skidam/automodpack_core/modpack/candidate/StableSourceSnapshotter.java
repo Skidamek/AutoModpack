@@ -19,7 +19,6 @@ import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public final class StableSourceSnapshotter {
-	private static final int MAX_ATTEMPTS = 3;
 	private final CopyOperation copyOperation;
 
 	public StableSourceSnapshotter() {
@@ -37,56 +36,46 @@ public final class StableSourceSnapshotter {
 
 	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory,
 			FileMetadataCache fileMetadataCache, ModFileCache modFileCache, Path objectStoreDirectory) throws CandidateBuildException {
-		for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-			Path staged = null;
-			try {
-				BasicFileAttributes before = attributes(source.sourcePath());
-				Exclusion exclusion = expectedPathExclusion(source, before, autoExcludeUnnecessary);
-				if (exclusion != null) return new Snapshot(null, exclusion, null);
-				Snapshot cached = cachedSnapshot(source, before, autoExcludeServerMods, stagingDirectory, fileMetadataCache, modFileCache, objectStoreDirectory);
-				if (cached != null) return cached;
+		Path staged = null;
+		try {
+			BasicFileAttributes before = attributes(source.sourcePath());
+			Exclusion exclusion = expectedPathExclusion(source, before, autoExcludeUnnecessary);
+			if (exclusion != null) return new Snapshot(null, exclusion, null);
+			Snapshot cached = cachedSnapshot(source, before, autoExcludeServerMods, stagingDirectory, fileMetadataCache, modFileCache, objectStoreDirectory);
+			if (cached != null) return cached;
 
-				ensureStagingDirectory(stagingDirectory);
-				staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
-				copyOperation.copy(source.sourcePath(), staged);
-				force(staged);
+			ensureStagingDirectory(stagingDirectory);
+			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
+			copyOperation.copy(source.sourcePath(), staged);
+			force(staged);
 
-				exclusion = expectedContentExclusion(staged, autoExcludeServerMods);
-				String type = exclusion == null ? fileType(staged, source.logicalPath()) : null;
-				String sha1 = exclusion == null ? HashUtils.getHash(staged) : null;
-				if (exclusion == null && sha1 == null) throw new IOException("SHA-1 calculation returned null");
-				String murmur = null;
-				if (exclusion == null && ModpackContentType.isSourceFetchable(type))
-					murmur = HashUtils.getCurseforgeMurmurHash(staged);
-				BasicFileAttributes after = attributes(source.sourcePath());
-				if (!stable(before, after)) {
-					Files.deleteIfExists(staged);
-					staged = null;
-					if (attempt == MAX_ATTEMPTS)
-						throw new CandidateBuildException("Source remained unstable after " + MAX_ATTEMPTS + " attempts: " + source.sourcePath());
-					continue;
-				}
-				long size = Files.size(staged);
-				if (size != after.size()) throw new IOException("Staged snapshot size does not match stable source size: " + source.sourcePath());
-				if (exclusion != null) {
-					Files.deleteIfExists(staged);
-					staged = null;
-					return new Snapshot(null, exclusion, null);
-				}
-				if (fileMetadataCache != null) fileMetadataCache.overwriteCache(source.sourcePath(), sha1);
-				if (fileMetadataCache != null) fileMetadataCache.overwriteCache(staged, sha1);
-				return new Snapshot(new GroupManifest.GroupFile(size, type, false, false, sha1, murmur), null,
-						new StagedObject(sha1, size, staged));
-			} catch (CandidateBuildException e) {
-				delete(staged, e);
-				throw e;
-			} catch (Exception e) {
-				CandidateBuildException failure = new CandidateBuildException("Failed to snapshot stable source " + source.sourcePath(), e);
-				delete(staged, failure);
-				throw failure;
+			exclusion = expectedContentExclusion(staged, autoExcludeServerMods);
+			String type = exclusion == null ? fileType(staged, source.logicalPath()) : null;
+			String sha1 = exclusion == null ? HashUtils.getHash(staged) : null;
+			if (exclusion == null && sha1 == null) throw new IOException("SHA-1 calculation returned null");
+			String murmur = null;
+			if (exclusion == null && ModpackContentType.isSourceFetchable(type)) murmur = HashUtils.getCurseforgeMurmurHash(staged);
+			BasicFileAttributes after = attributes(source.sourcePath());
+			if (!stable(before, after)) throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
+			long size = Files.size(staged);
+			if (size != after.size()) throw new IOException("Staged snapshot size does not match stable source size: " + source.sourcePath());
+			if (exclusion != null) {
+				Files.deleteIfExists(staged);
+				staged = null;
+				return new Snapshot(null, exclusion, null);
 			}
+			if (fileMetadataCache != null) fileMetadataCache.overwriteCache(source.sourcePath(), sha1);
+			if (fileMetadataCache != null) fileMetadataCache.overwriteCache(staged, sha1);
+			return new Snapshot(new GroupManifest.GroupFile(size, type, false, false, sha1, murmur), null,
+					new StagedObject(sha1, size, staged));
+		} catch (CandidateBuildException e) {
+			delete(staged, e);
+			throw e;
+		} catch (Exception e) {
+			CandidateBuildException failure = new CandidateBuildException("Failed to snapshot stable source " + source.sourcePath(), e);
+			delete(staged, failure);
+			throw failure;
 		}
-		throw new CandidateBuildException("Failed to snapshot source " + source.sourcePath());
 	}
 
 	private Snapshot cachedSnapshot(CandidateSource source, BasicFileAttributes before, boolean autoExcludeServerMods, Path stagingDirectory,

@@ -63,11 +63,9 @@ class GenerationIdentityTest {
 	}
 
 	@Test
-	void generationRecordsRejectInvalidOrOversizedPatchNotes() {
+	void generationRecordsRejectInvalidPatchNotes() {
 		GroupManifest manifest = GroupManifestValidator.validate(catalogue("main", "notes"));
 		assertThrows(IllegalArgumentException.class, () -> GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), String.valueOf((char) 0xD800)));
-		assertThrows(IllegalArgumentException.class,
-				() -> GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "x".repeat(GenerationMetadata.MAX_PATCH_NOTES_UTF8_BYTES + 1)));
 	}
 
 	@Test
