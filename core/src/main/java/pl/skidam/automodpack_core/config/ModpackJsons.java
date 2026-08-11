@@ -44,7 +44,8 @@ public class ModpackJsons {
 		public static class ModpackGroupFields {
 			public String displayName = "";
 			public String description = "";
-			public String tag = "";
+			public String category = "";
+			public String icon = "";
 			public boolean required;
 			public boolean defaultSelected;
 			public Set<String> breaksWith = Set.of();

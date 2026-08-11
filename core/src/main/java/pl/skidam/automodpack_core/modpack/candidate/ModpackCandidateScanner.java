@@ -135,7 +135,8 @@ public final class ModpackCandidateScanner {
 				ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
-				group.tag = declaration.tag == null ? "" : declaration.tag;
+				group.category = declaration.category == null ? "" : declaration.category;
+				group.icon = declaration.icon == null ? "" : declaration.icon;
 				group.required = declaration.required;
 				group.defaultSelected = declaration.defaultSelected;
 				group.breaksWith = sortedSet(declaration.breaksWith);

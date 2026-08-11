@@ -82,7 +82,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	// What the player has actually ticked; resolved is what that implies once required groups,
 	// dependencies, conflicts and platform rules are applied.
 	private final Set<String> chosen = new LinkedHashSet<>();
-	private final Set<String> chosenTags = new LinkedHashSet<>();
+	private final Set<String> chosenCategories = new LinkedHashSet<>();
 	private final Set<String> excluded = new LinkedHashSet<>();
 	private ResolvedSelection resolution;
 	private List<String> resolutionErrors = List.of();
@@ -141,7 +141,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				: this.expectedSelection == null ? GroupSelectionResolver.defaultIntent(manifest) : this.expectedSelection;
 		this.initialSelection = initial;
 		this.chosen.addAll(initial.requestedGroups());
-		this.chosenTags.addAll(initial.requestedTags());
+		this.chosenCategories.addAll(initial.requestedCategories());
 		this.excluded.addAll(initial.excludedGroups());
 		try {
 		this.resolution = this.expectedSelection == null && initialSelection == null
@@ -332,7 +332,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
 			chosen.clear();
 			chosen.addAll(defaults.requestedGroups());
-			chosenTags.clear();
+			chosenCategories.clear();
 			excluded.clear();
 			reresolveDefault();
 		}));
@@ -406,8 +406,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private void applyIntent(SelectionIntent intent) {
 		chosen.clear();
 		chosen.addAll(intent.requestedGroups());
-		chosenTags.clear();
-		chosenTags.addAll(intent.requestedTags());
+		chosenCategories.clear();
+		chosenCategories.addAll(intent.requestedCategories());
 		excluded.clear();
 		excluded.addAll(intent.excludedGroups());
 	}
@@ -639,12 +639,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private void rebuildRows() {
 		rows.clear();
 		rows.add(new Row(VersionedText.translatable("automodpack.ui.general").getString(), null, null));
-		for (var entry : groups.entrySet()) if (entry.getValue().tag().isEmpty()) rows.add(new Row("", entry.getKey(), null));
+		for (var entry : groups.entrySet()) if (entry.getValue().category().isEmpty()) rows.add(new Row("", entry.getKey(), null));
 		Set<String> categories = new TreeSet<>();
-		for (GroupManifest.Group group : groups.values()) if (!group.tag().isEmpty()) categories.add(group.tag());
+		for (GroupManifest.Group group : groups.values()) if (!group.category().isEmpty()) categories.add(group.category());
 		for (String category : categories) {
 			rows.add(new Row(categoryLabel(category), null, category));
-			for (var entry : groups.entrySet()) if (category.equals(entry.getValue().tag())) rows.add(new Row("", entry.getKey(), category));
+			for (var entry : groups.entrySet()) if (category.equals(entry.getValue().category())) rows.add(new Row("", entry.getKey(), category));
 		}
 	}
 
@@ -678,7 +678,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (explanation != null && dependency) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.dependencyNamed", names(explanation.relatedGroups())).getString());
 		else if (explanation != null) appendTooltipLine(tooltip, explanation.explanation());
 		if (explanation != null && !dependency && !explanation.relatedGroups().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.related", names(explanation.relatedGroups())).getString());
-		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.category", tagLabel(group)).getString());
+		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.category", categoryLabel(group)).getString());
 		if (group.required()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requiredAlways").getString());
 		if (group.defaultSelected()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.defaultSelected").getString());
 		if (resolution.forcedGroups().contains(groupId)) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.forced").getString());
@@ -689,9 +689,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
 	}
 
-	private String tagLabel(GroupManifest.Group group) {
-		if (group.tag().isEmpty()) return VersionedText.translatable("automodpack.ui.general").getString();
-		return categoryLabel(group.tag());
+	private String categoryLabel(GroupManifest.Group group) {
+		if (group.category().isEmpty()) return VersionedText.translatable("automodpack.ui.general").getString();
+		return categoryLabel(group.category());
 	}
 
 	private static void appendTooltipLine(StringBuilder tooltip, String line) {
@@ -766,15 +766,15 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private boolean hasOptionalCategoryGroups(String category) {
-		return groups.values().stream().anyMatch(group -> category.equals(group.tag()) && !group.required());
+		return groups.values().stream().anyMatch(group -> category.equals(group.category()) && !group.required());
 	}
 
 	private boolean categorySelected(String category) {
-		return chosenTags.contains(category);
+		return chosenCategories.contains(category);
 	}
 
 	private SelectionIntent currentIntent() {
-		return new SelectionIntent(chosen, chosenTags, excluded);
+		return new SelectionIntent(chosen, chosenCategories, excluded);
 	}
 
 	private boolean canSave() {

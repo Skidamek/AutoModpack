@@ -32,9 +32,9 @@ public final class GroupSelectionResolver {
 		state.collectStaleChoices();
 
 		for (String groupId : state.requiredGroups) state.resolveRoot(groupId, Source.REQUIRED, true);
-		for (String tag : intent.requestedTags()) for (var entry : manifest.groups().entrySet()) {
+		for (String category : intent.requestedCategories()) for (var entry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = entry.getValue();
-			if (tag.equals(group.tag()) && !group.required() && group.supports(platform)) state.resolveRoot(entry.getKey(), Source.EXPLICIT, false);
+			if (category.equals(group.category()) && !group.required() && group.supports(platform)) state.resolveRoot(entry.getKey(), Source.EXPLICIT, false);
 		}
 		for (String groupId : intent.requestedGroups()) if (manifest.groups().containsKey(groupId)) {
 			GroupManifest.Group group = manifest.groups().get(groupId);
@@ -53,18 +53,18 @@ public final class GroupSelectionResolver {
 		Objects.requireNonNull(clicked);
 		Objects.requireNonNull(platform);
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
-		Set<String> requestedTags = new TreeSet<>(current.requestedTags());
+		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
 		GroupManifest.Group clickedGroup = manifest.groups().get(clicked);
-		if (clickedGroup != null && !clickedGroup.tag().isEmpty() && requestedTags.remove(clickedGroup.tag())) {
+		if (clickedGroup != null && !clickedGroup.category().isEmpty() && requestedCategories.remove(clickedGroup.category())) {
 			for (var entry : manifest.groups().entrySet()) {
 				GroupManifest.Group group = entry.getValue();
-				if (clickedGroup.tag().equals(group.tag()) && !group.required() && group.supports(platform)) requestedGroups.add(entry.getKey());
+				if (clickedGroup.category().equals(group.category()) && !group.required() && group.supports(platform)) requestedGroups.add(entry.getKey());
 			}
 		}
 		if (!requestedGroups.add(clicked)) requestedGroups.remove(clicked);
 		excludedGroups.remove(clicked);
-		return new SelectionIntent(requestedGroups, requestedTags, excludedGroups);
+		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
 	}
 
 	/** Toggles one persisted category intent without pretending that its groups were clicked individually. */
@@ -74,17 +74,17 @@ public final class GroupSelectionResolver {
 		Objects.requireNonNull(category);
 		Objects.requireNonNull(platform);
 		Set<String> categoryGroups = new TreeSet<>();
-		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().tag()) && !entry.getValue().required() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
+		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().required() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
-		Set<String> requestedTags = new TreeSet<>(current.requestedTags());
+		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
-		boolean remove = !requestedTags.add(category);
-		if (remove) requestedTags.remove(category);
+		boolean remove = !requestedCategories.add(category);
+		if (remove) requestedCategories.remove(category);
 		for (String groupId : categoryGroups) {
 			requestedGroups.remove(groupId);
 			excludedGroups.remove(groupId);
 		}
-		return new SelectionIntent(requestedGroups, requestedTags, excludedGroups);
+		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
 	}
 
 	public static boolean conflicts(GroupManifest manifest, String first, String second) {

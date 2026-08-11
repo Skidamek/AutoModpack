@@ -250,13 +250,13 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateSelectionMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorRequestedTags == null
-				|| transaction.expectedPriorExcludedGroups == null || transaction.requestedGroups == null || transaction.requestedTags == null || transaction.excludedGroups == null)
+		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorRequestedCategories == null
+				|| transaction.expectedPriorExcludedGroups == null || transaction.requestedGroups == null || transaction.requestedCategories == null || transaction.excludedGroups == null)
 			throw new IOException("Selection metadata is incomplete");
 		if (!isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
-				|| !isCanonicalIntentList(transaction.expectedPriorRequestedTags)
+				|| !isCanonicalIntentList(transaction.expectedPriorRequestedCategories)
 				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups)
-				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.requestedTags)
+				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.requestedCategories)
 				|| !isCanonicalIntentList(transaction.excludedGroups))
 			throw new IOException("Selection metadata is not canonical");
 		try {
@@ -285,8 +285,8 @@ public final class UpdateTransactionExecutor {
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
 		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
 				|| transaction.ledgerDigest != null || transaction.targetPlatform != null || transaction.selectionDigest != null || transaction.overlayDigest != null
-				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.expectedPriorRequestedTags != null
-				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.requestedTags != null || transaction.excludedGroups != null
+				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.expectedPriorRequestedCategories != null
+				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.requestedCategories != null || transaction.excludedGroups != null
 				|| transaction.plannedClientConfig != null || transaction.plannedGeneratedCopies != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty()
 				|| !transaction.plannedBaselineCaptures.isEmpty() || !transaction.plannedConflicts.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");

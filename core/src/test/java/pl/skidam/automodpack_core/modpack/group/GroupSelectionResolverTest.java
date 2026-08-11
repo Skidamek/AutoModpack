@@ -30,7 +30,7 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void explicitlyRequestedUnavailableOptionalGroupInvalidatesResolution() {
-		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "", false, false, new TreeSet<>(), new TreeSet<>(),
+		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(),
 				Set.of(ClientPlatform.WINDOWS), new TreeMap<>())));
 
 		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
@@ -43,8 +43,8 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void explicitlyRequestedOptionalGroupBlockedByUnavailableDependencyIsHonest() {
-		GroupManifest.Group dependency = new GroupManifest.Group("Dependency", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>());
-		GroupManifest.Group feature = new GroupManifest.Group("Feature", "", "", false, false, new TreeSet<>(), new TreeSet<>(Set.of("dependency")), Set.of(), new TreeMap<>());
+		GroupManifest.Group dependency = new GroupManifest.Group("Dependency", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>());
+		GroupManifest.Group feature = new GroupManifest.Group("Feature", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(Set.of("dependency")), Set.of(), new TreeMap<>());
 		GroupManifest manifest = manifest(Map.of("dependency", dependency, "feature", feature));
 
 		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
@@ -57,7 +57,7 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void unsupportedGroupsNeverRequestedRemainOutsideRequestedUnavailableSubset() {
-		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "", false, false, new TreeSet<>(), new TreeSet<>(),
+		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(),
 				Set.of(ClientPlatform.WINDOWS), new TreeMap<>())));
 
 		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of()), ClientPlatform.LINUX);
@@ -77,35 +77,35 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void categoryTogglePersistsCategoryWithoutPretendingItsGroupsWereClicked() {
-		GroupManifest manifest = manifest(Map.of("one", tagged("one", ClientPlatform.LINUX), "two", tagged("two", ClientPlatform.LINUX)));
+		GroupManifest manifest = manifest(Map.of("one", categorized("one", ClientPlatform.LINUX), "two", categorized("two", ClientPlatform.LINUX)));
 
 		SelectionIntent selected = GroupSelectionResolver.preferCategory(manifest, new SelectionIntent(Set.of()), "visuals", ClientPlatform.LINUX);
 
 		assertEquals(Set.of(), selected.requestedGroups());
-		assertEquals(Set.of("visuals"), selected.requestedTags());
+		assertEquals(Set.of("visuals"), selected.requestedCategories());
 		assertEquals(Set.of("one", "two"), GroupSelectionResolver.resolve(manifest, selected, ClientPlatform.LINUX).selectedGroups());
 		assertEquals(Set.of(), selected.excludedGroups());
 	}
 
 	@Test
 	void individualGroupDoesNotSelectItsSingleGroupCategory() {
-		GroupManifest manifest = manifest(Map.of("one", tagged("one", ClientPlatform.LINUX)));
+		GroupManifest manifest = manifest(Map.of("one", categorized("one", ClientPlatform.LINUX)));
 
 		SelectionIntent selected = GroupSelectionResolver.prefer(manifest, new SelectionIntent(Set.of()), "one", ClientPlatform.LINUX);
 
 		assertEquals(Set.of("one"), selected.requestedGroups());
-		assertTrue(selected.requestedTags().isEmpty());
+		assertTrue(selected.requestedCategories().isEmpty());
 	}
 
 	@Test
 	void changingAChildConvertsTheRestOfItsSelectedCategoryToIndividualChoices() {
-		GroupManifest manifest = manifest(Map.of("one", tagged("one", ClientPlatform.LINUX), "two", tagged("two", ClientPlatform.LINUX)));
+		GroupManifest manifest = manifest(Map.of("one", categorized("one", ClientPlatform.LINUX), "two", categorized("two", ClientPlatform.LINUX)));
 		SelectionIntent category = GroupSelectionResolver.preferCategory(manifest, new SelectionIntent(Set.of()), "visuals", ClientPlatform.LINUX);
 
 		SelectionIntent changed = GroupSelectionResolver.prefer(manifest, category, "one", ClientPlatform.LINUX);
 
 		assertEquals(Set.of("two"), changed.requestedGroups());
-		assertTrue(changed.requestedTags().isEmpty());
+		assertTrue(changed.requestedCategories().isEmpty());
 	}
 
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
@@ -113,10 +113,10 @@ class GroupSelectionResolverTest {
 	}
 
 	private static GroupManifest.Group group(boolean required, boolean defaultSelected, Set<String> requires) {
-		return new GroupManifest.Group("", "", "", required, defaultSelected, new TreeSet<>(), new TreeSet<>(requires), Set.of(), new TreeMap<>());
+		return new GroupManifest.Group("", "", "", "", required, defaultSelected, new TreeSet<>(), new TreeSet<>(requires), Set.of(), new TreeMap<>());
 	}
 
-	private static GroupManifest.Group tagged(String name, ClientPlatform platform) {
-		return new GroupManifest.Group(name, "", "visuals", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(platform), new TreeMap<>());
+	private static GroupManifest.Group categorized(String name, ClientPlatform platform) {
+		return new GroupManifest.Group(name, "", "visuals", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(platform), new TreeMap<>());
 	}
 }
