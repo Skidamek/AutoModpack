@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.update;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -14,6 +13,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
@@ -31,6 +31,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class UpdatePreview {
 	private final UpdatePlan plan;
+	private final ChangeSet changeSet;
 	private final List<Entry> entries;
 	private final GroupConsequences groupConsequences;
 	private final String patchNotes;
@@ -40,7 +41,8 @@ public final class UpdatePreview {
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences, String patchNotes,
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Mode mode) {
 		this.plan = Objects.requireNonNull(plan, "plan");
-		this.entries = logicalEntries(entries);
+		this.changeSet = createChangeSet(entries, plan.restartReasons());
+		this.entries = legacyEntries(this.changeSet);
 		this.groupConsequences = Objects.requireNonNull(groupConsequences, "groupConsequences");
 		this.patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
 		this.patchNotesHistory = List.copyOf(Objects.requireNonNull(patchNotesHistory, "patchNotesHistory"));
@@ -62,6 +64,11 @@ public final class UpdatePreview {
 	/** The one canonical, user-visible change set shared by preview and changelog consumers. */
 	public List<Entry> entries() {
 		return entries;
+	}
+
+	/** The canonical logical changes and physical occurrences for this preview. */
+	public ChangeSet changeSet() {
+		return changeSet;
 	}
 
 	public GroupConsequences groupConsequences() {
@@ -103,53 +110,12 @@ public final class UpdatePreview {
 	}
 
 	public Summary summary() {
-		Set<String> changed = new HashSet<>();
-		Set<String> removed = new HashSet<>();
-		Set<String> preserved = new HashSet<>();
-		Set<String> unsafe = new HashSet<>();
-		for (Entry entry : entries) {
-			switch (entry.kind.summaryBucket()) {
-				case CHANGED -> changed.add(entry.relativePath);
-				case REMOVED -> removed.add(entry.relativePath);
-				case PRESERVED -> preserved.add(entry.relativePath);
-				case UNSAFE -> unsafe.add(entry.relativePath);
-			}
-		}
-		Set<String> otherEffects = new TreeSet<>();
-		for (RestartReason reason : plan.restartReasons()) otherEffects.add(reason.name());
-		return new Summary(changed.size(), removed.size(), preserved.size(), unsafe.size(), otherEffects.size());
-	}
-
-	private static List<Entry> logicalEntries(List<Entry> entries) {
-		Map<String, Entry> unique = new TreeMap<>();
-		for (Entry entry : List.copyOf(entries)) unique.merge(entry.relativePath(), entry, UpdatePreview::mergeLogicalEntry);
-		return unique.values().stream().sorted(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
-				.thenComparing(Entry::relativePath)).toList();
-	}
-
-	private static Entry mergeLogicalEntry(Entry first, Entry second) {
-		List<Entry> entries = List.of(first, second);
-		Kind kind;
-		if (entries.stream().anyMatch(entry -> entry.kind == Kind.UNSAFE)) kind = Kind.UNSAFE;
-		else
-			if (entries.stream().anyMatch(entry -> entry.kind == Kind.CHANGED)
-					|| entries.stream().anyMatch(entry -> entry.kind == Kind.ADDED) && entries.stream().anyMatch(entry -> entry.kind == Kind.REMOVED))
-				kind = Kind.CHANGED;
-			else
-				if (entries.stream().anyMatch(entry -> entry.kind == Kind.ADDED)) kind = Kind.ADDED;
-				else if (entries.stream().anyMatch(entry -> entry.kind == Kind.REMOVED)) kind = Kind.REMOVED;
-				else if (entries.stream().anyMatch(entry -> entry.kind == Kind.PRESERVED_CHANGED)) kind = Kind.PRESERVED_CHANGED;
-				else if (entries.stream().anyMatch(entry -> entry.kind == Kind.PRESERVED_UNAVAILABLE)) kind = Kind.PRESERVED_UNAVAILABLE;
-				else kind = Kind.PRESERVED_OUTSIDE;
-		Entry sizeSource = entries.stream().filter(entry -> entry.kind == kind).findFirst()
-				.orElseGet(() -> entries.stream().filter(entry -> entry.kind == Kind.ADDED || entry.kind == Kind.CHANGED).findFirst().orElse(first));
-		Root root = first.root.ordinal() <= second.root.ordinal() ? first.root : second.root;
-		return new Entry(kind, root, first.relativePath, sizeSource.size);
+		ChangeSet.Summary summary = changeSet.summary();
+		return new Summary(summary.addedFiles() + summary.modifiedFiles(), summary.removedFiles(), summary.preservedFiles(), summary.unsafeFiles(), summary.effectCount());
 	}
 
 	public String latestPatchNotes() {
-		if (!patchNotes.isBlank()) return patchNotes;
-		return GenerationPatchNoteHistory.latestNotes(patchNotesHistory);
+		return patchNotes;
 	}
 
 	public Set<RestartReason> restartReasons() {
@@ -163,6 +129,61 @@ public final class UpdatePreview {
 
 	private long bytesOf(Kind kind) {
 		return entries.stream().filter(entry -> entry.kind == kind).mapToLong(Entry::size).sum();
+	}
+
+	private static ChangeSet createChangeSet(List<Entry> entries, Set<RestartReason> restartReasons) {
+		List<ChangeSet.Change> changes = new ArrayList<>();
+		for (Entry entry : List.copyOf(Objects.requireNonNull(entries, "entries"))) {
+			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence(entry.root.name(), entry.relativePath(), entry.size());
+			changes.add(new ChangeSet.Change(entry.relativePath(), canonicalKind(entry.kind), List.of(occurrence)));
+		}
+		List<ChangeSet.Effect> effects = new ArrayList<>();
+		if (restartReasons != null) for (RestartReason reason : restartReasons) effects.add(new ChangeSet.Effect("restart", reason.name()));
+		return ChangeSet.of(changes, effects);
+	}
+
+	private static List<Entry> legacyEntries(ChangeSet changeSet) {
+		List<Entry> entries = new ArrayList<>();
+		for (ChangeSet.Change change : changeSet.changes()) {
+			ChangeSet.Occurrence occurrence = change.occurrences().stream().min(Comparator.comparingInt(entry -> root(entry.location()).ordinal())).orElseThrow();
+			long size = change.occurrences().stream().mapToLong(ChangeSet.Occurrence::size).max().orElseThrow();
+			entries.add(new Entry(legacyKind(change.kind()), root(occurrence.location()), change.logicalPath(), size));
+		}
+		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.sortBucket()).thenComparing(entry -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
+				.thenComparing(Entry::relativePath));
+		return List.copyOf(entries);
+	}
+
+	private static ChangeSet.Kind canonicalKind(Kind kind) {
+		return switch (kind) {
+			case ADDED -> ChangeSet.Kind.ADDED;
+			case CHANGED -> ChangeSet.Kind.MODIFIED;
+			case REMOVED -> ChangeSet.Kind.REMOVED;
+			case PRESERVED_CHANGED -> ChangeSet.Kind.PRESERVED_CHANGED;
+			case PRESERVED_UNAVAILABLE -> ChangeSet.Kind.PRESERVED_UNAVAILABLE;
+			case PRESERVED_OUTSIDE -> ChangeSet.Kind.PRESERVED_OUTSIDE;
+			case UNSAFE -> ChangeSet.Kind.UNSAFE;
+		};
+	}
+
+	private static Kind legacyKind(ChangeSet.Kind kind) {
+		return switch (kind) {
+			case ADDED -> Kind.ADDED;
+			case MODIFIED, METADATA_ONLY -> Kind.CHANGED;
+			case REMOVED -> Kind.REMOVED;
+			case PRESERVED_CHANGED -> Kind.PRESERVED_CHANGED;
+			case PRESERVED_UNAVAILABLE -> Kind.PRESERVED_UNAVAILABLE;
+			case PRESERVED_OUTSIDE, PRESERVED -> Kind.PRESERVED_OUTSIDE;
+			case UNSAFE -> Kind.UNSAFE;
+		};
+	}
+
+	private static Root root(String location) {
+		try {
+			return Root.valueOf(location);
+		} catch (IllegalArgumentException e) {
+			throw new IllegalStateException("Preview change has an unknown physical root: " + location, e);
+		}
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
@@ -242,7 +263,8 @@ public final class UpdatePreview {
 			entries.add(new Entry(kind, key.root(), key.relativePath(), current.size()));
 		}
 
-		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal()).thenComparing(Entry::relativePath));
+		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.sortBucket()).thenComparing(entry -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
+				.thenComparing(Entry::relativePath));
 		GroupConsequences consequences = selection == null ? new GroupConsequences(Set.of(), Set.of(), Set.of()) : consequences(selection);
 		return new UpdatePreview(plan, entries, consequences, patchNotes, patchNotesHistory, mode);
 	}

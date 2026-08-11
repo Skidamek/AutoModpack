@@ -14,17 +14,13 @@ public final class GenerationHistorySummary {
 	public static List<Entry> summarize(List<GenerationRecord> generations, List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
 		Objects.requireNonNull(generations, "generations");
 		Objects.requireNonNull(patchNotesHistory, "patch notes history");
-		Map<String, String> latestNotesByGeneration = new HashMap<>();
-		String latestNotes = "";
-		for (GenerationPatchNoteHistory.Entry entry : patchNotesHistory) {
-			if (!entry.patchNotes().isBlank()) latestNotes = entry.patchNotes();
-			latestNotesByGeneration.put(entry.generationId(), latestNotes);
-		}
+		Map<String, String> notesByGeneration = new HashMap<>();
+		for (GenerationPatchNoteHistory.Entry entry : patchNotesHistory) notesByGeneration.put(entry.generationId(), entry.patchNotes());
 		List<Entry> summaries = new ArrayList<>(generations.size());
 		for (int index = 0; index < generations.size(); index++) {
 			GenerationRecord generation = Objects.requireNonNull(generations.get(index), "generation history entry");
 			GenerationRecord predecessor = index == 0 ? null : generations.get(index - 1);
-			String notes = latestNotesByGeneration.getOrDefault(generation.metadata().generationId(), generation.metadata().patchNotes());
+			String notes = notesByGeneration.getOrDefault(generation.metadata().generationId(), generation.metadata().patchNotes());
 			summaries.add(new Entry(index + 1, generation.metadata().generationId(), generation.metadata().createdAt(), notes,
 					GenerationDiff.between(predecessor == null ? null : predecessor.manifest(), generation.manifest())));
 		}
