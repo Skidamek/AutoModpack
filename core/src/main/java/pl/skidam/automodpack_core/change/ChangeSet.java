@@ -34,7 +34,8 @@ public final class ChangeSet {
 			.thenComparing(Occurrence::logicalPath).thenComparingLong(Occurrence::size)
 			.thenComparing(occurrence -> Objects.toString(occurrence.beforeHash(), ""))
 			.thenComparing(occurrence -> Objects.toString(occurrence.afterHash(), ""))
-			.thenComparing(Occurrence::contentKind);
+			.thenComparing(Occurrence::contentKind)
+			.thenComparing(occurrence -> String.join("\u0000", occurrence.featureIds()));
 
 	private final List<Change> changes;
 	private final List<Effect> effects;
@@ -80,7 +81,7 @@ public final class ChangeSet {
 		for (var group : manifest.groups().entrySet()) for (var file : group.getValue().files().entrySet()) {
 			GroupManifest.GroupFile value = file.getValue();
 			changes.add(new Change(file.getKey(), Kind.PRESERVED,
-					List.of(new Occurrence(group.getKey(), file.getKey(), value.size(), null, value.sha1(), value.type(), List.of()))));
+					List.of(new Occurrence("catalogue", file.getKey(), value.size(), null, value.sha1(), value.type(), List.of(group.getKey()), List.of()))));
 		}
 		return of(changes);
 	}
@@ -221,17 +222,21 @@ public final class ChangeSet {
 		}
 	}
 
-	public record Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, String contentKind, List<String> references) {
+	public record Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, String contentKind, List<String> featureIds, List<String> references) {
 		public Occurrence(String location, String logicalPath, long size) {
-			this(location, logicalPath, size, null, null, null, List.of());
+			this(location, logicalPath, size, null, null, null, List.of(), List.of());
 		}
 
 		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash) {
-			this(location, logicalPath, size, beforeHash, afterHash, null, List.of());
+			this(location, logicalPath, size, beforeHash, afterHash, null, List.of(), List.of());
 		}
 
 		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, List<String> references) {
-			this(location, logicalPath, size, beforeHash, afterHash, null, references);
+			this(location, logicalPath, size, beforeHash, afterHash, null, List.of(), references);
+		}
+
+		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, String contentKind, List<String> references) {
+			this(location, logicalPath, size, beforeHash, afterHash, contentKind, List.of(), references);
 		}
 
 		public Occurrence {
@@ -242,13 +247,18 @@ public final class ChangeSet {
 			beforeHash = normalizeHash(beforeHash, "before hash");
 			afterHash = normalizeHash(afterHash, "after hash");
 			contentKind = normalizeContentKind(contentKind, logicalPath);
+			featureIds = normalizedValues(featureIds);
 			List<String> normalizedReferences = new ArrayList<>();
 			if (references != null) for (String reference : references) if (reference != null && !reference.isBlank() && !normalizedReferences.contains(reference)) normalizedReferences.add(reference);
 			references = List.copyOf(normalizedReferences);
 		}
 
 		public Occurrence withReferences(List<String> newReferences) {
-			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, newReferences);
+			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, featureIds, newReferences);
+		}
+
+		public Occurrence withFeatureIds(Collection<String> newFeatureIds) {
+			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, newFeatureIds == null ? List.of() : List.copyOf(newFeatureIds), references);
 		}
 	}
 
@@ -277,5 +287,12 @@ public final class ChangeSet {
 	private static String normalizeContentKind(String value, String logicalPath) {
 		if (value == null || value.isBlank()) return ModpackPathPolicy.isModPath(logicalPath) ? ModpackContentType.MOD : ModpackPathPolicy.typeForPath(logicalPath);
 		return value.trim().toLowerCase(Locale.ROOT);
+	}
+
+	private static List<String> normalizedValues(Collection<String> values) {
+		List<String> normalized = new ArrayList<>();
+		if (values != null) for (String value : values) if (value != null && !value.isBlank() && !normalized.contains(value.trim())) normalized.add(value.trim());
+		normalized.sort(String::compareTo);
+		return List.copyOf(normalized);
 	}
 }

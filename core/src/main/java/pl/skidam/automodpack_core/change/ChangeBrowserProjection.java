@@ -99,11 +99,11 @@ public final class ChangeBrowserProjection {
 	}
 
 	/** A query shared by tree and list projections. Empty sets mean no restriction. */
-	public record Filter(String search, Set<String> contentKinds, Set<String> groupIds) {
+	public record Filter(String search, Set<String> contentKinds, Set<String> featureIds) {
 		public Filter {
 			search = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
 			contentKinds = normalizedKinds(contentKinds);
-			groupIds = normalizedGroups(groupIds);
+			featureIds = normalizedFeatures(featureIds);
 		}
 
 		public static Filter all() {
@@ -111,15 +111,15 @@ public final class ChangeBrowserProjection {
 		}
 
 		public Filter withSearch(String value) {
-			return new Filter(value, contentKinds, groupIds);
+			return new Filter(value, contentKinds, featureIds);
 		}
 
 		public Filter withContentKinds(Collection<String> values) {
-			return new Filter(search, normalizedKinds(values), groupIds);
+			return new Filter(search, normalizedKinds(values), featureIds);
 		}
 
-		public Filter withGroups(Collection<String> values) {
-			return new Filter(search, contentKinds, normalizedGroups(values));
+		public Filter withFeatures(Collection<String> values) {
+			return new Filter(search, contentKinds, normalizedFeatures(values));
 		}
 
 		private List<ChangeSet.Occurrence> visibleOccurrences(ChangeSet.Change change) {
@@ -131,11 +131,11 @@ public final class ChangeBrowserProjection {
 
 		private boolean matchesOccurrence(ChangeSet.Occurrence occurrence) {
 			return (contentKinds.isEmpty() || contentKinds.contains(occurrence.contentKind()))
-					&& (groupIds.isEmpty() || groupIds.contains(occurrence.location()));
+					&& (featureIds.isEmpty() || occurrence.featureIds().stream().anyMatch(featureIds::contains));
 		}
 
 		private boolean matchesSearch(ChangeSet.Occurrence occurrence) {
-			return contains(search, occurrence.location()) || contains(search, occurrence.contentKind());
+			return contains(search, occurrence.location()) || contains(search, occurrence.contentKind()) || occurrence.featureIds().stream().anyMatch(value -> contains(search, value));
 		}
 
 		private static boolean contains(String query, String value) {
@@ -148,7 +148,7 @@ public final class ChangeBrowserProjection {
 			return Collections.unmodifiableSet(normalized);
 		}
 
-		private static Set<String> normalizedGroups(Collection<String> values) {
+		private static Set<String> normalizedFeatures(Collection<String> values) {
 			TreeSet<String> normalized = new TreeSet<>();
 			if (values != null) for (String value : values) if (value != null && !value.isBlank()) normalized.add(value.trim());
 			return Collections.unmodifiableSet(normalized);
@@ -221,10 +221,10 @@ public final class ChangeBrowserProjection {
 			return Collections.unmodifiableSet(kinds);
 		}
 
-		public Set<String> groups() {
-			TreeSet<String> groups = new TreeSet<>();
-			for (ChangeSet.Occurrence occurrence : occurrences) groups.add(occurrence.location());
-			return Collections.unmodifiableSet(groups);
+		public Set<String> features() {
+			TreeSet<String> features = new TreeSet<>();
+			for (ChangeSet.Occurrence occurrence : occurrences) features.addAll(occurrence.featureIds());
+			return Collections.unmodifiableSet(features);
 		}
 
 		private FileRow withDepth(int value) {

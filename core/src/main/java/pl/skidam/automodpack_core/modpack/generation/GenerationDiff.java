@@ -60,8 +60,8 @@ public record GenerationDiff(
 			GroupManifest.GroupFile after = change.after();
 			long size = after == null ? before.size() : after.size();
 			String contentKind = after == null ? before.type() : after.type();
-			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence(change.groupId(), change.logicalPath(), size,
-					before == null ? null : before.sha1(), after == null ? null : after.sha1(), contentKind, List.of());
+			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence("catalogue", change.logicalPath(), size,
+					before == null ? null : before.sha1(), after == null ? null : after.sha1(), contentKind, List.of(change.groupId()), List.of());
 			changes.add(new ChangeSet.Change(change.logicalPath(), canonicalKind(change.classification()), List.of(occurrence)));
 		}
 		List<ChangeSet.Effect> effects = new ArrayList<>();
