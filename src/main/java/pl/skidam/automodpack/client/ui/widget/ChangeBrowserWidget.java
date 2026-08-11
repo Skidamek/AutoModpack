@@ -59,6 +59,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 	}
 
 	private void activate(Entry entry) {
+		this.setSelected(entry);
 		if (entry.row instanceof ChangeBrowserProjection.FolderRow folder) folderToggle.accept(folder.path());
 	}
 
@@ -115,7 +116,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth) {
 			int indent = Math.min(72, row.depth() * 12);
 			String marker = marker();
-			String label = row instanceof ChangeBrowserProjection.FolderRow ? leafName(row.path()) : row.path();
+			String label = row instanceof ChangeBrowserProjection.FolderRow || row.depth() > 0 ? leafName(row.path()) : row.path();
 			ChatFormatting color = row instanceof ChangeBrowserProjection.FileRow file ? kindColor(file.kind()) : ChatFormatting.WHITE;
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
 					VersionedText.literal(truncate(minecraft, marker + label, Math.max(1, entryWidth - indent - 12))).withStyle(color), x + indent + 6, y + 4, TextColors.WHITE);
