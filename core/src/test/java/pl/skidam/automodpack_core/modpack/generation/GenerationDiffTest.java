@@ -35,7 +35,8 @@ class GenerationDiffTest {
 		assertEquals(List.of("Changed pack metadata 'modpackName'", "Changed group 'main'", "Added file 'main/a-added'",
 				"Changed metadata for file 'main/a-metadata'", "Changed file 'main/b-modified'", "Removed file 'main/z-removed'"), diff.humanReadableChanges());
 		assertEquals(4, diff.changeSet().changes().size());
-		assertEquals(List.of("main"), diff.changeSet().changes().get(0).occurrences().stream().map(occurrence -> occurrence.location()).toList());
+		assertEquals(List.of("catalogue"), diff.changeSet().changes().get(0).occurrences().stream().map(occurrence -> occurrence.location()).toList());
+		assertEquals(List.of("main"), diff.changeSet().changes().get(0).occurrences().stream().flatMap(occurrence -> occurrence.featureIds().stream()).toList());
 		assertEquals(2, diff.changeSet().effects().size());
 	}
 
