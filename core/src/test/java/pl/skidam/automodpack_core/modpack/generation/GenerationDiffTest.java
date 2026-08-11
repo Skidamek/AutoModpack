@@ -17,11 +17,11 @@ class GenerationDiffTest {
 	void reportsAllFileClassesMetadataAndCanonicalOrder() {
 		GroupManifest parent = manifest("parent", Map.of("z-removed", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
 				"b-modified", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
-				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "old")), "old description", "old-tag",
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "old")), "old description", "old-category",
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
 		GroupManifest child = manifest("child", Map.of("a-added", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
 				"b-modified", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
-				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "new")), "new description", "new-tag",
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "new")), "new description", "new-category",
 				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98");
 
 		GenerationDiff diff = GenerationDiff.between(parent, child);
@@ -40,9 +40,9 @@ class GenerationDiffTest {
 	}
 
 	@Test
-	void reportsGroupTagMetadataChanges() {
-		GroupManifest parent = taggedManifest("old-tag");
-		GroupManifest child = taggedManifest("new-tag");
+	void reportsGroupCategoryMetadataChanges() {
+		GroupManifest parent = categorizedManifest("old-category");
+		GroupManifest child = categorizedManifest("new-category");
 
 		GenerationDiff diff = GenerationDiff.between(parent, child);
 
@@ -74,19 +74,19 @@ class GenerationDiffTest {
 		assertEquals(new GenerationDiff.Summary(0, 1, 0, 0, 0), diff.summary());
 	}
 
-	private static GroupManifest taggedManifest(String tag) {
+	private static GroupManifest categorizedManifest(String category) {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.tag = tag;
+		group.category = category;
 		group.files = Map.of();
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}
 
-	private static GroupManifest manifest(String id, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files, String description, String tag,
+	private static GroupManifest manifest(String id, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files, String description, String category,
 			String deletion) {
-		return manifestWithGroups(id, Map.of("main", files), description, tag, deletion);
+		return manifestWithGroups(id, Map.of("main", files), description, category, deletion);
 	}
 
 	private static GroupManifest manifestWithGroups(String id, Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> groups) {
@@ -94,7 +94,7 @@ class GenerationDiffTest {
 	}
 
 	private static GroupManifest manifestWithGroups(String id, Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> groups, String description,
-			String tag, String deletion) {
+			String category, String deletion) {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.modpackName = id;

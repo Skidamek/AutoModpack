@@ -65,8 +65,8 @@ class ModpackCandidateScannerTest {
 		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, provenance.selectedSource().kind());
 		assertEquals("config/example.txt", provenance.selectedSource().logicalPath());
 		assertEquals("config/example.txt", candidate.manifest().groups().get("main").files().firstKey());
-		assertEquals("", candidate.manifest().groups().get("main").tag());
-		assertEquals("", candidate.manifest().toFields().groups.get("main").tag);
+		assertEquals("", candidate.manifest().groups().get("main").category());
+		assertEquals("", candidate.manifest().toFields().groups.get("main").category);
 	}
 
 	@Test

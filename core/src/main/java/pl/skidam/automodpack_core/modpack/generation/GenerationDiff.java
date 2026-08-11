@@ -193,7 +193,7 @@ public record GenerationDiff(
 
 	private static boolean sameGroupMetadata(GroupManifest.Group before, GroupManifest.Group after) {
 		return Objects.equals(before.displayName(), after.displayName()) && Objects.equals(before.description(), after.description())
-				&& Objects.equals(before.tag(), after.tag()) && before.required() == after.required() && before.defaultSelected() == after.defaultSelected()
+				&& Objects.equals(before.category(), after.category()) && Objects.equals(before.icon(), after.icon()) && before.required() == after.required() && before.defaultSelected() == after.defaultSelected()
 				&& Objects.equals(before.breaksWith(), after.breaksWith()) && Objects.equals(before.requires(), after.requires())
 				&& Objects.equals(before.compatiblePlatforms(), after.compatiblePlatforms());
 	}
