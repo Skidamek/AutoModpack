@@ -2,10 +2,10 @@ package pl.skidam.automodpack.client.ui;
 
 import pl.skidam.automodpack_core.update.UpdatePlan;
 
-final class UiFormat {
+public final class UiFormat {
 	private UiFormat() {}
 
-	static String formatSize(long bytes) {
+	public static String formatSize(long bytes) {
 		if (bytes < 1024) return bytes + " B";
 		if (bytes < 1024L * 1024L) return (bytes / 1024) + " KiB";
 		if (bytes < 1024L * 1024L * 1024L) return (bytes / (1024L * 1024L)) + " MiB";
