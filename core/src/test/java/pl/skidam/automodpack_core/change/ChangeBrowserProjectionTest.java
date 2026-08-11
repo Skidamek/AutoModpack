@@ -39,6 +39,7 @@ class ChangeBrowserProjectionTest {
 		assertEquals(List.of("mods/removed.jar"), projection.files().stream().map(ChangeBrowserProjection.FileRow::path).toList());
 		assertEquals(0, projection.files().get(0).depth());
 		assertEquals(Set.of("mod"), projection.files().get(0).contentKinds());
+		assertEquals(Set.of("optional"), projection.files().get(0).features());
 		assertEquals(ChangeSet.Kind.REMOVED, projection.files().get(0).kind());
 	}
 
@@ -92,6 +93,6 @@ class ChangeBrowserProjectionTest {
 	}
 
 	private static ChangeSet.Change change(String path, ChangeSet.Kind kind, String group, long size, String contentKind) {
-		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence(group, path, size, null, HASH, contentKind, List.of())));
+		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("catalogue", path, size, null, HASH, contentKind, List.of(group), List.of())));
 	}
 }
