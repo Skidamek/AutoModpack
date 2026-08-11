@@ -13,6 +13,9 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Provides an explicit, user-confirmed cleanup pass for client generation storage. */
@@ -24,7 +27,6 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private boolean busy;
 	private boolean closed;
 	private ClientGenerationStore.CompactionResult result;
-	private String error;
 	private Future<?> work;
 
 	public ClientStorageMaintenanceScreen(Screen parent, ClientStorage storage) {
@@ -51,7 +53,6 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		if (busy || closed) return;
 		busy = true;
 		result = null;
-		error = null;
 		rebuild();
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
@@ -71,11 +72,9 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	}
 
 	private void fail(Exception exception) {
-		new ScreenManager().report(exception, "Client storage cleanup failed");
 		if (closed) return;
 		busy = false;
-		error = exception.getMessage() == null || exception.getMessage().isBlank() ? exception.getClass().getSimpleName() : exception.getMessage();
-		rebuild();
+		new ScreenManager().failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
 	private void closeToParent() {
@@ -122,8 +121,6 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		} else if (result != null) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.complete").withStyle(ChatFormatting.GREEN), this.width / 2, y + 8, TextColors.WHITE);
 			drawStats(matrices, result, y + 26, textWidth);
-		} else if (error != null) {
-			drawWrapped(matrices, VersionedText.translatable("automodpack.storage.error", error).getString(), y + 8, textWidth, TextColors.RED);
 		}
 	}
 

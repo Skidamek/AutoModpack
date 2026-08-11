@@ -14,6 +14,9 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.QuarantineArchive;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Shows local mods kept safely aside after a same-ID conflict. */
@@ -142,7 +145,7 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 		if (closed) return;
 		busy = false;
 		closeToParent();
-		new ScreenManager().error(exception, "automodpack.error.critical", String.valueOf(exception.getMessage()), "automodpack.error.logs");
+		new ScreenManager().failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
 	private void closeToParent() {
