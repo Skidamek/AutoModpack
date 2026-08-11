@@ -119,7 +119,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			int entryIndex = index;
 			HistoryEntry entry = entries.get(index);
 			String label = VersionedText.translatable("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString();
-			Button row = buttonWidget(x, ENTRY_TOP + (index - start) * ENTRY_HEIGHT, rowWidth, ROW_HEIGHT,
+			Button row = buttonWidget(x, ENTRY_TOP + (index - start) * ENTRY_HEIGHT, rowWidth, ENTRY_HEIGHT - 2,
 					VersionedText.literal(truncateToWidth(this.font, label, rowWidth - 12)).withStyle(isCurrent(entry) ? ChatFormatting.GREEN : ChatFormatting.WHITE), button -> openEntry(entryIndex));
 			row.active = !busy && canOpen(entry);
 			if (!canOpen(entry)) setTooltip(row, VersionedText.translatable("automodpack.history.detailsCompacted"));
@@ -299,11 +299,11 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			String status = status(entry);
 			String note = entry.patchNotes().isBlank() ? VersionedText.translatable("automodpack.history.noPatchNotes").getString() : firstLine(entry.patchNotes());
 			GenerationDiff.Summary diff = entry.diffSummary();
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, status, rowWidth - 12)).withStyle(isCurrent(entry) ? ChatFormatting.GREEN : ChatFormatting.GRAY), left + 6, y + 23, TextColors.WHITE);
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", note).getString(), rowWidth - 12)).withStyle(ChatFormatting.YELLOW), left + 6, y + 35,
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, status, rowWidth - 12)).withStyle(isCurrent(entry) ? ChatFormatting.GREEN : ChatFormatting.GRAY), left + 6, y + 4, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", note).getString(), rowWidth - 12)).withStyle(ChatFormatting.YELLOW), left + 6, y + 31,
 					TextColors.WHITE);
 			String diffText = VersionedText.translatable("automodpack.history.diff", diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles(), diff.metadataOnlyFiles(), diff.metadataChanges()).getString();
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, rowWidth - 12)).withStyle(ChatFormatting.GRAY), left + 6, y + 47, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, rowWidth - 12)).withStyle(ChatFormatting.GRAY), left + 6, y + 42, TextColors.WHITE);
 		}
 		if (entries.isEmpty()) drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.empty").withStyle(ChatFormatting.GRAY), left, ENTRY_TOP, TextColors.WHITE);
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.loading").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
