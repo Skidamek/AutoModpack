@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client.ui.widget;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -119,9 +120,9 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			String label = row instanceof ChangeBrowserProjection.FolderRow || row.depth() > 0 ? leafName(row.path()) : row.path();
 			ChatFormatting color = row instanceof ChangeBrowserProjection.FileRow file ? kindColor(file.kind()) : ChatFormatting.WHITE;
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
-					VersionedText.literal(truncate(minecraft, marker + label, Math.max(1, entryWidth - indent - 12))).withStyle(color), x + indent + 6, y + 4, TextColors.WHITE);
+					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, marker + label, Math.max(1, entryWidth - indent - 12))).withStyle(color), x + indent + 6, y + 4, TextColors.WHITE);
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
-					VersionedText.literal(truncate(minecraft, detail(), Math.max(1, entryWidth - indent - 22))).withStyle(ChatFormatting.GRAY), x + indent + 16, y + 17, TextColors.WHITE);
+					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, detail(), Math.max(1, entryWidth - indent - 22))).withStyle(ChatFormatting.GRAY), x + indent + 16, y + 17, TextColors.WHITE);
 		}
 
 		private String marker() {
@@ -217,7 +218,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 	}
 
 	private static String kindName(ChangeSet.Kind kind) {
-		return VersionedText.translatable("automodpack.browser.kind." + kind.name().toLowerCase(java.util.Locale.ROOT)).getString();
+		return VersionedText.translatable("automodpack.browser.kind." + kind.name().toLowerCase(Locale.ROOT)).getString();
 	}
 
 	private static String contentName(String contentKind) {
@@ -227,13 +228,5 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 	private static String leafName(String path) {
 		int separator = path.lastIndexOf('/');
 		return separator < 0 ? path : path.substring(separator + 1);
-	}
-
-	private static String truncate(Minecraft client, String text, int width) {
-		if (client.font.width(text) <= width) return text;
-		String ellipsis = "...";
-		int end = text.length();
-		while (end > 0 && client.font.width(text.substring(0, end) + ellipsis) > width) end--;
-		return text.substring(0, end).stripTrailing() + ellipsis;
 	}
 }

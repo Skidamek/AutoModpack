@@ -162,7 +162,7 @@ public class VersionedScreen extends Screen {
 	}
 	/*?}*/
 
-	protected static String truncateToWidth(Font font, String text, int maxWidth) {
+	public static String truncateToWidth(Font font, String text, int maxWidth) {
 		if (text == null || text.isEmpty() || maxWidth <= 0) return "";
 		if (font.width(text) <= maxWidth) return text;
 		String ellipsis = "...";
