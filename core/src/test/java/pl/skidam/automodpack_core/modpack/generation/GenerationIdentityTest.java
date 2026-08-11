@@ -76,11 +76,24 @@ class GenerationIdentityTest {
 	}
 
 	@Test
-	void groupTagChangesStateDigest() {
+	void groupCategoryChangesStateDigest() {
 		var firstFields = catalogue("main", "same");
 		var secondFields = catalogue("main", "same");
-		firstFields.groups.get("main").tag = "first-tag";
-		secondFields.groups.get("main").tag = "second-tag";
+		firstFields.groups.get("main").category = "first-category";
+		secondFields.groups.get("main").category = "second-category";
+
+		GroupManifest first = GroupManifestValidator.validate(firstFields);
+		GroupManifest second = GroupManifestValidator.validate(secondFields);
+
+		assertNotEquals(GenerationIdentity.stateDigest(first), GenerationIdentity.stateDigest(second));
+	}
+
+	@Test
+	void groupIconChangesStateDigest() {
+		var firstFields = catalogue("main", "same");
+		var secondFields = catalogue("main", "same");
+		firstFields.groups.get("main").icon = "minecraft:item/stone";
+		secondFields.groups.get("main").icon = "minecraft:item/diamond";
 
 		GroupManifest first = GroupManifestValidator.validate(firstFields);
 		GroupManifest second = GroupManifestValidator.validate(secondFields);

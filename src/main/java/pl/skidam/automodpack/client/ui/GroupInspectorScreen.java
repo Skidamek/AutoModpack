@@ -73,7 +73,8 @@ public final class GroupInspectorScreen extends VersionedScreen {
 
 		int metadataY = 56 + (descriptionLines.size() - 1) * 12;
 		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.groupInspector.tag", tagLabel()).getString(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2,
+				VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.selection.category", categoryLabel()).getString(), this.width - 20)).withStyle(ChatFormatting.GRAY),
+				this.width / 2,
 				metadataY,
 				TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font,
@@ -126,9 +127,9 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		return wrapToWidth(this.font, description, Math.max(1, this.width - 20), 2);
 	}
 
-	private String tagLabel() {
-		if (group.tag().isEmpty()) return VersionedText.translatable("automodpack.ui.general").getString();
-		return categoryLabel(group.tag());
+	private String categoryLabel() {
+		if (group.category().isEmpty()) return VersionedText.translatable("automodpack.ui.general").getString();
+		return categoryLabel(group.category());
 	}
 
 	private static String categoryLabel(String category) {

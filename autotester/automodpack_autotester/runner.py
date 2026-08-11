@@ -1102,6 +1102,7 @@ def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict], modpa
         .string(modpack_name if modpack_name is not None else ctx.modpack_name)
         .string("")
         .string("")
+        .string("")
         .boolean(True)
         .boolean(True)
     )
@@ -1172,7 +1173,8 @@ def _write_staged_generation(
             "main": {
                 "displayName": modpack_name,
                 "description": "",
-                "tag": "",
+                "category": "",
+                "icon": "",
                 "required": True,
                 "defaultSelected": True,
                 "breaksWith": [],

@@ -78,7 +78,8 @@ public final class GenerationCatalogueLines {
 					oldGroup == null ? ChatFormatting.GREEN : newGroup == null ? ChatFormatting.RED : ChatFormatting.YELLOW));
 			appendChange(lines, "displayName", oldGroup == null ? null : oldGroup.displayName(), newGroup == null ? null : newGroup.displayName());
 			appendChange(lines, "description", oldGroup == null ? null : oldGroup.description(), newGroup == null ? null : newGroup.description());
-			appendChange(lines, "tag", oldGroup == null ? null : oldGroup.tag(), newGroup == null ? null : newGroup.tag());
+			appendChange(lines, "category", oldGroup == null ? null : oldGroup.category(), newGroup == null ? null : newGroup.category());
+			appendChange(lines, "icon", oldGroup == null ? null : oldGroup.icon(), newGroup == null ? null : newGroup.icon());
 			appendChange(lines, "required", oldGroup == null ? null : oldGroup.required(), newGroup == null ? null : newGroup.required());
 			appendChange(lines, "defaultSelected", oldGroup == null ? null : oldGroup.defaultSelected(), newGroup == null ? null : newGroup.defaultSelected());
 			appendChange(lines, "breaksWith", oldGroup == null ? null : oldGroup.breaksWith(), newGroup == null ? null : newGroup.breaksWith());
@@ -89,7 +90,8 @@ public final class GenerationCatalogueLines {
 	}
 
 	private static boolean sameGroupMetadata(GroupManifest.Group before, GroupManifest.Group after) {
-		return Objects.equals(before.displayName(), after.displayName()) && Objects.equals(before.description(), after.description()) && Objects.equals(before.tag(), after.tag())
+		return Objects.equals(before.displayName(), after.displayName()) && Objects.equals(before.description(), after.description()) && Objects.equals(before.category(), after.category())
+				&& Objects.equals(before.icon(), after.icon())
 				&& before.required() == after.required() && before.defaultSelected() == after.defaultSelected() && Objects.equals(before.breaksWith(), after.breaksWith())
 				&& Objects.equals(before.requires(), after.requires()) && Objects.equals(before.compatiblePlatforms(), after.compatiblePlatforms());
 	}
