@@ -32,7 +32,7 @@ public interface ScreenService {
 
 	void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed);
 
-	void error(String... args);
+	void failure(FailureRequest request);
 
 	void title();
 

@@ -14,6 +14,9 @@ import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /*? if >= 1.20.5 {*/
@@ -37,7 +40,8 @@ public abstract class ConnectScreenMixin {
 		ServerAddressPin.Parsed parsed = ServerAddressPin.parse(info.ip);
 		info.ip = parsed.address();
 		if (parsed.isMalformed()) {
-			new ScreenManager().error(new IllegalArgumentException(parsed.error()), "automodpack.pin.invalid", parsed.error());
+			new ScreenManager().failure(FailureRequest.of(new IllegalArgumentException(parsed.error()), "automodpack.pin.invalid", FailureCategory.SECURITY,
+					FailureDestination.CURRENT_SCREEN, null));
 			ci.cancel();
 			return;
 		}
