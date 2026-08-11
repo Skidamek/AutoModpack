@@ -173,7 +173,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				selectedContent.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable("automodpack.browser.content." + selectedContent).getString()));
 		if (featureButton != null) {
 			featureButton.active = !features().isEmpty();
-			String label = selectedFeature.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : featureNames.getOrDefault(selectedFeature, VersionedText.translatable("automodpack.browser.unknownFeature").getString());
+			String label = featureNames.get(selectedFeature);
+			if (selectedFeature.isBlank()) label = VersionedText.translatable("automodpack.browser.all").getString();
+			else if (label == null || label.isBlank()) label = VersionedText.translatable("automodpack.browser.unknownFeature").getString();
 			featureButton.setMessage(VersionedText.translatable("automodpack.browser.featureFilter", label));
 		}
 		if (modeButton != null) modeButton.setMessage(VersionedText.translatable(mode == ChangeBrowserProjection.Mode.TREE ? "automodpack.browser.tree" : "automodpack.browser.list"));

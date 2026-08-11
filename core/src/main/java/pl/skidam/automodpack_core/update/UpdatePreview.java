@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupResolution;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
@@ -38,16 +39,23 @@ public final class UpdatePreview {
 	private final String patchNotes;
 	private final List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
 	private final Mode mode;
+	private final Map<String, String> featureNames;
 
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences, String patchNotes,
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Mode mode) {
+		this(plan, entries, groupConsequences, patchNotes, patchNotesHistory, mode, createChangeSet(entries, plan.restartReasons()), Map.of());
+	}
+
+	private UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences, String patchNotes,
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Mode mode, ChangeSet changeSet, Map<String, String> featureNames) {
 		this.plan = Objects.requireNonNull(plan, "plan");
-		this.changeSet = createChangeSet(entries, plan.restartReasons());
+		this.changeSet = Objects.requireNonNull(changeSet, "preview change set");
 		this.entries = legacyEntries(this.changeSet);
 		this.groupConsequences = Objects.requireNonNull(groupConsequences, "groupConsequences");
 		this.patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
 		this.patchNotesHistory = List.copyOf(Objects.requireNonNull(patchNotesHistory, "patchNotesHistory"));
 		this.mode = Objects.requireNonNull(mode, "mode");
+		this.featureNames = Map.copyOf(new TreeMap<>(featureNames == null ? Map.of() : featureNames));
 	}
 
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences) {
@@ -86,6 +94,39 @@ public final class UpdatePreview {
 
 	public Mode mode() {
 		return mode;
+	}
+
+	public Map<String, String> featureNames() {
+		return featureNames;
+	}
+
+	/** Adds player-facing feature names and exact current ownership to the canonical preview changes. */
+	public UpdatePreview withFeatureManifest(GroupManifest manifest) {
+		Objects.requireNonNull(manifest, "feature manifest");
+		Map<String, String> names = new TreeMap<>();
+		Map<String, List<String>> ownersByPath = new TreeMap<>();
+		Map<String, GroupManifest.GroupFile> filesByPath = new TreeMap<>();
+		manifest.groups().forEach((groupId, group) -> {
+			names.put(groupId, group.displayName());
+			group.files().forEach((path, file) -> {
+				ownersByPath.computeIfAbsent(path, ignored -> new ArrayList<>()).add(groupId);
+				filesByPath.putIfAbsent(path, file);
+			});
+		});
+		List<ChangeSet.Change> enriched = new ArrayList<>();
+		for (ChangeSet.Change change : changeSet.changes()) {
+			List<String> owners = ownersByPath.getOrDefault(change.logicalPath(), List.of());
+			GroupManifest.GroupFile currentFile = filesByPath.get(change.logicalPath());
+			List<ChangeSet.Occurrence> occurrences = new ArrayList<>();
+			for (ChangeSet.Occurrence occurrence : change.occurrences()) {
+				List<String> featureIds = owners.isEmpty() ? occurrence.featureIds() : owners;
+				String contentKind = currentFile == null ? occurrence.contentKind() : currentFile.type();
+				String afterHash = currentFile == null || change.kind() == ChangeSet.Kind.REMOVED ? occurrence.afterHash() : currentFile.sha1();
+				occurrences.add(new ChangeSet.Occurrence(occurrence.location(), occurrence.logicalPath(), occurrence.size(), occurrence.beforeHash(), afterHash, contentKind, featureIds, occurrence.references()));
+			}
+			enriched.add(new ChangeSet.Change(change.logicalPath(), change.kind(), occurrences));
+		}
+		return new UpdatePreview(plan, entries, groupConsequences, patchNotes, patchNotesHistory, mode, ChangeSet.of(enriched, changeSet.effects()), names);
 	}
 
 	public long addedBytes() {
@@ -149,6 +190,28 @@ public final class UpdatePreview {
 		}
 		List<ChangeSet.Effect> effects = new ArrayList<>();
 		if (restartReasons != null) for (RestartReason reason : restartReasons) effects.add(new ChangeSet.Effect("restart", reason.name()));
+		return ChangeSet.of(changes, effects);
+	}
+
+	private static ChangeSet createChangeSet(List<Entry> entries, Set<RestartReason> restartReasons, Map<FileKey, FileState> originalFiles,
+			ModpackJsons.ModpackContentFields target, OwnershipLedger ledger) {
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetFiles = new TreeMap<>();
+		if (target.list != null) for (ModpackJsons.ModpackContentFields.ModpackContentItem item : target.list) targetFiles.put(UpdatePlanner.normalize(item.file), item);
+		List<ChangeSet.Change> changes = new ArrayList<>();
+		for (Entry entry : entries) {
+			FileKey key = new FileKey(entry.root(), entry.relativePath());
+			FileState before = originalFiles.get(key);
+			ModpackJsons.ModpackContentFields.ModpackContentItem after = targetFiles.get(entry.relativePath());
+			OwnershipLedger.Entry ownership = ledger.entries().get(entry.relativePath());
+			String beforeHash = before == null || !HashUtils.isSha1(before.sha1()) ? null : before.sha1();
+			String afterHash = after == null || !HashUtils.isSha1(after.sha1) ? null : after.sha1;
+			String contentKind = after == null ? null : after.type;
+			List<String> featureIds = ownership == null ? List.of() : List.copyOf(ownership.historicalGroupIds());
+			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence(entry.root.name(), entry.relativePath(), entry.size(), beforeHash, afterHash, contentKind, featureIds, List.of());
+			changes.add(new ChangeSet.Change(entry.relativePath(), canonicalKind(entry.kind()), List.of(occurrence)));
+		}
+		List<ChangeSet.Effect> effects = new ArrayList<>();
+		for (RestartReason reason : restartReasons) effects.add(new ChangeSet.Effect("restart", reason.name()));
 		return ChangeSet.of(changes, effects);
 	}
 
@@ -276,7 +339,8 @@ public final class UpdatePreview {
 		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.sortBucket()).thenComparing(entry -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
 				.thenComparing(Entry::relativePath));
 		GroupConsequences consequences = selection == null ? new GroupConsequences(Set.of(), Set.of(), Set.of()) : consequences(selection);
-		return new UpdatePreview(plan, entries, consequences, patchNotes, patchNotesHistory, mode);
+		return new UpdatePreview(plan, entries, consequences, patchNotes, patchNotesHistory, mode,
+				createChangeSet(entries, plan.restartReasons(), originalFiles, target, ledger), Map.of());
 	}
 
 	private static GroupConsequences consequences(ResolvedSelection selection) {
