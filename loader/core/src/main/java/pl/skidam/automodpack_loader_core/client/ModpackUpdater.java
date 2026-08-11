@@ -30,6 +30,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.GenerationUpdateRange;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
@@ -152,7 +153,7 @@ public class ModpackUpdater implements AutoCloseable {
 			String installedGenerationId = active != null && selectedTarget.manifest().modpackId().equals(active.modpackId) ? active.generationId : "";
 			GenerationUpdateRange updateRange = updateRange(selectedTarget, installedGenerationId);
 			return UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, null,
-					featuredNotes(updateRange), updateRange.generations());
+					featuredNotes(updateRange), updateRange.generations()).withFeatureManifest(selectedTarget.manifest());
 		}
 	}
 
@@ -416,7 +417,7 @@ public class ModpackUpdater implements AutoCloseable {
 		clientConfig = preparation.currentConfig();
 		reviewedRemovalPlan = ReviewedClientPlan.pending(preparation, preparation.plan());
 		return UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation), mode, preparation.baseline(),
-				"", List.of());
+				"", List.of()).withFeatureManifest(removalManifest(preparation));
 	}
 
 	public UpdateTransactionExecutor.Execution deactivateModpack() throws Exception {
@@ -443,7 +444,7 @@ public class ModpackUpdater implements AutoCloseable {
 			clientConfig = preparation.plannedConfig();
 			if (remove) new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
 			UpdatePreview applied = UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation),
-					remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION, preparation.baseline(), "", List.of());
+					remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION, preparation.baseline(), "", List.of()).withFeatureManifest(removalManifest(preparation));
 			changelogs.replaceWith(applied, Map.of());
 			ApplyResult applyResult = applyResult(preparation.plan());
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
@@ -459,6 +460,12 @@ public class ModpackUpdater implements AutoCloseable {
 		Set<String> stale = new TreeSet<>(intent.requestedGroups());
 		stale.removeAll(selected);
 		return new ResolvedSelection(intent, new TreeSet<>(selected), new TreeSet<>(stale));
+	}
+
+	private GroupManifest removalManifest(ClientUpdatePlanBuilder.RemovalPreparation preparation) throws IOException {
+		String generationId = preparation.installed().targetGenerationId;
+		return new ClientGenerationStore(storage).read(generationId)
+				.orElseThrow(() -> new IOException("Installed generation record is unavailable: " + generationId)).manifest();
 	}
 
 	// Load the already-installed modpack without contacting the server or
@@ -757,7 +764,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
 		GenerationUpdateRange updateRange = updateRange(target, installedGenerationId(target.manifest().modpackId()));
 		UpdatePreview applied = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), target.flatTarget(), target.selection(), false, null,
-				featuredNotes(updateRange), updateRange.generations());
+				featuredNotes(updateRange), updateRange.generations()).withFeatureManifest(target.manifest());
 		changelogs.replaceWith(applied, resolveMainPageUrls(prepared));
 		LOGGER.info("Prepared update changes: {} changed, {} removed", changelogs.changedFiles().size(), changelogs.removedFiles().size());
 	}
@@ -849,7 +856,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private boolean requestPreparedPlanPreview(ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) throws IOException {
 		GenerationUpdateRange updateRange = updateRange(selectedTarget, installedGenerationId(selectedTarget.manifest().modpackId()));
 		UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, null,
-				featuredNotes(updateRange), updateRange.generations());
+				featuredNotes(updateRange), updateRange.generations()).withFeatureManifest(selectedTarget.manifest());
 		return new ScreenManager().preview(preview, getModpackName(),
 				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, returnToSelection, resolveMainPageUrls(prepared));
 	}
