@@ -1,7 +1,15 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
@@ -11,66 +19,97 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistorySummary;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
+import pl.skidam.automodpack_loader_core.screen.HistoricalCatalogueLoader;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
+/**
+ * Shows the authoritative generation timeline. The index is thin and is rendered immediately;
+ * historical catalogues are fetched only after the player selects an entry whose local details are
+ * not already available.
+ */
 public final class ContentHistoryScreen extends VersionedScreen {
-	private static final int ENTRY_TOP = 44;
-	private static final int ENTRY_HEIGHT = 50;
+	private static final int ENTRY_TOP = 52;
+	private static final int ENTRY_HEIGHT = 54;
 	private static final int PANEL_WIDTH = 600;
+	private static final int ROW_HEIGHT = 20;
 
 	private final Screen parent;
-	private final List<GenerationRecord> history;
-	private final List<GenerationHistorySummary.Entry> entries;
+	private final GenerationHistoryIndex historyIndex;
+	private final List<GenerationRecord> localHistory;
+	private final List<HistoryEntry> entries;
 	private final List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
 	private final String modpackName;
+	private final HistoricalCatalogueLoader catalogueLoader;
 	private final Runnable closedCallback;
+	private final Map<String, GenerationRecord> localByGenerationId;
 	private Button previousButton;
 	private Button nextButton;
 	private int page;
+	private boolean busy;
+	private boolean closed;
 
-	public ContentHistoryScreen(Screen parent, List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory,
-			Runnable closedCallback) {
+	public ContentHistoryScreen(Screen parent, GenerationHistoryIndex historyIndex, List<GenerationRecord> localHistory, String modpackName,
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, HistoricalCatalogueLoader catalogueLoader, Runnable closedCallback) {
 		super(VersionedText.translatable("automodpack.history.title"));
 		this.parent = parent;
-		this.history = List.copyOf(history);
-		this.entries = GenerationHistorySummary.summarize(this.history, patchNotesHistory);
-		this.patchNotesHistory = List.copyOf(patchNotesHistory);
+		this.historyIndex = Objects.requireNonNull(historyIndex, "generation history index");
+		this.localHistory = List.copyOf(localHistory == null ? List.of() : localHistory);
+		this.localByGenerationId = new HashMap<>();
+		for (GenerationRecord record : this.localHistory) this.localByGenerationId.put(record.metadata().generationId(), record);
+		this.entries = buildEntries();
+		this.patchNotesHistory = List.copyOf(patchNotesHistory == null ? List.of() : patchNotesHistory);
 		this.modpackName = modpackName == null ? "" : modpackName;
-		this.closedCallback = closedCallback;
+		this.catalogueLoader = Objects.requireNonNull(catalogueLoader, "historical catalogue loader");
+		this.closedCallback = closedCallback == null ? () -> {} : closedCallback;
+	}
+
+	private List<HistoryEntry> buildEntries() {
+		List<HistoryEntry> result = new ArrayList<>(historyIndex.entries().size());
+		for (int index = historyIndex.entries().size() - 1; index >= 0; index--) {
+			GenerationHistoryIndex.Entry entry = historyIndex.entries().get(index);
+			result.add(new HistoryEntry(entry.generationId(), entry.parentGenerationId(), entry.createdAt(), entry.patchNotes(), entry.diffSummary(), entry.detailsAvailable(),
+					entry.rollbackAvailable(), localByGenerationId.get(entry.generationId()), entry));
+		}
+		return List.copyOf(result);
 	}
 
 	@Override
 	protected void init() {
 		super.init();
-		int y = this.height - 28;
-		boolean hasNotes = GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
-		boolean hasFiles = !history.isEmpty();
+		int bottomY = this.height - 28;
 		boolean hasPagination = pageCount() > 1;
-		int navigationY = hasPagination ? y - 24 : -1;
-		int actionWidth = actionButtonWidth(310, 3);
-		this.previousButton = buttonWidget(actionButtonX(310, 3, 0), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1));
-		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), navigationY, actionWidth, 20, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
+		int navigationY = hasPagination ? bottomY - 24 : -1;
+		int actionWidth = actionButtonWidth(PANEL_WIDTH, 3);
+		this.previousButton = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 0), navigationY, actionWidth, ROW_HEIGHT, VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1));
+		this.nextButton = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 2), navigationY, actionWidth, ROW_HEIGHT, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
 		updateNavigation();
 		if (hasPagination) {
 			this.addRenderableWidget(this.previousButton);
-			Button pageLabel = buttonWidget(actionButtonX(310, 3, 1), navigationY, actionWidth, 20,
+			Button pageLabel = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 1), navigationY, actionWidth, ROW_HEIGHT,
 					VersionedText.translatable("automodpack.ui.page", page + 1, pageCount()), button -> {});
 			pageLabel.active = false;
 			this.addRenderableWidget(pageLabel);
 			this.addRenderableWidget(this.nextButton);
 		}
-		int bottomButtonCount = 1 + (hasNotes ? 1 : 0) + (hasFiles ? 1 : 0);
+
+		int bottomButtonCount = 1 + (hasPatchNotesHistory() ? 1 : 0) + (hasLocalFiles() ? 1 : 0);
 		int bottomIndex = 0;
-		this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, bottomIndex++), y, actionWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
-		if (hasNotes)
-			this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, bottomIndex++), y, actionWidth, 20,
-					VersionedText.translatable("automodpack.patchNotes.button"), button -> openPatchNotes()));
-		if (hasFiles)
-			this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, bottomButtonCount, bottomIndex), y, actionWidth, 20,
-					VersionedText.translatable("automodpack.management.files"), button -> openFiles()));
+		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, bottomButtonCount, bottomIndex++), bottomY, actionWidth, ROW_HEIGHT,
+				VersionedText.translatable("automodpack.back"), button -> back()));
+		if (hasPatchNotesHistory()) this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, bottomButtonCount, bottomIndex++), bottomY, actionWidth, ROW_HEIGHT,
+				VersionedText.translatable("automodpack.patchNotes.button"), button -> openPatchNotes()));
+		if (hasLocalFiles()) this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, bottomButtonCount, bottomIndex), bottomY, actionWidth, ROW_HEIGHT,
+				VersionedText.translatable("automodpack.management.files"), button -> openFiles()));
 
 		int start = page * rowsPerPage();
 		int end = Math.min(entries.size(), start + rowsPerPage());
@@ -78,13 +117,22 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		int x = panelLeft(PANEL_WIDTH);
 		for (int index = start; index < end; index++) {
 			int entryIndex = index;
-			GenerationHistorySummary.Entry entry = entries.get(index);
-			boolean current = index == entries.size() - 1;
-			String label = VersionedText.translatable("automodpack.history.generation", entry.number(), entry.createdAt().truncatedTo(ChronoUnit.SECONDS)).getString()
-					+ (current ? "  " + VersionedText.translatable("automodpack.history.latest").getString() : "");
-			this.addRenderableWidget(buttonWidget(x, ENTRY_TOP + (index - start) * ENTRY_HEIGHT, rowWidth, 20,
-					VersionedText.literal(truncateToWidth(this.font, label, rowWidth - 12)).withStyle(current ? ChatFormatting.GREEN : ChatFormatting.WHITE), button -> openGeneration(entryIndex)));
+			HistoryEntry entry = entries.get(index);
+			String label = VersionedText.translatable("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString();
+			Button row = buttonWidget(x, ENTRY_TOP + (index - start) * ENTRY_HEIGHT, rowWidth, ROW_HEIGHT,
+					VersionedText.literal(truncateToWidth(this.font, label, rowWidth - 12)).withStyle(isCurrent(entry) ? ChatFormatting.GREEN : ChatFormatting.WHITE), button -> openEntry(entryIndex));
+			row.active = !busy && entry.canOpen();
+			if (!entry.canOpen()) setTooltip(row, VersionedText.translatable("automodpack.history.detailsCompacted"));
+			this.addRenderableWidget(row);
 		}
+	}
+
+	private boolean hasPatchNotesHistory() {
+		return entries.size() > 1 || GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
+	}
+
+	private boolean hasLocalFiles() {
+		return !localHistory.isEmpty();
 	}
 
 	private int pageCount() {
@@ -93,13 +141,13 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	}
 
 	private int rowsPerPage() {
-		return Math.max(1, (this.height - 76 - ENTRY_TOP) / ENTRY_HEIGHT);
+		return Math.max(1, (this.height - 92 - ENTRY_TOP) / ENTRY_HEIGHT);
 	}
 
 	private void updateNavigation() {
 		page = Math.max(0, Math.min(pageCount() - 1, page));
-		previousButton.active = page > 0;
-		nextButton.active = page + 1 < pageCount();
+		if (previousButton != null) previousButton.active = !busy && page > 0;
+		if (nextButton != null) nextButton.active = !busy && page + 1 < pageCount();
 	}
 
 	private void changePage(int amount) {
@@ -116,64 +164,172 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		*//*?}*/
 	}
 
-	private void back() {
-		closedCallback.run();
-		ScreenImpl.setScreen(parent);
+	private boolean isCurrent(HistoryEntry entry) {
+		return historyIndex.currentGenerationId().equals(entry.generationId());
 	}
 
 	private void openPatchNotes() {
-		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, patchNotesHistory, modpackName));
+		ScreenImpl.setScreen(PatchNotesHistoryScreen.fromIndex(this, historyIndex, modpackName));
 	}
 
 	private void openFiles() {
-		GenerationRecord generation = history.get(history.size() - 1);
-		ScreenImpl.setScreen(new PagedTextScreen(this,
-				VersionedText.translatable("automodpack.files.title", modpackName),
-				VersionedText.translatable("automodpack.files.description"), GenerationCatalogueLines.files(generation)));
+		if (localHistory.isEmpty()) return;
+		GenerationRecord latest = localByGenerationId.get(historyIndex.currentGenerationId());
+		if (latest == null) latest = localHistory.get(localHistory.size() - 1);
+		Map<String, String> featureNames = featureNames(latest.manifest());
+		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.files.title", modpackName),
+				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(latest.manifest()), featureNames));
 	}
 
-	private void openGeneration(int index) {
-		GenerationRecord previous = index == 0 ? null : history.get(index - 1);
-		GenerationRecord current = history.get(index);
-		ScreenImpl.setScreen(new PagedTextScreen(this,
-				VersionedText.translatable("automodpack.history.details.title", entries.get(index).number()),
-				VersionedText.translatable("automodpack.history.details.description"), GenerationCatalogueLines.diff(previous, current)));
+	private void openEntry(int index) {
+		if (busy || index < 0 || index >= entries.size()) return;
+		HistoryEntry entry = entries.get(index);
+		if (entry.localRecord() != null) {
+			openLocal(entry);
+			return;
+		}
+		if (!entry.canOpen() || entry.indexEntry() == null || catalogueLoader == null) return;
+		busy = true;
+		updateNavigation();
+		rebuild();
+		loadRemote(entry).whenComplete((loaded, failure) -> this.minecraft.execute(() -> {
+			if (closed) return;
+			busy = false;
+			if (failure != null) {
+				updateNavigation();
+				rebuild();
+				failure(unwrap(failure));
+				return;
+			}
+			openBrowser(entry, loaded.catalogue().manifest(), loaded.parentManifest());
+		}));
+	}
+
+	private void openLocal(HistoryEntry entry) {
+		GenerationRecord record = entry.localRecord();
+		GenerationRecord parentRecord = localByGenerationId.get(entry.parentGenerationId());
+		if (parentRecord != null || entry.parentGenerationId().isEmpty()) {
+			openBrowser(entry, record.manifest(), parentRecord == null ? null : parentRecord.manifest());
+			return;
+		}
+		GenerationHistoryIndex.Entry parentEntry = historyIndex.find(entry.parentGenerationId()).orElse(null);
+		if (parentEntry == null || !parentEntry.detailsAvailable()) {
+			openBrowser(entry, record.manifest(), null);
+			return;
+		}
+		busy = true;
+		rebuild();
+		catalogueLoader.load(parentEntry).whenComplete((parent, failure) -> this.minecraft.execute(() -> {
+			if (closed) return;
+			busy = false;
+			if (failure != null) {
+				rebuild();
+				failure(unwrap(failure));
+				return;
+			}
+			openBrowser(entry, record.manifest(), parent.manifest());
+		}));
+	}
+
+	private CompletableFuture<LoadedEntry> loadRemote(HistoryEntry entry) {
+		CompletableFuture<CatalogueSnapshot> current = catalogueLoader.load(entry.indexEntry());
+		return current.thenCompose(catalogue -> loadParent(entry).thenApply(parent -> new LoadedEntry(catalogue, parent)));
+	}
+
+	private CompletableFuture<GroupManifest> loadParent(HistoryEntry entry) {
+		if (entry.parentGenerationId().isEmpty()) return CompletableFuture.completedFuture(null);
+		GenerationRecord localParent = localByGenerationId.get(entry.parentGenerationId());
+		if (localParent != null) return CompletableFuture.completedFuture(localParent.manifest());
+		GenerationHistoryIndex.Entry parentEntry = historyIndex.find(entry.parentGenerationId()).orElse(null);
+		if (parentEntry == null || !parentEntry.detailsAvailable()) return CompletableFuture.completedFuture(null);
+		return catalogueLoader.load(parentEntry).thenApply(CatalogueSnapshot::manifest);
+	}
+
+	private void openBrowser(HistoryEntry entry, GroupManifest current, GroupManifest parentManifest) {
+		GenerationDiff diff = GenerationDiff.between(parentManifest, current);
+		String descriptionKey = parentManifest == null ? "automodpack.history.detailsDescriptionUnavailable" : "automodpack.history.detailsDescription";
+		ScreenImpl.setScreen(new ChangeBrowserScreen(this,
+				VersionedText.translatable("automodpack.history.detailsTitle", VersionedText.translatable("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString()),
+				VersionedText.translatable(descriptionKey), diff.changeSet(), featureNames(current)));
+	}
+
+	private static Map<String, String> featureNames(GroupManifest manifest) {
+		Map<String, String> names = new TreeMap<>();
+		for (Map.Entry<String, GroupManifest.Group> group : manifest.groups().entrySet()) {
+			String name = group.getValue().displayName();
+			names.put(group.getKey(), name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : name);
+		}
+		return names;
+	}
+
+	private void failure(Throwable cause) {
+		new ScreenManager().failure(FailureRequest.of(cause, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+	}
+
+	private static Throwable unwrap(Throwable failure) {
+		Throwable current = failure;
+		while ((current instanceof CompletionException || current instanceof ExecutionException) && current.getCause() != null) current = current.getCause();
+		return current;
+	}
+
+	private void back() {
+		if (closed) return;
+		closed = true;
+		catalogueLoader.close();
+		closedCallback.run();
+		ScreenImpl.setScreen(parent);
 	}
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String title = VersionedText.translatable(modpackName.isBlank() ? "automodpack.history.title" : "automodpack.history.titleNamed", modpackName).getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.description").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
-		int pageSize = rowsPerPage();
-		int start = page * pageSize;
-		int end = Math.min(entries.size(), start + pageSize);
+		int left = panelLeft(PANEL_WIDTH);
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), left, 10, TextColors.WHITE);
+		drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.description").withStyle(ChatFormatting.GRAY), left, 25, TextColors.WHITE);
+		int start = page * rowsPerPage();
+		int end = Math.min(entries.size(), start + rowsPerPage());
+		int rowWidth = panelWidth(PANEL_WIDTH);
 		for (int index = start; index < end; index++) {
-			GenerationHistorySummary.Entry entry = entries.get(index);
+			HistoryEntry entry = entries.get(index);
 			int y = ENTRY_TOP + (index - start) * ENTRY_HEIGHT;
-			String notes = entry.patchNotes().isBlank() ? VersionedText.translatable("automodpack.history.noPatchNotes").getString() : firstLine(entry.patchNotes());
-			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", notes).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2,
-					y + 23,
+			String status = status(entry);
+			String note = entry.patchNotes().isBlank() ? VersionedText.translatable("automodpack.history.noPatchNotes").getString() : firstLine(entry.patchNotes());
+			GenerationDiff.Summary diff = entry.diffSummary();
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, status, rowWidth - 12)).withStyle(isCurrent(entry) ? ChatFormatting.GREEN : ChatFormatting.GRAY), left + 6, y + 23, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", note).getString(), rowWidth - 12)).withStyle(ChatFormatting.YELLOW), left + 6, y + 35,
 					TextColors.WHITE);
-			GenerationDiff.Summary diff = entry.diff().summary();
 			String diffText = VersionedText.translatable("automodpack.history.diff", diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles(), diff.metadataOnlyFiles(), diff.metadataChanges()).getString();
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 36,
-					TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, rowWidth - 12)).withStyle(ChatFormatting.GRAY), left + 6, y + 47, TextColors.WHITE);
 		}
-		if (entries.isEmpty())
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 82,
-					TextColors.WHITE);
+		if (entries.isEmpty()) drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.empty").withStyle(ChatFormatting.GRAY), left, ENTRY_TOP, TextColors.WHITE);
+		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.loading").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
+	}
+
+	private String status(HistoryEntry entry) {
+		List<String> values = new ArrayList<>();
+		if (isCurrent(entry)) values.add(VersionedText.translatable("automodpack.history.current").getString());
+		if (entry.localRecord() != null) values.add(VersionedText.translatable("automodpack.history.savedLocally").getString());
+		if (!isCurrent(entry) && entry.rollbackAvailable()) values.add(VersionedText.translatable("automodpack.history.rollbackAvailable").getString());
+		if (entry.localRecord() == null) values.add(VersionedText.translatable(entry.detailsAvailable() ? "automodpack.history.detailsAvailable" : "automodpack.history.detailsCompacted").getString());
+		return String.join(" · ", values);
 	}
 
 	private String firstLine(String notes) {
-		String line = notes.split("\\R", -1)[0];
-		return truncateToWidth(this.font, line, Math.max(1, this.width - 20));
+		return truncateToWidth(this.font, notes.split("\\R", -1)[0], Math.max(1, panelWidth(PANEL_WIDTH) - 12));
 	}
 
 	@Override
 	public boolean shouldCloseOnEsc() {
 		back();
 		return false;
+	}
+
+	private record LoadedEntry(CatalogueSnapshot catalogue, GroupManifest parentManifest) {}
+
+	private record HistoryEntry(String generationId, String parentGenerationId, Instant createdAt, String patchNotes, GenerationDiff.Summary diffSummary,
+			boolean detailsAvailable, boolean rollbackAvailable, GenerationRecord localRecord, GenerationHistoryIndex.Entry indexEntry) {
+		private boolean canOpen() {
+			return localRecord != null || detailsAvailable;
+		}
 	}
 }

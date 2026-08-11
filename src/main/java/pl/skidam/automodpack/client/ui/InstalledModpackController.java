@@ -179,11 +179,8 @@ final class InstalledModpackController {
 	void openHistory(Pack pack, Runnable released) {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
-				ClientGenerationStore generationStore = new ClientGenerationStore(storage);
 				String generationId = historyGenerationId(pack);
-				List<GenerationRecord> availableLineage = generationStore.availableLineage(pack.modpackId(), generationId);
-				List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(generationId);
-				new ScreenManager().history(availableLineage, pack.name(), patchNotesHistory, released);
+				GenerationHistoryController.open(storage, pack.modpackId(), generationId, pack.name(), released);
 			} catch (Exception e) {
 				releaseOnClient(released);
 				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);

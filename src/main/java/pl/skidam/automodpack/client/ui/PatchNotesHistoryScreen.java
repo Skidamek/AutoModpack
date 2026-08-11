@@ -1,7 +1,9 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
@@ -11,6 +13,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 
 public final class PatchNotesHistoryScreen extends VersionedScreen {
@@ -18,7 +21,7 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 	private static final int CONTENT_PADDING = 16;
 	private static final int LINE_HEIGHT = 12;
 	private final Screen parent;
-	private final List<GenerationPatchNoteHistory.Entry> history;
+	private final List<DisplayEntry> history;
 	private final String modpackName;
 	private final Runnable closedCallback;
 	private List<String> displayLines;
@@ -31,6 +34,14 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 	}
 
 	public PatchNotesHistoryScreen(Screen parent, List<GenerationPatchNoteHistory.Entry> history, String modpackName, Runnable closedCallback) {
+		this(parent, displayEntries(history), modpackName, closedCallback, true);
+	}
+
+	static PatchNotesHistoryScreen fromIndex(Screen parent, GenerationHistoryIndex index, String modpackName) {
+		return new PatchNotesHistoryScreen(parent, index.entries().stream().map(entry -> new DisplayEntry(entry.createdAt(), entry.patchNotes())).collect(Collectors.toList()), modpackName, () -> {}, true);
+	}
+
+	private PatchNotesHistoryScreen(Screen parent, List<DisplayEntry> history, String modpackName, Runnable closedCallback, boolean displayEntries) {
 		super(VersionedText.translatable("automodpack.patchNotes.title"));
 		this.parent = parent;
 		this.history = List.copyOf(history);
@@ -71,19 +82,19 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 	private List<String> buildDisplayLines() {
 		int width = Math.max(1, panelWidth(PANEL_WIDTH) - CONTENT_PADDING * 2);
 		List<String> lines = new ArrayList<>();
-		for (int index = 0; index < history.size(); index++) {
-			GenerationPatchNoteHistory.Entry entry = history.get(index);
-			lines.add(truncateToWidth(this.font, VersionedText.translatable("automodpack.patchNotes.generation", shortGenerationId(entry.generationId()), entry.createdAt()).getString(), width));
+		for (int index = history.size() - 1; index >= 0; index--) {
+			DisplayEntry entry = history.get(index);
+			lines.add(truncateToWidth(this.font, VersionedText.translatable("automodpack.patchNotes.entry", UiFormat.formatInstant(entry.createdAt())).getString(), width));
 			String notes = entry.patchNotes().isBlank() ? VersionedText.translatable("automodpack.patchNotes.none").getString() : entry.patchNotes();
 			lines.addAll(wrapToWidth(this.font, notes, width, Integer.MAX_VALUE));
-			if (index + 1 < history.size()) lines.add("");
+			if (index > 0) lines.add("");
 		}
 		if (lines.isEmpty()) lines.add(VersionedText.translatable("automodpack.patchNotes.empty").getString());
 		return lines;
 	}
 
-	private static String shortGenerationId(String generationId) {
-		return generationId.substring(0, Math.min(12, generationId.length()));
+	private static List<DisplayEntry> displayEntries(List<GenerationPatchNoteHistory.Entry> history) {
+		return history == null ? List.of() : history.stream().map(entry -> new DisplayEntry(entry.createdAt(), entry.patchNotes())).toList();
 	}
 
 	private void updateNavigation() {
@@ -115,7 +126,7 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 		int end = Math.min(lines.size(), start + pageSize);
 		for (int index = start; index < end; index++) {
 			String line = lines.get(index);
-			String generationPrefix = VersionedText.translatable("automodpack.patchNotes.generation", "", "").getString().stripTrailing();
+			String generationPrefix = VersionedText.translatable("automodpack.patchNotes.entry", "").getString().stripTrailing();
 			ChatFormatting color = line.startsWith(generationPrefix) ? ChatFormatting.YELLOW : ChatFormatting.WHITE;
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(color), left, 50 + (index - start) * LINE_HEIGHT, TextColors.WHITE);
 		}
@@ -129,4 +140,6 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 		back();
 		return false;
 	}
+
+	private record DisplayEntry(Instant createdAt, String patchNotes) {}
 }
