@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
@@ -162,19 +163,22 @@ class ModpackCandidateScannerTest {
 	}
 
 	@Test
-	void sourceMutationAfterEveryCopyExhaustsRetriesWithoutLeakingStagedFiles() throws Exception {
+	void sourceMutationDuringCopyFailsWithoutLeakingStagedFiles() throws Exception {
 		Path sourcePath = tempDir.resolve("source.txt");
 		Files.writeString(sourcePath, "initial", StandardCharsets.UTF_8);
 		Path staging = tempDir.resolve("staging");
 		CandidateSource source = new CandidateSource("main", "config/source.txt", CandidateSource.SourceKind.GROUP_DIRECTORY, sourcePath, null);
+		AtomicInteger copies = new AtomicInteger();
 		StableSourceSnapshotter reader = new StableSourceSnapshotter((sourceFile, staged) -> {
+			copies.incrementAndGet();
 			Files.copy(sourceFile, staged, StandardCopyOption.REPLACE_EXISTING);
 			Files.writeString(sourceFile, Files.readString(sourceFile, StandardCharsets.UTF_8) + "x", StandardCharsets.UTF_8);
 		});
 
 		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> reader.snapshot(source, false, false, staging));
 
-		assertTrue(failure.getMessage().contains("remained unstable"));
+		assertTrue(failure.getMessage().contains("changed while being snapshotted"));
+		assertEquals(1, copies.get());
 		assertTrue(Files.isDirectory(staging, LinkOption.NOFOLLOW_LINKS));
 		try (var files = Files.list(staging)) {
 			assertEquals(0, files.count());
