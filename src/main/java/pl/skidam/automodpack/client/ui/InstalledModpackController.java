@@ -166,7 +166,8 @@ final class InstalledModpackController {
 		}
 		try {
 			UpdatePlan plan = new UpdatePlan(pack.modpackId(), GenerationTarget.from(pack.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of());
-			UpdatePreview preview = new UpdatePreview(plan, List.of(), new UpdatePreview.GroupConsequences(Set.of(), Set.of(), Set.of()), "", List.of(), UpdatePreview.Mode.REMOVAL);
+			UpdatePreview preview = new UpdatePreview(plan, List.of(), new UpdatePreview.GroupConsequences(Set.of(), Set.of(), Set.of()), "", List.of(), UpdatePreview.Mode.REMOVAL)
+					.withFeatureManifest(pack.record().manifest());
 			new ScreenManager().preview(preview, pack.name(),
 					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> forget(pack, released, removed)),
 					released, false, Map.of());
