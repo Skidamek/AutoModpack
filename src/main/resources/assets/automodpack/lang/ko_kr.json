@@ -221,7 +221,6 @@
   "automodpack.history.details.description": "All catalogue changes from the previous generation.",
   "automodpack.history.detailsTitle": "%s의 변경사항",
   "automodpack.history.detailsDescription": "이전 세대의 변화.",
-  "automodpack.history.detailsDescriptionUnavailable": "이전 세대 세부정보는 제공되지 않습니다. 이 세대의 콘텐츠를 보여줍니다.",
   "automodpack.history.details.empty": "No catalogue changes.",
   "automodpack.files.title": "%s owned files",
   "automodpack.files.description": "Complete installed modpack file catalogue.",
