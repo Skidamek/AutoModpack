@@ -121,8 +121,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			String label = VersionedText.translatable("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString();
 			Button row = buttonWidget(x, ENTRY_TOP + (index - start) * ENTRY_HEIGHT, rowWidth, ROW_HEIGHT,
 					VersionedText.literal(truncateToWidth(this.font, label, rowWidth - 12)).withStyle(isCurrent(entry) ? ChatFormatting.GREEN : ChatFormatting.WHITE), button -> openEntry(entryIndex));
-			row.active = !busy && entry.canOpen();
-			if (!entry.canOpen()) setTooltip(row, VersionedText.translatable("automodpack.history.detailsCompacted"));
+			row.active = !busy && canOpen(entry);
+			if (!canOpen(entry)) setTooltip(row, VersionedText.translatable("automodpack.history.detailsCompacted"));
 			this.addRenderableWidget(row);
 		}
 	}
@@ -188,7 +188,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			openLocal(entry);
 			return;
 		}
-		if (!entry.canOpen() || entry.indexEntry() == null || catalogueLoader == null) return;
+		if (!canOpen(entry) || entry.indexEntry() == null) return;
 		busy = true;
 		updateNavigation();
 		rebuild();
@@ -213,10 +213,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			return;
 		}
 		GenerationHistoryIndex.Entry parentEntry = historyIndex.find(entry.parentGenerationId()).orElse(null);
-		if (parentEntry == null || !parentEntry.detailsAvailable()) {
-			openBrowser(entry, record.manifest(), null);
-			return;
-		}
+		if (parentEntry == null || !parentEntry.detailsAvailable()) return;
 		busy = true;
 		rebuild();
 		catalogueLoader.load(parentEntry).whenComplete((parent, failure) -> this.minecraft.execute(() -> {
@@ -241,16 +238,23 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		GenerationRecord localParent = localByGenerationId.get(entry.parentGenerationId());
 		if (localParent != null) return CompletableFuture.completedFuture(localParent.manifest());
 		GenerationHistoryIndex.Entry parentEntry = historyIndex.find(entry.parentGenerationId()).orElse(null);
-		if (parentEntry == null || !parentEntry.detailsAvailable()) return CompletableFuture.completedFuture(null);
+		if (parentEntry == null || !parentEntry.detailsAvailable())
+			return CompletableFuture.failedFuture(new IllegalStateException("The parent generation catalogue is unavailable"));
 		return catalogueLoader.load(parentEntry).thenApply(CatalogueSnapshot::manifest);
 	}
 
 	private void openBrowser(HistoryEntry entry, GroupManifest current, GroupManifest parentManifest) {
+		if (parentManifest == null && !entry.parentGenerationId().isEmpty()) throw new IllegalStateException("A history diff requires its parent catalogue");
 		GenerationDiff diff = GenerationDiff.between(parentManifest, current);
-		String descriptionKey = parentManifest == null ? "automodpack.history.detailsDescriptionUnavailable" : "automodpack.history.detailsDescription";
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this,
 				VersionedText.translatable("automodpack.history.detailsTitle", VersionedText.translatable("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString()),
-				VersionedText.translatable(descriptionKey), diff.changeSet(), featureNames(current)));
+				VersionedText.translatable("automodpack.history.detailsDescription"), diff.changeSet(), featureNames(current)));
+	}
+
+	private boolean canOpen(HistoryEntry entry) {
+		if (entry.localRecord() == null && !entry.detailsAvailable()) return false;
+		if (entry.parentGenerationId().isEmpty() || localByGenerationId.containsKey(entry.parentGenerationId())) return true;
+		return historyIndex.find(entry.parentGenerationId()).map(GenerationHistoryIndex.Entry::detailsAvailable).orElse(false);
 	}
 
 	private static Map<String, String> featureNames(GroupManifest manifest) {
@@ -327,9 +331,5 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private record LoadedEntry(CatalogueSnapshot catalogue, GroupManifest parentManifest) {}
 
 	private record HistoryEntry(String generationId, String parentGenerationId, Instant createdAt, String patchNotes, GenerationDiff.Summary diffSummary,
-			boolean detailsAvailable, boolean rollbackAvailable, GenerationRecord localRecord, GenerationHistoryIndex.Entry indexEntry) {
-		private boolean canOpen() {
-			return localRecord != null || detailsAvailable;
-		}
-	}
+			boolean detailsAvailable, boolean rollbackAvailable, GenerationRecord localRecord, GenerationHistoryIndex.Entry indexEntry) {}
 }
