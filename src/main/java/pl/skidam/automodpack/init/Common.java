@@ -86,4 +86,18 @@ public class Common {
 		/*return new Identifier(MOD_ID, path);
 		*//*?}*/
 	}
+
+	@SuppressWarnings("removal")
+	public static Identifier resourceId(String resourceLocation) {
+		int separator = resourceLocation.indexOf(':');
+		String namespace = resourceLocation.substring(0, separator);
+		String path = resourceLocation.substring(separator + 1);
+		/*? if >=1.21.11 {*/
+		return Identifier.tryBuild(namespace, path);
+		/*?} else if >=1.19.2 {*/
+		/*return Identifier.tryBuild(namespace, path);
+		*//*?} else {*/
+		/*return new Identifier(namespace, path);
+		*//*?}*/
+	}
 }
