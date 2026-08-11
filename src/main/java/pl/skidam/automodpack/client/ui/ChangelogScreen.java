@@ -15,7 +15,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.ListEntry;
 import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 
 public class ChangelogScreen extends VersionedScreen {
@@ -93,7 +92,7 @@ public class ChangelogScreen extends VersionedScreen {
 			VersionedText.translatable("automodpack.patchNotes.all"),
 			button -> ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, changelogs.patchNotesHistory(), ""))
 		);
-		this.patchNotesButton.active = GenerationPatchNoteHistory.containsNotes(changelogs.patchNotesHistory());
+		this.patchNotesButton.active = !changelogs.patchNotesHistory().isEmpty();
 
 		this.openMainPageButton = buttonWidget(
 			actionButtonX(310, 3, 2),

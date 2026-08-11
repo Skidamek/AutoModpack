@@ -238,8 +238,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		if (!beginManagement()) return;
 		try {
 			UpdatePlan plan = new UpdatePlan(entry.modpackId(), GenerationTarget.from(entry.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of());
-			UpdatePreview preview = new UpdatePreview(plan, List.of(), new UpdatePreview.GroupConsequences(Set.of(), Set.of(), Set.of()), "",
-					new ClientGenerationStore(storage).patchNotesHistory(entry.record().metadata().generationId()), UpdatePreview.Mode.REMOVAL);
+			UpdatePreview preview = new UpdatePreview(plan, List.of(), new UpdatePreview.GroupConsequences(Set.of(), Set.of(), Set.of()), "", List.of(), UpdatePreview.Mode.REMOVAL);
 			new ScreenManager().preview(preview, entry.name(),
 					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeInactiveRemoval(entry)),
 					(Runnable) this::endManagement, false, Map.of());
