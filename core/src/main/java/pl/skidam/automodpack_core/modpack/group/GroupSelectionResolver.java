@@ -249,31 +249,10 @@ public final class GroupSelectionResolver {
 				else if (unavailableGroups.contains(groupId)) status = GroupResolution.Status.UNAVAILABLE;
 				else if (blockedGroups.contains(groupId)) status = GroupResolution.Status.BLOCKED;
 				else status = GroupResolution.Status.AVAILABLE;
-				explanations.put(groupId, new GroupResolution(groupId, status, groupReasons, relatedGroups.get(groupId), explanation(status, groupReasons, relatedGroups.get(groupId))));
+				explanations.put(groupId, new GroupResolution(groupId, status, groupReasons, relatedGroups.get(groupId)));
 			}
 			dependencyGroups.retainAll(selected);
 			return new ResolvedSelection(intent, selected, staleGroups, requiredGroups, forcedGroups, dependencyGroups, unavailableGroups, requestedUnavailableGroups, explanations);
-		}
-
-		private String explanation(GroupResolution.Status status, Set<GroupResolution.Reason> groupReasons, Set<String> related) {
-			return switch (status) {
-				case SELECTED -> selectedExplanation(groupReasons);
-				case AVAILABLE -> "Available";
-				case UNAVAILABLE -> "Unavailable on " + platform.id();
-				case BLOCKED -> related == null || related.isEmpty() ? "Blocked by a dependency" : "Unavailable because " + String.join(", ", related) + " is unavailable";
-				case EXCLUDED -> "Excluded by the player";
-				case CONFLICT -> "Conflicts with " + String.join(", ", related == null ? Set.of() : related);
-				case STALE -> "Stale selection";
-			};
-		}
-
-		private String selectedExplanation(Set<GroupResolution.Reason> groupReasons) {
-			if (groupReasons.contains(GroupResolution.Reason.REQUIRED)) return "Required by the server";
-			if (groupReasons.contains(GroupResolution.Reason.FORCED)) return "Required by the server";
-			if (groupReasons.contains(GroupResolution.Reason.DEPENDENCY)) return "Required by another selected group";
-			if (groupReasons.contains(GroupResolution.Reason.EXPLICIT_GROUP)) return "Explicitly selected";
-			if (groupReasons.contains(GroupResolution.Reason.DEFAULT_SELECTED)) return "Included by default";
-			return "Selected";
 		}
 
 		private void addReason(String groupId, GroupResolution.Reason reason) {
