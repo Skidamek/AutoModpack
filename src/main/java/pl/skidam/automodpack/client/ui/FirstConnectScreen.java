@@ -45,7 +45,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
 		int optionalY = actionY - 26;
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
-		if (GenerationPatchNoteHistory.containsNotes(target.patchNotesHistory())) {
+		if (GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes())) {
 			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY - 26, 150, 20, VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
 		}
 	}
@@ -85,7 +85,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 	}
 
 	private void openPatchNotes() {
-		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, target.patchNotesHistory(), target.manifest().modpackName()));
+		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, updater.getFirstInstallPatchNotes(), target.manifest().modpackName()));
 	}
 
 	@Override

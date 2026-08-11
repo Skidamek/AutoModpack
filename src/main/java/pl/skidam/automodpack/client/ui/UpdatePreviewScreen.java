@@ -15,7 +15,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.ListEntry;
 import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 
@@ -55,7 +54,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.changesList = new ListEntryWidget(rows(), this.minecraft, this.width, this.height, listTop(), listBottom(), 18);
 		this.addRenderableWidget(this.changesList);
 
-		boolean hasPatchNotes = GenerationPatchNoteHistory.containsNotes(preview.patchNotesHistory());
+		boolean hasPatchNotes = !preview.patchNotesHistory().isEmpty();
 		if (hasPatchNotes) this.addRenderableWidget(buttonWidget(this.width / 2 - 75, this.layout.patchNotesButtonY(), 150, 20,
 				VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
 		this.openMainPageButton = buttonWidget(actionButtonX(310, 3, 1), this.height - 28, actionWidth, 20,
@@ -77,7 +76,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private Layout layout() {
-		boolean hasPatchNotes = GenerationPatchNoteHistory.containsNotes(preview.patchNotesHistory());
+		boolean hasPatchNotes = !preview.patchNotesHistory().isEmpty();
 		boolean hasOtherEffects = preview.summary().otherEffects() > 0;
 		int actionY = this.height - 28;
 		int patchNotesButtonY = hasPatchNotes ? actionY - 24 : -1;
