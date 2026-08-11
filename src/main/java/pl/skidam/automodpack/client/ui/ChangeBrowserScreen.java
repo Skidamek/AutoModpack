@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
@@ -22,7 +23,7 @@ import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
 
 /** Shared vanilla-style file browser used for installed catalogues and generation diffs. */
-public final class ChangeBrowserScreen extends VersionedScreen {
+public class ChangeBrowserScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 600;
 	private static final int GAP = 6;
 	private final Screen parent;
@@ -30,7 +31,7 @@ public final class ChangeBrowserScreen extends VersionedScreen {
 	private final Component description;
 	private final ChangeSet changes;
 	private final Map<String, String> featureNames;
-	private final Runnable verifyAction;
+	private final BrowserAction auxiliaryAction;
 	private final Set<String> collapsedFolders = new TreeSet<>();
 	private ChangeBrowserProjection.Mode mode = ChangeBrowserProjection.Mode.TREE;
 	private String search = "";
@@ -50,14 +51,14 @@ public final class ChangeBrowserScreen extends VersionedScreen {
 		this(parent, heading, description, changes, featureNames, null);
 	}
 
-	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, Runnable verifyAction) {
+	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction) {
 		super(heading);
 		this.parent = parent;
 		this.heading = Objects.requireNonNull(heading, "browser heading");
 		this.description = Objects.requireNonNull(description, "browser description");
 		this.changes = Objects.requireNonNull(changes, "browser changes");
 		this.featureNames = Map.copyOf(featureNames == null ? Map.of() : featureNames);
-		this.verifyAction = verifyAction;
+		this.auxiliaryAction = auxiliaryAction;
 	}
 
 	@Override
@@ -89,7 +90,7 @@ public final class ChangeBrowserScreen extends VersionedScreen {
 		updateControlLabels();
 		rebuildBrowser();
 
-		int buttonCount = verifyAction == null ? 3 : 4;
+		int buttonCount = auxiliaryAction == null ? 3 : 4;
 		int buttonWidth = actionButtonWidth(PANEL_WIDTH, buttonCount);
 		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, buttonCount, 0), this.height - 28, buttonWidth, 20,
 				VersionedText.translatable("automodpack.back"), button -> back()));
@@ -99,8 +100,12 @@ public final class ChangeBrowserScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.changelog.noPage"), button -> openSelectedPage());
 		this.openPageButton.active = false;
 		this.addRenderableWidget(this.openPageButton);
-		if (verifyAction != null) this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, buttonCount, 3), this.height - 28, buttonWidth, 20,
-				VersionedText.translatable("automodpack.validation.verify"), button -> verifyAction.run()));
+		if (auxiliaryAction != null) {
+			Button auxiliaryButton = buttonWidget(actionButtonX(PANEL_WIDTH, buttonCount, 3), this.height - 28, buttonWidth, 20,
+					auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this));
+			auxiliaryButton.active = auxiliaryAction.active();
+			this.addRenderableWidget(auxiliaryButton);
+		}
 		updateDetailsLabel();
 	}
 
@@ -218,5 +223,12 @@ public final class ChangeBrowserScreen extends VersionedScreen {
 	public boolean shouldCloseOnEsc() {
 		back();
 		return false;
+	}
+
+	public record BrowserAction(Component label, Consumer<Screen> action, boolean active) {
+		public BrowserAction {
+			label = Objects.requireNonNull(label, "browser action label");
+			action = Objects.requireNonNull(action, "browser action");
+		}
 	}
 }
