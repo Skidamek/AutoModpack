@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.modpack.generation;
 import java.util.*;
 import java.util.function.BiPredicate;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 
 /** A deterministic, complete-catalogue diff between two generation states. */
@@ -43,15 +44,28 @@ public record GenerationDiff(
 	}
 
 	public boolean isEmpty() {
-		return files.isEmpty() && packMetadata.isEmpty() && groupMetadata.isEmpty();
+		return changeSet().changes().isEmpty() && changeSet().effects().isEmpty();
 	}
 
 	public Summary summary() {
-		EnumMap<FileClassification, Set<String>> paths = new EnumMap<>(FileClassification.class);
-		for (FileClassification classification : FileClassification.values()) paths.put(classification, new TreeSet<>());
-		for (FileChange change : files) paths.get(change.classification()).add(change.logicalPath());
-		return new Summary(paths.get(FileClassification.ADDED).size(), paths.get(FileClassification.MODIFIED).size(), paths.get(FileClassification.REMOVED).size(),
-				paths.get(FileClassification.METADATA_ONLY).size(), packMetadata.changedCount() + groupMetadata.changedCount());
+		ChangeSet.Summary summary = changeSet().summary();
+		return new Summary(summary.addedFiles(), summary.modifiedFiles(), summary.removedFiles(), summary.metadataOnlyFiles(), summary.effectCount());
+	}
+
+	/** Returns the canonical logical change model used by previews, history, and changelogs. */
+	public ChangeSet changeSet() {
+		List<ChangeSet.Change> changes = new ArrayList<>(files.size());
+		for (FileChange change : files) {
+			GroupManifest.GroupFile before = change.before();
+			GroupManifest.GroupFile after = change.after();
+			long size = after == null ? before.size() : after.size();
+			changes.add(new ChangeSet.Change(change.logicalPath(), canonicalKind(change.classification()), List.of(new ChangeSet.Occurrence(change.groupId(), change.logicalPath(), size,
+					before == null ? null : before.sha1(), after == null ? null : after.sha1()))));
+		}
+		List<ChangeSet.Effect> effects = new ArrayList<>();
+		appendMetadataEffects(effects, "pack", packMetadata);
+		appendMetadataEffects(effects, "group", groupMetadata);
+		return ChangeSet.of(changes, effects);
 	}
 
 	/** Returns deterministic text for an operator-facing generation change summary. */
@@ -69,6 +83,21 @@ public record GenerationDiff(
 		for (String value : summary.added()) changes.add("Added " + kind + " '" + value + "'");
 		for (String value : summary.modified()) changes.add("Changed " + kind + " '" + value + "'");
 		for (String value : summary.removed()) changes.add("Removed " + kind + " '" + value + "'");
+	}
+
+	private static void appendMetadataEffects(List<ChangeSet.Effect> effects, String kind, MetadataSummary summary) {
+		for (String value : summary.added()) effects.add(new ChangeSet.Effect(kind + ".added", value));
+		for (String value : summary.modified()) effects.add(new ChangeSet.Effect(kind + ".modified", value));
+		for (String value : summary.removed()) effects.add(new ChangeSet.Effect(kind + ".removed", value));
+	}
+
+	private static ChangeSet.Kind canonicalKind(FileClassification classification) {
+		return switch (classification) {
+			case ADDED -> ChangeSet.Kind.ADDED;
+			case MODIFIED -> ChangeSet.Kind.MODIFIED;
+			case REMOVED -> ChangeSet.Kind.REMOVED;
+			case METADATA_ONLY -> ChangeSet.Kind.METADATA_ONLY;
+		};
 	}
 
 	public enum FileClassification {

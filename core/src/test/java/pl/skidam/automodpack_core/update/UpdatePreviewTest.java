@@ -130,7 +130,7 @@ class UpdatePreviewTest {
 				new UpdatePreview.GroupConsequences(Set.of("optional"), Set.of("main"), Set.of("stale")));
 
 		assertEquals(new UpdatePreview.Summary(1, 1, 1, 0, 1), preview.summary());
-		assertEquals(List.of(UpdatePreview.Kind.CHANGED, UpdatePreview.Kind.REMOVED, UpdatePreview.Kind.PRESERVED_CHANGED), preview.entries().stream().map(UpdatePreview.Entry::kind).toList());
+		assertEquals(List.of(UpdatePreview.Kind.REMOVED, UpdatePreview.Kind.CHANGED, UpdatePreview.Kind.PRESERVED_CHANGED), preview.entries().stream().map(UpdatePreview.Entry::kind).toList());
 	}
 
 	@Test
