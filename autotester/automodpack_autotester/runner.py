@@ -179,7 +179,7 @@ def _ensure_client_data_root(game_dir: Path) -> Path:
     data_root = game_dir / _CLIENT_DATA_ROOT
     if not marker.exists():
         data_root.mkdir(parents=True, exist_ok=True)
-        marker.write_text(json.dumps({"root": _CLIENT_DATA_ROOT_IN_CONTAINER, "shared": False}, indent=2) + "\n")
+        marker.write_text(json.dumps({"root": _CLIENT_DATA_ROOT_IN_CONTAINER, "shared": False}, indent=2) + "\n", encoding="utf-8")
     else:
         data_root.mkdir(parents=True, exist_ok=True)
     return data_root
@@ -224,7 +224,7 @@ def _prepare_server(ctx: Context):
     cfg["modpackName"] = ctx.modpack_name
     cfg["acceptedLoaders"] = [ctx.target.loader]
     (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
-    (srv_dir / "automodpack" / "server-config.json").write_text(json.dumps(cfg, indent=2))
+    (srv_dir / "automodpack" / "server-config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     (srv_dir / "automodpack" / "data-root.json").write_text(
         json.dumps({"root": "/data/automodpack/data", "shared": False}, indent=2) + "\n",
         encoding="utf-8",
@@ -255,7 +255,7 @@ def _write_server_generation(ctx: Context, index: int) -> None:
     host_root.mkdir(parents=True, exist_ok=True)
     main_root = host_root / "main"
     (main_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
-    (main_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
+    (main_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n", encoding="utf-8")
     configured_groups = {
         str(group_id)
         for group_id in ((ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {}).get("groups", {}) or {})
@@ -279,11 +279,11 @@ def _write_server_generation(ctx: Context, index: int) -> None:
                 raise ValueError(f"server generation fixture for {rel} must be a mapping")
             write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
         else:
-            f.write_text(str(item.get("content", "")))
+            f.write_text(str(item.get("content", "")), encoding="utf-8")
     patch_notes = generation.get("patchNotes", "")
     patch_path = srv_dir / "automodpack" / "server" / "patch-notes.md"
     patch_path.parent.mkdir(parents=True, exist_ok=True)
-    patch_path.write_text(str(patch_notes))
+    patch_path.write_text(str(patch_notes), encoding="utf-8")
 
 
 def _launch_server(ctx: Context):
@@ -1216,7 +1216,7 @@ def _write_staged_generation(
         manifest["patchNotesHistory"] = [*parent_history, _staged_patch_note_entry(manifest["generation"])]
     generation_path = client_root / "records" / generation_id / "manifest.json"
     generation_path.parent.mkdir(parents=True, exist_ok=True)
-    generation_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    generation_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     objects = data_root / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     for entry in files:
@@ -1302,7 +1302,7 @@ def _v_stage_modpack(ctx: Context, step):
         if isinstance(item, dict) and item.get("editable") is True
     }
     (root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
-    (root / ctx.marker_rel).write_text(json.dumps({"marker": modpack_name}) + "\n")
+    (root / ctx.marker_rel).write_text(json.dumps({"marker": modpack_name}) + "\n", encoding="utf-8")
     for item in declared_files:
         if not isinstance(item, dict) or "path" not in item:
             raise ValueError("stage_modpack files entries need path/content")
@@ -1317,7 +1317,7 @@ def _v_stage_modpack(ctx: Context, step):
             write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
         else:
             f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(content)
+            f.write_text(content, encoding="utf-8")
 
     mods = step.get("mods") or []
     if mods:
@@ -1361,13 +1361,13 @@ def _v_stage_modpack(ctx: Context, step):
         "stateDigest": generation["stateDigest"],
         "ledgerDigest": generation["ledgerDigest"],
     }
-    (client_root / "active-state.json").write_text(json.dumps(state, indent=2) + "\n")
+    (client_root / "active-state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
     selection_store = client_root / "selections.json"
     selection_store.write_text(json.dumps({
         "DO_NOT_CHANGE_IT": 1,
         "selections": {modpack_id: {"requestedGroups": [], "excludedGroups": []}},
-    }, indent=2) + "\n")
+    }, indent=2) + "\n", encoding="utf-8")
 
     # A client config that selects the staged pack and disables the launch update,
     # so Preload loads it locally (no server contact, no file reconciliation). The
@@ -1389,7 +1389,7 @@ def _v_stage_modpack(ctx: Context, step):
     }
     cfg.update(ctx.resolve(step.get("config", {}) or {}))
     automodpack.mkdir(parents=True, exist_ok=True)
-    (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2))
+    (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 
 @verb("seed_cas")

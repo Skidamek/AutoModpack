@@ -17,7 +17,7 @@ class HashUtilsTest {
 
 	@Test
 	void hashesFileWithSha1() throws IOException {
-		Path file = Files.writeString(tempDir.resolve("test-hash.txt"), "test content 2137!");
+		Path file = Files.writeString(tempDir.resolve("test-hash.txt"), "test content 2137!", StandardCharsets.UTF_8);
 		assertEquals("16883d77e42fcb574c70e31cda49b3f955a48be8", HashUtils.getHash(file));
 	}
 
@@ -45,14 +45,14 @@ class HashUtilsTest {
 
 	@Test
 	void curseforgeHashMatchesKnownValue() throws IOException {
-		Path file = Files.writeString(tempDir.resolve("murmur-test.txt"), "test content 2137!");
+		Path file = Files.writeString(tempDir.resolve("murmur-test.txt"), "test content 2137!", StandardCharsets.UTF_8);
 		assertEquals("3151456706", HashUtils.getCurseforgeMurmurHash(file));
 	}
 
 	@Test
 	void curseforgeHashIgnoresWhitespace() throws IOException {
-		Path cleanFile = Files.writeString(tempDir.resolve("clean.txt"), "test");
-		Path messyFile = Files.writeString(tempDir.resolve("messy.txt"), " t\te\ns\rt ");
+		Path cleanFile = Files.writeString(tempDir.resolve("clean.txt"), "test", StandardCharsets.UTF_8);
+		Path messyFile = Files.writeString(tempDir.resolve("messy.txt"), " t\te\ns\rt ", StandardCharsets.UTF_8);
 		assertEquals(HashUtils.getCurseforgeMurmurHash(cleanFile), HashUtils.getCurseforgeMurmurHash(messyFile));
 		assertEquals("2667173943", HashUtils.getCurseforgeMurmurHash(messyFile));
 	}
