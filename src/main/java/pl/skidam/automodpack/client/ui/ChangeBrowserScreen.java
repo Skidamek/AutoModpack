@@ -73,7 +73,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * 2 : searchWidth + GAP * 3)) / 3);
 		this.browserTop = narrow ? 83 : 59;
 		this.searchField = new EditBox(this.font, panelLeft, 35, searchWidth, 20, VersionedText.translatable("automodpack.browser.search"));
-		this.searchField.setMaxLength(256);
+		this.searchField.setMaxLength(Integer.MAX_VALUE);
 		this.searchField.setValue(search);
 		this.searchField.setSuggestion(VersionedText.translatable("automodpack.browser.search").getString());
 		this.searchField.setResponder(value -> {
