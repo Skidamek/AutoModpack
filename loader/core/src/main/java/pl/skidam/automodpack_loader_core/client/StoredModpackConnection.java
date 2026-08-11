@@ -3,6 +3,7 @@ package pl.skidam.automodpack_loader_core.client;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
@@ -12,6 +13,7 @@ import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -24,15 +26,19 @@ public final class StoredModpackConnection implements AutoCloseable {
 	private final ConnectionJsons.ConnectionInfo connection;
 	private final Secrets.Secret secret;
 	private final GenerationRecord advertisedRecord;
+	private final GenerationHistoryIndex advertisedHistoryIndex;
+	private final List<GenerationPatchNoteHistory.Entry> advertisedPatchNotes;
 	private final ClientStorage storage;
 	private DownloadClient client;
 
 	private StoredModpackConnection(String modpackId, ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, GenerationRecord advertisedRecord,
-			ClientStorage storage, DownloadClient client) {
+			GenerationHistoryIndex advertisedHistoryIndex, List<GenerationPatchNoteHistory.Entry> advertisedPatchNotes, ClientStorage storage, DownloadClient client) {
 		this.modpackId = modpackId;
 		this.connection = connection;
 		this.secret = secret;
 		this.advertisedRecord = advertisedRecord;
+		this.advertisedHistoryIndex = advertisedHistoryIndex;
+		this.advertisedPatchNotes = List.copyOf(advertisedPatchNotes);
 		this.storage = storage;
 		this.client = client;
 	}
@@ -52,7 +58,12 @@ public final class StoredModpackConnection implements AutoCloseable {
 		try {
 			GenerationRecord advertisedRecord = GenerationRecord.fromFields(result.content());
 			if (!modpackId.equals(advertisedRecord.manifest().modpackId())) throw new IOException("Connected modpack identity does not match the installed pack");
-			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, advertisedRecord, storage, client);
+			if (result.content().generationHistory == null) throw new IOException("Server generation history is unavailable");
+			GenerationHistoryIndex historyIndex = GenerationHistoryIndex.fromFields(result.content().generationHistory);
+			if (!advertisedRecord.metadata().generationId().equals(historyIndex.currentGenerationId()))
+				throw new IOException("Server generation history does not describe the advertised generation");
+			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, advertisedRecord, historyIndex,
+					GenerationPatchNoteHistory.fromFields(result.content()), storage, client);
 			client = null;
 			return session;
 		} finally {
@@ -62,6 +73,14 @@ public final class StoredModpackConnection implements AutoCloseable {
 
 	public GenerationRecord advertisedRecord() {
 		return advertisedRecord;
+	}
+
+	public GenerationHistoryIndex advertisedHistoryIndex() {
+		return advertisedHistoryIndex;
+	}
+
+	public List<GenerationPatchNoteHistory.Entry> advertisedPatchNotes() {
+		return advertisedPatchNotes;
 	}
 
 	/** Downloads and validates one historical catalogue through this authenticated session. */
