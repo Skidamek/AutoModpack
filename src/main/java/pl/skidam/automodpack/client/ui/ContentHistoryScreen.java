@@ -23,7 +23,6 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
@@ -47,7 +46,6 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private final GenerationHistoryIndex historyIndex;
 	private final List<GenerationRecord> localHistory;
 	private final List<HistoryEntry> entries;
-	private final List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
 	private final String modpackName;
 	private final HistoricalCatalogueLoader catalogueLoader;
 	private final Runnable closedCallback;
@@ -59,7 +57,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private boolean closed;
 
 	public ContentHistoryScreen(Screen parent, GenerationHistoryIndex historyIndex, List<GenerationRecord> localHistory, String modpackName,
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, HistoricalCatalogueLoader catalogueLoader, Runnable closedCallback) {
+			HistoricalCatalogueLoader catalogueLoader, Runnable closedCallback) {
 		super(VersionedText.translatable("automodpack.history.title"));
 		this.parent = parent;
 		this.historyIndex = Objects.requireNonNull(historyIndex, "generation history index");
@@ -67,7 +65,6 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		this.localByGenerationId = new HashMap<>();
 		for (GenerationRecord record : this.localHistory) this.localByGenerationId.put(record.metadata().generationId(), record);
 		this.entries = buildEntries();
-		this.patchNotesHistory = List.copyOf(patchNotesHistory == null ? List.of() : patchNotesHistory);
 		this.modpackName = modpackName == null ? "" : modpackName;
 		this.catalogueLoader = Objects.requireNonNull(catalogueLoader, "historical catalogue loader");
 		this.closedCallback = closedCallback == null ? () -> {} : closedCallback;
@@ -128,7 +125,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	}
 
 	private boolean hasPatchNotesHistory() {
-		return entries.size() > 1 || GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
+		return entries.size() > 1 || entries.stream().anyMatch(entry -> !entry.patchNotes().isBlank());
 	}
 
 	private boolean hasLocalFiles() {

@@ -38,7 +38,7 @@ final class GenerationHistoryController {
 				List<GenerationRecord> availableHistory = store.availableLineage(modpackId, currentGenerationId);
 				StoredModpackConnection connection = StoredModpackConnection.open(storage, modpackId, true);
 				HistoricalCatalogueLoader catalogueLoader = new ConnectedCatalogueLoader(connection);
-				new ScreenManager().history(new HistoryViewRequest(connection.advertisedHistoryIndex(), availableHistory, modpackName, connection.advertisedPatchNotes(), catalogueLoader, closed));
+				new ScreenManager().history(new HistoryViewRequest(connection.advertisedHistoryIndex(), availableHistory, modpackName, catalogueLoader, closed));
 			} catch (Exception e) {
 				Minecraft.getInstance().execute(closed);
 				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));

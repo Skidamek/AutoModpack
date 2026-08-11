@@ -185,7 +185,7 @@ public class ScreenImpl implements ScreenService {
 
 		public static void history(HistoryViewRequest request) {
 			Screen parent = Screens.getScreen();
-			Screens.setScreen(new ContentHistoryScreen(parent, request.historyIndex(), request.availableHistory(), request.modpackName(), request.patchNotesHistory(), request.catalogueLoader(), request.closed()));
+			Screens.setScreen(new ContentHistoryScreen(parent, request.historyIndex(), request.availableHistory(), request.modpackName(), request.catalogueLoader(), request.closed()));
 		}
 
 		public static void failure(FailureRequest request) {
