@@ -221,7 +221,6 @@
   "automodpack.history.details.description": "All catalogue changes from the previous generation.",
   "automodpack.history.detailsTitle": "Változások innen: %s",
   "automodpack.history.detailsDescription": "Változások az előző generációhoz képest.",
-  "automodpack.history.detailsDescriptionUnavailable": "Az előző generációs adatok nem állnak rendelkezésre; bemutatva ennek a generációnak a tartalmát.",
   "automodpack.history.details.empty": "No catalogue changes.",
   "automodpack.files.title": "%s owned files",
   "automodpack.files.description": "Complete installed modpack file catalogue.",

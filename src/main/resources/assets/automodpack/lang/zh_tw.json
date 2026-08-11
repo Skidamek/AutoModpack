@@ -221,7 +221,6 @@
   "automodpack.history.details.description": "All catalogue changes from the previous generation.",
   "automodpack.history.detailsTitle": "%s 的更改",
   "automodpack.history.detailsDescription": "較上一代的變化。",
-  "automodpack.history.detailsDescriptionUnavailable": "上一代的詳細資訊不可用；展示這一代的內容。",
   "automodpack.history.details.empty": "No catalogue changes.",
   "automodpack.files.title": "%s owned files",
   "automodpack.files.description": "Complete installed modpack file catalogue.",

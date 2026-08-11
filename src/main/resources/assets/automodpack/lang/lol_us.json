@@ -221,7 +221,6 @@
   "automodpack.history.details.description": "All catalogue changes from the previous generation.",
   "automodpack.history.detailsTitle": "Changes from %s nao!",
   "automodpack.history.detailsDescription": "Changes from teh previous generation nao!",
-  "automodpack.history.detailsDescriptionUnavailable": "Previous generation details r unavailable; showing dis generation's contents nao!",
   "automodpack.history.details.empty": "No catalogue changes.",
   "automodpack.files.title": "%s owned files",
   "automodpack.files.description": "Complete installed modpack file catalogue.",

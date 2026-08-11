@@ -221,7 +221,6 @@
   "automodpack.history.details.description": "All catalogue changes from the previous generation.",
   "automodpack.history.detailsTitle": "Cambios desde %s",
   "automodpack.history.detailsDescription": "Cambios respecto a la generación anterior.",
-  "automodpack.history.detailsDescriptionUnavailable": "Los detalles de la generación anterior no están disponibles; mostrando los contenidos de esta generación.",
   "automodpack.history.details.empty": "No catalogue changes.",
   "automodpack.files.title": "%s owned files",
   "automodpack.files.description": "Complete installed modpack file catalogue.",
