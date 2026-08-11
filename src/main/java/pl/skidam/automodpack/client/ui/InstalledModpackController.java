@@ -195,7 +195,8 @@ final class InstalledModpackController {
 				group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : group.displayName()));
 		ScreenImpl.setScreen(new ChangeBrowserScreen(parent,
 				VersionedText.translatable("automodpack.files.title", pack.name()),
-				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), featureNames));
+				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), featureNames,
+				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, storage)), true)));
 	}
 
 	void openRecovery(Screen parent, Pack pack, Runnable released) {
