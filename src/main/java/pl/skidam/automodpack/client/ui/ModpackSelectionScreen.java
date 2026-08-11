@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -372,7 +371,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private boolean canToggle(String groupId, GroupManifest.Group group) {
 		if (isMandatory(manifest, group)) return false;
-		GroupResolution explanation = resolution.explanation(groupId);
+		GroupResolution explanation = resolution.resolution(groupId);
 		if (explanation == null) return group.supports(ClientPlatform.current());
 		if (explanation.selected() && (resolution.requiredGroups().contains(groupId) || resolution.forcedGroups().contains(groupId)
 				|| resolution.dependencyGroups().contains(groupId))) return false;
@@ -406,7 +405,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			ResolvedSelection nextResolution = GroupSelectionResolver.resolve(manifest, next, ClientPlatform.current());
 			applyResolved(next, nextResolution);
 		} catch (SelectionResolutionException exception) {
-			ConflictReplacement replacement = conflictReplacement(next, preferredGroups, exception.resolution());
+			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, ClientPlatform.current(), exception.resolution()).orElse(null);
 			if (replacement != null) {
 				ScreenImpl.setScreen(new FeatureConflictScreen(this, preferredName, names(replacement.conflictingGroups()), () -> applySelectionChange(replacement.intent(), Set.of(), preferredName)));
 				return;
@@ -415,43 +414,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					? VersionedText.translatable("automodpack.selection.changeInvalid").getString()
 					: VersionedText.translatable("automodpack.selection.cannotSelect", preferredName).getString();
 			rebuild();
-		}
-	}
-
-	private ConflictReplacement conflictReplacement(SelectionIntent next, Set<String> preferredGroups, ResolvedSelection partial) {
-		if (preferredGroups.isEmpty() || partial == null) return null;
-		Set<String> conflicts = new TreeSet<>();
-		for (String preferred : preferredGroups) {
-			GroupResolution explanation = partial.explanation(preferred);
-			if (explanation != null && explanation.status() == GroupResolution.Status.CONFLICT) conflicts.addAll(explanation.relatedGroups());
-		}
-		conflicts.removeAll(preferredGroups);
-		if (conflicts.isEmpty()) return null;
-
-		Set<String> requestedGroups = new TreeSet<>(next.requestedGroups());
-		requestedGroups.removeIf(groupId -> !preferredGroups.contains(groupId) && selectsAny(new SelectionIntent(Set.of(groupId)), conflicts));
-		Set<String> requestedCategories = new TreeSet<>(next.requestedCategories());
-		Set<String> expandedGroups = new TreeSet<>();
-		for (String category : new TreeSet<>(requestedCategories)) {
-			if (!selectsAny(new SelectionIntent(Set.of(), Set.of(category), Set.of()), conflicts)) continue;
-			requestedCategories.remove(category);
-			for (String groupId : categoryGroups(category)) if (!conflicts.contains(groupId)) expandedGroups.add(groupId);
-		}
-		requestedGroups.addAll(expandedGroups);
-		SelectionIntent replacement = new SelectionIntent(requestedGroups, requestedCategories, next.excludedGroups());
-		try {
-			GroupSelectionResolver.resolve(manifest, replacement, ClientPlatform.current());
-			return new ConflictReplacement(replacement, conflicts);
-		} catch (SelectionResolutionException ignored) {
-			return null;
-		}
-	}
-
-	private boolean selectsAny(SelectionIntent intent, Set<String> groupIds) {
-		try {
-			return !Collections.disjoint(GroupSelectionResolver.resolve(manifest, intent, ClientPlatform.current()).selectedGroups(), groupIds);
-		} catch (SelectionResolutionException exception) {
-			return exception.resolution() != null && !Collections.disjoint(exception.resolution().selectedGroups(), groupIds);
 		}
 	}
 
@@ -728,7 +690,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (group == null) return null;
 		StringBuilder tooltip = new StringBuilder();
 		if (!group.description().isBlank()) tooltip.append(group.description());
-		GroupResolution explanation = resolution.explanation(groupId);
+		GroupResolution explanation = resolution.resolution(groupId);
 		if (explanation != null) appendTooltipLine(tooltip, resolutionText(explanation));
 		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.category", categoryLabel(group)).getString());
 		if (group.required()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requiredAlways").getString());
@@ -776,8 +738,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private MutableComponent rowLabel(String groupId, GroupManifest.Group group) {
 		if (group == null) return VersionedText.literal(truncateToWidth(this.font, groupId, panelWidth(ROW_WIDTH) - 76));
 
-		String name = group.displayName().isBlank() ? groupId : group.displayName();
-		GroupResolution explanation = resolution.explanation(groupId);
+		String name = displayName(groupId);
+		GroupResolution explanation = resolution.resolution(groupId);
 		String metrics = VersionedText.translatable("automodpack.selection.metrics", group.files().size(), UiFormat.formatSize(groupBytes(group))).getString();
 		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel("[#] ", name, metrics, VersionedText.translatable("automodpack.selection.status.required").getString()), ChatFormatting.GRAY);
 		if (explanation != null && explanation.reasons().contains(GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE))
@@ -926,8 +888,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private record Row(String section, String groupId, String tagId) {}
-
-	private record ConflictReplacement(SelectionIntent intent, Set<String> conflictingGroups) {}
 
 	private record ManagementAction(ManagementKind kind, MutableComponent label, Runnable action) {}
 
