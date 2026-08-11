@@ -2,9 +2,9 @@ package pl.skidam.automodpack_core.modpack.group;
 
 import java.util.*;
 
-public record GroupResolution(String groupId, Status status, NavigableSet<Reason> reasons, NavigableSet<String> relatedGroups, String explanation) {
-	public GroupResolution(String groupId, Status status, Collection<Reason> reasons, Collection<String> relatedGroups, String explanation) {
-		this(groupId, status, immutableReasons(reasons), immutableStrings(relatedGroups), explanation);
+public record GroupResolution(String groupId, Status status, NavigableSet<Reason> reasons, NavigableSet<String> relatedGroups) {
+	public GroupResolution(String groupId, Status status, Collection<Reason> reasons, Collection<String> relatedGroups) {
+		this(groupId, status, immutableReasons(reasons), immutableStrings(relatedGroups));
 	}
 
 	public GroupResolution {
@@ -12,7 +12,6 @@ public record GroupResolution(String groupId, Status status, NavigableSet<Reason
 		status = Objects.requireNonNull(status);
 		reasons = immutableReasons(reasons);
 		relatedGroups = immutableStrings(relatedGroups);
-		explanation = explanation == null ? "" : explanation;
 	}
 
 	public boolean selected() {

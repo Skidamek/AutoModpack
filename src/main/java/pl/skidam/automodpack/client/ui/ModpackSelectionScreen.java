@@ -686,10 +686,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		StringBuilder tooltip = new StringBuilder();
 		if (!group.description().isBlank()) tooltip.append(group.description());
 		GroupResolution explanation = resolution.explanation(groupId);
-		boolean dependency = resolution.dependencyGroups().contains(groupId);
-		if (explanation != null && dependency) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.dependencyNamed", names(explanation.relatedGroups())).getString());
-		else if (explanation != null) appendTooltipLine(tooltip, explanation.explanation());
-		if (explanation != null && !dependency && !explanation.relatedGroups().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.related", names(explanation.relatedGroups())).getString());
+		if (explanation != null) appendTooltipLine(tooltip, resolutionText(explanation));
 		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.category", categoryLabel(group)).getString());
 		if (group.required()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requiredAlways").getString());
 		if (group.defaultSelected()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.defaultSelected").getString());
@@ -699,6 +696,28 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.files", group.files().size(), UiFormat.formatSize(groupBytes(group))).getString());
 		if (!group.supports(ClientPlatform.current())) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.unavailableOn", ClientPlatform.current().id()).getString());
 		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
+	}
+
+	private String resolutionText(GroupResolution groupResolution) {
+		return switch (groupResolution.status()) {
+			case SELECTED -> selectedResolutionText(groupResolution);
+			case AVAILABLE -> VersionedText.translatable("automodpack.selection.status.available").getString();
+			case UNAVAILABLE -> VersionedText.translatable("automodpack.selection.unavailableOn", ClientPlatform.current().id()).getString();
+			case BLOCKED -> groupResolution.relatedGroups().isEmpty()
+					? VersionedText.translatable("automodpack.selection.status.dependencyUnavailable").getString()
+					: VersionedText.translatable("automodpack.selection.blockedBy", names(groupResolution.relatedGroups())).getString();
+			case EXCLUDED -> VersionedText.translatable("automodpack.selection.status.excluded").getString();
+			case CONFLICT -> VersionedText.translatable("automodpack.selection.conflictsWith", names(groupResolution.relatedGroups())).getString();
+			case STALE -> VersionedText.translatable("automodpack.selection.status.stale").getString();
+		};
+	}
+
+	private String selectedResolutionText(GroupResolution groupResolution) {
+		if (groupResolution.reasons().contains(GroupResolution.Reason.REQUIRED)) return VersionedText.translatable("automodpack.selection.requiredAlways").getString();
+		if (groupResolution.reasons().contains(GroupResolution.Reason.FORCED)) return VersionedText.translatable("automodpack.selection.forced").getString();
+		if (groupResolution.reasons().contains(GroupResolution.Reason.DEPENDENCY)) return VersionedText.translatable("automodpack.selection.dependencyNamed", names(groupResolution.relatedGroups())).getString();
+		if (groupResolution.reasons().contains(GroupResolution.Reason.DEFAULT_SELECTED)) return VersionedText.translatable("automodpack.selection.defaultSelected").getString();
+		return VersionedText.translatable("automodpack.selection.status.selected").getString();
 	}
 
 	private String categoryLabel(GroupManifest.Group group) {
