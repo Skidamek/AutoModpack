@@ -57,6 +57,9 @@ import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_loader_core.DetachedUpdateHelper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.UpdateTransactionSupport;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -597,7 +600,7 @@ public class ModpackUpdater implements AutoCloseable {
 			}
 			close();
 		} catch (Exception e) {
-			new ScreenManager().error(e, "automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			close();
 			return;
 		}
@@ -611,8 +614,7 @@ public class ModpackUpdater implements AutoCloseable {
 			acquireTargetObjects(selectedTarget.flatTarget(), cache, true);
 			finalPlan = planBuilder.buildPlan(new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, true), cache, modCache);
 		} catch (SocketTimeoutException | ConnectException e) {
-			String host = connectionInfo == null || connectionInfo.endpoint == null ? "modpack host" : "Modpack host of " + connectionInfo.endpoint.getHostString();
-			new ScreenManager().error(e, "automodpack.error.critical", host + " is not responding", "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.connection", FailureCategory.CONNECTION, FailureDestination.CURRENT_SCREEN, null));
 			close();
 			return;
 		} catch (InterruptedException e) {
@@ -621,7 +623,7 @@ public class ModpackUpdater implements AutoCloseable {
 			close();
 			return;
 		} catch (Exception e) {
-			new ScreenManager().error(e, "automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			close();
 			return;
 		}
@@ -642,7 +644,7 @@ public class ModpackUpdater implements AutoCloseable {
 			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			return ApplyStatus.DEFERRED;
 		} catch (Exception e) {
-			new ScreenManager().error(e, "automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			return ApplyStatus.FAILED;
 		} finally {
 			close();

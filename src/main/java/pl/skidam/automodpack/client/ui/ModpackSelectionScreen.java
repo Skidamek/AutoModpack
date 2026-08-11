@@ -43,6 +43,9 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.QuarantineArchive;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.PageLayout;
 
@@ -444,7 +447,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		try {
 			return new ModpackUpdater(null, null, storage);
 		} catch (RuntimeException e) {
-			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			return null;
 		}
 	}
@@ -462,7 +465,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			} catch (Exception e) {
 				recoveryUpdater.close();
 				endManagement();
-				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		});
 	}
@@ -478,7 +481,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				new ScreenManager().history(availableLineage, modpackName, patchNotesHistory, this::endManagement);
 			} catch (Exception e) {
 				endManagement();
-				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		});
 	}
@@ -598,16 +601,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private void save() {
 		SelectionIntent target = currentIntent();
-		if (!resolutionErrors.isEmpty()) {
-			String error = resolutionErrors.get(0);
-			new ScreenManager().error(new IllegalStateException(error), "automodpack.error.critical", error, "automodpack.error.logs");
-			return;
-		}
+		if (!resolutionErrors.isEmpty()) return;
 		if (selectionAction != null) {
 			try {
 				selectionAction.accept(target);
 			} catch (RuntimeException e) {
-				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			}
 			return;
 		}
@@ -620,7 +619,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			saved = true;
 			rebuild();
 		} catch (IOException e) {
-			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
 

@@ -24,6 +24,9 @@ import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /*? if >= 1.21.10 {*/
@@ -73,7 +76,8 @@ public abstract class EditServerScreenMixin extends Screen {
 	private void automodpack$rejectMalformedPin(CallbackInfo ci) {
 		ServerAddressPin.Parsed parsed = ServerAddressPin.parse(ipEdit.getValue());
 		if (!parsed.isMalformed()) return;
-		new ScreenManager().error(new IllegalArgumentException(parsed.error()), "automodpack.pin.invalid", parsed.error());
+		new ScreenManager().failure(FailureRequest.of(new IllegalArgumentException(parsed.error()), "automodpack.pin.invalid", FailureCategory.SECURITY,
+				FailureDestination.CURRENT_SCREEN, null));
 		ci.cancel();
 	}
 

@@ -44,7 +44,7 @@ public class PreloadScreenImpl implements ScreenService {
 	public void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed) {}
 
 	@Override
-	public void error(String... args) {}
+	public void failure(FailureRequest request) {}
 
 	@Override
 	public void title() {}

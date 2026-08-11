@@ -38,6 +38,9 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Lists locally installed packs and keeps each pack's lifecycle actions beside its row. */
@@ -182,7 +185,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			} catch (Exception e) {
 				if (updater != null) updater.close();
 				endManagement();
-				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		});
 	}
@@ -200,7 +203,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			InstalledModpackSwitch.start(storage, entry.record(), savedSelection, targetSelection, entry.name(), false, this::endManagement);
 		} catch (RuntimeException e) {
 			endManagement();
-			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
 
@@ -211,7 +214,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			updater = new ModpackUpdater(null, null, storage);
 		} catch (RuntimeException e) {
 			endManagement();
-			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 			return;
 		}
 		DownloadClient.NET_EXECUTOR.execute(() -> {
@@ -226,7 +229,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			} catch (Exception e) {
 				updater.close();
 				endManagement();
-				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		});
 	}
@@ -242,7 +245,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 					(Runnable) this::endManagement, false, Map.of());
 		} catch (Exception e) {
 			endManagement();
-			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
 
@@ -250,10 +253,10 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		try {
 			if (!(deactivation ? updater.deactivateModpack() : updater.removeModpack()).success()) {
 				String error = deactivation ? "automodpack.error.deactivationIncomplete" : "automodpack.error.removalIncomplete";
-				new ScreenManager().error(new IllegalStateException(error), "automodpack.error.critical", error, "automodpack.error.logs");
+				new ScreenManager().failure(FailureRequest.of(new IllegalStateException(error), error, FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		} catch (Exception e) {
-			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 		} finally {
 			updater.close();
 		}
@@ -265,7 +268,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			this.minecraft.execute(() -> ScreenImpl.setScreen(new InstalledModpacksScreen(parent)));
 		} catch (Exception e) {
 			endManagement();
-			new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
 
