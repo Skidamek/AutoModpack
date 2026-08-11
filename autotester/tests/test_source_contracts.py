@@ -45,7 +45,7 @@ def test_autotest_bridge_readiness_is_level_triggered():
     source = (
         Path(__file__).parents[2]
         / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     start = source[
         source.index("public static void start()") : source.index(
             "public static void onClientReady()"

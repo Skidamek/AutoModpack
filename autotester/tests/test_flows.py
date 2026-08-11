@@ -83,7 +83,7 @@ def _seed_bootstrap(ctx, step):
     data = ctx.game_dir / "automodpack" / "client" / "data"
     (data / "packs" / "packaaa").mkdir(parents=True, exist_ok=True)
     (ctx.game_dir / "automodpack" / "client-config.json").write_text(
-        json.dumps({"selectedModpackId": "packaaa"})
+        json.dumps({"selectedModpackId": "packaaa"}), encoding="utf-8"
     )
     (data / "known-hosts.json").write_text(
         json.dumps(
@@ -97,7 +97,7 @@ def _seed_bootstrap(ctx, step):
                     }
                 }
             }
-        )
+        ), encoding="utf-8"
     )
     connection_path = data / "packs" / "packaaa" / "connection.json"
     previous_connection = {}
@@ -113,7 +113,7 @@ def _seed_bootstrap(ctx, step):
                 },
                 "secrets": previous_connection.get("secrets", {}),
             }
-        )
+        ), encoding="utf-8"
     )
     projection_root = ctx.server_dir / "automodpack" / "server"
     projection_root.mkdir(parents=True, exist_ok=True)
@@ -126,7 +126,7 @@ def _seed_bootstrap(ctx, step):
         sha1 = hashlib.sha1(payload).hexdigest()
         files[path] = {"sha1": sha1, "size": str(len(payload))}
     (projection_root / "current-projection.json").write_text(
-        json.dumps({"modpackId": "packaaa", "groups": {"main": {"files": files}}})
+        json.dumps({"modpackId": "packaaa", "groups": {"main": {"files": files}}}), encoding="utf-8"
     )
 
 

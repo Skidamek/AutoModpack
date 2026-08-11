@@ -442,7 +442,7 @@ class FakeBridge:
         root.mkdir(parents=True, exist_ok=True)
         marker = root / self.ctx.marker_rel
         marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text("{}")
+        marker.write_text("{}", encoding="utf-8")
         files = self.ctx.scenario_files
         fixture_files: list[tuple[Path, bytes]] = []
         if self.selected_pack == "B":
@@ -475,7 +475,7 @@ class FakeBridge:
             if isinstance(content, bytes):
                 f.write_bytes(content)
             else:
-                f.write_text(content)
+                f.write_text(content, encoding="utf-8")
         for rel, payload in fixture_files:
             f = root / rel
             f.parent.mkdir(parents=True, exist_ok=True)
@@ -490,10 +490,10 @@ class FakeBridge:
             secret = "fake-authenticated-secret"
             connection.setdefault("secrets", {})[self.ctx.vars["bootstrap_origin"]] = {"secret": secret, "timestamp": 1}
             connection_path.parent.mkdir(parents=True, exist_ok=True)
-            connection_path.write_text(json.dumps(connection))
+            connection_path.write_text(json.dumps(connection), encoding="utf-8")
             server_secrets = self.ctx.server_dir / "automodpack" / "server" / "secrets.json"
             server_secrets.parent.mkdir(parents=True, exist_ok=True)
-            server_secrets.write_text(json.dumps({"secrets": {"fake-player": {"secret": secret, "timestamp": 1}}}))
+            server_secrets.write_text(json.dumps({"secrets": {"fake-player": {"secret": secret, "timestamp": 1}}}), encoding="utf-8")
         self.synced = True
         self.update_available = False
         if self.selected_pack == "B" and self._pack_b_owns_conflict() and not self.quarantine_restored:
@@ -582,5 +582,5 @@ class FakeBridge:
         (record / "manifest.json").write_text(json.dumps({
             "modpackName": "Pack A", "modpackId": "packaaa", "groups": manifest_groups,
             "generation": {"generationId": generation_id, "patchNotes": notes},
-        }))
-        (client / "active-state.json").write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}))
+        }), encoding="utf-8")
+        (client / "active-state.json").write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}), encoding="utf-8")

@@ -302,7 +302,7 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
 
     runner._launch_client(ctx)
     marker = ctx.game_dir / "automodpack/data-root.json"
-    before = json.loads(marker.read_text())
+    before = json.loads(marker.read_text(encoding="utf-8"))
 
     runner._v_stage_modpack(
         ctx,
@@ -315,7 +315,7 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
     )
 
     assert before == {"root": "/work/game/automodpack/client/data", "shared": False}
-    assert json.loads(marker.read_text()) == before
+    assert json.loads(marker.read_text(encoding="utf-8")) == before
 
 
 def test_connect_screen_classifier_does_not_loop_on_first_connection():
