@@ -51,8 +51,8 @@ class GroupSelectionResolverTest {
 				() -> GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of("feature")), ClientPlatform.LINUX));
 
 		assertEquals(Set.of("feature"), failure.resolution().requestedUnavailableGroups());
-		assertEquals(GroupResolution.Status.BLOCKED, failure.resolution().explanation("feature").status());
-		assertEquals(Set.of("dependency"), failure.resolution().explanation("feature").relatedGroups());
+		assertEquals(GroupResolution.Status.BLOCKED, failure.resolution().resolution("feature").status());
+		assertEquals(Set.of("dependency"), failure.resolution().resolution("feature").relatedGroups());
 	}
 
 	@Test
@@ -72,7 +72,7 @@ class GroupSelectionResolverTest {
 
 		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of("feature")), ClientPlatform.LINUX);
 
-		assertEquals(Set.of("feature"), resolved.explanation("dependency").relatedGroups());
+		assertEquals(Set.of("feature"), resolved.resolution("dependency").relatedGroups());
 	}
 
 	@Test
@@ -106,6 +106,25 @@ class GroupSelectionResolverTest {
 
 		assertEquals(Set.of("two"), changed.requestedGroups());
 		assertTrue(changed.requestedCategories().isEmpty());
+	}
+
+	@Test
+	void conflictReplacementKeepsSafeMembersOfASelectedCategory() {
+		GroupManifest.Group dependency = group(false, false, Set.of());
+		GroupManifest.Group oldFeature = new GroupManifest.Group("Old feature", "", "visuals", "", false, false, new TreeSet<>(), new TreeSet<>(Set.of("dependency")), Set.of(ClientPlatform.LINUX), new TreeMap<>());
+		GroupManifest.Group safeFeature = categorized("Safe feature", ClientPlatform.LINUX);
+		GroupManifest.Group preferred = new GroupManifest.Group("Preferred", "", "", "", false, false, new TreeSet<>(Set.of("dependency")), new TreeSet<>(), Set.of(), new TreeMap<>());
+		GroupManifest manifest = manifest(Map.of("dependency", dependency, "old", oldFeature, "safe", safeFeature, "preferred", preferred));
+		SelectionIntent category = GroupSelectionResolver.preferCategory(manifest, new SelectionIntent(Set.of()), "visuals", ClientPlatform.LINUX);
+		SelectionIntent candidate = GroupSelectionResolver.prefer(manifest, category, "preferred", ClientPlatform.LINUX);
+		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class, () -> GroupSelectionResolver.resolve(manifest, candidate, ClientPlatform.LINUX));
+
+		GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, candidate, Set.of("preferred"), ClientPlatform.LINUX, failure.resolution()).orElseThrow();
+
+		assertTrue(replacement.intent().requestedCategories().isEmpty());
+		assertEquals(Set.of("preferred", "safe"), replacement.intent().requestedGroups());
+		assertEquals(Set.of("dependency"), replacement.conflictingGroups());
+		assertEquals(Set.of("preferred", "safe"), GroupSelectionResolver.resolve(manifest, replacement.intent(), ClientPlatform.LINUX).selectedGroups());
 	}
 
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {

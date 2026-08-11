@@ -30,8 +30,8 @@ class SelectedModpackTargetTest {
 
 		assertEquals(persisted, failure.resolution().intent());
 		assertEquals(Set.of("first", "second"), failure.resolution().selectedGroups());
-		assertEquals(GroupResolution.Status.CONFLICT, failure.resolution().explanation("first").status());
-		assertEquals(GroupResolution.Status.CONFLICT, failure.resolution().explanation("second").status());
+		assertEquals(GroupResolution.Status.CONFLICT, failure.resolution().resolution("first").status());
+		assertEquals(GroupResolution.Status.CONFLICT, failure.resolution().resolution("second").status());
 	}
 
 	private static GroupManifest.Group group(Set<String> breaksWith) {

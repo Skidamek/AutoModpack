@@ -220,7 +220,7 @@ public final class GroupManifestValidator {
 	private static boolean isOptionalUnavailable(GroupManifest manifest, String groupId, ResolvedSelection selection) {
 		GroupManifest.Group group = manifest.groups().get(groupId);
 		if (group == null || group.required()) return false;
-		GroupResolution resolution = selection.explanation(groupId);
+		GroupResolution resolution = selection.resolution(groupId);
 		return resolution != null && (resolution.status() == GroupResolution.Status.BLOCKED || resolution.status() == GroupResolution.Status.UNAVAILABLE);
 	}
 

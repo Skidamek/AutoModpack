@@ -29,16 +29,8 @@ public record ResolvedSelection(
 		groupResolutions = immutableMap(groupResolutions);
 	}
 
-	public NavigableMap<String, GroupResolution> explanations() {
-		return groupResolutions;
-	}
-
-	public GroupResolution explanation(String groupId) {
+	public GroupResolution resolution(String groupId) {
 		return groupResolutions.get(groupId);
-	}
-
-	public NavigableSet<String> unsupportedGroups() {
-		return unavailableGroups;
 	}
 
 	private static NavigableSet<String> immutableSet(Collection<String> values) {
