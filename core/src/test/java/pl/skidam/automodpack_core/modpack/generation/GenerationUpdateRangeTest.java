@@ -47,6 +47,7 @@ class GenerationUpdateRangeTest {
 
 		assertFalse(range.complete());
 		assertEquals(List.of(THIRD), range.generations().stream().map(GenerationPatchNoteHistory.Entry::generationId).toList());
+		assertTrue(range.featuredNotes().isEmpty());
 	}
 
 	private static List<GenerationPatchNoteHistory.Entry> history(String secondNotes, String thirdNotes) {
