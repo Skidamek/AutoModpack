@@ -513,7 +513,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		generation.manifest().groups().forEach((groupId, group) -> featureNames.put(groupId, displayName(groupId)));
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this,
 				VersionedText.translatable("automodpack.files.title", modpackName),
-				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(generation.manifest()), featureNames));
+				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(generation.manifest()), featureNames,
+				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, storage)), true)));
 	}
 
 	private boolean beginManagement() {
