@@ -76,6 +76,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final ModpackUpdater pendingUpdater;
 	private final boolean managerEntry;
 	private final boolean openedFromManager;
+	private final boolean showManagement;
 	private final boolean activeModpack;
 	private final GenerationRecord localRecord;
 
@@ -112,12 +113,22 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	public static ModpackSelectionScreen forInstalledRecord(Screen parent, GenerationRecord record, boolean managerEntry) {
-		return new ModpackSelectionScreen(parent, record.manifest(), null, null, null, () -> {}, null, managerEntry, true, record);
+		return forInstalledRecord(parent, record, managerEntry, true);
+	}
+
+	static ModpackSelectionScreen forInstalledRecord(Screen parent, GenerationRecord record, boolean managerEntry, boolean showManagement) {
+		return new ModpackSelectionScreen(parent, record.manifest(), null, null, null, () -> {}, null, managerEntry, true, showManagement, record);
 	}
 
 	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, SelectionIntent expectedSelection, SelectionIntent initialSelection,
 			Consumer<SelectionIntent> selectionAction, Runnable cancelAction, ModpackUpdater pendingUpdater, boolean managerEntry, boolean openedFromManager,
 			GenerationRecord localRecord) {
+		this(parent, manifest, expectedSelection, initialSelection, selectionAction, cancelAction, pendingUpdater, managerEntry, openedFromManager, true, localRecord);
+	}
+
+	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, SelectionIntent expectedSelection, SelectionIntent initialSelection,
+			Consumer<SelectionIntent> selectionAction, Runnable cancelAction, ModpackUpdater pendingUpdater, boolean managerEntry, boolean openedFromManager,
+			boolean showManagement, GenerationRecord localRecord) {
 		super(VersionedText.translatable("automodpack.selection.title"));
 		this.parent = parent;
 		this.manifest = Objects.requireNonNull(manifest);
@@ -134,6 +145,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.pendingUpdater = pendingUpdater;
 		this.managerEntry = managerEntry;
 		this.openedFromManager = openedFromManager;
+		this.showManagement = showManagement;
 		this.activeModpack = activeModpack(storage, modpackId);
 		this.localRecord = localRecord;
 		SelectionIntent initial = initialSelection != null
@@ -234,7 +246,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 
 		int listTop = 64;
-		List<ManagementAction> managementActions = selectionAction == null ? managementActions() : List.of();
+		List<ManagementAction> managementActions = selectionAction == null && showManagement ? managementActions() : List.of();
 		int managementRows = managementRowCount(managementActions.size());
 		int reservedManagementRows = Math.max(1, managementRows);
 		// Keep page breaks and list-to-control spacing stable when a flow hides the management row.
