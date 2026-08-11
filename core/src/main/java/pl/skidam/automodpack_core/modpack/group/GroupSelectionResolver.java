@@ -94,6 +94,60 @@ public final class GroupSelectionResolver {
 		return (firstGroup != null && firstGroup.breaksWith().contains(second)) || (secondGroup != null && secondGroup.breaksWith().contains(first));
 	}
 
+	/** Builds the deterministic intent that keeps newly preferred groups and removes the choices which conflict with them. */
+	public static Optional<ConflictReplacement> replaceConflicts(GroupManifest manifest, SelectionIntent candidate, Set<String> preferredGroups,
+			ClientPlatform platform, ResolvedSelection partial) {
+		Objects.requireNonNull(manifest);
+		Objects.requireNonNull(candidate);
+		Objects.requireNonNull(preferredGroups);
+		Objects.requireNonNull(platform);
+		if (preferredGroups.isEmpty() || partial == null) return Optional.empty();
+		Set<String> conflicts = new TreeSet<>();
+		for (String preferred : preferredGroups) {
+			GroupResolution resolution = partial.resolution(preferred);
+			if (resolution != null && resolution.status() == GroupResolution.Status.CONFLICT) conflicts.addAll(resolution.relatedGroups());
+		}
+		conflicts.removeAll(preferredGroups);
+		if (conflicts.isEmpty()) return Optional.empty();
+
+		Set<String> requestedGroups = new TreeSet<>(candidate.requestedGroups());
+		requestedGroups.removeIf(groupId -> !preferredGroups.contains(groupId) && selectsAny(manifest, new SelectionIntent(Set.of(groupId)), platform, conflicts));
+		Set<String> requestedCategories = new TreeSet<>(candidate.requestedCategories());
+		Set<String> expandedGroups = new TreeSet<>();
+		for (String category : new TreeSet<>(requestedCategories)) {
+			if (!selectsAny(manifest, new SelectionIntent(Set.of(), Set.of(category), Set.of()), platform, conflicts)) continue;
+			requestedCategories.remove(category);
+			for (var entry : manifest.groups().entrySet()) {
+				GroupManifest.Group group = entry.getValue();
+				if (!category.equals(group.category()) || group.required() || !group.supports(platform)) continue;
+				if (!selectsAny(manifest, new SelectionIntent(Set.of(entry.getKey())), platform, conflicts)) expandedGroups.add(entry.getKey());
+			}
+		}
+		requestedGroups.addAll(expandedGroups);
+		SelectionIntent replacement = new SelectionIntent(requestedGroups, requestedCategories, candidate.excludedGroups());
+		try {
+			resolve(manifest, replacement, platform);
+			return Optional.of(new ConflictReplacement(replacement, conflicts));
+		} catch (SelectionResolutionException ignored) {
+			return Optional.empty();
+		}
+	}
+
+	private static boolean selectsAny(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform, Set<String> groupIds) {
+		try {
+			return !Collections.disjoint(resolve(manifest, intent, platform).selectedGroups(), groupIds);
+		} catch (SelectionResolutionException exception) {
+			return exception.resolution() != null && !Collections.disjoint(exception.resolution().selectedGroups(), groupIds);
+		}
+	}
+
+	public record ConflictReplacement(SelectionIntent intent, Set<String> conflictingGroups) {
+		public ConflictReplacement {
+			intent = Objects.requireNonNull(intent);
+			conflictingGroups = Set.copyOf(new TreeSet<>(conflictingGroups));
+		}
+	}
+
 	private enum Source {
 		REQUIRED,
 		DEFAULT_SELECTED,
