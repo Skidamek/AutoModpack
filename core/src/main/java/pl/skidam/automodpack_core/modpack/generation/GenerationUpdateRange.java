@@ -28,7 +28,7 @@ public record GenerationUpdateRange(List<GenerationPatchNoteHistory.Entry> gener
 	}
 
 	public Optional<GenerationPatchNoteHistory.Entry> featuredNotes() {
-		if (generations.isEmpty()) return Optional.empty();
+		if (!complete || generations.isEmpty()) return Optional.empty();
 		if (!spansMultipleGenerations()) return generations.get(0).patchNotes().isBlank() ? Optional.empty() : Optional.of(generations.get(0));
 		for (int index = generations.size() - 1; index >= 0; index--) {
 			GenerationPatchNoteHistory.Entry generation = generations.get(index);
