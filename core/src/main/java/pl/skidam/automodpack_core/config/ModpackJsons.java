@@ -18,6 +18,7 @@ public class ModpackJsons {
 		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
 		public GenerationFields generation;
 		public List<PatchNotesHistoryEntryFields> patchNotesHistory = List.of();
+		public GenerationJsons.GenerationHistoryIndexFields generationHistory;
 
 		public static class GenerationFields {
 			public int schemaVersion;

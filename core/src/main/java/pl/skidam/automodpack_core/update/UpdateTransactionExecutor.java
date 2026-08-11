@@ -83,7 +83,7 @@ public final class UpdateTransactionExecutor {
 		ClientStorage storage = context.storage();
 		ensureNoActiveTransaction(storage);
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest);
-		new ClientGenerationStore(storage).write(target.generationRecord(), target.patchNotesHistory());
+		new ClientGenerationStore(storage).write(target.generationRecord(), target.patchNotesHistory(), target.historyIndex());
 		return commit(transaction);
 	}
 
