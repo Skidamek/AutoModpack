@@ -10,7 +10,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 
 /**
  * The immutable, logical view of a set of file changes.
@@ -30,7 +33,8 @@ public final class ChangeSet {
 	private static final Comparator<Occurrence> OCCURRENCE_ORDER = Comparator.comparing(Occurrence::location)
 			.thenComparing(Occurrence::logicalPath).thenComparingLong(Occurrence::size)
 			.thenComparing(occurrence -> Objects.toString(occurrence.beforeHash(), ""))
-			.thenComparing(occurrence -> Objects.toString(occurrence.afterHash(), ""));
+			.thenComparing(occurrence -> Objects.toString(occurrence.afterHash(), ""))
+			.thenComparing(Occurrence::contentKind);
 
 	private final List<Change> changes;
 	private final List<Effect> effects;
@@ -67,6 +71,18 @@ public final class ChangeSet {
 
 	public static ChangeSet of(Change change) {
 		return of(List.of(change), List.of());
+	}
+
+	/** Creates the canonical current-state view of a complete modpack catalogue. */
+	public static ChangeSet catalogue(GroupManifest manifest) {
+		Objects.requireNonNull(manifest, "catalogue manifest");
+		List<Change> changes = new ArrayList<>();
+		for (var group : manifest.groups().entrySet()) for (var file : group.getValue().files().entrySet()) {
+			GroupManifest.GroupFile value = file.getValue();
+			changes.add(new Change(file.getKey(), Kind.PRESERVED,
+					List.of(new Occurrence(group.getKey(), file.getKey(), value.size(), null, value.sha1(), value.type(), List.of()))));
+		}
+		return of(changes);
 	}
 
 	public List<Change> changes() {
@@ -205,13 +221,17 @@ public final class ChangeSet {
 		}
 	}
 
-	public record Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, List<String> references) {
+	public record Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, String contentKind, List<String> references) {
 		public Occurrence(String location, String logicalPath, long size) {
-			this(location, logicalPath, size, null, null, List.of());
+			this(location, logicalPath, size, null, null, null, List.of());
 		}
 
 		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash) {
-			this(location, logicalPath, size, beforeHash, afterHash, List.of());
+			this(location, logicalPath, size, beforeHash, afterHash, null, List.of());
+		}
+
+		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, List<String> references) {
+			this(location, logicalPath, size, beforeHash, afterHash, null, references);
 		}
 
 		public Occurrence {
@@ -221,13 +241,14 @@ public final class ChangeSet {
 			if (size < 0) throw new IllegalArgumentException("Change occurrence size is negative");
 			beforeHash = normalizeHash(beforeHash, "before hash");
 			afterHash = normalizeHash(afterHash, "after hash");
+			contentKind = normalizeContentKind(contentKind, logicalPath);
 			List<String> normalizedReferences = new ArrayList<>();
 			if (references != null) for (String reference : references) if (reference != null && !reference.isBlank() && !normalizedReferences.contains(reference)) normalizedReferences.add(reference);
 			references = List.copyOf(normalizedReferences);
 		}
 
 		public Occurrence withReferences(List<String> newReferences) {
-			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, newReferences);
+			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, newReferences);
 		}
 	}
 
@@ -251,5 +272,10 @@ public final class ChangeSet {
 		String normalized = value.trim().toLowerCase(Locale.ROOT);
 		if (!normalized.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid " + label);
 		return normalized;
+	}
+
+	private static String normalizeContentKind(String value, String logicalPath) {
+		if (value == null || value.isBlank()) return ModpackPathPolicy.isModPath(logicalPath) ? ModpackContentType.MOD : ModpackPathPolicy.typeForPath(logicalPath);
+		return value.trim().toLowerCase(Locale.ROOT);
 	}
 }

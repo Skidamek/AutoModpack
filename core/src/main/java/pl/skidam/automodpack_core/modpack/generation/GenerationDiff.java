@@ -59,8 +59,10 @@ public record GenerationDiff(
 			GroupManifest.GroupFile before = change.before();
 			GroupManifest.GroupFile after = change.after();
 			long size = after == null ? before.size() : after.size();
-			changes.add(new ChangeSet.Change(change.logicalPath(), canonicalKind(change.classification()), List.of(new ChangeSet.Occurrence(change.groupId(), change.logicalPath(), size,
-					before == null ? null : before.sha1(), after == null ? null : after.sha1()))));
+			String contentKind = after == null ? before.type() : after.type();
+			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence(change.groupId(), change.logicalPath(), size,
+					before == null ? null : before.sha1(), after == null ? null : after.sha1(), contentKind, List.of());
+			changes.add(new ChangeSet.Change(change.logicalPath(), canonicalKind(change.classification()), List.of(occurrence)));
 		}
 		List<ChangeSet.Effect> effects = new ArrayList<>();
 		appendMetadataEffects(effects, "pack", packMetadata);
