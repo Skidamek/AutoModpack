@@ -19,6 +19,7 @@ import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.HistoricalCatalogueLoader;
+import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /**
@@ -41,7 +42,7 @@ final class GenerationHistoryController {
 						.orElseThrow(() -> new IOException("Generation history index is unavailable"));
 				List<GenerationPatchNoteHistory.Entry> patchNotes = readPatchNotes(store, currentGenerationId, availableHistory);
 				HistoricalCatalogueLoader catalogueLoader = new LazyCatalogueLoader(storage, modpackId);
-				new ScreenManager().history(historyIndex, availableHistory, modpackName, patchNotes, catalogueLoader, closed);
+				new ScreenManager().history(new HistoryViewRequest(historyIndex, availableHistory, modpackName, patchNotes, catalogueLoader, closed));
 			} catch (Exception e) {
 				Minecraft.getInstance().execute(closed);
 				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));

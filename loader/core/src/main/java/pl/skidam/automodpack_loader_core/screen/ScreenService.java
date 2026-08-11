@@ -4,9 +4,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
@@ -31,8 +28,7 @@ public interface ScreenService {
 
 	void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed);
 
-	void history(GenerationHistoryIndex historyIndex, List<GenerationRecord> availableHistory, String modpackName,
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, HistoricalCatalogueLoader catalogueLoader, Runnable closed);
+	void history(HistoryViewRequest request);
 
 	void failure(FailureRequest request);
 
