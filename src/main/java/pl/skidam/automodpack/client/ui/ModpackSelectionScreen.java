@@ -737,7 +737,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private MutableComponent rowLabel(String groupId, GroupManifest.Group group) {
-		if (group == null) return VersionedText.literal(truncateToWidth(this.font, groupId, panelWidth(ROW_WIDTH) - 76));
+		if (group == null) return VersionedText.translatable("automodpack.browser.unknownFeature");
 
 		String name = displayName(groupId);
 		GroupResolution explanation = resolution.resolution(groupId);
@@ -797,7 +797,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		for (String value : values) {
 			if (result.length() > 0) result.append(", ");
 			GroupManifest.Group related = groups.get(value);
-			result.append(related == null || related.displayName().isBlank() ? value : related.displayName());
+			result.append(related == null || related.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : related.displayName());
 		}
 		return result.length() == 0 ? VersionedText.translatable("automodpack.ui.none").getString() : result.toString();
 	}
