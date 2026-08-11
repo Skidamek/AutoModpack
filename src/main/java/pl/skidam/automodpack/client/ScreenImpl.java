@@ -2,8 +2,6 @@ package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack.client.ui.*;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -15,6 +13,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenService;
 import pl.skidam.automodpack_loader_core.screen.HistoricalCatalogueLoader;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
+import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
@@ -72,9 +71,8 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void history(GenerationHistoryIndex historyIndex, List<GenerationRecord> availableHistory, String modpackName,
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, HistoricalCatalogueLoader catalogueLoader, Runnable closed) {
-		executeOnClient(() -> Screens.history(historyIndex, availableHistory, modpackName, patchNotesHistory, catalogueLoader, closed));
+	public void history(HistoryViewRequest request) {
+		executeOnClient(() -> Screens.history(request));
 	}
 
 	@Override
@@ -185,10 +183,9 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new RecoveryArchiveScreen(parent, modpackUpdater, recoverySnapshot, modpackName, closed));
 		}
 
-		public static void history(GenerationHistoryIndex historyIndex, List<GenerationRecord> history, String modpackName,
-				List<GenerationPatchNoteHistory.Entry> patchNotesHistory, HistoricalCatalogueLoader catalogueLoader, Runnable closed) {
+		public static void history(HistoryViewRequest request) {
 			Screen parent = Screens.getScreen();
-			Screens.setScreen(new ContentHistoryScreen(parent, historyIndex, history, modpackName, patchNotesHistory, catalogueLoader, closed));
+			Screens.setScreen(new ContentHistoryScreen(parent, request.historyIndex(), request.availableHistory(), request.modpackName(), request.patchNotesHistory(), request.catalogueLoader(), request.closed()));
 		}
 
 		public static void failure(FailureRequest request) {
