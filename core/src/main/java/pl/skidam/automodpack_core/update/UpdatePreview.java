@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.group.GroupResolution;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
@@ -279,9 +280,7 @@ public final class UpdatePreview {
 	}
 
 	private static GroupConsequences consequences(ResolvedSelection selection) {
-		Map<String, String> explanations = new TreeMap<>();
-		selection.explanations().forEach((groupId, resolution) -> explanations.put(groupId, resolution.explanation()));
-		return new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), explanations);
+		return new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), selection.groupResolutions());
 	}
 
 	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
@@ -309,7 +308,7 @@ public final class UpdatePreview {
 
 	public record Summary(int changedFiles, int removedFiles, int preservedFiles, int unsafeFiles, int otherEffects) {}
 
-	public record GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups, Map<String, String> explanations) {
+	public record GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups, Map<String, GroupResolution> resolutions) {
 		public GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups) {
 			this(explicitGroups, resolvedGroups, staleGroups, Map.of());
 		}
@@ -318,16 +317,13 @@ public final class UpdatePreview {
 			explicitGroups = immutable(explicitGroups);
 			resolvedGroups = immutable(resolvedGroups);
 			staleGroups = immutable(staleGroups);
-			explanations = immutableMap(explanations);
+			resolutions = Map.copyOf(new TreeMap<>(resolutions == null ? Map.of() : resolutions));
 		}
 
 		private static Set<String> immutable(Set<String> values) {
 			return Set.copyOf(new TreeSet<>(values == null ? Set.of() : values));
 		}
 
-		private static Map<String, String> immutableMap(Map<String, String> values) {
-			return Map.copyOf(new TreeMap<>(values == null ? Map.of() : values));
-		}
 	}
 
 	public enum Mode {
