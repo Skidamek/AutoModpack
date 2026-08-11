@@ -226,7 +226,9 @@
   "automodpack.firstConnect.includedGroups": "Included groups: %s",
   "automodpack.firstConnect.unavailableOldChoices": "Unavailable old choices: %s",
 
-  "automodpack.groupInspector.title": "Group details",
+  "automodpack.groupInspector.title": "Feature details",
+  "automodpack.groupInspector.browseFiles": "Browse files",
+  "automodpack.groupInspector.filesDescription": "Files supplied by this feature",
   "automodpack.groupInspector.group": "Group %s",
   "automodpack.groupInspector.tag": "Tag: %s",
   "automodpack.groupInspector.requiresConflicts": "Requires: %s  Conflicts: %s",
