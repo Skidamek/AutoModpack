@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -191,9 +192,12 @@ final class InstalledModpackController {
 	}
 
 	void openFiles(Screen parent, Pack pack) {
-		ScreenImpl.setScreen(new PagedTextScreen(parent,
+		Map<String, String> featureNames = new TreeMap<>();
+		pack.record().manifest().groups().forEach((groupId, group) -> featureNames.put(groupId,
+				group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : group.displayName()));
+		ScreenImpl.setScreen(new ChangeBrowserScreen(parent,
 				VersionedText.translatable("automodpack.files.title", pack.name()),
-				VersionedText.translatable("automodpack.files.description"), GenerationCatalogueLines.files(pack.record())));
+				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), featureNames));
 	}
 
 	void openRecovery(Screen parent, Pack pack, Runnable released) {
