@@ -177,8 +177,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		String records = VersionedText.translatable("automodpack.storage.records", compacted.generationRecordCountBefore(), compacted.generationRecordCountAfter(), UiFormat.formatSize(compacted.generationRecordBytesBefore()), UiFormat.formatSize(compacted.generationRecordBytesAfter())).getString();
 		String objects = VersionedText.translatable("automodpack.storage.objects", compacted.objectCollection().before().objectCount(), compacted.objectCollection().after().objectCount(), UiFormat.formatSize(compacted.objectCollection().before().objectBytes()), UiFormat.formatSize(compacted.objectCollection().after().objectBytes())).getString();
 		String generatedCopies = VersionedText.translatable("automodpack.storage.generatedCopies", compacted.generatedCopyCountBefore(), compacted.generatedCopyCountAfter(), UiFormat.formatSize(compacted.generatedCopyBytesBefore()), UiFormat.formatSize(compacted.generatedCopyBytesAfter())).getString();
-		y = drawWrapped(matrices, records, y, textWidth, TextColors.WHITE) + 4;
-		y = drawWrapped(matrices, objects, y, textWidth, TextColors.WHITE) + 4;
+		y = drawWrapped(matrices, records, y, textWidth, TextColors.WHITE);
+		y = drawWrapped(matrices, objects, y, textWidth, TextColors.WHITE);
 		drawWrapped(matrices, generatedCopies, y, textWidth, TextColors.GRAY);
 	}
 
