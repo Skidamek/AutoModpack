@@ -65,14 +65,14 @@ flow:
     until:
       all:
         - screen: ContentHistoryScreen
-        - element: { text: View all patch notes, enabled: true }
+        - element: { text: Patch notes, enabled: true }
         - element: { text: Files, enabled: true }
   - do: screenshot
     name: capture clickable generation history
     file: note-only-clickable-history
   - do: click
-    name: open the first generation catalogue diff
-    select: { role: button, index: 4 }
+    name: open the latest generation catalogue diff
+    select: { text: Updated }
   - do: wait_for
     name: show the complete generation diff
     until:
