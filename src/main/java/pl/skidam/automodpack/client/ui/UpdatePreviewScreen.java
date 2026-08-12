@@ -125,8 +125,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				.getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(bytes).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += 15;
-		if (summary.effectCount() > 0) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.otherEffects", summary.effectCount()).withStyle(ChatFormatting.YELLOW), this.width / 2, y, TextColors.WHITE);
+		long otherEffects = changes.effects().stream().filter(effect -> !"restart".equals(effect.category())).count();
+		if (otherEffects > 0) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.otherEffects", otherEffects).withStyle(ChatFormatting.YELLOW), this.width / 2, y, TextColors.WHITE);
 			y += 15;
 		}
 		String restart = preview.restartReasons().isEmpty()
