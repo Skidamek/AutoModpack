@@ -527,7 +527,7 @@ flow:
     until:
       all:
         - screen: ClientStorageMaintenanceScreen
-        - element: { text: Cleanup complete, enabled: false }
+        - element: { text: Clean local storage, enabled: true }
   - do: assert_file_content
     name: verify cleanup kept the active Pack B v2 projection
     path: "${active_dir}/config/pack-b.txt"
