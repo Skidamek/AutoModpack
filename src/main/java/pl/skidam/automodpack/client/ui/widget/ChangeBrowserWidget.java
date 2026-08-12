@@ -88,6 +88,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 
 		@Override
 		public @NotNull Component getNarration() {
+			if (row instanceof ChangeBrowserProjection.EffectRow effect) return VersionedText.literal(effectName(effect.effect()) + ", " + detail());
 			return VersionedText.literal(row.path() + ", " + detail());
 		}
 
