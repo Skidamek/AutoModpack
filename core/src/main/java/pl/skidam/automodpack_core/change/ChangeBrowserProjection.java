@@ -62,6 +62,7 @@ public final class ChangeBrowserProjection {
 		if (!filter.contentKinds().isEmpty() || !filter.featureIds().isEmpty()) return List.of();
 		List<EffectRow> visible = new ArrayList<>();
 		for (ChangeSet.Effect effect : changes.effects()) {
+			if (!effect.category().startsWith("pack.") && !effect.category().startsWith("group.")) continue;
 			if (!filter.search().isBlank() && !Filter.contains(filter.search(), effect.category()) && !Filter.contains(filter.search(), effect.value())) continue;
 			visible.add(new EffectRow("metadata/" + visible.size(), 0, effect));
 		}
