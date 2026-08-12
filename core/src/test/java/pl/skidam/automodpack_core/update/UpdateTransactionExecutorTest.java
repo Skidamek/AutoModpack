@@ -218,6 +218,53 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void preservesOwnedBytesWhileRestoringThePrePackBaseline() throws Exception {
+		ClientStorage storage = storage();
+		byte[] serverBytes = "pack-a-value".getBytes(StandardCharsets.UTF_8);
+		byte[] baselineBytes = "player-value".getBytes(StandardCharsets.UTF_8);
+		byte[] targetBytes = "pack-b-value".getBytes(StandardCharsets.UTF_8);
+		String serverHash = store(storage, serverBytes);
+		String baselineHash = store(storage, baselineBytes);
+		String targetHash = store(storage, targetBytes);
+		String restoredPath = "config/pack-a.json";
+		SelectedModpackTarget installed = target(restoredPath, "config", false, serverHash, serverBytes.length);
+		UpdatePlan installedPlan = plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, restoredPath, OperationType.INSTALL_OBJECT, serverHash, serverBytes.length, null),
+				new Operation(Root.GAME_DIR, restoredPath, OperationType.INSTALL_OBJECT, serverHash, serverBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, restoredPath, true, serverHash, serverBytes.length),
+						new ProjectedFile(Root.GAME_DIR, restoredPath, true, serverHash, serverBytes.length)));
+		UpdateTransactionExecutor executor = executor(storage);
+		assertTrue(executor.commit(installedPlan, installed).success());
+		Files.delete(storage.objectsDirectory().resolve(serverHash));
+
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
+		baseline.modpackId = installed.manifest().modpackId();
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = restoredPath;
+		baselineEntry.objectHash = baselineHash;
+		baselineEntry.size = baselineBytes.length;
+		baseline.entries = List.of(baselineEntry);
+		ModpackJsons.CompleteModpackContentFields targetFields = fields("config/pack-b.json", "config", false, targetHash, targetBytes.length);
+		targetFields.modpackId = "def5678";
+		GenerationRecord targetRecord = GenerationRecord.create(GroupManifestValidator.validate(targetFields), null, Instant.parse("2026-01-02T00:00:00Z"), "");
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(targetRecord.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
+				new UpdatePlan.FileKey(Root.PROJECTION, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true),
+				new UpdatePlan.FileKey(Root.GAME_DIR, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true));
+		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.manifest().modpackId(), installed.flatTarget(), Map.of(), baseline,
+				Set.of(baselineHash));
+		UpdatePlan switchPlan = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), target.flatTarget(), files, Map.of(), Set.of(), List.of(), List.of(),
+				List.of(), List.of(), selection, clientConfig(target.manifest().modpackId())));
+
+		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, restoredPath, serverHash, serverBytes.length)), switchPlan.preservations());
+		assertTrue(switchPlan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals(restoredPath)
+				&& file.present() && baselineHash.equals(file.expectedHash())));
+		assertTrue(executor.commit(switchPlan, target).success());
+		assertArrayEquals(baselineBytes, Files.readAllBytes(storage.gameDirectory().resolve(restoredPath)));
+		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(serverHash), serverBytes.length, serverHash));
+	}
+
+	@Test
 	void removalSwapsToAnEmptyProjectionAndKeepsImmutableGenerationRecords() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "removable-object".getBytes(StandardCharsets.UTF_8);
