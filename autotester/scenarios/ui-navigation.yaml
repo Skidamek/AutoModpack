@@ -19,20 +19,20 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: Prev, enabled: false }
-        - element: { text: Next, enabled: true }
+        - element: { text: "< Prev", enabled: false }
+        - element: { text: "Next >", enabled: true }
   - do: click
     name: open the next group page
-    select: { text: Next }
+    select: { text: "Next >" }
   - do: click
     name: open the final category page
-    select: { text: Next }
+    select: { text: "Next >" }
   - do: wait_for
     name: disable next at the last page and show the category separately from its group
     until:
       all:
-        - element: { text: Prev, enabled: true }
-        - element: { text: Next, enabled: false }
+        - element: { text: "< Prev", enabled: true }
+        - element: { text: "Next >", enabled: false }
         - element: { text: "[ ] Category: Visuals" }
         - element: { text: "[ ] Visuals" }
   - do: click
