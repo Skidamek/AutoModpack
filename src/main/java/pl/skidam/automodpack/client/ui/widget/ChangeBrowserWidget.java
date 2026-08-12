@@ -164,9 +164,15 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			int references = 0;
 			for (ChangeSet.Occurrence occurrence : file.occurrences()) {
 				locations.add(occurrence.location());
-				features.addAll(occurrence.featureIds());
-				String hash = occurrence.afterHash() == null ? occurrence.beforeHash() : occurrence.afterHash();
-				if (hash != null) hashes.add(hash.substring(0, Math.min(12, hash.length())));
+				for (String featureId : occurrence.featureIds()) {
+					String name = featureNames.get(featureId);
+					features.add(name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : name);
+				}
+				String before = shortHash(occurrence.beforeHash());
+				String after = shortHash(occurrence.afterHash());
+				if (before != null && after != null && !before.equals(after)) hashes.add(before + " -> " + after);
+				else if (after != null) hashes.add(after);
+				else if (before != null) hashes.add(before);
 				references += occurrence.references().size();
 			}
 			List<String> parts = new ArrayList<>();
