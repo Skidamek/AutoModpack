@@ -74,6 +74,8 @@ def test_rollback_server_generation_uses_retained_history_and_durable_receipt(ma
     current_id = "b" * 40
     rollback_id = "c" * 40
     state_digest = "d" * 40
+    rollback_ledger_digest = "9" * 40
+    rollback_ledger_digest = "9" * 40
     history = [
         {"generationId": target_id, "parentGenerationId": "", "patchNotes": "root"},
         {"generationId": current_id, "parentGenerationId": target_id, "patchNotes": "update"},
@@ -103,13 +105,19 @@ def test_rollback_server_generation_uses_retained_history_and_durable_receipt(ma
                         "patchNotes": "Release gate rollback verification.",
                         "rollbackTargetGenerationId": target_id,
                         "stateDigest": state_digest,
-                        "ledgerDigest": "0" * 40,
+                        "ledgerDigest": rollback_ledger_digest,
                     },
                     "patchNotesHistory": [*history, {"generationId": rollback_id, "parentGenerationId": current_id, "patchNotes": "Release gate rollback verification."}],
                 }
                 (server_root / "current-projection.json").write_text(json.dumps(updated), encoding="utf-8")
                 (server_root / "current.json").write_text(json.dumps({"generationId": rollback_id}), encoding="utf-8")
-                (server_root / "commits" / f"{rollback_id}.json").write_text(json.dumps({"parentGenerationId": current_id, "rollbackTargetGenerationId": target_id, "stateDigest": state_digest, "ledgerDigest": "0" * 40}), encoding="utf-8")
+                (server_root / "commits" / f"{rollback_id}.json").write_text(json.dumps({
+                    "parentGenerationId": current_id,
+                    "rollbackTargetGenerationId": target_id,
+                    "stateDigest": state_digest,
+                    "ledgerDigest": rollback_ledger_digest,
+                    "patchNotes": "Release gate rollback verification.",
+                }), encoding="utf-8")
             return _ExecResult()
 
     container = Container()
@@ -122,6 +130,7 @@ def test_rollback_server_generation_uses_retained_history_and_durable_receipt(ma
     ]
     assert ctx.vars["server_rollback"]["targetGenerationId"] == target_id
     assert ctx.vars["server_rollback"]["currentGenerationId"] == rollback_id
+    assert ctx.vars["server_rollback"]["ledgerDigest"] == rollback_ledger_digest
 
 
 def test_collect_server_objects_requires_real_transition_receipt(make_ctx, monkeypatch):

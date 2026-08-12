@@ -620,7 +620,7 @@ def _v_rollback_server_generation(ctx: Context, step):
         if current_history.get(new_id, {}).get("patchNotes") != notes:
             return None
         commit = _read_server_json(ctx, f"commits/{new_id}.json", "server rollback commit")
-        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id or str(commit.get("stateDigest", "")) != state_digest or str(commit.get("ledgerDigest", "")) != after_ledger_digest:
+        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id or str(commit.get("stateDigest", "")) != state_digest or str(commit.get("ledgerDigest", "")) != after_ledger_digest or str(commit.get("patchNotes", "")) != notes:
             return None
         return after_pointer, after_projection
 
