@@ -117,8 +117,8 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth) {
 			int indent = Math.min(72, row.depth() * 12);
 			String marker = marker();
-			String label = row instanceof ChangeBrowserProjection.FolderRow || row.depth() > 0 ? leafName(row.path()) : row.path();
-			ChatFormatting color = row instanceof ChangeBrowserProjection.FileRow file ? kindColor(file.kind()) : ChatFormatting.WHITE;
+			String label = row instanceof ChangeBrowserProjection.EffectRow effect ? effectName(effect.effect()) : row instanceof ChangeBrowserProjection.FolderRow || row.depth() > 0 ? leafName(row.path()) : row.path();
+			ChatFormatting color = row instanceof ChangeBrowserProjection.FileRow file ? kindColor(file.kind()) : row instanceof ChangeBrowserProjection.EffectRow effect ? kindColor(effectKind(effect.effect())) : ChatFormatting.WHITE;
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
 					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, marker + label, Math.max(1, entryWidth - indent - 12))).withStyle(color), x + indent + 6, y + 4, TextColors.WHITE);
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
@@ -127,8 +127,13 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 
 		private String marker() {
 			if (row instanceof ChangeBrowserProjection.FolderRow) return collapsed ? "+ " : "- ";
+			if (row instanceof ChangeBrowserProjection.EffectRow effect) return marker(effectKind(effect.effect()));
 			ChangeBrowserProjection.FileRow file = (ChangeBrowserProjection.FileRow) row;
-			return switch (file.kind()) {
+			return marker(file.kind());
+		}
+
+		private String marker(ChangeSet.Kind kind) {
+			return switch (kind) {
 				case ADDED -> "+ ";
 				case REMOVED -> "- ";
 				case MODIFIED, METADATA_ONLY -> "~ ";
@@ -140,6 +145,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		private String detail() {
 			if (row instanceof ChangeBrowserProjection.FolderRow folder)
 				return folderDetail(folder.aggregate());
+			if (row instanceof ChangeBrowserProjection.EffectRow effect) return kindName(effectKind(effect.effect()));
 			ChangeBrowserProjection.FileRow file = (ChangeBrowserProjection.FileRow) row;
 			if (technicalDetails) return technicalDetail(file);
 			List<String> parts = new ArrayList<>();
@@ -186,6 +192,14 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			return String.join(" | ", parts);
 		}
 
+		private String effectName(ChangeSet.Effect effect) {
+			if (effect.category().startsWith("group.")) {
+				String name = featureNames.get(effect.value());
+				return name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : name;
+			}
+			return VersionedText.translatable("automodpack.ui.general").getString();
+		}
+
 		/*? if >= 1.21.9 {*/
 		@Override
 		public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean bl) {
@@ -215,6 +229,16 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			case MODIFIED, METADATA_ONLY -> ChatFormatting.YELLOW;
 			default -> ChatFormatting.WHITE;
 		};
+	}
+
+	private static ChangeSet.Kind effectKind(ChangeSet.Effect effect) {
+		if (effect.category().endsWith(".added")) return ChangeSet.Kind.ADDED;
+		if (effect.category().endsWith(".removed")) return ChangeSet.Kind.REMOVED;
+		return ChangeSet.Kind.METADATA_ONLY;
+	}
+
+	private static String shortHash(String hash) {
+		return hash == null ? null : hash.substring(0, Math.min(12, hash.length()));
 	}
 
 	private static String kindName(ChangeSet.Kind kind) {
