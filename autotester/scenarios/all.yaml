@@ -459,7 +459,7 @@ flow:
     file: all-content-history
   - do: click
     name: open all Pack B patch notes from content history
-    select: { text: View all patch notes }
+    select: { text: Patch notes }
   - do: wait_for
     name: show all Pack B patch notes
     until: { screen: PatchNotesHistoryScreen }
