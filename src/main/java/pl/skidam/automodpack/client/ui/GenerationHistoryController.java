@@ -1,12 +1,15 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import net.minecraft.client.Minecraft;
 
 import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -36,14 +39,40 @@ final class GenerationHistoryController {
 			try {
 				ClientGenerationStore store = new ClientGenerationStore(storage);
 				List<GenerationRecord> availableHistory = store.availableLineage(modpackId, currentGenerationId);
-				StoredModpackConnection connection = StoredModpackConnection.open(storage, modpackId, true);
-				HistoricalCatalogueLoader catalogueLoader = new ConnectedCatalogueLoader(connection);
-				new ScreenManager().history(new HistoryViewRequest(connection.advertisedHistoryIndex(), availableHistory, modpackName, catalogueLoader, closed));
+				Optional<GenerationHistoryIndex> storedHistory = store.historyIndex(currentGenerationId);
+				try {
+					StoredModpackConnection connection = StoredModpackConnection.open(storage, modpackId, true);
+					new ScreenManager().history(new HistoryViewRequest(connection.advertisedHistoryIndex(), availableHistory, modpackName, new ConnectedCatalogueLoader(connection), closed));
+				} catch (IOException connectionFailure) {
+					GenerationHistoryIndex offlineHistory = storedHistory.orElseGet(() -> localHistoryIndex(modpackId, availableHistory));
+					new ScreenManager().history(new HistoryViewRequest(offlineHistory, availableHistory, modpackName, new OfflineCatalogueLoader(connectionFailure), closed));
+				}
 			} catch (Exception e) {
 				Minecraft.getInstance().execute(closed);
 				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		});
+	}
+
+	private static GenerationHistoryIndex localHistoryIndex(String modpackId, List<GenerationRecord> history) {
+		return GenerationHistoryIndex.fromHistory(modpackId, history.stream().map(record -> new GenerationHistoryEntry(record.manifest(), record.metadata())).toList());
+	}
+
+	private static final class OfflineCatalogueLoader implements HistoricalCatalogueLoader {
+		private final IOException failure;
+
+		private OfflineCatalogueLoader(IOException failure) {
+			this.failure = Objects.requireNonNull(failure, "connection failure");
+		}
+
+		@Override
+		public CompletableFuture<CatalogueSnapshot> load(GenerationHistoryIndex.Entry entry) {
+			Objects.requireNonNull(entry, "history entry");
+			return CompletableFuture.failedFuture(failure);
+		}
+
+		@Override
+		public void close() {}
 	}
 
 	private static final class ConnectedCatalogueLoader implements HistoricalCatalogueLoader {
