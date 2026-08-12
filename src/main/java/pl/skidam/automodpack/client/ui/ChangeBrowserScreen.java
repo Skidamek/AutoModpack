@@ -46,6 +46,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private Button detailsButton;
 	private Button openPageButton;
 	private int browserTop;
+	private int browserBottom;
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames) {
 		this(parent, heading, description, changes, featureNames, null);
@@ -88,9 +89,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.addRenderableWidget(this.featureButton);
 		this.addRenderableWidget(this.modeButton);
 		updateControlLabels();
+		this.browserBottom = this.height - (auxiliaryAction == null ? 48 : 74);
 		rebuildBrowser();
 
-		int buttonCount = auxiliaryAction == null ? 3 : 4;
+		int buttonCount = 3;
 		int buttonWidth = actionButtonWidth(PANEL_WIDTH, buttonCount);
 		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, buttonCount, 0), this.height - 28, buttonWidth, 20,
 				VersionedText.translatable("automodpack.back"), button -> back()));
@@ -101,7 +103,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.openPageButton.active = false;
 		this.addRenderableWidget(this.openPageButton);
 		if (auxiliaryAction != null) {
-			Button auxiliaryButton = buttonWidget(actionButtonX(PANEL_WIDTH, buttonCount, 3), this.height - 28, buttonWidth, 20,
+			Button auxiliaryButton = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 1, 1, 0), this.height - 54, actionButtonWidth(PANEL_WIDTH, 1), 20,
 					auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this));
 			auxiliaryButton.active = auxiliaryAction.active();
 			this.addRenderableWidget(auxiliaryButton);
@@ -116,7 +118,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature));
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, mode, filter).collapse(collapsedFolders);
 		this.browser = new ChangeBrowserWidget(projection, collapsedFolders, featureNames, technicalDetails, this::toggleFolder,
-				this.minecraft, this.width, this.height, browserTop, this.height - 48);
+				this.minecraft, this.width, this.height, browserTop, browserBottom);
 		this.addRenderableWidget(this.browser);
 	}
 
@@ -214,7 +216,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature)));
 		String summary = VersionedText.translatable("automodpack.browser.summary", projection.total().fileCount(), UiFormat.formatSize(projection.total().byteCount())).getString();
 		if (!projection.effects().isEmpty()) summary += " | " + projection.effects().size() + " " + VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
-		drawTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY), panelLeft(PANEL_WIDTH), this.height - 43, TextColors.WHITE);
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY), panelLeft(PANEL_WIDTH), browserBottom + 5, TextColors.WHITE);
 		if (projection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
 		String reference = firstReference();
