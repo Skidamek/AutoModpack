@@ -1165,6 +1165,9 @@ flow:
         - screen: FirstConnectScreen
         - element: { text: "[ ] Keep 2 existing files in mods", enabled: true }
         - element: { text: Continue and keep mods, enabled: true }
+  - do: screenshot
+    name: capture first-install cleanup with its safe default
+    file: all-first-install-cleanup-default
   - do: click
     name: navigate into first-install customization before consent
     select: { text: Customize groups }
@@ -1186,6 +1189,9 @@ flow:
   - do: wait_for
     name: show explicit first-install cleanup consent
     until: { element: { text: "[x] Preserve and remove 2 existing files", enabled: true } }
+  - do: screenshot
+    name: capture explicit first-install cleanup consent
+    file: all-first-install-cleanup-consent
   - do: click
     name: revoke first-install cleanup once before final consent
     select: { text: "[x] Preserve and remove 2 existing files" }

@@ -42,7 +42,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		int twoButtonWidth = actionButtonWidth(310, 2);
 		this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 0), actionY, twoButtonWidth, 20,
 				VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
-		String continueKey = updater.firstInstallLocalModCount() == 0 ? "automodpack.firstConnect.continue" : "automodpack.firstConnect.continueKeepMods";
+		String continueKey = updater.firstInstallLocalModCount() > 0 && !archiveExistingMods ? "automodpack.firstConnect.continueKeepMods" : "automodpack.firstConnect.continue";
 		this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 1), actionY, twoButtonWidth, 20,
 				VersionedText.translatable(continueKey).withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
 		int optionalY = actionY - 26;
@@ -52,10 +52,11 @@ public final class FirstConnectScreen extends VersionedScreen {
 					VersionedText.translatable(cleanupKey, updater.firstInstallLocalModCount()), button -> toggleExistingMods()));
 			optionalY -= 26;
 		}
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
 		if (GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes())) {
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY - 26, 150, 20, VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
-		}
+			int optionalWidth = actionButtonWidth(310, 2);
+			this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 0), optionalY, optionalWidth, 20, VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
+			this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 1), optionalY, optionalWidth, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
+		} else this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
 	}
 
 	private void continueWithDefaults() {

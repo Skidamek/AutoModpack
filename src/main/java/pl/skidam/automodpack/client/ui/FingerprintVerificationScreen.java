@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.List;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
@@ -12,6 +14,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class FingerprintVerificationScreen extends VersionedScreen {
@@ -58,8 +61,10 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	public void initWidgets() {
 		assert this.minecraft != null;
 
-		// Text field for fingerprint input (same size as skip screen)
-		this.textField = new EditBox(this.font, this.width / 2 - 170, this.height / 2 + 15, 340, 20,
+		int inputGroupWidth = Math.min(366, this.width - 20);
+		int inputX = (this.width - inputGroupWidth) / 2;
+		int textFieldWidth = inputGroupWidth - 24;
+		this.textField = new EditBox(this.font, inputX, this.height / 2 + 27, textFieldWidth, 20,
 				VersionedText.literal("")
 		);
 		this.textField.setMaxLength(64);
@@ -88,8 +93,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.validation.verify").withStyle(ChatFormatting.BOLD),
 				button -> verifyFingerprint());
 
-		// Wiki button (icon button aligned to the right of text field)
-		this.wikiButton = iconButtonWidget(this.width / 2 + 22 + 150, this.height / 2 + 15, 20, 16,
+		this.wikiButton = iconButtonWidget(inputX + textFieldWidth + 4, this.height / 2 + 29, 20, 16,
 				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
 				"link", VersionedText.translatable("automodpack.learnmore"));
 
@@ -129,42 +133,38 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	}
 
 	private String getConcatenatedFingerprint() {
-		return truncateToWidth(this.font, serverFingerprint, Math.max(1, this.width - 20));
+		return NetUtils.shortenFingerprint(serverFingerprint, 16);
 	}
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		int lineHeight = 12; // Consistent line spacing
+		int lineHeight = 12;
 
 		// Title
 		drawCenteredTextWithShadow(matrices, this.font,
 				VersionedText.translatable("automodpack.validation.title").withStyle(ChatFormatting.BOLD),
 				this.width / 2, this.height / 2 - 85, TextColors.WHITE);
 
-		// Description line 1
-		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.translatable("automodpack.validation.description1"),
-				this.width / 2, this.height / 2 - 65, TextColors.WHITE);
-
-		// Description line 2
-		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.translatable("automodpack.validation.description2"),
-				this.width / 2, this.height / 2 - 65 + lineHeight, TextColors.WHITE);
+		String description = VersionedText.translatable("automodpack.validation.description1").getString() + " "
+				+ VersionedText.translatable("automodpack.validation.description2").getString();
+		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 24, 3);
+		for (int index = 0; index < descriptionLines.size(); index++)
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)), this.width / 2, this.height / 2 - 65 + index * lineHeight, TextColors.WHITE);
 
 		// Server fingerprint label
 		drawCenteredTextWithShadow(matrices, this.font,
 				VersionedText.translatable("automodpack.validation.fingerprint.label"),
-				this.width / 2, this.height / 2 - 35, TextColors.WHITE);
+				this.width / 2, this.height / 2 - 23, TextColors.WHITE);
 
 		// Server fingerprint value (concatenated, gray, not bold - intentionally harder to read)
 		drawCenteredTextWithShadow(matrices, this.font,
 				VersionedText.literal(getConcatenatedFingerprint()),
-				this.width / 2, this.height / 2 - 35 + lineHeight, TextColors.LIGHT_GRAY);
+				this.width / 2, this.height / 2 - 23 + lineHeight, TextColors.LIGHT_GRAY);
 
 		// Confirmation text
 		drawCenteredTextWithShadow(matrices, this.font,
 				VersionedText.translatable("automodpack.validation.confirm.text"),
-				this.width / 2, this.height / 2 - 15 + lineHeight, TextColors.WHITE);
+				this.width / 2, this.height / 2 + 9, TextColors.WHITE);
 	}
 
 	@Override

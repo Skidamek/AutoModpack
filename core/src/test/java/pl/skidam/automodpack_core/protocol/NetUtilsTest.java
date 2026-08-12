@@ -11,6 +11,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class NetUtilsTest {
+	@Test
+	void shortensFingerprintWithoutShowingItsMiddle() {
+		String fingerprint = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+		String shortened = NetUtils.shortenFingerprint(fingerprint, 16);
+
+		assertEquals("0123456789abcdef...0123456789abcdef", shortened);
+		assertFalse(shortened.contains(fingerprint));
+		assertEquals("short fingerprint", NetUtils.shortenFingerprint("short fingerprint", 16));
+	}
 
 	@Test
 	void createsJdkCompatibleSelfSignedCertificateWithoutInstallingProvider(@TempDir Path directory) throws Exception {

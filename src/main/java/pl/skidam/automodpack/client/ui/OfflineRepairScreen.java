@@ -58,12 +58,13 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		super.init();
 		int width = panelWidth(PANEL_WIDTH);
 		int x = panelLeft(PANEL_WIDTH);
-		int listTop = prepared.unownedModPaths().isEmpty() ? 82 : 106;
+		int listTop = prepared.requiresUpdate() ? 94 : 82;
 		if (!prepared.unownedModPaths().isEmpty()) {
-			Button archive = buttonWidget(x, 78, width, 20, VersionedText.translatable(archiveUnownedMods ? "automodpack.repair.archiveUnownedOn" : "automodpack.repair.archiveUnownedOff",
+			Button archive = buttonWidget(x, listTop, width, 20, VersionedText.translatable(archiveUnownedMods ? "automodpack.repair.archiveUnownedOn" : "automodpack.repair.archiveUnownedOff",
 					prepared.unownedModPaths().size()), press -> toggleUnowned());
 			archive.active = !busy;
 			this.addRenderableWidget(archive);
+			listTop += 28;
 		}
 
 		List<OfflineRepair.EditableResetCandidate> candidates = prepared.editableResetCandidates();
@@ -83,24 +84,25 @@ public final class OfflineRepairScreen extends VersionedScreen {
 
 		int actionY = this.height - 28;
 		boolean needsUpdate = prepared.requiresUpdate();
-		int actionCount = needsUpdate && updateAction != null ? 3 : 2;
-		int actionWidth = actionButtonWidth(PANEL_WIDTH, actionCount);
-		Button repairButton = buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, 0), actionY, actionWidth, 20,
+		boolean canUpdate = needsUpdate && updateAction != null;
+		int primaryCount = canUpdate ? 2 : 1;
+		int primaryY = actionY - 24;
+		int primaryWidth = actionButtonWidth(PANEL_WIDTH, primaryCount);
+		Button repairButton = buttonWidget(actionButtonX(PANEL_WIDTH, primaryCount, 0), primaryY, primaryWidth, 20,
 				VersionedText.translatable(needsUpdate ? "automodpack.repair.available" : "automodpack.repair.apply"), press -> apply());
 		repairButton.active = !busy && hasRepairWork();
 		this.addRenderableWidget(repairButton);
-		int cancelIndex = actionCount - 1;
-		if (needsUpdate && updateAction != null) {
-			Button update = buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, 1), actionY, actionWidth, 20,
+		if (canUpdate) {
+			Button update = buttonWidget(actionButtonX(PANEL_WIDTH, primaryCount, 1), primaryY, primaryWidth, 20,
 					VersionedText.translatable("automodpack.repair.updateAndFinish"), press -> updateAndFinish());
 			update.active = !busy;
 			this.addRenderableWidget(update);
 		}
-		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, actionCount, cancelIndex), actionY, actionWidth, 20,
+		this.addRenderableWidget(buttonWidget(x, actionY, width, 20,
 				VersionedText.translatable("automodpack.cancel"), press -> back()));
 
 		if (pageCount > 1) {
-			int navigationY = actionY - 24;
+			int navigationY = primaryY - 24;
 			int navigationWidth = actionButtonWidth(PANEL_WIDTH, 3);
 			Button previous = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 0), navigationY, navigationWidth, 20, VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1));
 			previous.active = !busy && page > 0;
@@ -114,7 +116,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		}
 
 		if (!candidates.isEmpty() && !selectedEditablePaths.isEmpty()) {
-			Button keepAll = buttonWidget(x, actionY - (pageCount > 1 ? 48 : 24), width, 20, VersionedText.translatable("automodpack.repair.keepAllEditable"), press -> keepAllEditable());
+			Button keepAll = buttonWidget(x, primaryY - (pageCount > 1 ? 48 : 24), width, 20, VersionedText.translatable("automodpack.repair.keepAllEditable"), press -> keepAllEditable());
 			keepAll.active = !busy;
 			this.addRenderableWidget(keepAll);
 		}
@@ -125,7 +127,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	}
 
 	private int rowsPerPage(int listTop) {
-		return Math.max(1, (this.height - listTop - 84) / ROW_HEIGHT);
+		return Math.max(1, (this.height - listTop - 108) / ROW_HEIGHT);
 	}
 
 	private static int pageCount(int size, int pageSize) {
@@ -264,8 +266,12 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		else if (receipt != null) {
 			String result = VersionedText.translatable("automodpack.repair.receipt", receipt.repairedCasObjects(), receipt.repairedMaterializedFiles(), receipt.resetEditableFiles(), receipt.archivedUnownedMods()).getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, result, this.width - 20)).withStyle(receipt.complete() ? ChatFormatting.GREEN : ChatFormatting.YELLOW), this.width / 2, 66, TextColors.WHITE);
-		} else if (prepared.requiresUpdate()) drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.translatable(updateAction == null ? "automodpack.repair.updateNeededOffline" : "automodpack.repair.updateNeeded").withStyle(ChatFormatting.YELLOW), this.width / 2, 66, TextColors.WHITE);
+		} else if (prepared.requiresUpdate()) {
+			String updateMessage = VersionedText.translatable(updateAction == null ? "automodpack.repair.updateNeededOffline" : "automodpack.repair.updateNeeded").getString();
+			List<String> lines = wrapToWidth(this.font, updateMessage, this.width - 28, 2);
+			for (int index = 0; index < lines.size(); index++)
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(lines.get(index)).withStyle(ChatFormatting.YELLOW), this.width / 2, 66 + index * 12, TextColors.WHITE);
+		}
 	}
 
 	@Override
