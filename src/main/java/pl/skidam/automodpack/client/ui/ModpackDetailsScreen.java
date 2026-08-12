@@ -50,7 +50,9 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 			Action action = actions.get(index);
 			int column = index % columns;
 			int row = index / columns;
-			addAction(actionButtonX(PANEL_WIDTH, columns, column), y + row * (ACTION_HEIGHT + 4), width, action.labelKey(), action.action());
+			boolean unpaired = columns == 2 && index + 1 == actions.size() && actions.size() % 2 == 1;
+			int x = unpaired ? centeredActionButtonX(PANEL_WIDTH, columns, 1, 0) : actionButtonX(PANEL_WIDTH, columns, column);
+			addAction(x, y + row * (ACTION_HEIGHT + 4), width, action.labelKey(), action.action());
 		}
 
 		int backY = this.height - 28;
