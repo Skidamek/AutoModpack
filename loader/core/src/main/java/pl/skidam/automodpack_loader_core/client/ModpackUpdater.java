@@ -497,7 +497,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 
-		UpdateType updateType = applyResult.restartReasons().contains(RestartReason.SELECTED_MODPACK)
+		UpdateType updateType = applyResult.restartReasons().contains(UpdatePlan.RestartReason.SELECTED_MODPACK)
 				? UpdateType.SELECT
 				: fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 		new ReLauncher(updateType, changelogs).restart(false);
@@ -706,9 +706,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private static ApplyResult applyResult(UpdatePlan plan) {
-		EnumSet<RestartReason> restartReasons = plan.restartReasons().stream().map(reason -> RestartReason.valueOf(reason.name()))
-				.collect(Collectors.toCollection(() -> EnumSet.noneOf(RestartReason.class)));
-		return new ApplyResult(restartReasons);
+		return new ApplyResult(plan.restartReasons());
 	}
 
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
@@ -864,25 +862,11 @@ public class ModpackUpdater implements AutoCloseable {
 		INACTIVE, WAITING, PREVIEWING, STARTED, CANCELLED
 	}
 
-	private enum RestartReason {
-		REMOVED_NON_MODPACK_FILES("files removed from the modpack were deleted from the game directory"),
-		CORRECTED_FILE_LOCATIONS("standard-directory mods were copied or updated"),
-		FIXED_NESTED_MODS("conflicting nested mods were copied to the standard mods directory"),
-		REMOVED_DUPLICATE_MODS("duplicate standard-directory mods were removed"),
-		REMOVED_STANDARD_MODS("modpack-owned mods were removed from the standard mods directory"),
-		APPLIED_SERVER_DELETIONS("server-requested mod deletions were applied"),
-		CHANGED_LOADER_VERSION("launcher loader-version metadata changed"),
-		CHANGED_GROUP_SELECTION("the selected modpack groups changed"),
-		SELECTED_MODPACK("the selected stable modpack changed");
-
-		private final String description;
-
-		RestartReason(String description) {
-			this.description = description;
+	private record ApplyResult(Set<UpdatePlan.RestartReason> restartReasons) {
+		private ApplyResult {
+			restartReasons = restartReasons.isEmpty() ? Set.of() : Collections.unmodifiableSet(EnumSet.copyOf(restartReasons));
 		}
-	}
 
-	private record ApplyResult(EnumSet<RestartReason> restartReasons) {
 		private boolean requiresRestart() {
 			return !restartReasons.isEmpty();
 		}
@@ -892,8 +876,23 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 
 		private List<String> reasonDescriptions() {
-			return restartReasons.stream().map(reason -> reason.description).toList();
+			return restartReasons.stream().map(ModpackUpdater::describeRestartReason).toList();
 		}
+	}
+
+	private static String describeRestartReason(UpdatePlan.RestartReason reason) {
+		return switch (reason) {
+			case REMOVED_NON_MODPACK_FILES -> "files removed from the modpack were deleted from the game directory";
+			case REMOVED_LOCAL_MODS -> "player-approved local mods were preserved and removed from the game directory";
+			case CORRECTED_FILE_LOCATIONS -> "standard-directory mods were copied or updated";
+			case FIXED_NESTED_MODS -> "conflicting nested mods were copied to the standard mods directory";
+			case REMOVED_DUPLICATE_MODS -> "duplicate standard-directory mods were removed";
+			case REMOVED_STANDARD_MODS -> "modpack-owned mods were removed from the standard mods directory";
+			case APPLIED_SERVER_DELETIONS -> "server-requested mod deletions were applied";
+			case CHANGED_LOADER_VERSION -> "launcher loader-version metadata changed";
+			case CHANGED_GROUP_SELECTION -> "the selected modpack groups changed";
+			case SELECTED_MODPACK -> "the selected stable modpack changed";
+		};
 	}
 
 	private enum ApplyStatus {

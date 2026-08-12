@@ -5,6 +5,7 @@ exercised end to end without Docker, HeadlessMC, or a real Minecraft server.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import types
@@ -92,6 +93,16 @@ class FakeBridge:
         self.storage_running = False
         self.vault_claim_available = False
         self.baseline_snapshots: dict[Path, bytes] = {}
+        self.first_install_archive_existing = False
+        self.storage_verified = False
+        self.repair_mutations: set[tuple[str, str]] = set()
+        self.repair_editable_reset = True
+        self.repair_archive_unowned = False
+        self.repair_applied = False
+        self.error_parent = "details"
+        self.selected_claim_path: str | None = None
+        self.repair_expected: dict[str, bytes] = {}
+        self.vault_parent = "settings"
 
     # --- snapshot ---------------------------------------------------------
     def render_frame(self) -> None:
@@ -108,8 +119,9 @@ class FakeBridge:
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "first_connection": {
                 "screenClass": "FirstConnectScreen",
-                "buttons": [{"id": 3, "text": "Continue", "enabled": True, "visible": True},
+                "buttons": [{"id": 3, "text": "Continue" if not self._first_install_local_mods() else "Continue and keep mods", "enabled": True, "visible": True},
                             {"id": 18, "text": "Customize groups", "enabled": True, "visible": True},
+                            *([{"id": 89, "text": (f"[x] Preserve and remove {len(self._first_install_local_mods())} existing files" if self.first_install_archive_existing else f"[ ] Keep {len(self._first_install_local_mods())} existing files in mods"), "enabled": True, "visible": True}] if self._first_install_local_mods() else []),
                             {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -119,7 +131,8 @@ class FakeBridge:
                             {"id": 28, "text": "Client", "enabled": True, "visible": True},
 							{"id": 29, "text": ("[+] Visuals (required by Addon)" if self.dependency else "Visuals"), "enabled": True, "visible": True},
                             {"id": 30, "text": "Next >", "enabled": True, "visible": True},
-                            {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
+                            {"id": 31, "text": "Preview target", "enabled": True, "visible": True},
+                            {"id": 102, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "group1": {
@@ -184,24 +197,39 @@ class FakeBridge:
                 "buttons": self._details_buttons(),
                 "textFields": [],
             },
+            "offline_repair": {
+                "screenClass": "OfflineRepairScreen",
+                "buttons": self._repair_buttons(),
+                "textFields": [],
+            },
+            "error": {
+                "screenClass": "ErrorScreen",
+                "buttons": [{"id": 93, "text": "Copy details", "enabled": True, "visible": True},
+                            {"id": 94, "text": "Back", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
             "pack_storage": {
                 "screenClass": "ModpackStorageScreen",
-                "buttons": [*([{"id": 79, "text": "Preserved files", "enabled": True, "visible": True}] if self.vault_claim_available else []),
+                "buttons": [*([{"id": 79, "text": "Preserved files", "enabled": True, "visible": True}] if self._claims(self._pack_id(self.details_pack))[1] else []),
                             {"id": 81, "text": "Clean local storage", "enabled": True, "visible": True},
                             {"id": 82, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "preservation": {
                 "screenClass": "PreservationVaultScreen",
-                "buttons": [{"id": 83, "text": "config/amp-autotest-gamma.cfg", "enabled": True, "visible": self.vault_claim_available},
+                "buttons": [{"id": 83, "text": "config/amp-autotest-gamma.cfg", "enabled": True, "visible": any(claim.get("originalPath") == "config/amp-autotest-gamma.cfg" for claim in self._claims("packaaa")[1])},
                             {"id": 84, "text": "Restore", "enabled": self.vault_claim_selected, "visible": True},
                             {"id": 85, "text": "Save copy", "enabled": self.vault_claim_selected, "visible": True},
+                            {"id": 90, "text": "Confirm deletion" if self.vault_claim_selected == "delete-pending" else "Delete from vault", "enabled": bool(self.vault_claim_selected), "visible": True},
+                            {"id": 103, "text": "Next >", "enabled": True, "visible": True},
                             {"id": 86, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "storage": {
                 "screenClass": "ClientStorageMaintenanceScreen",
                 "buttons": [
+                    *([{"id": 101, "text": "Storage verified", "enabled": False, "visible": True}] if self.storage_verified else []),
+                    {"id": 91, "text": "Verify storage", "enabled": not self.storage_running, "visible": True},
                     {"id": 46, "text": "Clean local storage", "enabled": not self.storage_running, "visible": True},
                     {"id": 47, "text": "Back", "enabled": True, "visible": True},
                 ],
@@ -251,6 +279,7 @@ class FakeBridge:
                 "buttons": [{"id": 49, "text": "mods/amp-autotest-conflict.jar", "enabled": True, "visible": True},
                             {"id": 44, "text": "Restore", "enabled": self.vault_claim_selected, "visible": True},
                             {"id": 45, "text": "Save copy", "enabled": self.vault_claim_selected, "visible": True},
+                            {"id": 92, "text": "Confirm deletion" if self.vault_claim_selected == "delete-pending" else "Delete from vault", "enabled": bool(self.vault_claim_selected), "visible": True},
                             {"id": 48, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -274,10 +303,14 @@ class FakeBridge:
             self.screen = "preparing"
         elif element_id == 3:
             self.screen = "preview"
+        elif element_id == 89:
+            self.first_install_archive_existing = not self.first_install_archive_existing
         elif element_id == 18:
             self.screen = "group0"
         elif element_id == 19 or element_id == 28:
             self.screen = "group0"
+        elif element_id == 102:
+            self.screen = "first_connection"
         elif element_id == 20 or element_id == 30 or element_id == 36:
             self.screen = "group1" if self.screen == "group0" else "group2"
         elif element_id == 21 or element_id == 31:
@@ -333,6 +366,25 @@ class FakeBridge:
             if self.details_pack != self.selected_pack:
                 self.pending_pack = self.details_pack
             self.screen = "preview"
+        elif element_id == 70:
+            self.repair_editable_reset = True
+            self.repair_archive_unowned = False
+            self.repair_applied = False
+            self.update_available = self._repair_requires_update()
+            self.screen = "offline_repair"
+        elif element_id == 95:
+            self.repair_editable_reset = not self.repair_editable_reset
+        elif element_id == 96:
+            self.repair_editable_reset = False
+        elif element_id == 97:
+            self.repair_archive_unowned = not self.repair_archive_unowned
+        elif element_id == 98:
+            self._apply_offline_repair()
+        elif element_id == 99:
+            self._apply_offline_repair()
+            self.screen = "preview"
+        elif element_id == 100:
+            self.screen = "details"
         elif element_id == 14:
             self.screen = self.history_parent
         elif element_id == 17:
@@ -359,18 +411,24 @@ class FakeBridge:
             self.screen = "manager"
         elif element_id == 43:
             self.vault_claim_selected = False
+            self.vault_parent = "settings"
             self.screen = "vault_conflict"
         elif element_id == 49:
             self.vault_claim_selected = True
+            self.selected_claim_path = "mods/amp-autotest-conflict.jar"
             self.screen = "vault_conflict"
         elif element_id == 44:
-            self._restore_preservation_original()
-            self.screen = "vault_conflict"
+            if self._active_pack_owns_selected_claim("packbbb"):
+                self.error_parent = "vault_conflict"
+                self.screen = "error"
+            else:
+                self._restore_preservation_original()
+                self.screen = "vault_conflict"
         elif element_id == 45:
             self._save_preservation_copy()
             self.screen = "vault_conflict"
         elif element_id == 48:
-            self.screen = "settings"
+            self.screen = self.vault_parent
         elif element_id == 46:
             if self.screen == "manager":
                 self.screen = "storage"
@@ -380,26 +438,50 @@ class FakeBridge:
                 self.storage_running = False
         elif element_id == 47:
             self.screen = "manager"
+        elif element_id == 91:
+            if self._has_damaged_preservation_object():
+                self.error_parent = "storage"
+                self.screen = "error"
+            else:
+                self.storage_verified = True
         elif element_id == 78:
             self.screen = "manager"
         elif element_id == 79:
             self.vault_claim_selected = False
-            self.screen = "preservation"
+            self.vault_parent = "pack_storage"
+            self.screen = "preservation" if self.details_pack == "A" else "vault_conflict"
         elif element_id == 81:
             self.screen = "storage"
         elif element_id == 82:
             self.screen = "details"
         elif element_id == 83:
             self.vault_claim_selected = True
+            self.selected_claim_path = "config/amp-autotest-gamma.cfg"
             self.screen = "preservation"
         elif element_id == 84:
-            self._restore_pack_a_preservation_original()
-            self.screen = "preservation"
+            if self._active_pack_owns_selected_claim("packaaa"):
+                self.error_parent = "preservation"
+                self.screen = "error"
+            else:
+                self._restore_pack_a_preservation_original()
+                self.screen = "preservation"
         elif element_id == 85:
             self._save_preservation_copy()
             self.screen = "preservation"
         elif element_id == 86:
             self.screen = "pack_storage"
+        elif element_id == 103:
+            self.screen = "preservation"
+        elif element_id in (90, 92):
+            if self.vault_claim_selected == "delete-pending":
+                self._delete_selected_claim("packaaa" if self.screen == "preservation" else "packbbb")
+                self.vault_claim_selected = False
+            else:
+                self.vault_claim_selected = "delete-pending"
+        elif element_id == 93:
+            self.ctx.vars["fake_error_details_copied"] = True
+        elif element_id == 94:
+            self.screen = self.error_parent
         elif element_id == 87:
             self.screen = "settings"
         elif element_id == 88:
@@ -474,6 +556,126 @@ class FakeBridge:
         self._editable_overlay_path("A").unlink(missing_ok=True)
         self.pack_a_installed = False
 
+    def _first_install_local_mods(self) -> list[Path]:
+        mods = self.ctx.game_dir / "mods"
+        if self.pack_a_installed or not mods.is_dir():
+            return []
+        return sorted(path for path in mods.iterdir() if path.is_file() and path.name != "automodpack.jar")
+
+    def _repair_unowned_mods(self) -> list[Path]:
+        mods = self.ctx.game_dir / "mods"
+        if not mods.is_dir():
+            return []
+        owned_names = {rel.name for rel, _payload in self._generation_fixture_files(1 if self.ctx.vars.get("published_server_generation") else 0)}
+        return sorted(path for path in mods.iterdir() if path.is_file() and path.name != "automodpack.jar" and path.name not in owned_names)
+
+    def _repair_buttons(self) -> list[dict]:
+        buttons: list[dict] = []
+        if not self.repair_applied:
+            buttons.append({"id": 97, "text": (f"[x] Archive and remove {len(self._repair_unowned_mods())} unowned mods" if self.repair_archive_unowned else f"[ ] Keep {len(self._repair_unowned_mods())} unowned mods"), "enabled": True, "visible": bool(self._repair_unowned_mods())})
+            buttons.append({"id": 95, "text": "[x] Reset config/pack-shared-editable.txt" if self.repair_editable_reset else "[ ] Keep changes in config/pack-shared-editable.txt", "enabled": True, "visible": True})
+            if self.repair_editable_reset:
+                buttons.append({"id": 96, "text": "Keep all editable changes", "enabled": True, "visible": True})
+        repair_work = not self.repair_applied and (self.repair_editable_reset or self.repair_archive_unowned or bool(self.repair_mutations))
+        buttons.append({"id": 98, "text": "Repair available files" if self.update_available else "Repair files", "enabled": repair_work, "visible": True})
+        if self.update_available:
+            buttons.append({"id": 99, "text": "Update and finish repair", "enabled": True, "visible": True})
+        buttons.append({"id": 100, "text": "Cancel", "enabled": True, "visible": True})
+        return buttons
+
+    def _repair_requires_update(self) -> bool:
+        active = self.ctx.game_dir / "automodpack" / "client" / "active"
+        objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+        for logical_path, payload in self.repair_expected.items():
+            digest = hashlib.sha1(payload).hexdigest()
+            candidates = (active / logical_path, objects / digest, self.ctx.path(logical_path))
+            if not any(candidate.is_file() and candidate.read_bytes() == payload for candidate in candidates):
+                return True
+        return False
+
+    def _apply_offline_repair(self) -> None:
+        active = self.ctx.game_dir / "automodpack" / "client" / "active"
+        objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+        for logical_path, payload in self.repair_expected.items():
+            projected = active / logical_path
+            digest = hashlib.sha1(payload).hexdigest()
+            object_path = objects / digest
+            live = self.ctx.path(logical_path)
+            if not any(candidate.is_file() and candidate.read_bytes() == payload for candidate in (projected, object_path, live)):
+                continue
+            projected.parent.mkdir(parents=True, exist_ok=True)
+            projected.write_bytes(payload)
+            object_path.parent.mkdir(parents=True, exist_ok=True)
+            object_path.write_bytes(payload)
+            if logical_path != "config/pack-shared-editable.txt":
+                live.parent.mkdir(parents=True, exist_ok=True)
+                live.write_bytes(payload)
+        if self.repair_editable_reset:
+            source = active / "config/pack-shared-editable.txt"
+            if source.is_file():
+                destination = self.ctx.path("config/pack-shared-editable.txt")
+                if destination.is_file() and destination.read_bytes() != source.read_bytes():
+                    self._vault_claim(self._pack_id(self.selected_pack), "config/pack-shared-editable.txt", destination.read_bytes(), "EDITABLE_RESET")
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+        self._repair_preservation_objects()
+        if self.repair_archive_unowned:
+            for source in self._repair_unowned_mods():
+                self._vault_claim(self._pack_id(self.selected_pack), f"mods/{source.name}", source.read_bytes(), "STRICT_REPAIR")
+                source.unlink()
+        self.repair_mutations.clear()
+        self.repair_applied = True
+        self.repair_editable_reset = False
+        self.repair_archive_unowned = False
+
+    def _repair_preservation_objects(self) -> None:
+        objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+        restored = self.ctx.game_dir / "automodpack" / "client" / "restored"
+        for pack_id in ("packaaa", "packbbb"):
+            _manifest, claims = self._claims(pack_id)
+            for claim in claims:
+                expected_hash = claim["objectHash"]
+                object_path = objects / expected_hash
+                if object_path.is_file() and hashlib.sha1(object_path.read_bytes()).hexdigest() == expected_hash:
+                    continue
+                saved_copy = restored / pack_id / claim["generationId"] / claim["claimId"] / claim["originalPath"]
+                if saved_copy.is_file() and hashlib.sha1(saved_copy.read_bytes()).hexdigest() == expected_hash:
+                    object_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(saved_copy, object_path)
+
+    def _claims(self, pack_id: str) -> tuple[Path, list[dict]]:
+        manifest = self.ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id / "claims.json"
+        if not manifest.is_file():
+            return manifest, []
+        return manifest, json.loads(manifest.read_text(encoding="utf-8")).get("claims", [])
+
+    def _active_pack_owns_selected_claim(self, pack_id: str) -> bool:
+        _manifest, claims = self._claims(pack_id)
+        selected = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), claims[0] if claims else None)
+        return selected is not None and self.selected_pack == {"packaaa": "A", "packbbb": "B"}.get(pack_id) and (self.ctx.game_dir / "automodpack" / "client" / "active" / selected["originalPath"]).is_file()
+
+    def _has_damaged_preservation_object(self) -> bool:
+        for pack_id in ("packaaa", "packbbb"):
+            _manifest, claims = self._claims(pack_id)
+            for claim in claims:
+                object_path = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / claim["objectHash"]
+                if not object_path.is_file() or hashlib.sha1(object_path.read_bytes()).hexdigest() != claim["objectHash"]:
+                    return True
+        return False
+
+    def _delete_selected_claim(self, pack_id: str) -> None:
+        manifest, claims = self._claims(pack_id)
+        if not claims:
+            return
+        selected = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), claims[0])
+        remaining = [claim for claim in claims if claim.get("claimId") != selected.get("claimId")]
+        if remaining:
+            manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": remaining}), encoding="utf-8")
+        else:
+            manifest.unlink(missing_ok=True)
+            if pack_id == "packaaa":
+                self.vault_claim_available = False
+
     def _compact_local_storage(self) -> None:
         """Keep the fake bridge focused on the UI; scenario assertions prove preservation."""
 
@@ -486,6 +688,11 @@ class FakeBridge:
         self.preservation_restored = False
         self.preservation_copy_saved = False
         self.vault_claim_selected = False
+        self.first_install_archive_existing = False
+        self.storage_verified = False
+        self.repair_mutations.clear()
+        self.repair_applied = False
+        self.repair_expected.clear()
 
     def _generation_fixture_files(self, index: int) -> list[tuple[Path, bytes]]:
         generations = self.ctx.scenario.get("serverFiles", {}).get("generations", [])
@@ -503,6 +710,10 @@ class FakeBridge:
             self.ctx.path(rel).unlink(missing_ok=True)
 
     def _write_modpack(self) -> None:
+        if self.first_install_archive_existing:
+            for source in self._first_install_local_mods():
+                self._vault_claim("packaaa", f"mods/{source.name}", source.read_bytes(), "STRICT_INSTALL")
+                source.unlink()
         root = self.ctx.game_dir / "automodpack" / "client" / "active"
         if root.exists():
             shutil.rmtree(root)
@@ -522,7 +733,8 @@ class FakeBridge:
                      (Path("config/amp-autotest-baseline.json"), "server-baseline-v2\n"),
                      (Path("config/amp-autotest-visual.txt"), "visual-v2\n"),
                      (Path("config/amp-autotest-delta.txt"), "delta-v2\n"),
-                     (Path("config/pack-a-only.txt"), "pack-a-v2\n")]
+                     (Path("config/pack-a-only.txt"), "pack-a-v2\n"),
+                     (Path("config/pack-shared-editable.txt"), "pack-a-default\n")]
             (root / "config/amp-autotest-gamma.cfg").unlink(missing_ok=True)
             self._remove_generation_fixture_files(0, root)
         elif self.ctx.vars.get("client_generation_reset"):
@@ -545,6 +757,13 @@ class FakeBridge:
                 f.write_bytes(content)
             else:
                 f.write_text(content, encoding="utf-8")
+            if rel.as_posix() != "config/pack-shared-editable.txt":
+                live = self.ctx.path(rel)
+                live.parent.mkdir(parents=True, exist_ok=True)
+                if isinstance(content, bytes):
+                    live.write_bytes(content)
+                else:
+                    live.write_text(content, encoding="utf-8")
         for rel, payload in fixture_files:
             f = root / rel
             f.parent.mkdir(parents=True, exist_ok=True)
@@ -676,6 +895,7 @@ class FakeBridge:
     def _details_buttons(self) -> list[dict]:
         active = self.details_pack == self.selected_pack
         return [{"id": 69, "text": "Update" if active else "Activate", "enabled": True, "visible": True},
+                *([{"id": 70, "text": "Repair", "enabled": True, "visible": True}] if active else []),
                 {"id": 72, "text": "Features", "enabled": True, "visible": True},
                 {"id": 73, "text": "History", "enabled": True, "visible": True},
                 {"id": 74, "text": "Files", "enabled": True, "visible": True},
@@ -698,6 +918,20 @@ class FakeBridge:
             manifest_groups[group_id].setdefault("breaksWith", [])
             manifest_groups[group_id].setdefault("requires", [])
             manifest_groups[group_id].setdefault("compatiblePlatforms", [])
+        active = self.ctx.game_dir / "automodpack" / "client" / "active"
+        active_files = {}
+        self.repair_expected = {}
+        if active.is_dir():
+            for path in sorted(path for path in active.rglob("*") if path.is_file()):
+                logical_path = path.relative_to(active).as_posix()
+                payload = path.read_bytes()
+                digest = hashlib.sha1(payload).hexdigest()
+                active_files[logical_path] = {"sha1": digest, "size": str(len(payload))}
+                self.repair_expected[logical_path] = payload
+                object_path = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / digest
+                object_path.parent.mkdir(parents=True, exist_ok=True)
+                object_path.write_bytes(payload)
+        manifest_groups.setdefault("main", {"required": True, "defaultSelected": True})["files"] = active_files
         client = self.ctx.game_dir / "automodpack" / "client"
         record = client / "records" / generation_id
         record.mkdir(parents=True, exist_ok=True)

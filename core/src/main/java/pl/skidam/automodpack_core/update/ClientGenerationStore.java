@@ -104,19 +104,69 @@ public final class ClientGenerationStore {
 			ModpackJsons.CompleteModpackContentFields existingFields = readFields(path).orElseThrow(() -> new IOException("Stored client generation is invalid: " + path));
 			GenerationRecord existing = GenerationRecord.fromFields(existingFields);
 			if (!existing.equals(record)) throw new IOException("Client generation record already exists with different content: " + path);
-			boolean historyChanged = !Objects.equals(existingFields.generationHistory == null ? null : GenerationHistoryIndex.fromFields(existingFields.generationHistory), historyIndex);
-			if (!GenerationPatchNoteHistory.fromFields(existingFields).equals(patchNotesHistory) || historyChanged) {
-				if (existingFields.patchNotesHistory != null && !existingFields.patchNotesHistory.isEmpty())
-					if (!GenerationPatchNoteHistory.fromFields(existingFields).equals(patchNotesHistory))
-						throw new IOException("Client generation patch-note history already exists with different content: " + path);
+			List<GenerationPatchNoteHistory.Entry> effectivePatchNotesHistory = compatiblePatchNotesHistory(existingFields, fields, patchNotesHistory, path);
+			GenerationPatchNoteHistory.writeFields(fields, effectivePatchNotesHistory);
+			GenerationHistoryIndex existingHistoryIndex = existingFields.generationHistory == null ? null : GenerationHistoryIndex.fromFields(existingFields.generationHistory);
+			GenerationHistoryIndex effectiveHistoryIndex = compatibleHistoryIndex(existingHistoryIndex, historyIndex, path);
+			if (effectiveHistoryIndex == null) fields.generationHistory = null;
+			else fields.generationHistory = effectiveHistoryIndex.toFields();
+			boolean historyChanged = !Objects.equals(existingHistoryIndex, effectiveHistoryIndex);
+			boolean patchNotesChanged = !GenerationPatchNoteHistory.fromFields(existingFields).equals(effectivePatchNotesHistory)
+					|| hasCompletePatchNotesHistory(existingFields) != hasCompletePatchNotesHistory(fields);
+			if (patchNotesChanged || historyChanged) {
 				ConfigTools.writeAtomic(path, fields);
-				verify(path, record, patchNotesHistory, historyIndex);
+				verify(path, record, effectivePatchNotesHistory, effectiveHistoryIndex);
 			}
 			return;
 		}
 		Files.createDirectories(path.getParent());
 		ConfigTools.writeAtomic(path, fields);
 		verify(path, record, patchNotesHistory, historyIndex);
+	}
+
+	private static List<GenerationPatchNoteHistory.Entry> compatiblePatchNotesHistory(ModpackJsons.CompleteModpackContentFields existingFields,
+			ModpackJsons.CompleteModpackContentFields requestedFields, List<GenerationPatchNoteHistory.Entry> requestedHistory, Path path) throws IOException {
+		List<GenerationPatchNoteHistory.Entry> existingHistory = GenerationPatchNoteHistory.fromFields(existingFields);
+		boolean existingComplete = hasCompletePatchNotesHistory(existingFields);
+		boolean requestedComplete = hasCompletePatchNotesHistory(requestedFields);
+		if (existingComplete && requestedComplete && !existingHistory.equals(requestedHistory))
+			throw new IOException("Client generation patch-note history already exists with different content: " + path);
+		return existingComplete ? existingHistory : requestedHistory;
+	}
+
+	private static boolean hasCompletePatchNotesHistory(ModpackJsons.CompleteModpackContentFields fields) {
+		return fields.patchNotesHistory != null && !fields.patchNotesHistory.isEmpty();
+	}
+
+	private static GenerationHistoryIndex compatibleHistoryIndex(GenerationHistoryIndex existing, GenerationHistoryIndex requested, Path path) throws IOException {
+		if (existing == null) return requested;
+		if (requested == null) return existing;
+		if (!existing.modpackId().equals(requested.modpackId()) || !existing.currentGenerationId().equals(requested.currentGenerationId())
+				|| existing.entries().size() != requested.entries().size())
+			throw new IOException("Client generation history index already exists with different content: " + path);
+		List<GenerationHistoryIndex.Entry> merged = new ArrayList<>(existing.entries().size());
+		for (int index = 0; index < existing.entries().size(); index++) {
+			GenerationHistoryIndex.Entry stored = existing.entries().get(index);
+			GenerationHistoryIndex.Entry incoming = requested.entries().get(index);
+			if (!sameHistoryEntryContent(stored, incoming)) throw new IOException("Client generation history index already exists with different content: " + path);
+			merged.add(new GenerationHistoryIndex.Entry(stored.generationId(), stored.parentGenerationId(), stored.createdAt(), stored.stateDigest(), stored.rollbackTargetGenerationId(), stored.patchNotes(),
+					stored.patchNotesDigest(), stored.diffSummary(), stored.diffDigest(), stored.detailsAvailable() || incoming.detailsAvailable(), stored.rollbackAvailable() || incoming.rollbackAvailable()));
+		}
+		int boundaryIndex = -1;
+		for (int index = 0; index < merged.size(); index++) {
+			if (merged.get(index).rollbackAvailable()) {
+				boundaryIndex = index;
+				break;
+			}
+		}
+		if (boundaryIndex < 0) throw new IOException("Client generation history index has no rollback boundary: " + path);
+		return new GenerationHistoryIndex(existing.modpackId(), existing.currentGenerationId(), boundaryIndex == 0 ? "" : merged.get(boundaryIndex).generationId(), merged);
+	}
+
+	private static boolean sameHistoryEntryContent(GenerationHistoryIndex.Entry first, GenerationHistoryIndex.Entry second) {
+		return first.generationId().equals(second.generationId()) && first.parentGenerationId().equals(second.parentGenerationId()) && first.createdAt().equals(second.createdAt())
+				&& first.stateDigest().equals(second.stateDigest()) && first.rollbackTargetGenerationId().equals(second.rollbackTargetGenerationId()) && first.patchNotes().equals(second.patchNotes())
+				&& first.patchNotesDigest().equals(second.patchNotesDigest()) && first.diffSummary().equals(second.diffSummary()) && first.diffDigest().equals(second.diffDigest());
 	}
 
 	public Optional<GenerationRecord> read(String generationId) throws IOException {

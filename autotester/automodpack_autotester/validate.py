@@ -18,6 +18,8 @@ _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")
 _COUNT_FIELDS = ("count", "min_count", "max_count")
 _REMOTE_MOD_FIELDS = {"url", "sha512", "name"}
 _SHA512 = re.compile(r"[0-9a-fA-F]{128}")
+_PRESERVATION_REASONS = {"SERVER_REMOVAL", "MODPACK_REMOVAL", "MODPACK_DEACTIVATION", "LOCAL_CONFLICT", "STRICT_INSTALL", "STRICT_REPAIR", "EDITABLE_RESET"}
+_PRESERVATION_STATUSES = {"AVAILABLE", "RESTORED", "SAVED_COPY"}
 _RELEASE_GATE_CAPABILITIES = frozenset({
     "bootstrap",
     "groups",
@@ -34,10 +36,18 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "fresh-generation-deletion",
     "removal",
     "secure-bootstrap",
+    "offline-repair",
+    "repair-cas-integrity",
+    "first-install-cleanup-consent",
+    "repair-ui-navigation",
+    "storage-verification",
 })
 _RELEASE_GATE_REQUIRED_VERBS = {
     "server-generation-rollback": "rollback_server_generation",
     "server-object-gc": "collect_server_objects",
+    "offline-repair": "mutate_client_file",
+    "repair-cas-integrity": "mutate_active_object",
+    "storage-verification": "assert_client_object",
 }
 
 
@@ -154,13 +164,13 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                 _check_publish_generation(step, problems, label)
             elif verb == "assert_generation":
                 _check_generation_assertion(step, problems, label)
-            elif verb in ("assert_file_content", "wait_file_content", "write_file", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_preservation_claim"):
+            elif verb in ("assert_file_content", "wait_file_content", "write_file", "mutate_client_file", "mutate_active_object", "assert_client_object", "mutate_preservation_object", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_preservation_claim"):
                 if not isinstance(step.get("path"), str) or not step["path"].strip():
-                    if verb not in ("assert_preservation_claim",):
+                    if verb not in ("assert_preservation_claim", "mutate_preservation_object"):
                         problems.append(f"{label}.path: expected a non-empty relative path")
                 if verb in ("wait_file_content", "write_file") and not isinstance(step.get("content"), str):
                     problems.append(f"{label}.content: expected a string")
-                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_preservation_claim") and step.get("fixture") is not None:
+                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_preservation_claim", "mutate_preservation_object") and step.get("fixture") is not None:
                     _check_mod_fixture(step.get("fixture"), problems, f"{label}.fixture")
                 if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture") and step.get("fixture") is not None and isinstance(step.get("path"), str) and not step["path"].lower().endswith(".jar"):
                     problems.append(f"{label}.path: valid mod fixtures must use a .jar path")
@@ -168,8 +178,23 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                     problems.append(f"{label}.fixture: .jar paths require a valid mod fixture mapping")
                 if verb == "seed_mod_fixture" and step.get("fixture") is None:
                     problems.append(f"{label}.fixture: this verb requires a valid mod fixture mapping")
-                if verb == "assert_preservation_claim" and (not isinstance(step.get("packId"), str) or not step["packId"].strip()):
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and (not isinstance(step.get("packId"), str) or not step["packId"].strip()):
                     problems.append(f"{label}.packId: expected a non-empty pack ID")
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "content" in step and not isinstance(step["content"], str):
+                    problems.append(f"{label}.content: expected a string")
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "originalPath" in step and (not isinstance(step["originalPath"], str) or not step["originalPath"].strip()):
+                    problems.append(f"{label}.originalPath: expected a non-empty relative path")
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "reason" in step and step["reason"] not in _PRESERVATION_REASONS:
+                    problems.append(f"{label}.reason: unknown preservation reason {step['reason']!r}")
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "status" in step and step["status"] not in _PRESERVATION_STATUSES:
+                    problems.append(f"{label}.status: unknown preservation status {step['status']!r}")
+                if verb in ("mutate_client_file", "mutate_active_object", "mutate_preservation_object") and step.get("action") not in ("corrupt", "delete"):
+                    problems.append(f"{label}.action: expected 'corrupt' or 'delete'")
+                for field in ("present", "valid", "objectValid"):
+                    if field in step and not isinstance(step[field], bool):
+                        problems.append(f"{label}.{field}: expected a boolean")
+                if "count" in step and (not isinstance(step["count"], int) or isinstance(step["count"], bool) or step["count"] < 0):
+                    problems.append(f"{label}.count: expected a non-negative integer")
 
 
 def _contains_verb(steps, wanted, macros, stack=()):

@@ -24,6 +24,10 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
+import pl.skidam.automodpack_core.modpack.generation.GenerationIdentity;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -164,6 +168,55 @@ class ClientGenerationStoreTest {
 		assertTrue(Files.exists(storage.generationManifest(malformedId)));
 		assertTrue(Files.exists(local));
 		assertEquals(valid.metadata().generationId(), storage.readActiveState().generationId);
+	}
+
+	@Test
+	void sameGenerationRepairDoesNotReplaceCompletePatchNoteHistoryWithPartialMetadata() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "generation-object");
+		GenerationRecord parent = record(FIRST_PACK, hash, Files.size(storage.objectsDirectory().resolve(hash)), Instant.parse("2026-01-01T00:00:00Z"), null);
+		GenerationRecord current = record(FIRST_PACK, hash, Files.size(storage.objectsDirectory().resolve(hash)), Instant.parse("2026-01-02T00:00:00Z"), parent);
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		List<GenerationPatchNoteHistory.Entry> completeHistory = GenerationPatchNoteHistory.fromRecords(List.of(parent, current));
+
+		generations.write(current, completeHistory);
+		assertDoesNotThrow(() -> generations.write(current, GenerationPatchNoteHistory.forRecord(current)));
+
+		assertEquals(completeHistory, generations.patchNotesHistory(current.metadata().generationId()));
+	}
+
+	@Test
+	void sameGenerationRepairRejectsConflictingCompletePatchNoteHistory() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "generation-object");
+		GenerationRecord parent = record(FIRST_PACK, hash, Files.size(storage.objectsDirectory().resolve(hash)), Instant.parse("2026-01-01T00:00:00Z"), null);
+		GenerationRecord current = record(FIRST_PACK, hash, Files.size(storage.objectsDirectory().resolve(hash)), Instant.parse("2026-01-02T00:00:00Z"), parent);
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		List<GenerationPatchNoteHistory.Entry> completeHistory = GenerationPatchNoteHistory.fromRecords(List.of(parent, current));
+		GenerationPatchNoteHistory.Entry conflictingParent = new GenerationPatchNoteHistory.Entry(parent.metadata().schemaVersion(), parent.metadata().generationId(), parent.metadata().parentGenerationId(),
+				parent.metadata().createdAt(), "conflicting notes", GenerationIdentity.patchNotesDigest("conflicting notes"));
+
+		generations.write(current, completeHistory);
+
+		assertThrows(IOException.class, () -> generations.write(current, List.of(conflictingParent, completeHistory.get(1))));
+		assertEquals(completeHistory, generations.patchNotesHistory(current.metadata().generationId()));
+	}
+
+	@Test
+	void sameGenerationRepairMergesHistoryIndexWithoutDiscardingExistingDetails() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "generation-object");
+		GenerationRecord parent = record(FIRST_PACK, hash, Files.size(storage.objectsDirectory().resolve(hash)), Instant.parse("2026-01-01T00:00:00Z"), null);
+		GenerationRecord current = record(FIRST_PACK, hash, Files.size(storage.objectsDirectory().resolve(hash)), Instant.parse("2026-01-02T00:00:00Z"), parent);
+		GenerationHistoryIndex completeIndex = GenerationHistoryIndex.fromHistory(FIRST_PACK,
+				List.of(new GenerationHistoryEntry(parent.manifest(), parent.metadata()), new GenerationHistoryEntry(current.manifest(), current.metadata())));
+		GenerationHistoryIndex compactedIndex = completeIndex.compactBefore(current.metadata().generationId());
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+
+		generations.write(current, GenerationPatchNoteHistory.fromRecords(List.of(parent, current)), completeIndex);
+		generations.write(current, GenerationPatchNoteHistory.forRecord(current), compactedIndex);
+
+		assertEquals(completeIndex, generations.historyIndex(current.metadata().generationId()).orElseThrow());
 	}
 
 	@Test

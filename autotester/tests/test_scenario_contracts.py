@@ -83,6 +83,28 @@ def test_validation_requires_write_file_content_string():
     )
 
 
+def test_validation_rejects_invalid_runtime_mutation():
+    scenario = {
+        "id": "bad-runtime-mutation",
+        "flow": [{"do": "mutate_active_object", "path": "config/owned.txt", "action": "rename"}],
+    }
+
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+
+    assert any("mutate_active_object.action: expected 'corrupt' or 'delete'" in problem for problem in problems)
+
+
+def test_validation_requires_preservation_mutation_identity():
+    scenario = {
+        "id": "bad-preservation-mutation",
+        "flow": [{"do": "mutate_preservation_object", "action": "corrupt"}],
+    }
+
+    problems = validate_scenario(scenario, load_macros(), load_targets())
+
+    assert any("mutate_preservation_object.packId: expected a non-empty pack ID" in problem for problem in problems)
+
+
 def test_validation_rejects_plain_text_unowned_jar_seed():
     scenario = load_scenarios()["all"]
     seed = next(
