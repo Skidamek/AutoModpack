@@ -65,20 +65,19 @@ flow:
     until:
       all:
         - screen: ContentHistoryScreen
-        - element: { text: Generation 1, enabled: true }
-        - element: { text: Generation 2, enabled: true }
+        - element: { text: View all patch notes, enabled: true }
         - element: { text: Files, enabled: true }
   - do: screenshot
     name: capture clickable generation history
     file: note-only-clickable-history
   - do: click
     name: open the first generation catalogue diff
-    select: { text: Generation 1 }
+    select: { role: button, index: 4 }
   - do: wait_for
     name: show the complete generation diff
     until:
       all:
-        - screen: PagedTextScreen
+        - screen: ChangeBrowserScreen
         - element: { text: Back, enabled: true }
   - do: screenshot
     name: capture the git-like generation diff
@@ -93,7 +92,7 @@ flow:
     name: show all installed modpack-owned files
     until:
       all:
-        - screen: PagedTextScreen
+        - screen: ChangeBrowserScreen
         - element: { text: Back, enabled: true }
   - do: screenshot
     name: capture the complete owned-file catalogue
