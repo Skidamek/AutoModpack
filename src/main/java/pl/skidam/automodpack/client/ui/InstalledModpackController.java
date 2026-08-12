@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -111,9 +112,9 @@ final class InstalledModpackController {
 		}
 	}
 
-	void update(Pack pack, Runnable released) {
+	void update(Pack pack, Consumer<Boolean> completed) {
 		if (!pack.active() || !pack.connectionAvailable()) {
-			releaseOnClient(released);
+			releaseOnClient(() -> completed.accept(false));
 			return;
 		}
 		DownloadClient.NET_EXECUTOR.execute(() -> {
@@ -131,14 +132,14 @@ final class InstalledModpackController {
 				ModpackUtils.UpdateCheckResult updateResult = ModpackUtils.isUpdate(target.flatTarget(), storage);
 				if (!updater.requiresUpdateBeforeLogin(updateResult)) {
 					updater.close();
-					releaseOnClient(released);
+					releaseOnClient(() -> completed.accept(true));
 					return;
 				}
 				updater.processModpackUpdate(updateResult);
-				releaseOnClient(released);
+				releaseOnClient(() -> completed.accept(false));
 			} catch (Exception e) {
 				if (updater != null) updater.close();
-				releaseOnClient(released);
+				releaseOnClient(() -> completed.accept(false));
 				failure(e, "automodpack.error.update", FailureCategory.UPDATE);
 			}
 		});
