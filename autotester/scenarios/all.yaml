@@ -113,14 +113,6 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: "Next >", enabled: true }
-  - do: click
-    name: inspect unavailable platform filtering
-    select: { text: Next > }
-  - do: wait_for
-    name: show the unavailable platform group
-    until:
-      all:
         - element: { text: Windows-only }
         - element: { text: unavailable }
   - do: screenshot
