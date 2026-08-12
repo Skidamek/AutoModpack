@@ -147,7 +147,7 @@ topology:
             syncedFiles: ["/config/amp-navigation-extra-5.txt"]
           visual:
             displayName: Visuals
-            tag: client
+            category: client
             syncedFiles: ["/config/amp-navigation-visual.txt"]
 
 serverFiles:
