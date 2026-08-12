@@ -162,12 +162,12 @@ topology:
 serverFiles:
   modpackName: amp-autotest
   marker: config/amp-autotest-marker.json
-  files:
-    - path: config/amp-autotest-navigation.txt
-      content: "navigation\n"
-    - { path: config/amp-navigation-extra-1.txt, content: "extra-1\n" }
-    - { path: config/amp-navigation-extra-2.txt, content: "extra-2\n" }
-    - { path: config/amp-navigation-extra-3.txt, content: "extra-3\n" }
-    - { path: config/amp-navigation-extra-4.txt, content: "extra-4\n" }
-    - { path: config/amp-navigation-extra-5.txt, content: "extra-5\n" }
-    - { path: config/amp-navigation-visual.txt, content: "visual\n" }
+  generations:
+    - files:
+        - { group: main, path: config/amp-autotest-navigation.txt, content: "navigation\n" }
+        - { group: extra1, path: config/amp-navigation-extra-1.txt, content: "extra-1\n" }
+        - { group: extra2, path: config/amp-navigation-extra-2.txt, content: "extra-2\n" }
+        - { group: extra3, path: config/amp-navigation-extra-3.txt, content: "extra-3\n" }
+        - { group: extra4, path: config/amp-navigation-extra-4.txt, content: "extra-4\n" }
+        - { group: extra5, path: config/amp-navigation-extra-5.txt, content: "extra-5\n" }
+        - { group: visual, path: config/amp-navigation-visual.txt, content: "visual\n" }
