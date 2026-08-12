@@ -107,6 +107,9 @@ flow:
       all:
         - screen: FeatureConflictScreen
         - element: { text: "Use Alternative", enabled: true }
+  - do: screenshot
+    name: capture deterministic conflict replacement
+    file: all-feature-conflict
   - do: click
     name: keep the alternative and replace the conflicting visual choice
     select: { text: "Use Alternative" }
@@ -656,6 +659,79 @@ flow:
   - do: wait_client_exit
     name: wait for final restart
   - use: rejoin
+  - do: disconnect
+    name: return to multiplayer before reviewing recovery
+  - use: open_multiplayer
+  - do: click
+    name: open Pack A settings for recovery
+    select: { text: Modpack settings }
+  - do: click
+    name: open the installed pack manager for recovery
+    select: { text: Pack manager }
+  - do: click
+    name: open Pack A details for recovery
+    select: { text: Pack A }
+  - do: wait_for
+    name: show Pack A storage actions
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { text: Storage & recovery, enabled: true }
+  - do: click
+    name: open Pack A storage actions
+    select: { text: Storage & recovery }
+  - do: wait_for
+    name: expose the first recovery candidate
+    until:
+      all:
+        - screen: ModpackStorageScreen
+        - element: { text: Recovery, enabled: true }
+  - do: screenshot
+    name: capture storage with recovery available
+    file: all-pack-storage-recovery
+  - do: click
+    name: open the recovery archive
+    select: { text: Recovery }
+  - do: wait_for
+    name: show the removed file as recoverable
+    until:
+      all:
+        - screen: RecoveryArchiveScreen
+        - element: { text: Preserve, enabled: true }
+  - do: screenshot
+    name: capture available recovery files
+    file: all-recovery-available
+  - do: click
+    name: preserve the removed file
+    select: { text: Preserve }
+  - do: wait_for
+    name: finish preserving the removed file
+    timeout: 30s
+    until: { no_element: { text: Preserve, enabled: true } }
+  - do: click
+    name: show archived recovery files
+    select: { text: Archived }
+  - do: sleep
+    name: render the archived removed file
+    duration: 1s
+  - do: screenshot
+    name: capture archived recovery files
+    file: all-recovery-archived
+  - do: click
+    name: return to Pack A storage
+    select: { text: Back }
+  - do: click
+    name: return to Pack A details
+    select: { text: Back }
+  - do: click
+    name: return to the installed pack manager
+    select: { text: Back }
+  - do: click
+    name: return to Pack A settings
+    select: { text: Back }
+  - do: click
+    name: return to multiplayer after recovery review
+    select: { text: Back }
   - do: quit
     name: stop the installed client before fresh-client reset
   - do: wait_client_exit
