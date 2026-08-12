@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -204,7 +205,7 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 	}
 
 	private String displayPreservedAt(String preservedAt) {
-		return preservedAt == null || preservedAt.isEmpty() ? VersionedText.translatable("automodpack.recovery.unknown").getString() : truncateToWidth(this.font, preservedAt, Math.max(1, this.width - 20));
+		return preservedAt == null || preservedAt.isEmpty() ? VersionedText.translatable("automodpack.recovery.unknown").getString() : UiFormat.formatInstant(Instant.parse(preservedAt));
 	}
 
 	@Override
