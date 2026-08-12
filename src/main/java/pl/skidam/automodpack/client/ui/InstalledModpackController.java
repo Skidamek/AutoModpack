@@ -1,9 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
-import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -82,12 +79,10 @@ final class InstalledModpackController {
 	}
 
 	boolean hasRecovery(Pack pack) {
-		try {
-			Path root = storage.recoveryDirectory(pack.modpackId());
-			if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return false;
-			try (var paths = Files.list(root)) {
-				return paths.findAny().isPresent();
-			}
+		if (!pack.active()) return false;
+		try (ModpackUpdater updater = new ModpackUpdater(null, null, storage)) {
+			ModpackUpdater.RecoverySnapshot snapshot = updater.recoverySnapshot();
+			return !snapshot.available().isEmpty() || !snapshot.archived().isEmpty();
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
