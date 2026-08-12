@@ -152,7 +152,23 @@ def _wait_exit(ctx, step):
 
 def _reset_client_generation(ctx, step):
     ctx.bridge._reset_client_generation()
-    for relative in ("records", "active", "active-state.json", "data/objects"):
+    for relative in (
+        "records",
+        "active",
+        "active-state.json",
+        "overlays",
+        "baselines",
+        "generated-copies",
+        "incoming",
+        "backup",
+        "recovery",
+        "quarantine",
+        "selections.json",
+        "restart-state.json",
+        "update-transaction.json",
+        "incoming-content.json.temp",
+        "data/objects",
+    ):
         path = ctx.game_dir / "automodpack" / "client" / relative
         if path.is_dir():
             shutil.rmtree(path)

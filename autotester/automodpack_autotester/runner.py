@@ -791,12 +791,28 @@ def _v_launch_client(ctx: Context, step):
 
 @verb("reset_client_generation")
 def _v_reset_client_generation(ctx: Context, _step):
-    """Reset only records, active projection, active state, and object CAS for a fresh-client test.
+    """Reset install-owned state and object CAS for a fresh-client test.
 
     Trust and connection data remain in place deliberately, as do all ordinary game files such as mods/.
     """
     client = ctx.game_dir / "automodpack" / "client"
-    for relative in ("records", "active", "active-state.json", "data/objects"):
+    for relative in (
+        "records",
+        "active",
+        "active-state.json",
+        "overlays",
+        "baselines",
+        "generated-copies",
+        "incoming",
+        "backup",
+        "recovery",
+        "quarantine",
+        "selections.json",
+        "restart-state.json",
+        "update-transaction.json",
+        "incoming-content.json.temp",
+        "data/objects",
+    ):
         path = client / relative
         if path.is_dir():
             shutil.rmtree(path)
