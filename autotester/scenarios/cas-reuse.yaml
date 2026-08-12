@@ -13,6 +13,10 @@ flow:
   - use: download_modpack
   - do: verify_files
     name: verify all CAS-backed files were installed
+  - do: assert_file_content
+    name: verify the seeded CAS avoided network downloads
+    path: downloads/log.json
+    content: ""
   - do: wait_for
     name: verify the completion count describes applied changes
     timeout: 20s
