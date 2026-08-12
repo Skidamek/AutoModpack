@@ -40,6 +40,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
 		actions.add(new Action("automodpack.management.files", this::openFiles));
 		actions.add(new Action("automodpack.packDetails.storage", this::openStorage));
+		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate));
 		actions.add(new Action("automodpack.management.remove", this::remove));
 		int columns = actions.size() > 3 ? 2 : 1;
 		int width = actionButtonWidth(PANEL_WIDTH, columns);
@@ -101,6 +102,13 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		busy = true;
 		updateActions();
 		controller.remove(pack, this::released, () -> ScreenImpl.setScreen(new InstalledModpacksScreen(parent)));
+	}
+
+	private void deactivate() {
+		if (busy) return;
+		busy = true;
+		updateActions();
+		controller.deactivate(pack, this::released);
 	}
 
 	private void released() {
