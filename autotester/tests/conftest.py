@@ -77,6 +77,8 @@ class FakeBridge:
         self.rendered_screens: dict[str, str] = {}
         self.secondary_pack = False
         self.selected_pack = "A"
+        self.details_pack = "A"
+        self.pack_a_installed = False
         self.pending_pack: str | None = None
         self.pack_b_files: list[tuple[Path, bytes | str]] = []
         self.update_available = False
@@ -86,7 +88,8 @@ class FakeBridge:
         self.conflict = False
         self.quarantine_restored = False
         self.storage_running = False
-        self.storage_complete = False
+        self.recovery_available = False
+        self.recovery_preserved = False
         self.baseline_snapshots: dict[Path, bytes] = {}
 
     # --- snapshot ---------------------------------------------------------
@@ -137,6 +140,12 @@ class FakeBridge:
                             {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
                 "textFields": [],
             },
+            "feature_conflict": {
+                "screenClass": "FeatureConflictScreen",
+                "buttons": [{"id": 67, "text": "Keep current", "enabled": True, "visible": True},
+                            {"id": 68, "text": "Use Alternative", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
             "preview": {
                 "screenClass": "UpdatePreviewScreen",
                 "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True},
@@ -169,10 +178,30 @@ class FakeBridge:
                 "buttons": self._manager_buttons(),
                 "textFields": [],
             },
+            "details": {
+                "screenClass": "ModpackDetailsScreen",
+                "buttons": self._details_buttons(),
+                "textFields": [],
+            },
+            "pack_storage": {
+                "screenClass": "ModpackStorageScreen",
+                "buttons": [*([{"id": 79, "text": "Recovery", "enabled": True, "visible": True}] if self.recovery_available else []),
+                            {"id": 81, "text": "Clean local storage", "enabled": True, "visible": True},
+                            {"id": 82, "text": "Back", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "recovery": {
+                "screenClass": "RecoveryArchiveScreen",
+                "buttons": [{"id": 83, "text": "Files to preserve", "enabled": self.recovery_preserved, "visible": True},
+                            {"id": 84, "text": "Preserved files", "enabled": True, "visible": True},
+                            *([] if self.recovery_preserved else [{"id": 85, "text": "Preserve config/amp-autotest-gamma.cfg (fixture)", "enabled": True, "visible": True}]),
+                            {"id": 86, "text": "Back", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
             "storage": {
                 "screenClass": "ClientStorageMaintenanceScreen",
                 "buttons": [
-                    {"id": 46, "text": "Cleanup complete" if self.storage_complete else "Clean local storage", "enabled": not self.storage_running and not self.storage_complete, "visible": True},
+                    {"id": 46, "text": "Clean local storage", "enabled": not self.storage_running, "visible": True},
                     {"id": 47, "text": "Back", "enabled": True, "visible": True},
                 ],
                 "textFields": [],
@@ -183,13 +212,8 @@ class FakeBridge:
                             {"id": 13, "text": "Save", "enabled": True, "visible": True},
                             {"id": 57, "text": "History", "enabled": True, "visible": True},
                             {"id": 66, "text": "Files", "enabled": True, "visible": True},
+                            {"id": 88, "text": "Back", "enabled": True, "visible": True},
                             *([{"id": 43, "text": "Quarantine", "enabled": True, "visible": True}] if self._quarantine_available() else [])],
-                "textFields": [],
-            },
-            "selection": {
-                "screenClass": "ModpackSelectionScreen",
-                "buttons": [{"id": 12, "text": "Review pack switch", "enabled": True, "visible": True},
-                            {"id": 13, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "patch_history": {
@@ -266,7 +290,12 @@ class FakeBridge:
             self.screen = "group1"
         elif element_id == 34:
             self.conflict = True
-            self.screen = "group1"
+            self.screen = "feature_conflict"
+        elif element_id == 67:
+            self.screen = "group2"
+        elif element_id == 68:
+            self.dependency = False
+            self.screen = "group2"
         elif element_id == 25 or element_id == 35:
             self.screen = "group1" if self.screen == "group2" else self.screen
         elif element_id == 39:
@@ -290,20 +319,17 @@ class FakeBridge:
         elif element_id == 8:
             self.screen = "multiplayer"
         elif element_id == 9:
-            if self.selected_pack == "A":
-                self.screen = "settings"
-            else:
-                self.pending_pack = "A"
-                self.screen = "selection"
+            self.details_pack = "A"
+            self.screen = "details"
         elif element_id == 11:
-            self.pending_pack = "B"
-            self.screen = "selection"
+            self.details_pack = "B"
+            self.screen = "details"
         elif element_id == 10:
             self.screen = "manager"
-        elif element_id == 12:
+        elif element_id == 69:
+            if self.details_pack != self.selected_pack:
+                self.pending_pack = self.details_pack
             self.screen = "preview"
-        elif element_id == 13:
-            self.screen = "manager"
         elif element_id == 14:
             self.screen = self.history_parent
         elif element_id == 17:
@@ -321,11 +347,13 @@ class FakeBridge:
             self.screen = "content_patch_history"
         elif element_id == 16:
             self.screen = "restart"
-        elif element_id == 41:
+        elif element_id == 75:
+            self.screen = "pack_storage"
+        elif element_id == 77:
             self.screen = "removal_preview"
         elif element_id == 42:
             self._remove_active_pack()
-            self.screen = "title"
+            self.screen = "manager"
         elif element_id == 43:
             self.screen = "quarantine"
         elif element_id == 44:
@@ -342,6 +370,25 @@ class FakeBridge:
                 self.storage_running = False
         elif element_id == 47:
             self.screen = "manager"
+        elif element_id == 78:
+            self.screen = "manager"
+        elif element_id == 79:
+            self.screen = "recovery"
+        elif element_id == 81:
+            self.screen = "storage"
+        elif element_id == 82:
+            self.screen = "details"
+        elif element_id == 84:
+            self.screen = "recovery"
+        elif element_id == 85:
+            self.recovery_preserved = True
+            self.screen = "recovery"
+        elif element_id == 86:
+            self.screen = "pack_storage"
+        elif element_id == 87:
+            self.screen = "settings"
+        elif element_id == 88:
+            self.screen = "multiplayer"
         return {"ok": True}
 
     def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
@@ -410,15 +457,18 @@ class FakeBridge:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
         self._editable_overlay_path("A").unlink(missing_ok=True)
+        self.pack_a_installed = False
 
     def _compact_local_storage(self) -> None:
         """Keep the fake bridge focused on the UI; scenario assertions prove preservation."""
-        self.storage_complete = True
 
     def _reset_client_generation(self) -> None:
         self.secondary_pack = False
         self.pending_pack = None
         self.pack_b_files = []
+        self.pack_a_installed = False
+        self.recovery_available = False
+        self.recovery_preserved = False
 
     def _generation_fixture_files(self, index: int) -> list[tuple[Path, bytes]]:
         generations = self.ctx.scenario.get("serverFiles", {}).get("generations", [])
@@ -448,6 +498,7 @@ class FakeBridge:
         if self.selected_pack == "B":
             files = self.pack_b_files
         elif self.update_available:
+            self.recovery_available = True
             files = [(Path("config/amp-autotest-alpha.txt"), "amp-autotest-alpha-v2\n"),
                      (Path("config/amp-autotest-beta.json"), '{"id":"beta","value":43}'),
                      (Path("config/amp-autotest-baseline.json"), "server-baseline-v2\n"),
@@ -495,6 +546,8 @@ class FakeBridge:
             server_secrets.parent.mkdir(parents=True, exist_ok=True)
             server_secrets.write_text(json.dumps({"secrets": {"fake-player": {"secret": secret, "timestamp": 1}}}), encoding="utf-8")
         self.synced = True
+        if self.selected_pack == "A":
+            self.pack_a_installed = True
         self.update_available = False
         if self.selected_pack == "B" and self._pack_b_owns_conflict() and not self.quarantine_restored:
             payload = self.ctx.game_dir / "automodpack" / "client" / "quarantine" / "packbbb" / "conflicts" / "fake-conflict" / "payload"
@@ -546,22 +599,27 @@ class FakeBridge:
         self.quarantine_restored = True
 
     def _manager_buttons(self) -> list[dict]:
-        if not self.secondary_pack:
+        buttons = []
+        if self.pack_a_installed:
             state = "active" if self.selected_pack == "A" else "switch"
-            return [{"id": 9, "text": f"Pack A  [{state}]  connected", "enabled": True, "visible": True},
-                    {"id": 70, "text": "Update", "enabled": self.selected_pack == "A", "visible": True},
-                    {"id": 71, "text": "Deactivate", "enabled": self.selected_pack == "A", "visible": True},
-                    {"id": 41, "text": "Remove", "enabled": True, "visible": True},
-                    {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
-        a_state = "active" if self.selected_pack == "A" else "switch"
-        b_state = "active" if self.selected_pack == "B" else "switch"
-        return [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
-                {"id": 70, "text": "Update", "enabled": self.selected_pack == "A", "visible": True},
-                {"id": 71, "text": "Deactivate", "enabled": self.selected_pack == "A", "visible": True},
-                {"id": 41, "text": "Remove", "enabled": True, "visible": True},
-                {"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
-                {"id": 11, "text": f"Pack B  [{b_state}]  local record", "enabled": True, "visible": True},
-                {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
+            buttons.append({"id": 9, "text": f"Pack A  [{state}]  connected", "enabled": True, "visible": True})
+        if self.secondary_pack:
+            state = "active" if self.selected_pack == "B" else "switch"
+            buttons.append({"id": 11, "text": f"Pack B  [{state}]  local record", "enabled": True, "visible": True})
+        buttons.extend([{"id": 46, "text": "Local storage", "enabled": True, "visible": True},
+                        {"id": 87, "text": "Back", "enabled": True, "visible": True}])
+        return buttons
+
+    def _details_buttons(self) -> list[dict]:
+        active = self.details_pack == self.selected_pack
+        return [{"id": 69, "text": "Update" if active else "Activate", "enabled": True, "visible": True},
+                {"id": 72, "text": "Features", "enabled": True, "visible": True},
+                {"id": 73, "text": "History", "enabled": True, "visible": True},
+                {"id": 74, "text": "Files", "enabled": True, "visible": True},
+                {"id": 75, "text": "Storage & recovery", "enabled": True, "visible": True},
+                *([{"id": 76, "text": "Deactivate", "enabled": True, "visible": True}] if active else []),
+                {"id": 77, "text": "Remove", "enabled": True, "visible": True},
+                {"id": 78, "text": "Back", "enabled": True, "visible": True}]
 
     def _write_manifest(self) -> None:
         groups = self.ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}).get("config", {}).get("groups", {})
