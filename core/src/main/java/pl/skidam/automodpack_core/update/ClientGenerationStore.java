@@ -282,8 +282,6 @@ public final class ClientGenerationStore {
 		FileTrees.delete(storage.generatedCopiesPackDirectory(normalizedModpackId));
 		storage.clearOverlay(normalizedModpackId);
 		FileTrees.delete(storage.baselineFile(normalizedModpackId).getParent());
-		FileTrees.delete(storage.recoveryDirectory(normalizedModpackId));
-		FileTrees.delete(storage.quarantinePackDirectory(normalizedModpackId));
 		FileTrees.delete(storage.connectionDirectory(normalizedModpackId));
 		ClientObjectStore.collectUnreachableObjects(storage, Set.copyOf(generationIds()), Set.of());
 	}

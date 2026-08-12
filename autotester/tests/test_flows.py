@@ -247,7 +247,7 @@ _BUILTIN_VERBS = {
     "seed_same_path_conflict": steps_io.seed_same_path_conflict,
     "seed_mod_fixture": steps_io.seed_mod_fixture,
     "assert_mod_fixture": steps_io.assert_mod_fixture,
-    "assert_quarantine_payload": steps_io.assert_quarantine_payload,
+    "assert_preservation_claim": steps_io.assert_preservation_claim,
     "assert_generation": steps_io.assert_generation,
     "click": steps_ui.click,
     "type": steps_ui.type_,
@@ -424,11 +424,11 @@ def test_release_gate_flow(make_ctx, flow_verbs):
         },
         ctx.target.minecraft,
     )
-    quarantine = (
+    preservation = (
         ctx.game_dir
-        / "automodpack/client/quarantine/packbbb/conflicts/fake-conflict/payload"
+        / "automodpack/client/preservation/packbbb/claims.json"
     )
-    assert not quarantine.exists()
+    assert not preservation.exists()
     assert_valid_mod_fixture(
         (ctx.game_dir / "mods/amp-autotest-conflict.jar").read_bytes(),
         {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"},

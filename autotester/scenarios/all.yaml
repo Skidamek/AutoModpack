@@ -16,7 +16,7 @@ releaseGate:
     - pack-switching
     - generation-update
     - conflict-preservation
-    - quarantine-restoration
+    - preservation-vault
     - storage-maintenance
     - server-history-compaction
     - server-generation-rollback
@@ -311,8 +311,8 @@ flow:
     name: verify the server-owned valid mod is active for Pack B
     path: "${active_dir}/mods/amp-autotest-conflict.jar"
     fixture: { modId: amp_autotest_conflict, version: "2.0.0-server", marker: server }
-  - do: assert_quarantine_payload
-    name: verify the local collision payload was preserved in quarantine
+  - do: assert_preservation_claim
+    name: verify the local collision payload was preserved in preservation
     packId: packbbb
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
   - do: assert
@@ -394,7 +394,7 @@ flow:
     that: { file_gone: "${active_dir}/config/pack-b.txt" }
 
   # Publish a newer record for the same Pack B identity without the conflicting
-  # mod. Its old quarantine is now safe to restore because the active target no
+  # mod. Its old preservation is now safe to restore because the active target no
   # longer owns the source path.
   - do: stage_modpack
     name: stage Pack B v2 without the conflicting mod
@@ -406,7 +406,7 @@ flow:
       - { path: config/pack-b.txt, content: "pack-b-v2\n" }
       - { path: config/pack-shared-editable.txt, content: "pack-b-v2-default\n", editable: true }
   - do: disconnect
-    name: leave Pack A before the safe quarantine restore switch
+    name: leave Pack A before the safe preservation restore switch
   - use: open_multiplayer
   - use: open_pack_manager
   - do: click
@@ -438,12 +438,12 @@ flow:
     name: open Pack B v2 settings directly from multiplayer
     select: { text: Modpack settings }
   - do: wait_for
-    name: show Pack B quarantine action
+    name: show Pack B preservation action
     until:
       all:
         - screen: ModpackSelectionScreen
         - element: { text: History, enabled: true }
-        - element: { text: Quarantine, enabled: true }
+        - element: { text: Preserved files, enabled: true }
   - do: click
     name: open Pack B generation history from multiplayer settings
     select: { text: History }
@@ -472,20 +472,23 @@ flow:
     name: return to Pack B settings after history
     until: { screen: ModpackSelectionScreen }
   - do: screenshot
-    name: capture Pack B quarantine action
-    file: all-quarantine-settings
+    name: capture Pack B preservation action
+    file: all-preservation-settings
   - do: click
-    name: open the quarantine archive
-    select: { text: Quarantine }
+    name: open the preservation archive
+    select: { text: Preserved files }
+  - do: click
+    name: select the preserved local conflict
+    select: { text: mods/amp-autotest-conflict.jar }
   - do: wait_for
-    name: show the safe quarantine restore action
+    name: show the safe preservation restore action
     until:
       all:
-        - screen: QuarantineArchiveScreen
+        - screen: PreservationVaultScreen
         - element: { text: Restore, enabled: true }
   - do: screenshot
-    name: capture the quarantine restore screen
-    file: all-quarantine-restore
+    name: capture the preservation restore screen
+    file: all-preservation-restore
   - do: click
     name: restore the no-longer-owned local conflict
     select: { text: Restore }
@@ -493,14 +496,15 @@ flow:
     name: wait for the restored local mod
     path: mods/amp-autotest-conflict.jar
   - do: assert_mod_fixture
-    name: verify quarantine restore returned the original local mod
+    name: verify preservation restore returned the original local mod
     path: mods/amp-autotest-conflict.jar
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
-  - do: assert
-    name: verify the restored quarantine record was consumed
-    that: { file_gone: automodpack/client/quarantine/packbbb/conflicts/fake-conflict/payload }
+  - do: assert_preservation_claim
+    name: verify the restored preservation claim remains durable in the vault
+    packId: packbbb
+    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
   - do: click
-    name: return from quarantine to Pack B settings
+    name: return from preservation to Pack B settings
     select: { text: Back }
   - do: wait_for
     name: return to Pack B settings after restore
@@ -538,12 +542,13 @@ flow:
     path: "${active_dir}/config/pack-b.txt"
     content: "pack-b-v2\n"
   - do: assert_mod_fixture
-    name: verify cleanup kept the restored local quarantine payload
+    name: verify cleanup kept the restored local preservation payload
     path: mods/amp-autotest-conflict.jar
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
-  - do: assert
-    name: verify cleanup kept the consumed quarantine archive empty
-    that: { file_gone: automodpack/client/quarantine/packbbb/conflicts/fake-conflict/payload }
+  - do: assert_preservation_claim
+    name: verify cleanup retained the durable preservation claim
+    packId: packbbb
+    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
   - do: screenshot
     name: capture client local storage after cleanup
     file: all-local-storage-after
@@ -660,63 +665,63 @@ flow:
     name: wait for final restart
   - use: rejoin
   - do: disconnect
-    name: return to multiplayer before reviewing recovery
+    name: return to multiplayer before reviewing recovered
   - use: open_multiplayer
   - do: click
-    name: open Pack A settings for recovery
+    name: open Pack A settings for recovered
     select: { text: Modpack settings }
   - do: click
-    name: open the installed pack manager for recovery
+    name: open the installed pack manager for recovered
     select: { text: Pack manager }
   - do: click
-    name: open Pack A details for recovery
+    name: open Pack A details for recovered
     select: { text: Pack A }
   - do: wait_for
     name: show Pack A storage actions
     until:
       all:
         - screen: ModpackDetailsScreen
-        - element: { text: Storage & recovery, enabled: true }
+        - element: { text: Storage, enabled: true }
   - do: click
     name: open Pack A storage actions
-    select: { text: Storage & recovery }
+    select: { text: Storage }
   - do: wait_for
-    name: expose the first recovery candidate
+    name: expose the first recovered candidate
     until:
       all:
         - screen: ModpackStorageScreen
-        - element: { text: Recovery, enabled: true }
+        - element: { text: Preserved files, enabled: true }
   - do: screenshot
-    name: capture storage with recovery available
-    file: all-pack-storage-recovery
+    name: capture storage with recovered available
+    file: all-pack-storage-recovered
   - do: click
-    name: open the recovery archive
-    select: { text: Recovery }
+    name: open the recovered archive
+    select: { text: Preserved files }
   - do: wait_for
     name: show the removed file as recoverable
     until:
       all:
-        - screen: RecoveryArchiveScreen
+        - screen: PreservationVaultScreen
         - element: { text: config/amp-autotest-gamma.cfg, enabled: true }
   - do: screenshot
-    name: capture available recovery files
-    file: all-recovery-available
+    name: capture available recovered files
+    file: all-recovered-available
   - do: click
-    name: preserve the removed file
+    name: select the removed file
     select: { text: config/amp-autotest-gamma.cfg }
-  - do: wait_for
-    name: finish preserving the removed file
-    timeout: 30s
-    until: { no_element: { text: config/amp-autotest-gamma.cfg, enabled: true } }
   - do: click
-    name: show archived recovery files
-    select: { text: Preserved files }
+    name: save a copy of the removed file
+    select: { text: Save copy }
+  - do: wait_for
+    name: finish saving the removed file copy
+    timeout: 30s
+    until: { screen: PreservationVaultScreen }
   - do: sleep
     name: render the archived removed file
     duration: 1s
   - do: screenshot
-    name: capture archived recovery files
-    file: all-recovery-archived
+    name: capture archived recovered files
+    file: all-recovered-archived
   - do: click
     name: return to Pack A storage
     select: { text: Back }
@@ -730,7 +735,7 @@ flow:
     name: return to Pack A settings
     select: { text: Back }
   - do: click
-    name: return to multiplayer after recovery review
+    name: return to multiplayer after recovered review
     select: { text: Back }
   - do: quit
     name: stop the installed client before fresh-client reset

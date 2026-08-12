@@ -22,8 +22,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
-import pl.skidam.automodpack_core.update.QuarantineArchive;
-import pl.skidam.automodpack_core.update.RecoveryArchive;
+import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
@@ -54,10 +53,8 @@ public final class ClientObjectStore {
 			long overlayBytes,
 			long baselineFileCount,
 			long baselineBytes,
-			long recoveryFileCount,
-			long recoveryBytes,
-			long quarantineFileCount,
-			long quarantineBytes,
+			long preservationFileCount,
+			long preservationBytes,
 			long incomingFileCount,
 			long incomingBytes,
 			long backupFileCount,
@@ -65,7 +62,7 @@ public final class ClientObjectStore {
 		public StorageReport {
 			if (List.of(objectCount, objectBytes, referencedObjectCount, referencedObjectBytes, validReferencedObjectCount, validReferencedObjectBytes,
 					missingReferencedObjectCount, invalidReferencedObjectCount, generationRecordCount, generationRecordBytes, metadataFileCount, metadataBytes,
-					overlayFileCount, overlayBytes, baselineFileCount, baselineBytes, recoveryFileCount, recoveryBytes, quarantineFileCount, quarantineBytes,
+					overlayFileCount, overlayBytes, baselineFileCount, baselineBytes, preservationFileCount, preservationBytes,
 					incomingFileCount, incomingBytes, backupFileCount, backupBytes).stream().anyMatch(value -> value < 0))
 				throw new IllegalArgumentException("Client storage report values cannot be negative");
 			if (validReferencedObjectCount > referencedObjectCount || missingReferencedObjectCount > referencedObjectCount
@@ -109,7 +106,7 @@ public final class ClientObjectStore {
 
 	/**
 	 * Explicitly collects canonical, valid CAS objects not referenced by the selected client state.
-	 * Generation records and recovery/quarantine data are never deleted by this method. Because this
+	 * Generation records and preservation claims are never deleted by this method. Because this
 	 * tranche does not prune records atomically, the supplied generation set must contain every
 	 * installed record; the active generation is retained and validated as well.
 	 */
@@ -187,13 +184,12 @@ public final class ClientObjectStore {
 		FileTotals metadata = metadataTotals(storage);
 		FileTotals overlays = fileTotals(regularFiles(storage.overlaysDirectory(), "client overlays"));
 		FileTotals baselines = fileTotals(regularFiles(storage.baselinesDirectory(), "client baselines"));
-		FileTotals recovery = fileTotals(regularFiles(storage.recoveryDirectory(), "client recovery archives"));
-		FileTotals quarantine = fileTotals(regularFiles(storage.quarantineDirectory(), "client quarantine archives"));
+		FileTotals preservation = fileTotals(regularFiles(storage.preservationDirectory(), "client preservation vault"));
 		FileTotals incoming = fileTotals(regularFiles(storage.incomingDirectory(), "client incoming transactions"));
 		FileTotals backup = fileTotals(regularFiles(storage.backupDirectory(), "client transaction backups"));
 		return new StorageReport(objects.count(), objects.bytes(), references.hashes().size(), referenceTotals.expectedBytes(), referenceTotals.validCount(), referenceTotals.validBytes(),
 				referenceTotals.missingCount(), referenceTotals.invalidCount(), records.count(), records.bytes(), active.count(), active.bytes(), metadata.count(), metadata.bytes(), overlays.count(), overlays.bytes(),
-				baselines.count(), baselines.bytes(), recovery.count(), recovery.bytes(), quarantine.count(), quarantine.bytes(), incoming.count(), incoming.bytes(), backup.count(), backup.bytes());
+				baselines.count(), baselines.bytes(), preservation.count(), preservation.bytes(), incoming.count(), incoming.bytes(), backup.count(), backup.bytes());
 	}
 
 	private static ReferenceSet collectReferences(ClientStorage storage, Set<String> retainedGenerationIds) throws IOException {
@@ -233,8 +229,7 @@ public final class ClientObjectStore {
 		collectBaselines(storage, retained);
 		collectOverlays(storage, retained);
 		collectGeneratedCopies(storage, retained);
-		collectRecovery(storage, retained);
-		collectQuarantine(storage, retained);
+		collectPreservation(storage, retained);
 		collectTransaction(storage, retained);
 		collectActiveProjection(storage, retained, activeState);
 		return retained;
@@ -294,19 +289,11 @@ public final class ClientObjectStore {
 		}
 	}
 
-	private static void collectRecovery(ClientStorage storage, ReferenceSet retained) throws IOException {
-		for (Path modpack : childDirectories(storage.recoveryDirectory(), "client recovery archives")) {
-			requireModpackId(modpack.getFileName().toString(), "client recovery directory");
-			ClientStorageJsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(modpack);
-			for (var entry : archive.entries) retained.addOptional(entry.sha1, entry.size, "recovery archive");
-		}
-	}
-
-	private static void collectQuarantine(ClientStorage storage, ReferenceSet retained) throws IOException {
-		for (Path modpack : childDirectories(storage.quarantineDirectory(), "client quarantine archives")) {
-			String modpackId = requireModpackId(modpack.getFileName().toString(), "client quarantine directory");
-			ClientStorageJsons.ClientQuarantineFields archive = QuarantineArchive.read(storage, modpackId);
-			for (var entry : archive.entries) retained.addOptional(entry.sourceHash, entry.sourceSize, "quarantine archive");
+	private static void collectPreservation(ClientStorage storage, ReferenceSet retained) throws IOException {
+		for (Path modpack : childDirectories(storage.preservationDirectory(), "client preservation vault")) {
+			String modpackId = requireModpackId(modpack.getFileName().toString(), "client preservation directory");
+			PreservationVault.Snapshot snapshot = PreservationVault.read(storage, modpackId);
+			for (PreservationVault.Claim claim : snapshot.claims()) retained.addRequired(claim.objectHash(), claim.size(), "preservation claim");
 		}
 	}
 

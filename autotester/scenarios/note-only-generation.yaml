@@ -152,7 +152,7 @@ flow:
         - element: { text: Back, enabled: true }
   - do: click
     name: open per-pack storage actions
-    select: { text: Storage & recovery }
+    select: { text: Storage }
   - do: wait_for
     name: show per-pack storage actions
     until:

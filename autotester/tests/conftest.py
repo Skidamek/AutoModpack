@@ -88,10 +88,11 @@ class FakeBridge:
         self.history_parent = "restart"
         self.dependency = False
         self.conflict = False
-        self.quarantine_restored = False
+        self.preservation_restored = False
+        self.preservation_copy_saved = False
+        self.vault_claim_selected = False
         self.storage_running = False
-        self.recovery_available = False
-        self.recovery_preserved = False
+        self.vault_claim_available = False
         self.baseline_snapshots: dict[Path, bytes] = {}
 
     # --- snapshot ---------------------------------------------------------
@@ -191,16 +192,16 @@ class FakeBridge:
             },
             "pack_storage": {
                 "screenClass": "ModpackStorageScreen",
-                "buttons": [*([{"id": 79, "text": "Recovery", "enabled": True, "visible": True}] if self.recovery_available else []),
+                "buttons": [*([{"id": 79, "text": "Preserved files", "enabled": True, "visible": True}] if self.vault_claim_available else []),
                             {"id": 81, "text": "Clean local storage", "enabled": True, "visible": True},
                             {"id": 82, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
-            "recovery": {
-                "screenClass": "RecoveryArchiveScreen",
-                "buttons": [{"id": 83, "text": "Files to preserve", "enabled": self.recovery_preserved, "visible": True},
-                            {"id": 84, "text": "Preserved files", "enabled": True, "visible": True},
-                            *([] if self.recovery_preserved else [{"id": 85, "text": "Preserve config/amp-autotest-gamma.cfg (fixture)", "enabled": True, "visible": True}]),
+            "preservation": {
+                "screenClass": "PreservationVaultScreen",
+                "buttons": [{"id": 83, "text": "config/amp-autotest-gamma.cfg", "enabled": True, "visible": self.vault_claim_available},
+                            {"id": 84, "text": "Restore", "enabled": self.vault_claim_selected, "visible": True},
+                            {"id": 85, "text": "Save copy", "enabled": self.vault_claim_selected, "visible": True},
                             {"id": 86, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -219,7 +220,7 @@ class FakeBridge:
                             {"id": 57, "text": "History", "enabled": True, "visible": True},
                             {"id": 66, "text": "Files", "enabled": True, "visible": True},
                             {"id": 88, "text": "Back", "enabled": True, "visible": True},
-                            *([{"id": 43, "text": "Quarantine", "enabled": True, "visible": True}] if self._quarantine_available() else [])],
+                            *([{"id": 43, "text": "Preserved files", "enabled": True, "visible": True}] if self._vault_conflict_available() else [])],
                 "textFields": [],
             },
             "patch_history": {
@@ -251,10 +252,12 @@ class FakeBridge:
                             {"id": 16, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
-            "quarantine": {
-                "screenClass": "QuarantineArchiveScreen",
-                "buttons": [{"id": 44, "text": "Restore", "enabled": not self.quarantine_restored, "visible": True},
-                            {"id": 45, "text": "Back", "enabled": True, "visible": True}],
+            "vault_conflict": {
+                "screenClass": "PreservationVaultScreen",
+                "buttons": [{"id": 49, "text": "mods/amp-autotest-conflict.jar", "enabled": True, "visible": True},
+                            {"id": 44, "text": "Restore", "enabled": self.vault_claim_selected, "visible": True},
+                            {"id": 45, "text": "Save copy", "enabled": self.vault_claim_selected, "visible": True},
+                            {"id": 48, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "ingame": {"screenClass": None, "buttons": [{"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}], "textFields": []},
@@ -365,11 +368,18 @@ class FakeBridge:
             self._remove_active_pack()
             self.screen = "manager"
         elif element_id == 43:
-            self.screen = "quarantine"
+            self.vault_claim_selected = False
+            self.screen = "vault_conflict"
+        elif element_id == 49:
+            self.vault_claim_selected = True
+            self.screen = "vault_conflict"
         elif element_id == 44:
-            self._restore_quarantine()
-            self.screen = "quarantine"
+            self._restore_preservation_original()
+            self.screen = "vault_conflict"
         elif element_id == 45:
+            self._save_preservation_copy()
+            self.screen = "vault_conflict"
+        elif element_id == 48:
             self.screen = "settings"
         elif element_id == 46:
             if self.screen == "manager":
@@ -382,17 +392,22 @@ class FakeBridge:
         elif element_id == 47:
             self.screen = self.storage_parent if self.screen == "storage" else "settings"
         elif element_id == 79:
-            self.screen = "recovery"
+            self.vault_claim_selected = False
+            self.screen = "preservation"
         elif element_id == 81:
             self.storage_parent = "pack_storage"
             self.screen = "storage"
         elif element_id == 82:
             self.screen = "details"
+        elif element_id == 83:
+            self.vault_claim_selected = True
+            self.screen = "preservation"
         elif element_id == 84:
-            self.screen = "recovery"
+            self._restore_pack_a_preservation_original()
+            self.screen = "preservation"
         elif element_id == 85:
-            self.recovery_preserved = True
-            self.screen = "recovery"
+            self._save_preservation_copy()
+            self.screen = "preservation"
         elif element_id == 86:
             self.screen = "pack_storage"
         elif element_id == 88:
@@ -476,8 +491,10 @@ class FakeBridge:
         self.pack_removed = True
         self.pending_pack = None
         self.pack_b_files = []
-        self.recovery_available = False
-        self.recovery_preserved = False
+        self.vault_claim_available = False
+        self.preservation_restored = False
+        self.preservation_copy_saved = False
+        self.vault_claim_selected = False
 
     def _generation_fixture_files(self, index: int) -> list[tuple[Path, bytes]]:
         generations = self.ctx.scenario.get("serverFiles", {}).get("generations", [])
@@ -507,7 +524,8 @@ class FakeBridge:
         if self.selected_pack == "B":
             files = self.pack_b_files
         elif self.update_available:
-            self.recovery_available = True
+            self.vault_claim_available = True
+            self._vault_claim("packaaa", "config/amp-autotest-gamma.cfg", b"amp-autotest-gamma-v1\n", "SERVER_REMOVAL")
             files = [(Path("config/amp-autotest-alpha.txt"), "amp-autotest-alpha-v2\n"),
                      (Path("config/amp-autotest-beta.json"), '{"id":"beta","value":43}'),
                      (Path("config/amp-autotest-baseline.json"), "server-baseline-v2\n"),
@@ -558,10 +576,9 @@ class FakeBridge:
         if self.selected_pack == "A":
             self.pack_removed = False
         self.update_available = False
-        if self.selected_pack == "B" and self._pack_b_owns_conflict() and not self.quarantine_restored:
-            payload = self.ctx.game_dir / "automodpack" / "client" / "quarantine" / "packbbb" / "conflicts" / "fake-conflict" / "payload"
-            payload.parent.mkdir(parents=True, exist_ok=True)
-            payload.write_bytes(valid_mod_jar_bytes(self.ctx.vars["same_path_conflict_fixture"], self.ctx.target.minecraft))
+        if self.selected_pack == "B" and self._pack_b_owns_conflict() and not self.preservation_restored:
+            payload = valid_mod_jar_bytes(self.ctx.vars["same_path_conflict_fixture"], self.ctx.target.minecraft)
+            self._vault_claim("packbbb", self.ctx.vars["same_path_conflict_path"], payload, "LOCAL_CONFLICT")
             source = self.ctx.path(self.ctx.vars["same_path_conflict_path"])
             source.unlink(missing_ok=True)
         self._write_manifest()
@@ -590,22 +607,68 @@ class FakeBridge:
         conflict_path = self._conflict_path()
         return conflict_path is not None and any(str(rel) == conflict_path for rel, _content in self.pack_b_files)
 
-    def _quarantine_payload_path(self) -> Path:
-        return self.ctx.game_dir / "automodpack" / "client" / "quarantine" / "packbbb" / "conflicts" / "fake-conflict" / "payload"
+    def _vault_claim(self, pack_id: str, original_path: str, payload: bytes, reason: str) -> Path:
+        import hashlib
+        digest = hashlib.sha1(payload).hexdigest()
+        objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+        objects.mkdir(parents=True, exist_ok=True)
+        (objects / digest).write_bytes(payload)
+        root = self.ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id
+        root.mkdir(parents=True, exist_ok=True)
+        manifest = root / "claims.json"
+        claims = json.loads(manifest.read_text(encoding="utf-8")).get("claims", []) if manifest.is_file() else []
+        generation_id = "a" * 40
+        identity = (f"automodpack-preservation-v1\nmodpack={pack_id}\ngeneration={generation_id}\nreason={reason}\n"
+                    f"root=GAME_DIR\npath={original_path}\nhash={digest}\nsize={len(payload)}\n")
+        claim_id = hashlib.sha1(identity.encode()).hexdigest()
+        claims = [claim for claim in claims if claim.get("claimId") != claim_id]
+        claims.append({"claimId": claim_id, "originalPath": original_path, "sourceRoot": "GAME_DIR", "objectHash": digest, "size": len(payload), "modpackId": pack_id, "generationId": generation_id, "reason": reason, "preservedAt": "2026-01-01T00:00:00Z", "status": "AVAILABLE"})
+        manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": sorted(claims, key=lambda claim: claim["claimId"])}), encoding="utf-8")
+        return objects / digest
 
-    def _quarantine_available(self) -> bool:
-        return self.selected_pack == "B" and self._quarantine_payload_path().is_file()
+    def _vault_conflict_available(self) -> bool:
+        return self.selected_pack == "B" and self._conflict_claim_path().is_file()
 
-    def _restore_quarantine(self) -> None:
-        payload = self._quarantine_payload_path()
+    def _conflict_claim_path(self) -> Path:
+        return self.ctx.game_dir / "automodpack" / "client" / "preservation" / "packbbb" / "claims.json"
+
+    def _restore_preservation_original(self) -> None:
         conflict_path = self._conflict_path()
-        if not payload.is_file() or conflict_path is None:
-            raise AssertionError("fake quarantine restore requested without an available conflict payload")
+        if conflict_path is None or not self._conflict_claim_path().is_file():
+            raise AssertionError("fake preservation restore requested without an available claim")
+        claim = json.loads(self._conflict_claim_path().read_text(encoding="utf-8"))["claims"][0]
+        payload = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / claim["objectHash"]
         target = self.ctx.path(conflict_path)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(payload, target)
-        shutil.rmtree(payload.parent, ignore_errors=False)
-        self.quarantine_restored = True
+        self.preservation_restored = True
+
+    def _restore_pack_a_preservation_original(self) -> None:
+        manifest = self.ctx.game_dir / "automodpack" / "client" / "preservation" / "packaaa" / "claims.json"
+        if not manifest.is_file():
+            raise AssertionError("fake preservation restore requested without an available Pack A claim")
+        claim = json.loads(manifest.read_text(encoding="utf-8"))["claims"][0]
+        source = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / claim["objectHash"]
+        destination = self.ctx.path(claim["originalPath"])
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        self.preservation_restored = True
+
+    def _save_preservation_copy(self) -> None:
+        for pack_id in ("packaaa", "packbbb"):
+            manifest = self.ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id / "claims.json"
+            if not manifest.is_file():
+                continue
+            claims = json.loads(manifest.read_text(encoding="utf-8")).get("claims", [])
+            for claim in claims:
+                root = self.ctx.game_dir / "automodpack" / "client" / "restored" / pack_id / claim["generationId"] / claim["claimId"]
+                destination = root / claim["originalPath"]
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                source = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / claim["objectHash"]
+                shutil.copy2(source, destination)
+                claim["status"] = "SAVED_COPY"
+            manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": claims}), encoding="utf-8")
+        self.preservation_copy_saved = True
 
     def _manager_buttons(self) -> list[dict]:
         if self.pack_removed:
@@ -631,7 +694,7 @@ class FakeBridge:
         actions.extend([{"id": 13, "text": "Modpack settings", "enabled": True, "visible": True},
                         {"id": 73, "text": "History", "enabled": True, "visible": True},
                         {"id": 74, "text": "Files", "enabled": True, "visible": True},
-                        {"id": 75, "text": "Storage & recovery", "enabled": True, "visible": True},
+                        {"id": 75, "text": "Storage", "enabled": True, "visible": True},
                         {"id": 41, "text": "Remove", "enabled": True, "visible": True}])
         return actions + [{"id": 52, "text": "Back", "enabled": True, "visible": True}]
 

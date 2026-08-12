@@ -268,17 +268,25 @@ def assert_mod_fixture(ctx, step):
         raise AssertionError(f"mod fixture {path} is not readable: {error}") from error
 
 
-@verb("assert_quarantine_payload")
-def assert_quarantine_payload(ctx, step):
-    """Assert that a conflict payload was archived under one pack's quarantine records."""
+@verb("assert_preservation_claim")
+def assert_preservation_claim(ctx, step):
+    """Assert that a conflict payload is represented by a durable CAS vault claim."""
     pack_id = str(ctx.resolve(step["packId"]))
     fixture = ctx.resolve(step.get("fixture"))
     expected = str(ctx.resolve(step.get("content", "")))
-    conflicts = ctx.game_dir / "automodpack" / "client" / "quarantine" / pack_id / "conflicts"
-    if not conflicts.is_dir():
-        raise AssertionError(f"quarantine conflicts directory is missing: {conflicts}")
-    for payload in sorted(conflicts.glob("*/payload")):
+    manifest = ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id / "claims.json"
+    if not manifest.is_file():
+        raise AssertionError(f"preservation manifest is missing: {manifest}")
+    try:
+        claims = json.loads(manifest.read_text(encoding="utf-8")).get("claims", [])
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"preservation manifest is invalid: {manifest}") from error
+    objects = ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+    for claim in claims:
+        payload = objects / str(claim.get("objectHash", ""))
         try:
+            if claim.get("reason") != "LOCAL_CONFLICT":
+                continue
             if isinstance(fixture, dict):
                 assert_valid_mod_fixture(payload.read_bytes(), fixture, ctx.target.minecraft)
                 return
@@ -286,7 +294,7 @@ def assert_quarantine_payload(ctx, step):
                 return
         except (AssertionError, FileNotFoundError, IsADirectoryError, OSError):
             continue
-    raise AssertionError(f"no quarantine payload under {conflicts} matched the expected local content")
+    raise AssertionError(f"no preservation claim under {manifest} matched the expected local content")
 
 
 @verb("assert_generation")
