@@ -53,8 +53,7 @@ public final class ClientStorage {
 	private final Path clientConfigFile;
 	private final Path modpackContentTempFile;
 	private final Path helperDirectory;
-	private final Path recoveryDirectory;
-	private final Path quarantineDirectory;
+	private final Path preservationDirectory;
 	private final Path bootstrapFile;
 	private final Path fileMetadataDirectory;
 	private final Path modMetadataDirectory;
@@ -85,9 +84,8 @@ public final class ClientStorage {
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
 		this.modpackContentTempFile = this.clientDirectory.resolve(CLIENT_CONTENT_TEMP_FILE.getFileName()).normalize();
 		this.helperDirectory = this.clientDirectory.resolve(CLIENT_HELPER_DIR.getFileName()).normalize();
+		this.preservationDirectory = this.clientDirectory.resolve(CLIENT_PRESERVATION_DIR.getFileName()).normalize();
 		this.bootstrapFile = this.gameDirectory.resolve(BOOTSTRAP_FILE).normalize();
-		this.recoveryDirectory = this.clientDirectory.resolve(CLIENT_RECOVERY_DIR.getFileName()).normalize();
-		this.quarantineDirectory = this.clientDirectory.resolve(CLIENT_QUARANTINE_DIR.getFileName()).normalize();
 		this.fileMetadataDirectory = dataLayout.fileMetadataDirectory();
 		this.modMetadataDirectory = dataLayout.modMetadataDirectory();
 		this.packsDirectory = dataLayout.packsDirectory();
@@ -226,28 +224,24 @@ public final class ClientStorage {
 		return helperDirectory;
 	}
 
-	public Path recoveryDirectory() {
-		return recoveryDirectory;
+	public Path preservationDirectory() {
+		return preservationDirectory;
 	}
 
-	public Path quarantineDirectory() {
-		return quarantineDirectory;
+	public Path preservationPackDirectory(String modpackId) {
+		return preservationDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
 	}
 
-	public Path quarantinePackDirectory(String modpackId) {
-		return quarantineDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
+	public Path preservationManifest(String modpackId) {
+		return preservationPackDirectory(modpackId).resolve("claims.json").normalize();
 	}
 
-	public Path quarantinePayload(String modpackId, String conflictId) {
-		if (!HashUtils.isCanonicalSha1(conflictId)) throw new IllegalArgumentException("Invalid conflict ID");
-		Path root = quarantinePackDirectory(modpackId);
-		Path payload = root.resolve("conflicts").resolve(conflictId).resolve("payload").normalize();
-		if (!payload.startsWith(root)) throw new IllegalArgumentException("Quarantine path escaped its modpack root");
-		return payload;
-	}
-
-	public Path quarantineManifest(String modpackId) {
-		return quarantinePackDirectory(modpackId).resolve("manifest.json").normalize();
+	public Path restoredClaimDirectory(String modpackId, String generationId, String claimId) {
+		String generation = generationId == null || generationId.isEmpty() ? "unversioned" : requireDigest(generationId, "generation ID");
+		Path root = automodpackDirectory.resolve("restored").resolve(ModpackId.requireValid(modpackId)).resolve(generation).normalize();
+		Path claim = root.resolve(requireDigest(claimId, "preservation claim ID")).normalize();
+		if (!claim.startsWith(root)) throw new IllegalArgumentException("Restored copy path escaped its modpack root");
+		return claim;
 	}
 
 	public Path bootstrapFile() {
@@ -345,10 +339,6 @@ public final class ClientStorage {
 		return backupDirectory.resolve(requireTransactionId(transactionId)).normalize();
 	}
 
-	public Path recoveryDirectory(String modpackId) {
-		return recoveryDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
-	}
-
 	public String overlayDigest(String modpackId) throws IOException {
 		return ClientOverlaySnapshot.capture(this, modpackId, null).digest();
 	}
@@ -370,7 +360,7 @@ public final class ClientStorage {
 		ensureDirectory(incomingDirectory, "client transaction incoming root");
 		ensureDirectory(backupDirectory, "client transaction backup root");
 		ensureDirectory(helperDirectory, "client update helper");
-		ensureDirectory(quarantineDirectory, "client quarantine root");
+		ensureDirectory(preservationDirectory, "client preservation root");
 	}
 
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
@@ -400,7 +390,7 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile);
 		validateWithin(gameDirectory, bootstrapFile);
-		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, recoveryDirectory, quarantineDirectory,
+		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
 				stateFile, transactionFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
 		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}

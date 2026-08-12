@@ -1,6 +1,8 @@
 package pl.skidam.automodpack_core.update;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -12,18 +14,14 @@ import java.util.TreeSet;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
-import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
-import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileState;
-import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
-import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
-import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 
 class UpdatePreviewTest {
@@ -32,10 +30,9 @@ class UpdatePreviewTest {
 	private static final String OTHER_HASH = "3333333333333333333333333333333333333333";
 
 	@Test
-	void reportsAddsChangesRemovalsAndCasPreservation() {
+	void planningProducesTheCanonicalPreviewConsequences() {
 		ModpackJsons.ModpackContentFields target = manifest(
-				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
-				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/changed.json", "8", "config", false, false, TARGET_HASH, "0"),
+				item("config/new.json", TARGET_HASH, 4, "config"), item("config/changed.json", TARGET_HASH, 8, "config"),
 				entry("config/new.json", TARGET_HASH, 4, OwnershipLedger.Status.PRESENT),
 				entry("config/changed.json", TARGET_HASH, 8, OwnershipLedger.Status.PRESENT),
 				entry("config/old.json", OLD_HASH, 7, OwnershipLedger.Status.TOMBSTONE));
@@ -43,183 +40,47 @@ class UpdatePreviewTest {
 				new FileKey(Root.GAME_DIR, "config/changed.json"), new FileState(OTHER_HASH, 8, true),
 				new FileKey(Root.GAME_DIR, "config/old.json"), new FileState(OLD_HASH, 7, true));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
-		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
+		UpdatePlan decision = plan(target, files);
+		UpdatePreview preview = UpdatePreview.create(decision, null, UpdatePreview.Mode.UPDATE);
 
-		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.ADDED && entry.relativePath().equals("config/new.json")));
-		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.CHANGED && entry.relativePath().equals("config/changed.json")));
-		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.REMOVED && entry.relativePath().equals("config/old.json")));
-		var changed = preview.changeSet().changes().stream().filter(change -> change.logicalPath().equals("config/changed.json")).findFirst().orElseThrow().primaryOccurrence();
+		assertSame(decision.consequences(), preview.changeSet());
+		assertEquals(ChangeSet.Kind.ADDED, change(preview, "config/new.json").kind());
+		assertEquals(ChangeSet.Kind.MODIFIED, change(preview, "config/changed.json").kind());
+		assertEquals(ChangeSet.Kind.REMOVED, change(preview, "config/old.json").kind());
+		ChangeSet.Occurrence changed = change(preview, "config/changed.json").primaryOccurrence();
 		assertEquals("config", changed.contentKind());
 		assertEquals(OTHER_HASH, changed.beforeHash());
 		assertEquals(TARGET_HASH, changed.afterHash());
 		assertEquals(List.of("main"), changed.featureIds());
-
-		GroupManifest.Group feature = new GroupManifest.Group("Main feature", "", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
-				new TreeMap<>(Map.of("config/changed.json", new GroupManifest.GroupFile(8, "config", false, false, TARGET_HASH, "0"))));
-		GroupManifest featureManifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", feature)));
-		UpdatePreview named = preview.withFeatureManifest(featureManifest);
-		assertEquals("Main feature", named.featureNames().get("main"));
 	}
 
 	@Test
-	void displaysManagedProjectionAndLiveCopyAsOneLogicalFile() {
-		ModpackJsons.ModpackContentFields target = manifest(
-				new ModpackJsons.ModpackContentFields.ModpackContentItem("test/video.mp4", "9", "other", false, false, TARGET_HASH, "0"),
+	void oneLogicalDispositionKeepsEveryPhysicalOccurrence() {
+		ModpackJsons.ModpackContentFields target = manifest(item("test/video.mp4", TARGET_HASH, 9, "other"),
 				entry("test/video.mp4", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT));
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
 
-		UpdatePreview preview = UpdatePreview.create(plan, Map.of(), target, null, false);
+		UpdatePreview preview = UpdatePreview.create(plan(target, Map.of()), null, UpdatePreview.Mode.UPDATE);
 
-		assertEquals(List.of(new UpdatePreview.Entry(UpdatePreview.Kind.ADDED, Root.PROJECTION, "test/video.mp4", 9)), preview.entries());
-		assertEquals(1, preview.summary().changedFiles());
-	}
-
-	@Test
-	void combinesDifferentPhysicalEffectsForOneLogicalPath() {
-		ModpackJsons.ModpackContentFields target = manifest();
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
-
-		UpdatePreview preview = new UpdatePreview(plan, List.of(
-				new UpdatePreview.Entry(UpdatePreview.Kind.REMOVED, Root.PROJECTION, "config/shared.json", 4),
-				new UpdatePreview.Entry(UpdatePreview.Kind.CHANGED, Root.GAME_DIR, "config/shared.json", 8)),
-				new UpdatePreview.GroupConsequences(Set.of(), Set.of(), Set.of()));
-
-		assertEquals(List.of(new UpdatePreview.Entry(UpdatePreview.Kind.CHANGED, Root.PROJECTION, "config/shared.json", 8)), preview.entries());
-	}
-
-	@Test
-	void exposesAcquisitionBytesAndPlanRestartReasons() {
-		ModpackJsons.ModpackContentFields target = manifest(
-				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, TARGET_HASH, "0"),
-				entry("config/new.json", TARGET_HASH, 4, OwnershipLedger.Status.PRESENT));
-		Map<FileKey, FileState> files = Map.of();
-		UpdatePlan planned = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
-		UpdatePlan plan = new UpdatePlan(planned.modpackId(), planned.generationTarget(), planned.operations(), planned.projectedFinalState(), planned.plannedClientConfig(),
-				Set.of(RestartReason.CORRECTED_FILE_LOCATIONS), planned.preservations(), planned.baselineCaptures(), planned.conflicts(), planned.generatedCopies());
-
-		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
-
-		assertEquals(4, preview.uncachedAcquisitionBytes());
-		assertEquals(plan.restartReasons(), preview.restartReasons());
-	}
-
-	@Test
-	void classifiesGuardedReplacementOfExistingRegularFileAsChanged() {
-		ModpackJsons.ModpackContentFields target = manifest();
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(OLD_HASH, 7, true));
-		UpdatePlan plan = planWithOperation(target, new Operation(Root.GAME_DIR, "config/settings.json", OperationType.INSTALL_OBJECT, TARGET_HASH, 9, OLD_HASH));
-		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
-
-		assertEquals(UpdatePreview.Kind.CHANGED, assertSingle(preview, "config/settings.json").kind());
-		assertEquals(1, preview.summary().changedFiles());
-		assertEquals(9, preview.changedBytes());
-	}
-
-	@Test
-	void classifiesGuardedInstallAtAbsentPathAsAdded() {
-		ModpackJsons.ModpackContentFields target = manifest();
-		UpdatePlan plan = planWithOperation(target, new Operation(Root.GAME_DIR, "config/settings.json", OperationType.INSTALL_OBJECT, TARGET_HASH, 9, OLD_HASH));
-		UpdatePreview preview = UpdatePreview.create(plan, Map.of(), target, null, false);
-
-		assertEquals(UpdatePreview.Kind.ADDED, assertSingle(preview, "config/settings.json").kind());
-		assertEquals(1, preview.summary().changedFiles());
+		ChangeSet.Change change = change(preview, "test/video.mp4");
+		assertEquals(ChangeSet.Kind.ADDED, change.kind());
+		assertEquals(List.of("GAME_DIR", "PROJECTION"), change.occurrences().stream().map(ChangeSet.Occurrence::location).toList());
 		assertEquals(9, preview.addedBytes());
+		assertEquals(1, preview.summary().changedFiles());
 	}
 
 	@Test
-	void summaryDeduplicatesLogicalPathsAndLabelsOtherEffects() {
-		ModpackJsons.ModpackContentFields target = manifest();
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
-		UpdatePreview preview = new UpdatePreview(plan, List.of(
-				new UpdatePreview.Entry(UpdatePreview.Kind.PRESERVED_CHANGED, Root.GAME_DIR, "config/preserved.json", 1),
-				new UpdatePreview.Entry(UpdatePreview.Kind.CHANGED, Root.PROJECTION, "config/shared.json", 2),
-				new UpdatePreview.Entry(UpdatePreview.Kind.REMOVED, Root.GAME_DIR, "config/removed.json", 3)),
-				new UpdatePreview.GroupConsequences(Set.of("optional"), Set.of("main"), Set.of("stale")));
-
-		assertEquals(new UpdatePreview.Summary(1, 1, 1, 0, 1), preview.summary());
-		assertEquals(List.of(UpdatePreview.Kind.REMOVED, UpdatePreview.Kind.CHANGED, UpdatePreview.Kind.PRESERVED_CHANGED), preview.entries().stream().map(UpdatePreview.Entry::kind).toList());
-	}
-
-	@Test
-	void classifiesKindsForSummaryPrecedenceAndDisplay() {
-		assertEquals(UpdatePreview.SummaryBucket.CHANGED, UpdatePreview.Kind.ADDED.summaryBucket());
-		assertEquals(UpdatePreview.SummaryBucket.REMOVED, UpdatePreview.Kind.REMOVED.summaryBucket());
-		assertEquals(UpdatePreview.SummaryBucket.PRESERVED, UpdatePreview.Kind.PRESERVED_CHANGED.summaryBucket());
-		assertEquals(UpdatePreview.SummaryBucket.UNSAFE, UpdatePreview.Kind.UNSAFE.summaryBucket());
-		assertTrue(UpdatePreview.Kind.PRESERVED_OUTSIDE.isPreserved());
-		assertFalse(UpdatePreview.Kind.CHANGED.isPreserved());
-		assertEquals(UpdatePreview.SortBucket.UNSAFE, UpdatePreview.Kind.UNSAFE.sortBucket());
-		assertEquals(UpdatePreview.SortBucket.REMOVED, UpdatePreview.Kind.REMOVED.sortBucket());
-		assertEquals(UpdatePreview.SortBucket.CHANGED, UpdatePreview.Kind.CHANGED.sortBucket());
-		assertEquals(UpdatePreview.SortBucket.PRESERVED, UpdatePreview.Kind.PRESERVED_CHANGED.sortBucket());
-		assertEquals("+ ", UpdatePreview.Kind.ADDED.displaySymbol());
-		assertEquals("~ ", UpdatePreview.Kind.CHANGED.displaySymbol());
-		assertEquals("- ", UpdatePreview.Kind.REMOVED.displaySymbol());
-		assertEquals("! ", UpdatePreview.Kind.UNSAFE.displaySymbol());
-		assertEquals("  ", UpdatePreview.Kind.PRESERVED_CHANGED.displaySymbol());
-	}
-
-	@Test
-	void normalizesTargetPathsBeforeLedgerComparison() {
-		ModpackJsons.ModpackContentFields target = manifest(
-				new ModpackJsons.ModpackContentFields.ModpackContentItem("/config/kept.json", "8", "config", false, false, OLD_HASH, "0"),
-				entry("config/kept.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 8, true));
-
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
-		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
-
-		assertTrue(preview.entries().stream().noneMatch(entry -> entry.relativePath().equals("config/kept.json")
-				&& (entry.kind() == UpdatePreview.Kind.PRESERVED_CHANGED || entry.kind() == UpdatePreview.Kind.PRESERVED_OUTSIDE
-						|| entry.kind() == UpdatePreview.Kind.PRESERVED_UNAVAILABLE)));
-	}
-
-	@Test
-	void reportsUnavailableHashWithoutThrowing() {
+	void unavailableOwnedContentIsDecidedDuringPlanning() {
 		ModpackJsons.ModpackContentFields target = manifest(entry("config/unknown.json", OLD_HASH, 12, OwnershipLedger.Status.TOMBSTONE));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/unknown.json"), new FileState(null, 12, true));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
-		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
+		UpdatePlan decision = plan(target, files);
 
-		assertEquals(UpdatePreview.Kind.PRESERVED_UNAVAILABLE, assertSingle(preview, "config/unknown.json").kind());
+		assertEquals(ChangeSet.Kind.PRESERVED_UNAVAILABLE, change(UpdatePreview.create(decision, null, UpdatePreview.Mode.UPDATE), "config/unknown.json").kind());
 	}
 
 	@Test
-	void removalPreviewShowsDeletionAndCasPreservation() {
-		ModpackJsons.ModpackContentFields installed = manifest(
-				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/removed.json", "7", "config", false, false, OLD_HASH, "0"),
-				entry("config/removed.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = installed.modpackId;
-		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
-		baselineEntry.logicalPath = "config/removed.json";
-		baselineEntry.objectHash = "";
-		baselineEntry.size = -1;
-		baselineEntry.absent = true;
-		baseline.entries = new ArrayList<>(List.of(baselineEntry));
-		Map<FileKey, FileState> files = Map.of(
-				new FileKey(Root.PROJECTION, "config/removed.json"), new FileState(OLD_HASH, 7, true),
-				new FileKey(Root.GAME_DIR, "config/removed.json"), new FileState(OLD_HASH, 7, true));
-		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
-
-		UpdatePreview preview = UpdatePreview.create(plan, files, installed, null, true);
-
-		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.REMOVED && entry.relativePath().equals("config/removed.json")));
-		assertEquals(0, preview.summary().preservedFiles());
-	}
-
-	@Test
-	void removalPreviewHidesFilesAlreadyMatchingBaseline() {
-		ModpackJsons.ModpackContentFields installed = manifest(
-				new ModpackJsons.ModpackContentFields.ModpackContentItem("config/kept.json", "7", "config", false, false, OLD_HASH, "0"),
+	void removalDoesNotReportLiveFileAlreadyMatchingBaseline() {
+		ModpackJsons.ModpackContentFields installed = manifest(item("config/kept.json", OLD_HASH, 7, "config"),
 				entry("config/kept.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
 		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = installed.modpackId;
@@ -227,42 +88,53 @@ class UpdatePreviewTest {
 		baselineEntry.logicalPath = "config/kept.json";
 		baselineEntry.objectHash = OLD_HASH;
 		baselineEntry.size = 7;
-		baseline.entries = List.of(baselineEntry);
+		baseline.entries = new ArrayList<>(List.of(baselineEntry));
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "config/kept.json"), new FileState(OLD_HASH, 7, true),
 				new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true));
-		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(OLD_HASH), null, new ClientConfigJsons.ClientConfigFieldsV3()));
 
-		UpdatePreview preview = UpdatePreview.create(plan, files, installed, null, true, baseline);
+		UpdatePlan decision = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(OLD_HASH), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+		ChangeSet.Change change = change(UpdatePreview.create(decision, null, UpdatePreview.Mode.REMOVAL), "config/kept.json");
 
-		assertTrue(preview.entries().stream().noneMatch(entry -> entry.root() == Root.GAME_DIR && entry.relativePath().equals("config/kept.json")));
+		assertEquals(ChangeSet.Kind.REMOVED, change.kind());
+		assertEquals(List.of("PROJECTION"), change.occurrences().stream().map(ChangeSet.Occurrence::location).toList());
 	}
 
 	@Test
-	void includesExplicitResolvedAndStaleGroupConsequences() {
-		ModpackJsons.ModpackContentFields target = manifest();
-		Map<FileKey, FileState> files = Map.of();
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
-				new ClientConfigJsons.ClientConfigFieldsV3()));
-		ResolvedSelection selection = new ResolvedSelection(new SelectionIntent(Set.of("optional")), new TreeSet<>(Set.of("main", "optional")),
-				new TreeSet<>(Set.of("stale")));
+	void presentationNamesDoNotReclassifyTheDecision() {
+		ModpackJsons.ModpackContentFields target = manifest(item("mods/example.jar", TARGET_HASH, 9, "mod"),
+				entry("mods/example.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT));
+		UpdatePreview preview = UpdatePreview.create(plan(target, Map.of()), null, UpdatePreview.Mode.UPDATE);
+		GroupManifest.Group feature = new GroupManifest.Group("Main feature", "", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+				new TreeMap<>(Map.of("mods/example.jar", new GroupManifest.GroupFile(9, "mod", false, false, TARGET_HASH, "0"))));
+		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", feature)));
 
-		UpdatePreview preview = UpdatePreview.create(plan, files, target, selection, false, "Patch notes");
+		UpdatePreview named = preview.withFeatureManifest(manifest);
 
-		assertEquals("Patch notes", preview.patchNotes());
-		assertEquals(Set.of("optional"), preview.groupConsequences().explicitGroups());
-		assertEquals(Set.of("main", "optional"), preview.groupConsequences().resolvedGroups());
-		assertEquals(Set.of("stale"), preview.groupConsequences().staleGroups());
+		assertEquals(change(preview, "mods/example.jar").kind(), change(named, "mods/example.jar").kind());
+		assertEquals(List.of("main"), change(named, "mods/example.jar").primaryOccurrence().featureIds());
+		assertEquals("Main feature", named.featureNames().get("main"));
 	}
 
-	private static UpdatePreview.Entry assertSingle(UpdatePreview preview, String path) {
-		return preview.entries().stream().filter(entry -> entry.relativePath().equals(path)).findFirst().orElseThrow();
+	@Test
+	void addingRestartReasonUpdatesDecisionAndConsequencesTogether() {
+		UpdatePlan decision = plan(manifest(), Map.of()).withRestartReason(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
+
+		assertTrue(decision.restartReasons().contains(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION));
+		assertTrue(decision.consequences().effects().contains(new ChangeSet.Effect("restart", "CHANGED_LOADER_VERSION")));
 	}
 
-	private static UpdatePlan planWithOperation(ModpackJsons.ModpackContentFields target, Operation operation) {
-		UpdatePlan planned = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, Map.of(), Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+	private static ChangeSet.Change change(UpdatePreview preview, String path) {
+		return preview.changeSet().changes().stream().filter(change -> change.logicalPath().equals(path)).findFirst().orElseThrow();
+	}
+
+	private static UpdatePlan plan(ModpackJsons.ModpackContentFields target, Map<FileKey, FileState> files) {
+		return UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new ClientConfigJsons.ClientConfigFieldsV3()));
-		return new UpdatePlan(planned.modpackId(), planned.generationTarget(), List.of(operation), List.of(), planned.plannedClientConfig(), Set.of(), List.of(), List.of(), List.of(), List.of());
+	}
+
+	private static ModpackJsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
+		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, Long.toString(size), type, false, false, hash, "0");
 	}
 
 	private static ModpackJsons.ModpackContentFields manifest(Object... values) {

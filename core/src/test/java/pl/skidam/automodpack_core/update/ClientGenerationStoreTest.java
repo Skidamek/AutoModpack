@@ -256,14 +256,15 @@ class ClientGenerationStoreTest {
 		Path local = Files.writeString(storage.gamePath("mods/local.jar"), "local", StandardCharsets.UTF_8);
 		Path quarantineSource = Files.writeString(storage.gamePath("mods/quarantined.jar"), "quarantined", StandardCharsets.UTF_8);
 		String quarantineHash = HashUtils.getHash(quarantineSource);
-		QuarantineArchive.archive(storage, old.metadata().generationId(), new UpdatePlan.Conflict(FIRST_PACK, "a".repeat(40), Set.of("test"), "mods/quarantined.jar",
-				quarantineHash, Files.size(quarantineSource), "mods/server.jar", "b".repeat(40), 1, UpdatePlan.ConflictAction.QUARANTINE));
+		PreservationVault.preserveConflict(storage, old.metadata().generationId(), new UpdatePlan.Conflict(FIRST_PACK, "a".repeat(40), Set.of("test"), "mods/quarantined.jar",
+				quarantineHash, Files.size(quarantineSource), "mods/server.jar", "b".repeat(40), 1, UpdatePlan.ConflictAction.PRESERVE_LOCAL));
 
 		generations.compact();
 
 		assertEquals("player-edit", Files.readString(overlay, StandardCharsets.UTF_8));
 		assertTrue(Files.exists(storage.baselineFile(FIRST_PACK)));
-		assertTrue(Files.exists(storage.quarantinePayload(FIRST_PACK, "a".repeat(40))));
+		assertEquals(1, PreservationVault.read(storage, FIRST_PACK).claims().size());
+		assertTrue(Files.exists(storage.objectsDirectory().resolve(quarantineHash)));
 		assertTrue(Files.exists(local));
 		assertFalse(Files.exists(quarantineSource));
 	}

@@ -2,12 +2,9 @@ package pl.skidam.automodpack_loader_core.screen;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -42,13 +39,8 @@ public final class ScreenManager {
 		instance.welcome(modpackUpdater);
 	}
 
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
-			Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
-		return instance.preview(preview, modpackName, continueAction, cancelAction, returnToSelection, mainPageUrls);
-	}
-
-	public void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed) {
-		instance.recovery(modpackUpdater, recoverySnapshot, modpackName, closed);
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
+		return instance.preview(preview, modpackName, continueAction, cancelAction, returnToSelection);
 	}
 
 	public void history(HistoryViewRequest request) {

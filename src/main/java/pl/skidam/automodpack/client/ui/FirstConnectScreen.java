@@ -26,6 +26,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public final class FirstConnectScreen extends VersionedScreen {
 	private final ModpackUpdater updater;
 	private final SelectedModpackTarget target;
+	private boolean archiveExistingMods;
 	private boolean finished;
 
 	public FirstConnectScreen(ModpackUpdater updater) {
@@ -41,9 +42,16 @@ public final class FirstConnectScreen extends VersionedScreen {
 		int twoButtonWidth = actionButtonWidth(310, 2);
 		this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 0), actionY, twoButtonWidth, 20,
 				VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
+		String continueKey = updater.firstInstallLocalModCount() == 0 ? "automodpack.firstConnect.continue" : "automodpack.firstConnect.continueKeepMods";
 		this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 1), actionY, twoButtonWidth, 20,
-				VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
+				VersionedText.translatable(continueKey).withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
 		int optionalY = actionY - 26;
+		if (updater.firstInstallLocalModCount() > 0) {
+			String cleanupKey = archiveExistingMods ? "automodpack.firstConnect.archiveExistingOn" : "automodpack.firstConnect.archiveExistingOff";
+			this.addRenderableWidget(buttonWidget(this.width / 2 - 155, optionalY, 310, 20,
+					VersionedText.translatable(cleanupKey, updater.firstInstallLocalModCount()), button -> toggleExistingMods()));
+			optionalY -= 26;
+		}
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
 		if (GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes())) {
 			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY - 26, 150, 20, VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
@@ -57,8 +65,15 @@ public final class FirstConnectScreen extends VersionedScreen {
 			return;
 		}
 		finished = true;
+		updater.setFirstInstallLocalModCleanup(archiveExistingMods);
 		new ScreenManager().waiting();
 		updater.startConfirmedUpdate();
+	}
+
+	private void toggleExistingMods() {
+		if (finished) return;
+		archiveExistingMods = !archiveExistingMods;
+		rebuild();
 	}
 
 	private void customize() {
@@ -67,6 +82,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 			try {
 				if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) throw new IllegalStateException("Modpack confirmation is no longer active");
 				updater.selectTarget(intent);
+				updater.setFirstInstallLocalModCleanup(archiveExistingMods);
 				new ScreenManager().waiting();
 				updater.startConfirmedUpdate();
 			} catch (RuntimeException e) {
@@ -128,6 +144,13 @@ public final class FirstConnectScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.firstConnect.selectedSummary", selection.selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(bytes)).getString(), this.width - 20);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
 		y += 16;
+		if (updater.firstInstallLocalModCount() > 0) {
+			String existingKey = archiveExistingMods ? "automodpack.firstConnect.existingModsArchive" : "automodpack.firstConnect.existingModsKeep";
+			drawCenteredTextWithShadow(matrices, this.font,
+					VersionedText.translatable(existingKey, updater.firstInstallLocalModCount()).withStyle(archiveExistingMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY),
+					this.width / 2, y, TextColors.WHITE);
+			y += 16;
+		}
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.bundleExplanation").withStyle(ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += 16;
@@ -166,6 +189,15 @@ public final class FirstConnectScreen extends VersionedScreen {
 		if (names.isEmpty()) return VersionedText.translatable("automodpack.ui.none").getString();
 		String joined = String.join(", ", names);
 		return truncateToWidth(this.font, joined, Math.max(1, this.width - 20));
+	}
+
+	private void rebuild() {
+		/*? if >=1.19.2 {*/
+		this.rebuildWidgets();
+		/*?} else {*/
+		/*
+		this.init(this.minecraft, this.width, this.height);
+		*//*?}*/
 	}
 
 	@Override

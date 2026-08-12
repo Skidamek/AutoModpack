@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
+
 import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
@@ -30,9 +32,11 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.QuarantineArchive;
+import pl.skidam.automodpack_core.update.OfflineRepair;
+import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
@@ -78,19 +82,9 @@ final class InstalledModpackController {
 		return discoveryFailure;
 	}
 
-	boolean hasRecovery(Pack pack) {
-		if (!pack.active()) return false;
-		try (ModpackUpdater updater = new ModpackUpdater(null, null, storage)) {
-			ModpackUpdater.RecoverySnapshot snapshot = updater.recoverySnapshot();
-			return !snapshot.available().isEmpty() || !snapshot.archived().isEmpty();
-		} catch (IOException | RuntimeException e) {
-			return false;
-		}
-	}
-
-	boolean hasQuarantine(Pack pack) {
+	boolean hasPreservedFiles(Pack pack) {
 		try {
-			return QuarantineArchive.hasEntries(storage, pack.modpackId());
+			return !PreservationVault.read(storage, pack.modpackId()).claims().isEmpty();
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
@@ -140,6 +134,24 @@ final class InstalledModpackController {
 		});
 	}
 
+	void repair(Screen parent, Pack pack, Consumer<Boolean> completed) {
+		if (!pack.active()) {
+			releaseOnClient(() -> completed.accept(false));
+			return;
+		}
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			try {
+				ClientOfflineRepair repair = new ClientOfflineRepair(storage, MODPACK_LOADER);
+				OfflineRepair.Prepared prepared = repair.inspect();
+				releaseOnClient(() -> ScreenImpl.setScreen(new OfflineRepairScreen(parent, pack.name(), repair, prepared,
+						pack.connectionAvailable() ? () -> update(pack, completed) : null, () -> completed.accept(false))));
+			} catch (Exception e) {
+				releaseOnClient(() -> completed.accept(false));
+				failure(e, "automodpack.error.repair", FailureCategory.STORAGE);
+			}
+		});
+	}
+
 	void activate(Pack pack, Runnable released) {
 		try {
 			SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
@@ -161,12 +173,11 @@ final class InstalledModpackController {
 			return;
 		}
 		try {
-			UpdatePlan plan = new UpdatePlan(pack.modpackId(), GenerationTarget.from(pack.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of());
-			UpdatePreview preview = new UpdatePreview(plan, List.of(), new UpdatePreview.GroupConsequences(Set.of(), Set.of(), Set.of()), "", List.of(), UpdatePreview.Mode.REMOVAL)
-					.withFeatureManifest(pack.record().manifest());
+			UpdatePlan plan = new UpdatePlan(pack.modpackId(), GenerationTarget.from(pack.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(pack.record().manifest());
 			new ScreenManager().preview(preview, pack.name(),
 					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> forget(pack, released, removed)),
-					released, false, Map.of());
+					released, false);
 		} catch (Exception e) {
 			released.run();
 			failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
@@ -195,25 +206,8 @@ final class InstalledModpackController {
 				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, storage)), true)));
 	}
 
-	void openRecovery(Screen parent, Pack pack, Runnable released) {
-		ModpackUpdater updater;
-		try {
-			updater = new ModpackUpdater(null, null, storage);
-		} catch (RuntimeException e) {
-			released.run();
-			failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
-			return;
-		}
-		ModpackUpdater recoveryUpdater = updater;
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			try {
-				new ScreenManager().recovery(recoveryUpdater, recoveryUpdater.recoverySnapshot(), pack.name(), released);
-			} catch (Exception e) {
-				recoveryUpdater.close();
-				releaseOnClient(released);
-				failure(e, "automodpack.error.update", FailureCategory.UPDATE);
-			}
-		});
+	void openPreservedFiles(Screen parent, Pack pack, Runnable released) {
+		ScreenImpl.setScreen(new PreservationVaultScreen(parent, storage, pack.modpackId(), pack.name(), pack.active(), released));
 	}
 
 	private void removeActive(Pack pack, boolean deactivation, Runnable released) {
@@ -235,7 +229,7 @@ final class InstalledModpackController {
 				UpdatePreview preview = deactivation ? removalUpdater.previewDeactivation() : removalUpdater.previewRemoval();
 				new ScreenManager().preview(preview, pack.name(),
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeActiveRemoval(removalUpdater, deactivation, released, removed)),
-						released, false, Map.of());
+						released, false);
 			} catch (Exception e) {
 				removalUpdater.close();
 				releaseOnClient(released);

@@ -1,10 +1,7 @@
 package pl.skidam.automodpack_loader_core.screen;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
-import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -30,13 +27,9 @@ public class PreloadScreenImpl implements ScreenService {
 	public void welcome(ModpackUpdater modpackUpdater) {}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
-			Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
 		return false;
 	}
-
-	@Override
-	public void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed) {}
 
 	@Override
 	public void history(HistoryViewRequest request) {}

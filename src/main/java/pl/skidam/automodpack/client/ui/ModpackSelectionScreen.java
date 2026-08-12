@@ -3,9 +3,6 @@ package pl.skidam.automodpack.client.ui;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,7 +38,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.QuarantineArchive;
+import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
@@ -95,8 +92,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private boolean closed;
 	private boolean managementInFlight;
 	private boolean switchInFlight;
-	private Button recoveryButton;
-	private Button quarantineButton;
+	private Button vaultButton;
 	private Button historyButton;
 	private Button filesButton;
 	private Button saveButton;
@@ -326,8 +322,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				Button button = buttonWidget(centeredActionButtonX(ROW_WIDTH, rowCount, rowCount, index - rowStart), managementTop + row * ROW_HEIGHT,
 						managementWidth, 20, action.label(), press -> action.action().run());
 				this.addRenderableWidget(button);
-				if (action.kind() == ManagementKind.RECOVERY) this.recoveryButton = button;
-				if (action.kind() == ManagementKind.QUARANTINE) this.quarantineButton = button;
+				if (action.kind() == ManagementKind.VAULT) this.vaultButton = button;
 				if (action.kind() == ManagementKind.HISTORY) this.historyButton = button;
 				if (action.kind() == ManagementKind.FILES) this.filesButton = button;
 			}
@@ -464,33 +459,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		ScreenImpl.setScreen(new GroupInspectorScreen(this, manifest, groupId));
 	}
 
-	private ModpackUpdater createUpdater() {
-		try {
-			return new ModpackUpdater(null, null, storage);
-		} catch (RuntimeException e) {
-			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
-			return null;
-		}
-	}
-
-	private void requestRecovery() {
-		if (!beginManagement()) return;
-		ModpackUpdater recoveryUpdater = createUpdater();
-		if (recoveryUpdater == null) {
-			endManagement();
-			return;
-		}
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			try {
-				new ScreenManager().recovery(recoveryUpdater, recoveryUpdater.recoverySnapshot(), modpackName, (Runnable) this::endManagement);
-			} catch (Exception e) {
-				recoveryUpdater.close();
-				endManagement();
-				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
-			}
-		});
-	}
-
 	private void requestHistory() {
 		if (!beginManagement()) return;
 		try {
@@ -501,9 +469,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 	}
 
-	private void requestQuarantine() {
+	private void requestVault() {
 		if (!beginManagement()) return;
-		ScreenImpl.setScreen(new QuarantineArchiveScreen(this, storage, modpackId, modpackName, activeModpack, this::endManagement));
+		ScreenImpl.setScreen(new PreservationVaultScreen(this, storage, modpackId, modpackName, activeModpack, this::endManagement));
 	}
 
 	private void requestFiles() {
@@ -530,37 +498,23 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void updateManagementButtons() {
-		if (recoveryButton != null) recoveryButton.active = !managementInFlight;
-		if (quarantineButton != null) quarantineButton.active = !managementInFlight;
+		if (vaultButton != null) vaultButton.active = !managementInFlight;
 		if (historyButton != null) historyButton.active = !managementInFlight;
 		if (filesButton != null) filesButton.active = !managementInFlight;
 	}
 
 	private List<ManagementAction> managementActions() {
 		List<ManagementAction> actions = new ArrayList<>();
-		if (activeModpack && hasRecoveryArchive()) actions.add(new ManagementAction(ManagementKind.RECOVERY, VersionedText.translatable("automodpack.management.recovery"), this::requestRecovery));
-		if (hasQuarantineArchive()) actions.add(new ManagementAction(ManagementKind.QUARANTINE, VersionedText.translatable("automodpack.management.quarantine"), this::requestQuarantine));
+		if (hasPreservedFiles()) actions.add(new ManagementAction(ManagementKind.VAULT, VersionedText.translatable("automodpack.management.preservedFiles"), this::requestVault));
 		if (hasHistory()) actions.add(new ManagementAction(ManagementKind.HISTORY, VersionedText.translatable("automodpack.management.history"), this::requestHistory));
 		if (localRecord != null || activeGeneration(modpackId) != null) actions.add(new ManagementAction(ManagementKind.FILES, VersionedText.translatable("automodpack.management.files"), this::requestFiles));
 		if (hasInstalledPacks()) actions.add(new ManagementAction(ManagementKind.MANAGER, VersionedText.translatable("automodpack.packManager.switch"), this::requestPackManager));
 		return List.copyOf(actions);
 	}
 
-	private boolean hasRecoveryArchive() {
+	private boolean hasPreservedFiles() {
 		try {
-			Path root = storage.recoveryDirectory(modpackId);
-			if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) return false;
-			try (var paths = Files.list(root)) {
-				return paths.findAny().isPresent();
-			}
-		} catch (IOException | RuntimeException e) {
-			return false;
-		}
-	}
-
-	private boolean hasQuarantineArchive() {
-		try {
-			return QuarantineArchive.hasEntries(storage, modpackId);
+			return !PreservationVault.read(storage, modpackId).claims().isEmpty();
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
@@ -892,5 +846,5 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private record ManagementAction(ManagementKind kind, MutableComponent label, Runnable action) {}
 
-	private enum ManagementKind { RECOVERY, QUARANTINE, HISTORY, FILES, MANAGER }
+	private enum ManagementKind { VAULT, HISTORY, FILES, MANAGER }
 }
