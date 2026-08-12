@@ -697,20 +697,20 @@ flow:
     until:
       all:
         - screen: RecoveryArchiveScreen
-        - element: { text: Preserve, enabled: true }
+        - element: { text: config/amp-autotest-gamma.cfg, enabled: true }
   - do: screenshot
     name: capture available recovery files
     file: all-recovery-available
   - do: click
     name: preserve the removed file
-    select: { text: Preserve }
+    select: { text: config/amp-autotest-gamma.cfg }
   - do: wait_for
     name: finish preserving the removed file
     timeout: 30s
-    until: { no_element: { text: Preserve, enabled: true } }
+    until: { no_element: { text: config/amp-autotest-gamma.cfg, enabled: true } }
   - do: click
     name: show archived recovery files
-    select: { text: Archived }
+    select: { text: Preserved files }
   - do: sleep
     name: render the archived removed file
     duration: 1s
