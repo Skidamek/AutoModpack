@@ -41,19 +41,19 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int actionWidth = actionButtonWidth(PANEL_WIDTH, 3);
-		int actionY = this.height - 28;
+		int actionWidth = actionButtonWidth(PANEL_WIDTH, 2);
+		int actionY = this.height - 54;
 		String verifyLabel = busy && operation == Operation.VERIFY ? "automodpack.storage.verifyingButton" : "automodpack.storage.verify";
-		Button verify = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 0), actionY, actionWidth, 20,
+		Button verify = buttonWidget(actionButtonX(PANEL_WIDTH, 2, 0), actionY, actionWidth, 20,
 				VersionedText.translatable(verifyLabel), button -> verify());
 		verify.active = !busy && !closed;
 		this.addRenderableWidget(verify);
 		String actionLabel = busy && operation == Operation.COMPACT ? "automodpack.storage.runningButton" : "automodpack.storage.confirm";
-		Button maintenance = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 1), actionY, actionWidth, 20,
+		Button maintenance = buttonWidget(actionButtonX(PANEL_WIDTH, 2, 1), actionY, actionWidth, 20,
 				VersionedText.translatable(actionLabel), button -> compact());
 		maintenance.active = !busy && !closed;
 		this.addRenderableWidget(maintenance);
-		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 2), actionY, actionWidth, 20,
+		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 1, 1, 0), this.height - 28, actionButtonWidth(PANEL_WIDTH, 1), 20,
 				VersionedText.translatable("automodpack.back"), button -> closeToParent()));
 	}
 
