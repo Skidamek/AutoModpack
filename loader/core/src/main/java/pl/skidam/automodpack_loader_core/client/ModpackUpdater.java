@@ -312,8 +312,8 @@ public class ModpackUpdater implements AutoCloseable {
 			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			close();
 		} catch (Exception e) {
-			LOGGER.error("Error while initializing modpack updater", e);
 			close();
+			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
 
