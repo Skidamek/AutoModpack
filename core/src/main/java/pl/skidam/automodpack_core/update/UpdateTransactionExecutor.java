@@ -416,7 +416,9 @@ public final class UpdateTransactionExecutor {
 			if (!ledgerEntry.historicalHashes().contains(new OwnershipLedger.Content(preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize())))
 				throw new IOException("Preservation target is not owned by the target ledger");
 			ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
-			if (projected == null || projected.present()) throw new IOException("Preservation target is not absent from projected final state");
+			if (projected == null) throw new IOException("Preservation target is missing from projected final state");
+			if (projected.present() && preservation.expectedHash().equalsIgnoreCase(projected.expectedHash()) && preservation.expectedSize() == projected.expectedSize())
+				throw new IOException("Preserved bytes remain in projected final state");
 		}
 	}
 
