@@ -169,10 +169,10 @@ flow:
     name: verify advanced group metadata and latest notes were installed
     groups:
       main: { required: true, defaultSelected: true }
-      visual: { required: false, defaultSelected: true, tag: client, requires: [main] }
-      addon: { required: false, defaultSelected: false, tag: extras, requires: [visual] }
-      alternative: { required: false, defaultSelected: false, tag: extras, breaksWith: [visual] }
-      windows: { required: false, compatiblePlatforms: [windows], tag: platform }
+      visual: { required: false, defaultSelected: true, category: client, requires: [main] }
+      addon: { required: false, defaultSelected: false, category: extras, requires: [visual] }
+      alternative: { required: false, defaultSelected: false, category: extras, breaksWith: [visual] }
+      windows: { required: false, compatiblePlatforms: [windows], category: platform }
     patchNotes: "Initial release: core content and optional client groups."
   - do: wait_for
     name: wait for restart review
@@ -831,26 +831,26 @@ topology:
           visual:
             displayName: Visuals
             description: Default client visuals
-            tag: client
+            category: client
             defaultSelected: true
             requires: [main]
             syncedFiles: ["/config/amp-autotest-visual.txt"]
           addon:
             displayName: Addon
             description: Optional addon depending on visuals
-            tag: extras
+            category: extras
             requires: [visual]
             syncedFiles: ["/config/amp-autotest-addon.txt"]
           alternative:
             displayName: Alternative
             description: Mutually exclusive alternative
-            tag: extras
+            category: extras
             breaksWith: [visual]
             syncedFiles: ["/config/amp-autotest-alternative.txt"]
           windows:
             displayName: Windows-only
             description: Platform-filtered fixture
-            tag: platform
+            category: platform
             compatiblePlatforms: [windows]
             syncedFiles: ["/config/amp-autotest-windows.txt"]
 
