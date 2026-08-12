@@ -150,6 +150,21 @@ flow:
         - element: { text: Modpack settings, enabled: true }
         - element: { text: Back, enabled: true }
   - do: click
+    name: open per-pack storage actions
+    select: { text: Storage & recovery }
+  - do: wait_for
+    name: show per-pack storage actions
+    until:
+      all:
+        - screen: ModpackStorageScreen
+        - element: { text: Clean local storage, enabled: true }
+  - do: screenshot
+    name: capture per-pack storage actions
+    file: note-only-pack-storage
+  - do: click
+    name: return to active pack details
+    select: { text: Back }
+  - do: click
     name: return to the installed pack list
     select: { text: Back }
   - do: wait_for
