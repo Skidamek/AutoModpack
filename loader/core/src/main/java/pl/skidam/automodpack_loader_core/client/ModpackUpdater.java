@@ -491,7 +491,7 @@ public class ModpackUpdater implements AutoCloseable {
 		List<RecoveryFile> available = new ArrayList<>();
 		Path storeRoot = storage.objectsDirectory();
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
-			if (targetPaths.contains(ledgerEntry.logicalPath()) || UpdatePlanner.managedCleanupKey(ledgerEntry.logicalPath()).isEmpty()) continue;
+			if (ledgerEntry.currentStatus() != OwnershipLedger.Status.TOMBSTONE || targetPaths.contains(ledgerEntry.logicalPath()) || UpdatePlanner.managedCleanupKey(ledgerEntry.logicalPath()).isEmpty()) continue;
 			for (OwnershipLedger.Content content : ledgerEntry.historicalHashes()) {
 				String hash = content.sha1().toLowerCase(Locale.ROOT);
 				if (!FileIntegrity.matches(storeRoot.resolve(hash), content.size(), hash)) continue;
