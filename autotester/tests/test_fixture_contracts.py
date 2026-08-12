@@ -15,7 +15,15 @@ from automodpack_autotester.config import (
     load_targets,
     parse_server_files,
 )
-from automodpack_autotester.engine.steps_io import seed_unowned_local_file, write_file
+from automodpack_autotester.engine.steps_io import (
+    assert_client_object,
+    assert_preservation_claim,
+    mutate_active_object,
+    mutate_client_file,
+    mutate_preservation_object,
+    seed_unowned_local_file,
+    write_file,
+)
 from automodpack_autotester.generation_identity import CanonicalEncoder
 from automodpack_autotester.mod_fixtures import (
     assert_valid_mod_fixture,
@@ -148,6 +156,55 @@ def test_write_file_rejects_path_escape(make_ctx):
 
     with pytest.raises(ValueError, match="escapes the client game directory"):
         write_file(ctx, {"path": "../outside.txt", "content": "must not escape\n"})
+
+
+def test_client_file_mutation_is_scoped_and_deterministic(make_ctx):
+    ctx = make_ctx()
+    path = ctx.game_dir / "config/local.txt"
+    path.parent.mkdir(parents=True)
+    path.write_text("healthy\n", encoding="utf-8")
+
+    mutate_client_file(ctx, {"path": "config/local.txt", "action": "corrupt"})
+    first = path.read_bytes()
+    path.write_text("healthy\n", encoding="utf-8")
+    mutate_client_file(ctx, {"path": "config/local.txt", "action": "corrupt"})
+
+    assert path.read_bytes() == first
+    with pytest.raises(ValueError, match="escapes the client game directory"):
+        mutate_client_file(ctx, {"path": "../outside.txt", "action": "delete"})
+
+
+def test_active_object_mutation_and_assertion_use_installed_manifest(make_ctx):
+    ctx = make_ctx()
+    root = ctx.game_dir / "staged"
+    file = root / "config/owned.txt"
+    file.parent.mkdir(parents=True)
+    file.write_text("server bytes\n", encoding="utf-8")
+    generation = runner._write_staged_generation(ctx, root, "fixture7", ctx.game_dir / "automodpack/client/data", client_root=ctx.game_dir / "automodpack/client")
+    (ctx.game_dir / "automodpack/client/active-state.json").write_text(json.dumps({"modpackId": "fixture7", "generationId": generation["generationId"], "status": "ACTIVE"}), encoding="utf-8")
+
+    assert_client_object(ctx, {"path": "config/owned.txt"})
+    mutate_active_object(ctx, {"path": "config/owned.txt", "action": "corrupt"})
+    assert_client_object(ctx, {"path": "config/owned.txt", "valid": False})
+
+
+def test_preservation_claim_filters_do_not_rely_on_corrupt_object_bytes(make_ctx):
+    ctx = make_ctx()
+    pack_id = "fixture7"
+    payload = b"preserved bytes\n"
+    object_hash = hashlib.sha1(payload).hexdigest()
+    objects = ctx.game_dir / "automodpack/client/data/objects"
+    objects.mkdir(parents=True)
+    (objects / object_hash).write_bytes(payload)
+    claims = ctx.game_dir / f"automodpack/client/preservation/{pack_id}/claims.json"
+    claims.parent.mkdir(parents=True)
+    claims.write_text(json.dumps({"claims": [{"originalPath": "mods/local.jar", "objectHash": object_hash, "size": len(payload), "reason": "STRICT_REPAIR", "status": "AVAILABLE"}]}), encoding="utf-8")
+    selector = {"packId": pack_id, "originalPath": "mods/local.jar", "reason": "STRICT_REPAIR", "content": payload.decode("utf-8")}
+
+    assert_preservation_claim(ctx, selector)
+    mutate_preservation_object(ctx, {**selector, "action": "corrupt"})
+    assert_preservation_claim(ctx, {**selector, "objectValid": False})
+    assert_preservation_claim(ctx, {"packId": pack_id, "reason": "EDITABLE_RESET", "present": False})
 
 
 def test_metadata_only_fixture_uses_no_code_loader_metadata():

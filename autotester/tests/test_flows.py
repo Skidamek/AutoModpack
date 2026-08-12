@@ -241,6 +241,10 @@ _BUILTIN_VERBS = {
     "wait_generation": steps_io.wait_generation,
     "assert_file_content": steps_io.assert_file_content,
     "write_file": steps_io.write_file,
+    "mutate_client_file": steps_io.mutate_client_file,
+    "mutate_active_object": steps_io.mutate_active_object,
+    "assert_client_object": steps_io.assert_client_object,
+    "mutate_preservation_object": steps_io.mutate_preservation_object,
     "assert_bootstrap_import": steps_io.assert_bootstrap_import,
     "assert_authenticated_secret": steps_io.assert_authenticated_secret,
     "seed_unowned_local_file": steps_io.seed_unowned_local_file,
@@ -379,6 +383,74 @@ def test_fake_restart_screen_matches_production_button_order(make_ctx):
     ]
 
 
+def test_fake_new_repair_and_preservation_ui_states(make_ctx):
+    ctx = make_ctx()
+    bridge = FakeBridge(ctx)
+    ctx.bridge = bridge
+
+    # First-install cleanup is explicit, reversible before confirmation, and off by default.
+    for name in ("local-one.jar", "local-two.jar"):
+        (ctx.game_dir / "mods" / name).write_bytes(b"local")
+    bridge.screen = "first_connection"
+    assert any(button["text"] == "[ ] Keep 2 existing files in mods" for button in bridge.gui()["buttons"])
+    bridge.click(89)
+    assert any(button["text"] == "[x] Preserve and remove 2 existing files" for button in bridge.gui()["buttons"])
+    bridge.click(89)
+    assert any(button["text"] == "[ ] Keep 2 existing files in mods" for button in bridge.gui()["buttons"])
+
+    # Repair is available only for the active pack. Its destructive choices default to keep.
+    bridge.pack_a_installed = True
+    bridge.secondary_pack = True
+    bridge.details_pack = "B"
+    bridge.screen = "details"
+    assert not any(button["text"] == "Repair" for button in bridge.gui()["buttons"])
+    bridge.details_pack = "A"
+    assert any(button["text"] == "Repair" for button in bridge.gui()["buttons"])
+    bridge.click(70)
+    buttons = bridge.gui()["buttons"]
+    assert any(button["text"] == "[x] Reset config/pack-shared-editable.txt" for button in buttons)
+    assert any(button["text"] == "[ ] Keep 2 unowned mods" for button in buttons)
+    bridge.click(95)
+    assert any(button["text"] == "[ ] Keep changes in config/pack-shared-editable.txt" for button in bridge.gui()["buttons"])
+    bridge.click(97)
+    assert any(button["text"] == "[x] Archive and remove 2 unowned mods" for button in bridge.gui()["buttons"])
+    bridge.click(100)
+    assert bridge.gui()["screenClass"] == "ModpackDetailsScreen"
+
+    # Storage verification returns to the same screen after a corrupt claimed object fails.
+    object_path = bridge._vault_claim("packaaa", "config/amp-autotest-gamma.cfg", b"gamma", "SERVER_REMOVAL")
+    bridge.vault_claim_available = True
+    bridge.screen = "storage"
+    bridge.click(91)
+    assert bridge.storage_verified
+    object_path.write_bytes(b"damaged")
+    bridge.click(91)
+    assert bridge.gui()["screenClass"] == "ErrorScreen"
+    bridge.click(93)
+    assert ctx.vars["fake_error_details_copied"]
+    bridge.click(94)
+    assert bridge.gui()["screenClass"] == "ClientStorageMaintenanceScreen"
+
+    # Restore refuses to overwrite an active owned path. Save-copy and two-click deletion remain available.
+    active_owned = ctx.game_dir / "automodpack/client/active/config/amp-autotest-gamma.cfg"
+    active_owned.parent.mkdir(parents=True, exist_ok=True)
+    active_owned.write_bytes(b"server")
+    object_path.write_bytes(b"gamma")
+    bridge.screen = "preservation"
+    bridge.click(83)
+    bridge.click(84)
+    assert bridge.gui()["screenClass"] == "ErrorScreen"
+    bridge.click(94)
+    assert bridge.gui()["screenClass"] == "PreservationVaultScreen"
+    bridge.click(90)
+    assert any(button["text"] == "Confirm deletion" for button in bridge.gui()["buttons"])
+    bridge.click(83)  # Reselecting a row cancels the pending destructive action.
+    assert any(button["text"] == "Delete from vault" for button in bridge.gui()["buttons"])
+    bridge.click(90)
+    bridge.click(90)
+    assert not (ctx.game_dir / "automodpack/client/preservation/packaaa/claims.json").exists()
+
+
 def test_release_gate_flow(make_ctx, flow_verbs):
     """Exercise the declarative release flow; Docker remains runtime authority."""
     scenario = load_scenarios()["all"]
@@ -415,25 +487,13 @@ def test_release_gate_flow(make_ctx, flow_verbs):
         (ctx.game_dir / "automodpack/client-config.json").read_text(encoding="utf-8")
     )
     assert client_config.get("selectedModpackId") == ""
-    assert_valid_mod_fixture(
-        (ctx.game_dir / "mods/local-unowned.jar").read_bytes(),
-        {
-            "modId": "amp_autotest_unowned",
-            "version": "1.0.0-local-unowned",
-            "marker": "unowned-local",
-        },
-        ctx.target.minecraft,
-    )
+    assert not (ctx.game_dir / "mods/local-unowned.jar").exists()
     preservation = (
         ctx.game_dir
         / "automodpack/client/preservation/packbbb/claims.json"
     )
     assert not preservation.exists()
-    assert_valid_mod_fixture(
-        (ctx.game_dir / "mods/amp-autotest-conflict.jar").read_bytes(),
-        {"modId": "amp_autotest_conflict", "version": "1.0.0-local", "marker": "local"},
-        ctx.target.minecraft,
-    )
+    assert not (ctx.game_dir / "mods/amp-autotest-conflict.jar").exists()
     assert (ctx.game_dir / "config/amp-autotest-baseline.json").read_text(
         encoding="utf-8"
     ) == "local-baseline\n"

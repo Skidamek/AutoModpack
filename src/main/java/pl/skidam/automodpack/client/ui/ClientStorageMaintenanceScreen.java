@@ -29,6 +29,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private final ClientStorage storage;
 	private boolean busy;
 	private boolean closed;
+	private boolean presentingFailure;
 	private Operation operation;
 	private ClientGenerationStore.CompactionResult compactionResult;
 	private ClientObjectStore.StorageReport verificationReport;
@@ -109,6 +110,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		if (closed) return;
 		busy = false;
 		operation = null;
+		presentingFailure = true;
 		new ScreenManager().failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
@@ -136,6 +138,11 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 
 	@Override
 	public void removed() {
+		if (presentingFailure) {
+			presentingFailure = false;
+			super.removed();
+			return;
+		}
 		if (!closed) {
 			closed = true;
 			cancelWork();
