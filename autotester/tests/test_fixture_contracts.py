@@ -101,10 +101,10 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
 
     assert not (client / "records").exists()
     assert not (client / "active").exists()
-    assert not (client / "data/objects").exists()
-    assert not (client / "active-state.json").exists()
     assert not (client / "baselines").exists()
     assert not (client / "overlays").exists()
+    assert not (client / "data/objects").exists()
+    assert not (client / "active-state.json").exists()
     assert not (client / "quarantine").exists()
     assert_valid_mod_fixture((ctx.game_dir / "mods/old.jar").read_bytes(), fixture)
     assert (client / "data/known-hosts.json").read_text(encoding="utf-8") == '{"hosts": {}}'

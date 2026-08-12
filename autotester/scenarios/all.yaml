@@ -737,7 +737,7 @@ flow:
   - do: wait_client_exit
     name: wait for the installed client to stop before fresh-client reset
   - do: reset_client_generation
-    name: reset only fresh-client generation state and CAS
+    name: reset fresh-client install state and CAS
   - do: assert_client_objects_absent
     name: verify fresh-client CAS is absent before saved-secret preload
   - do: seed_mod_fixture
