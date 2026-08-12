@@ -51,7 +51,7 @@ def test_server_history_compaction_uses_registered_command():
     )
 
     assert (
-        '["rcon-cli", "automodpack", "generate", "storage", "compact", "confirm"]'
+        '["rcon-cli", "automodpack", "generate", "storage", "compact", "before", expected_ids[-1], "confirm"]'
         in source
     )
     assert (

@@ -726,7 +726,7 @@ def _v_compact_server_history(ctx: Context, step):
         server_root / "deltas" / f"{generation_id}.json"
         for generation_id in expected_superseded_ids
     }
-    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "compact", "confirm"])
+    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "compact", "before", expected_ids[-1], "confirm"])
     output = result.output.decode("utf-8", errors="replace") if result.output else ""
     if result.exit_code != 0:
         raise RuntimeError(f"server history compaction command failed ({result.exit_code}): {output}")
