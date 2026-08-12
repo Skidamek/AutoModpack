@@ -43,14 +43,29 @@ public final class ChangeBrowserProjection {
 		Objects.requireNonNull(mode, "projection mode");
 		Objects.requireNonNull(filter, "change filter");
 		List<FileRow> files = visibleFiles(changes, filter);
+		List<EffectRow> effects = visibleEffects(changes, filter);
 		Aggregate total = aggregate(files);
-		if (mode == Mode.LIST) return new Projection(mode, files.stream().map(file -> file.withDepth(0)).map(Row.class::cast).toList(), total);
+		if (mode == Mode.LIST) {
+			List<Row> rows = new ArrayList<>(effects);
+			rows.addAll(files.stream().map(file -> file.withDepth(0)).toList());
+			return new Projection(mode, rows, total);
+		}
 		TreeNode root = new TreeNode("");
 		for (FileRow file : files) root.add(file);
 		aggregateNode(root);
-		List<Row> rows = new ArrayList<>();
+		List<Row> rows = new ArrayList<>(effects);
 		appendTreeRows(root, 0, rows);
 		return new Projection(mode, rows, total);
+	}
+
+	private static List<EffectRow> visibleEffects(ChangeSet changes, Filter filter) {
+		if (!filter.contentKinds().isEmpty() || !filter.featureIds().isEmpty()) return List.of();
+		List<EffectRow> visible = new ArrayList<>();
+		for (ChangeSet.Effect effect : changes.effects()) {
+			if (!filter.search().isBlank() && !Filter.contains(filter.search(), effect.category()) && !Filter.contains(filter.search(), effect.value())) continue;
+			visible.add(new EffectRow("metadata/" + visible.size(), 0, effect));
+		}
+		return List.copyOf(visible);
 	}
 
 	private static List<FileRow> visibleFiles(ChangeSet changes, Filter filter) {
@@ -170,6 +185,10 @@ public final class ChangeBrowserProjection {
 			return rows.stream().filter(FolderRow.class::isInstance).map(FolderRow.class::cast).toList();
 		}
 
+		public List<EffectRow> effects() {
+			return rows.stream().filter(EffectRow.class::isInstance).map(EffectRow.class::cast).toList();
+		}
+
 		/** Returns this tree with descendants of the supplied folders hidden; totals remain the full query totals. */
 		public Projection collapse(Collection<String> collapsedFolders) {
 			if (mode != Mode.TREE || collapsedFolders == null || collapsedFolders.isEmpty()) return this;
@@ -181,7 +200,7 @@ public final class ChangeBrowserProjection {
 		}
 	}
 
-	public sealed interface Row permits FileRow, FolderRow {
+	public sealed interface Row permits FileRow, FolderRow, EffectRow {
 		String path();
 
 		int depth();
@@ -237,6 +256,19 @@ public final class ChangeBrowserProjection {
 			path = LogicalPath.requireCanonical(path);
 			if (depth < 0) throw new IllegalArgumentException("Folder row depth is negative");
 			aggregate = Objects.requireNonNull(aggregate, "folder aggregate");
+		}
+	}
+
+	public record EffectRow(String path, int depth, ChangeSet.Effect effect) implements Row {
+		public EffectRow {
+			path = Objects.requireNonNull(path, "effect row path");
+			if (depth < 0) throw new IllegalArgumentException("Effect row depth is negative");
+			effect = Objects.requireNonNull(effect, "change effect");
+		}
+
+		@Override
+		public Aggregate aggregate() {
+			return Aggregate.empty();
 		}
 	}
 
