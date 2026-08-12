@@ -607,7 +607,10 @@ def _v_rollback_server_generation(ctx: Context, step):
             return None
         if str(after_current.get("rollbackTargetGenerationId", "")) != target_id or str(after_current.get("patchNotes", "")) != notes:
             return None
-        if str(after_current.get("stateDigest", "")) != state_digest or str(after_current.get("ledgerDigest", "")) != ledger_digest:
+        if str(after_current.get("stateDigest", "")) != state_digest:
+            return None
+        rollback_ledger_digest = str(after_current.get("ledgerDigest", ""))
+        if not re.fullmatch(r"[0-9a-f]{40}", rollback_ledger_digest):
             return None
         history_ids = [str(entry.get("generationId", "")) for entry in after_history if isinstance(entry, dict)]
         expected_history_ids = [str(entry.get("generationId", "")) for entry in history] + [new_id]
@@ -620,6 +623,8 @@ def _v_rollback_server_generation(ctx: Context, step):
             return None
         commit = _read_server_json(ctx, f"commits/{new_id}.json", "server rollback commit")
         if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id:
+            return None
+        if str(commit.get("stateDigest", "")) != state_digest or str(commit.get("ledgerDigest", "")) != rollback_ledger_digest or str(commit.get("patchNotes", "")) != notes:
             return None
         return after_pointer, after_projection
 
