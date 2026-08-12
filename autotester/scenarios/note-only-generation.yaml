@@ -266,7 +266,7 @@ flow:
     until:
       all:
         - screen: ClientStorageMaintenanceScreen
-        - element: { text: Cleanup complete, enabled: false }
+        - element: { text: Clean local storage, enabled: true }
   - do: click
     name: return to the inactive pack manager after compaction
     select: { text: Back }
