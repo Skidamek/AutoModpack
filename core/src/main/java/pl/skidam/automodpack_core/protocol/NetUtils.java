@@ -83,6 +83,11 @@ public class NetUtils {
 		return fingerprint.substring(0, 8) + "…" + fingerprint.substring(fingerprint.length() - 8);
 	}
 
+	public static String shortenFingerprint(String fingerprint, int visibleCharactersPerSide) {
+		if (fingerprint == null || visibleCharactersPerSide < 1 || fingerprint.length() <= visibleCharactersPerSide * 2 + 3) return fingerprint;
+		return fingerprint.substring(0, visibleCharactersPerSide) + "..." + fingerprint.substring(fingerprint.length() - visibleCharactersPerSide);
+	}
+
 	public static KeyPair generateKeyPair() throws Exception {
 		KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
 		keyPairGenerator.initialize(2048);
