@@ -210,14 +210,8 @@ flow:
   - use: rejoin
   - do: disconnect
     name: return to the vanilla title screen before opening multiplayer
-  - use: open_multiplayer
-  - use: open_pack_manager
-  - do: seed_unowned_local_file
-    name: seed an unowned local file for preservation coverage
-    path: mods/local-unowned.jar
-    fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
-  # A second complete record is cached while A is active. The manager path
-  # below proves that selecting a row does not activate it before review.
+  # A second complete record is cached while A is active. Stage it before the
+  # manager is constructed so the screen reads a complete, stable snapshot.
   - do: stage_modpack
     name: stage a second complete cached pack record
     recordOnly: true
@@ -232,6 +226,12 @@ flow:
       # FileInspection planner recognizes it on every supported loader.
       - path: mods/amp-autotest-conflict.jar
         fixture: { modId: amp_autotest_conflict, version: "2.0.0-server", marker: server }
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: seed_unowned_local_file
+    name: seed an unowned local file for preservation coverage
+    path: mods/local-unowned.jar
+    fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
   - do: seed_same_path_conflict
     name: seed the local payload at the server-owned mods path
     path: mods/amp-autotest-conflict.jar
