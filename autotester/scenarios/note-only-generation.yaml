@@ -107,26 +107,35 @@ flow:
     name: open per-pack lifecycle actions
     select: { text: Pack manager }
   - do: wait_for
-    name: show compact actions beside the active pack
+    name: show the active pack in the manager
     until:
       all:
         - screen: InstalledModpacksScreen
+        - element: { text: Note-only Test P, enabled: true }
+  - do: screenshot
+    name: capture the installed pack list
+    file: note-only-pack-list
+  - do: click
+    name: open the installed pack details
+    select: { text: Note-only Test P }
+  - do: wait_for
+    name: show active pack lifecycle actions in its details
+    until:
+      all:
+        - screen: ModpackDetailsScreen
         - element: { text: Update, enabled: true }
         - element: { text: Deactivate, enabled: true }
         - element: { text: Remove, enabled: true }
-  - do: screenshot
-    name: capture per-pack lifecycle actions
-    file: note-only-pack-actions
-  - do: click
-    name: review the installed pack from its manager
-    select: { text: Note-only Test P }
-  - do: wait_for
-    name: return to the existing settings route for the same pack
-    until:
-      all:
-        - screen: ModpackSelectionScreen
-        - element: { text: Pack manager, enabled: true }
         - element: { text: Back, enabled: true }
+  - do: screenshot
+    name: capture active pack lifecycle actions
+    file: note-only-pack-details
+  - do: click
+    name: return to the installed pack list
+    select: { text: Back }
+  - do: click
+    name: return to active pack settings
+    select: { text: Back }
   - do: click
     name: leave the original settings route
     select: { text: Back }
@@ -139,11 +148,14 @@ flow:
   - do: click
     name: reopen per-pack lifecycle actions
     select: { text: Pack manager }
+  - do: click
+    name: open the active pack details
+    select: { text: Note-only Test P }
   - do: wait_for
     name: restore the pack manager actions
     until:
       all:
-        - screen: InstalledModpacksScreen
+        - screen: ModpackDetailsScreen
         - element: { text: Update, enabled: true }
   - do: click
     name: check manually for another update
@@ -151,7 +163,10 @@ flow:
   - do: wait_for
     name: report that the installed generation is current
     timeout: 30s
-    until: { element: { text: Up to date } }
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { text: Up to date, enabled: false }
   - do: click
     name: preview deactivation
     select: { text: Deactivate }
@@ -199,27 +214,31 @@ flow:
       all:
         - screen: InstalledModpacksScreen
         - element: { text: Note-only Test P }
-        - element: { text: Update, enabled: false }
+  - do: click
+    name: open the inactive pack details
+    select: { text: Note-only Test P }
+  - do: wait_for
+    name: show inactive pack lifecycle actions
+    until:
+      all:
+        - screen: ModpackDetailsScreen
         - element: { text: Activate, enabled: true }
         - element: { text: Remove, enabled: true }
   - do: click
-    name: review a pack from the top-level manager
-    select: { text: Note-only Test P }
+    name: inspect inactive pack features
+    select: { text: Modpack settings }
   - do: wait_for
-    name: keep the pack manager action available in its child
+    name: keep the details route available from feature settings
     until:
       all:
         - screen: ModpackSelectionScreen
         - element: { text: Pack manager, enabled: true }
   - do: click
-    name: return to the top-level manager with its normal action
+    name: return to inactive pack details
     select: { text: Pack manager }
-  - do: wait_for
-    name: restore the inactive pack actions
-    until:
-      all:
-        - screen: InstalledModpacksScreen
-        - element: { text: Activate, enabled: true }
+  - do: click
+    name: return to the inactive pack list
+    select: { text: Back }
   - do: click
     name: open local storage after deactivation
     select: { text: Local storage }
@@ -241,7 +260,10 @@ flow:
     until:
       all:
         - screen: InstalledModpacksScreen
-        - element: { text: Activate, enabled: true }
+        - element: { text: Note-only Test P, enabled: true }
+  - do: click
+    name: reopen inactive pack details after compaction
+    select: { text: Note-only Test P }
   - do: click
     name: activate the retained pack again
     select: { text: Activate }

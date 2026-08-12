@@ -96,8 +96,21 @@ flow:
     name: select the conflicting alternative
     select: { text: Alternative }
   - do: wait_for
-    name: show the conflict explanation
-    until: { element: { text: conflict } }
+    name: show the deterministic conflict replacement confirmation
+    until:
+      all:
+        - screen: FeatureConflictScreen
+        - element: { text: Keep current, enabled: true }
+        - element: { text: Use Alternative, enabled: true }
+  - do: click
+    name: keep the current feature selection
+    select: { text: Keep current }
+  - do: wait_for
+    name: return to dependency and conflict groups after confirmation
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: "Next >", enabled: true }
   - do: click
     name: inspect unavailable platform filtering
     select: { text: Next > }
@@ -252,17 +265,17 @@ flow:
         - element: { text: Pack B }
         - element: { text: active }
   - do: click
-    name: open Pack B for review only
+    name: open Pack B details for review
     select: { text: Pack B }
   - do: wait_for
-    name: show Pack B review settings
+    name: show Pack B activation action
     until:
       all:
-        - screen: ModpackSelectionScreen
-        - element: { text: Review pack switch }
+        - screen: ModpackDetailsScreen
+        - element: { text: Activate, enabled: true }
   - do: click
     name: review the A to B cached switch
-    select: { text: Review pack switch }
+    select: { text: Activate }
   - do: wait_for
     name: show cached switch preview
     until:
@@ -327,11 +340,14 @@ flow:
     name: open Pack A for the reverse switch
     select: { text: Pack A }
   - do: wait_for
-    name: show Pack A review settings
-    until: { element: { text: Review pack switch } }
+    name: show Pack A activation action
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { text: Activate, enabled: true }
   - do: click
     name: review the B to A cached switch
-    select: { text: Review pack switch }
+    select: { text: Activate }
   - do: wait_for
     name: show reverse cached switch preview
     until: { element: { text: Update, enabled: true } }
@@ -399,7 +415,7 @@ flow:
     select: { text: Pack B }
   - do: click
     name: review the Pack A to Pack B v2 switch
-    select: { text: Review pack switch }
+    select: { text: Activate }
   - do: wait_for
     name: show Pack B v2 switch preview
     until: { element: { text: Update, enabled: true } }
@@ -545,7 +561,7 @@ flow:
     select: { text: Pack A }
   - do: click
     name: review the Pack B v2 to Pack A switch
-    select: { text: Review pack switch }
+    select: { text: Activate }
   - do: wait_for
     name: show the return to Pack A preview
     until: { element: { text: Update, enabled: true } }
@@ -722,14 +738,27 @@ flow:
     name: open the Pack A manager
     select: { text: Pack manager }
   - do: wait_for
-    name: show active Pack A lifecycle actions
+    name: show active Pack A in the manager
     until:
       all:
         - screen: InstalledModpacksScreen
+        - element: { text: Pack A, enabled: true }
+  - do: screenshot
+    name: capture active Pack A in the manager
+    file: all-pack-manager
+  - do: click
+    name: open active Pack A details
+    select: { text: Pack A }
+  - do: wait_for
+    name: show active Pack A lifecycle actions
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { text: Deactivate, enabled: true }
         - element: { text: Remove, enabled: true }
   - do: screenshot
-    name: capture active Pack A manager actions
-    file: all-pack-manager-actions
+    name: capture active Pack A lifecycle actions
+    file: all-pack-details
   - do: click
     name: open the Pack A removal review
     select: { text: Remove }
