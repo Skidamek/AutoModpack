@@ -428,6 +428,8 @@ public class ModpackUpdater implements AutoCloseable {
 	private UpdateTransactionExecutor.Execution applyRemovalLike(boolean remove) throws Exception {
 		ClientUpdatePlanBuilder.RemovalPreparation preparation = planBuilder.prepareRemoval();
 		clientConfig = preparation.currentConfig();
+		UpdatePreview applied = UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation),
+				remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION, preparation.baseline(), "", List.of()).withFeatureManifest(removalManifest(preparation));
 		UpdateTransaction transaction = remove
 				? UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId))
 				: UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
@@ -435,8 +437,6 @@ public class ModpackUpdater implements AutoCloseable {
 		if (execution.success()) {
 			clientConfig = preparation.plannedConfig();
 			if (remove) new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
-			UpdatePreview applied = UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation),
-					remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION, preparation.baseline(), "", List.of()).withFeatureManifest(removalManifest(preparation));
 			changelogs.replaceWith(applied, Map.of());
 			ApplyResult applyResult = applyResult(preparation.plan());
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
