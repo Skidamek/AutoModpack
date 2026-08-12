@@ -247,10 +247,10 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: Pack manager, enabled: true }
+        - element: { text: Back, enabled: true }
   - do: click
     name: return to inactive pack details
-    select: { text: Pack manager }
+    select: { text: Back }
   - do: click
     name: return to the inactive pack list
     select: { text: Back }
