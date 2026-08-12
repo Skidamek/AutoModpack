@@ -25,7 +25,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 /** One browser for every file AutoModpack preserved before a destructive change. */
 public final class PreservationVaultScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 430;
-	private static final int ROW_HEIGHT = 46;
+	private static final int ROW_HEIGHT = 52;
 
 	private final Screen parent;
 	private final ClientStorage storage;
@@ -252,21 +252,19 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		String description = loading ? VersionedText.translatable("automodpack.vault.loading").getString()
 				: VersionedText.translatable(activePack ? "automodpack.vault.active" : "automodpack.vault.inactive", claims().size()).getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, description, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
-		PreservationVault.Claim selected = selected();
-		if (selected != null) {
-			String detail = restoreFailed ? VersionedText.translatable("automodpack.vault.restoreUnavailable").getString()
-					: VersionedText.translatable("automodpack.vault.detail", reason(selected.reason()), UiFormat.formatInstant(selected.preservedAt()), status(selected.status())).getString();
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, detail, this.width - 20)).withStyle(ChatFormatting.AQUA), this.width / 2, 42, TextColors.WHITE);
-		}
-		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 54, TextColors.WHITE);
+		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 28, 2);
+		for (int index = 0; index < descriptionLines.size(); index++)
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), this.width / 2, 28 + index * 12, TextColors.WHITE);
+		if (restoreFailed) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.restoreUnavailable").withStyle(ChatFormatting.AQUA), this.width / 2, 52, TextColors.WHITE);
+		else if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		List<PreservationVault.Claim> claims = claims();
 		int start = page * rowsPerPage();
 		for (int index = start; index < Math.min(claims.size(), start + rowsPerPage()); index++) {
 			PreservationVault.Claim claim = claims.get(index);
 			int y = 88 + (index - start) * ROW_HEIGHT;
-			String metadata = VersionedText.translatable("automodpack.vault.row", reason(claim.reason()), status(claim.status()), UiFormat.formatInstant(claim.preservedAt())).getString();
+			String metadata = reason(claim.reason()) + "  |  " + status(claim.status());
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, metadata, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(UiFormat.formatInstant(claim.preservedAt())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 12, TextColors.WHITE);
 		}
 		if (!loading && claims.isEmpty()) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
 	}

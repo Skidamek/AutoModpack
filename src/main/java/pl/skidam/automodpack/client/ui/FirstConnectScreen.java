@@ -48,7 +48,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 					optionalAction(VersionedText.translatable(cleanupKey, updater.firstInstallLocalModCount()), button -> toggleExistingMods())));
 		}
 		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize())));
-		String continueKey = updater.firstInstallLocalModCount() == 0 ? "automodpack.firstConnect.continue" : "automodpack.firstConnect.continueKeepMods";
+		String continueKey = updater.firstInstallLocalModCount() > 0 && !archiveExistingMods ? "automodpack.firstConnect.continueKeepMods" : "automodpack.firstConnect.continue";
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()),
 				primaryAction(VersionedText.translatable(continueKey).withStyle(ChatFormatting.BOLD), button -> continueWithDefaults())));

@@ -62,6 +62,9 @@ accept_certificate:
       all:
         - element: { role: textfield }
         - element: { text: verify, enabled: true }
+  - do: screenshot
+    name: capture the shortened certificate fingerprint
+    file: certificate-verification
   - do: type
     name: enter the fingerprint
     select: { role: textfield }
