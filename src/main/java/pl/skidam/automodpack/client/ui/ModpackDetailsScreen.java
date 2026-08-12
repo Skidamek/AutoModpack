@@ -37,6 +37,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		actionButtons.clear();
 		List<Action> actions = new ArrayList<>();
 		actions.add(new Action(pack.active() && upToDate ? "automodpack.management.upToDate" : pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
+		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
 		actions.add(new Action("automodpack.selection.button", this::openFeatures));
 		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
 		actions.add(new Action("automodpack.management.files", this::openFiles));
@@ -82,6 +83,13 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		upToDate = current;
 		released();
 		if (current) rebuild();
+	}
+
+	private void repair() {
+		if (busy || !pack.active()) return;
+		busy = true;
+		updateActions();
+		controller.repair(this, pack, this::updateCompleted);
 	}
 
 	private void openFeatures() {

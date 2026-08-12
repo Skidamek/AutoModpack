@@ -8,7 +8,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
-/** Routes pack-specific recovery archives and the explicit global storage cleanup. */
+/** Routes pack-specific preserved files and the explicit global storage cleanup. */
 public final class ModpackStorageScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 320;
 
@@ -29,12 +29,8 @@ public final class ModpackStorageScreen extends VersionedScreen {
 		int x = panelLeft(PANEL_WIDTH);
 		int width = panelWidth(PANEL_WIDTH);
 		int y = 76;
-		if (controller.hasRecovery(pack)) {
-			this.addRenderableWidget(buttonWidget(x, y, width, 22, VersionedText.translatable("automodpack.management.recovery"), button -> openRecovery()));
-			y += 26;
-		}
-		if (controller.hasQuarantine(pack)) {
-			this.addRenderableWidget(buttonWidget(x, y, width, 22, VersionedText.translatable("automodpack.management.quarantine"), button -> openQuarantine()));
+		if (controller.hasPreservedFiles(pack)) {
+			this.addRenderableWidget(buttonWidget(x, y, width, 22, VersionedText.translatable("automodpack.management.preservedFiles"), button -> openPreservedFiles()));
 			y += 26;
 		}
 		this.addRenderableWidget(buttonWidget(x, y, width, 22, VersionedText.translatable("automodpack.packDetails.localStorage"), button -> openLocalStorage()));
@@ -42,12 +38,8 @@ public final class ModpackStorageScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
 	}
 
-	private void openRecovery() {
-		controller.openRecovery(this, pack, () -> {});
-	}
-
-	private void openQuarantine() {
-		ScreenImpl.setScreen(new QuarantineArchiveScreen(this, controller.storage(), pack.modpackId(), pack.name(), pack.active(), () -> {}));
+	private void openPreservedFiles() {
+		controller.openPreservedFiles(this, pack, () -> {});
 	}
 
 	private void openLocalStorage() {

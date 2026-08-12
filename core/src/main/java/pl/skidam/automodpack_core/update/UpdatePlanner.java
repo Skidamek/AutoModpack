@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.update;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -19,6 +20,7 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
@@ -48,8 +50,11 @@ public final class UpdatePlanner {
 			List<NestedCopy> previousNestedCopies,
 			List<NestedCopy> nestedCopies,
 			SelectionContext selection,
-			ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
+			ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig,
+			Map<String, FileState> consentedLocalModFiles) {
 		public Input {
+			if (installedManifest != null && consentedLocalModFiles != null && !consentedLocalModFiles.isEmpty())
+				throw new IllegalArgumentException("First-install consent cannot be used after a modpack is installed");
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
 			Map<String, FileState> normalizedOverlays = new TreeMap<>();
 			for (var entry : editableOverlays.entrySet()) normalizedOverlays.put(normalize(entry.getKey()), entry.getValue());
@@ -59,6 +64,18 @@ public final class UpdatePlanner {
 			standardMods = List.copyOf(standardMods);
 			previousNestedCopies = List.copyOf(previousNestedCopies);
 			nestedCopies = List.copyOf(nestedCopies);
+			Map<String, FileState> normalizedConsent = new TreeMap<>();
+			for (var entry : (consentedLocalModFiles == null ? Map.<String, FileState>of() : consentedLocalModFiles).entrySet())
+				normalizedConsent.put(normalize(entry.getKey()), entry.getValue());
+			consentedLocalModFiles = Collections.unmodifiableMap(normalizedConsent);
+		}
+
+		public Input(ModpackJsons.ModpackContentFields installedManifest, ModpackJsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
+				Map<String, FileState> editableOverlays, Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods,
+				List<NestedCopy> previousNestedCopies, List<NestedCopy> nestedCopies, SelectionContext selection,
+				ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
+			this(installedManifest, targetManifest, files, editableOverlays, forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCopies, selection,
+					plannedClientConfig, Map.of());
 		}
 
 	}
@@ -164,8 +181,10 @@ public final class UpdatePlanner {
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
+		ChangeSet consequences = consequences(ordered, input.files(), installed, ledger, restartReasons, true, input.baseline());
 		return new UpdatePlan(installed.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
-				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(), List.of(), List.of(), List.of());
+				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(), List.of(), List.of(), List.of(),
+				consequences);
 	}
 
 	public static UpdatePlan plan(Input input) {
@@ -189,6 +208,7 @@ public final class UpdatePlanner {
 		List<BaselineCapture> baselineCaptures = new ArrayList<>();
 		List<Conflict> conflicts = new ArrayList<>();
 		OwnershipLedger installedLedger = input.installedManifest() == null ? null : OwnershipLedger.fromFields(input.installedManifest().ownershipLedger);
+		planConsentedLocalMods(input, projected, operations, preservations, restartReasons);
 
 		for (var entry : installedItems.entrySet()) {
 			if (targetItems.containsKey(entry.getKey())) continue;
@@ -239,7 +259,8 @@ public final class UpdatePlanner {
 					String liveHash = overlay == null ? item.sha1 : overlay.sha1();
 					long liveSize = overlay == null ? parseSize(item.size) : overlay.size();
 					if (!matches(live, liveHash, liveSize)) {
-						install(operations, projected, liveKey, liveHash, liveSize);
+						FileState consented = input.consentedLocalModFiles().get(relative);
+						install(operations, projected, liveKey, liveHash, liveSize, consented == null ? null : consented.sha1());
 						if (activeMod) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
 					}
 				}
@@ -259,10 +280,99 @@ public final class UpdatePlanner {
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
+		ChangeSet consequences = consequences(ordered, input.files(), target, ledger, restartReasons, false, null);
 		return new UpdatePlan(target.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
 				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(),
 				baselineCaptures.stream().sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal()).thenComparing(BaselineCapture::relativePath)).toList(),
-				conflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList(), generatedCopies);
+				conflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList(), generatedCopies, consequences);
+	}
+
+	private static void planConsentedLocalMods(Input input, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations,
+			List<Preservation> preservations, EnumSet<RestartReason> restartReasons) {
+		if (input.installedManifest() != null) {
+			if (!input.consentedLocalModFiles().isEmpty()) throw new IllegalArgumentException("First-install consent cannot be used after a modpack is installed");
+			return;
+		}
+		if (input.consentedLocalModFiles().isEmpty()) return;
+		for (var entry : input.consentedLocalModFiles().entrySet()) {
+			String relative = normalize(entry.getKey());
+			Path path = Path.of(relative);
+			if (path.getNameCount() != 2 || !path.getName(0).toString().equals(ModpackPathPolicy.MODS_ROOT))
+				throw new IllegalArgumentException("First-install consent path must be a direct mods child: " + relative);
+			FileState observed = entry.getValue();
+			if (observed == null || !observed.regularFile() || !HashUtils.isSha1(observed.sha1()) || observed.size() < 0)
+				throw new IllegalArgumentException("First-install consent file metadata is invalid: " + relative);
+			FileKey key = new FileKey(Root.GAME_DIR, relative);
+			FileState current = projected.get(key);
+			if (!matches(current, observed.sha1(), observed.size())) throw new IllegalArgumentException("First-install consent file changed after scanning: " + relative);
+			preservations.add(new Preservation(Root.GAME_DIR, relative, observed.sha1().toLowerCase(Locale.ROOT), observed.size(), PreservationProof.PLAYER_CONSENT));
+			delete(operations, projected, key, observed.sha1());
+			restartReasons.add(RestartReason.REMOVED_LOCAL_MODS);
+		}
+	}
+
+	private static ChangeSet consequences(List<Operation> operations, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
+			OwnershipLedger ledger, Set<RestartReason> restartReasons, boolean removal, ClientStorageJsons.ClientBaselineFields baseline) {
+		Map<FileKey, Operation> operationsByFile = operations.stream().collect(Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), Function.identity()));
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetFiles = target.list == null ? Map.of() : sortedItems(target.list);
+		List<ChangeSet.Change> changes = new ArrayList<>();
+		for (Operation operation : operations) {
+			FileKey key = new FileKey(operation.root(), operation.relativePath());
+			FileState before = originalFiles.get(key);
+			ModpackJsons.ModpackContentFields.ModpackContentItem after = targetFiles.get(operation.relativePath());
+			OwnershipLedger.Entry ownership = ledger.entries().get(operation.relativePath());
+			ChangeSet.Kind kind = operation.operation() == OperationType.DELETE
+					? ChangeSet.Kind.REMOVED
+					: before == null || !before.regularFile() ? ChangeSet.Kind.ADDED : ChangeSet.Kind.MODIFIED;
+			String beforeHash = before == null || !HashUtils.isSha1(before.sha1()) ? null : before.sha1();
+			String afterHash = operation.operation() == OperationType.DELETE ? null : operation.expectedObjectHash();
+			String contentKind = after == null ? null : after.type;
+			List<String> featureIds = ownership == null ? List.of() : List.copyOf(ownership.historicalGroupIds());
+			long size = operation.operation() == OperationType.DELETE ? before == null ? 0 : Math.max(0, before.size()) : operation.expectedSize();
+			changes.add(new ChangeSet.Change(operation.relativePath(), kind,
+					List.of(new ChangeSet.Occurrence(operation.root().name(), operation.relativePath(), size, beforeHash, afterHash, contentKind, featureIds, List.of()))));
+		}
+
+		Set<String> targetPaths = targetFiles.keySet();
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries = removal ? consequenceBaselineEntries(baseline) : Map.of();
+		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
+			if (!removal && targetPaths.contains(ledgerEntry.logicalPath())) continue;
+			Optional<FileKey> optionalKey = managedCleanupKey(ledgerEntry.logicalPath());
+			if (optionalKey.isEmpty()) continue;
+			FileKey key = optionalKey.get();
+			FileState current = originalFiles.get(key);
+			if (current == null || operationsByFile.containsKey(key)) continue;
+			if (removal && consequenceBaselineMatches(current, baselineEntries.get(ledgerEntry.logicalPath()))) continue;
+			ChangeSet.Kind kind;
+			if (!current.regularFile()) {
+				kind = ChangeSet.Kind.UNSAFE;
+			} else if (!HashUtils.isSha1(current.sha1()) || current.size() < 0) {
+				kind = ChangeSet.Kind.PRESERVED_UNAVAILABLE;
+			} else {
+				OwnershipLedger.Content content = new OwnershipLedger.Content(current.sha1().toLowerCase(Locale.ROOT), current.size());
+				kind = ledgerEntry.historicalHashes().contains(content)
+						? removal ? ChangeSet.Kind.PRESERVED_UNAVAILABLE : ChangeSet.Kind.PRESERVED_OUTSIDE
+						: ChangeSet.Kind.PRESERVED_CHANGED;
+			}
+			String beforeHash = HashUtils.isSha1(current.sha1()) ? current.sha1() : null;
+			changes.add(new ChangeSet.Change(key.relativePath(), kind, List.of(new ChangeSet.Occurrence(key.root().name(), key.relativePath(), Math.max(0, current.size()),
+					beforeHash, null, null, List.copyOf(ledgerEntry.historicalGroupIds()), List.of()))));
+		}
+
+		List<ChangeSet.Effect> effects = restartReasons.stream().map(reason -> new ChangeSet.Effect("restart", reason.name())).toList();
+		return ChangeSet.of(changes, effects);
+	}
+
+	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> consequenceBaselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
+		if (baseline == null || baseline.entries == null) return Map.of();
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
+		for (var entry : baseline.entries) if (entry != null && entry.logicalPath != null) entries.put(normalize(entry.logicalPath), entry);
+		return entries;
+	}
+
+	private static boolean consequenceBaselineMatches(FileState current, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
+		return baseline != null && !baseline.absent && HashUtils.isSha1(baseline.objectHash)
+				&& baseline.size >= 0 && current.regularFile() && baseline.size == current.size() && baseline.objectHash.equalsIgnoreCase(current.sha1());
 	}
 
 	private static void planBaselineCaptures(Map<FileKey, FileState> original, Map<FileKey, Operation> operations,
@@ -437,7 +547,7 @@ public final class UpdatePlanner {
 			FileKey targetKey = new FileKey(Root.GAME_DIR, normalize(target.relativePath()));
 			boolean targetAlreadyMatches = matches(projected.get(targetKey), target.sha1(), target.size());
 			boolean sourceNeedsDisposition = !oldKey.equals(targetKey) || !keepStandard || !targetAlreadyMatches;
-			if (sourceNeedsDisposition) conflicts.add(conflict(modpackId, target, standard, owned ? ConflictAction.REMOVE_OWNED : ConflictAction.QUARANTINE));
+			if (sourceNeedsDisposition) conflicts.add(conflict(modpackId, target, standard, owned ? ConflictAction.REMOVE_OWNED : ConflictAction.PRESERVE_LOCAL));
 			if (keepStandard) {
 				if (!targetAlreadyMatches) {
 					install(operations, projected, targetKey, target.sha1(), target.size(),

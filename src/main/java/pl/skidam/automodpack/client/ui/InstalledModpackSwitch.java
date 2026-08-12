@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
 import java.io.IOException;
-import java.util.Map;
 
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -38,7 +37,7 @@ final class InstalledModpackSwitch {
 						(Runnable) () -> {
 							finalUpdater.close();
 							release.run();
-						}, returnToSelection, Map.of());
+						}, returnToSelection);
 			} catch (Exception e) {
 				if (updater != null) updater.close();
 				release.run();

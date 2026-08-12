@@ -1,0 +1,507 @@
+package pl.skidam.automodpack_core.update;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.stream.Stream;
+
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.ModFileCache;
+
+/**
+ * Offline integrity inspection and repair for the active, locally installed generation.
+ * The installed generation record is the expected truth; every filesystem and CAS
+ * observation is force-rehashed before it can become a repair source.
+ */
+public final class OfflineRepair {
+	private static final Comparator<Finding> FINDING_ORDER = Comparator.comparing((Finding finding) -> finding.place().ordinal()).thenComparing(Finding::logicalPath);
+	private static final Comparator<EditableResetCandidate> EDITABLE_ORDER = Comparator.comparing(EditableResetCandidate::logicalPath);
+	private final ClientStorage storage;
+
+	public OfflineRepair(ClientStorage storage) {
+		this.storage = Objects.requireNonNull(storage, "client storage");
+	}
+
+	public enum Place {
+		CAS,
+		PROJECTION,
+		LIVE,
+		GENERATED_COPY
+	}
+
+	public enum Condition {
+		MISSING,
+		DAMAGED,
+		UNSUPPORTED_PATH
+	}
+
+	public record Request(SelectedModpackTarget activeTarget, Set<String> forceCopyPaths, Path protectedModPath) {
+		public Request {
+			activeTarget = Objects.requireNonNull(activeTarget, "active target");
+			TreeSet<String> normalizedForceCopyPaths = new TreeSet<>();
+			for (String path : Objects.requireNonNull(forceCopyPaths, "force-copy paths")) normalizedForceCopyPaths.add(UpdatePlanner.normalize(path));
+			forceCopyPaths = Set.copyOf(normalizedForceCopyPaths);
+			protectedModPath = protectedModPath == null ? null : protectedModPath.toAbsolutePath().normalize();
+		}
+	}
+
+	public record Finding(Place place, String logicalPath, String expectedHash, long expectedSize, Condition condition, String observedHash, long observedSize,
+			boolean locallyRepairable) {
+		public Finding {
+			place = Objects.requireNonNull(place, "repair place");
+			logicalPath = Objects.requireNonNull(logicalPath, "logical path");
+			expectedHash = HashUtils.normalizeSha1(expectedHash);
+			if (expectedSize < 0 || observedSize < -1) throw new IllegalArgumentException("Repair finding sizes are invalid");
+			condition = Objects.requireNonNull(condition, "repair condition");
+			if (observedHash != null) observedHash = HashUtils.normalizeSha1(observedHash);
+		}
+	}
+
+	public record EditableResetCandidate(String logicalPath, String defaultHash, long defaultSize, String currentHash, long currentSize, boolean absent) {
+		public EditableResetCandidate {
+			logicalPath = UpdatePlanner.normalize(logicalPath);
+			defaultHash = HashUtils.normalizeSha1(defaultHash);
+			if (defaultSize < 0 || currentSize < -1) throw new IllegalArgumentException("Editable reset candidate sizes are invalid");
+			if (currentHash != null) currentHash = HashUtils.normalizeSha1(currentHash);
+			if (absent != (currentHash == null)) throw new IllegalArgumentException("Editable reset candidate absence is inconsistent");
+		}
+	}
+
+	public record Prepared(String modpackId, String generationId, String selectionDigest, Request request, List<Finding> findings,
+			List<EditableResetCandidate> editableResetCandidates, List<String> unownedModPaths, long directlyHashedFileCount, long directlyHashedBytes) {
+		public Prepared {
+			Objects.requireNonNull(modpackId, "modpack ID");
+			generationId = HashUtils.normalizeSha1(generationId);
+			selectionDigest = HashUtils.normalizeSha1(selectionDigest);
+			request = Objects.requireNonNull(request, "repair request");
+			findings = List.copyOf(findings);
+			editableResetCandidates = List.copyOf(editableResetCandidates);
+			unownedModPaths = List.copyOf(unownedModPaths);
+			if (directlyHashedFileCount < 0 || directlyHashedBytes < 0) throw new IllegalArgumentException("Direct hash receipt is invalid");
+		}
+
+		public boolean healthy() {
+			return findings.isEmpty();
+		}
+
+		public boolean requiresUpdate() {
+			return findings.stream().anyMatch(finding -> !finding.locallyRepairable());
+		}
+	}
+
+	public record Receipt(Prepared before, Prepared after, long repairedCasObjects, long repairedMaterializedFiles, long resetEditableFiles, long archivedUnownedMods) {
+		public Receipt {
+			before = Objects.requireNonNull(before, "repair input");
+			after = Objects.requireNonNull(after, "repair result");
+			if (repairedCasObjects < 0 || repairedMaterializedFiles < 0 || resetEditableFiles < 0 || archivedUnownedMods < 0)
+				throw new IllegalArgumentException("Repair receipt values are invalid");
+		}
+
+		public boolean complete() {
+			return after.healthy();
+		}
+
+		public boolean changedFiles() {
+			return repairedMaterializedFiles > 0 || resetEditableFiles > 0 || archivedUnownedMods > 0;
+		}
+	}
+
+	/** Performs a read-only, cache-bypassing inspection. */
+	public Prepared inspect(Request request) throws IOException {
+		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+			return analyze(request, fileCache, modCache).prepared();
+		}
+	}
+
+	/** Repairs every locally repairable non-editable finding and returns a fresh direct-hash receipt. */
+	public Receipt apply(Prepared prepared) throws IOException {
+		return apply(prepared, Set.of(), Set.of());
+	}
+
+	/** Applies local repairs plus the exact editable resets and unowned-mod cleanup selected by the player. */
+	public Receipt apply(Prepared prepared, Set<String> editableResetPaths, Set<String> unownedModPaths) throws IOException {
+		Objects.requireNonNull(prepared, "prepared repair");
+		Set<String> requestedEditableResets = normalizedSelection(editableResetPaths);
+		Set<String> requestedUnownedMods = normalizedSelection(unownedModPaths);
+		Request request = prepared.request();
+		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+			Analysis current = analyze(request, fileCache, modCache);
+			requireSamePinnedIdentity(prepared, current.prepared());
+			requireSelections(current.prepared(), requestedEditableResets, requestedUnownedMods);
+			long repairedCas = 0;
+			for (Expected expected : current.expected().values().stream().filter(value -> value.place() == Place.CAS).sorted(Expected.ORDER).toList()) {
+				Observation observation = current.observations().get(expected.path());
+				if (matches(observation, expected.content()) || observation != null && observation.unsupported()) continue;
+				Path source = verifiedSource(current.sources().getOrDefault(expected.content(), List.of()), expected.path(), expected.content(), fileCache);
+				if (source == null) continue;
+				assertPinned(request);
+				ensureSafePath(storage.objectsDirectory(), expected.path());
+				if (VerifiedFileTransfer.copyAtomic(source, expected.path(), expected.content().size(), expected.content().hash())) repairedCas++;
+				fileCache.rehash(expected.path());
+			}
+
+			Analysis withRepairedCas = analyze(request, fileCache, modCache);
+			long repairedFiles = 0;
+			for (Expected expected : withRepairedCas.expected().values().stream().filter(value -> value.place() != Place.CAS).sorted(Expected.ORDER).toList()) {
+				Observation observation = withRepairedCas.observations().get(expected.path());
+				if (matches(observation, expected.content()) || observation != null && observation.unsupported()) continue;
+				Path object = storage.objectsDirectory().resolve(expected.content().hash()).normalize();
+				Observation objectObservation = withRepairedCas.observations().get(object);
+				if (!matches(objectObservation, expected.content())) continue;
+				assertPinned(request);
+				ensureSafePath(expected.root(), expected.path());
+				if (VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash())) repairedFiles++;
+				fileCache.rehash(expected.path());
+			}
+
+			Analysis locallyRepaired = analyze(request, fileCache, modCache);
+			long resetEditable = resetEditableFiles(request, locallyRepaired, requestedEditableResets, fileCache);
+			Analysis afterEditableReset = analyze(request, fileCache, modCache);
+			long archivedUnowned = archiveUnownedMods(request, afterEditableReset, requestedUnownedMods, fileCache);
+			Prepared after = analyze(request, fileCache, modCache).prepared();
+			requireSamePinnedIdentity(prepared, after);
+			return new Receipt(current.prepared(), after, repairedCas, repairedFiles, resetEditable, archivedUnowned);
+		}
+	}
+
+	private long resetEditableFiles(Request request, Analysis analysis, Set<String> selected, FileMetadataCache fileCache) throws IOException {
+		if (selected.isEmpty()) return 0;
+		Map<String, EditableResetCandidate> candidates = analysis.prepared().editableResetCandidates().stream()
+				.collect(java.util.stream.Collectors.toMap(EditableResetCandidate::logicalPath, candidate -> candidate));
+		TreeSet<String> tombstones = new TreeSet<>(storage.readOverlayState(analysis.prepared().modpackId()).deletedPaths);
+		long reset = 0;
+		for (String logicalPath : selected.stream().sorted().toList()) {
+			EditableResetCandidate candidate = candidates.get(logicalPath);
+			if (candidate == null) throw new IOException("Editable reset selection is stale: " + logicalPath);
+			Path live = storage.gamePath(logicalPath);
+			Path object = storage.objectsDirectory().resolve(candidate.defaultHash()).normalize();
+			Observation objectObservation = analysis.observations().get(object.toAbsolutePath().normalize());
+			if (!matches(objectObservation, new Content(candidate.defaultHash(), candidate.defaultSize())))
+				throw new IOException("Editable default is unavailable locally: " + logicalPath);
+			assertPinned(request);
+			if (!candidate.absent())
+				PreservationVault.preserve(storage, analysis.prepared().modpackId(), analysis.prepared().generationId(), PreservationVault.Reason.EDITABLE_RESET,
+						Root.GAME_DIR, logicalPath, candidate.currentHash(), candidate.currentSize());
+			ensureSafePath(storage.gameDirectory(), live);
+			VerifiedFileTransfer.copyAtomic(object, live, candidate.defaultSize(), candidate.defaultHash());
+			Files.deleteIfExists(storage.overlayFile(analysis.prepared().modpackId(), logicalPath));
+			tombstones.remove(logicalPath);
+			fileCache.rehash(live);
+			reset++;
+		}
+		storage.writeOverlayState(analysis.prepared().modpackId(), tombstones);
+		return reset;
+	}
+
+	private long archiveUnownedMods(Request request, Analysis analysis, Set<String> selected, FileMetadataCache fileCache) throws IOException {
+		if (selected.isEmpty()) return 0;
+		long archived = 0;
+		for (String logicalPath : selected.stream().sorted().toList()) {
+			if (!analysis.prepared().unownedModPaths().contains(logicalPath)) throw new IOException("Unowned-mod selection is stale: " + logicalPath);
+			Path source = storage.gamePath(logicalPath);
+			if (source.toAbsolutePath().normalize().equals(request.protectedModPath())) throw new IOException("The running AutoModpack JAR cannot be archived");
+			ensureSafePath(storage.modsDirectory(), source);
+			if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Unowned mod is no longer a regular file: " + logicalPath);
+			String hash = fileCache.rehash(source);
+			long size = Files.size(source);
+			assertPinned(request);
+			PreservationVault.preserveAndRemove(storage, analysis.prepared().modpackId(), analysis.prepared().generationId(), PreservationVault.Reason.STRICT_REPAIR,
+					Root.GAME_DIR, logicalPath, hash, size);
+			archived++;
+		}
+		return archived;
+	}
+
+	private static Set<String> normalizedSelection(Set<String> paths) {
+		TreeSet<String> normalized = new TreeSet<>();
+		for (String path : Objects.requireNonNull(paths, "repair selection")) normalized.add(UpdatePlanner.normalize(path));
+		return Set.copyOf(normalized);
+	}
+
+	private static void requireSelections(Prepared prepared, Set<String> editable, Set<String> unowned) throws IOException {
+		Set<String> editableCandidates = prepared.editableResetCandidates().stream().map(EditableResetCandidate::logicalPath).collect(java.util.stream.Collectors.toSet());
+		if (!editableCandidates.containsAll(editable)) throw new IOException("Editable reset selection contains a stale path");
+		if (!Set.copyOf(prepared.unownedModPaths()).containsAll(unowned)) throw new IOException("Unowned-mod selection contains a stale path");
+	}
+
+	private Analysis analyze(Request request, FileMetadataCache fileCache, ModFileCache modCache) throws IOException {
+		Objects.requireNonNull(request, "repair request");
+		assertPinned(request);
+		Map<Path, Expected> expected = new LinkedHashMap<>();
+		Map<Path, Observation> observations = new HashMap<>();
+		Set<Path> modFiles = new TreeSet<>();
+		Map<String, EditableResetCandidate> editable = new TreeMap<>();
+		String modpackId = request.activeTarget().manifest().modpackId();
+		String generationId = request.activeTarget().generationTarget().targetGenerationId();
+
+		// The state reader validates editable tombstone identity and canonical paths.
+		storage.readOverlayState(modpackId);
+		Map<String, Observation> overlays = inspectOverlay(modpackId, fileCache, observations);
+		for (var item : request.activeTarget().flatTarget().list.stream().sorted(Comparator.comparing(value -> UpdatePlanner.normalize(value.file))).toList()) {
+			String logicalPath = UpdatePlanner.normalize(item.file);
+			Content content = new Content(item.sha1, parseSize(item.size));
+			boolean mod = ModpackContentType.MOD.equals(item.type);
+			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
+			addExpected(expected, new Expected(Place.PROJECTION, logicalPath, storage.activeDirectory(), storage.activePath(logicalPath), content));
+			if (mod) modFiles.add(storage.activePath(logicalPath));
+
+			Path livePath = storage.gamePath(logicalPath);
+			if (item.editable) {
+				Observation live = observe(livePath, storage.gameDirectory(), fileCache, observations);
+				if (!matches(live, content))
+					editable.put(logicalPath, new EditableResetCandidate(logicalPath, content.hash(), content.size(), live == null ? null : live.hash(), live == null ? -1 : live.size(), live == null));
+				Observation overlay = overlays.get(logicalPath);
+				if (overlay != null && !overlay.unsupported())
+					addExpected(expected,
+							new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectsDirectory().resolve(overlay.hash()).normalize(), new Content(overlay.hash(), overlay.size())));
+			} else if (!ModpackPathPolicy.isActiveMod(logicalPath, item.type) || request.forceCopyPaths().contains(logicalPath)) {
+				addExpected(expected, new Expected(Place.LIVE, logicalPath, storage.gameDirectory(), livePath, content));
+				if (mod) modFiles.add(livePath);
+			}
+		}
+
+		String selectionDigest = UpdateTransaction.digest(request.activeTarget().selection().intent());
+		GeneratedCopyState generated = GeneratedCopyState.read(storage, modpackId, generationId, selectionDigest);
+		for (GeneratedCopyState.Entry entry : generated.entries()) {
+			Content content = new Content(entry.sha1(), entry.size());
+			addExpected(expected, new Expected(Place.CAS, entry.logicalPath(), storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
+			Path live = storage.gamePath(entry.logicalPath());
+			addExpected(expected, new Expected(Place.GENERATED_COPY, entry.logicalPath(), storage.gameDirectory(), live, content));
+			modFiles.add(live);
+		}
+		addBaselineObjects(expected, modpackId);
+		for (PreservationVault.Claim claim : PreservationVault.read(storage, modpackId).claims()) {
+			Content content = new Content(claim.objectHash(), claim.size());
+			addExpected(expected, new Expected(Place.CAS, claim.originalPath(), storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
+			Path sourceRoot = switch (claim.sourceRoot()) {
+				case GAME_DIR -> storage.gameDirectory();
+				case OVERLAY -> storage.overlayDirectory(modpackId);
+				case PROJECTION -> storage.activeDirectory();
+			};
+			Path source = switch (claim.sourceRoot()) {
+				case GAME_DIR -> storage.gamePath(claim.originalPath());
+				case OVERLAY -> storage.overlayFile(modpackId, claim.originalPath());
+				case PROJECTION -> storage.activePath(claim.originalPath());
+			};
+			observe(source, sourceRoot, fileCache, observations);
+			Path savedRoot = storage.restoredClaimDirectory(modpackId, claim.generationId(), claim.claimId());
+			observe(LogicalPath.resolve(savedRoot, claim.originalPath()), savedRoot, fileCache, observations);
+		}
+
+		Set<String> ownedLiveMods = new TreeSet<>();
+		for (Expected value : expected.values()) if ((value.place() == Place.LIVE || value.place() == Place.GENERATED_COPY) && ModpackPathPolicy.isModPath(value.logicalPath())) ownedLiveMods.add(value.logicalPath());
+		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations, modFiles);
+		for (Expected value : expected.values()) observe(value.path(), value.root(), fileCache, observations);
+		for (Path modFile : modFiles) {
+			Observation observation = observations.get(modFile.toAbsolutePath().normalize());
+			if (observation != null && !observation.unsupported()) modCache.reinspectMod(modFile, fileCache);
+		}
+
+		Map<Content, List<Path>> sources = new HashMap<>();
+		for (Observation observation : observations.values())
+			if (!observation.unsupported()) sources.computeIfAbsent(new Content(observation.hash(), observation.size()), ignoredContent -> new ArrayList<>()).add(observation.path());
+		for (List<Path> paths : sources.values()) paths.sort(Comparator.comparing(Path::toString));
+		List<Finding> findings = new ArrayList<>();
+		for (Expected value : expected.values()) {
+			Observation observation = observations.get(value.path());
+			if (matches(observation, value.content())) continue;
+			Condition condition = observation == null ? Condition.MISSING : observation.unsupported() ? Condition.UNSUPPORTED_PATH : Condition.DAMAGED;
+			boolean repairable = condition != Condition.UNSUPPORTED_PATH && sources.getOrDefault(value.content(), List.of()).stream().anyMatch(path -> !path.equals(value.path()));
+			findings.add(new Finding(value.place(), value.logicalPath(), value.content().hash(), value.content().size(), condition,
+					observation == null || observation.unsupported() ? null : observation.hash(), observation == null || observation.unsupported() ? -1 : observation.size(), repairable));
+		}
+		findings.sort(FINDING_ORDER);
+		List<EditableResetCandidate> editableCandidates = editable.values().stream().sorted(EDITABLE_ORDER).toList();
+		long bytes = 0;
+		for (Observation observation : observations.values()) if (!observation.unsupported()) bytes = Math.addExact(bytes, observation.size());
+		Prepared prepared = new Prepared(modpackId, generationId, selectionDigest, request, findings, editableCandidates, unownedMods,
+				observations.values().stream().filter(observation -> !observation.unsupported()).count(), bytes);
+		return new Analysis(prepared, Map.copyOf(expected), Map.copyOf(observations), immutableSources(sources));
+	}
+
+	private Map<String, Observation> inspectOverlay(String modpackId, FileMetadataCache fileCache, Map<Path, Observation> observations) throws IOException {
+		Path root = storage.overlayDirectory(modpackId);
+		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return Map.of();
+		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client editable overlay root is not a directory: " + root);
+		Map<String, Observation> result = new TreeMap<>();
+		try (Stream<Path> paths = Files.walk(root)) {
+			for (Path path : paths.filter(candidate -> !candidate.equals(root)).sorted().toList()) {
+				if (Files.isSymbolicLink(path)) throw new IOException("Client editable overlay contains a symbolic link: " + path);
+				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
+				String relative = UpdatePlanner.normalize(root.relativize(path).toString());
+				Observation observation = observe(path, root, fileCache, observations);
+				if (observation != null) result.put(relative, observation);
+			}
+		}
+		return Map.copyOf(result);
+	}
+
+	private void addBaselineObjects(Map<Path, Expected> expected, String modpackId) throws IOException {
+		Path baselineFile = storage.baselineFile(modpackId);
+		if (!Files.exists(baselineFile, LinkOption.NOFOLLOW_LINKS)) return;
+		if (Files.isSymbolicLink(baselineFile) || !Files.isRegularFile(baselineFile, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client baseline is not a regular file: " + baselineFile);
+		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(baselineFile, ClientStorageJsons.ClientBaselineFields.class)
+				.orElseThrow(() -> new IOException("Client baseline is empty: " + baselineFile));
+		if (baseline.schemaVersion != 1 || !modpackId.equals(baseline.modpackId) || baseline.entries == null) throw new IOException("Client baseline identity is invalid: " + baselineFile);
+		for (var entry : baseline.entries) {
+			if (entry == null || entry.logicalPath == null || entry.objectHash == null) throw new IOException("Client baseline entry is incomplete: " + baselineFile);
+			String logicalPath = UpdatePlanner.normalize(entry.logicalPath);
+			if (!logicalPath.equals(entry.logicalPath)) throw new IOException("Client baseline path is not canonical: " + entry.logicalPath);
+			if (entry.absent) {
+				if (!entry.objectHash.isEmpty() || entry.size != -1) throw new IOException("Absent client baseline contains file metadata: " + logicalPath);
+				continue;
+			}
+			Content content = new Content(entry.objectHash, entry.size);
+			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
+		}
+	}
+
+	private List<String> inspectMods(Path protectedModPath, Set<String> ownedLiveMods, FileMetadataCache fileCache, Map<Path, Observation> observations,
+			Set<Path> modFiles) throws IOException {
+		Path root = storage.modsDirectory();
+		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
+		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Mods path is not a directory: " + root);
+		List<String> unowned = new ArrayList<>();
+		try (Stream<Path> paths = Files.list(root)) {
+			for (Path path : paths.sorted().toList()) {
+				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(path)) continue;
+				Path normalized = path.toAbsolutePath().normalize();
+				String logicalPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(normalized).toString());
+				observe(normalized, storage.gameDirectory(), fileCache, observations);
+				modFiles.add(normalized);
+				if (!ownedLiveMods.contains(logicalPath) && !normalized.equals(protectedModPath)) unowned.add(logicalPath);
+			}
+		}
+		return List.copyOf(unowned);
+	}
+
+	private Observation observe(Path path, Path root, FileMetadataCache fileCache, Map<Path, Observation> observations) throws IOException {
+		Path normalized = path.toAbsolutePath().normalize();
+		if (observations.containsKey(normalized)) return observations.get(normalized);
+		if (!safePath(root, normalized)) {
+			Observation unsupported = new Observation(normalized, null, -1, true);
+			observations.put(normalized, unsupported);
+			return unsupported;
+		}
+		if (!Files.exists(normalized, LinkOption.NOFOLLOW_LINKS)) return null;
+		if (Files.isSymbolicLink(normalized) || !Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
+			Observation unsupported = new Observation(normalized, null, -1, true);
+			observations.put(normalized, unsupported);
+			return unsupported;
+		}
+		String hash = fileCache.rehash(normalized);
+		Observation observation = new Observation(normalized, hash, Files.size(normalized), false);
+		observations.put(normalized, observation);
+		return observation;
+	}
+
+	private void assertPinned(Request request) throws IOException {
+		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot repair while an update transaction is active");
+		var state = storage.readActiveState();
+		String modpackId = request.activeTarget().manifest().modpackId();
+		String generationId = request.activeTarget().generationTarget().targetGenerationId();
+		if (state == null || !modpackId.equals(state.modpackId) || !generationId.equals(state.generationId)) throw new IOException("Repair target is no longer the active installed generation");
+		var stored = new ClientGenerationStore(storage).read(generationId).orElseThrow(() -> new IOException("Active client generation record is missing: " + generationId));
+		if (!stored.equals(request.activeTarget().generationRecord())) throw new IOException("Repair target disagrees with the installed generation record");
+		var active = new ClientGenerationStore(storage).readActiveTarget(request.activeTarget().platform()).orElseThrow(() -> new IOException("Active client target is unavailable"));
+		if (!active.generationRecord().equals(request.activeTarget().generationRecord()) || !active.selection().intent().equals(request.activeTarget().selection().intent()))
+			throw new IOException("Repair selection changed after preparation");
+	}
+
+	private static void requireSamePinnedIdentity(Prepared expected, Prepared actual) throws IOException {
+		if (!expected.modpackId().equals(actual.modpackId()) || !expected.generationId().equals(actual.generationId()) || !expected.selectionDigest().equals(actual.selectionDigest()))
+			throw new IOException("Active repair identity changed after preparation");
+	}
+
+	private static Path verifiedSource(Collection<Path> candidates, Path target, Content content, FileMetadataCache fileCache) throws IOException {
+		for (Path candidate : candidates) {
+			if (candidate.equals(target) || !Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(candidate)) continue;
+			String hash = fileCache.rehash(candidate);
+			if (content.hash().equals(hash) && Files.size(candidate) == content.size()) return candidate;
+		}
+		return null;
+	}
+
+	private static void addExpected(Map<Path, Expected> expected, Expected candidate) throws IOException {
+		Expected previous = expected.putIfAbsent(candidate.path(), candidate);
+		if (previous != null && !previous.content().equals(candidate.content())) throw new IOException("Repair graph expects conflicting content at " + candidate.path());
+	}
+
+	private static boolean matches(Observation observation, Content content) {
+		return observation != null && !observation.unsupported() && observation.size() == content.size() && observation.hash().equals(content.hash());
+	}
+
+	private static boolean safePath(Path root, Path path) {
+		Path normalizedRoot = root.toAbsolutePath().normalize();
+		Path normalizedPath = path.toAbsolutePath().normalize();
+		if (!normalizedPath.startsWith(normalizedRoot) || Files.isSymbolicLink(normalizedRoot)) return false;
+		Path current = normalizedRoot;
+		for (Path part : normalizedRoot.relativize(normalizedPath)) {
+			current = current.resolve(part);
+			if (!current.equals(normalizedPath) && Files.isSymbolicLink(current)) return false;
+		}
+		return true;
+	}
+
+	private static void ensureSafePath(Path root, Path path) throws IOException {
+		if (!safePath(root, path) || Files.isSymbolicLink(path)) throw new IOException("Repair path contains a symbolic link or escapes its root: " + path);
+	}
+
+	private static long parseSize(String value) {
+		try {
+			long size = Long.parseLong(value);
+			if (size < 0) throw new IllegalArgumentException("Negative size");
+			return size;
+		} catch (RuntimeException e) {
+			throw new IllegalArgumentException("Invalid installed file size: " + value, e);
+		}
+	}
+
+	private static Map<Content, List<Path>> immutableSources(Map<Content, List<Path>> values) {
+		Map<Content, List<Path>> result = new HashMap<>();
+		values.forEach((content, paths) -> result.put(content, List.copyOf(paths)));
+		return Map.copyOf(result);
+	}
+
+	private record Content(String hash, long size) {
+		private Content {
+			hash = HashUtils.normalizeSha1(hash);
+			if (size < 0) throw new IllegalArgumentException("Repair content size is invalid");
+		}
+	}
+
+	private record Expected(Place place, String logicalPath, Path root, Path path, Content content) {
+		private static final Comparator<Expected> ORDER = Comparator.comparing((Expected value) -> value.place().ordinal()).thenComparing(Expected::logicalPath);
+		private Expected {
+			logicalPath = UpdatePlanner.normalize(logicalPath);
+			root = root.toAbsolutePath().normalize();
+			path = path.toAbsolutePath().normalize();
+			if (!path.startsWith(root)) throw new IllegalArgumentException("Expected repair path escaped its root");
+		}
+	}
+
+	private record Observation(Path path, String hash, long size, boolean unsupported) {}
+
+	private record Analysis(Prepared prepared, Map<Path, Expected> expected, Map<Path, Observation> observations, Map<Content, List<Path>> sources) {}
+}
