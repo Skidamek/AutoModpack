@@ -614,7 +614,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void requestPackManager() {
-		ScreenImpl.setScreen(openedFromManager ? parent : new InstalledModpacksScreen(this, modpackId));
+		ScreenImpl.setScreen(openedFromManager ? parent : new InstalledModpacksScreen(this));
 	}
 
 	private void save() {

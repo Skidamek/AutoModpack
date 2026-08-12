@@ -22,20 +22,14 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private static final int ROW_HEIGHT = 34;
 
 	private final Screen parent;
-	private final String returnModpackId;
 	private final InstalledModpackController controller;
 	private List<InstalledModpackController.Pack> entries;
 	private int page;
 	private boolean discoveryFailureShown;
 
 	public InstalledModpacksScreen(Screen parent) {
-		this(parent, null);
-	}
-
-	InstalledModpacksScreen(Screen parent, String returnModpackId) {
 		super(VersionedText.translatable("automodpack.packManager.title"));
 		this.parent = parent;
-		this.returnModpackId = returnModpackId;
 		this.controller = new InstalledModpackController();
 		this.entries = controller.installed();
 	}
@@ -103,10 +97,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	}
 
 	private void open(InstalledModpackController.Pack entry) {
-		if (entry.modpackId().equals(returnModpackId)) {
-			ScreenImpl.setScreen(parent);
-			return;
-		}
 		ScreenImpl.setScreen(new ModpackDetailsScreen(this, controller, entry));
 	}
 
