@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFilePublisher;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
 public final class GenerationStore {
 	public static final int CURRENT_POINTER_SCHEMA_VERSION = 1;
@@ -670,7 +671,7 @@ public final class GenerationStore {
 			String name = object.getFileName().toString();
 			if (!isDigest(name) || reachable.contains(name) || !FileIntegrity.matchesCanonicalSha1(object, name)) continue;
 			long size = Files.size(object);
-			if (Files.deleteIfExists(object)) {
+			if (ImmutableFiles.deleteIfExists(object)) {
 				deletedCount = addExact(deletedCount, 1, "deleted object count");
 				deletedBytes = addExact(deletedBytes, size, "deleted object bytes");
 			}

@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
 /** Measures and explicitly maintains the client shared object store. */
 public final class ClientObjectStore {
@@ -134,7 +135,7 @@ public final class ClientObjectStore {
 				if (!object.getParent().equals(storage.objectsDirectory()) || !HashUtils.isCanonicalSha1(name) || globallyReferenced.contains(name)) continue;
 				if (!FileIntegrity.matchesCanonicalSha1(object, name)) continue;
 				long size = Files.size(object);
-				if (Files.deleteIfExists(object)) {
+				if (ImmutableFiles.deleteIfExists(object)) {
 					deletedCount = addExact(deletedCount, 1, "deleted object count");
 					deletedBytes = addExact(deletedBytes, size, "deleted object bytes");
 				}
