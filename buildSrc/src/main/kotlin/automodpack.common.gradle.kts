@@ -205,6 +205,7 @@ val auditMergedJarTask =
 		mergedJarPath.set(mergeJarTask.flatMap { it.outputJar })
 		inputs.property("automodpackBuildMode", automodpackBuildMode)
 		maxJarBytes.set(3L * 1024 * 1024)
+		enforceReleaseSizeBudget.set(!isAutotestBuild)
 		maxMusicBytes.set(64L * 1024)
 	}
 
