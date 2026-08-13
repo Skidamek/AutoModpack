@@ -226,7 +226,6 @@
   "automodpack.groupInspector.browseFiles": "Browse fylez",
   "automodpack.groupInspector.filesDescription": "fylez supplied by this feature",
   "automodpack.groupInspector.group": "Group %s",
-  "automodpack.groupInspector.tag": "Tag: %s",
   "automodpack.groupInspector.requiresConflicts": "Requires: %s  Conflicts: %s",
   "automodpack.groupInspector.platforms": "Platforms: %s",
   "automodpack.groupInspector.allPlatforms": "All supported platforms",
