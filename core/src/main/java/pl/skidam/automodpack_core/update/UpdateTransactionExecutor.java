@@ -104,6 +104,7 @@ public final class UpdateTransactionExecutor {
 
 	private static void requireNoActiveTransaction(ClientStorage storage) throws IOException {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An update transaction is already active for this game directory");
+		if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An offline repair must finish before an update can start");
 	}
 
 	public Execution recover(UpdateTransaction transaction) throws IOException {

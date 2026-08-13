@@ -9,12 +9,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -88,7 +92,7 @@ class OfflineRepairTest {
 		OfflineRepair.Receipt receipt = repair.apply(prepared);
 
 		assertTrue(prepared.healthy());
-		assertEquals(Set.of("config/settings.json"), prepared.editableResetCandidates().stream().map(OfflineRepair.EditableResetCandidate::logicalPath).collect(java.util.stream.Collectors.toSet()));
+		assertEquals(Set.of("config/settings.json"), prepared.editableResetCandidates().stream().map(OfflineRepair.EditableResetCandidate::logicalPath).collect(Collectors.toSet()));
 		assertEquals("my-local-edit", Files.readString(live, StandardCharsets.UTF_8));
 		assertEquals(0, receipt.repairedMaterializedFiles());
 	}
@@ -115,8 +119,51 @@ class OfflineRepairTest {
 		assertFalse(Files.exists(extra));
 		assertTrue(Files.exists(protectedJar));
 		Set<PreservationVault.Reason> reasons = PreservationVault.read(storage, target.manifest().modpackId()).claims().stream()
-				.map(PreservationVault.Claim::reason).collect(java.util.stream.Collectors.toSet());
+				.map(PreservationVault.Claim::reason).collect(Collectors.toSet());
 		assertEquals(Set.of(PreservationVault.Reason.EDITABLE_RESET, PreservationVault.Reason.STRICT_REPAIR), reasons);
+	}
+
+	@Test
+	void resumesJournaledRepairAfterPowerLoss() throws Exception {
+		ClientStorage storage = storage();
+		byte[] expectedBytes = "server-default".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(expectedBytes);
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", true, hash, expectedBytes.length));
+		write(storage.objectsDirectory().resolve(hash), expectedBytes);
+		write(storage.activePath("config/settings.json"), expectedBytes);
+		byte[] editedBytes = "my-local-edit".getBytes(StandardCharsets.UTF_8);
+		Path live = write(storage.gamePath("config/settings.json"), editedBytes);
+		Path extra = write(storage.modsDirectory().resolve("extra.jar"), "extra".getBytes(StandardCharsets.UTF_8));
+		OfflineRepair repair = new OfflineRepair(storage);
+		OfflineRepair.Request request = new OfflineRepair.Request(target, Set.of(), null);
+		OfflineRepair.Prepared prepared = repair.inspect(request);
+		OfflineRepair.EditableResetCandidate candidate = prepared.editableResetCandidates().get(0);
+		ClientStorageJsons.OfflineRepairJournalFields journal = new ClientStorageJsons.OfflineRepairJournalFields();
+		journal.modpackId = prepared.modpackId();
+		journal.generationId = prepared.generationId();
+		journal.selectionDigest = prepared.selectionDigest();
+		ClientStorageJsons.OfflineRepairJournalFields.EditableResetFields reset = new ClientStorageJsons.OfflineRepairJournalFields.EditableResetFields();
+		reset.logicalPath = candidate.logicalPath();
+		reset.defaultHash = candidate.defaultHash();
+		reset.defaultSize = candidate.defaultSize();
+		reset.currentHash = candidate.currentHash();
+		reset.currentSize = candidate.currentSize();
+		reset.absent = candidate.absent();
+		journal.editableResets = List.of(reset);
+		ClientStorageJsons.OfflineRepairJournalFields.UnownedModFields unowned = new ClientStorageJsons.OfflineRepairJournalFields.UnownedModFields();
+		unowned.logicalPath = "mods/extra.jar";
+		unowned.objectHash = HashUtils.getHash(extra);
+		unowned.size = Files.size(extra);
+		journal.unownedMods = List.of(unowned);
+		ConfigTools.writeAtomic(storage.repairJournalFile(), journal);
+
+		OfflineRepair.Receipt receipt = repair.recover(request);
+
+		assertTrue(FileIntegrity.matches(live, expectedBytes.length, hash));
+		assertFalse(Files.exists(extra));
+		assertFalse(Files.exists(storage.repairJournalFile()));
+		assertEquals(1, receipt.resetEditableFiles());
+		assertEquals(1, receipt.archivedUnownedMods());
 	}
 
 	@Test
@@ -135,7 +182,7 @@ class OfflineRepairTest {
 
 		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(target, Set.of(), protectedJar));
 
-		assertEquals(java.util.List.of("mods/extra.jar"), prepared.unownedModPaths());
+		assertEquals(List.of("mods/extra.jar"), prepared.unownedModPaths());
 		assertTrue(prepared.healthy());
 		assertEquals(fileMetadataBefore, regularFileCount(storage.fileMetadataDirectory()));
 		assertEquals(modMetadataBefore, regularFileCount(storage.modMetadataDirectory()));

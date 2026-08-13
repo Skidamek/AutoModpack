@@ -60,4 +60,28 @@ public class ClientStorageJsons {
 		public String modpackId = "";
 		public List<String> deletedPaths = List.of();
 	}
+
+	public static class OfflineRepairJournalFields {
+		public int schemaVersion = 1;
+		public String modpackId = "";
+		public String generationId = "";
+		public String selectionDigest = "";
+		public List<EditableResetFields> editableResets = List.of();
+		public List<UnownedModFields> unownedMods = List.of();
+
+		public static class EditableResetFields {
+			public String logicalPath = "";
+			public String defaultHash = "";
+			public long defaultSize = -1;
+			public String currentHash;
+			public long currentSize = -1;
+			public boolean absent;
+		}
+
+		public static class UnownedModFields {
+			public String logicalPath = "";
+			public String objectHash = "";
+			public long size = -1;
+		}
+	}
 }
