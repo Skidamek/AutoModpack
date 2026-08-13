@@ -83,15 +83,20 @@ public final class UpdateTransactionExecutor {
 		ClientStorage storage = context.storage();
 		ensureNoActiveTransaction(storage);
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest);
-		new ClientGenerationStore(storage).write(target.generationRecord(), target.patchNotesHistory(), target.historyIndex());
-		return commit(transaction);
+		return commitPrepared(transaction, target);
 	}
 
 	public Execution commit(UpdateTransaction transaction) throws IOException {
-		validate(transaction);
+		return commitPrepared(transaction, null);
+	}
+
+	private Execution commitPrepared(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
+		validate(transaction, unpublishedTarget);
 		validateSelectionBeforeMutation(transaction);
 		ensureNoActiveTransaction(context.storage());
 		context.storage().ensureRoots();
+		if (unpublishedTarget != null)
+			new ClientGenerationStore(context.storage()).write(unpublishedTarget.generationRecord(), unpublishedTarget.patchNotesHistory(), unpublishedTarget.historyIndex());
 		ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
 		return executePersisted(transaction);
 	}
@@ -111,8 +116,12 @@ public final class UpdateTransactionExecutor {
 	}
 
 	public void validate(UpdateTransaction transaction) throws IOException {
+		validate(transaction, null);
+	}
+
+	private void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget) throws IOException {
 		try {
-			validateUnchecked(transaction);
+			validateUnchecked(transaction, selectedTarget);
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
@@ -120,7 +129,7 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	private void validateUnchecked(UpdateTransaction transaction) throws IOException {
+	private void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget) throws IOException {
 		if (transaction == null) throw new IOException("Transaction is missing");
 		if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported transaction schema");
 		try {
@@ -140,8 +149,11 @@ public final class UpdateTransactionExecutor {
 		ModpackJsons.ModpackContentFields target = null;
 		if (isModpackPurpose(transaction.purpose)) {
 			ModpackId.requireValid(transaction.modpackId);
-			GenerationRecord record = storedRecord(transaction);
-			target = resolvedTarget(transaction, record).flatTarget();
+			if (selectedTarget != null && transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE)
+				throw new IOException("A supplied update target is only valid for a modpack update transaction");
+			GenerationRecord record = selectedTarget == null ? storedRecord(transaction) : selectedTarget.generationRecord();
+			target = selectedTarget == null ? resolvedTarget(transaction, record).flatTarget() : selectedTarget.flatTarget();
+			if (selectedTarget != null) validateSelectedTargetMetadata(transaction, selectedTarget);
 			validateGenerationIdentity(transaction, record, target);
 			validateManifest(target, transaction.modpackId);
 			validateSelectionMetadata(transaction);
@@ -181,6 +193,12 @@ public final class UpdateTransactionExecutor {
 		if (transaction.purpose == UpdateTransaction.Purpose.SELF_UPDATE && !operationKeys.equals(finalState.keySet()))
 			throw new IOException("Special-purpose transaction operations and projected final state must match exactly");
 		if (target != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateManifestProjection(target, finalState);
+	}
+
+	private static void validateSelectedTargetMetadata(UpdateTransaction transaction, SelectedModpackTarget target) throws IOException {
+		if (!Objects.equals(transaction.expectedPriorIntent(), target.expectedPriorIntent()) || !transaction.targetIntent().equals(target.selection().intent())
+				|| !transaction.platform().equals(target.platform()))
+			throw new IOException("Transaction selection metadata disagrees with the supplied target");
 	}
 
 	private void validateGeneratedCopies(UpdateTransaction transaction) throws IOException {

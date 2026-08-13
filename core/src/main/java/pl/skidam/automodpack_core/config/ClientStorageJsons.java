@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.config;
 import java.util.List;
 
 public class ClientStorageJsons {
-
 	public static class ClientBaselineFields {
 		public int schemaVersion = 1;
 		public String modpackId = "";
