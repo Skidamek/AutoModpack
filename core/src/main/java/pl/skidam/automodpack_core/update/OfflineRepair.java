@@ -15,6 +15,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -154,7 +155,7 @@ public final class OfflineRepair {
 				Path source = verifiedSource(current.sources().getOrDefault(expected.content(), List.of()), expected.path(), expected.content(), fileCache);
 				if (source == null) continue;
 				assertPinned(request);
-				ensureSafePath(storage.objectsDirectory(), expected.path());
+				requireSafePath(storage.objectsDirectory(), expected.path());
 				if (VerifiedFileTransfer.copyAtomic(source, expected.path(), expected.content().size(), expected.content().hash())) repairedCas++;
 				fileCache.rehash(expected.path());
 			}
@@ -168,7 +169,7 @@ public final class OfflineRepair {
 				Observation objectObservation = withRepairedCas.observations().get(object);
 				if (!matches(objectObservation, expected.content())) continue;
 				assertPinned(request);
-				ensureSafePath(expected.root(), expected.path());
+				requireSafePath(expected.root(), expected.path());
 				if (VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash())) repairedFiles++;
 				fileCache.rehash(expected.path());
 			}
@@ -186,7 +187,7 @@ public final class OfflineRepair {
 	private long resetEditableFiles(Request request, Analysis analysis, Set<String> selected, FileMetadataCache fileCache) throws IOException {
 		if (selected.isEmpty()) return 0;
 		Map<String, EditableResetCandidate> candidates = analysis.prepared().editableResetCandidates().stream()
-				.collect(java.util.stream.Collectors.toMap(EditableResetCandidate::logicalPath, candidate -> candidate));
+				.collect(Collectors.toMap(EditableResetCandidate::logicalPath, candidate -> candidate));
 		TreeSet<String> tombstones = new TreeSet<>(storage.readOverlayState(analysis.prepared().modpackId()).deletedPaths);
 		long reset = 0;
 		for (String logicalPath : selected.stream().sorted().toList()) {
@@ -201,7 +202,7 @@ public final class OfflineRepair {
 			if (!candidate.absent())
 				PreservationVault.preserve(storage, analysis.prepared().modpackId(), analysis.prepared().generationId(), PreservationVault.Reason.EDITABLE_RESET,
 						Root.GAME_DIR, logicalPath, candidate.currentHash(), candidate.currentSize());
-			ensureSafePath(storage.gameDirectory(), live);
+			requireSafePath(storage.gameDirectory(), live);
 			VerifiedFileTransfer.copyAtomic(object, live, candidate.defaultSize(), candidate.defaultHash());
 			Files.deleteIfExists(storage.overlayFile(analysis.prepared().modpackId(), logicalPath));
 			tombstones.remove(logicalPath);
@@ -219,7 +220,7 @@ public final class OfflineRepair {
 			if (!analysis.prepared().unownedModPaths().contains(logicalPath)) throw new IOException("Unowned-mod selection is stale: " + logicalPath);
 			Path source = storage.gamePath(logicalPath);
 			if (source.toAbsolutePath().normalize().equals(request.protectedModPath())) throw new IOException("The running AutoModpack JAR cannot be archived");
-			ensureSafePath(storage.modsDirectory(), source);
+			requireSafePath(storage.modsDirectory(), source);
 			if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Unowned mod is no longer a regular file: " + logicalPath);
 			String hash = fileCache.rehash(source);
 			long size = Files.size(source);
@@ -238,7 +239,7 @@ public final class OfflineRepair {
 	}
 
 	private static void requireSelections(Prepared prepared, Set<String> editable, Set<String> unowned) throws IOException {
-		Set<String> editableCandidates = prepared.editableResetCandidates().stream().map(EditableResetCandidate::logicalPath).collect(java.util.stream.Collectors.toSet());
+		Set<String> editableCandidates = prepared.editableResetCandidates().stream().map(EditableResetCandidate::logicalPath).collect(Collectors.toSet());
 		if (!editableCandidates.containsAll(editable)) throw new IOException("Editable reset selection contains a stale path");
 		if (!Set.copyOf(prepared.unownedModPaths()).containsAll(unowned)) throw new IOException("Unowned-mod selection contains a stale path");
 	}
@@ -451,7 +452,7 @@ public final class OfflineRepair {
 		return true;
 	}
 
-	private static void ensureSafePath(Path root, Path path) throws IOException {
+	private static void requireSafePath(Path root, Path path) throws IOException {
 		if (!safePath(root, path) || Files.isSymbolicLink(path)) throw new IOException("Repair path contains a symbolic link or escapes its root: " + path);
 	}
 
