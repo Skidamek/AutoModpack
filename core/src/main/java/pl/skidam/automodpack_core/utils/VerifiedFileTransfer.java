@@ -41,7 +41,7 @@ public final class VerifiedFileTransfer {
 	/** Copies a verified file without replacing a destination created by another operation. */
 	public static boolean copyCreateOnly(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
 		requireValidSource(sourceFile, expectedSize, expectedSha1);
-		return ImmutableFilePublisher.publishCopy(sourceFile, targetFile, path -> {
+		return ImmutableFilePublisher.publishCreateOnlyCopy(sourceFile, targetFile, path -> {
 			if (!FileIntegrity.matches(path, expectedSize, expectedSha1)) throw new IOException("Immutable copy has different bytes: " + path);
 		});
 	}

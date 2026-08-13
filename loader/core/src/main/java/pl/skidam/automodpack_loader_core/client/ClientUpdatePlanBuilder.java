@@ -157,7 +157,7 @@ final class ClientUpdatePlanBuilder {
 			if (operation.root() == UpdatePlan.Root.OVERLAY) {
 				Path overlay = storage.overlayFile(targetManifest.modpackId, operation.relativePath());
 				if (FileIntegrity.matches(overlay, operation.expectedSize(), operation.expectedObjectHash())) {
-					VerifiedFileTransfer.copyAtomic(overlay, storeFile, operation.expectedSize(), operation.expectedObjectHash());
+					VerifiedFileTransfer.copyAtomicImmutable(overlay, storeFile, operation.expectedSize(), operation.expectedObjectHash());
 					continue;
 				}
 				throw new IOException("Required editable overlay object is unavailable: " + operation.expectedObjectHash());
@@ -168,7 +168,7 @@ final class ClientUpdatePlanBuilder {
 			if (!FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash())) source = livePath(item);
 			if (!FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash()))
 				throw new IOException("Required object is absent from CAS and verified live locations: " + operation.expectedObjectHash());
-			VerifiedFileTransfer.copyAtomic(source, storeFile, operation.expectedSize(), operation.expectedObjectHash());
+			VerifiedFileTransfer.copyAtomicImmutable(source, storeFile, operation.expectedSize(), operation.expectedObjectHash());
 		}
 	}
 
