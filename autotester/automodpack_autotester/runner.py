@@ -972,11 +972,20 @@ def _v_wait_bridge(ctx: Context, step):
         ctx.bridge = BridgeClient(ctx.game_dir, ctx.token)
     timeout = _client_start_timeout(ctx, step)
     deadline = time.monotonic() + timeout
+    retried_dependency_download = False
     while time.monotonic() < deadline:
         try:
             _assert_running(ctx.cli_name)
         except RuntimeError as e:
             logs = _container_logs(ctx.cli_name)
+            if not retried_dependency_download and _transient_dependency_download_failure(logs):
+                # The failed launch leaves successfully downloaded artifacts in the target cache. One continuation recovered
+                # the observed cold-cache timeout; a second failure is kept as evidence instead of masking a broken target.
+                retried_dependency_download = True
+                logger.warning("Client dependency download failed transiently for %s; retrying the launch once", ctx.target.id)
+                _remove_container(ctx.cli_name)
+                _launch_client(ctx)
+                continue
             # Keep whole trailing lines (not a mid-line byte slice) so the crash
             # tail — including the exception header — stays readable.
             tail = "\n".join(logs.splitlines()[-80:])
@@ -993,6 +1002,12 @@ def _v_wait_bridge(ctx: Context, step):
             pass
         _jitter_sleep(1)
     raise TimeoutError(f"Bridge for {ctx.target.id} did not become available within {timeout}s")
+
+
+def _transient_dependency_download_failure(logs: str) -> bool:
+    if "[LibraryDownloader]" not in logs:
+        return False
+    return any(marker in logs for marker in ("HTTP connect timed out", "Connection reset", "Temporary failure in name resolution"))
 
 
 def _client_cache_receipt(ctx: Context):
