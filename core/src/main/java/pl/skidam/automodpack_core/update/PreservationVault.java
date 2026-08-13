@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -263,7 +264,7 @@ public final class PreservationVault {
 			throw new IOException("Preservation manifest is invalid", e);
 		}
 		if (fields.schemaVersion != 1 || !modpackId.equals(fields.modpackId) || fields.claims == null) throw new IOException("Preservation manifest identity is invalid");
-		Set<String> ids = new java.util.HashSet<>();
+		Set<String> ids = new HashSet<>();
 		for (ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim : fields.claims) {
 			Claim parsed = toClaim(claim);
 			if (!modpackId.equals(parsed.modpackId()) || !ids.add(parsed.claimId())) throw new IOException("Preservation manifest contains duplicate or foreign claims");

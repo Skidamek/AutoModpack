@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -98,7 +99,7 @@ class PreservationVaultTest {
 		installActiveRecord(storage, "mods/server.jar");
 		var active = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElseThrow();
 		new GeneratedCopyState(MODPACK_ID, active.generationTarget().targetGenerationId(), UpdateTransaction.digest(active.selection().intent()),
-				java.util.List.of(new GeneratedCopyState.Entry("mods/generated.jar", hash, 10))).write(storage);
+				List.of(new GeneratedCopyState.Entry("mods/generated.jar", hash, 10))).write(storage);
 
 		assertThrows(IOException.class, () -> PreservationVault.restoreOriginal(storage, MODPACK_ID, claim.claimId()));
 		assertFalse(Files.exists(source));

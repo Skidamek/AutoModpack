@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.config;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -118,7 +119,7 @@ public class ModpackJsons {
 
 			@Override
 			public String toString() {
-				return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
+				return String.format(Locale.ROOT, "ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
 			}
 
 			@Override

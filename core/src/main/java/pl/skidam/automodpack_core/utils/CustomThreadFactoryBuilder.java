@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.utils;
 
+import java.util.Locale;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -64,7 +65,7 @@ public class CustomThreadFactoryBuilder {
 			} else {
 				thread = new Thread(runnable);
 			}
-			if (nameFormat != null) thread.setName(String.format(nameFormat, threadNumber.getAndIncrement()));
+			if (nameFormat != null) thread.setName(String.format(Locale.ROOT, nameFormat, threadNumber.getAndIncrement()));
 			thread.setDaemon(daemon);
 
 			if (priority != 0) {
