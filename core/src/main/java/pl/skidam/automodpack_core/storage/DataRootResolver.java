@@ -53,10 +53,11 @@ public final class DataRootResolver {
 		}
 	}
 
-	public record Location(Path root, boolean shared, String ownerId) {
+	public record Location(Path root, boolean shared, String ownerId, Path ownerPath) {
 		public Location {
 			root = Objects.requireNonNull(root, "root").toAbsolutePath().normalize();
 			ownerId = UUID.fromString(Objects.requireNonNull(ownerId, "owner ID")).toString();
+			ownerPath = Objects.requireNonNull(ownerPath, "owner path").toAbsolutePath().normalize();
 		}
 
 		public Layout layout() {
@@ -75,13 +76,13 @@ public final class DataRootResolver {
 			Files.createDirectories(automodpackDirectory);
 			Path sharedRoot = platformDataRoot();
 			if (probe(sharedRoot)) {
-				Location location = new Location(sharedRoot, true, UUID.randomUUID().toString());
+				Location location = new Location(sharedRoot, true, UUID.randomUUID().toString(), gameRoot);
 				writePinned(marker, location, gameRoot);
 				return location;
 			}
 			Path fallback = automodpackDirectory.resolve("data").normalize();
 			if (!probe(fallback)) throw new IOException("Neither shared nor local AutoModpack data storage is writable");
-			Location location = new Location(fallback, false, UUID.randomUUID().toString());
+			Location location = new Location(fallback, false, UUID.randomUUID().toString(), gameRoot);
 			writePinned(marker, location, gameRoot);
 			return location;
 		} catch (IOException e) {
@@ -100,9 +101,13 @@ public final class DataRootResolver {
 		if (fields.ownerId == null || fields.ownerId.isBlank() || !ownerPathHash.equals(fields.ownerPathHash)) {
 			fields.ownerId = UUID.randomUUID().toString();
 			fields.ownerPathHash = ownerPathHash;
+			fields.ownerPath = gameRoot.toString();
+			ConfigTools.writeAtomic(marker, fields);
+		} else if (!gameRoot.toString().equals(fields.ownerPath)) {
+			fields.ownerPath = gameRoot.toString();
 			ConfigTools.writeAtomic(marker, fields);
 		}
-		return new Location(root, fields.shared, fields.ownerId);
+		return new Location(root, fields.shared, fields.ownerId, gameRoot);
 	}
 
 	private static void writePinned(Path marker, Location location, Path gameRoot) throws IOException {
@@ -111,6 +116,7 @@ public final class DataRootResolver {
 		fields.shared = location.shared();
 		fields.ownerId = location.ownerId();
 		fields.ownerPathHash = ownerPathHash(gameRoot);
+		fields.ownerPath = gameRoot.toString();
 		ConfigTools.writeAtomic(marker, fields);
 	}
 

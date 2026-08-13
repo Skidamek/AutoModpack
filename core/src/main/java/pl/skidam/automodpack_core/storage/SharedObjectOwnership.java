@@ -57,6 +57,7 @@ public final class SharedObjectOwnership {
 		StorageJsons.ObjectOwnershipFields fields = new StorageJsons.ObjectOwnershipFields();
 		fields.ownerId = location.ownerId();
 		fields.component = canonicalComponent;
+		fields.ownerPath = location.ownerPath().toString();
 		fields.objectHashes = List.copyOf(hashes);
 		ConfigTools.writeAtomic(owners.resolve(location.ownerId() + "." + canonicalComponent + ".json"), fields);
 	}
@@ -72,6 +73,10 @@ public final class SharedObjectOwnership {
 					throw new IOException("Shared object ownership root contains an unsupported entry: " + path);
 				StorageJsons.ObjectOwnershipFields fields = ConfigTools.read(path, StorageJsons.ObjectOwnershipFields.class)
 						.orElseThrow(() -> new IOException("Shared object ownership receipt is empty: " + path));
+				if (!liveOwner(layout, fields)) {
+					Files.deleteIfExists(path);
+					continue;
+				}
 				String receiptId = path.getFileName().toString().substring(0, path.getFileName().toString().length() - ".json".length());
 				String expectedReceiptId = fields.ownerId + "." + requireComponent(fields.component);
 				if (!expectedReceiptId.equals(receiptId) || fields.objectHashes == null) throw new IOException("Shared object ownership identity is invalid: " + path);
@@ -81,6 +86,29 @@ public final class SharedObjectOwnership {
 			}
 		}
 		return Collections.unmodifiableSet(result);
+	}
+
+	private static boolean liveOwner(DataRootResolver.Layout layout, StorageJsons.ObjectOwnershipFields fields) throws IOException {
+		if (fields.ownerPath == null || fields.ownerPath.isBlank()) return false;
+		Path gameRoot;
+		try {
+			gameRoot = Path.of(fields.ownerPath).toAbsolutePath().normalize();
+		} catch (RuntimeException e) {
+			return false;
+		}
+		Path marker = gameRoot.resolve("automodpack").resolve("data-root.json").normalize();
+		if (Files.notExists(marker, LinkOption.NOFOLLOW_LINKS)) return false;
+		if (Files.isSymbolicLink(marker) || !Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Shared object owner marker is not a regular file: " + marker);
+		StorageJsons.DataRootFields owner = ConfigTools.read(marker, StorageJsons.DataRootFields.class)
+				.orElseThrow(() -> new IOException("Shared object owner marker is empty: " + marker));
+		if (owner.ownerId == null || owner.root == null) return false;
+		Path ownerRoot;
+		try {
+			ownerRoot = Path.of(owner.root).toAbsolutePath().normalize();
+		} catch (RuntimeException e) {
+			return false;
+		}
+		return fields.ownerId.equals(owner.ownerId) && layout.root().equals(ownerRoot);
 	}
 
 	private static Set<String> canonical(Set<String> hashes) throws IOException {
