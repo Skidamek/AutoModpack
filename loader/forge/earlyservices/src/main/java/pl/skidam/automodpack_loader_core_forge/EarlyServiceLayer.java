@@ -192,7 +192,7 @@ public final class EarlyServiceLayer {
 				}
 			}
 
-			EarlyServiceBridgePlugin.ensureRunsFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
+			EarlyServiceBridgePlugin.registerFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
 		} catch (Throwable t) {
 			LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 		}
