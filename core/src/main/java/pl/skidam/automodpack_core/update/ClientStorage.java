@@ -49,6 +49,7 @@ public final class ClientStorage {
 	private final Path backupDirectory;
 	private final Path stateFile;
 	private final Path transactionFile;
+	private final Path repairJournalFile;
 	private final Path selectionFile;
 	private final Path restartLoopStateFile;
 	private final Path clientConfigFile;
@@ -80,6 +81,7 @@ public final class ClientStorage {
 		this.backupDirectory = this.clientDirectory.resolve(CLIENT_BACKUP_DIR.getFileName()).normalize();
 		this.stateFile = this.clientDirectory.resolve(CLIENT_ACTIVE_STATE_FILE.getFileName()).normalize();
 		this.transactionFile = this.clientDirectory.resolve(CLIENT_TRANSACTION_FILE.getFileName()).normalize();
+		this.repairJournalFile = this.clientDirectory.resolve("repair.json").normalize();
 		this.selectionFile = this.clientDirectory.resolve(CLIENT_SELECTION_FILE.getFileName()).normalize();
 		this.restartLoopStateFile = this.clientDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE.getFileName()).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
@@ -193,6 +195,10 @@ public final class ClientStorage {
 
 	public Path transactionFile() {
 		return transactionFile;
+	}
+
+	public Path repairJournalFile() {
+		return repairJournalFile;
 	}
 
 	public Path selectionFile() {
@@ -403,7 +409,7 @@ public final class ClientStorage {
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile);
 		validateWithin(gameDirectory, bootstrapFile);
 		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
-				stateFile, transactionFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
+				stateFile, transactionFile, repairJournalFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
 		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}
 

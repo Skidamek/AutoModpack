@@ -43,7 +43,9 @@ public final class ClientOfflineRepair {
 	public OfflineRepair.Prepared inspect() throws IOException {
 		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current())
 				.orElseThrow(() -> new IOException("Repair is available only for the active installed modpack"));
-		return repair.inspect(new OfflineRepair.Request(target, forceCopyPaths(target), protectedModPath));
+		OfflineRepair.Request request = new OfflineRepair.Request(target, forceCopyPaths(target), protectedModPath);
+		repair.recover(request);
+		return repair.inspect(request);
 	}
 
 	public OfflineRepair.Receipt apply(OfflineRepair.Prepared prepared) throws IOException {
