@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
 class GenerationStoreTest {
 	@TempDir
@@ -39,8 +40,12 @@ class GenerationStoreTest {
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "First generation notes\r\n");
 		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, first.status());
 		assertEquals("", first.record().metadata().parentGenerationId());
-		assertTrue(Files.exists(tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json")));
-		assertTrue(Files.exists(tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json")));
+		Path catalogue = tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json");
+		Path commit = tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json");
+		assertTrue(Files.exists(catalogue));
+		assertTrue(Files.exists(commit));
+		assertTrue(ImmutableFiles.isProtected(catalogue));
+		assertTrue(ImmutableFiles.isProtected(commit));
 		assertFalse(Files.exists(tempDir.resolve("records")));
 		String pointer = Files.readString(tempDir.resolve("current.json"), StandardCharsets.UTF_8);
 
@@ -491,6 +496,30 @@ class GenerationStoreTest {
 		GenerationStore.CurrentSnapshot current = interrupted.loadCurrent().orElseThrow();
 		GenerationStore.Publication published = interrupted.publish(candidate("after-retry"), Optional.of(current), "");
 		assertEquals(published.record(), interrupted.loadCurrentDeep().orElseThrow().record());
+	}
+
+	@Test
+	void normalReadFinishesInterruptedCompactionAndReconcilesProjection() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "first notes");
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(store.loadCurrent().orElseThrow()), "second notes");
+		byte[] staleProjection = Files.readAllBytes(tempDir.resolve("current-projection.json"));
+		GenerationStore.Publication third = store.publish(candidate("third"), Optional.of(store.loadCurrent().orElseThrow()), "third notes");
+		AtomicBoolean interrupt = new AtomicBoolean(true);
+		GenerationStore interrupted = new GenerationStore(tempDir, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC), () -> {}, path -> {
+			if (interrupt.getAndSet(false)) throw new IOException("injected compaction interruption");
+		});
+
+		assertThrows(IOException.class, () -> interrupted.compactBefore(third.record().metadata().generationId()));
+		Files.write(tempDir.resolve("current-projection.json"), staleProjection);
+		GenerationStore recovered = store(Instant.parse("2026-01-03T00:00:00Z"));
+		GenerationHistoryIndex index = recovered.currentHistoryIndex().orElseThrow();
+
+		assertFalse(index.find(first.record().metadata().generationId()).orElseThrow().rollbackAvailable());
+		assertFalse(index.find(second.record().metadata().generationId()).orElseThrow().rollbackAvailable());
+		assertFalse(Files.exists(tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json")));
+		ModpackJsons.CompleteModpackContentFields projection = ConfigTools.read(tempDir.resolve("current-projection.json"), ModpackJsons.CompleteModpackContentFields.class).orElseThrow();
+		assertEquals(index, GenerationHistoryIndex.fromFields(projection.generationHistory));
 	}
 
 	private GenerationStore store(Instant instant) {
