@@ -370,7 +370,7 @@ public class ModpackUtils {
 		LOGGER.info("Asking user to verify certificate for Minecraft server {} from AutoModpack endpoint {}:{}", originHost, connectionInfo.endpoint.getHostString(),
 				connectionInfo.endpoint.getPort());
 
-		var parent = new ScreenManager().getScreen().orElse(null);
+		var parent = ScreenManager.getScreen().orElse(null);
 		if (parent == null) {
 			LOGGER.warn("No screen available, cannot ask user");
 			return CompletableFuture.completedFuture(false);
@@ -382,7 +382,7 @@ public class ModpackUtils {
 			result.complete(true);
 		};
 		Runnable cancelAction = () -> result.complete(false);
-		new ScreenManager().validation(parent, fingerprint, trustAction, cancelAction);
+		ScreenManager.validation(parent, fingerprint, trustAction, cancelAction);
 		return result;
 	}
 }

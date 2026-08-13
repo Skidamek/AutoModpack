@@ -264,7 +264,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	}
 
 	private void failure(Throwable cause) {
-		new ScreenManager().failure(FailureRequest.of(cause, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+		ScreenManager.failure(FailureRequest.of(cause, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
 	private static Throwable unwrap(Throwable failure) {

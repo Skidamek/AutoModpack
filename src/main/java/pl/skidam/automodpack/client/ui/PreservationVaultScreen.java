@@ -3,6 +3,7 @@ package pl.skidam.automodpack.client.ui;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
@@ -206,7 +207,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		restoreFailed = restoreAttempt;
 		rebuild();
 		presentingFailure = true;
-		new ScreenManager().failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
+		ScreenManager.failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
 	private void back() {
@@ -270,11 +271,11 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	}
 
 	private static String reason(PreservationVault.Reason reason) {
-		return VersionedText.translatable("automodpack.vault.reason." + reason.name().toLowerCase(java.util.Locale.ROOT)).getString();
+		return VersionedText.translatable("automodpack.vault.reason." + reason.name().toLowerCase(Locale.ROOT)).getString();
 	}
 
 	private static String status(PreservationVault.Status status) {
-		return VersionedText.translatable("automodpack.vault.status." + status.name().toLowerCase(java.util.Locale.ROOT)).getString();
+		return VersionedText.translatable("automodpack.vault.status." + status.name().toLowerCase(Locale.ROOT)).getString();
 	}
 
 	@Override

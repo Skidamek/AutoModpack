@@ -194,7 +194,7 @@ public final class AutoTestBridge {
 	}
 
 	private static Screen currentScreen() {
-		return (Screen) new ScreenManager().getScreen().orElse(null);
+		return (Screen) ScreenManager.getScreen().orElse(null);
 	}
 
 	private static JsonObject gui() {

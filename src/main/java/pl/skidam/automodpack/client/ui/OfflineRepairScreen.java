@@ -216,7 +216,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		busy = false;
 		rebuild();
 		presentingFailure = true;
-		new ScreenManager().failure(FailureRequest.of(exception, "automodpack.error.repair", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
+		ScreenManager.failure(FailureRequest.of(exception, "automodpack.error.repair", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
 	private void cancelWork() {

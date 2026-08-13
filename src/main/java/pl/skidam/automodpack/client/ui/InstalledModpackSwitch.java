@@ -32,7 +32,7 @@ final class InstalledModpackSwitch {
 				updater = updater(storage, target);
 				UpdatePreview preview = updater.previewInstalledSwitch();
 				ModpackUpdater finalUpdater = updater;
-				new ScreenManager().preview(preview, modpackName,
+				ScreenManager.preview(preview, modpackName,
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> apply(finalUpdater, release)),
 						(Runnable) () -> {
 							finalUpdater.close();
@@ -41,7 +41,7 @@ final class InstalledModpackSwitch {
 			} catch (Exception e) {
 				if (updater != null) updater.close();
 				release.run();
-				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		});
 	}
@@ -62,7 +62,7 @@ final class InstalledModpackSwitch {
 		} catch (Exception e) {
 			updater.close();
 			release.run();
-			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
 }

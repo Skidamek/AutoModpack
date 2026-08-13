@@ -316,7 +316,7 @@ public class Commands {
 			var connections = hostServer.getConnections();
 			var uniqueSecrets = Set.copyOf(connections.values());
 
-			send(context, String.format("Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), ChatFormatting.YELLOW, false);
+			send(context, String.format(Locale.ROOT, "Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), ChatFormatting.YELLOW, false);
 
 			for (String secret : uniqueSecrets) {
 				var playerSecretPair = SecretsStore.getHostSecret(secret);
@@ -327,7 +327,7 @@ public class Commands {
 
 				long connNum = connections.values().stream().filter(secret::equals).count();
 
-				send(context, String.format("Player: %s (%s) is downloading modpack using %d connections", GameHelpers.getPlayerName(profile), playerId, connNum), ChatFormatting.GREEN, false);
+				send(context, String.format(Locale.ROOT, "Player: %s (%s) is downloading modpack using %d connections", GameHelpers.getPlayerName(profile), playerId, connNum), ChatFormatting.GREEN, false);
 			}
 		});
 

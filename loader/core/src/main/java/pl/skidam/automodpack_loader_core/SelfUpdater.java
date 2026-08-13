@@ -170,7 +170,7 @@ public class SelfUpdater {
 			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
 
 			DownloadManager downloadManager = new DownloadManager(0, storage);
-			new ScreenManager().download(downloadManager, "AutoModpack " + automodpack.fileVersion());
+			ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
 			downloadManager.download(targetJar, automodpack.SHA1Hash(),
 					List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
 					() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));

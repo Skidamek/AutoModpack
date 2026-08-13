@@ -64,7 +64,7 @@ final class ClientLoginUpdateFlow {
 				if (savedSelection != null && canRepair(manifestResult.content())) {
 					disconnectImmediately(handler);
 					ScreenImpl.repairSelection(manifestResult.content(), savedSelection, intent -> {
-						new ScreenManager().waiting();
+						ScreenManager.waiting();
 						DownloadClient.NET_EXECUTOR.execute(() -> {
 							try {
 								SelectedModpackTarget repaired = SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, intent, ClientPlatform.current());
@@ -103,7 +103,7 @@ final class ClientLoginUpdateFlow {
 			FailureRequest request = FailureRequest.of(failure, "automodpack.pin.mismatch", FailureCategory.SECURITY, FailureDestination.MULTIPLAYER, null)
 					.withDiagnosticDetails("Origin: " + mismatch.getOrigin(), "Expected fingerprint: " + mismatch.getExpectedFingerprint(),
 							"Presented fingerprint: " + mismatch.getPresentedFingerprint());
-			new ScreenManager().failure(request);
+			ScreenManager.failure(request);
 		} else if (result.state() == ModpackUtils.ManifestFetchState.OPERATION_FAILED) {
 			presentFailure(failure, "automodpack.error.hostContent", FailureCategory.HOST);
 		} else {
@@ -112,7 +112,7 @@ final class ClientLoginUpdateFlow {
 	}
 
 	private static void presentFailure(Throwable failure, String messageKey, FailureCategory category) {
-		new ScreenManager().failure(FailureRequest.of(failure, messageKey, category, FailureDestination.MULTIPLAYER, null));
+		ScreenManager.failure(FailureRequest.of(failure, messageKey, category, FailureDestination.MULTIPLAYER, null));
 	}
 
 	private static boolean canRepair(ModpackJsons.CompleteModpackContentFields fields) {

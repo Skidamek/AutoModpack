@@ -24,16 +24,16 @@ public class SpeedFormatter {
 		long secs = seconds % 60;
 
 		if (days > 0) {
-			return String.format("%dd %dh", days, hours);
+			return String.format(Locale.ROOT, "%dd %dh", days, hours);
 		} else if (hours > 0) {
 			// e.g. 1h 05m
-			return String.format("%dh %02dm", hours, minutes);
+			return String.format(Locale.ROOT, "%dh %02dm", hours, minutes);
 		} else if (minutes > 0) {
 			// e.g. 05m 12s
-			return String.format("%02dm %02ds", minutes, secs);
+			return String.format(Locale.ROOT, "%02dm %02ds", minutes, secs);
 		} else {
 			// e.g. 45s
-			return String.format("%ds", secs);
+			return String.format(Locale.ROOT, "%ds", secs);
 		}
 	}
 }

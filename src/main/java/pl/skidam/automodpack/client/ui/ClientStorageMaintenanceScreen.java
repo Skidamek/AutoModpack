@@ -111,7 +111,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		busy = false;
 		operation = null;
 		presentingFailure = true;
-		new ScreenManager().failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
+		ScreenManager.failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
 	private void closeToParent() {
@@ -187,8 +187,6 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		y = drawWrapped(matrices, records, y, textWidth, TextColors.WHITE);
 		y = drawWrapped(matrices, objects, y, textWidth, TextColors.WHITE);
 		y = drawWrapped(matrices, generatedCopies, y, textWidth, TextColors.GRAY);
-		if (compacted.objectCollection().status() == ClientObjectStore.CollectionStatus.SHARED_STORE_RETAINED)
-			drawWrapped(matrices, VersionedText.translatable("automodpack.storage.sharedObjectsKept").getString(), y, textWidth, TextColors.YELLOW);
 	}
 
 	@Override
