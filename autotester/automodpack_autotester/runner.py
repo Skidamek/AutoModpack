@@ -966,10 +966,7 @@ def _v_assert_preload_acquired(ctx: Context, _step):
 def _v_wait_bridge(ctx: Context, step):
     if ctx.bridge is None:
         ctx.bridge = BridgeClient(ctx.game_dir, ctx.token)
-    timeout = parse_duration(
-        step.get("timeout"),
-        default=float(ctx.scenario.get("timeouts", {}).get("clientStartSeconds", 180)),
-    )
+    timeout = _client_start_timeout(ctx, step)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -986,11 +983,39 @@ def _v_wait_bridge(ctx: Context, step):
                 data = json.loads(sf.read_text(encoding="utf-8"))
                 if data.get("status") == "ready":
                     ctx.bridge.request("ping", timeout=5)
+                    _record_warm_client_cache(ctx)
                     return
         except Exception:
             pass
         _jitter_sleep(1)
     raise TimeoutError(f"Bridge for {ctx.target.id} did not become available within {timeout}s")
+
+
+def _client_cache_receipt(ctx: Context):
+    tid = ctx.target.id.replace(".", "_")
+    path = (ctx.out_dir.parent / ".hmc-cache" / tid / "launch-ready").resolve()
+    return path, f"{ctx.target.loader}:{ctx.target.minecraft}:{_load_ver(ctx.target)}\n"
+
+
+def _client_start_timeout(ctx: Context, step):
+    if "timeout" in step:
+        return parse_duration(step["timeout"])
+    path, expected = _client_cache_receipt(ctx)
+    try:
+        warm = path.read_text(encoding="utf-8") == expected
+    except OSError:
+        warm = False
+    configured = {**ctx.settings.get("timeouts", {}), **ctx.scenario.get("timeouts", {})}
+    key = "clientStartSeconds" if warm else "clientRunSeconds"
+    return float(configured.get(key, 180 if warm else 600))
+
+
+def _record_warm_client_cache(ctx: Context):
+    path, receipt = _client_cache_receipt(ctx)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(receipt, encoding="utf-8")
+    os.replace(temporary, path)
 
 
 @verb("connect")
