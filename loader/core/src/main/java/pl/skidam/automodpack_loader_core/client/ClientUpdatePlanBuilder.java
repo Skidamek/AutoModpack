@@ -366,7 +366,6 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private List<UpdatePlan.NestedCopy> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
-		Files.createDirectories(storage.incomingDirectory());
 		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
 			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type)).toList()) {

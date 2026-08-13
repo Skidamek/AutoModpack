@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -84,11 +83,6 @@ public final class StoredModpackConnection implements AutoCloseable {
 		}
 		Path destination = storage.helperDirectory().resolve("history-catalogue-" + entry.stateDigest() + ".json").normalize();
 		if (!destination.startsWith(storage.helperDirectory())) return CompletableFuture.failedFuture(new IOException("Historical catalogue path escaped client storage"));
-		try {
-			Files.createDirectories(storage.helperDirectory());
-		} catch (IOException e) {
-			return CompletableFuture.failedFuture(e);
-		}
 		return new ClientGenerationStore(storage).downloadHistoricalCatalogue(currentClient, entry, destination, null);
 	}
 
