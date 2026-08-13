@@ -209,7 +209,7 @@ public final class GenerationStore {
 
 	/** Measures the current generation store without publishing or deleting managed state. */
 	public StorageReport measureStorage() throws IOException {
-		ensureDirectory(root, "generation store");
+		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
 			return measureStorageLocked();
 		}
@@ -221,7 +221,7 @@ public final class GenerationStore {
 		Objects.requireNonNull(pinnedObjectHashes, "pinnedObjectHashes");
 		NavigableSet<String> generationPins = canonicalPins(retainedGenerationIds, "generation");
 		NavigableSet<String> objectPins = canonicalPins(pinnedObjectHashes, "object");
-		ensureDirectory(root, "generation store");
+		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
 			return collectUnreachableObjectsLocked(generationPins, objectPins);
 		}
@@ -229,7 +229,7 @@ public final class GenerationStore {
 
 	/** Returns an exact, non-mutating receipt for compacting details before a retained boundary. */
 	public CompactionPreview previewCompaction(String boundaryGenerationId) throws IOException {
-		ensureDirectory(root, "generation store");
+		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
 			return previewCompactionLocked(boundaryGenerationId);
 		}
@@ -237,7 +237,7 @@ public final class GenerationStore {
 
 	/** Explicitly removes detailed server state before a validated retained boundary. */
 	public CompactionResult compactBefore(String boundaryGenerationId) throws IOException {
-		ensureDirectory(root, "generation store");
+		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
 			return compactBeforeLocked(boundaryGenerationId);
 		}
@@ -262,7 +262,7 @@ public final class GenerationStore {
 
 	/** Repairs a missing or invalid projection under the publication lock before returning the active hosting map. */
 	public Optional<CurrentSnapshot> loadCurrentAndRepair() throws IOException {
-		ensureDirectory(root, "generation store");
+		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
 			return loadCurrent(false, true);
 		}
@@ -310,7 +310,7 @@ public final class GenerationStore {
 	}
 
 	public Publication publish(ModpackCandidate candidate, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
-		ensureDirectory(root, "generation store");
+		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
 			return publishLocked(candidate, expectedCurrent, patchNotes);
 		}
@@ -319,14 +319,14 @@ public final class GenerationStore {
 	public Publication publishRevert(String targetGenerationId, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
 		if (!isDigest(targetGenerationId)) throw new IOException("Invalid rollback target generation ID: " + targetGenerationId);
 		Objects.requireNonNull(expectedCurrent, "expectedCurrent");
-		ensureDirectory(root, "generation store");
+		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
 			Optional<CurrentSnapshot> actualBefore = loadCurrent();
-			ensureExpected(expectedCurrent, actualBefore);
+			requireExpected(expectedCurrent, actualBefore);
 			GenerationRecord previous = actualBefore.map(CurrentSnapshot::record).orElseThrow(() -> new IOException("Cannot revert before the root generation is published"));
 			GenerationHistoryEntry target = findAncestor(previous, targetGenerationId);
 			if (target == null) throw new IOException("Rollback target is not in the current generation history: " + targetGenerationId);
-			ensureStoreDirectories();
+			createStoreDirectories();
 			GenerationRecord record = GenerationRecord.create(target.manifest(), previous, clock.instant(), patchNotes, targetGenerationId);
 			OwnershipDelta delta = writeDeltaNoClobber(record, previous);
 			writeCatalogueNoClobber(record);
@@ -336,7 +336,7 @@ public final class GenerationStore {
 			writeCurrentProjection(record);
 			hosting.put("", currentProjectionPath);
 			commitHook.beforeCurrentPointerReplacement();
-			ensureCurrentStillMatches(expectedCurrent);
+			requireCurrentStillMatches(expectedCurrent);
 			ConfigTools.writeAtomic(currentPath, pointer(record));
 			return new Publication(PublicationStatus.PUBLISHED, record, currentProjectionPath, hosting);
 		}
@@ -361,7 +361,7 @@ public final class GenerationStore {
 			if (!entry.detailsAvailable()) continue;
 			Path path = cataloguePath(entry.stateDigest());
 			if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) continue;
-			ensureRegular(path, "generation catalogue");
+			requireRegular(path, "generation catalogue");
 			paths.put(GenerationHistoryIndex.catalogueRequestKey(entry.stateDigest()), path);
 		}
 		return paths;
@@ -377,7 +377,7 @@ public final class GenerationStore {
 		Objects.requireNonNull(candidate, "candidate");
 		Objects.requireNonNull(expectedCurrent, "expectedCurrent");
 		Optional<CurrentSnapshot> actualBefore = loadCurrent();
-		ensureExpected(expectedCurrent, actualBefore);
+		requireExpected(expectedCurrent, actualBefore);
 		GenerationRecord previous = actualBefore.map(CurrentSnapshot::record).orElse(null);
 		if (previous != null && !previous.manifest().modpackId().equals(candidate.manifest().modpackId()))
 			throw new IOException("Modpack ID cannot change within a generation lineage");
@@ -395,7 +395,7 @@ public final class GenerationStore {
 				return publication(PublicationStatus.NO_CHANGES, actualBefore.orElseThrow());
 		}
 
-		ensureStoreDirectories();
+		createStoreDirectories();
 		GenerationRecord record = GenerationRecord.create(candidate.manifest(), previous, clock.instant(), patchNotes);
 		objectStore.promoteAll(candidate.objects());
 		OwnershipDelta delta = writeDeltaNoClobber(record, previous);
@@ -408,7 +408,7 @@ public final class GenerationStore {
 		Publication publication = new Publication(PublicationStatus.PUBLISHED, record, currentProjectionPath, hosting);
 		GenerationJsons.GenerationPointerFields nextPointer = pointer(record);
 		commitHook.beforeCurrentPointerReplacement();
-		ensureCurrentStillMatches(expectedCurrent);
+		requireCurrentStillMatches(expectedCurrent);
 		ConfigTools.writeAtomic(currentPath, nextPointer);
 		return publication;
 	}
@@ -435,26 +435,26 @@ public final class GenerationStore {
 		return new Publication(status, snapshot.record(), snapshot.projectionPath(), snapshot.hostingPaths());
 	}
 
-	private void ensureExpected(Optional<CurrentSnapshot> expected, Optional<CurrentSnapshot> actual) throws IOException {
+	private void requireExpected(Optional<CurrentSnapshot> expected, Optional<CurrentSnapshot> actual) throws IOException {
 		if (expected.isPresent() != actual.isPresent()) throw new IOException("Current generation changed before publication");
 		if (expected.isPresent() && !expected.get().record().metadata().generationId().equals(actual.get().record().metadata().generationId()))
 			throw new IOException("Current generation changed before publication");
 	}
 
-	private void ensureCurrentStillMatches(Optional<CurrentSnapshot> expected) throws IOException {
+	private void requireCurrentStillMatches(Optional<CurrentSnapshot> expected) throws IOException {
 		Optional<String> actualGenerationId = Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS) ? Optional.of(readCurrentPointer().generationId) : Optional.empty();
 		if (expected.isPresent() != actualGenerationId.isPresent()) throw new IOException("Current generation changed before publication");
 		if (expected.isPresent() && !expected.orElseThrow().record().metadata().generationId().equals(actualGenerationId.orElseThrow()))
 			throw new IOException("Current generation changed before publication");
 	}
 
-	private void ensureStoreDirectories() throws IOException {
-		ensureDirectory(root, "generation store");
-		ensureDirectory(cataloguesDirectory, "generation catalogues");
-		ensureDirectory(commitsDirectory, "generation commits");
-		ensureDirectory(deltasDirectory, "generation deltas");
-		ensureDirectory(objectsDirectory, "immutable objects");
-		ensureDirectory(stagingDirectory, "generation staging");
+	private void createStoreDirectories() throws IOException {
+		FileTrees.createManagedDirectory(root, "generation store");
+		FileTrees.createManagedDirectory(cataloguesDirectory, "generation catalogues");
+		FileTrees.createManagedDirectory(commitsDirectory, "generation commits");
+		FileTrees.createManagedDirectory(deltasDirectory, "generation deltas");
+		FileTrees.createManagedDirectory(objectsDirectory, "immutable objects");
+		FileTrees.createManagedDirectory(stagingDirectory, "generation staging");
 	}
 
 	private CompactionPreview previewCompactionLocked(String boundaryGenerationId) throws IOException {
@@ -517,14 +517,14 @@ public final class GenerationStore {
 	}
 
 	private void validateDeletionTargets(List<Path> paths, String description) throws IOException {
-		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) ensureRegular(path, description);
+		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) requireRegular(path, description);
 	}
 
 	private DeletionResult deleteCompactionFiles(List<Path> paths, String description) throws IOException {
 		long deleted = 0;
 		long bytes = 0;
 		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			ensureRegular(path, description);
+			requireRegular(path, description);
 			long size = Files.size(path);
 			compactionDeleteHook.beforeDelete(path);
 			if (Files.deleteIfExists(path)) {
@@ -679,7 +679,7 @@ public final class GenerationStore {
 
 	private void verifyPinnedObject(String sha1) throws IOException {
 		Path object = objectPath(sha1);
-		ensureRegular(object, "pinned immutable object " + sha1);
+		requireRegular(object, "pinned immutable object " + sha1);
 		if (!sha1.equals(HashUtils.getHash(object))) throw new IOException("Pinned immutable object failed SHA-1 verification: " + object);
 	}
 
@@ -701,7 +701,7 @@ public final class GenerationStore {
 	}
 
 	private GenerationJsons.GenerationPointerFields readCurrentPointer() throws IOException {
-		ensureRegular(currentPath, "current generation pointer");
+		requireRegular(currentPath, "current generation pointer");
 		try {
 			GenerationJsons.GenerationPointerFields pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), GenerationJsons.GenerationPointerFields.class);
 			if (pointer.schemaVersion != CURRENT_POINTER_SCHEMA_VERSION || !isDigest(pointer.generationId))
@@ -716,7 +716,7 @@ public final class GenerationStore {
 
 	private Optional<GenerationCheckpoint> readCheckpoint() throws IOException {
 		if (!Files.exists(checkpointPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
-		ensureRegular(checkpointPath, "generation history checkpoint");
+		requireRegular(checkpointPath, "generation history checkpoint");
 		try {
 			return Optional.of(GenerationCheckpoint.fromFields(ConfigTools.parse(Files.readString(checkpointPath, StandardCharsets.UTF_8), GenerationJsons.GenerationCheckpointFields.class)));
 		} catch (RuntimeException e) {
@@ -746,7 +746,7 @@ public final class GenerationStore {
 	}
 
 	private GenerationRecord readProjection(Path path) throws IOException {
-		ensureRegular(path, "current generation projection");
+		requireRegular(path, "current generation projection");
 		try {
 			ModpackJsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), ModpackJsons.CompleteModpackContentFields.class);
 			GenerationPatchNoteHistory.fromFields(fields);
@@ -770,7 +770,7 @@ public final class GenerationStore {
 	}
 
 	private OwnershipDelta readDelta(Path path) throws IOException {
-		ensureRegular(path, "generation ownership delta");
+		requireRegular(path, "generation ownership delta");
 		try {
 			return OwnershipDelta.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.OwnershipDeltaFields.class));
 		} catch (RuntimeException e) {
@@ -783,7 +783,7 @@ public final class GenerationStore {
 	}
 
 	private CatalogueSnapshot readCatalogue(Path path) throws IOException {
-		ensureRegular(path, "generation catalogue snapshot");
+		requireRegular(path, "generation catalogue snapshot");
 		try {
 			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.CatalogueSnapshotFields.class));
 			if (!snapshot.stateDigest().equals(catalogueStateDigest(path))) throw new IOException("Catalogue snapshot filename does not match its identity: " + path);
@@ -800,7 +800,7 @@ public final class GenerationStore {
 	}
 
 	private GenerationCommit readCommit(Path path) throws IOException {
-		ensureRegular(path, "generation commit");
+		requireRegular(path, "generation commit");
 		try {
 			GenerationCommit commit = GenerationCommit.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.GenerationCommitFields.class));
 			if (!commit.generationId().equals(commitGenerationId(path))) throw new IOException("Generation commit filename does not match its identity: " + path);
@@ -956,7 +956,7 @@ public final class GenerationStore {
 		if (previousSize != null && previousSize.longValue() != expectedSize)
 			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
 		if (!verified.add(sha1)) return;
-		ensureRegular(object, "immutable object " + sha1);
+		requireRegular(object, "immutable object " + sha1);
 		if (Files.size(object) != expectedSize || !sha1.equals(HashUtils.getHash(object)))
 			throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
 	}
@@ -1038,7 +1038,7 @@ public final class GenerationStore {
 
 	private <T> void writeImmutableJsonNoClobber(Path path, Path directory, Object value, T expected,
 			ImmutableJsonReader<T> reader, String description) throws IOException {
-		ensureDirectory(directory, description + "s");
+		FileTrees.createManagedDirectory(directory, description + "s");
 		byte[] bytes = ConfigTools.GSON.toJson(value).getBytes(StandardCharsets.UTF_8);
 		ImmutableFilePublisher.publishBytes(path, bytes, existingPath -> {
 			T existing = reader.read(existingPath);
@@ -1046,16 +1046,9 @@ public final class GenerationStore {
 		});
 	}
 
-	private static void ensureRegular(Path path, String description) throws IOException {
+	private static void requireRegular(Path path, String description) throws IOException {
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("Invalid " + description + ": expected a regular non-symlink file at " + path);
-	}
-
-	private static void ensureDirectory(Path path, String description) throws IOException {
-		if (Files.isSymbolicLink(path)) throw new IOException("Managed " + description + " cannot be a symbolic link: " + path);
-		Files.createDirectories(path);
-		if (Files.isSymbolicLink(path) || !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Invalid managed " + description + " directory: " + path);
 	}
 
 	private static void requireDirectory(Path path, String description) throws IOException {

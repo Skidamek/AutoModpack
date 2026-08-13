@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.modpack.candidate;
 import static pl.skidam.automodpack_core.Constants.MOD_ID;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
@@ -13,6 +12,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -44,10 +44,10 @@ public final class StableSourceSnapshotter {
 			Snapshot cached = cachedSnapshot(source, before, autoExcludeServerMods, stagingDirectory, fileMetadataCache, modFileCache, objectStoreDirectory);
 			if (cached != null) return cached;
 
-			ensureStagingDirectory(stagingDirectory);
+			FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
 			copyOperation.copy(source.sourcePath(), staged);
-			force(staged);
+			FileTrees.forceFile(staged);
 
 			exclusion = expectedContentExclusion(staged, autoExcludeServerMods);
 			String type = exclusion == null ? fileType(staged, source.logicalPath()) : null;
@@ -87,7 +87,7 @@ public final class StableSourceSnapshotter {
 		if (!object.startsWith(objectStoreDirectory.toAbsolutePath().normalize()) || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)
 				|| Files.size(object) != before.size() || !sha1.equalsIgnoreCase(fileMetadataCache.getHashOrNull(object)))
 			return null;
-		ensureStagingDirectory(stagingDirectory);
+		FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 		Path staged = Files.createTempFile(stagingDirectory, "snapshot-cached-", stagingSuffix(source.sourcePath()));
 		Files.deleteIfExists(staged);
 		try {
@@ -168,19 +168,6 @@ public final class StableSourceSnapshotter {
 	private static String stagingSuffix(Path source) {
 		String name = source.getFileName().toString();
 		return JarUtils.hasJarExtension(name) ? ".jar" : ".staged";
-	}
-
-	private static void ensureStagingDirectory(Path stagingDirectory) throws IOException {
-		if (Files.isSymbolicLink(stagingDirectory)) throw new IOException("Managed staging directory cannot be a symbolic link: " + stagingDirectory);
-		Files.createDirectories(stagingDirectory);
-		if (Files.isSymbolicLink(stagingDirectory) || !Files.isDirectory(stagingDirectory, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Managed staging directory is not a regular directory: " + stagingDirectory);
-	}
-
-	private static void force(Path file) throws IOException {
-		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-			channel.force(true);
-		}
 	}
 
 	private static void delete(Path path, CandidateBuildException failure) {

@@ -169,7 +169,7 @@ class OfflineRepairTest {
 
 	private ClientStorage storage() throws Exception {
 		ClientStorage storage = ClientStorage.fromGameDirectory(temporaryDirectory.resolve("game"));
-		storage.ensureRoots();
+		storage.createDirectories();
 		Files.createDirectories(storage.modsDirectory());
 		return storage;
 	}

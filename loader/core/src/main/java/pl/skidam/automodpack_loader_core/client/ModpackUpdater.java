@@ -133,7 +133,7 @@ public class ModpackUpdater implements AutoCloseable {
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			acquireTargetObjects(selectedTarget.flatTarget(), cache, true);
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
-			planBuilder.ensurePlanObjects(prepared.plan(), selectedTarget.flatTarget());
+			planBuilder.preparePlanObjects(prepared.plan(), selectedTarget.flatTarget());
 			installedSwitchPlan = ReviewedClientPlan.pending(prepared, prepared.plan());
 			String installedGenerationId = active != null && selectedTarget.manifest().modpackId().equals(active.modpackId) ? active.generationId : "";
 			GenerationUpdateRange updateRange = updateRange(selectedTarget, installedGenerationId);
@@ -214,7 +214,7 @@ public class ModpackUpdater implements AutoCloseable {
 		sourceFetchManager = newSourceFetchManager(new ArrayList<>(unique.values()));
 	}
 
-	private FetchManager ensureSourceFetch(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
+	private FetchManager sourceFetch(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
 		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
 		for (var item : items) addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
 		List<FetchManager.FetchData> fetchData = new ArrayList<>(unique.values());
@@ -370,7 +370,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 		requireLiveConnection();
 		totalBytesToDownload = missing.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		FetchManager fetchManager = ensureSourceFetch(missing);
+		FetchManager fetchManager = sourceFetch(missing);
 		try {
 			if (!downloadModpack(missing, System.currentTimeMillis(), fetchManager, playerFacing))
 				throw new IOException("One or more selected modpack objects could not be acquired");
@@ -837,7 +837,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private void executePlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, SelectedModpackTarget target) throws IOException {
 		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
 		UpdatePlan plan = prepared.plan();
-		planBuilder.ensurePlanObjects(plan, target.flatTarget());
+		planBuilder.preparePlanObjects(plan, target.flatTarget());
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest());
 		if (!execution.success()) {
 			DetachedUpdateHelper.launch(execution.transaction());

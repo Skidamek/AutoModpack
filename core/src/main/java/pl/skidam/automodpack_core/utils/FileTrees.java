@@ -42,6 +42,14 @@ public final class FileTrees {
 		}
 	}
 
+	/** Creates a managed directory and rejects symbolic-link aliases. */
+	public static void createManagedDirectory(Path directory, String description) throws IOException {
+		if (Files.isSymbolicLink(directory)) throw new IOException("Managed " + description + " cannot be a symbolic link: " + directory);
+		Files.createDirectories(directory);
+		if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS))
+			throw new IOException("Managed " + description + " is not a directory: " + directory);
+	}
+
 	public static void delete(Path directory) throws IOException {
 		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return;
 		if (Files.isSymbolicLink(directory)) {

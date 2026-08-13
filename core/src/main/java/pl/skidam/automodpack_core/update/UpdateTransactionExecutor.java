@@ -81,7 +81,7 @@ public final class UpdateTransactionExecutor {
 
 	public Execution commit(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest) throws IOException {
 		ClientStorage storage = context.storage();
-		ensureNoActiveTransaction(storage);
+		requireNoActiveTransaction(storage);
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest);
 		return commitPrepared(transaction, target);
 	}
@@ -93,15 +93,14 @@ public final class UpdateTransactionExecutor {
 	private Execution commitPrepared(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
 		validate(transaction, unpublishedTarget);
 		validateSelectionBeforeMutation(transaction);
-		ensureNoActiveTransaction(context.storage());
-		context.storage().ensureRoots();
+		requireNoActiveTransaction(context.storage());
 		if (unpublishedTarget != null)
 			new ClientGenerationStore(context.storage()).write(unpublishedTarget.generationRecord(), unpublishedTarget.patchNotesHistory(), unpublishedTarget.historyIndex());
 		ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
 		return executePersisted(transaction);
 	}
 
-	private static void ensureNoActiveTransaction(ClientStorage storage) throws IOException {
+	private static void requireNoActiveTransaction(ClientStorage storage) throws IOException {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An update transaction is already active for this game directory");
 	}
 
