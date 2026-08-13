@@ -441,7 +441,7 @@ def test_wait_bridge_retries_only_transient_dependency_download(make_ctx, monkey
     bridge_state.parent.mkdir(parents=True, exist_ok=True)
     bridge_state.write_text(json.dumps({"status": "ready"}), encoding="utf-8")
     ctx.bridge = types.SimpleNamespace(request=lambda *_args, **_kwargs: None)
-    running_checks = iter((RuntimeError("download failed"), None))
+    running_checks = iter((RuntimeError("first download failed"), RuntimeError("second download failed"), None))
     launches = []
 
     def assert_running(_name):
@@ -457,7 +457,7 @@ def test_wait_bridge_retries_only_transient_dependency_download(make_ctx, monkey
 
     runner._v_wait_bridge(ctx, {"timeout": "1s"})
 
-    assert launches == [("remove", ctx.cli_name), ("launch", ctx.target.id)]
+    assert launches == [("remove", ctx.cli_name), ("launch", ctx.target.id), ("remove", ctx.cli_name), ("launch", ctx.target.id)]
     assert not runner._transient_dependency_download_failure("MixinApplyError\nHTTP connect timed out")
 
 
