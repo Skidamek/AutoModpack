@@ -1471,6 +1471,7 @@ def run_case(
     artifact_dir: Path,
     client_image: str,
     settings: dict,
+    resource_scope: str,
 ) -> dict:
     started = time.monotonic()
     scenario_id = scenario.get("id", "?")
@@ -1481,9 +1482,10 @@ def run_case(
     game_dir = case_dir / "client" / "game"
     # On host networking the two containers share the host namespace, so there is
     # no user-defined network to create and the client reaches the server locally.
-    net_name = "host" if net_mode == "host" else f"amp-{secrets.token_hex(4)}"[:63]
-    srv_name = f"amp-s-{secrets.token_hex(4)}"[:63]
-    cli_name = f"amp-c-{secrets.token_hex(4)}"[:63]
+    resource_prefix = f"amp-{resource_scope}"
+    net_name = "host" if net_mode == "host" else f"{resource_prefix}-n-{secrets.token_hex(4)}"[:63]
+    srv_name = f"{resource_prefix}-s-{secrets.token_hex(4)}"[:63]
+    cli_name = f"{resource_prefix}-c-{secrets.token_hex(4)}"[:63]
     server_host = "127.0.0.1" if net_mode == "host" else srv_name
     token = secrets.token_hex(16)
 

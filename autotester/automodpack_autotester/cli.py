@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
+import signal
 import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -26,20 +28,29 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 
+def _interrupt_on_termination(_signum, _frame) -> None:
+    raise KeyboardInterrupt
+
+
 def _resolve_settings_path(s: dict, key: str, default: str) -> Path:
     raw = s.get("paths", {}).get(key, default)
     p = Path(str(raw))
     return (REPO_ROOT / p).resolve() if not p.is_absolute() else p.resolve()
 
 
-def _kill_amp_containers() -> None:
+def _cleanup_run_resources(resource_scope: str) -> None:
+    prefix = f"amp-{resource_scope}-"
     client = docker_py.from_env()
-    for c in client.containers.list(all=True, filters={"name": "amp-"}):
+    for c in client.containers.list(all=True):
+        if not c.name.startswith(prefix):
+            continue
         try:
             c.remove(force=True)
         except Exception:
             pass
-    for n in client.networks.list(filters={"name": "amp-"}):
+    for n in client.networks.list():
+        if not n.name.startswith(prefix):
+            continue
         try:
             n.remove()
         except Exception:
@@ -255,10 +266,13 @@ def main(argv: list[str] | None = None) -> int:
 
     results: dict = {}
     interrupted = False
+    resource_scope = secrets.token_hex(4)
     try:
         executor = ThreadPoolExecutor(
             max_workers=max(1, args.jobs or rc.get("jobs", 1))
         )
+        previous_sigterm_handler = signal.signal(signal.SIGTERM, _interrupt_on_termination)
+        task_map = {}
         try:
             task_map = {
                 executor.submit(
@@ -269,6 +283,7 @@ def main(argv: list[str] | None = None) -> int:
                     artifact_dir=artifact_dir,
                     client_image=client_image,
                     settings=s,
+                    resource_scope=resource_scope,
                 ): t
                 for t in selected
             }
@@ -287,13 +302,14 @@ def main(argv: list[str] | None = None) -> int:
             for ff in task_map:
                 ff.cancel()
             try:
-                _kill_amp_containers()
+                _cleanup_run_resources(resource_scope)
             except KeyboardInterrupt:
                 print("Force exit.", file=sys.stderr)
                 os._exit(1)
             print("Cleanup complete.", file=sys.stderr)
 
         finally:
+            signal.signal(signal.SIGTERM, previous_sigterm_handler)
             executor.shutdown(wait=False)
             ok = all(r.get("ok", False) for r in results.values())
             (out_dir / "results.json").write_text(
