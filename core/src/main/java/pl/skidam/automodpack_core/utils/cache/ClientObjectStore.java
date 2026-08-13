@@ -146,8 +146,16 @@ public final class ClientObjectStore {
 
 	/** Publishes a conservative durable receipt before or after client state changes. */
 	public static void publishOwnership(ClientStorage storage) throws IOException {
+		publishOwnership(storage, Set.of());
+	}
+
+	/** Publishes durable state plus temporary objects that an in-flight operation is acquiring. */
+	public static void publishOwnership(ClientStorage storage, Set<String> temporaryObjectHashes) throws IOException {
 		Objects.requireNonNull(storage, "storage");
-		SharedObjectOwnership.publish(storage.dataLocation(), "client", collectReferences(storage, null).hashes());
+		Objects.requireNonNull(temporaryObjectHashes, "temporary object hashes");
+		ReferenceSet references = collectReferences(storage, null);
+		for (String hash : canonicalPins(temporaryObjectHashes, "temporary object")) references.addOptional(hash, -1, "in-flight acquisition");
+		SharedObjectOwnership.publish(storage.dataLocation(), "client", references.hashes());
 	}
 
 	/** Returns every CAS hash referenced by validated client state, excluding historical ownership metadata. */
