@@ -42,14 +42,14 @@ final class GenerationHistoryController {
 				Optional<GenerationHistoryIndex> storedHistory = store.historyIndex(currentGenerationId);
 				try {
 					StoredModpackConnection connection = StoredModpackConnection.open(storage, modpackId, true);
-					new ScreenManager().history(new HistoryViewRequest(connection.advertisedHistoryIndex(), availableHistory, modpackName, new ConnectedCatalogueLoader(connection), closed));
+					ScreenManager.history(new HistoryViewRequest(connection.advertisedHistoryIndex(), availableHistory, modpackName, new ConnectedCatalogueLoader(connection), closed));
 				} catch (IOException connectionFailure) {
 					GenerationHistoryIndex offlineHistory = storedHistory.orElseGet(() -> localHistoryIndex(modpackId, availableHistory));
-					new ScreenManager().history(new HistoryViewRequest(offlineHistory, availableHistory, modpackName, new OfflineCatalogueLoader(connectionFailure), closed));
+					ScreenManager.history(new HistoryViewRequest(offlineHistory, availableHistory, modpackName, new OfflineCatalogueLoader(connectionFailure), closed));
 				}
 			} catch (Exception e) {
 				Minecraft.getInstance().execute(closed);
-				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
+				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		});
 	}

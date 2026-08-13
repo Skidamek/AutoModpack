@@ -73,7 +73,7 @@ public class HandshakeC2SPacket {
 
 		// Disconnect and install only if the update is valid
 		if (SelfUpdater.validUpdate(semver)) {
-			new ScreenManager().waiting();
+			ScreenManager.waiting();
 			ClientLoginDisconnect.disconnect(handler);
 			SelfUpdater.installModVersion(automodpack);
 		}

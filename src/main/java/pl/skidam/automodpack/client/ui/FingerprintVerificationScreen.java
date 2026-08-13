@@ -104,7 +104,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		verifyButton.active = false;
 		this.validated = true;
 		this.inputText = "";
-		new ScreenManager().waiting();
+		ScreenManager.waiting();
 		validatedCallback.run();
 	}
 

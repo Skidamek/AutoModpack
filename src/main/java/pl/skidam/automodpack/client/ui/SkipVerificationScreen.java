@@ -91,7 +91,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 
 		if (input.equals(REQUIRED_TEXT)) {
 			confirmButton.active = false;
-			new ScreenManager().waiting();
+			ScreenManager.waiting();
 			validatedCallback.run();
 		} else {
 			Constants.LOGGER.error("Skip verification text mismatch, try again");
