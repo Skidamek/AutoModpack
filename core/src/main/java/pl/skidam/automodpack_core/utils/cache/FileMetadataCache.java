@@ -40,17 +40,19 @@ public class FileMetadataCache implements AutoCloseable {
 		private String contentHash;
 		private long lastModifiedNanos;
 		private long creationTimeNanos;
+		private long changeTimeNanos;
 		private long size;
 		private String fileKey;
 		private long validatedAtNanos;
 
 		public CachedFile() {}
 
-		public CachedFile(String path, String contentHash, long lastModifiedNanos, long creationTimeNanos, long size, String fileKey, long validatedAtNanos) {
+		public CachedFile(String path, String contentHash, long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey, long validatedAtNanos) {
 			this.path = path;
 			this.contentHash = contentHash;
 			this.lastModifiedNanos = lastModifiedNanos;
 			this.creationTimeNanos = creationTimeNanos;
+			this.changeTimeNanos = changeTimeNanos;
 			this.size = size;
 			this.fileKey = fileKey;
 			this.validatedAtNanos = validatedAtNanos;
@@ -72,6 +74,10 @@ public class FileMetadataCache implements AutoCloseable {
 			return creationTimeNanos;
 		}
 
+		public long changeTimeNanos() {
+			return changeTimeNanos;
+		}
+
 		public long size() {
 			return size;
 		}
@@ -85,9 +91,9 @@ public class FileMetadataCache implements AutoCloseable {
 		}
 	}
 
-	private record FileFingerprint(long lastModifiedNanos, long creationTimeNanos, long size, String fileKey) {}
+	private record FileFingerprint(long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey) {}
 
-	private record ComputedHash(String hash, BasicFileAttributes attributes) {}
+	private record ComputedHash(String hash, BasicFileAttributes attributes, FileFingerprint fingerprint) {}
 
 	public static FileMetadataCache open(Path path) throws IOException {
 		return REGISTRY.acquire(path, FileMetadataCache::new);
@@ -118,8 +124,8 @@ public class FileMetadataCache implements AutoCloseable {
 		synchronized (locks[lockIndex]) {
 			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
 			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
-			FileFingerprint stableFingerprint = fingerprint(computed.attributes());
-			CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.size(),
+			FileFingerprint stableFingerprint = computed.fingerprint();
+			CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
 					stableFingerprint.fileKey(), validationTimeNanos());
 			writeRecord(record);
 			return computed.hash();
@@ -129,7 +135,7 @@ public class FileMetadataCache implements AutoCloseable {
 	public String getOrComputeHashWithAttributes(Path file, BasicFileAttributes attrs) {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
-		FileFingerprint fingerprint = fingerprint(attrs);
+		FileFingerprint fingerprint = fingerprint(absPath, attrs);
 		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
 
 		synchronized (locks[lockIndex]) {
@@ -139,8 +145,8 @@ public class FileMetadataCache implements AutoCloseable {
 			ComputedHash computed = computeStableHash(absPath, attrs);
 			if (computed == null) return null;
 
-			FileFingerprint stableFingerprint = fingerprint(computed.attributes());
-			CachedFile newRecord = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.size(),
+			FileFingerprint stableFingerprint = computed.fingerprint();
+			CachedFile newRecord = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
 					stableFingerprint.fileKey(), validationTimeNanos());
 			writeRecord(newRecord);
 			return computed.hash();
@@ -173,9 +179,18 @@ public class FileMetadataCache implements AutoCloseable {
 		}
 	}
 
-	private static FileFingerprint fingerprint(BasicFileAttributes attrs) {
+	private static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
 		String fileKey = attrs.fileKey() == null ? "null" : attrs.fileKey().toString();
-		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), attrs.size(), fileKey);
+		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos(path), attrs.size(), fileKey);
+	}
+
+	private static long changeTimeNanos(Path path) {
+		try {
+			Object value = Files.getAttribute(path, "unix:ctime", LinkOption.NOFOLLOW_LINKS);
+			return value instanceof FileTime time ? toNanos(time) : Long.MIN_VALUE;
+		} catch (IOException | UnsupportedOperationException | IllegalArgumentException e) {
+			return Long.MIN_VALUE;
+		}
 	}
 
 	private static long toNanos(FileTime time) {
@@ -187,19 +202,17 @@ public class FileMetadataCache implements AutoCloseable {
 		return now.getEpochSecond() * 1_000_000_000L + now.getNano();
 	}
 
-	private static boolean sameFingerprint(BasicFileAttributes first, BasicFileAttributes second) {
-		return fingerprint(first).equals(fingerprint(second));
-	}
-
 	private ComputedHash computeStableHash(Path file, BasicFileAttributes initialAttributes, LinkOption... options) {
 		BasicFileAttributes before = initialAttributes;
 		for (int attempt = 0; attempt < 3; attempt++) {
+			FileFingerprint beforeFingerprint = fingerprint(file, before);
 			String hash = HashUtils.getHash(file);
 			if (hash == null) return null;
 			try {
 				BasicFileAttributes after = Files.readAttributes(file, BasicFileAttributes.class, options);
 				if (!after.isRegularFile() || after.isSymbolicLink()) return null;
-				if (sameFingerprint(before, after)) return new ComputedHash(hash, after);
+				FileFingerprint afterFingerprint = fingerprint(file, after);
+				if (beforeFingerprint.equals(afterFingerprint)) return new ComputedHash(hash, after, afterFingerprint);
 				before = after;
 			} catch (IOException e) {
 				return null;
@@ -211,7 +224,8 @@ public class FileMetadataCache implements AutoCloseable {
 
 	private static boolean isCacheValid(CachedFile cached, FileFingerprint fingerprint) {
 		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
-				&& cached.creationTimeNanos() == fingerprint.creationTimeNanos() && cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey())
+				&& cached.creationTimeNanos() == fingerprint.creationTimeNanos() && cached.changeTimeNanos() == fingerprint.changeTimeNanos()
+				&& cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey())
 				&& fingerprint.lastModifiedNanos() < cached.validatedAtNanos();
 	}
 
@@ -244,8 +258,9 @@ public class FileMetadataCache implements AutoCloseable {
 	public void overwriteCache(Path file, String hash) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
 		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class);
-		FileFingerprint fingerprint = fingerprint(attrs);
-		CachedFile record = new CachedFile(absPath.toString(), hash, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.size(), fingerprint.fileKey(), validationTimeNanos());
+		FileFingerprint fingerprint = fingerprint(absPath, attrs);
+		CachedFile record = new CachedFile(absPath.toString(), hash, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
+				validationTimeNanos());
 		int lockIndex = Math.floorMod(record.path().hashCode(), locks.length);
 		synchronized (locks[lockIndex]) {
 			hotRecords.put(record.path(), record);
