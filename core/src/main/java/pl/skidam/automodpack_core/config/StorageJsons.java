@@ -8,6 +8,7 @@ public class StorageJsons {
 		public String root = "";
 		public boolean shared;
 		public String ownerId = "";
+		public String ownerPathHash = "";
 	}
 
 	public static class ObjectOwnershipFields {
