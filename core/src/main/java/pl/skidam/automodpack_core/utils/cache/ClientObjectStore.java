@@ -244,6 +244,7 @@ public final class ClientObjectStore {
 		collectGeneratedCopies(storage, retained);
 		collectPreservation(storage, retained);
 		collectTransaction(storage, retained);
+		collectRepair(storage, retained);
 		collectActiveProjection(storage, retained, activeState);
 		return retained;
 	}
@@ -339,6 +340,23 @@ public final class ClientObjectStore {
 			if (conflict == null) throw new IOException("Client transaction contains an incomplete conflict");
 			retained.addOptional(conflict.sourceHash(), conflict.sourceSize(), "in-flight transaction conflict source");
 			retained.addRequired(conflict.targetHash(), conflict.targetSize(), "in-flight transaction conflict target");
+		}
+	}
+
+	private static void collectRepair(ClientStorage storage, ReferenceSet retained) throws IOException {
+		Path path = storage.repairJournalFile();
+		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
+		requireRegular(path, "offline repair journal");
+		ClientStorageJsons.OfflineRepairJournalFields fields = readJson(path, ClientStorageJsons.OfflineRepairJournalFields.class, "offline repair journal");
+		if (fields.schemaVersion != 1 || fields.editableResets == null || fields.unownedMods == null) throw new IOException("Offline repair journal fields are incomplete: " + path);
+		for (var reset : fields.editableResets) {
+			if (reset == null) throw new IOException("Offline repair journal contains an incomplete editable reset");
+			retained.addRequired(reset.defaultHash, reset.defaultSize, "offline repair editable default");
+			retained.addIfPresent(reset.currentHash, reset.currentSize, "offline repair editable source");
+		}
+		for (var mod : fields.unownedMods) {
+			if (mod == null) throw new IOException("Offline repair journal contains an incomplete unowned mod");
+			retained.addIfPresent(mod.objectHash, mod.size, "offline repair unowned mod");
 		}
 	}
 
