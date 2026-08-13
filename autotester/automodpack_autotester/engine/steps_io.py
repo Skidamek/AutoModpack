@@ -17,12 +17,19 @@ from .registry import verb
 from .util import await_condition, parse_duration
 
 
+def _while_client_running(ctx, result):
+    if result is not None:
+        return result
+    ctx.assert_client_running()
+    return None
+
+
 def _await_exist(ctx, root, rels, step, msg, default_timeout):
     """Poll until every path in ``rels`` exists under ``root``, or time out."""
     paths = [root / r for r in rels]
     timeout = parse_duration(step.get("timeout"), default=default_timeout)
     await_condition(
-        lambda: True if all(p.exists() for p in paths) else None,
+        lambda: _while_client_running(ctx, True if all(p.exists() for p in paths) else None),
         timeout,
         step.get("poll"),
         msg,
@@ -131,7 +138,7 @@ def wait_file(ctx, step):
     template = str(step["path"])
     timeout = parse_duration(step.get("timeout"), default=300)
     await_condition(
-        lambda: True if (ctx.game_dir / ctx.resolve(template)).exists() else None,
+        lambda: _while_client_running(ctx, True if (ctx.game_dir / ctx.resolve(template)).exists() else None),
         timeout,
         step.get("poll"),
         f"file {template} did not appear",
@@ -148,9 +155,10 @@ def wait_file_content(ctx, step):
 
     def _matches():
         try:
-            return True if path.read_text(encoding="utf-8") == expected else None
+            result = True if path.read_text(encoding="utf-8") == expected else None
         except (FileNotFoundError, IsADirectoryError, OSError):
-            return None
+            result = None
+        return _while_client_running(ctx, result)
 
     await_condition(_matches, timeout, step.get("poll"), f"file {template} did not contain the expected content")
 
@@ -180,7 +188,7 @@ def verify_mods(ctx, step):
     def _all():
         mods = {p.name for p in mod_dir.glob("*.jar")} if mod_dir.exists() else set()
         ok = all(any(fnmatch(m, pat) for m in mods) for pat in ctx.expected_mods)
-        return True if ok else None
+        return _while_client_running(ctx, True if ok else None)
 
     await_condition(_all, timeout, step.get("poll"), "expected mods missing")
 
@@ -212,9 +220,10 @@ def wait_generation(ctx, step):
 
     def _committed():
         try:
-            return _read_active_generation(ctx, expected_patch_notes)
+            result = _read_active_generation(ctx, expected_patch_notes)
         except (FileNotFoundError, IsADirectoryError, OSError, TypeError, ValueError, json.JSONDecodeError):
-            return None
+            result = None
+        return _while_client_running(ctx, result)
 
     await_condition(_committed, timeout, step.get("poll"), "active generation state was not committed")
 

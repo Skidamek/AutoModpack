@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 from automodpack_autotester import cli, runner
-from automodpack_autotester.engine.steps_io import wait_file_content, wait_generation
+from automodpack_autotester.engine.steps_io import wait_file, wait_file_content, wait_generation
+from automodpack_autotester.engine.util import ClientExited
 
 
 def _target(**kw):
@@ -40,6 +41,38 @@ def test_targets_command_uses_configured_defaults(monkeypatch, capsys):
 
     assert cli._cmd_targets(None, None) == 0
     assert json.loads(capsys.readouterr().out) == ["selected"]
+
+
+def test_sigterm_enters_the_interrupt_cleanup_path():
+    with pytest.raises(KeyboardInterrupt):
+        cli._interrupt_on_termination(None, None)
+
+
+def test_interrupted_run_cleans_only_its_docker_resources(monkeypatch):
+    class Resource:
+        def __init__(self, name):
+            self.name = name
+            self.removed = False
+
+        def remove(self, **_kwargs):
+            self.removed = True
+
+    owned_container = Resource("amp-owned123-c-abcd")
+    other_container = Resource("amp-other456-c-abcd")
+    owned_network = Resource("amp-owned123-n-abcd")
+    other_network = Resource("amp-other456-n-abcd")
+    docker = types.SimpleNamespace(
+        containers=types.SimpleNamespace(list=lambda **_kwargs: [owned_container, other_container]),
+        networks=types.SimpleNamespace(list=lambda **_kwargs: [owned_network, other_network]),
+    )
+    monkeypatch.setattr(cli.docker_py, "from_env", lambda: docker)
+
+    cli._cleanup_run_resources("owned123")
+
+    assert owned_container.removed
+    assert owned_network.removed
+    assert not other_container.removed
+    assert not other_network.removed
 
 
 # ── validation ─────────────────────────────────────────────────────────────
@@ -231,6 +264,17 @@ def test_wait_file_content_waits_for_replaced_payload(make_ctx):
         )
     finally:
         writer.join()
+
+
+def test_filesystem_waits_fail_when_client_exits(make_ctx):
+    ctx = make_ctx()
+    ctx.running_provider = lambda: (_ for _ in ()).throw(ClientExited("client exited with code 124"))
+
+    with pytest.raises(ClientExited, match="code 124"):
+        wait_file(ctx, {"path": "missing", "timeout": "1h", "poll": "1ms"})
+
+    with pytest.raises(ClientExited, match="code 124"):
+        wait_generation(ctx, {"timeout": "1h", "poll": "1ms"})
 
 
 # ── artifact and staged manifest handling ────────────────────────────────────
