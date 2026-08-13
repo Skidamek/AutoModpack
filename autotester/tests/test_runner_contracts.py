@@ -434,6 +434,32 @@ def test_client_start_timeout_uses_proven_cache_receipt(make_ctx):
     assert runner._client_start_timeout(ctx, {}) == 300
 
 
+def test_wait_bridge_retries_only_transient_dependency_download(make_ctx, monkeypatch):
+    ctx = make_ctx()
+    bridge_state = runner._bridge_state(ctx)
+    bridge_state.parent.mkdir(parents=True, exist_ok=True)
+    bridge_state.write_text(json.dumps({"status": "ready"}), encoding="utf-8")
+    ctx.bridge = types.SimpleNamespace(request=lambda *_args, **_kwargs: None)
+    running_checks = iter((RuntimeError("download failed"), None))
+    launches = []
+
+    def assert_running(_name):
+        failure = next(running_checks)
+        if failure:
+            raise failure
+
+    monkeypatch.setattr(runner, "_assert_running", assert_running)
+    monkeypatch.setattr(runner, "_container_logs", lambda _name: "[LibraryDownloader]: missing dependency\nHTTP connect timed out")
+    monkeypatch.setattr(runner, "_remove_container", lambda name: launches.append(("remove", name)))
+    monkeypatch.setattr(runner, "_launch_client", lambda launched_ctx: launches.append(("launch", launched_ctx.target.id)))
+    monkeypatch.setattr(runner, "_record_warm_client_cache", lambda _ctx: None)
+
+    runner._v_wait_bridge(ctx, {"timeout": "1s"})
+
+    assert launches == [("remove", ctx.cli_name), ("launch", ctx.target.id)]
+    assert not runner._transient_dependency_download_failure("MixinApplyError\nHTTP connect timed out")
+
+
 def test_connect_screen_classifier_does_not_loop_on_first_connection():
     assert runner._is_connecting_screen(
         "net.minecraft.client.gui.screens.ConnectScreen"
