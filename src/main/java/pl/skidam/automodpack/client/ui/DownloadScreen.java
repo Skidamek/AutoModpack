@@ -2,8 +2,6 @@ package pl.skidam.automodpack.client.ui;
 
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 
-import java.io.IOException;
-
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
@@ -17,9 +15,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.SpeedFormatter;
 
@@ -59,14 +54,6 @@ public class DownloadScreen extends VersionedScreen {
 		initWidgets();
 	}
 
-	private void saveClientConfig() {
-		try {
-			ConfigTools.writeAtomic(ClientStorage.open(GameDirectory.current()).clientConfigFile(), clientConfig);
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to save client configuration", e);
-		}
-	}
-
 	private void initWidgets() {
 		cancelButton = addActionArea(310, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> {
@@ -80,15 +67,13 @@ public class DownloadScreen extends VersionedScreen {
 
 		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
 			AudioManager.stopMusic();
-			clientConfig.playMusic = false;
-			saveClientConfig();
+			ClientPreferences.setMusicEnabled(false);
 		}, "music-note", VersionedText.translatable("soundCategory.music")));
 		setTooltip(muteMusicButton, VersionedText.translatable("soundCategory.music"));
 
 		playMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
 			AudioManager.playMusic();
-			clientConfig.playMusic = true;
-			saveClientConfig();
+			ClientPreferences.setMusicEnabled(true);
 		}, "mute-music-note", VersionedText.translatable("soundCategory.music")));
 		setTooltip(playMusicButton, VersionedText.translatable("soundCategory.music"));
 	}

@@ -34,6 +34,7 @@ import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
+import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
@@ -51,6 +52,7 @@ public class Preload {
 			initializeConstants();
 			loadConfigs();
 			DetachedUpdateHelper.cleanupOldHelperJars();
+			recoverPendingRepair();
 			recoverPendingTransaction();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) importBootstrap();
 			updateAll();
@@ -59,6 +61,12 @@ public class Preload {
 			e.printStackTrace();
 			throw new RuntimeException(e);
 		}
+	}
+
+	private void recoverPendingRepair() throws IOException {
+		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return;
+		var receipt = new ClientOfflineRepair(storage, MODPACK_LOADER).recover();
+		LOGGER.info("Recovered offline repair for {} (complete: {})", receipt.before().modpackId(), receipt.complete());
 	}
 
 	private static void writeConfig(Path path, Object value) {

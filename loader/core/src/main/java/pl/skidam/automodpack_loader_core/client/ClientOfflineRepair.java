@@ -41,11 +41,14 @@ public final class ClientOfflineRepair {
 	}
 
 	public OfflineRepair.Prepared inspect() throws IOException {
-		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current())
-				.orElseThrow(() -> new IOException("Repair is available only for the active installed modpack"));
-		OfflineRepair.Request request = new OfflineRepair.Request(target, forceCopyPaths(target), protectedModPath);
+		OfflineRepair.Request request = request();
 		repair.recover(request);
 		return repair.inspect(request);
+	}
+
+	/** Resumes a player-approved repair before normal update or projection loading starts. */
+	public OfflineRepair.Receipt recover() throws IOException {
+		return repair.recover(request());
 	}
 
 	public OfflineRepair.Receipt apply(OfflineRepair.Prepared prepared) throws IOException {
@@ -54,6 +57,12 @@ public final class ClientOfflineRepair {
 
 	public OfflineRepair.Receipt apply(OfflineRepair.Prepared prepared, Set<String> editableResetPaths, Set<String> unownedModPaths) throws IOException {
 		return repair.apply(prepared, editableResetPaths, unownedModPaths);
+	}
+
+	private OfflineRepair.Request request() throws IOException {
+		SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current())
+				.orElseThrow(() -> new IOException("Repair is available only for the active installed modpack"));
+		return new OfflineRepair.Request(target, forceCopyPaths(target), protectedModPath);
 	}
 
 	private Set<String> forceCopyPaths(SelectedModpackTarget target) throws IOException {

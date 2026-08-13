@@ -14,7 +14,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
-import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
@@ -26,7 +25,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 310;
 
 	private final Screen parent;
-	private final ClientStorage storage;
+	private final InstalledModpackController controller;
 	private boolean busy;
 	private boolean closed;
 	private boolean presentingFailure;
@@ -35,10 +34,10 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private ClientObjectStore.StorageReport verificationReport;
 	private Future<?> work;
 
-	public ClientStorageMaintenanceScreen(Screen parent, ClientStorage storage) {
+	public ClientStorageMaintenanceScreen(Screen parent, InstalledModpackController controller) {
 		super(VersionedText.translatable("automodpack.storage.title"));
 		this.parent = parent;
-		this.storage = storage;
+		this.controller = controller;
 	}
 
 	@Override
@@ -61,7 +60,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		begin(Operation.VERIFY);
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
-				ClientObjectStore.StorageReport report = ClientObjectStore.validate(storage);
+				ClientObjectStore.StorageReport report = controller.validateStorage();
 				this.minecraft.execute(() -> finishVerification(report));
 			} catch (Exception exception) {
 				this.minecraft.execute(() -> fail(exception));
@@ -74,7 +73,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		begin(Operation.COMPACT);
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
-				ClientGenerationStore.CompactionResult compacted = new ClientGenerationStore(storage).compact();
+				ClientGenerationStore.CompactionResult compacted = controller.compactStorage();
 				this.minecraft.execute(() -> finish(compacted));
 			} catch (Exception exception) {
 				this.minecraft.execute(() -> fail(exception));
