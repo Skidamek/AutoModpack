@@ -72,7 +72,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			bootstrapJars(earlyServiceJars, serviceLayer, arguments);
 
 			EarlyServiceLayer.instantiateTransformationServices();
-			EarlyServiceBridgePlugin.ensureRunsFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
+			EarlyServiceBridgePlugin.registerFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
 		} catch (Throwable t) {
 			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 		}
