@@ -213,7 +213,7 @@ public class ModpackUtils {
 			try {
 				if (Files.exists(storeFile)) {
 					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
-					Files.delete(storeFile);
+					ImmutableFiles.deleteIfExists(storeFile);
 				}
 			} catch (IOException e) {
 				LOGGER.error("Failed to evict corrupt store object {}", entry.sha1, e);
@@ -242,7 +242,7 @@ public class ModpackUtils {
 			if (Files.exists(storeFile)) {
 				try {
 					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
-					Files.delete(storeFile);
+					ImmutableFiles.deleteIfExists(storeFile);
 				} catch (IOException e) {
 					LOGGER.warn("Failed to evict corrupt store object {}", entry.sha1, e);
 				}

@@ -21,6 +21,7 @@ import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 public class DownloadManager {
@@ -261,7 +262,7 @@ public class DownloadManager {
 				success = true;
 			} else {
 				// DOWNLOAD REQUIRED. A corrupt object is never a cache hit.
-				if (Files.exists(storeFile)) Files.delete(storeFile);
+				ImmutableFiles.deleteIfExists(storeFile);
 				success = attemptDownload(hashPathPair, task, storeFile);
 			}
 		} catch (InterruptedException e) {
