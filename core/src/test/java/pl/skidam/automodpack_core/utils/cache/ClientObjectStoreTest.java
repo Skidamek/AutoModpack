@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class ClientObjectStoreTest {
@@ -111,6 +112,21 @@ class ClientObjectStoreTest {
 		ClientStorage clone = ClientStorage.open(cloneRoot);
 
 		assertNotEquals(original.dataLocation().ownerId(), clone.dataLocation().ownerId());
+	}
+
+	@Test
+	void collectionRetiresReceiptAfterItsInstallationIsRemoved() throws Exception {
+		Path sharedData = temporaryDirectory.resolve("shared-data");
+		ClientStorage first = storage("first-game", sharedData, true);
+		ClientStorage removed = storage("removed-game", sharedData, true);
+		String hash = store(removed, "removed-instance-object");
+		ClientObjectStore.publishOwnership(removed, Set.of(hash));
+		FileTrees.delete(removed.gameDirectory());
+
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
+
+		assertEquals(1, result.deletedObjectCount());
+		assertFalse(Files.exists(first.objectsDirectory().resolve(hash)));
 	}
 
 	@Test

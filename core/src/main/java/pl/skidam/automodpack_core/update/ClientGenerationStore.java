@@ -36,6 +36,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /** Persistent immutable client snapshots of downloaded generation records. The server store is compact; client snapshots remain complete so local history and cached switching work without server access. */
 public final class ClientGenerationStore {
@@ -279,6 +280,9 @@ public final class ClientGenerationStore {
 		removeGeneratedCopies(snapshot.removedGenerationIds());
 
 		ClientObjectStore.CollectionResult objectCollection = ClientObjectStore.collectUnreachableObjects(storage, snapshot.retainedGenerationIds(), Set.of());
+		try (FileMetadataCache metadata = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			metadata.cleanup();
+		}
 		FileTotals recordsAfter = generationTotals(snapshot.retainedGenerationIds());
 		ClientObjectStore.GeneratedCopyReport generatedAfter = ClientObjectStore.measureGeneratedCopies(storage);
 		return new CompactionResult(List.copyOf(snapshot.retainedGenerationIds()), List.copyOf(snapshot.removedGenerationIds()), recordsBefore.count(), recordsBefore.bytes(),
