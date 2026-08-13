@@ -15,6 +15,8 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
 import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -162,6 +164,7 @@ public final class GenerationStore {
 	private final Path objectsDirectory;
 	private final Path stagingDirectory;
 	private final ServerObjectStore objectStore;
+	private final DataRootResolver.Location dataLocation;
 	private final Clock clock;
 	private final CommitHook commitHook;
 	private final CompactionDeleteHook compactionDeleteHook;
@@ -182,11 +185,20 @@ public final class GenerationStore {
 		this(root, objectsDirectory, Clock.systemUTC(), NOOP_HOOK, NOOP_COMPACTION_DELETE_HOOK);
 	}
 
+	public GenerationStore(Path root, DataRootResolver.Location dataLocation) {
+		this(root, dataLocation.layout().objectsDirectory(), Clock.systemUTC(), NOOP_HOOK, NOOP_COMPACTION_DELETE_HOOK, dataLocation);
+	}
+
 	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook) {
 		this(root, objectsDirectory, clock, commitHook, NOOP_COMPACTION_DELETE_HOOK);
 	}
 
 	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook) {
+		this(root, objectsDirectory, clock, commitHook, compactionDeleteHook, null);
+	}
+
+	private GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook,
+			DataRootResolver.Location dataLocation) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
 		this.currentPath = this.root.resolve(StoragePaths.SERVER_CURRENT_FILE.getFileName().toString());
 		this.currentProjectionPath = this.root.resolve(StoragePaths.SERVER_CURRENT_PROJECTION_FILE.getFileName().toString());
@@ -201,6 +213,7 @@ public final class GenerationStore {
 		this.commitHook = Objects.requireNonNull(commitHook);
 		this.compactionDeleteHook = Objects.requireNonNull(compactionDeleteHook);
 		this.objectStore = new ServerObjectStore(objectsDirectory, stagingDirectory);
+		this.dataLocation = dataLocation;
 	}
 
 	public Path objectRoot() {
@@ -397,6 +410,7 @@ public final class GenerationStore {
 
 		createStoreDirectories();
 		GenerationRecord record = GenerationRecord.create(candidate.manifest(), previous, clock.instant(), patchNotes);
+		publishOwnershipWith(candidate.manifest());
 		objectStore.promoteAll(candidate.objects());
 		OwnershipDelta delta = writeDeltaNoClobber(record, previous);
 		writeCatalogueNoClobber(record);
@@ -411,6 +425,29 @@ public final class GenerationStore {
 		requireCurrentStillMatches(expectedCurrent);
 		ConfigTools.writeAtomic(currentPath, nextPointer);
 		return publication;
+	}
+
+	private void publishOwnershipWith(GroupManifest additionalManifest) throws IOException {
+		if (dataLocation == null || !dataLocation.shared()) return;
+		TreeSet<String> hashes = currentOwnershipHashes();
+		addManifestHashes(additionalManifest, hashes);
+		SharedObjectOwnership.publish(dataLocation, "server", hashes);
+	}
+
+	private void publishCurrentOwnership() throws IOException {
+		if (dataLocation != null && dataLocation.shared()) SharedObjectOwnership.publish(dataLocation, "server", currentOwnershipHashes());
+	}
+
+	private TreeSet<String> currentOwnershipHashes() throws IOException {
+		TreeSet<String> hashes = new TreeSet<>();
+		Optional<CurrentSnapshot> current = loadCurrent();
+		if (current.isEmpty()) return hashes;
+		for (GenerationHistoryEntry entry : readCompactState(current.orElseThrow().record().metadata().generationId()).entries()) addManifestHashes(entry.manifest(), hashes);
+		return hashes;
+	}
+
+	private static void addManifestHashes(GroupManifest manifest, Set<String> hashes) {
+		for (var group : manifest.groups().values()) for (var file : group.files().values()) hashes.add(file.sha1().toLowerCase(Locale.ROOT));
 	}
 
 	private PublicationGuard acquirePublicationGuard() throws IOException {
@@ -512,6 +549,7 @@ public final class GenerationStore {
 		DeletionResult deletedCatalogues = deleteCompactionFiles(preview.supersededCatalogueStateDigests().stream().map(this::cataloguePathUnchecked).toList(), "generation catalogue");
 		DeletionResult deletedCommits = deleteCompactionFiles(preview.supersededGenerationIds().stream().map(this::commitPathUnchecked).toList(), "generation commit");
 		DeletionResult deletedDeltas = deleteCompactionFiles(preview.supersededGenerationIds().stream().map(this::deltaPathUnchecked).toList(), "generation ownership delta");
+		publishCurrentOwnership();
 		return new CompactionResult(boundaryGenerationId, preview.supersededGenerationIds(), preview.supersededCatalogueStateDigests(), deletedCatalogues.count(), deletedCommits.count(),
 				deletedDeltas.count(), deletedCatalogues.bytes(), deletedCommits.bytes(), deletedDeltas.bytes());
 	}
@@ -609,6 +647,11 @@ public final class GenerationStore {
 			if (!reachable.contains(objectHash)) verifyPinnedObject(objectHash);
 			reachable.add(objectHash);
 		}
+		if (dataLocation != null) return SharedObjectOwnership.withGlobalReferences(dataLocation, "server", reachable, this::deleteUnreachableObjects);
+		return deleteUnreachableObjects(reachable);
+	}
+
+	private CollectionResult deleteUnreachableObjects(Set<String> reachable) throws IOException {
 		List<Path> beforeFiles = regularFiles(objectsDirectory, "immutable objects");
 		FileTotals before = fileTotals(beforeFiles);
 		long deletedCount = 0;

@@ -7,6 +7,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
@@ -41,11 +42,20 @@ public final class DataRootResolver {
 		public Path knownHostsLockFile() {
 			return root.resolve("known-hosts.json.lock").normalize();
 		}
+
+		public Path objectOwnersDirectory() {
+			return root.resolve("object-owners").normalize();
+		}
+
+		public Path objectOwnershipLockFile() {
+			return root.resolve("object-owners.lock").normalize();
+		}
 	}
 
-	public record Location(Path root, boolean shared) {
+	public record Location(Path root, boolean shared, String ownerId) {
 		public Location {
 			root = Objects.requireNonNull(root, "root").toAbsolutePath().normalize();
+			ownerId = UUID.fromString(Objects.requireNonNull(ownerId, "owner ID")).toString();
 		}
 
 		public Layout layout() {
@@ -64,13 +74,13 @@ public final class DataRootResolver {
 			Files.createDirectories(automodpackDirectory);
 			Path sharedRoot = platformDataRoot();
 			if (probe(sharedRoot)) {
-				Location location = new Location(sharedRoot, true);
+				Location location = new Location(sharedRoot, true, UUID.randomUUID().toString());
 				writePinned(marker, location);
 				return location;
 			}
 			Path fallback = automodpackDirectory.resolve("data").normalize();
 			if (!probe(fallback)) throw new IOException("Neither shared nor local AutoModpack data storage is writable");
-			Location location = new Location(fallback, false);
+			Location location = new Location(fallback, false, UUID.randomUUID().toString());
 			writePinned(marker, location);
 			return location;
 		} catch (IOException e) {
@@ -85,13 +95,18 @@ public final class DataRootResolver {
 		if (fields.root == null || fields.root.isBlank()) throw new IOException("AutoModpack data-root marker has no root");
 		Path root = Path.of(fields.root).toAbsolutePath().normalize();
 		if (!probe(root)) throw new IOException("Pinned AutoModpack data root is unavailable: " + root);
-		return new Location(root, fields.shared);
+		if (fields.ownerId == null || fields.ownerId.isBlank()) {
+			fields.ownerId = UUID.randomUUID().toString();
+			ConfigTools.writeAtomic(marker, fields);
+		}
+		return new Location(root, fields.shared, fields.ownerId);
 	}
 
 	private static void writePinned(Path marker, Location location) throws IOException {
 		StorageJsons.DataRootFields fields = new StorageJsons.DataRootFields();
 		fields.root = location.root().toString();
 		fields.shared = location.shared();
+		fields.ownerId = location.ownerId();
 		ConfigTools.writeAtomic(marker, fields);
 	}
 

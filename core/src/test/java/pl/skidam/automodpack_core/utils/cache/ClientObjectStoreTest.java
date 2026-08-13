@@ -86,15 +86,17 @@ class ClientObjectStoreTest {
 		ClientStorage second = storage("second-game", sharedData, true);
 		byte[] bytes = "second-instance-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(second, bytes);
+		String orphan = store(first, "shared-orphan");
 		GenerationRecord record = GenerationRecord.create(manifest(hash, bytes.length), null, Instant.parse("2026-08-08T00:00:00Z"), "notes");
 		new ClientGenerationStore(second).write(record);
+		ClientObjectStore.publishOwnership(second);
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
 
-		assertEquals(ClientObjectStore.CollectionStatus.SHARED_STORE_RETAINED, result.status());
-		assertEquals(result.before(), result.after());
-		assertEquals(0, result.deletedObjectCount());
+		assertEquals(ClientObjectStore.CollectionStatus.COLLECTED, result.status());
+		assertEquals(1, result.deletedObjectCount());
 		assertTrue(Files.exists(first.objectsDirectory().resolve(hash)));
+		assertFalse(Files.exists(first.objectsDirectory().resolve(orphan)));
 	}
 
 	@Test
@@ -186,8 +188,7 @@ class ClientObjectStoreTest {
 		dataRoot.root = dataDirectory.toString();
 		dataRoot.shared = shared;
 		ConfigTools.writeAtomic(game.resolve("automodpack/data-root.json"), dataRoot);
-		ClientStorage storage = ClientStorage.fromGameDirectory(game);
-		storage.createDirectories();
+		ClientStorage storage = ClientStorage.open(game);
 		return storage;
 	}
 

@@ -161,7 +161,7 @@ public final class EarlyServiceLayer {
 		if (!BOOTSTRAPPED.compareAndSet(false, true)) return;
 
 		try {
-			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
 			if (!Files.isDirectory(activeModsDirectory)) return;
 

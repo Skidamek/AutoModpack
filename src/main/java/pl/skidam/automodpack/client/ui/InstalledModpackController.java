@@ -54,7 +54,7 @@ final class InstalledModpackController {
 	private Throwable discoveryFailure;
 
 	InstalledModpackController() {
-		this(ClientStorage.fromGameDirectory(GameDirectory.current()));
+		this(ClientStorage.open(GameDirectory.current()));
 	}
 
 	InstalledModpackController(ClientStorage storage) {
