@@ -107,6 +107,41 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void recoveryRebuildsAPartialProjectionSwapFromCas() throws Exception {
+		ClientStorage storage = storage();
+		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
+		String oldHash = store(storage, oldBytes);
+		SelectedModpackTarget oldTarget = target("mods/old.jar", "mod", false, oldHash, oldBytes.length);
+		UpdateTransactionExecutor executor = executor(storage);
+		assertTrue(executor.commit(plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget).success());
+
+		byte[] newBytes = "new-projection".getBytes(StandardCharsets.UTF_8);
+		String newHash = store(storage, newBytes);
+		ModpackJsons.CompleteModpackContentFields newFields = fields("mods/new.jar", "mod", false, newHash, newBytes.length);
+		GenerationRecord newRecord = GenerationRecord.create(GroupManifestValidator.validate(newFields), oldTarget.generationRecord(), Instant.parse("2026-01-02T00:00:00Z"), "");
+		SelectionIntent intent = oldTarget.selection().intent();
+		SelectedModpackTarget newTarget = SelectedModpackTarget.prepare(newRecord.toFields(), intent, intent, ClientPlatform.LINUX);
+		UpdatePlan newPlan = plan(newTarget, clientConfig(newTarget.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
+		UpdateTransaction transaction = UpdateTransaction.create(newPlan, newTarget, storage.overlayDigest(newTarget.manifest().modpackId()));
+		new ClientGenerationStore(storage).write(newRecord);
+		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		Files.move(storage.activeDirectory(), storage.backupTransactionDirectory(transaction.transactionId));
+		Files.createDirectories(storage.activeDirectory().resolve("mods"));
+		Files.writeString(storage.activePath("mods/partial.jar"), "partial", StandardCharsets.UTF_8);
+
+		assertTrue(executor.recover(transaction).success());
+
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
+		assertFalse(Files.exists(storage.activePath("mods/partial.jar")));
+		assertFalse(Files.exists(storage.backupTransactionDirectory(transaction.transactionId)));
+		assertFalse(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
 	void firstInstallPreservesLocalSameIdModBeforeProjectionApply() throws Exception {
 		ClientStorage storage = storage();
 		byte[] serverBytes = "server-sodium".getBytes(StandardCharsets.UTF_8);

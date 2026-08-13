@@ -722,28 +722,18 @@ public final class UpdateTransactionExecutor {
 		Path active = context.storage().activeDirectory();
 		Path incoming = context.storage().incomingTransactionDirectory(transaction.transactionId);
 		Path backup = context.storage().backupTransactionDirectory(transaction.transactionId);
-		if (Files.exists(active, LinkOption.NOFOLLOW_LINKS) && Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
-			if (verifyProjectionQuietly(active, transaction.projectedFinalState)) {
-				FileTrees.delete(incoming);
-				FileTrees.delete(backup);
-				return;
-			}
-			throw new IOException("Client projection swap has two non-final directories");
+		if (verifyProjectionQuietly(active, transaction.projectedFinalState)) {
+			FileTrees.delete(incoming);
+			FileTrees.delete(backup);
+			return;
 		}
-		if (!Files.exists(incoming, LinkOption.NOFOLLOW_LINKS)) buildIncomingProjection(transaction);
-		if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) FileTrees.moveAtomic(active, backup);
-		try {
-			FileTrees.moveAtomic(incoming, active);
-		} catch (IOException e) {
-			if (!Files.exists(active, LinkOption.NOFOLLOW_LINKS) && Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
-				try {
-					FileTrees.moveAtomic(backup, active);
-				} catch (IOException restoreFailure) {
-					e.addSuppressed(restoreFailure);
-				}
-			}
-			throw e;
+		if (!verifyProjectionQuietly(incoming, transaction.projectedFinalState)) buildIncomingProjection(transaction);
+		if (Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
+			FileTrees.delete(active);
+		} else if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) {
+			FileTrees.moveDirectory(active, backup);
 		}
+		FileTrees.moveDirectory(incoming, active);
 		verifyProjection(active, transaction.projectedFinalState);
 	}
 

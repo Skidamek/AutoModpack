@@ -16,14 +16,23 @@ import java.util.stream.Stream;
 public final class FileTrees {
 	private FileTrees() {}
 
-	public static void moveAtomic(Path sourceDirectory, Path targetDirectory) throws IOException {
-		if (sourceDirectory.toAbsolutePath().normalize().getParent() == null || targetDirectory.toAbsolutePath().normalize().getParent() == null)
+	public static void moveDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
+		Path sourceParent = sourceDirectory.toAbsolutePath().normalize().getParent();
+		Path targetParent = targetDirectory.toAbsolutePath().normalize().getParent();
+		if (sourceParent == null || targetParent == null)
 			throw new IOException("Directory move requires concrete parent directories");
 		try {
 			Files.move(sourceDirectory, targetDirectory, StandardCopyOption.ATOMIC_MOVE);
-		} catch (AtomicMoveNotSupportedException e) {
-			throw new IOException("Atomic directory replacement is unsupported for " + targetDirectory, e);
+		} catch (AtomicMoveNotSupportedException | UnsupportedOperationException atomicMoveFailure) {
+			try {
+				Files.move(sourceDirectory, targetDirectory);
+			} catch (IOException e) {
+				e.addSuppressed(atomicMoveFailure);
+				throw e;
+			}
 		}
+		forceDirectory(sourceParent);
+		if (!sourceParent.equals(targetParent)) forceDirectory(targetParent);
 	}
 
 	/** Forces a directory entry update when the filesystem exposes directory channels. */
