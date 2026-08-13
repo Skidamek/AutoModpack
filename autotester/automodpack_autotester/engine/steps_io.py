@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import re
+import stat
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -52,7 +53,11 @@ def _mutate_file(path, action):
     if action == "delete":
         if not path.is_file():
             raise FileNotFoundError(f"cannot delete missing file: {path}")
-        path.unlink()
+        try:
+            path.unlink()
+        except PermissionError:
+            path.chmod(stat.S_IMODE(path.stat().st_mode) | stat.S_IWUSR)
+            path.unlink()
         return
     if action != "corrupt":
         raise ValueError(f"unknown client-file mutation {action!r}")
@@ -62,7 +67,15 @@ def _mutate_file(path, action):
     payload = _CORRUPT_BYTES
     while payload == original:
         payload += b"!"
-    path.write_bytes(payload)
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    made_writable = not original_mode & stat.S_IWUSR
+    if made_writable:
+        path.chmod(original_mode | stat.S_IWUSR)
+    try:
+        path.write_bytes(payload)
+    finally:
+        if made_writable:
+            path.chmod(original_mode)
 
 
 def _active_file(ctx, logical_path):

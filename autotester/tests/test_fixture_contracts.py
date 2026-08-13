@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import stat
 import zipfile
 from pathlib import Path
 
@@ -174,6 +175,19 @@ def test_client_file_mutation_is_scoped_and_deterministic(make_ctx):
     assert path.read_bytes() == first
     with pytest.raises(ValueError, match="escapes the client game directory"):
         mutate_client_file(ctx, {"path": "../outside.txt", "action": "delete"})
+
+
+def test_client_file_mutation_preserves_read_only_mode(make_ctx):
+    ctx = make_ctx()
+    path = ctx.game_dir / "config/read-only.txt"
+    path.parent.mkdir(parents=True)
+    path.write_text("healthy\n", encoding="utf-8")
+    path.chmod(stat.S_IRUSR)
+
+    mutate_client_file(ctx, {"path": "config/read-only.txt", "action": "corrupt"})
+
+    assert path.read_bytes() != b"healthy\n"
+    assert not stat.S_IMODE(path.stat().st_mode) & stat.S_IWUSR
 
 
 def test_active_object_mutation_and_assertion_use_installed_manifest(make_ctx):
