@@ -49,6 +49,7 @@ import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_loader_core.DetachedUpdateHelper;
@@ -84,6 +85,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private ReviewedClientPlan<ClientUpdatePlanBuilder.RemovalPreparation> reviewedRemovalPlan;
 	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
 	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
+	private final Set<String> reservedObjectHashes = new TreeSet<>();
 	public record SourceAvailability(int totalFiles, int resolvedFiles, boolean complete, boolean cancelled) {}
 
 	public String getModpackName() {
@@ -363,6 +365,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private int acquireTargetObjects(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, boolean playerFacing) throws Exception {
 		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items = target.list == null ? List.of() : target.list;
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> targetObjects = uniqueObjects(items);
+		reserveObjects(targetObjects.stream().map(item -> item.sha1).collect(Collectors.toSet()));
 		ModpackUtils.populateStoreFromCWD(targetObjects, cache, storage);
 		planBuilder.populateStoreFromCachedLocations(target, cache);
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
@@ -383,6 +386,11 @@ public class ModpackUpdater implements AutoCloseable {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> stillMissing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
 		if (!stillMissing.isEmpty()) throw new IOException("Verified selected-target objects are still missing after acquisition: " + stillMissing.size());
 		return missing.size();
+	}
+
+	private void reserveObjects(Set<String> hashes) throws IOException {
+		reservedObjectHashes.addAll(hashes.stream().map(hash -> hash.toLowerCase(Locale.ROOT)).toList());
+		ClientObjectStore.publishOwnership(storage, Set.copyOf(reservedObjectHashes));
 	}
 
 	private void loadSelectedActiveProjection() throws Exception {
@@ -882,6 +890,14 @@ public class ModpackUpdater implements AutoCloseable {
 		if (reviewedUpdatePlan != null && reviewedUpdatePlan.isApproved()) reviewedUpdatePlan.cancel();
 		if (reviewedRemovalPlan != null && reviewedRemovalPlan.isApproved()) reviewedRemovalPlan.cancel();
 		if (installedSwitchPlan != null && installedSwitchPlan.isApproved()) installedSwitchPlan.cancel();
+		if (!reservedObjectHashes.isEmpty()) {
+			reservedObjectHashes.clear();
+			try {
+				ClientObjectStore.publishOwnership(storage);
+			} catch (IOException e) {
+				LOGGER.warn("Could not release in-flight CAS ownership; the next startup will refresh it", e);
+			}
+		}
 		if (closed.compareAndSet(false, true) && downloadClient != null) downloadClient.close();
 	}
 

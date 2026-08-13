@@ -3,15 +3,17 @@ package pl.skidam.automodpack_core.update;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -21,6 +23,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /**
@@ -34,7 +37,7 @@ import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
  * </p>
  */
 public final class ClientStorage {
-	private static final ConcurrentHashMap<Path, ClientStorage> OPEN_STORAGE = new ConcurrentHashMap<>();
+	private static final Map<Path, WeakReference<ClientStorage>> OPEN_STORAGE = new HashMap<>();
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
 	private final Path clientDirectory;
@@ -99,17 +102,21 @@ public final class ClientStorage {
 		validateLayout();
 	}
 
-	public static ClientStorage open(Path gameDirectory) {
+	public static synchronized ClientStorage open(Path gameDirectory) {
 		Path normalized = requireDirectoryPath(gameDirectory, "game directory");
-		return OPEN_STORAGE.computeIfAbsent(normalized, path -> {
-			ClientStorage storage = new ClientStorage(path);
-			try {
-				storage.initialize();
-				return storage;
-			} catch (IOException e) {
-				throw new IllegalStateException("Cannot initialize client storage for " + storage.gameDirectory, e);
-			}
-		});
+		WeakReference<ClientStorage> reference = OPEN_STORAGE.get(normalized);
+		ClientStorage existing = reference == null ? null : reference.get();
+		if (existing != null) return existing;
+		OPEN_STORAGE.entrySet().removeIf(entry -> entry.getValue().get() == null);
+		ClientStorage storage = new ClientStorage(normalized);
+		try {
+			storage.initialize();
+			if (storage.sharedDataDirectory()) ClientObjectStore.publishOwnership(storage);
+			OPEN_STORAGE.put(normalized, new WeakReference<>(storage));
+			return storage;
+		} catch (IOException e) {
+			throw new IllegalStateException("Cannot initialize client storage for " + storage.gameDirectory, e);
+		}
 	}
 
 	public Path gameDirectory() {
