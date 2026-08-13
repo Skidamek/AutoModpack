@@ -803,7 +803,7 @@ public final class UpdateTransactionExecutor {
 			} else {
 				if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash())) throw new IOException("Baseline source changed: " + source);
 				Path object = context.storage().objectsDirectory().resolve(capture.expectedHash());
-				VerifiedFileTransfer.copyAtomic(source, object, capture.expectedSize(), capture.expectedHash());
+				VerifiedFileTransfer.copyAtomicImmutable(source, object, capture.expectedSize(), capture.expectedHash());
 				entry.objectHash = capture.expectedHash().toLowerCase(Locale.ROOT);
 				entry.size = capture.expectedSize();
 			}

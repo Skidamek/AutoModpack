@@ -22,19 +22,22 @@ class ImmutableFilePublisherTest {
 	Path temporaryDirectory;
 
 	@Test
-	void publishesWithoutHardLinksAndNeverReplacesExistingBytes() throws Exception {
+	void refusesFilesystemsWithoutAnEnforceableReadOnlyPolicy() throws Exception {
 		URI archive = URI.create("jar:" + temporaryDirectory.resolve("publication.zip").toUri());
 		try (FileSystem fileSystem = FileSystems.newFileSystem(archive, Map.of("create", "true"))) {
 			Path target = fileSystem.getPath("/immutable.json");
 			byte[] original = "original".getBytes(StandardCharsets.UTF_8);
-			assertTrue(ImmutableFilePublisher.publishBytes(target, original, this::requireOriginal));
-
-			assertFalse(ImmutableFilePublisher.publishBytes(target, original, this::requireOriginal));
-			assertThrows(IOException.class, () -> ImmutableFilePublisher.publishBytes(target, "replacement".getBytes(StandardCharsets.UTF_8), path -> {
-				throw new IOException("different immutable bytes");
-			}));
-			assertArrayEquals(original, Files.readAllBytes(target));
+			assertThrows(IOException.class, () -> ImmutableFilePublisher.publishBytes(target, original, this::requireOriginal));
+			assertFalse(Files.exists(target));
 		}
+	}
+
+	@Test
+	void protectsAnExistingValidTarget() throws Exception {
+		Path target = Files.writeString(temporaryDirectory.resolve("immutable.json"), "original", StandardCharsets.UTF_8);
+
+		assertFalse(ImmutableFilePublisher.publishBytes(target, "original".getBytes(StandardCharsets.UTF_8), this::requireOriginal));
+		assertTrue(ImmutableFiles.isProtected(target));
 	}
 
 	private void requireOriginal(Path path) throws IOException {

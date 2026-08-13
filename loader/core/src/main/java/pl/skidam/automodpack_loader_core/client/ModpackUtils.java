@@ -224,7 +224,7 @@ public class ModpackUtils {
 			if (isValidFile(fileInCWD, expectedSize, entry.sha1, cache)) {
 				LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
 				try {
-					VerifiedFileTransfer.copyAtomic(fileInCWD, storeFile, expectedSize, entry.sha1);
+					VerifiedFileTransfer.copyAtomicImmutable(fileInCWD, storeFile, expectedSize, entry.sha1);
 				} catch (IOException e) {
 					LOGGER.error("Failed to copy file from CWD to store: {}", entry.file, e);
 				}
