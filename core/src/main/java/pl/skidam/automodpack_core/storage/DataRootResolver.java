@@ -1,10 +1,14 @@
 package pl.skidam.automodpack_core.storage;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
@@ -15,6 +19,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Resolves the one shared-or-local AutoModpack data root for an instance. */
 public final class DataRootResolver {
+	private static final Object RESOLUTION_LOCK = new Object();
 	public record Layout(Path root) {
 		public Layout {
 			root = Objects.requireNonNull(root, "data root").toAbsolutePath().normalize();
@@ -68,26 +73,51 @@ public final class DataRootResolver {
 	private DataRootResolver() {}
 
 	public static Location resolve(Path gameDirectory) {
-		Path gameRoot = Objects.requireNonNull(gameDirectory, "game directory").toAbsolutePath().normalize();
-		Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
-		Path marker = automodpackDirectory.resolve("data-root.json").normalize();
+		Path requestedRoot = Objects.requireNonNull(gameDirectory, "game directory").toAbsolutePath().normalize();
 		try {
-			if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) return loadPinned(marker, gameRoot);
-			Files.createDirectories(automodpackDirectory);
-			Path sharedRoot = platformDataRoot();
-			if (probe(sharedRoot)) {
-				Location location = new Location(sharedRoot, true, UUID.randomUUID().toString(), gameRoot);
-				writePinned(marker, location, gameRoot);
-				return location;
+			Path gameRoot = canonicalGameRoot(requestedRoot);
+			Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
+			createLocalDataDirectory(gameRoot, automodpackDirectory);
+			Path marker = automodpackDirectory.resolve("data-root.json").normalize();
+			Path lockPath = automodpackDirectory.resolve("data-root.lock").normalize();
+			synchronized (RESOLUTION_LOCK) {
+				try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS); FileLock ignored = channel.lock()) {
+					validateLocalDataDirectory(gameRoot, automodpackDirectory);
+					if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) return loadPinned(marker, gameRoot);
+					Path sharedRoot = platformDataRoot();
+					if (probe(sharedRoot)) {
+						Location location = new Location(sharedRoot, true, UUID.randomUUID().toString(), gameRoot);
+						writePinned(marker, location, gameRoot);
+						return location;
+					}
+					Path fallback = automodpackDirectory.resolve("data").normalize();
+					if (!probe(fallback)) throw new IOException("Neither shared nor local AutoModpack data storage is writable");
+					Location location = new Location(fallback, false, UUID.randomUUID().toString(), gameRoot);
+					writePinned(marker, location, gameRoot);
+					return location;
+				}
 			}
-			Path fallback = automodpackDirectory.resolve("data").normalize();
-			if (!probe(fallback)) throw new IOException("Neither shared nor local AutoModpack data storage is writable");
-			Location location = new Location(fallback, false, UUID.randomUUID().toString(), gameRoot);
-			writePinned(marker, location, gameRoot);
-			return location;
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot resolve AutoModpack data storage for " + gameRoot, e);
+			throw new IllegalStateException("Cannot resolve AutoModpack data storage for " + requestedRoot, e);
 		}
+	}
+
+	private static Path canonicalGameRoot(Path requestedRoot) throws IOException {
+		Files.createDirectories(requestedRoot);
+		Path realRoot = requestedRoot.toRealPath();
+		if (!Files.isDirectory(realRoot, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Game directory is not a directory: " + requestedRoot);
+		return realRoot;
+	}
+
+	private static void createLocalDataDirectory(Path gameRoot, Path directory) throws IOException {
+		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) Files.createDirectory(directory);
+		validateLocalDataDirectory(gameRoot, directory);
+	}
+
+	private static void validateLocalDataDirectory(Path gameRoot, Path directory) throws IOException {
+		if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("AutoModpack data directory is not a regular directory: " + directory);
+		Path realDirectory = directory.toRealPath();
+		if (!gameRoot.equals(realDirectory.getParent())) throw new IOException("AutoModpack data directory resolves outside the game directory: " + directory);
 	}
 
 	private static Location loadPinned(Path marker, Path gameRoot) throws IOException {
@@ -120,8 +150,10 @@ public final class DataRootResolver {
 		ConfigTools.writeAtomic(marker, fields);
 	}
 
-	private static String ownerPathHash(Path gameRoot) {
-		return HashUtils.sha1(gameRoot.toAbsolutePath().normalize().toString());
+	private static String ownerPathHash(Path gameRoot) throws IOException {
+		Path realRoot = gameRoot.toRealPath();
+		Object fileKey = Files.readAttributes(realRoot, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey();
+		return HashUtils.sha1(fileKey == null ? "real-path\n" + realRoot : "file-key\n" + fileKey);
 	}
 
 	private static boolean probe(Path root) {
