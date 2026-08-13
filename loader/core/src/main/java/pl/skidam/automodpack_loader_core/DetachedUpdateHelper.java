@@ -33,7 +33,7 @@ public final class DetachedUpdateHelper {
 		if (transaction == null || transaction.transactionId == null) throw new IOException("Cannot launch update helper without a transaction UUID");
 		Path sourceJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(sourceJar)) throw new IOException("Runnable AutoModpack JAR is missing: " + sourceJar);
-		ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+		ClientStorage storage = ClientStorage.open(GameDirectory.current());
 		Path absoluteHelperDirectory = storage.helperDirectory();
 		Files.createDirectories(absoluteHelperDirectory);
 		cleanupOldHelperJars(absoluteHelperDirectory);
@@ -54,7 +54,7 @@ public final class DetachedUpdateHelper {
 	}
 
 	public static void cleanupOldHelperJars() {
-		cleanupOldHelperJars(ClientStorage.fromGameDirectory(GameDirectory.current()).helperDirectory());
+		cleanupOldHelperJars(ClientStorage.open(GameDirectory.current()).helperDirectory());
 	}
 
 	private static void cleanupOldHelperJars(Path directory) {
@@ -77,7 +77,7 @@ public final class DetachedUpdateHelper {
 	}
 
 	private static CleanupGuard cleanupGuard() {
-		Path pendingPath = ClientStorage.fromGameDirectory(GameDirectory.current()).transactionFile();
+		Path pendingPath = ClientStorage.open(GameDirectory.current()).transactionFile();
 		if (!Files.exists(pendingPath, LinkOption.NOFOLLOW_LINKS)) return new CleanupGuard(true, null);
 		if (!Files.isRegularFile(pendingPath, LinkOption.NOFOLLOW_LINKS)) {
 			LOGGER.warn("Skipping update-helper cleanup because pending transaction state is not a regular file: {}", pendingPath);

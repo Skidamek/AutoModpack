@@ -163,7 +163,7 @@ public class SelfUpdater {
 
 	public static void installModVersion(ModrinthAPI automodpack) {
 		try {
-			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			Path currentJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 			Path modsDirectory = storage.modsDirectory().toAbsolutePath().normalize();
 			if (!currentJar.getParent().equals(modsDirectory)) throw new IllegalStateException("Loaded AutoModpack JAR is not a direct child of the mods directory");

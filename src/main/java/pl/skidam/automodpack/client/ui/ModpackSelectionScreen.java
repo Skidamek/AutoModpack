@@ -132,7 +132,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.modpackId = manifest.modpackId();
 		this.modpackName = manifest.modpackName();
 		this.groups = manifest.groups();
-		this.storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+		this.storage = ClientStorage.open(GameDirectory.current());
 		this.selectionStore = new ClientSelectionStore(storage.selectionFile());
 		this.expectedSelection = expectedSelection == null && initialSelection == null
 				? selectionStore.get(modpackId).orElse(null)
@@ -199,7 +199,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private static boolean hasInstalledModpacks() {
 		try {
-			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			return !new ClientGenerationStore(storage).installedRecords().isEmpty();
 		} catch (IOException | RuntimeException e) {
 			return false;
@@ -213,7 +213,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private static GenerationRecord activeGeneration(String modpackId) {
 		try {
-			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			if (state == null || !modpackId.equals(state.modpackId)) return null;
 			return new ClientGenerationStore(storage).read(state.generationId).orElse(null);
