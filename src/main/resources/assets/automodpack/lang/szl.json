@@ -245,7 +245,6 @@
   "automodpack.groupInspector.browseFiles": "Przejrzij pliki",
   "automodpack.groupInspector.filesDescription": "Pliki dŏne ôd tyj funkcyji",
   "automodpack.groupInspector.group": "Gōpa %s",
-  "automodpack.groupInspector.tag": "Znŏcznik: %s",
   "automodpack.groupInspector.requiresConflicts": "Wymŏgŏ: %s  Konflikty: %s",
   "automodpack.groupInspector.platforms": "Platformy: %s",
   "automodpack.groupInspector.allPlatforms": "Wszyjske ôbsugiwane platformy",

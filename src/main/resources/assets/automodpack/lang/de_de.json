@@ -226,7 +226,6 @@
   "automodpack.groupInspector.browseFiles": "Dateien durchsuchen",
   "automodpack.groupInspector.filesDescription": "Von dieser Funktion bereitgestellte Dateien",
   "automodpack.groupInspector.group": "Gruppe %s",
-  "automodpack.groupInspector.tag": "Schlagwort: %s",
   "automodpack.groupInspector.requiresConflicts": "Erfordert: %s Konflikte: %s",
   "automodpack.groupInspector.platforms": "Plattformen: %s",
   "automodpack.groupInspector.allPlatforms": "Alle unterstützten Plattformen",

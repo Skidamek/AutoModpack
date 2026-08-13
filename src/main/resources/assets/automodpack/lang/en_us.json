@@ -22,7 +22,7 @@
   "automodpack.selection.shortButton": "Settings",
   "automodpack.selection.noGroups": "This modpack has no optional parts.",
   "automodpack.selection.preview": "Preview target",
-  "automodpack.selection.categoryExplanation": "Category buttons select their groups. AutoModpack does not save category tags separately.",
+  "automodpack.selection.categoryExplanation": "Category buttons select their groups. AutoModpack saves category choices separately from individual groups.",
 
   "automodpack.firstConnect.title": "Set up this modpack",
   "automodpack.firstConnect.description": "Review the default content before downloading.",
@@ -244,7 +244,6 @@
   "automodpack.groupInspector.browseFiles": "Browse files",
   "automodpack.groupInspector.filesDescription": "Files supplied by this feature",
   "automodpack.groupInspector.group": "Group %s",
-  "automodpack.groupInspector.tag": "Tag: %s",
   "automodpack.groupInspector.requiresConflicts": "Requires: %s  Conflicts: %s",
   "automodpack.groupInspector.platforms": "Platforms: %s",
   "automodpack.groupInspector.allPlatforms": "All supported platforms",

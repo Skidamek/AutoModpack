@@ -39,7 +39,7 @@ flow:
     name: select only the child group
     select: { text: "[ ] Visuals" }
   - do: wait_for
-    name: keep the single-child tag explicitly unselected
+    name: keep the single-child category explicitly unselected
     until:
       all:
         - element: { text: "[x] Visuals" }
@@ -48,7 +48,7 @@ flow:
     name: capture explicit child selection and pagination bounds
     file: ui-navigation-explicit-child
   - do: click
-    name: select the tag explicitly
+    name: select the category explicitly
     select: { text: "[ ] Category: Visuals" }
   - do: wait_for
     name: show the explicit category and its selected child

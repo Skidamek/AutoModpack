@@ -226,7 +226,6 @@
   "automodpack.groupInspector.browseFiles": "Parcourir les fichiers",
   "automodpack.groupInspector.filesDescription": "Fichiers fournis par cette fonctionnalité",
   "automodpack.groupInspector.group": "Groupe %s",
-  "automodpack.groupInspector.tag": "Étiquette : %s",
   "automodpack.groupInspector.requiresConflicts": "Nécessite : %s Conflits : %s",
   "automodpack.groupInspector.platforms": "Plateformes : %s",
   "automodpack.groupInspector.allPlatforms": "Toutes les plateformes prises en charge",

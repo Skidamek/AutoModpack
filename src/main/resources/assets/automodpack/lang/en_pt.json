@@ -226,7 +226,6 @@
   "automodpack.groupInspector.browseFiles": "Browse cargo",
   "automodpack.groupInspector.filesDescription": "Cargo supplied by this crew",
   "automodpack.groupInspector.group": "Crew %s",
-  "automodpack.groupInspector.tag": "Tag: %s",
   "automodpack.groupInspector.requiresConflicts": "Requires: %s  Conflicts: %s",
   "automodpack.groupInspector.platforms": "Platforms: %s",
   "automodpack.groupInspector.allPlatforms": "All supported waters",

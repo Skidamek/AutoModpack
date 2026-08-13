@@ -226,7 +226,6 @@
   "automodpack.groupInspector.browseFiles": "파일 찾아보기",
   "automodpack.groupInspector.filesDescription": "이 기능으로 제공되는 파일",
   "automodpack.groupInspector.group": "그룹 %s",
-  "automodpack.groupInspector.tag": "태그: %s",
   "automodpack.groupInspector.requiresConflicts": "요구 사항: %s 충돌: %s",
   "automodpack.groupInspector.platforms": "플랫폼: %s",
   "automodpack.groupInspector.allPlatforms": "지원되는 모든 플랫폼",
