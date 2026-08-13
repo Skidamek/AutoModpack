@@ -86,8 +86,8 @@ public record SemanticVersion(int major, int minor, int patch, String label, int
 
 	@Override
 	public String toString() {
-		if (isStable()) return String.format("%d.%d.%d", major, minor, patch);
+		if (isStable()) return String.format(Locale.ROOT, "%d.%d.%d", major, minor, patch);
 		// Standardize output to always use dot separator (beta.1)
-		return String.format("%d.%d.%d-%s.%d", major, minor, patch, label, preVersion);
+		return String.format(Locale.ROOT, "%d.%d.%d-%s.%d", major, minor, patch, label, preVersion);
 	}
 }
