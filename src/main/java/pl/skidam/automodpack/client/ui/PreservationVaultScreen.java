@@ -15,7 +15,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
@@ -29,7 +28,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private static final int ROW_HEIGHT = 52;
 
 	private final Screen parent;
-	private final ClientStorage storage;
+	private final InstalledModpackController controller;
 	private final String modpackId;
 	private final String modpackName;
 	private final boolean activePack;
@@ -45,10 +44,10 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private int page;
 	private Future<?> work;
 
-	public PreservationVaultScreen(Screen parent, ClientStorage storage, String modpackId, String modpackName, boolean activePack, Runnable closedCallback) {
+	public PreservationVaultScreen(Screen parent, InstalledModpackController controller, String modpackId, String modpackName, boolean activePack, Runnable closedCallback) {
 		super(VersionedText.translatable("automodpack.vault.title"));
 		this.parent = parent;
-		this.storage = storage;
+		this.controller = controller;
 		this.modpackId = modpackId;
 		this.modpackName = modpackName == null ? "" : modpackName;
 		this.activePack = activePack;
@@ -110,7 +109,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		loading = true;
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
-				PreservationVault.Snapshot loaded = PreservationVault.read(storage, modpackId);
+				PreservationVault.Snapshot loaded = controller.preservedFiles(modpackId);
 				this.minecraft.execute(() -> loaded(loaded));
 			} catch (Exception e) {
 				this.minecraft.execute(() -> fail(e));
@@ -159,13 +158,13 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private void restore() {
 		PreservationVault.Claim claim = selected();
 		if (claim == null || busy || !activePack || claim.sourceRoot() != UpdatePlan.Root.GAME_DIR) return;
-		run(() -> PreservationVault.restoreOriginal(storage, modpackId, claim.claimId()), true);
+		run(() -> controller.restorePreservedFile(modpackId, claim.claimId()), true);
 	}
 
 	private void saveCopy() {
 		PreservationVault.Claim claim = selected();
 		if (claim == null || busy) return;
-		run(() -> PreservationVault.saveCopy(storage, modpackId, claim.claimId()), false);
+		run(() -> controller.savePreservedCopy(modpackId, claim.claimId()), false);
 	}
 
 	private void delete() {
@@ -177,7 +176,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			return;
 		}
 		run(() -> {
-			PreservationVault.delete(storage, modpackId, claim.claimId());
+			controller.deletePreservedFile(modpackId, claim.claimId());
 			return null;
 		}, false);
 	}
@@ -188,7 +187,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
 				Path ignored = operation.run();
-				PreservationVault.Snapshot refreshed = PreservationVault.read(storage, modpackId);
+				PreservationVault.Snapshot refreshed = controller.preservedFiles(modpackId);
 				this.minecraft.execute(() -> loaded(refreshed));
 			} catch (Exception e) {
 				this.minecraft.execute(() -> fail(e, restoreAttempt));

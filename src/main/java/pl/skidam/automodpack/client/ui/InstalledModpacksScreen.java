@@ -79,9 +79,9 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 									rebuild();
 								}
 							})),
-					actionRow(ActionAreaLayout.RowKind.FOOTER,
-							secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
-							optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller.storage())))));
+						actionRow(ActionAreaLayout.RowKind.FOOTER,
+								secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
+								optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller)))));
 			List<Button> actionButtons = addActionArea(PANEL_WIDTH, actionY, rows.toArray(ActionRow[]::new));
 			actionButtons.get(0).active = page > 0;
 			actionButtons.get(2).active = page < pageCount - 1;
@@ -89,7 +89,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		}
 		this.addActionArea(PANEL_WIDTH, actionY, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
-				optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller.storage())))));
+				optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller)))));
 	}
 
 	private void open(InstalledModpackController.Pack entry) {
