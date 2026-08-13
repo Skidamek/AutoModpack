@@ -459,6 +459,7 @@ def _v_publish_server_generation(ctx: Context, step):
     index = int(step.get("generation", 1))
     _write_server_generation(ctx, index)
     notes = str(_server_generation(ctx, index).get("patchNotes", "")).strip()
+    previous_id = str(_read_server_json(ctx, "current.json", "server current pointer").get("generationId", ""))
     command = ["rcon-cli", "automodpack", "generate"]
     if notes:
         command.extend(["notes", notes.replace("\n", " ")])
@@ -466,13 +467,28 @@ def _v_publish_server_generation(ctx: Context, step):
     output = result.output.decode("utf-8", errors="replace") if result.output else ""
     if result.exit_code != 0:
         raise RuntimeError(f"server generation command failed ({result.exit_code}): {output}")
-    await_condition(
-        lambda: True if "PUBLISHED" in _container_logs(ctx.srv_name, tail=200) else None,
+
+    def published_generation():
+        try:
+            pointer = _read_server_json(ctx, "current.json", "server current pointer")
+            generation_id = str(pointer.get("generationId", ""))
+            if not generation_id or generation_id == previous_id:
+                return None
+            generation = _read_server_json(ctx, f"commits/{generation_id}.json", "published server generation")
+        except AssertionError:
+            return None
+        if str(generation.get("generationId", "")) != generation_id or str(generation.get("patchNotes", "")) != notes:
+            return None
+        return generation_id
+
+    published_id = await_condition(
+        published_generation,
         parse_duration(step.get("timeout"), default=120),
         step.get("poll"),
         f"server generation {index} was not published",
     )
     ctx.vars["published_server_generation"] = index
+    ctx.vars["published_server_generation_id"] = published_id
 
 
 def _read_server_json(ctx: Context, relative: str, description: str) -> dict:
@@ -929,6 +945,9 @@ def _v_assert_preload_acquired(ctx: Context, _step):
     if missing or invalid:
         raise AssertionError(f"preload CAS is incomplete: missing={missing}, invalid={invalid}")
     log = ctx.container_logs("client")
+    client_log = ctx.game_dir / "logs" / "latest.log"
+    if client_log.is_file():
+        log += "\n" + client_log.read_text(encoding="utf-8", errors="replace")
     marker = f"Preloaded {len(expected)} complete modpack objects"
     if marker not in log:
         raise AssertionError(f"client log did not prove fresh complete preload: {marker!r}")

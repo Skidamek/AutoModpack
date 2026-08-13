@@ -66,6 +66,33 @@ class _ExecResult:
         self.exit_code = exit_code
 
 
+def test_publish_server_generation_uses_durable_generation_receipt(make_ctx, monkeypatch):
+    ctx = make_ctx()
+    server_root = ctx.server_dir / "automodpack" / "server"
+    commits_root = server_root / "commits"
+    commits_root.mkdir(parents=True)
+    previous_id = "a" * 40
+    published_id = "b" * 40
+    notes = "Update without a loader-specific log receipt."
+    (server_root / "current.json").write_text(json.dumps({"generationId": previous_id}), encoding="utf-8")
+
+    class Container:
+        def exec_run(self, command):
+            assert command == ["rcon-cli", "automodpack", "generate", "notes", notes]
+            (commits_root / f"{published_id}.json").write_text(json.dumps({"generationId": published_id, "patchNotes": notes}), encoding="utf-8")
+            (server_root / "current.json").write_text(json.dumps({"generationId": published_id}), encoding="utf-8")
+            return _ExecResult()
+
+    monkeypatch.setattr(runner, "_write_server_generation", lambda *_: None)
+    monkeypatch.setattr(runner, "_server_generation", lambda *_: {"patchNotes": notes})
+    monkeypatch.setattr(runner, "_container", lambda _name: Container())
+
+    runner._v_publish_server_generation(ctx, {"generation": 1})
+
+    assert ctx.vars["published_server_generation"] == 1
+    assert ctx.vars["published_server_generation_id"] == published_id
+
+
 def test_rollback_server_generation_uses_retained_history_and_durable_receipt(make_ctx, monkeypatch):
     ctx = make_ctx()
     server_root = ctx.server_dir / "automodpack" / "server"
@@ -379,9 +406,10 @@ def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     objects.mkdir(parents=True, exist_ok=True)
     for payload in payloads.values():
         (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
-    ctx.logs_provider = lambda _which, _tail=None: (
-        "Preloaded 2 complete modpack objects in 1ms"
-    )
+    ctx.logs_provider = lambda _which, _tail=None: ""
+    client_log = ctx.game_dir / "logs" / "latest.log"
+    client_log.parent.mkdir(parents=True, exist_ok=True)
+    client_log.write_text("Preloaded 2 complete modpack objects in 1ms", encoding="utf-8")
 
     runner._v_assert_preload_acquired(ctx, {})
 
