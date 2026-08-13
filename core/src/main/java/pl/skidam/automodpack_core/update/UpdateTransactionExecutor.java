@@ -92,6 +92,10 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Execution commitPrepared(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
+		return ClientStorageMutation.run(context.storage(), () -> commitPreparedLocked(transaction, unpublishedTarget));
+	}
+
+	private Execution commitPreparedLocked(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
 		validate(transaction, unpublishedTarget);
 		validateSelectionBeforeMutation(transaction);
 		requireNoActiveTransaction(context.storage());
@@ -108,9 +112,11 @@ public final class UpdateTransactionExecutor {
 	}
 
 	public Execution recover(UpdateTransaction transaction) throws IOException {
-		validate(transaction);
-		validateSelectionBeforeMutation(transaction);
-		return executePersisted(transaction);
+		return ClientStorageMutation.run(context.storage(), () -> {
+			validate(transaction);
+			validateSelectionBeforeMutation(transaction);
+			return executePersisted(transaction);
+		});
 	}
 
 	public UpdateTransaction readPersisted() {

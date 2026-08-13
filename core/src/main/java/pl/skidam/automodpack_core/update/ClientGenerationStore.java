@@ -94,6 +94,13 @@ public final class ClientGenerationStore {
 
 	/** Persists the server's thin lineage index alongside the complete local generation record. */
 	public void write(GenerationRecord record, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, GenerationHistoryIndex historyIndex) throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			writeLocked(record, patchNotesHistory, historyIndex);
+			return null;
+		});
+	}
+
+	private void writeLocked(GenerationRecord record, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, GenerationHistoryIndex historyIndex) throws IOException {
 		Objects.requireNonNull(record, "record");
 		Objects.requireNonNull(patchNotesHistory, "patchNotesHistory");
 		Path path = storage.generationManifest(record.metadata().generationId());
@@ -269,6 +276,11 @@ public final class ClientGenerationStore {
 	 * </p>
 	 */
 	public CompactionResult compact() throws IOException {
+		return ClientStorageMutation.run(storage, this::compactLocked);
+	}
+
+	private CompactionResult compactLocked() throws IOException {
+		recoverCompactionLocked();
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("Cannot compact client storage while an update transaction is active: " + storage.transactionFile());
 		GenerationSnapshot snapshot = validateCompactionSnapshot();
@@ -276,10 +288,11 @@ public final class ClientGenerationStore {
 		FileTotals recordsBefore = generationTotals(snapshot.records().keySet());
 		ClientObjectStore.GeneratedCopyReport generatedBefore = ClientObjectStore.measureGeneratedCopies(storage);
 
-		for (String generationId : snapshot.removedGenerationIds()) FileTrees.delete(storage.generationDirectory(generationId));
-		removeGeneratedCopies(snapshot.removedGenerationIds());
+		writeCompactionJournal(snapshot.removedGenerationIds());
+		deleteJournaledGenerations(snapshot.removedGenerationIds());
 
 		ClientObjectStore.CollectionResult objectCollection = ClientObjectStore.collectUnreachableObjects(storage, snapshot.retainedGenerationIds(), Set.of());
+		finishCompactionJournal();
 		try (FileMetadataCache metadata = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			metadata.cleanup();
 		}
@@ -287,6 +300,43 @@ public final class ClientGenerationStore {
 		ClientObjectStore.GeneratedCopyReport generatedAfter = ClientObjectStore.measureGeneratedCopies(storage);
 		return new CompactionResult(List.copyOf(snapshot.retainedGenerationIds()), List.copyOf(snapshot.removedGenerationIds()), recordsBefore.count(), recordsBefore.bytes(),
 				recordsAfter.count(), recordsAfter.bytes(), generatedBefore.count(), generatedBefore.bytes(), generatedAfter.count(), generatedAfter.bytes(), objectCollection);
+	}
+
+	/** Resumes an interrupted explicit compaction before normal client work starts. */
+	public void recoverCompaction() throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			recoverCompactionLocked();
+			return null;
+		});
+	}
+
+	private void recoverCompactionLocked() throws IOException {
+		if (!Files.exists(storage.compactionJournalFile(), LinkOption.NOFOLLOW_LINKS)) return;
+		ClientStorageJsons.ClientCompactionJournalFields journal = ConfigTools.read(storage.compactionJournalFile(), ClientStorageJsons.ClientCompactionJournalFields.class)
+				.orElseThrow(() -> new IOException("Client compaction journal is empty"));
+		if (journal.schemaVersion != 1 || journal.removedGenerationIds == null) throw new IOException("Client compaction journal is invalid");
+		Set<String> removed = new TreeSet<>();
+		for (String generationId : journal.removedGenerationIds) removed.add(ClientObjectStore.normalizeHash(generationId));
+		if (!List.copyOf(removed).equals(journal.removedGenerationIds)) throw new IOException("Client compaction journal is not canonical");
+		deleteJournaledGenerations(removed);
+		ClientObjectStore.collectUnreachableObjects(storage, Set.copyOf(generationIds()), Set.of());
+		finishCompactionJournal();
+	}
+
+	private void writeCompactionJournal(Set<String> removedGenerationIds) throws IOException {
+		ClientStorageJsons.ClientCompactionJournalFields journal = new ClientStorageJsons.ClientCompactionJournalFields();
+		journal.removedGenerationIds = List.copyOf(new TreeSet<>(removedGenerationIds));
+		ConfigTools.writeAtomic(storage.compactionJournalFile(), journal);
+	}
+
+	private void deleteJournaledGenerations(Set<String> removedGenerationIds) throws IOException {
+		for (String generationId : removedGenerationIds) FileTrees.delete(storage.generationDirectory(generationId));
+		removeGeneratedCopies(removedGenerationIds);
+	}
+
+	private void finishCompactionJournal() throws IOException {
+		Files.deleteIfExists(storage.compactionJournalFile());
+		FileTrees.forceDirectory(storage.clientDirectory());
 	}
 
 	/**
@@ -321,6 +371,13 @@ public final class ClientGenerationStore {
 
 	/** Deletes every retained local artifact for one inactive modpack and collects objects no longer referenced by another pack. */
 	public void forgetModpack(String modpackId) throws IOException {
+		ClientStorageMutation.run(storage, () -> {
+			forgetModpackLocked(modpackId);
+			return null;
+		});
+	}
+
+	private void forgetModpackLocked(String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot forget a modpack while an update transaction is active");
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();

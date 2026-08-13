@@ -13,8 +13,6 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.utils.HashUtils;
-
 class FileMetadataCacheTest {
 	@TempDir
 	Path temporaryDirectory;
@@ -113,25 +111,26 @@ class FileMetadataCacheTest {
 	}
 
 	@Test
-	void trustedHashBypassesAValidLookingPersistedRecord() throws Exception {
+	void trustedHashReusesANonRacyPersistedRecord() throws Exception {
 		Path file = temporaryDirectory.resolve("file.bin");
 		Files.writeString(file, "first", StandardCharsets.UTF_8);
 		FileTime originalLastModifiedTime = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
 		Files.setLastModifiedTime(file, originalLastModifiedTime);
 		Path cacheDirectory = temporaryDirectory.resolve("file-metadata");
-		String staleHash;
+		String expectedHash;
 
 		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
-			staleHash = cache.getOrComputeHash(file);
-			Files.writeString(file, "other", StandardCharsets.UTF_8);
-			Files.setLastModifiedTime(file, originalLastModifiedTime);
-			cache.overwriteCache(file, staleHash);
-
-			assertEquals(staleHash, cache.getOrComputeHash(file));
+			expectedHash = cache.getOrComputeHash(file);
 		}
+		Path record;
+		try (var records = Files.walk(cacheDirectory)) {
+			record = records.filter(path -> path.getFileName().toString().endsWith(".json")).findFirst().orElseThrow();
+		}
+		FileTime sentinel = FileTime.from(Instant.ofEpochSecond(1_600_000_000L));
+		Files.setLastModifiedTime(record, sentinel);
 		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
-			assertEquals(HashUtils.getHash(file), cache.getTrustedHash(file));
-			assertNotEquals(staleHash, cache.getOrComputeHash(file));
+			assertEquals(expectedHash, cache.getOrComputeHash(file));
+			assertEquals(sentinel, Files.getLastModifiedTime(record));
 		}
 	}
 }

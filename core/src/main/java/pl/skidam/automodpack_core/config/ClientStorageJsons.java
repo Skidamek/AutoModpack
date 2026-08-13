@@ -84,4 +84,9 @@ public class ClientStorageJsons {
 			public long size = -1;
 		}
 	}
+
+	public static class ClientCompactionJournalFields {
+		public int schemaVersion = 1;
+		public List<String> removedGenerationIds = List.of();
+	}
 }

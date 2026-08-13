@@ -138,6 +138,7 @@ public final class OfflineRepair {
 	}
 
 	/** Resumes a power-interrupted repair from its durable intent, if one exists. */
+<<<<<<< HEAD
 	public Optional<Receipt> recover(Request request) throws IOException {
 		return ClientStorageMutation.run(storage, () -> recoverLocked(request));
 	}
@@ -146,6 +147,16 @@ public final class OfflineRepair {
 		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			Analysis current = analyze(request, fileCache);
+=======
+	public Receipt recover(Request request) throws IOException {
+		return ClientStorageMutation.run(storage, () -> recoverLocked(request));
+	}
+
+	private Receipt recoverLocked(Request request) throws IOException {
+		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return null;
+		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+			Analysis current = analyze(request, fileCache, modCache);
+>>>>>>> 49f0c7dd (Finish durable CAS and maintenance boundaries)
 			ClientStorageJsons.OfflineRepairJournalFields journal = readJournal(current.prepared());
 			return Optional.of(executeJournal(current.prepared(), current, journal, fileCache));
 		}

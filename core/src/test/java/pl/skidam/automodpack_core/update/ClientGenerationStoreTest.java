@@ -150,6 +150,33 @@ class ClientGenerationStoreTest {
 	}
 
 	@Test
+	void resumesCompactionAfterGenerationDeletion() throws Exception {
+		ClientStorage storage = storage();
+		String recordHash = store(storage, "record-object");
+		String generatedHash = store(storage, "generated-object");
+		long recordSize = Files.size(storage.objectsDirectory().resolve(recordHash));
+		GenerationRecord old = record(FIRST_PACK, recordHash, recordSize, Instant.parse("2026-01-01T00:00:00Z"), null);
+		GenerationRecord newest = record(FIRST_PACK, recordHash, recordSize, Instant.parse("2026-01-02T00:00:00Z"), old);
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		generations.write(old);
+		generations.write(newest);
+		storage.writeActiveState(FIRST_PACK, newest.metadata().generationId());
+		new GeneratedCopyState(FIRST_PACK, old.metadata().generationId(), SELECTION_DIGEST,
+				List.of(new GeneratedCopyState.Entry("mods/generated.jar", generatedHash, Files.size(storage.objectsDirectory().resolve(generatedHash))))).write(storage);
+		ClientStorageJsons.ClientCompactionJournalFields journal = new ClientStorageJsons.ClientCompactionJournalFields();
+		journal.removedGenerationIds = List.of(old.metadata().generationId());
+		ConfigTools.writeAtomic(storage.compactionJournalFile(), journal);
+		Files.delete(storage.generationManifest(old.metadata().generationId()));
+
+		generations.recoverCompaction();
+
+		assertFalse(Files.exists(storage.compactionJournalFile()));
+		assertFalse(Files.exists(storage.generatedCopiesGenerationDirectory(FIRST_PACK, old.metadata().generationId())));
+		assertFalse(Files.exists(storage.objectsDirectory().resolve(generatedHash)));
+		assertTrue(Files.exists(storage.objectsDirectory().resolve(recordHash)));
+	}
+
+	@Test
 	void malformedRecordRefusesWithoutMutation() throws Exception {
 		ClientStorage storage = storage();
 		String hash = store(storage, "valid-object");

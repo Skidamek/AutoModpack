@@ -55,6 +55,8 @@ public final class ClientStorage {
 	private final Path stateFile;
 	private final Path transactionFile;
 	private final Path repairJournalFile;
+	private final Path compactionJournalFile;
+	private final Path mutationLockFile;
 	private final Path selectionFile;
 	private final Path restartLoopStateFile;
 	private final Path clientConfigFile;
@@ -87,6 +89,8 @@ public final class ClientStorage {
 		this.stateFile = this.clientDirectory.resolve(CLIENT_ACTIVE_STATE_FILE.getFileName()).normalize();
 		this.transactionFile = this.clientDirectory.resolve(CLIENT_TRANSACTION_FILE.getFileName()).normalize();
 		this.repairJournalFile = this.clientDirectory.resolve("repair.json").normalize();
+		this.compactionJournalFile = this.clientDirectory.resolve("compaction.json").normalize();
+		this.mutationLockFile = this.clientDirectory.resolve("mutation.lock").normalize();
 		this.selectionFile = this.clientDirectory.resolve(CLIENT_SELECTION_FILE.getFileName()).normalize();
 		this.restartLoopStateFile = this.clientDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE.getFileName()).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
@@ -111,6 +115,7 @@ public final class ClientStorage {
 		ClientStorage storage = new ClientStorage(normalized);
 		try {
 			storage.initialize();
+			new ClientGenerationStore(storage).recoverCompaction();
 			if (storage.sharedDataDirectory()) ClientObjectStore.publishOwnership(storage);
 			OPEN_STORAGE.put(normalized, new WeakReference<>(storage));
 			return storage;
@@ -211,6 +216,14 @@ public final class ClientStorage {
 
 	public Path repairJournalFile() {
 		return repairJournalFile;
+	}
+
+	public Path compactionJournalFile() {
+		return compactionJournalFile;
+	}
+
+	public Path mutationLockFile() {
+		return mutationLockFile;
 	}
 
 	public Path selectionFile() {
