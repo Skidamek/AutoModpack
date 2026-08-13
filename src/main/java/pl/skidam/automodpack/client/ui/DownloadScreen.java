@@ -60,7 +60,7 @@ public class DownloadScreen extends VersionedScreen {
 
 	private void saveClientConfig() {
 		try {
-			ConfigTools.writeAtomic(ClientStorage.fromGameDirectory(GameDirectory.current()).clientConfigFile(), clientConfig);
+			ConfigTools.writeAtomic(ClientStorage.open(GameDirectory.current()).clientConfigFile(), clientConfig);
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save client configuration", e);
 		}

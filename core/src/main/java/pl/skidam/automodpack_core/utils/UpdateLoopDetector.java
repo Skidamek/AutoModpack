@@ -22,7 +22,7 @@ public final class UpdateLoopDetector {
 	private final LongSupplier currentTimeMillis;
 
 	public UpdateLoopDetector() {
-		this(ClientStorage.fromGameDirectory(GameDirectory.current()).restartLoopStateFile(), System::currentTimeMillis);
+		this(ClientStorage.open(GameDirectory.current()).restartLoopStateFile(), System::currentTimeMillis);
 	}
 
 	public UpdateLoopDetector(Path stateFile) {
