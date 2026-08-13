@@ -11,6 +11,7 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Resolves the one shared-or-local AutoModpack data root for an instance. */
 public final class DataRootResolver {
@@ -70,44 +71,51 @@ public final class DataRootResolver {
 		Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
 		Path marker = automodpackDirectory.resolve("data-root.json").normalize();
 		try {
-			if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) return loadPinned(marker);
+			if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) return loadPinned(marker, gameRoot);
 			Files.createDirectories(automodpackDirectory);
 			Path sharedRoot = platformDataRoot();
 			if (probe(sharedRoot)) {
 				Location location = new Location(sharedRoot, true, UUID.randomUUID().toString());
-				writePinned(marker, location);
+				writePinned(marker, location, gameRoot);
 				return location;
 			}
 			Path fallback = automodpackDirectory.resolve("data").normalize();
 			if (!probe(fallback)) throw new IOException("Neither shared nor local AutoModpack data storage is writable");
 			Location location = new Location(fallback, false, UUID.randomUUID().toString());
-			writePinned(marker, location);
+			writePinned(marker, location, gameRoot);
 			return location;
 		} catch (IOException e) {
 			throw new IllegalStateException("Cannot resolve AutoModpack data storage for " + gameRoot, e);
 		}
 	}
 
-	private static Location loadPinned(Path marker) throws IOException {
+	private static Location loadPinned(Path marker, Path gameRoot) throws IOException {
 		if (Files.isSymbolicLink(marker) || !Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("AutoModpack data-root marker is not a regular file: " + marker);
 		StorageJsons.DataRootFields fields = ConfigTools.read(marker, StorageJsons.DataRootFields.class).orElseThrow(() -> new IOException("AutoModpack data-root marker is empty"));
 		if (fields.root == null || fields.root.isBlank()) throw new IOException("AutoModpack data-root marker has no root");
 		Path root = Path.of(fields.root).toAbsolutePath().normalize();
 		if (!probe(root)) throw new IOException("Pinned AutoModpack data root is unavailable: " + root);
-		if (fields.ownerId == null || fields.ownerId.isBlank()) {
+		String ownerPathHash = ownerPathHash(gameRoot);
+		if (fields.ownerId == null || fields.ownerId.isBlank() || !ownerPathHash.equals(fields.ownerPathHash)) {
 			fields.ownerId = UUID.randomUUID().toString();
+			fields.ownerPathHash = ownerPathHash;
 			ConfigTools.writeAtomic(marker, fields);
 		}
 		return new Location(root, fields.shared, fields.ownerId);
 	}
 
-	private static void writePinned(Path marker, Location location) throws IOException {
+	private static void writePinned(Path marker, Location location, Path gameRoot) throws IOException {
 		StorageJsons.DataRootFields fields = new StorageJsons.DataRootFields();
 		fields.root = location.root().toString();
 		fields.shared = location.shared();
 		fields.ownerId = location.ownerId();
+		fields.ownerPathHash = ownerPathHash(gameRoot);
 		ConfigTools.writeAtomic(marker, fields);
+	}
+
+	private static String ownerPathHash(Path gameRoot) {
+		return HashUtils.sha1(gameRoot.toAbsolutePath().normalize().toString());
 	}
 
 	private static boolean probe(Path root) {
