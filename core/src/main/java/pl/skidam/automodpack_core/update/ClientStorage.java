@@ -11,6 +11,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -33,6 +34,7 @@ import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
  * </p>
  */
 public final class ClientStorage {
+	private static final ConcurrentHashMap<Path, ClientStorage> OPEN_STORAGE = new ConcurrentHashMap<>();
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
 	private final Path clientDirectory;
@@ -98,13 +100,16 @@ public final class ClientStorage {
 	}
 
 	public static ClientStorage open(Path gameDirectory) {
-		ClientStorage storage = new ClientStorage(gameDirectory);
-		try {
-			storage.initialize();
-			return storage;
-		} catch (IOException e) {
-			throw new IllegalStateException("Cannot initialize client storage for " + storage.gameDirectory, e);
-		}
+		Path normalized = requireDirectoryPath(gameDirectory, "game directory");
+		return OPEN_STORAGE.computeIfAbsent(normalized, path -> {
+			ClientStorage storage = new ClientStorage(path);
+			try {
+				storage.initialize();
+				return storage;
+			} catch (IOException e) {
+				throw new IllegalStateException("Cannot initialize client storage for " + storage.gameDirectory, e);
+			}
+		});
 	}
 
 	public Path gameDirectory() {
