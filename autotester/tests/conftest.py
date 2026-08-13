@@ -119,7 +119,7 @@ class FakeBridge:
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "first_connection": {
                 "screenClass": "FirstConnectScreen",
-                "buttons": [{"id": 3, "text": "Continue" if not self._first_install_local_mods() else "Continue and keep mods", "enabled": True, "visible": True},
+                "buttons": [{"id": 3, "text": "Continue" if not self._first_install_local_mods() else "Continue with defaults" if self.first_install_archive_existing else "Continue and keep mods", "enabled": True, "visible": True},
                             {"id": 18, "text": "Customize groups", "enabled": True, "visible": True},
                             *([{"id": 89, "text": (f"[x] Preserve and remove {len(self._first_install_local_mods())} existing files" if self.first_install_archive_existing else f"[ ] Keep {len(self._first_install_local_mods())} existing files in mods"), "enabled": True, "visible": True}] if self._first_install_local_mods() else []),
                             {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
