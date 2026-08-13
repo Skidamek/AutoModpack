@@ -287,7 +287,7 @@ public class ModpackUpdater implements AutoCloseable {
 				firstInstallLocalModFiles = storedTarget() == null ? scanFirstInstallLocalMods() : Map.of();
 				startSourceFetch();
 				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
-				new ScreenManager().welcome(this);
+				ScreenManager.welcome(this);
 			} else {
 				// Handle existing modpack
 				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, storage);
@@ -300,7 +300,7 @@ public class ModpackUpdater implements AutoCloseable {
 			close();
 		} catch (Exception e) {
 			close();
-			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
 
@@ -486,7 +486,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private void restartAfterApply(ApplyResult applyResult) {
 		if (!applyResult.requiresRestart()) {
 			updateLoopDetector.clear();
-			new ScreenManager().completeWithoutRestart();
+			ScreenManager.completeWithoutRestart();
 			return;
 		}
 		String fingerprint = updateStateFingerprint(applyResult);
@@ -557,7 +557,7 @@ public class ModpackUpdater implements AutoCloseable {
 	public void startUpdate() {
 		try {
 			requireLiveConnection();
-			new ScreenManager().waiting();
+			ScreenManager.waiting();
 			switch (requestUpdatePreview()) {
 				case PREVIEW_SHOWN -> {
 					return;
@@ -569,7 +569,7 @@ public class ModpackUpdater implements AutoCloseable {
 			}
 			close();
 		} catch (Exception e) {
-			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			close();
 			return;
 		}
@@ -583,7 +583,7 @@ public class ModpackUpdater implements AutoCloseable {
 			acquireTargetObjects(selectedTarget.flatTarget(), cache, true);
 			finalPlan = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 		} catch (SocketTimeoutException | ConnectException e) {
-			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.connection", FailureCategory.CONNECTION, FailureDestination.CURRENT_SCREEN, null));
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.connection", FailureCategory.CONNECTION, FailureDestination.CURRENT_SCREEN, null));
 			close();
 			return;
 		} catch (InterruptedException e) {
@@ -592,7 +592,7 @@ public class ModpackUpdater implements AutoCloseable {
 			close();
 			return;
 		} catch (Exception e) {
-			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			close();
 			return;
 		}
@@ -613,7 +613,7 @@ public class ModpackUpdater implements AutoCloseable {
 			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			return ApplyStatus.DEFERRED;
 		} catch (Exception e) {
-			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			return ApplyStatus.FAILED;
 		} finally {
 			close();
@@ -650,7 +650,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 
 		downloadManager = new DownloadManager(totalBytesToDownload, storage);
-		if (playerFacing) new ScreenManager().download(downloadManager, getModpackName());
+		if (playerFacing) ScreenManager.download(downloadManager, getModpackName());
 		downloadManager.attachDownloadClient(downloadClient);
 
 		for (var serverItem : finalFilesToUpdate) {
@@ -795,7 +795,7 @@ public class ModpackUpdater implements AutoCloseable {
 		GenerationUpdateRange updateRange = updateRange(selectedTarget, installedGenerationId(selectedTarget.manifest().modpackId()));
 		UpdatePreview preview = UpdatePreview.create(prepared.plan(), selectedTarget.selection(), UpdatePreview.Mode.UPDATE,
 				featuredNotes(updateRange), updateRange.generations()).withFeatureManifest(selectedTarget.manifest()).withReferences(resolveMainPageReferences(prepared));
-		return new ScreenManager().preview(preview, getModpackName(),
+		return ScreenManager.preview(preview, getModpackName(),
 				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, returnToSelection);
 	}
 

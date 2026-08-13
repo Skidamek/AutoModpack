@@ -23,10 +23,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
-import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupResolution;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
@@ -34,12 +31,7 @@ import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
-import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.PreservationVault;
-import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
@@ -65,8 +57,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final String modpackId;
 	private final String modpackName;
 	private final Map<String, GroupManifest.Group> groups;
-	private final ClientStorage storage;
-	private final ClientSelectionStore selectionStore;
+	private final InstalledModpackController controller;
 	private final SelectionIntent expectedSelection;
 	private final SelectionIntent initialSelection;
 	private final Consumer<SelectionIntent> selectionAction;
@@ -132,10 +123,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.modpackId = manifest.modpackId();
 		this.modpackName = manifest.modpackName();
 		this.groups = manifest.groups();
-		this.storage = ClientStorage.open(GameDirectory.current());
-		this.selectionStore = new ClientSelectionStore(storage.selectionFile());
+		this.controller = new InstalledModpackController();
 		this.expectedSelection = expectedSelection == null && initialSelection == null
-				? selectionStore.get(modpackId).orElse(null)
+				? controller.savedSelection(modpackId)
 				: expectedSelection;
 		this.selectionAction = selectionAction;
 		this.cancelAction = cancelAction;
@@ -143,7 +133,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.managerEntry = managerEntry;
 		this.openedFromManager = openedFromManager;
 		this.showManagement = showManagement;
-		this.activeModpack = activeModpack(storage, modpackId);
+		this.activeModpack = controller.activeRecord(modpackId) != null;
 		this.localRecord = localRecord;
 		SelectionIntent initial = initialSelection != null
 				? initialSelection
@@ -198,12 +188,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private static boolean hasInstalledModpacks() {
-		try {
-			ClientStorage storage = ClientStorage.open(GameDirectory.current());
-			return !new ClientGenerationStore(storage).installedRecords().isEmpty();
-		} catch (IOException | RuntimeException e) {
-			return false;
-		}
+		return new InstalledModpackController().hasInstalledPacks();
 	}
 
 	private static boolean modpackHasGeneration(String modpackId) {
@@ -212,14 +197,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private static GenerationRecord activeGeneration(String modpackId) {
-		try {
-			ClientStorage storage = ClientStorage.open(GameDirectory.current());
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null || !modpackId.equals(state.modpackId)) return null;
-			return new ClientGenerationStore(storage).read(state.generationId).orElse(null);
-		} catch (IOException | RuntimeException e) {
-			return null;
-		}
+		return new InstalledModpackController().activeRecord(modpackId);
 	}
 
 	@Override
@@ -461,28 +439,27 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private void requestHistory() {
 		if (!beginManagement()) return;
-		try {
-			GenerationHistoryController.open(storage, modpackId, historyGenerationId(), modpackName, this::endManagement);
-		} catch (Exception e) {
+		InstalledModpackController.Pack pack = managedPack();
+		if (pack == null) {
 			endManagement();
-			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
+			return;
 		}
+		controller.openHistory(pack, this::endManagement);
 	}
 
 	private void requestVault() {
 		if (!beginManagement()) return;
-		ScreenImpl.setScreen(new PreservationVaultScreen(this, storage, modpackId, modpackName, activeModpack, this::endManagement));
+		InstalledModpackController.Pack pack = managedPack();
+		if (pack == null) {
+			endManagement();
+			return;
+		}
+		controller.openPreservedFiles(this, pack, this::endManagement);
 	}
 
 	private void requestFiles() {
-		GenerationRecord generation = localRecord == null ? activeGeneration(modpackId) : localRecord;
-		if (generation == null) return;
-		Map<String, String> featureNames = new TreeMap<>();
-		generation.manifest().groups().forEach((groupId, group) -> featureNames.put(groupId, displayName(groupId)));
-		ScreenImpl.setScreen(new ChangeBrowserScreen(this,
-				VersionedText.translatable("automodpack.files.title", modpackName),
-				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(generation.manifest()), featureNames,
-				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, storage)), true)));
+		InstalledModpackController.Pack pack = managedPack();
+		if (pack != null) controller.openFiles(this, pack);
 	}
 
 	private boolean beginManagement() {
@@ -513,11 +490,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private boolean hasPreservedFiles() {
-		try {
-			return !PreservationVault.read(storage, modpackId).claims().isEmpty();
-		} catch (IOException | RuntimeException e) {
-			return false;
-		}
+		InstalledModpackController.Pack pack = managedPack();
+		return pack != null && controller.hasPreservedFiles(pack);
 	}
 
 	private static int managementRowCount(int actionCount) {
@@ -525,46 +499,16 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private boolean hasHistory() {
-		try {
-			ClientGenerationStore generationStore = new ClientGenerationStore(storage);
-			String generationId = historyGenerationId();
-			List<GenerationRecord> availableLineage = generationStore.availableLineage(modpackId, generationId);
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory = generationStore.patchNotesHistory(generationId);
-			return availableLineage.size() > 1 || GenerationPatchNoteHistory.containsNotes(patchNotesHistory);
-		} catch (IOException | RuntimeException e) {
-			return false;
-		}
-	}
-
-	private String historyGenerationId() throws IOException {
-		if (activeModpack) {
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null || !modpackId.equals(state.modpackId)) throw new IOException("Active generation is unavailable");
-			return state.generationId;
-		}
-		if (localRecord == null) throw new IOException("Installed generation record is unavailable");
-		return localRecord.metadata().generationId();
+		InstalledModpackController.Pack pack = managedPack();
+		return pack != null && controller.hasHistory(pack);
 	}
 
 	private boolean hasInstalledPacks() {
-		try {
-			return !new ClientGenerationStore(storage).installedRecords().isEmpty();
-		} catch (IOException | RuntimeException e) {
-			return false;
-		}
+		return controller.hasInstalledPacks();
 	}
 
 	private boolean isActiveModpack() {
 		return activeModpack;
-	}
-
-	private static boolean activeModpack(ClientStorage storage, String modpackId) {
-		try {
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			return state != null && modpackId.equals(state.modpackId);
-		} catch (IOException | RuntimeException e) {
-			return false;
-		}
 	}
 
 	private void requestPackManager() {
@@ -578,7 +522,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			try {
 				selectionAction.accept(target);
 			} catch (RuntimeException e) {
-				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			}
 			return;
 		}
@@ -587,18 +531,23 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return;
 		}
 		try {
-			selectionStore.compareAndSet(modpackId, expectedSelection, target);
+			controller.saveSelection(modpackId, expectedSelection, target);
 			saved = true;
 			rebuild();
 		} catch (IOException e) {
-			new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
 
 	private void startCachedSwitch(SelectionIntent targetIntent) {
 		if (switchInFlight) return;
 		switchInFlight = true;
-		InstalledModpackSwitch.start(storage, localRecord, expectedSelection, targetIntent, modpackName, true, () -> switchInFlight = false);
+		controller.switchSelection(localRecord, expectedSelection, targetIntent, modpackName, () -> switchInFlight = false);
+	}
+
+	private InstalledModpackController.Pack managedPack() {
+		GenerationRecord record = localRecord == null ? controller.activeRecord(modpackId) : localRecord;
+		return record == null ? null : controller.pack(record);
 	}
 
 	private void back() {

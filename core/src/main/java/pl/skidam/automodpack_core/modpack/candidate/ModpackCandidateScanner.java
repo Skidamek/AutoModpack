@@ -52,14 +52,14 @@ public final class ModpackCandidateScanner {
 		if (!synchronizedGroups.isEmpty()) {
 			Set<String> scanRoots = new TreeSet<>();
 			for (GroupRules rules : synchronizedGroups) scanRoots.addAll(rules.syncedFiles().safeScanRoots());
-			for (String scanRoot : minimalScanRoots(scanRoots)) {
+			Set<String> minimalRoots = minimalScanRoots(scanRoots);
+			Map<String, List<String>> groupsByScanRoot = indexGroupsByScanRoot(minimalRoots, rulesByGroup);
+			for (String scanRoot : minimalRoots) {
 				Path root = (scanRoot.isEmpty() ? request.serverRoot() : request.serverRoot().resolve(scanRoot)).normalize();
 				if (!root.startsWith(request.serverRoot())) throw new CandidateBuildException("Synchronized scan root escapes server root: " + scanRoot);
 				for (var file : walk(root, request.serverRoot()).entrySet()) {
-					for (var entry : declarations.entrySet()) {
-						String groupId = entry.getKey();
+					for (String groupId : groupsByScanRoot.get(scanRoot)) {
 						PathRuleSet syncedRules = rulesByGroup.get(groupId).syncedFiles();
-						if (syncedRules.isEmpty()) continue;
 						PathRuleSet.Decision decision = syncedRules.evaluate(file.getKey());
 						if (!decision.matched()) continue;
 						CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), decision.decisiveRule());
@@ -243,6 +243,21 @@ public final class ModpackCandidateScanner {
 			}
 		}
 		return minimal;
+	}
+
+	private static Map<String, List<String>> indexGroupsByScanRoot(Set<String> scanRoots, Map<String, GroupRules> rulesByGroup) {
+		Map<String, List<String>> result = new TreeMap<>();
+		for (String scanRoot : scanRoots) {
+			List<String> groups = new ArrayList<>();
+			for (var entry : rulesByGroup.entrySet()) {
+				Set<String> groupRoots = entry.getValue().syncedFiles().safeScanRoots();
+				if (groupRoots.stream().anyMatch(groupRoot -> groupRoot.isEmpty() || scanRoot.isEmpty() || scanRoot.equals(groupRoot)
+						|| scanRoot.startsWith(groupRoot + "/") || groupRoot.startsWith(scanRoot + "/")))
+					groups.add(entry.getKey());
+			}
+			result.put(scanRoot, List.copyOf(groups));
+		}
+		return Map.copyOf(result);
 	}
 
 	private static NavigableMap<String, Path> walk(Path root) throws CandidateBuildException {

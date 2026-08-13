@@ -258,9 +258,12 @@ public final class GenerationStore {
 
 	/** Returns the complete thin lineage, including entries whose detailed state was compacted. */
 	public Optional<GenerationHistoryIndex> currentHistoryIndex() throws IOException {
-		Optional<CurrentSnapshot> current = loadCurrent();
-		if (current.isEmpty()) return Optional.empty();
-		return Optional.of(historyIndex(current.orElseThrow().record().metadata().generationId()));
+		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+		readCheckpoint();
+		GenerationJsons.GenerationPointerFields pointer = readCurrentPointer();
+		LoadedProjection loaded = readProjectionOrCompact(pointer.generationId);
+		if (!loaded.record().metadata().generationId().equals(pointer.generationId)) throw new IOException("Current pointer does not match current generation identity: " + pointer.generationId);
+		return Optional.of(loaded.historyIndex() == null ? historyIndex(pointer.generationId) : loaded.historyIndex());
 	}
 
 	/** Loads the current materialized projection and verifies only the active target objects. */
@@ -442,8 +445,15 @@ public final class GenerationStore {
 		TreeSet<String> hashes = new TreeSet<>();
 		Optional<CurrentSnapshot> current = loadCurrent();
 		if (current.isEmpty()) return hashes;
-		for (GenerationHistoryEntry entry : readCompactState(current.orElseThrow().record().metadata().generationId()).entries()) addManifestHashes(entry.manifest(), hashes);
+		for (GenerationHistoryEntry entry : readCompactState(current.orElseThrow().record().metadata().generationId()).entries()) addExistingManifestHashes(entry.manifest(), hashes);
 		return hashes;
+	}
+
+	private void addExistingManifestHashes(GroupManifest manifest, Set<String> hashes) {
+		for (var group : manifest.groups().values()) for (var file : group.files().values()) {
+			String hash = file.sha1().toLowerCase(Locale.ROOT);
+			if (Files.isRegularFile(objectsDirectory.resolve(hash), LinkOption.NOFOLLOW_LINKS)) hashes.add(hash);
+		}
 	}
 
 	private static void addManifestHashes(GroupManifest manifest, Set<String> hashes) {

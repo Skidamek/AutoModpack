@@ -56,7 +56,7 @@ public class RestartScreen extends VersionedScreen {
 
 		changelogsButton = buttonWidget(this.width / 2 - 75, this.height - 48, 150, 20, VersionedText.translatable("automodpack.changelog.view"),
 				button -> {
-					new ScreenManager().changelog(this, changelogs);
+					ScreenManager.changelog(this, changelogs);
 				});
 	}
 
