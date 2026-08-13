@@ -423,6 +423,18 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
     assert json.loads(marker.read_text(encoding="utf-8")) == before
 
 
+def test_client_start_timeout_uses_proven_cache_receipt(make_ctx):
+    ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 180, "clientRunSeconds": 300}})
+
+    assert runner._client_start_timeout(ctx, {}) == 300
+
+    runner._record_warm_client_cache(ctx)
+    assert runner._client_start_timeout(ctx, {}) == 180
+
+    ctx.target.loader = "neoforge"
+    assert runner._client_start_timeout(ctx, {}) == 300
+
+
 def test_connect_screen_classifier_does_not_loop_on_first_connection():
     assert runner._is_connecting_screen(
         "net.minecraft.client.gui.screens.ConnectScreen"
