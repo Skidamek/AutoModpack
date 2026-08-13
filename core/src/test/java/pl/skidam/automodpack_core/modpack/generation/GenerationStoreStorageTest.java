@@ -3,7 +3,10 @@ package pl.skidam.automodpack_core.modpack.generation;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -142,6 +145,17 @@ class GenerationStoreStorageTest {
 		Files.delete(tempDir.resolve("current.json"));
 
 		assertThrows(IOException.class, () -> store.collectUnreachableObjects(Set.of(), Set.of()));
+	}
+
+	@Test
+	void resolvesStoragePathsOnAlternateFilesystemProviders() throws Exception {
+		URI archive = URI.create("jar:" + tempDir.resolve("generation.zip").toUri());
+		try (FileSystem fileSystem = FileSystems.newFileSystem(archive, Map.of("create", "true"))) {
+			Path root = fileSystem.getPath("/generation");
+			GenerationStore store = new GenerationStore(root, Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC), () -> {});
+
+			assertEquals(root.resolve("objects"), store.objectRoot());
+		}
 	}
 
 	private GenerationStore store(Instant instant) {

@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
@@ -18,7 +17,9 @@ import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFilePublisher;
 
 public final class GenerationStore {
 	public static final int CURRENT_POINTER_SCHEMA_VERSION = 1;
@@ -187,15 +188,15 @@ public final class GenerationStore {
 
 	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
-		this.currentPath = this.root.resolve(StoragePaths.SERVER_CURRENT_FILE.getFileName());
-		this.currentProjectionPath = this.root.resolve(StoragePaths.SERVER_CURRENT_PROJECTION_FILE.getFileName());
-		this.checkpointPath = this.root.resolve(StoragePaths.SERVER_GENERATION_CHECKPOINT_FILE.getFileName());
+		this.currentPath = this.root.resolve(StoragePaths.SERVER_CURRENT_FILE.getFileName().toString());
+		this.currentProjectionPath = this.root.resolve(StoragePaths.SERVER_CURRENT_PROJECTION_FILE.getFileName().toString());
+		this.checkpointPath = this.root.resolve(StoragePaths.SERVER_GENERATION_CHECKPOINT_FILE.getFileName().toString());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
-		this.cataloguesDirectory = this.root.resolve(StoragePaths.SERVER_CATALOGUES_DIR.getFileName());
-		this.commitsDirectory = this.root.resolve(StoragePaths.SERVER_COMMITS_DIR.getFileName());
-		this.deltasDirectory = this.root.resolve(StoragePaths.SERVER_DELTAS_DIR.getFileName());
+		this.cataloguesDirectory = this.root.resolve(StoragePaths.SERVER_CATALOGUES_DIR.getFileName().toString());
+		this.commitsDirectory = this.root.resolve(StoragePaths.SERVER_COMMITS_DIR.getFileName().toString());
+		this.deltasDirectory = this.root.resolve(StoragePaths.SERVER_DELTAS_DIR.getFileName().toString());
 		this.objectsDirectory = Objects.requireNonNull(objectsDirectory).toAbsolutePath().normalize();
-		this.stagingDirectory = this.root.resolve(StoragePaths.SERVER_STAGING_DIR.getFileName());
+		this.stagingDirectory = this.root.resolve(StoragePaths.SERVER_STAGING_DIR.getFileName().toString());
 		this.clock = Objects.requireNonNull(clock);
 		this.commitHook = Objects.requireNonNull(commitHook);
 		this.compactionDeleteHook = Objects.requireNonNull(compactionDeleteHook);
@@ -531,7 +532,7 @@ public final class GenerationStore {
 				bytes = addExact(bytes, size, "deleted " + description + " bytes");
 			}
 		}
-		if (deleted > 0 && !paths.isEmpty()) forceDirectory(paths.get(0).getParent());
+		if (deleted > 0 && !paths.isEmpty()) FileTrees.forceDirectory(paths.get(0).getParent());
 		return new DeletionResult(deleted, bytes);
 	}
 
@@ -621,7 +622,7 @@ public final class GenerationStore {
 				deletedBytes = addExact(deletedBytes, size, "deleted object bytes");
 			}
 		}
-		if (deletedCount > 0) forceDirectory(objectsDirectory);
+		if (deletedCount > 0) FileTrees.forceDirectory(objectsDirectory);
 		FileTotals after = fileTotals(regularFiles(objectsDirectory, "immutable objects"));
 		return new CollectionResult(before.bytes(), after.bytes(), before.count(), after.count(), deletedCount, deletedBytes);
 	}
@@ -1019,48 +1020,30 @@ public final class GenerationStore {
 		OwnershipLedger base = parent == null ? OwnershipLedger.empty(record.manifest().modpackId()) : parent.ownershipLedger();
 		OwnershipDelta delta = OwnershipDelta.between(base, record.manifest());
 		Path path = deltaPath(record.metadata().generationId());
-		writeImmutableJsonNoClobber(path, deltasDirectory, ".delta-", delta.toFields(), delta, this::readDelta, "generation ownership delta");
+		writeImmutableJsonNoClobber(path, deltasDirectory, delta.toFields(), delta, this::readDelta, "generation ownership delta");
 		return delta;
 	}
 
 	private void writeCatalogueNoClobber(GenerationRecord record) throws IOException {
 		CatalogueSnapshot snapshot = CatalogueSnapshot.from(record.manifest());
 		Path path = cataloguePath(snapshot.stateDigest());
-		writeImmutableJsonNoClobber(path, cataloguesDirectory, ".catalogue-", snapshot.toFields(), snapshot, this::readCatalogue, "generation catalogue snapshot");
+		writeImmutableJsonNoClobber(path, cataloguesDirectory, snapshot.toFields(), snapshot, this::readCatalogue, "generation catalogue snapshot");
 	}
 
 	private void writeCommitNoClobber(GenerationRecord record, OwnershipDelta delta) throws IOException {
 		GenerationCommit commit = GenerationCommit.from(record, delta);
 		Path path = commitPath(commit.generationId());
-		writeImmutableJsonNoClobber(path, commitsDirectory, ".commit-", commit.toFields(), commit, this::readCommit, "generation commit");
+		writeImmutableJsonNoClobber(path, commitsDirectory, commit.toFields(), commit, this::readCommit, "generation commit");
 	}
 
-	private <T> void writeImmutableJsonNoClobber(Path path, Path directory, String temporaryPrefix, Object value, T expected,
+	private <T> void writeImmutableJsonNoClobber(Path path, Path directory, Object value, T expected,
 			ImmutableJsonReader<T> reader, String description) throws IOException {
 		ensureDirectory(directory, description + "s");
 		byte[] bytes = ConfigTools.GSON.toJson(value).getBytes(StandardCharsets.UTF_8);
-		if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			T existing = reader.read(path);
-			if (!existing.equals(expected)) throw new IOException(description + " already exists with different content: " + path);
-			return;
-		}
-		Path temporary = Files.createTempFile(directory, temporaryPrefix, ".tmp");
-		try {
-			try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-				ByteBuffer buffer = ByteBuffer.wrap(bytes);
-				while (buffer.hasRemaining()) channel.write(buffer);
-				channel.force(true);
-			}
-			try {
-				Files.createLink(path, temporary);
-				forceDirectory(directory);
-			} catch (FileAlreadyExistsException e) {
-				T existing = reader.read(path);
-				if (!existing.equals(expected)) throw new IOException(description + " publication race: " + path, e);
-			}
-		} finally {
-			Files.deleteIfExists(temporary);
-		}
+		ImmutableFilePublisher.publishBytes(path, bytes, existingPath -> {
+			T existing = reader.read(existingPath);
+			if (!existing.equals(expected)) throw new IOException(description + " already exists with different content: " + existingPath);
+		});
 	}
 
 	private static void ensureRegular(Path path, String description) throws IOException {
@@ -1078,14 +1061,6 @@ public final class GenerationStore {
 	private static void requireDirectory(Path path, String description) throws IOException {
 		if (Files.isSymbolicLink(path) || !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("Invalid " + description + " directory: " + path);
-	}
-
-	private static void forceDirectory(Path directory) {
-		try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
-			channel.force(true);
-		} catch (IOException | UnsupportedOperationException ignored) {
-			// Directory fsync is unavailable on some supported filesystems.
-		}
 	}
 
 	private static boolean isDigest(String value) {

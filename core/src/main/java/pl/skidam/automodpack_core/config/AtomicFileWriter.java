@@ -10,6 +10,8 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.UUID;
 
+import pl.skidam.automodpack_core.utils.FileTrees;
+
 final class AtomicFileWriter {
 	private AtomicFileWriter() {}
 
@@ -30,17 +32,9 @@ final class AtomicFileWriter {
 			} catch (AtomicMoveNotSupportedException e) {
 				throw new IOException("Atomic configuration replacement is unsupported for " + path, e);
 			}
-			forceDirectory(parent);
+			FileTrees.forceDirectory(parent);
 		} finally {
 			Files.deleteIfExists(temporary);
-		}
-	}
-
-	private static void forceDirectory(Path directory) {
-		try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) {
-			channel.force(true);
-		} catch (IOException | UnsupportedOperationException ignored) {
-			// Directory fsync is unavailable on some supported filesystems.
 		}
 	}
 }
