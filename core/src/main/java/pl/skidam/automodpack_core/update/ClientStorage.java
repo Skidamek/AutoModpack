@@ -347,20 +347,21 @@ public final class ClientStorage {
 		return ClientOverlaySnapshot.capture(this, modpackId, cache);
 	}
 
-	public void ensureRoots() throws IOException {
-		ensureDirectory(clientDirectory, "client state root");
-		ensureDirectory(objectsDirectory, "client object store");
-		ensureDirectory(fileMetadataDirectory, "file metadata cache");
-		ensureDirectory(modMetadataDirectory, "mod metadata cache");
-		ensureDirectory(packsDirectory, "shared pack state");
-		ensureDirectory(recordsDirectory, "client generation records");
-		ensureDirectory(overlaysDirectory, "client overlays");
-		ensureDirectory(baselinesDirectory, "client baselines");
-		ensureDirectory(generatedCopiesDirectory, "client generated-copy state");
-		ensureDirectory(incomingDirectory, "client transaction incoming root");
-		ensureDirectory(backupDirectory, "client transaction backup root");
-		ensureDirectory(helperDirectory, "client update helper");
-		ensureDirectory(preservationDirectory, "client preservation root");
+	/** Creates the complete client storage layout during application bootstrap. */
+	public void createDirectories() throws IOException {
+		FileTrees.createManagedDirectory(clientDirectory, "client state root");
+		FileTrees.createManagedDirectory(objectsDirectory, "client object store");
+		FileTrees.createManagedDirectory(fileMetadataDirectory, "file metadata cache");
+		FileTrees.createManagedDirectory(modMetadataDirectory, "mod metadata cache");
+		FileTrees.createManagedDirectory(packsDirectory, "shared pack state");
+		FileTrees.createManagedDirectory(recordsDirectory, "client generation records");
+		FileTrees.createManagedDirectory(overlaysDirectory, "client overlays");
+		FileTrees.createManagedDirectory(baselinesDirectory, "client baselines");
+		FileTrees.createManagedDirectory(generatedCopiesDirectory, "client generated-copy state");
+		FileTrees.createManagedDirectory(incomingDirectory, "client transaction incoming root");
+		FileTrees.createManagedDirectory(backupDirectory, "client transaction backup root");
+		FileTrees.createManagedDirectory(helperDirectory, "client update helper");
+		FileTrees.createManagedDirectory(preservationDirectory, "client preservation root");
 	}
 
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
@@ -425,9 +426,4 @@ public final class ClientStorage {
 		return LogicalPath.resolve(root, logicalPath);
 	}
 
-	private static void ensureDirectory(Path directory, String description) throws IOException {
-		if (Files.isSymbolicLink(directory)) throw new IOException("Managed " + description + " cannot be a symbolic link: " + directory);
-		Files.createDirectories(directory);
-		if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Managed " + description + " is not a directory: " + directory);
-	}
 }

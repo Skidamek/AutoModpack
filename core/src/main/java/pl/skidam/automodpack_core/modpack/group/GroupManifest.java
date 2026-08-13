@@ -95,6 +95,13 @@ public record GroupManifest(
 		public boolean supports(ClientPlatform platform) {
 			return compatiblePlatforms.isEmpty() || compatiblePlatforms.contains(platform);
 		}
+
+		public boolean hasSameMetadata(Group other) {
+			return other != null && Objects.equals(displayName, other.displayName) && Objects.equals(description, other.description)
+					&& Objects.equals(category, other.category) && Objects.equals(icon, other.icon) && required == other.required
+					&& defaultSelected == other.defaultSelected && Objects.equals(breaksWith, other.breaksWith) && Objects.equals(requires, other.requires)
+					&& Objects.equals(compatiblePlatforms, other.compatiblePlatforms);
+		}
 	}
 	public record GroupFile(long size, String type, boolean editable, boolean overwriteEditable, String sha1, String murmur) {
 		public boolean sameEffectiveState(GroupFile other) {

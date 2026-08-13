@@ -56,7 +56,6 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 	}
 
 	public void write(ClientStorage storage) throws IOException {
-		storage.ensureRoots();
 		ClientStorageJsons.ClientGeneratedCopiesFields fields = toFields();
 		Path path = storage.generatedCopiesFile(modpackId, generationId, selectionDigest);
 		Files.createDirectories(path.getParent());
