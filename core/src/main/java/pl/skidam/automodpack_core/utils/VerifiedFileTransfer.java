@@ -1,15 +1,11 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 
 /** Durable file installation operations that verify size and SHA-1 before publication. */
 public final class VerifiedFileTransfer {
@@ -22,6 +18,7 @@ public final class VerifiedFileTransfer {
 		Path temporary = copyToVerifiedTemporary(sourceFile, targetFile, expectedSize, expectedSha1);
 		try {
 			moveAtomicReplace(temporary, targetFile);
+			FileTrees.forceDirectory(temporary.getParent());
 			return true;
 		} finally {
 			Files.deleteIfExists(temporary);
@@ -30,25 +27,10 @@ public final class VerifiedFileTransfer {
 
 	/** Copies a verified file without replacing a destination created by another operation. */
 	public static boolean copyCreateOnly(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
-		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1)) return false;
-		if (Files.exists(targetFile, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Target file already exists with different bytes: " + targetFile);
 		requireValidSource(sourceFile, expectedSize, expectedSha1);
-
-		Path temporary = copyToVerifiedTemporary(sourceFile, targetFile, expectedSize, expectedSha1);
-		try {
-			try {
-				moveCreateOnly(temporary, targetFile);
-			} catch (FileAlreadyExistsException raced) {
-				if (!FileIntegrity.matches(targetFile, expectedSize, expectedSha1))
-					throw new IOException("Target file was created with different bytes: " + targetFile, raced);
-				return false;
-			}
-			if (!FileIntegrity.matches(targetFile, expectedSize, expectedSha1))
-				throw new IOException("Created file failed size/SHA-1 verification: " + targetFile);
-			return true;
-		} finally {
-			Files.deleteIfExists(temporary);
-		}
+		return ImmutableFilePublisher.publishCopy(sourceFile, targetFile, path -> {
+			if (!FileIntegrity.matches(path, expectedSize, expectedSha1)) throw new IOException("Immutable copy has different bytes: " + path);
+		});
 	}
 
 	/** Installs an immutable object as a hard link, with verified-copy fallback when linking is unavailable. */
@@ -68,6 +50,7 @@ public final class VerifiedFileTransfer {
 			if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1))
 				throw new IOException("Linked file failed size/SHA-1 verification: " + temporary);
 			moveAtomicReplace(temporary, targetFile);
+			FileTrees.forceDirectory(parent);
 			return true;
 		} finally {
 			Files.deleteIfExists(temporary);
@@ -75,7 +58,7 @@ public final class VerifiedFileTransfer {
 	}
 
 	public static void promoteAtomic(Path temporary, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
-		forceFile(temporary);
+		FileTrees.forceFile(temporary);
 		if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1))
 			throw new IOException("Downloaded file failed size/SHA-1 verification: " + temporary);
 		Path targetParent = requireTargetParent(targetFile);
@@ -84,6 +67,7 @@ public final class VerifiedFileTransfer {
 		} catch (AtomicMoveNotSupportedException crossFileSystem) {
 			promoteAcrossFileSystems(temporary, targetFile, targetParent, expectedSize, expectedSha1, crossFileSystem);
 		}
+		FileTrees.forceDirectory(targetParent);
 	}
 
 	private static void promoteAcrossFileSystems(Path temporary, Path targetFile, Path targetParent, long expectedSize, String expectedSha1,
@@ -91,7 +75,7 @@ public final class VerifiedFileTransfer {
 		Path targetTemporary = Files.createTempFile(targetParent, "." + targetFile.getFileName() + ".", ".tmp");
 		try {
 			Files.copy(temporary, targetTemporary, StandardCopyOption.REPLACE_EXISTING);
-			forceFile(targetTemporary);
+			FileTrees.forceFile(targetTemporary);
 			if (!FileIntegrity.matches(targetTemporary, expectedSize, expectedSha1))
 				throw new IOException("Cross-filesystem promotion failed size/SHA-1 verification: " + targetTemporary, crossFileSystem);
 			moveAtomicReplace(targetTemporary, targetFile);
@@ -111,7 +95,7 @@ public final class VerifiedFileTransfer {
 		boolean valid = false;
 		try {
 			Files.copy(sourceFile, temporary, StandardCopyOption.REPLACE_EXISTING);
-			forceFile(temporary);
+			FileTrees.forceFile(temporary);
 			valid = FileIntegrity.matches(temporary, expectedSize, expectedSha1);
 			if (!valid) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
 			return temporary;
@@ -131,17 +115,4 @@ public final class VerifiedFileTransfer {
 		Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
 	}
 
-	private static void moveCreateOnly(Path sourceFile, Path targetFile) throws IOException {
-		try {
-			Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE);
-		} catch (AtomicMoveNotSupportedException unsupported) {
-			Files.move(sourceFile, targetFile);
-		}
-	}
-
-	private static void forceFile(Path file) throws IOException {
-		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
-			channel.force(true);
-		}
-	}
 }

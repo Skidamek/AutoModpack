@@ -1,12 +1,14 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.Comparator;
 import java.util.stream.Stream;
 
@@ -21,6 +23,22 @@ public final class FileTrees {
 			Files.move(sourceDirectory, targetDirectory, StandardCopyOption.ATOMIC_MOVE);
 		} catch (AtomicMoveNotSupportedException e) {
 			throw new IOException("Atomic directory replacement is unsupported for " + targetDirectory, e);
+		}
+	}
+
+	/** Forces a directory entry update when the filesystem exposes directory channels. */
+	public static void forceDirectory(Path directory) {
+		try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+			channel.force(true);
+		} catch (IOException | UnsupportedOperationException | IllegalArgumentException ignored) {
+			// Java does not expose a portable directory-sync capability probe.
+		}
+	}
+
+	/** Forces file content and metadata to stable storage. */
+	public static void forceFile(Path file) throws IOException {
+		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+			channel.force(true);
 		}
 	}
 
