@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -47,6 +48,19 @@ public final class ImmutableFiles {
 		if (posix != null) return disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS);
 		DosFileAttributeView dos = Files.getFileAttributeView(normalized, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
 		return dos != null && dos.readAttributes().isReadOnly();
+	}
+
+	/** Deletes an immutable name, clearing the DOS read-only bit only when Windows requires it. */
+	public static boolean deleteIfExists(Path file) throws IOException {
+		try {
+			return Files.deleteIfExists(file);
+		} catch (AccessDeniedException denied) {
+			DosFileAttributeView dos = Files.getFileAttributeView(file, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+			if (dos == null || !Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return false;
+			if (!dos.readAttributes().isReadOnly()) throw denied;
+			dos.setReadOnly(false);
+			return Files.deleteIfExists(file);
+		}
 	}
 
 	/** Makes a newly copied private temporary writable before it is forced and published. */
