@@ -121,12 +121,17 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		String description = entries.isEmpty()
 				? VersionedText.translatable("automodpack.packManager.empty").getString()
 				: VersionedText.translatable("automodpack.packManager.description").getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, description, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 32, TextColors.WHITE);
+		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 20, 2);
+		int descriptionY = descriptionLines.size() > 1 ? 28 : 32;
+		for (String line : descriptionLines) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.GRAY), this.width / 2, descriptionY, TextColors.WHITE);
+			descriptionY += 10;
+		}
 		if (!entries.isEmpty()) {
 			String active = entries.stream().filter(InstalledModpackController.Pack::active).findFirst()
 					.map(entry -> VersionedText.translatable("automodpack.packManager.active", entry.name()).getString())
 					.orElse(VersionedText.translatable("automodpack.packManager.noActive").getString());
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, active, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, 44, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, active, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, descriptionLines.size() > 1 ? 50 : 44, TextColors.WHITE);
 		}
 	}
 }
