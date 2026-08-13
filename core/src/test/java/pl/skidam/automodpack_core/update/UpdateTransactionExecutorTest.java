@@ -57,6 +57,7 @@ class UpdateTransactionExecutorTest {
 		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
 		assertEquals(target.generationRecord(), new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).orElseThrow());
 		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
+		assertEquals(List.of(target.generationRecord()), new ClientGenerationStore(storage).installedRecords());
 		assertEquals(target.manifest().modpackId(), ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
 		assertFalse(Files.exists(storage.automodpackDirectory().resolve("modpacks")));
 		assertFalse(Files.exists(storage.transactionFile()));
@@ -174,6 +175,24 @@ class UpdateTransactionExecutorTest {
 
 		assertThrows(IOException.class, () -> executor(storage).commit(plan, target));
 		assertTrue(new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).isEmpty());
+	}
+
+	@Test
+	void failedPreflightDoesNotPublishGenerationRecord() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "missing-object".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(bytes);
+		SelectedModpackTarget target = target("mods/missing.jar", "mod", false, hash, bytes.length);
+		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/missing.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/missing.jar", true, hash, bytes.length)));
+
+		assertThrows(IOException.class, () -> executor(storage).commit(plan, target));
+
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		assertTrue(generations.read(target.generationTarget().targetGenerationId()).isEmpty());
+		assertTrue(generations.installedRecords().isEmpty());
+		assertFalse(Files.exists(storage.transactionFile()));
 	}
 
 	@Test
