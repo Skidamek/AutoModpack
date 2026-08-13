@@ -42,7 +42,7 @@ class FileMetadataCacheTest {
 	}
 
 	@Test
-	void persistsMetadataAcrossFreshCacheInstance() throws Exception {
+	void persistsMetadataForAnUnchangedFileAcrossFreshCacheInstance() throws Exception {
 		Path file = temporaryDirectory.resolve("file.bin");
 		Files.writeString(file, "persisted", StandardCharsets.UTF_8);
 		FileTime originalLastModifiedTime = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
@@ -53,11 +53,62 @@ class FileMetadataCacheTest {
 		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
 			expectedHash = cache.getOrComputeHash(file);
 		}
-		Files.writeString(file, "newvalue!", StandardCharsets.UTF_8);
-		Files.setLastModifiedTime(file, originalLastModifiedTime);
-
 		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
 			assertEquals(expectedHash, cache.getOrComputeHash(file));
+		}
+	}
+
+	@Test
+	void detectsSameSizeChangeWhenModifiedTimeIsRestoredOnUnix() throws Exception {
+		Path file = temporaryDirectory.resolve("file.bin");
+		Files.writeString(file, "first", StandardCharsets.UTF_8);
+		FileTime originalLastModifiedTime = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
+		Files.setLastModifiedTime(file, originalLastModifiedTime);
+		Object originalChangeTime;
+		try {
+			originalChangeTime = Files.getAttribute(file, "unix:ctime");
+		} catch (UnsupportedOperationException e) {
+			assumeTrue(false, "The filesystem does not expose Unix change time");
+			return;
+		}
+
+		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+			String firstHash = cache.getOrComputeHash(file);
+			Files.writeString(file, "other", StandardCharsets.UTF_8);
+			Files.setLastModifiedTime(file, originalLastModifiedTime);
+			assumeTrue(!originalChangeTime.equals(Files.getAttribute(file, "unix:ctime")), "The filesystem did not advance change time");
+
+			assertNotEquals(firstHash, cache.getOrComputeHash(file));
+		}
+	}
+
+	@Test
+	void detectsMutationThroughAnotherHardlinkOnUnix() throws Exception {
+		Path object = temporaryDirectory.resolve("object");
+		Path projection = temporaryDirectory.resolve("projection");
+		Files.writeString(object, "first", StandardCharsets.UTF_8);
+		try {
+			Files.createLink(projection, object);
+		} catch (UnsupportedOperationException e) {
+			assumeTrue(false, "The filesystem does not support hardlinks");
+			return;
+		}
+		FileTime originalLastModifiedTime = Files.getLastModifiedTime(object);
+		Object originalChangeTime;
+		try {
+			originalChangeTime = Files.getAttribute(object, "unix:ctime");
+		} catch (UnsupportedOperationException e) {
+			assumeTrue(false, "The filesystem does not expose Unix change time");
+			return;
+		}
+
+		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+			String originalHash = cache.getOrComputeHash(object);
+			Files.writeString(projection, "other", StandardCharsets.UTF_8);
+			Files.setLastModifiedTime(projection, originalLastModifiedTime);
+			assumeTrue(!originalChangeTime.equals(Files.getAttribute(object, "unix:ctime")), "The filesystem did not advance change time");
+
+			assertNotEquals(originalHash, cache.getOrComputeHash(object));
 		}
 	}
 
@@ -74,6 +125,7 @@ class FileMetadataCacheTest {
 			staleHash = cache.getOrComputeHash(file);
 			Files.writeString(file, "other", StandardCharsets.UTF_8);
 			Files.setLastModifiedTime(file, originalLastModifiedTime);
+			cache.overwriteCache(file, staleHash);
 
 			assertEquals(staleHash, cache.getOrComputeHash(file));
 			assertEquals(HashUtils.getHash(file), cache.rehash(file));
