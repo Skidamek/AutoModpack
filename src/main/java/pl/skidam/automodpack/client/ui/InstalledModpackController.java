@@ -3,6 +3,7 @@ package pl.skidam.automodpack.client.ui;
 import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +37,7 @@ import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -59,10 +61,6 @@ final class InstalledModpackController {
 
 	InstalledModpackController(ClientStorage storage) {
 		this.storage = storage;
-	}
-
-	ClientStorage storage() {
-		return storage;
 	}
 
 	SelectionIntent savedSelection(String modpackId) {
@@ -124,6 +122,30 @@ final class InstalledModpackController {
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
+	}
+
+	ClientObjectStore.StorageReport validateStorage() throws IOException {
+		return ClientObjectStore.validate(storage);
+	}
+
+	ClientGenerationStore.CompactionResult compactStorage() throws IOException {
+		return new ClientGenerationStore(storage).compact();
+	}
+
+	PreservationVault.Snapshot preservedFiles(String modpackId) throws IOException {
+		return PreservationVault.read(storage, modpackId);
+	}
+
+	Path restorePreservedFile(String modpackId, String claimId) throws IOException {
+		return PreservationVault.restoreOriginal(storage, modpackId, claimId);
+	}
+
+	Path savePreservedCopy(String modpackId, String claimId) throws IOException {
+		return PreservationVault.saveCopy(storage, modpackId, claimId);
+	}
+
+	void deletePreservedFile(String modpackId, String claimId) throws IOException {
+		PreservationVault.delete(storage, modpackId, claimId);
 	}
 
 	boolean hasHistory(Pack pack) {
@@ -239,11 +261,11 @@ final class InstalledModpackController {
 		ScreenImpl.setScreen(new ChangeBrowserScreen(parent,
 				VersionedText.translatable("automodpack.files.title", pack.name()),
 				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), featureNames,
-				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, storage)), true)));
+				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, this)), true)));
 	}
 
 	void openPreservedFiles(Screen parent, Pack pack, Runnable released) {
-		ScreenImpl.setScreen(new PreservationVaultScreen(parent, storage, pack.modpackId(), pack.name(), pack.active(), released));
+		ScreenImpl.setScreen(new PreservationVaultScreen(parent, this, pack.modpackId(), pack.name(), pack.active(), released));
 	}
 
 	private void removeActive(Pack pack, boolean deactivation, Runnable released) {

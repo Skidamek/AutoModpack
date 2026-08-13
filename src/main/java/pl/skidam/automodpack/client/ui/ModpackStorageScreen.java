@@ -43,7 +43,7 @@ public final class ModpackStorageScreen extends VersionedScreen {
 	}
 
 	private void openLocalStorage() {
-		ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller.storage()));
+		ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller));
 	}
 
 	@Override

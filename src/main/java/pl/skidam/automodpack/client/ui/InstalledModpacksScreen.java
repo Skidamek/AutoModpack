@@ -91,7 +91,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 		int footerWidth = actionButtonWidth(PANEL_WIDTH, 2);
 		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, 2, 0), actionY, footerWidth, 20,
-				VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller.storage()))));
+				VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))));
 		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, 2, 1), actionY, footerWidth, 20,
 				VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
 	}
