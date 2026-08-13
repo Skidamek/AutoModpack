@@ -10,7 +10,9 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -33,6 +35,7 @@ public class FileMetadataCache implements AutoCloseable {
 
 	private final Path recordsDirectory;
 	private final Map<String, CachedFile> hotRecords = new HashMap<>();
+	private final Set<String> directlyHashedThisSession = new HashSet<>();
 	private final Object[] locks = new Object[64];
 
 	public static final class CachedFile {
@@ -110,6 +113,30 @@ public class FileMetadataCache implements AutoCloseable {
 	}
 
 	/**
+	 * Returns a hash that was computed from bytes in this cache session. Persisted metadata
+	 * remains a performance hint and is never authoritative for publication or deletion.
+	 */
+	public String getTrustedHash(Path file) throws IOException {
+		Path absPath = file.toAbsolutePath().normalize();
+		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+		return getTrustedHashWithAttributes(absPath, attrs);
+	}
+
+	public String getTrustedHashWithAttributes(Path file, BasicFileAttributes attrs) throws IOException {
+		Path absPath = file.toAbsolutePath().normalize();
+		String pathKey = absPath.toString();
+		FileFingerprint fingerprint = fingerprint(absPath, attrs);
+		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
+		synchronized (locks[lockIndex]) {
+			CachedFile cached = readRecord(pathKey);
+			if (directlyHashedThisSession.contains(pathKey) && isCacheValid(cached, fingerprint)) return cached.contentHash();
+			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
+			if (computed == null) throw new IOException("Cannot obtain a stable trusted hash for file: " + absPath);
+			return publishComputed(pathKey, computed);
+		}
+	}
+
+	/**
 	 * Hashes the current bytes without consulting a cached record and publishes the stable
 	 * observation back to the cache. This is intended for explicit integrity checks where
 	 * the cache itself is one of the things being verified.
@@ -124,11 +151,7 @@ public class FileMetadataCache implements AutoCloseable {
 		synchronized (locks[lockIndex]) {
 			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
 			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
-			FileFingerprint stableFingerprint = computed.fingerprint();
-			CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
-					stableFingerprint.fileKey(), validationTimeNanos());
-			writeRecord(record);
-			return computed.hash();
+			return publishComputed(pathKey, computed);
 		}
 	}
 
@@ -145,12 +168,17 @@ public class FileMetadataCache implements AutoCloseable {
 			ComputedHash computed = computeStableHash(absPath, attrs);
 			if (computed == null) return null;
 
-			FileFingerprint stableFingerprint = computed.fingerprint();
-			CachedFile newRecord = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
-					stableFingerprint.fileKey(), validationTimeNanos());
-			writeRecord(newRecord);
-			return computed.hash();
+			return publishComputed(pathKey, computed);
 		}
+	}
+
+	private String publishComputed(String pathKey, ComputedHash computed) {
+		FileFingerprint stableFingerprint = computed.fingerprint();
+		CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
+				stableFingerprint.fileKey(), validationTimeNanos());
+		writeRecord(record);
+		directlyHashedThisSession.add(pathKey);
+		return computed.hash();
 	}
 
 	private CachedFile readRecord(String pathKey) {
@@ -264,6 +292,7 @@ public class FileMetadataCache implements AutoCloseable {
 		int lockIndex = Math.floorMod(record.path().hashCode(), locks.length);
 		synchronized (locks[lockIndex]) {
 			hotRecords.put(record.path(), record);
+			directlyHashedThisSession.add(record.path());
 			ConfigTools.writeAtomic(recordPath(record.path()), record);
 		}
 	}
@@ -297,6 +326,9 @@ public class FileMetadataCache implements AutoCloseable {
 
 	@Override
 	public void close() {
-		if (REGISTRY.release(recordsDirectory, this)) hotRecords.clear();
+		if (REGISTRY.release(recordsDirectory, this)) {
+			hotRecords.clear();
+			directlyHashedThisSession.clear();
+		}
 	}
 }

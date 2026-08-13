@@ -113,7 +113,7 @@ class FileMetadataCacheTest {
 	}
 
 	@Test
-	void forcedRehashBypassesAValidLookingStaleRecord() throws Exception {
+	void trustedHashBypassesAValidLookingPersistedRecord() throws Exception {
 		Path file = temporaryDirectory.resolve("file.bin");
 		Files.writeString(file, "first", StandardCharsets.UTF_8);
 		FileTime originalLastModifiedTime = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
@@ -128,7 +128,9 @@ class FileMetadataCacheTest {
 			cache.overwriteCache(file, staleHash);
 
 			assertEquals(staleHash, cache.getOrComputeHash(file));
-			assertEquals(HashUtils.getHash(file), cache.rehash(file));
+		}
+		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+			assertEquals(HashUtils.getHash(file), cache.getTrustedHash(file));
 			assertNotEquals(staleHash, cache.getOrComputeHash(file));
 		}
 	}

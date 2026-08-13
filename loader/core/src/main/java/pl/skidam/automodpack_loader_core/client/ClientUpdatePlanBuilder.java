@@ -222,12 +222,7 @@ final class ClientUpdatePlanBuilder {
 				deletedPaths.add(UpdatePlanner.normalize(item.file));
 				continue;
 			}
-			String hash = cache.getHashOrNull(live);
-			if (hash == null) {
-				hash = HashUtils.getHash(live);
-				if (hash != null) cache.overwriteCache(live, hash);
-			}
-			if (hash == null) throw new IOException("Failed to hash editable live file: " + live);
+			String hash = cache.getTrustedHash(live);
 			long size = Files.size(live);
 			if (item.sha1.equalsIgnoreCase(hash) && Long.parseLong(item.size) == size) {
 				Files.deleteIfExists(overlay);
@@ -327,12 +322,7 @@ final class ClientUpdatePlanBuilder {
 			FileMetadataCache cache) throws IOException {
 		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return;
 		String relative = UpdatePlanner.normalize(rootPath.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString());
-		String hash = cache.getHashOrNull(path);
-		if (hash == null) {
-			hash = HashUtils.getHash(path);
-			if (hash == null) throw new IOException("Failed to hash live file: " + path);
-			cache.overwriteCache(path, hash);
-		}
+		String hash = cache.getTrustedHash(path);
 		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true));
 	}
 

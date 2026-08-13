@@ -81,11 +81,10 @@ public final class StableSourceSnapshotter {
 	private Snapshot cachedSnapshot(CandidateSource source, BasicFileAttributes before, boolean autoExcludeServerMods, Path stagingDirectory,
 			FileMetadataCache fileMetadataCache, ModFileCache modFileCache, Path objectStoreDirectory) throws IOException, CandidateBuildException {
 		if (fileMetadataCache == null || objectStoreDirectory == null) return null;
-		String sha1 = fileMetadataCache.getHashOrNullWithAttributes(source.sourcePath(), before);
-		if (sha1 == null) return null;
+		String sha1 = fileMetadataCache.getTrustedHashWithAttributes(source.sourcePath(), before);
 		Path object = objectStoreDirectory.resolve(sha1).normalize();
 		if (!object.startsWith(objectStoreDirectory.toAbsolutePath().normalize()) || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)
-				|| Files.size(object) != before.size() || !sha1.equalsIgnoreCase(fileMetadataCache.getHashOrNull(object)))
+				|| Files.size(object) != before.size() || !sha1.equalsIgnoreCase(fileMetadataCache.getTrustedHash(object)))
 			return null;
 		FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 		Path staged = Files.createTempFile(stagingDirectory, "snapshot-cached-", stagingSuffix(source.sourcePath()));
