@@ -35,6 +35,7 @@ public final class ImmutableFilePublisher {
 		Objects.requireNonNull(source, "source");
 		Path parent = requireParent(target);
 		if (validateExisting(target, existingFileValidator, null)) return false;
+		ImmutableFiles.protect(source);
 		try {
 			Files.createLink(target, source);
 			FileTrees.forceDirectory(parent);
@@ -59,6 +60,7 @@ public final class ImmutableFilePublisher {
 		Path temporary = Files.createTempFile(parent, ".immutable-", ".tmp");
 		try {
 			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
+			ImmutableFiles.allowOwnerWrite(temporary);
 			FileTrees.forceFile(temporary);
 			validate(existingFileValidator, temporary, null);
 			try {
@@ -76,6 +78,7 @@ public final class ImmutableFilePublisher {
 		Objects.requireNonNull(temporary, "temporary");
 		Path parent = requireParent(target);
 		if (validateExisting(target, existingFileValidator, null)) return false;
+		ImmutableFiles.protect(temporary);
 		boolean published = false;
 		try {
 			try {
@@ -127,6 +130,7 @@ public final class ImmutableFilePublisher {
 	private static void validate(ExistingFileValidator existingFileValidator, Path path, Exception publicationRace) throws IOException {
 		try {
 			existingFileValidator.validate(path);
+			ImmutableFiles.protect(path);
 		} catch (IOException e) {
 			if (publicationRace != null) e.addSuppressed(publicationRace);
 			throw e;
