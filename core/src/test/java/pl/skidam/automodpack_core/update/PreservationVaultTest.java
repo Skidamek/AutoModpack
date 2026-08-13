@@ -119,8 +119,7 @@ class PreservationVaultTest {
 	}
 
 	private ClientStorage storage() throws IOException {
-		ClientStorage storage = ClientStorage.fromGameDirectory(temporaryDirectory.resolve("game"));
-		storage.createDirectories();
+		ClientStorage storage = ClientStorage.open(temporaryDirectory.resolve("game"));
 		Files.createDirectories(storage.modsDirectory());
 		Files.createDirectories(storage.gamePath("config"));
 		return storage;

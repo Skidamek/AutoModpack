@@ -17,7 +17,7 @@ public final class UpdateTransactionSupport {
 	private UpdateTransactionSupport() {}
 
 	public static ClientStorage storage() {
-		return ClientStorage.fromGameDirectory(GameDirectory.current());
+		return ClientStorage.open(GameDirectory.current());
 	}
 
 	public static UpdateTransactionExecutor executor() {

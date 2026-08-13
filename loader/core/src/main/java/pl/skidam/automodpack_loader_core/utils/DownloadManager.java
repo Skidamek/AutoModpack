@@ -63,11 +63,11 @@ public class DownloadManager {
 	private final ClientStorage storage;
 
 	public DownloadManager() {
-		this(0, ClientStorage.fromGameDirectory(GameDirectory.current()));
+		this(0, ClientStorage.open(GameDirectory.current()));
 	}
 
 	public DownloadManager(long bytesToDownload) {
-		this(bytesToDownload, ClientStorage.fromGameDirectory(GameDirectory.current()));
+		this(bytesToDownload, ClientStorage.open(GameDirectory.current()));
 	}
 
 	public DownloadManager(long bytesToDownload, ClientStorage storage) {

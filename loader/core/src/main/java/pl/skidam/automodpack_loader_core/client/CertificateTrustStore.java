@@ -60,6 +60,6 @@ public final class CertificateTrustStore {
 	}
 
 	private static ClientStorage storage() {
-		return ClientStorage.fromGameDirectory(GameDirectory.current());
+		return ClientStorage.open(GameDirectory.current());
 	}
 }

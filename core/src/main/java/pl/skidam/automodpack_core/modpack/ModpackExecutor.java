@@ -48,7 +48,7 @@ public class ModpackExecutor {
 	}
 
 	public ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot) {
-		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot).layout().objectsDirectory()), new ModpackCandidateScanner()::scan,
+		this(serverRoot, groupRoot, generationRoot, new GenerationStore(generationRoot, DataRootResolver.resolve(serverRoot)), new ModpackCandidateScanner()::scan,
 				(ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2),
 						new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build()));
 	}

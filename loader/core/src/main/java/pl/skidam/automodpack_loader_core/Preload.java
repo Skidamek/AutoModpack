@@ -47,7 +47,7 @@ public class Preload {
 		try {
 			long start = System.currentTimeMillis();
 			LOGGER.info("Prelaunching AutoModpack...");
-			storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			storage = ClientStorage.open(GameDirectory.current());
 			initializeConstants();
 			loadConfigs();
 			DetachedUpdateHelper.cleanupOldHelperJars();
@@ -273,7 +273,6 @@ public class Preload {
 		}
 
 		try {
-			storage.createDirectories();
 			Files.createDirectories(SERVER_DIR);
 		} catch (IOException e) {
 			LOGGER.error("Failed to create AutoModpack state roots", e);

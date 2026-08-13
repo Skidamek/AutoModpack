@@ -53,7 +53,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			new Preload();
 			progress.complete();
 
-			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
 			if (!Files.isDirectory(activeModsDirectory)) return;
 

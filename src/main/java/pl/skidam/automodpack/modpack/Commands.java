@@ -609,13 +609,8 @@ public class Commands {
 				Path gameDirectory = GameDirectory.current();
 				Path serverRoot = gameDirectory.resolve(StoragePaths.SERVER_DIR).normalize();
 				DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory);
-				if (dataLocation.shared()) {
-					send(context, "Shared CAS objects were kept because other AutoModpack instances may still use them.", ChatFormatting.YELLOW, false);
-					return 0;
-				}
-				Path objectRoot = dataLocation.layout().objectsDirectory();
-				Set<String> clientObjectPins = ClientObjectStore.existingReferencedHashes(ClientStorage.fromGameDirectory(gameDirectory));
-				GenerationStore.CollectionResult result = new GenerationStore(serverRoot, objectRoot).collectUnreachableObjects(retainedGenerationIds, clientObjectPins);
+				Set<String> clientObjectPins = ClientObjectStore.existingReferencedHashes(ClientStorage.open(gameDirectory));
+				GenerationStore.CollectionResult result = new GenerationStore(serverRoot, dataLocation).collectUnreachableObjects(retainedGenerationIds, clientObjectPins);
 				send(context, "Generation objects collected", ChatFormatting.GREEN, false);
 				send(context, "Retained generations", ChatFormatting.WHITE, String.valueOf(retainedGenerationIds.size()), ChatFormatting.YELLOW, false);
 				send(context, "Objects", ChatFormatting.WHITE, result.beforeObjectCount() + " -> " + result.afterObjectCount(), ChatFormatting.YELLOW, false);

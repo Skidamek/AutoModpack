@@ -47,6 +47,7 @@ import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 
 /** Validates and applies the one journaled client operation plan. */
 public final class UpdateTransactionExecutor {
@@ -97,6 +98,7 @@ public final class UpdateTransactionExecutor {
 		if (unpublishedTarget != null)
 			new ClientGenerationStore(context.storage()).write(unpublishedTarget.generationRecord(), unpublishedTarget.patchNotesHistory(), unpublishedTarget.historyIndex());
 		ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+		ClientObjectStore.publishOwnership(context.storage());
 		return executePersisted(transaction);
 	}
 
@@ -552,8 +554,10 @@ public final class UpdateTransactionExecutor {
 
 	private Execution executePersisted(UpdateTransaction transaction) throws IOException {
 		if (transaction.phase == UpdateTransaction.Phase.COMMITTED) {
+			ClientObjectStore.publishOwnership(context.storage());
 			cleanupTransactionDirectories(transaction);
 			Files.deleteIfExists(context.storage().transactionFile());
+			ClientObjectStore.publishOwnership(context.storage());
 			return new Execution(UpdateTransaction.Status.SUCCESS, transaction, null, null, null);
 		}
 		AtomicReference<Operation> current = new AtomicReference<>();
@@ -596,9 +600,11 @@ public final class UpdateTransactionExecutor {
 				}
 				claimSelection(transaction);
 			} else applyOperations(transaction, current);
+			ClientObjectStore.publishOwnership(context.storage());
 			setPhase(transaction, UpdateTransaction.Phase.COMMITTED);
 			cleanupTransactionDirectories(transaction);
 			Files.deleteIfExists(context.storage().transactionFile());
+			ClientObjectStore.publishOwnership(context.storage());
 			return new Execution(UpdateTransaction.Status.SUCCESS, transaction, null, null, null);
 		} catch (IOException e) {
 			Operation currentOperation = current.get();

@@ -36,6 +36,7 @@ public final class ClientStorage {
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
 	private final Path clientDirectory;
+	private final DataRootResolver.Location dataLocation;
 	private final Path dataDirectory;
 	private final boolean sharedDataDirectory;
 	private final Path objectsDirectory;
@@ -61,11 +62,11 @@ public final class ClientStorage {
 	private final Path knownHostsFile;
 	private final Path knownHostsLockFile;
 
-	public ClientStorage(Path gameDirectory) {
+	private ClientStorage(Path gameDirectory) {
 		this.gameDirectory = requireDirectoryPath(gameDirectory, "game directory");
 		this.automodpackDirectory = this.gameDirectory.resolve(AUTOMODPACK_DIR).normalize();
 		this.clientDirectory = this.gameDirectory.resolve(CLIENT_DIR).normalize();
-		DataRootResolver.Location dataLocation = DataRootResolver.resolve(this.gameDirectory);
+		this.dataLocation = DataRootResolver.resolve(this.gameDirectory);
 		this.dataDirectory = dataLocation.root();
 		this.sharedDataDirectory = dataLocation.shared();
 		DataRootResolver.Layout dataLayout = dataLocation.layout();
@@ -94,8 +95,14 @@ public final class ClientStorage {
 		validateLayout();
 	}
 
-	public static ClientStorage fromGameDirectory(Path gameDirectory) {
-		return new ClientStorage(gameDirectory);
+	public static ClientStorage open(Path gameDirectory) {
+		ClientStorage storage = new ClientStorage(gameDirectory);
+		try {
+			storage.initialize();
+			return storage;
+		} catch (IOException e) {
+			throw new IllegalStateException("Cannot initialize client storage for " + storage.gameDirectory, e);
+		}
 	}
 
 	public Path gameDirectory() {
@@ -116,6 +123,10 @@ public final class ClientStorage {
 
 	public Path dataDirectory() {
 		return dataDirectory;
+	}
+
+	public DataRootResolver.Location dataLocation() {
+		return dataLocation;
 	}
 
 	public boolean sharedDataDirectory() {
@@ -348,7 +359,7 @@ public final class ClientStorage {
 	}
 
 	/** Creates the complete client storage layout during application bootstrap. */
-	public void createDirectories() throws IOException {
+	private void initialize() throws IOException {
 		FileTrees.createManagedDirectory(clientDirectory, "client state root");
 		FileTrees.createManagedDirectory(objectsDirectory, "client object store");
 		FileTrees.createManagedDirectory(fileMetadataDirectory, "file metadata cache");

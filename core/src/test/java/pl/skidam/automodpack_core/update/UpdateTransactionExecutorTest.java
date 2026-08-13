@@ -479,8 +479,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private ClientStorage storage() throws Exception {
-		ClientStorage storage = ClientStorage.fromGameDirectory(temporaryDirectory.resolve("game"));
-		storage.createDirectories();
+		ClientStorage storage = ClientStorage.open(temporaryDirectory.resolve("game"));
 		Files.createDirectories(storage.modsDirectory());
 		return storage;
 	}
