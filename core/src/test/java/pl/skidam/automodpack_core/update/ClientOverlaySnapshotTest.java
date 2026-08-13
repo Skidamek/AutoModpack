@@ -60,7 +60,7 @@ class ClientOverlaySnapshotTest {
 
 	private ClientStorage storage() throws Exception {
 		ClientStorage storage = ClientStorage.fromGameDirectory(temporaryDirectory.resolve("game"));
-		storage.ensureRoots();
+		storage.createDirectories();
 		return storage;
 	}
 

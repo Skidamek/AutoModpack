@@ -73,7 +73,7 @@ public final class GenerationCatalogueLines {
 		for (String groupId : groupIds) {
 			GroupManifest.Group oldGroup = before == null ? null : before.groups().get(groupId);
 			GroupManifest.Group newGroup = after.groups().get(groupId);
-			if (oldGroup != null && newGroup != null && sameGroupMetadata(oldGroup, newGroup)) continue;
+			if (oldGroup != null && oldGroup.hasSameMetadata(newGroup)) continue;
 			lines.add(line((oldGroup == null ? "+ " : newGroup == null ? "- " : "~ ") + "group " + groupId,
 					oldGroup == null ? ChatFormatting.GREEN : newGroup == null ? ChatFormatting.RED : ChatFormatting.YELLOW));
 			appendChange(lines, "displayName", oldGroup == null ? null : oldGroup.displayName(), newGroup == null ? null : newGroup.displayName());
@@ -87,13 +87,6 @@ public final class GenerationCatalogueLines {
 			appendChange(lines, "compatiblePlatforms", oldGroup == null ? null : oldGroup.compatiblePlatforms(), newGroup == null ? null : newGroup.compatiblePlatforms());
 			lines.add(blank());
 		}
-	}
-
-	private static boolean sameGroupMetadata(GroupManifest.Group before, GroupManifest.Group after) {
-		return Objects.equals(before.displayName(), after.displayName()) && Objects.equals(before.description(), after.description()) && Objects.equals(before.category(), after.category())
-				&& Objects.equals(before.icon(), after.icon())
-				&& before.required() == after.required() && before.defaultSelected() == after.defaultSelected() && Objects.equals(before.breaksWith(), after.breaksWith())
-				&& Objects.equals(before.requires(), after.requires()) && Objects.equals(before.compatiblePlatforms(), after.compatiblePlatforms());
 	}
 
 	private static void appendChange(List<Line> lines, String field, Object before, Object after) {

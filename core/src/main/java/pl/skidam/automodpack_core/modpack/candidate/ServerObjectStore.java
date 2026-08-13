@@ -21,8 +21,8 @@ public final class ServerObjectStore {
 	}
 
 	public NavigableMap<String, Path> promoteAll(NavigableMap<String, StagedObject> objects) throws IOException {
-		ensureManagedDirectory(objectsDirectory, "immutable object");
-		ensureManagedDirectory(stagingDirectory, "staging");
+		FileTrees.createManagedDirectory(objectsDirectory, "immutable object directory");
+		FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 		TreeMap<String, Path> promoted = new TreeMap<>();
 		for (StagedObject object : objects.values()) {
 			validateStaged(object);
@@ -74,13 +74,6 @@ public final class ServerObjectStore {
 
 	private static boolean valid(Path path, StagedObject object) {
 		return FileIntegrity.matches(path, object.size(), object.sha1());
-	}
-
-	private static void ensureManagedDirectory(Path directory, String description) throws IOException {
-		if (Files.isSymbolicLink(directory)) throw new IOException("Managed " + description + " directory cannot be a symbolic link: " + directory);
-		Files.createDirectories(directory);
-		if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Managed " + description + " directory is not a regular directory: " + directory);
 	}
 
 }

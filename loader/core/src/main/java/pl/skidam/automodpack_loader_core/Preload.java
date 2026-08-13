@@ -273,7 +273,7 @@ public class Preload {
 		}
 
 		try {
-			storage.ensureRoots();
+			storage.createDirectories();
 			Files.createDirectories(SERVER_DIR);
 		} catch (IOException e) {
 			LOGGER.error("Failed to create AutoModpack state roots", e);

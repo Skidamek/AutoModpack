@@ -147,7 +147,7 @@ final class ClientUpdatePlanBuilder {
 				item -> List.of(storage.activePath(item.file), livePath(item)));
 	}
 
-	void ensurePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest) throws IOException {
+	void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest) throws IOException {
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> itemsByHash = targetManifest.list.stream()
 				.collect(Collectors.toMap(item -> item.sha1.toLowerCase(Locale.ROOT), item -> item, (first, second) -> first));
 		for (UpdatePlan.Operation operation : plan.operations()) {
@@ -212,7 +212,6 @@ final class ClientUpdatePlanBuilder {
 	private void captureActiveEditableOverlays(FileMetadataCache cache) throws IOException {
 		SelectedModpackTarget activeTarget = storedSelectedTarget();
 		if (activeTarget == null || activeTarget.flatTarget().list == null) return;
-		storage.ensureRoots();
 		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.manifest().modpackId()).deletedPaths);
 		for (var item : activeTarget.flatTarget().list) {
 			if (!item.editable) continue;

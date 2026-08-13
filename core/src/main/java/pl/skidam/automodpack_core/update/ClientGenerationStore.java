@@ -95,7 +95,6 @@ public final class ClientGenerationStore {
 	public void write(GenerationRecord record, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, GenerationHistoryIndex historyIndex) throws IOException {
 		Objects.requireNonNull(record, "record");
 		Objects.requireNonNull(patchNotesHistory, "patchNotesHistory");
-		storage.ensureRoots();
 		Path path = storage.generationManifest(record.metadata().generationId());
 		ModpackJsons.CompleteModpackContentFields fields = record.toFields();
 		GenerationPatchNoteHistory.writeFields(fields, patchNotesHistory);
