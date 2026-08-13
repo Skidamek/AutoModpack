@@ -1,4 +1,5 @@
 {
+  "automodpack.storage.sharedObjectsKept": "Спільні об’єкти CAS збережено, оскільки їх можуть використовувати інші екземпляри гри.",
   "automodpack.restart.full": "Модпак було завантажено!",
   "automodpack.restart.update": "Оновлення модпака було завантажено!",
   "automodpack.restart.select": "Модпак, необхідний серверу, було обрано!",

@@ -76,6 +76,25 @@ class ClientObjectStoreTest {
 		assertFalse(Files.exists(storage.objectsDirectory().resolve(orphan)));
 		assertEquals(1, result.after().validReferencedObjectCount());
 		assertTrue(result.after().objectBytes() < result.before().objectBytes());
+		assertEquals(ClientObjectStore.CollectionStatus.COLLECTED, result.status());
+	}
+
+	@Test
+	void sharedStoreCollectionRetainsObjectsOwnedByAnotherInstance() throws Exception {
+		Path sharedData = temporaryDirectory.resolve("shared-data");
+		ClientStorage first = storage("first-game", sharedData, true);
+		ClientStorage second = storage("second-game", sharedData, true);
+		byte[] bytes = "second-instance-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(second, bytes);
+		GenerationRecord record = GenerationRecord.create(manifest(hash, bytes.length), null, Instant.parse("2026-08-08T00:00:00Z"), "notes");
+		new ClientGenerationStore(second).write(record);
+
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
+
+		assertEquals(ClientObjectStore.CollectionStatus.SHARED_STORE_RETAINED, result.status());
+		assertEquals(result.before(), result.after());
+		assertEquals(0, result.deletedObjectCount());
+		assertTrue(Files.exists(first.objectsDirectory().resolve(hash)));
 	}
 
 	@Test
@@ -157,11 +176,15 @@ class ClientObjectStoreTest {
 	}
 
 	private ClientStorage storage() throws Exception {
-		Path game = temporaryDirectory.resolve("game");
+		return storage("game", temporaryDirectory.resolve("data"), false);
+	}
+
+	private ClientStorage storage(String gameName, Path dataDirectory, boolean shared) throws Exception {
+		Path game = temporaryDirectory.resolve(gameName);
 		Files.createDirectories(game.resolve("automodpack"));
 		StorageJsons.DataRootFields dataRoot = new StorageJsons.DataRootFields();
-		dataRoot.root = temporaryDirectory.resolve("data").toString();
-		dataRoot.shared = false;
+		dataRoot.root = dataDirectory.toString();
+		dataRoot.shared = shared;
 		ConfigTools.writeAtomic(game.resolve("automodpack/data-root.json"), dataRoot);
 		ClientStorage storage = ClientStorage.fromGameDirectory(game);
 		storage.ensureRoots();

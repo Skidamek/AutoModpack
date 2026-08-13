@@ -1,4 +1,5 @@
 {
+  "automodpack.storage.sharedObjectsKept": "다른 게임 인스턴스에서 아직 사용할 수 있으므로 공유 CAS 객체를 유지했습니다.",
   "automodpack.restart.full": "모드팩이 다운로드되었습니다!",
   "automodpack.restart.update": "모드팩 업데이트가 다운로드되었습니다!",
   "automodpack.restart.select": "서버에서 요구하는 모드팩이 선택되었습니다!",

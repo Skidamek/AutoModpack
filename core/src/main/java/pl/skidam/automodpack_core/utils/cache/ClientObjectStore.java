@@ -80,14 +80,22 @@ public final class ClientObjectStore {
 	}
 
 	/** The receipt returned by one explicitly requested collection pass. */
-	public record CollectionResult(StorageReport before, StorageReport after, long deletedObjectCount, long deletedObjectBytes) {
+	public record CollectionResult(StorageReport before, StorageReport after, long deletedObjectCount, long deletedObjectBytes, CollectionStatus status) {
 		public CollectionResult {
 			before = Objects.requireNonNull(before, "before receipt");
 			after = Objects.requireNonNull(after, "after receipt");
+			status = Objects.requireNonNull(status, "collection status");
 			if (deletedObjectCount < 0 || deletedObjectBytes < 0) throw new IllegalArgumentException("Deleted object values cannot be negative");
 			if (after.objectCount() > before.objectCount() || after.objectBytes() > before.objectBytes())
 				throw new IllegalArgumentException("Collection increased the measured object store");
+			if (status == CollectionStatus.SHARED_STORE_RETAINED && (deletedObjectCount != 0 || deletedObjectBytes != 0 || !before.equals(after)))
+				throw new IllegalArgumentException("Shared object retention cannot change the object store");
 		}
+	}
+
+	public enum CollectionStatus {
+		COLLECTED,
+		SHARED_STORE_RETAINED
 	}
 
 	/** A deterministic measurement of validated generated-copy state files. */
@@ -108,7 +116,8 @@ public final class ClientObjectStore {
 	 * Explicitly collects canonical, valid CAS objects not referenced by the selected client state.
 	 * Generation records and preservation claims are never deleted by this method. Because this
 	 * tranche does not prune records atomically, the supplied generation set must contain every
-	 * installed record; the active generation is retained and validated as well.
+	 * installed record; the active generation is retained and validated as well. A shared store is
+	 * measured but never collected because one game instance cannot prove global unreachability.
 	 */
 	public static CollectionResult collectUnreachableObjects(ClientStorage storage, Set<String> retainedGenerationIds, Set<String> pinnedObjectHashes) throws IOException {
 		Objects.requireNonNull(storage, "storage");
@@ -118,6 +127,7 @@ public final class ClientObjectStore {
 		ReferenceSet references = collectReferences(storage, requestedGenerations);
 		for (String hash : canonicalPins(pinnedObjectHashes, "pinned object")) references.addOptional(hash, -1, "explicit pin");
 		StorageReport before = measure(storage, references, true);
+		if (storage.sharedDataDirectory()) return new CollectionResult(before, before, 0, 0, CollectionStatus.SHARED_STORE_RETAINED);
 		List<Path> objects = regularFiles(storage.objectsDirectory(), "client object store");
 		long deletedCount = 0;
 		long deletedBytes = 0;
@@ -134,7 +144,7 @@ public final class ClientObjectStore {
 			}
 		}
 		StorageReport after = measure(storage, references, true);
-		return new CollectionResult(before, after, deletedCount, deletedBytes);
+		return new CollectionResult(before, after, deletedCount, deletedBytes, CollectionStatus.COLLECTED);
 	}
 
 	/** Returns every CAS hash referenced by validated client state, excluding historical ownership metadata. */

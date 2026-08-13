@@ -1,4 +1,5 @@
 {
+  "automodpack.storage.sharedObjectsKept": "已保留共用的 CAS 物件，因為其他遊戲執行個體可能仍在使用它們。",
   "automodpack.restart.full": "模組包已下載！",
   "automodpack.restart.update": "已下載模組包的更新！",
   "automodpack.restart.select": "已選取伺服器所需的模組包！",
