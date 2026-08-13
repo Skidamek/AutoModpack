@@ -755,31 +755,10 @@ def _v_compact_server_history(ctx: Context, step):
             after_projection = json.loads(projection_path.read_text(encoding="utf-8"))
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             return None
-        checkpoint_history = list(checkpoint.get("patchNotesHistory") or [])
-        projection_history = list(after_projection.get("patchNotesHistory") or [])
-        checkpoint_ids = [str(entry.get("generationId", "")) for entry in checkpoint_history]
-        projection_ids = [str(entry.get("generationId", "")) for entry in projection_history]
-        if checkpoint_ids != expected_ids or projection_ids != expected_ids:
-            return None
-        if [str(entry.get("patchNotes", "")) for entry in checkpoint_history] != expected_notes:
-            return None
-        if [str(entry.get("patchNotes", "")) for entry in projection_history] != expected_notes:
-            return None
-        boundary_id = str(checkpoint.get("boundaryGenerationId", ""))
-        if boundary_id != expected_ids[-1] or str(checkpoint.get("record", {}).get("generation", {}).get("generationId", "")) != boundary_id:
-            return None
-        superseded_ids = set(checkpoint.get("supersededGenerationIds") or [])
-        if superseded_ids != expected_superseded_ids:
-            return None
-        superseded_states = set(checkpoint.get("supersededCatalogueStateDigests") or [])
-        current_state = str(checkpoint.get("record", {}).get("generation", {}).get("stateDigest", ""))
-        if current_state in superseded_states:
+        if not _completed_compaction_receipt(checkpoint, after_projection, expected_ids, expected_notes):
             return None
         if any(path.exists() for path in before_deletion_paths):
             return None
-        for state_digest in superseded_states:
-            if (server_root / "catalogues" / f"{state_digest}.json").exists():
-                return None
         after_counts = {
             name: len(list((server_root / name).glob("*.json")))
             for name in ("catalogues", "commits", "deltas")
@@ -798,6 +777,35 @@ def _v_compact_server_history(ctx: Context, step):
     )
     checkpoint_history = list(checkpoint.get("patchNotesHistory") or [])
     ctx.vars["server_compaction"] = {"before": before_counts, "after": after_counts, "historyEntries": len(checkpoint_history)}
+
+
+def _completed_compaction_receipt(checkpoint, projection, expected_ids, expected_notes):
+    checkpoint_history = list(checkpoint.get("patchNotesHistory") or [])
+    projection_history = list(projection.get("patchNotesHistory") or [])
+    if [str(entry.get("generationId", "")) for entry in checkpoint_history] != expected_ids:
+        return False
+    if [str(entry.get("generationId", "")) for entry in projection_history] != expected_ids:
+        return False
+    if [str(entry.get("patchNotes", "")) for entry in checkpoint_history] != expected_notes:
+        return False
+    if [str(entry.get("patchNotes", "")) for entry in projection_history] != expected_notes:
+        return False
+    boundary_id = expected_ids[-1]
+    if str(checkpoint.get("boundaryGenerationId", "")) != boundary_id:
+        return False
+    if str(checkpoint.get("record", {}).get("generation", {}).get("generationId", "")) != boundary_id:
+        return False
+    if checkpoint.get("supersededGenerationIds") or checkpoint.get("supersededCatalogueStateDigests"):
+        return False
+    for history in (checkpoint.get("historyIndex", {}), projection.get("generationHistory", {})):
+        entries = list(history.get("entries") or [])
+        if str(history.get("currentGenerationId", "")) != boundary_id or str(history.get("compactionBoundaryGenerationId", "")) != boundary_id:
+            return False
+        if [str(entry.get("generationId", "")) for entry in entries] != expected_ids:
+            return False
+        if any(bool(entry.get("rollbackAvailable")) for entry in entries[:-1]) or not bool(entries[-1].get("rollbackAvailable")):
+            return False
+    return True
 
 
 @verb("launch_client")
