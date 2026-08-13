@@ -7,6 +7,7 @@ import java.util.*;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.ImmutableFilePublisher;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
 /** Promotes verified candidate snapshots into the immutable server object directory. */
 public final class ServerObjectStore {
@@ -36,11 +37,13 @@ public final class ServerObjectStore {
 	private void promote(StagedObject object, Path destination) throws IOException {
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
 			verifyExisting(destination, object);
+			ImmutableFiles.protect(destination);
 			object.delete();
 			return;
 		}
 		verifyStaged(object);
 		ImmutableFilePublisher.publishFile(object.stagedPath(), destination, path -> verifyExisting(path, object));
+		ImmutableFiles.protect(destination);
 		object.delete();
 	}
 

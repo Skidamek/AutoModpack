@@ -10,9 +10,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -35,7 +34,6 @@ public class FileMetadataCache implements AutoCloseable {
 
 	private final Path recordsDirectory;
 	private final Map<String, CachedFile> hotRecords = new HashMap<>();
-	private final Set<String> directlyHashedThisSession = new HashSet<>();
 	private final Object[] locks = new Object[64];
 
 	public static final class CachedFile {
@@ -94,7 +92,7 @@ public class FileMetadataCache implements AutoCloseable {
 		}
 	}
 
-	private record FileFingerprint(long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey) {}
+	public record FileFingerprint(long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey) {}
 
 	private record ComputedHash(String hash, BasicFileAttributes attributes, FileFingerprint fingerprint) {}
 
@@ -107,33 +105,10 @@ public class FileMetadataCache implements AutoCloseable {
 		for (int i = 0; i < locks.length; i++) locks[i] = new Object();
 	}
 
+	/** Applies a Git-style persisted stat cache; explicit integrity repair uses rehash(). */
 	public String getOrComputeHash(Path file) throws IOException {
 		BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
 		return getOrComputeHashWithAttributes(file, attrs);
-	}
-
-	/**
-	 * Returns a hash that was computed from bytes in this cache session. Persisted metadata
-	 * remains a performance hint and is never authoritative for publication or deletion.
-	 */
-	public String getTrustedHash(Path file) throws IOException {
-		Path absPath = file.toAbsolutePath().normalize();
-		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-		return getTrustedHashWithAttributes(absPath, attrs);
-	}
-
-	public String getTrustedHashWithAttributes(Path file, BasicFileAttributes attrs) throws IOException {
-		Path absPath = file.toAbsolutePath().normalize();
-		String pathKey = absPath.toString();
-		FileFingerprint fingerprint = fingerprint(absPath, attrs);
-		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
-		synchronized (locks[lockIndex]) {
-			CachedFile cached = readRecord(pathKey);
-			if (directlyHashedThisSession.contains(pathKey) && isCacheValid(cached, fingerprint)) return cached.contentHash();
-			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
-			if (computed == null) throw new IOException("Cannot obtain a stable trusted hash for file: " + absPath);
-			return publishComputed(pathKey, computed);
-		}
 	}
 
 	/**
@@ -176,8 +151,14 @@ public class FileMetadataCache implements AutoCloseable {
 		FileFingerprint stableFingerprint = computed.fingerprint();
 		CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
 				stableFingerprint.fileKey(), validationTimeNanos());
+		CachedFile previous = hotRecords.get(pathKey);
+		if (previous != null && Objects.equals(previous.contentHash(), record.contentHash()) && previous.lastModifiedNanos() == record.lastModifiedNanos()
+				&& previous.creationTimeNanos() == record.creationTimeNanos() && previous.changeTimeNanos() == record.changeTimeNanos() && previous.size() == record.size()
+				&& Objects.equals(previous.fileKey(), record.fileKey())) {
+			hotRecords.put(pathKey, record);
+			return computed.hash();
+		}
 		writeRecord(record);
-		directlyHashedThisSession.add(pathKey);
 		return computed.hash();
 	}
 
@@ -207,7 +188,7 @@ public class FileMetadataCache implements AutoCloseable {
 		}
 	}
 
-	private static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
+	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
 		String fileKey = attrs.fileKey() == null ? "null" : attrs.fileKey().toString();
 		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos(path), attrs.size(), fileKey);
 	}
@@ -254,7 +235,7 @@ public class FileMetadataCache implements AutoCloseable {
 		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
 				&& cached.creationTimeNanos() == fingerprint.creationTimeNanos() && cached.changeTimeNanos() == fingerprint.changeTimeNanos()
 				&& cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey())
-				&& fingerprint.lastModifiedNanos() < cached.validatedAtNanos();
+				&& Math.floorDiv(fingerprint.lastModifiedNanos(), 1_000_000_000L) != Math.floorDiv(cached.validatedAtNanos(), 1_000_000_000L);
 	}
 
 	public String getHashOrNull(Path path) {
@@ -292,7 +273,6 @@ public class FileMetadataCache implements AutoCloseable {
 		int lockIndex = Math.floorMod(record.path().hashCode(), locks.length);
 		synchronized (locks[lockIndex]) {
 			hotRecords.put(record.path(), record);
-			directlyHashedThisSession.add(record.path());
 			ConfigTools.writeAtomic(recordPath(record.path()), record);
 		}
 	}
@@ -328,7 +308,6 @@ public class FileMetadataCache implements AutoCloseable {
 	public void close() {
 		if (REGISTRY.release(recordsDirectory, this)) {
 			hotRecords.clear();
-			directlyHashedThisSession.clear();
 		}
 	}
 }

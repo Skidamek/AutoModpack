@@ -29,6 +29,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
 class OfflineRepairTest {
 	@TempDir
@@ -236,6 +237,7 @@ class OfflineRepairTest {
 
 	private static Path write(Path path, byte[] bytes) throws Exception {
 		Files.createDirectories(path.getParent());
+		if (Files.exists(path) && ImmutableFiles.isProtected(path)) Files.delete(path);
 		return Files.write(path, bytes);
 	}
 

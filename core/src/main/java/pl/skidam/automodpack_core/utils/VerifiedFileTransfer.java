@@ -12,17 +12,30 @@ public final class VerifiedFileTransfer {
 	private VerifiedFileTransfer() {}
 
 	public static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
-		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1)) return false;
+		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, false);
+	}
+
+	private static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, boolean immutable) throws IOException {
+		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1)) {
+			if (immutable) ImmutableFiles.protect(targetFile);
+			return false;
+		}
 		requireValidSource(sourceFile, expectedSize, expectedSha1);
 
 		Path temporary = copyToVerifiedTemporary(sourceFile, targetFile, expectedSize, expectedSha1);
 		try {
+			if (immutable) ImmutableFiles.protect(temporary);
 			moveAtomicReplace(temporary, targetFile);
 			FileTrees.forceDirectory(temporary.getParent());
 			return true;
 		} finally {
 			Files.deleteIfExists(temporary);
 		}
+	}
+
+	/** Replaces an immutable object and enforces its read-only policy before returning. */
+	public static boolean copyAtomicImmutable(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
+		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, true);
 	}
 
 	/** Copies a verified file without replacing a destination created by another operation. */
@@ -39,8 +52,8 @@ public final class VerifiedFileTransfer {
 			ImmutableFiles.protect(targetFile);
 			return false;
 		}
-		requireValidSource(sourceFile, expectedSize, expectedSha1);
 		ImmutableFiles.protect(sourceFile);
+		requireValidSource(sourceFile, expectedSize, expectedSha1);
 		Path parent = requireTargetParent(targetFile);
 		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
 		Files.deleteIfExists(temporary);

@@ -34,7 +34,10 @@ public final class ImmutableFilePublisher {
 	public static boolean publishFile(Path source, Path target, ExistingFileValidator existingFileValidator) throws IOException {
 		Objects.requireNonNull(source, "source");
 		Path parent = requireParent(target);
-		if (validateExisting(target, existingFileValidator, null)) return false;
+		if (validateExisting(target, existingFileValidator, null)) {
+			ImmutableFiles.protect(target);
+			return false;
+		}
 		ImmutableFiles.protect(source);
 		try {
 			Files.createLink(target, source);
@@ -44,7 +47,7 @@ public final class ImmutableFilePublisher {
 			validate(existingFileValidator, target, e);
 			return false;
 		} catch (UnsupportedOperationException | FileSystemException linkFailure) {
-			return publishCopy(source, target, parent, existingFileValidator, linkFailure);
+			return publishCopy(source, target, parent, existingFileValidator, linkFailure, true);
 		}
 	}
 
@@ -53,16 +56,17 @@ public final class ImmutableFilePublisher {
 		Objects.requireNonNull(source, "source");
 		Path parent = requireParent(target);
 		if (validateExisting(target, existingFileValidator, null)) return false;
-		return publishCopy(source, target, parent, existingFileValidator, null);
+		return publishCopy(source, target, parent, existingFileValidator, null, false);
 	}
 
-	private static boolean publishCopy(Path source, Path target, Path parent, ExistingFileValidator existingFileValidator, Exception linkFailure) throws IOException {
+	private static boolean publishCopy(Path source, Path target, Path parent, ExistingFileValidator existingFileValidator, Exception linkFailure, boolean protect) throws IOException {
 		Path temporary = Files.createTempFile(parent, ".immutable-", ".tmp");
 		try {
 			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
 			ImmutableFiles.allowOwnerWrite(temporary);
 			FileTrees.forceFile(temporary);
 			validate(existingFileValidator, temporary, null);
+			if (protect) ImmutableFiles.protect(temporary);
 			try {
 				return publishTemporary(temporary, target, existingFileValidator);
 			} catch (IOException e) {
@@ -78,7 +82,6 @@ public final class ImmutableFilePublisher {
 		Objects.requireNonNull(temporary, "temporary");
 		Path parent = requireParent(target);
 		if (validateExisting(target, existingFileValidator, null)) return false;
-		ImmutableFiles.protect(temporary);
 		boolean published = false;
 		try {
 			try {
@@ -88,7 +91,7 @@ public final class ImmutableFilePublisher {
 				return false;
 			} catch (UnsupportedOperationException | FileSystemException linkFailure) {
 				try {
-					Files.move(temporary, target);
+					Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
 				} catch (FileAlreadyExistsException e) {
 					validate(existingFileValidator, target, e);
 					return false;
@@ -130,7 +133,6 @@ public final class ImmutableFilePublisher {
 	private static void validate(ExistingFileValidator existingFileValidator, Path path, Exception publicationRace) throws IOException {
 		try {
 			existingFileValidator.validate(path);
-			ImmutableFiles.protect(path);
 		} catch (IOException e) {
 			if (publicationRace != null) e.addSuppressed(publicationRace);
 			throw e;
