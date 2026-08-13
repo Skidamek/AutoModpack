@@ -1200,7 +1200,7 @@ flow:
     select: { text: "[ ] Keep 2 existing files in mods" }
   - do: click
     name: continue with defaults and approved cleanup
-    select: { text: Continue and keep mods }
+    select: { text: Continue with defaults }
   - do: wait_for
     name: review the strict first-install update
     timeout: 90s
