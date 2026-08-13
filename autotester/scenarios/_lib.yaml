@@ -166,6 +166,7 @@ open_multiplayer:
   - do: click
     name: open vanilla multiplayer
     select: { text: multiplayer }
+    skip_if: { screen: Play Multiplayer }
   - do: wait_for
     name: wait for multiplayer screen
     timeout: 20s

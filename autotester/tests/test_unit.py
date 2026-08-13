@@ -184,6 +184,26 @@ def test_click_timeout_reports_disabled_gui_state(make_ctx, monkeypatch):
         steps_ui.click(ctx, {"select": {"text": "multiplayer"}})
 
 
+def test_click_skips_when_navigation_already_reached_its_destination(make_ctx):
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+
+    class MultiplayerBridge:
+        def gui(self, timeout=30):
+            return {
+                "screenClass": "net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen",
+                "title": "Play Multiplayer",
+                "buttons": [{"id": 3, "text": "Direct Connection", "enabled": True, "visible": True}],
+            }
+
+        def click(self, element_id, **payload):
+            raise AssertionError("click must not be sent after navigation reached its destination")
+
+    ctx.bridge = MultiplayerBridge()
+    steps_ui.click(ctx, {"select": {"text": "multiplayer"}, "skip_if": {"screen": "Play Multiplayer"}, "timeout": "1ms"})
+
+
 # ── templating ────────────────────────────────────────────────────────────
 
 

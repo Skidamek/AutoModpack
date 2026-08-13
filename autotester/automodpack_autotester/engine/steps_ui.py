@@ -7,12 +7,21 @@ from . import conditions, selectors
 from .registry import verb
 from .util import ClientExited, await_condition, parse_duration
 
+_SKIP_CLICK = object()
 
-def _await_element(ctx, selector, step, not_found):
+
+def _await_element(ctx, selector, step, not_found, skip_if=None):
     """Poll the GUI until ``selector`` matches an element, or time out."""
     timeout = parse_duration(step.get("timeout"), default=30)
+
+    def candidate():
+        gui = ctx.gui()
+        if skip_if and conditions.evaluate(ctx, skip_if, gui):
+            return _SKIP_CLICK
+        return selectors.find_one(gui, selector)
+
     return await_condition(
-        lambda: selectors.find_one(ctx.gui(), selector),
+        candidate,
         timeout,
         step.get("poll"),
         not_found,
@@ -37,8 +46,9 @@ def _gui_diagnostic(gui):
 def click(ctx, step):
     selector = dict(ctx.resolve(step.get("select") or {}))
     selector.setdefault("enabled", True)  # by default only click clickable elements
+    skip_if = ctx.resolve(step.get("skip_if") or {})
     try:
-        el = _await_element(ctx, selector, step, f"no element matched {selector!r}")
+        el = _await_element(ctx, selector, step, f"no element matched {selector!r}", skip_if)
     except TimeoutError as error:
         if ctx.bridge is None:
             raise
@@ -47,6 +57,8 @@ def click(ctx, step):
         except (ClientExited, RuntimeError, TimeoutError) as snapshot_error:
             raise error from snapshot_error
         raise TimeoutError(f"{error}; {_gui_diagnostic(gui)}") from error
+    if el is _SKIP_CLICK:
+        return
     if step.get("enable"):
         ctx.bridge.click(int(el["id"]), enable=True)
     else:
