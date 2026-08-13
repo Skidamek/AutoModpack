@@ -283,8 +283,6 @@ public class DownloadManager {
 
 		try {
 			try {
-				Files.createDirectories(storage.objectsDirectory());
-				Files.createDirectories(storage.incomingDirectory());
 				tempStoreFile = Files.createTempFile(storage.incomingDirectory(), "." + hashPathPair.hash() + ".", ".tmp");
 				activeTemporaryFiles.put(hashPathPair, tempStoreFile);
 			} catch (IOException e) {
