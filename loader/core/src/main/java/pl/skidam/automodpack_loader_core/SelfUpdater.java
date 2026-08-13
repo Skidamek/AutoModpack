@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -19,6 +20,7 @@ import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -162,12 +164,14 @@ public class SelfUpdater {
 	}
 
 	public static void installModVersion(ModrinthAPI automodpack) {
+		ClientStorage storage = null;
 		try {
-			ClientStorage storage = ClientStorage.open(GameDirectory.current());
+			storage = ClientStorage.open(GameDirectory.current());
 			Path currentJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 			Path modsDirectory = storage.modsDirectory().toAbsolutePath().normalize();
 			if (!currentJar.getParent().equals(modsDirectory)) throw new IllegalStateException("Loaded AutoModpack JAR is not a direct child of the mods directory");
 			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
+			ClientObjectStore.publishOwnership(storage, Set.of(automodpack.SHA1Hash()));
 
 			DownloadManager downloadManager = new DownloadManager(0, storage);
 			ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
@@ -192,6 +196,12 @@ public class SelfUpdater {
 			new ReLauncher(UpdateType.AUTOMODPACK).restart(true);
 		} catch (Exception e) {
 			LOGGER.error("Failed to update AutoModpack", e);
+		} finally {
+			if (storage != null) try {
+				ClientObjectStore.publishOwnership(storage);
+			} catch (Exception e) {
+				LOGGER.warn("Could not release self-update CAS ownership; the next startup will refresh it", e);
+			}
 		}
 	}
 }
