@@ -38,6 +38,7 @@ class VerifiedFileTransferTest {
 		long size = Files.size(source);
 
 		assertTrue(VerifiedFileTransfer.copyCreateOnly(source, target, size, hash));
+		assertFalse(Files.isSameFile(source, target));
 		assertFalse(VerifiedFileTransfer.copyCreateOnly(source, target, size, hash));
 		Files.writeString(target, "different", StandardCharsets.UTF_8);
 		assertThrows(IOException.class, () -> VerifiedFileTransfer.copyCreateOnly(source, target, size, hash));
