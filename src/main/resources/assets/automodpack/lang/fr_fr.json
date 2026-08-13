@@ -1,4 +1,5 @@
 {
+  "automodpack.storage.sharedObjectsKept": "Les objets CAS partagés ont été conservés, car d’autres instances du jeu peuvent encore les utiliser.",
   "automodpack.restart.full": "Le modpack a été téléchargé !",
   "automodpack.restart.update": "Une mise à jour du Modpack a été téléchargée !",
   "automodpack.restart.select": "Le modpack requis par le serveur a été sélectionné !",

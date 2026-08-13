@@ -608,7 +608,12 @@ public class Commands {
 						.forEach(entry -> retainedGenerationIds.add(entry.generationId())));
 				Path gameDirectory = GameDirectory.current();
 				Path serverRoot = gameDirectory.resolve(StoragePaths.SERVER_DIR).normalize();
-				Path objectRoot = DataRootResolver.resolve(gameDirectory).layout().objectsDirectory();
+				DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory);
+				if (dataLocation.shared()) {
+					send(context, "Shared CAS objects were kept because other AutoModpack instances may still use them.", ChatFormatting.YELLOW, false);
+					return 0;
+				}
+				Path objectRoot = dataLocation.layout().objectsDirectory();
 				Set<String> clientObjectPins = ClientObjectStore.existingReferencedHashes(ClientStorage.fromGameDirectory(gameDirectory));
 				GenerationStore.CollectionResult result = new GenerationStore(serverRoot, objectRoot).collectUnreachableObjects(retainedGenerationIds, clientObjectPins);
 				send(context, "Generation objects collected", ChatFormatting.GREEN, false);

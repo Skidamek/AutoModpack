@@ -186,7 +186,9 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		String generatedCopies = VersionedText.translatable("automodpack.storage.generatedCopies", compacted.generatedCopyCountBefore(), compacted.generatedCopyCountAfter(), UiFormat.formatSize(compacted.generatedCopyBytesBefore()), UiFormat.formatSize(compacted.generatedCopyBytesAfter())).getString();
 		y = drawWrapped(matrices, records, y, textWidth, TextColors.WHITE);
 		y = drawWrapped(matrices, objects, y, textWidth, TextColors.WHITE);
-		drawWrapped(matrices, generatedCopies, y, textWidth, TextColors.GRAY);
+		y = drawWrapped(matrices, generatedCopies, y, textWidth, TextColors.GRAY);
+		if (compacted.objectCollection().status() == ClientObjectStore.CollectionStatus.SHARED_STORE_RETAINED)
+			drawWrapped(matrices, VersionedText.translatable("automodpack.storage.sharedObjectsKept").getString(), y, textWidth, TextColors.YELLOW);
 	}
 
 	@Override
