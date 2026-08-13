@@ -140,6 +140,10 @@ public final class OfflineRepair {
 
 	/** Resumes a power-interrupted repair from its durable intent, if one exists. */
 	public Receipt recover(Request request) throws IOException {
+		return ClientStorageMutation.run(storage, () -> recoverLocked(request));
+	}
+
+	private Receipt recoverLocked(Request request) throws IOException {
 		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return null;
 		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			Analysis current = analyze(request, fileCache, modCache);
@@ -155,6 +159,10 @@ public final class OfflineRepair {
 
 	/** Applies local repairs plus the exact editable resets and unowned-mod cleanup selected by the player. */
 	public Receipt apply(Prepared prepared, Set<String> editableResetPaths, Set<String> unownedModPaths) throws IOException {
+		return ClientStorageMutation.run(storage, () -> applyLocked(prepared, editableResetPaths, unownedModPaths));
+	}
+
+	private Receipt applyLocked(Prepared prepared, Set<String> editableResetPaths, Set<String> unownedModPaths) throws IOException {
 		Objects.requireNonNull(prepared, "prepared repair");
 		Set<String> requestedEditableResets = normalizedSelection(editableResetPaths);
 		Set<String> requestedUnownedMods = normalizedSelection(unownedModPaths);
@@ -193,7 +201,7 @@ public final class OfflineRepair {
 			if (source == null) continue;
 			assertPinned(request);
 			requireSafePath(storage.objectsDirectory(), expected.path());
-			if (VerifiedFileTransfer.copyAtomic(source, expected.path(), expected.content().size(), expected.content().hash())) repairedCas++;
+			if (VerifiedFileTransfer.copyAtomicImmutable(source, expected.path(), expected.content().size(), expected.content().hash())) repairedCas++;
 			fileCache.rehash(expected.path());
 		}
 
@@ -207,7 +215,10 @@ public final class OfflineRepair {
 			if (!matches(objectObservation, expected.content())) continue;
 			assertPinned(request);
 			requireSafePath(expected.root(), expected.path());
-			if (VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash())) repairedFiles++;
+			boolean repaired = expected.place() == Place.PROJECTION
+					? VerifiedFileTransfer.linkAtomic(object, expected.path(), expected.content().size(), expected.content().hash())
+					: VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash());
+			if (repaired) repairedFiles++;
 			fileCache.rehash(expected.path());
 		}
 		return new RepairCounts(repairedCas, repairedFiles);

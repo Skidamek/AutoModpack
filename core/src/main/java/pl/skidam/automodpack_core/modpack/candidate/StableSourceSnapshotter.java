@@ -14,6 +14,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
@@ -39,6 +40,7 @@ public final class StableSourceSnapshotter {
 		Path staged = null;
 		try {
 			BasicFileAttributes before = attributes(source.sourcePath());
+			FileMetadataCache.FileFingerprint beforeFingerprint = FileMetadataCache.fingerprint(source.sourcePath(), before);
 			Exclusion exclusion = expectedPathExclusion(source, before, autoExcludeUnnecessary);
 			if (exclusion != null) return new Snapshot(null, exclusion, null);
 			Snapshot cached = cachedSnapshot(source, before, autoExcludeServerMods, stagingDirectory, fileMetadataCache, modFileCache, objectStoreDirectory);
@@ -56,7 +58,7 @@ public final class StableSourceSnapshotter {
 			String murmur = null;
 			if (exclusion == null && ModpackContentType.isSourceFetchable(type)) murmur = HashUtils.getCurseforgeMurmurHash(staged);
 			BasicFileAttributes after = attributes(source.sourcePath());
-			if (!stable(before, after)) throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
+			if (!beforeFingerprint.equals(FileMetadataCache.fingerprint(source.sourcePath(), after))) throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 			long size = Files.size(staged);
 			if (size != after.size()) throw new IOException("Staged snapshot size does not match stable source size: " + source.sourcePath());
 			if (exclusion != null) {
@@ -81,11 +83,12 @@ public final class StableSourceSnapshotter {
 	private Snapshot cachedSnapshot(CandidateSource source, BasicFileAttributes before, boolean autoExcludeServerMods, Path stagingDirectory,
 			FileMetadataCache fileMetadataCache, ModFileCache modFileCache, Path objectStoreDirectory) throws IOException, CandidateBuildException {
 		if (fileMetadataCache == null || objectStoreDirectory == null) return null;
-		String sha1 = fileMetadataCache.getTrustedHashWithAttributes(source.sourcePath(), before);
+		String sha1 = fileMetadataCache.getOrComputeHashWithAttributes(source.sourcePath(), before);
 		Path object = objectStoreDirectory.resolve(sha1).normalize();
 		if (!object.startsWith(objectStoreDirectory.toAbsolutePath().normalize()) || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)
-				|| Files.size(object) != before.size() || !sha1.equalsIgnoreCase(fileMetadataCache.getTrustedHash(object)))
+				|| Files.size(object) != before.size() || !sha1.equalsIgnoreCase(fileMetadataCache.getOrComputeHash(object)))
 			return null;
+		ImmutableFiles.protect(object);
 		FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 		Path staged = Files.createTempFile(stagingDirectory, "snapshot-cached-", stagingSuffix(source.sourcePath()));
 		Files.deleteIfExists(staged);
@@ -96,7 +99,7 @@ public final class StableSourceSnapshotter {
 				Files.copy(object, staged);
 			}
 			BasicFileAttributes after = attributes(source.sourcePath());
-			if (!stable(before, after)) {
+			if (!FileMetadataCache.fingerprint(source.sourcePath(), before).equals(FileMetadataCache.fingerprint(source.sourcePath(), after))) {
 				Files.deleteIfExists(staged);
 				return null;
 			}
@@ -176,11 +179,6 @@ public final class StableSourceSnapshotter {
 		} catch (IOException e) {
 			failure.addSuppressed(e);
 		}
-	}
-
-	private static boolean stable(BasicFileAttributes before, BasicFileAttributes after) {
-		return before.isRegularFile() == after.isRegularFile() && before.size() == after.size() && before.lastModifiedTime().equals(after.lastModifiedTime())
-				&& (before.fileKey() == null || after.fileKey() == null || Objects.equals(before.fileKey(), after.fileKey()));
 	}
 
 	@FunctionalInterface

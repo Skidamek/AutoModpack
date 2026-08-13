@@ -253,7 +253,7 @@ public final class ClientObjectStore {
 		collectPreservation(storage, retained);
 		collectTransaction(storage, retained);
 		collectRepair(storage, retained);
-		collectActiveProjection(storage, retained, activeState);
+		validateActiveProjection(storage, activeState);
 		return retained;
 	}
 
@@ -287,13 +287,15 @@ public final class ClientObjectStore {
 	}
 
 	private static void collectOverlays(ClientStorage storage, ReferenceSet retained) throws IOException {
-		for (Path modpack : childDirectories(storage.overlaysDirectory(), "client overlays")) {
-			String modpackId = modpack.getFileName().toString();
-			requireModpackId(modpackId, "client overlay directory");
-			try (Stream<Path> files = Files.walk(modpack)) {
-				for (Path file : files.filter(path -> !path.equals(modpack)).sorted().toList()) {
-					requireNoSymbolicLink(file, "client overlay");
-					if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.addOptional(HashUtils.getHash(file), Files.size(file), "client overlay");
+		try (FileMetadataCache metadata = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			for (Path modpack : childDirectories(storage.overlaysDirectory(), "client overlays")) {
+				String modpackId = modpack.getFileName().toString();
+				requireModpackId(modpackId, "client overlay directory");
+				try (Stream<Path> files = Files.walk(modpack)) {
+					for (Path file : files.filter(path -> !path.equals(modpack)).sorted().toList()) {
+						requireNoSymbolicLink(file, "client overlay");
+						if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.addOptional(metadata.getOrComputeHash(file), Files.size(file), "client overlay");
+					}
 				}
 			}
 		}
@@ -368,10 +370,9 @@ public final class ClientObjectStore {
 		}
 	}
 
-	private static void collectActiveProjection(ClientStorage storage, ReferenceSet retained, ClientStorageJsons.ClientGenerationStateFields activeState) throws IOException {
-		if (!Files.exists(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
-		for (Path file : regularFiles(storage.activeDirectory(), "client active projection")) retained.addOptional(HashUtils.getHash(file), Files.size(file), "active projection");
-		if (activeState != null && !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client active projection is not a directory");
+	private static void validateActiveProjection(ClientStorage storage, ClientStorageJsons.ClientGenerationStateFields activeState) throws IOException {
+		if (activeState != null && Files.exists(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS))
+			throw new IOException("Client active projection is not a directory");
 	}
 
 	private static ReferenceTotals measureReferences(ClientStorage storage, ReferenceSet references, boolean requireRequiredReferences) throws IOException {

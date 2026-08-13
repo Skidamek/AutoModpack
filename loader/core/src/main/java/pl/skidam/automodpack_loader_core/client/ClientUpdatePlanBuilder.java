@@ -222,7 +222,7 @@ final class ClientUpdatePlanBuilder {
 				deletedPaths.add(UpdatePlanner.normalize(item.file));
 				continue;
 			}
-			String hash = cache.getTrustedHash(live);
+			String hash = cache.getOrComputeHash(live);
 			long size = Files.size(live);
 			if (item.sha1.equalsIgnoreCase(hash) && Long.parseLong(item.size) == size) {
 				Files.deleteIfExists(overlay);
@@ -230,7 +230,7 @@ final class ClientUpdatePlanBuilder {
 				continue;
 			}
 			Path object = storage.objectsDirectory().resolve(hash);
-			if (!FileIntegrity.matches(object, size, hash)) VerifiedFileTransfer.copyAtomic(live, object, size, hash);
+			if (!FileIntegrity.matches(object, size, hash)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash);
 			VerifiedFileTransfer.copyAtomic(object, overlay, size, hash);
 			deletedPaths.remove(UpdatePlanner.normalize(item.file));
 		}
@@ -254,7 +254,7 @@ final class ClientUpdatePlanBuilder {
 
 	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileMetadataCache cache) throws IOException {
 		if (!FileIntegrity.matches(source, size, sha1)) return false;
-		VerifiedFileTransfer.copyAtomic(source, object, size, sha1);
+		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, sha1);
 		cache.overwriteCache(object, sha1);
 		return true;
 	}
@@ -322,7 +322,7 @@ final class ClientUpdatePlanBuilder {
 			FileMetadataCache cache) throws IOException {
 		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return;
 		String relative = UpdatePlanner.normalize(rootPath.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString());
-		String hash = cache.getTrustedHash(path);
+		String hash = cache.getOrComputeHash(path);
 		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true));
 	}
 
@@ -372,7 +372,7 @@ final class ClientUpdatePlanBuilder {
 				if (mod.path() == null || mod.hash() == null || !Files.isRegularFile(mod.path())) continue;
 				long size = Files.size(mod.path());
 				Path storeFile = storage.objectsDirectory().resolve(mod.hash());
-				if (!FileIntegrity.matches(storeFile, size, mod.hash())) VerifiedFileTransfer.copyAtomic(mod.path(), storeFile, size, mod.hash());
+				if (!FileIntegrity.matches(storeFile, size, mod.hash())) VerifiedFileTransfer.copyAtomicImmutable(mod.path(), storeFile, size, mod.hash());
 				Path targetPath = storage.modsDirectory().resolve(mod.path().getFileName()).normalize();
 				if (!targetPath.startsWith(storage.gameDirectory())) throw new IOException("Nested mod target escaped the game directory: " + targetPath);
 				String relativePath = UpdatePlanner.normalize(storage.gameDirectory().relativize(targetPath).toString());

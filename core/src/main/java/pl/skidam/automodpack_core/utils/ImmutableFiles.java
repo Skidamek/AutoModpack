@@ -1,9 +1,11 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.DosFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
@@ -19,22 +21,24 @@ public final class ImmutableFiles {
 	public static void protect(Path file) throws IOException {
 		Path normalized = file.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(normalized)) throw new IOException("Immutable path is not a regular file: " + normalized);
-		PosixFileAttributeView posix = Files.getFileAttributeView(normalized, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
-		if (posix != null) {
-			Set<PosixFilePermission> permissions = EnumSet.noneOf(PosixFilePermission.class);
-			permissions.addAll(posix.readAttributes().permissions());
-			permissions.removeAll(WRITE_PERMISSIONS);
-			posix.setPermissions(permissions);
-			if (!disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) throw new IOException("Filesystem did not make immutable file read-only: " + normalized);
-			return;
+		if (isProtected(normalized)) return;
+		try (FileChannel channel = FileChannel.open(normalized, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+			PosixFileAttributeView posix = Files.getFileAttributeView(normalized, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+			if (posix != null) {
+				Set<PosixFilePermission> permissions = EnumSet.noneOf(PosixFilePermission.class);
+				permissions.addAll(posix.readAttributes().permissions());
+				permissions.removeAll(WRITE_PERMISSIONS);
+				posix.setPermissions(permissions);
+				if (!disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) throw new IOException("Filesystem did not make immutable file read-only: " + normalized);
+			} else {
+				DosFileAttributeView dos = Files.getFileAttributeView(normalized, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+				if (dos != null) {
+					dos.setReadOnly(true);
+					if (!dos.readAttributes().isReadOnly()) throw new IOException("Filesystem did not make immutable file read-only: " + normalized);
+				} else if (!normalized.toFile().setReadOnly()) throw new IOException("Filesystem has no enforceable read-only policy for immutable file: " + normalized);
+			}
+			channel.force(true);
 		}
-		DosFileAttributeView dos = Files.getFileAttributeView(normalized, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
-		if (dos != null) {
-			dos.setReadOnly(true);
-			if (!dos.readAttributes().isReadOnly()) throw new IOException("Filesystem did not make immutable file read-only: " + normalized);
-			return;
-		}
-		if (!normalized.toFile().setReadOnly()) throw new IOException("Filesystem has no enforceable read-only policy for immutable file: " + normalized);
 	}
 
 	public static boolean isProtected(Path file) throws IOException {
