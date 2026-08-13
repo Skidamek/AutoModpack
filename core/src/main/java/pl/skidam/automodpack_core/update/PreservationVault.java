@@ -97,7 +97,7 @@ public final class PreservationVault {
 
 			validateSource(storage, pack, normalizedRoot, source);
 			if (!FileIntegrity.matches(source, size, hash)) throw new IOException("Preservation source changed after planning: " + source);
-			if (!FileIntegrity.matches(object, size, hash)) VerifiedFileTransfer.copyAtomic(source, object, size, hash);
+			if (!FileIntegrity.matches(object, size, hash)) VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash);
 			if (!FileIntegrity.matches(object, size, hash)) throw new IOException("Preserved object verification failed: " + object);
 
 			ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = new ClientStorageJsons.ClientPreservationVaultFields.ClaimFields();
@@ -342,7 +342,7 @@ public final class PreservationVault {
 		Path sourceRoot = source.startsWith(storage.gameDirectory()) ? storage.gameDirectory() : storage.clientDirectory();
 		validateNoSymbolicLinkDescendants(sourceRoot, source, "preservation source");
 		if (!FileIntegrity.matches(source, size, hash)) throw new IOException("Preserved object is corrupt and its source is unavailable: " + hash);
-		VerifiedFileTransfer.copyAtomic(source, object, size, hash);
+		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash);
 	}
 
 	private static Path object(ClientStorage storage, String hash) throws IOException {
