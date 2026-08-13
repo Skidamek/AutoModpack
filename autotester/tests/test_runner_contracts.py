@@ -126,6 +126,31 @@ def test_publish_server_generation_uses_durable_generation_receipt(make_ctx, mon
     assert ctx.vars["published_server_generation_id"] == published_id
 
 
+def test_completed_compaction_receipt_has_no_pending_deletions():
+    expected_ids = ["a" * 40, "b" * 40]
+    expected_notes = ["initial", "rollback"]
+    history_entries = [
+        {"generationId": expected_ids[0], "rollbackAvailable": False},
+        {"generationId": expected_ids[1], "rollbackAvailable": True},
+    ]
+    history = {"currentGenerationId": expected_ids[-1], "compactionBoundaryGenerationId": expected_ids[-1], "entries": history_entries}
+    patch_notes = [{"generationId": generation_id, "patchNotes": notes} for generation_id, notes in zip(expected_ids, expected_notes, strict=True)]
+    checkpoint = {
+        "boundaryGenerationId": expected_ids[-1],
+        "record": {"generation": {"generationId": expected_ids[-1]}},
+        "patchNotesHistory": patch_notes,
+        "historyIndex": history,
+        "supersededGenerationIds": [],
+        "supersededCatalogueStateDigests": [],
+    }
+    projection = {"patchNotesHistory": patch_notes, "generationHistory": history}
+
+    assert runner._completed_compaction_receipt(checkpoint, projection, expected_ids, expected_notes)
+
+    checkpoint["supersededGenerationIds"] = [expected_ids[0]]
+    assert not runner._completed_compaction_receipt(checkpoint, projection, expected_ids, expected_notes)
+
+
 def test_rollback_server_generation_uses_retained_history_and_durable_receipt(make_ctx, monkeypatch):
     ctx = make_ctx()
     server_root = ctx.server_dir / "automodpack" / "server"
