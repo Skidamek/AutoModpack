@@ -16,7 +16,8 @@ import java.util.stream.Stream;
 public final class FileTrees {
 	private FileTrees() {}
 
-	public static void moveDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
+	/** Moves a directory whose caller has a durable recovery journal and validates the result. */
+	public static void moveRecoverableDirectory(Path sourceDirectory, Path targetDirectory) throws IOException {
 		Path sourceParent = sourceDirectory.toAbsolutePath().normalize().getParent();
 		Path targetParent = targetDirectory.toAbsolutePath().normalize().getParent();
 		if (sourceParent == null || targetParent == null)

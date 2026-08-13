@@ -6,10 +6,10 @@ import java.nio.channels.FileChannel;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.UUID;
 
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileTrees;
 
 final class AtomicFileWriter {
@@ -28,9 +28,9 @@ final class AtomicFileWriter {
 				channel.force(true);
 			}
 			try {
-				Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+				DurableFiles.replace(temporary, path);
 			} catch (AtomicMoveNotSupportedException e) {
-				throw new IOException("Atomic configuration replacement is unsupported for " + path, e);
+				throw new IOException("The filesystem cannot durably replace " + path + "; use a major local filesystem with atomic rename support", e);
 			}
 			FileTrees.forceDirectory(parent);
 		} finally {

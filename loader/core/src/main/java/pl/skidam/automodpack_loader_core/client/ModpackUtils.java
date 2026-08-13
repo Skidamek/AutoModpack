@@ -141,7 +141,7 @@ public class ModpackUtils {
 
 						// Finally, check Hash
 						// We pass 'diskAttrs' to the cache so it doesn't need to re-stat the file.
-						String hash = cache.getHashOrNullWithAttributes(parentDir.resolve(fileName), diskAttrs);
+						String hash = cache.getTrustedHashWithAttributes(parentDir.resolve(fileName), diskAttrs);
 
 						if (!serverItem.sha1.equalsIgnoreCase(hash)) filesToUpdate.add(serverItem);
 					}
@@ -253,7 +253,7 @@ public class ModpackUtils {
 	private static boolean isValidFile(Path file, long expectedSize, String expectedSha1, FileMetadataCache cache) {
 		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
 		try {
-			return Files.size(file) == expectedSize && expectedSha1.equalsIgnoreCase(cache.getOrComputeHash(file));
+			return Files.size(file) == expectedSize && expectedSha1.equalsIgnoreCase(cache.getTrustedHash(file));
 		} catch (IOException e) {
 			return false;
 		}

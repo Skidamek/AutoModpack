@@ -35,8 +35,12 @@ public final class VerifiedFileTransfer {
 
 	/** Installs an immutable object as a hard link, with verified-copy fallback when linking is unavailable. */
 	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
-		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1)) return false;
+		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1)) {
+			ImmutableFiles.protect(targetFile);
+			return false;
+		}
 		requireValidSource(sourceFile, expectedSize, expectedSha1);
+		ImmutableFiles.protect(sourceFile);
 		Path parent = requireTargetParent(targetFile);
 		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
 		Files.deleteIfExists(temporary);
@@ -46,9 +50,12 @@ public final class VerifiedFileTransfer {
 			} catch (UnsupportedOperationException | FileSystemException unsupportedLink) {
 				Files.createFile(temporary);
 				Files.copy(sourceFile, temporary, StandardCopyOption.REPLACE_EXISTING);
+				ImmutableFiles.allowOwnerWrite(temporary);
+				FileTrees.forceFile(temporary);
 			}
 			if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1))
 				throw new IOException("Linked file failed size/SHA-1 verification: " + temporary);
+			ImmutableFiles.protect(temporary);
 			moveAtomicReplace(temporary, targetFile);
 			FileTrees.forceDirectory(parent);
 			return true;
@@ -61,6 +68,7 @@ public final class VerifiedFileTransfer {
 		FileTrees.forceFile(temporary);
 		if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1))
 			throw new IOException("Downloaded file failed size/SHA-1 verification: " + temporary);
+		ImmutableFiles.protect(temporary);
 		Path targetParent = requireTargetParent(targetFile);
 		try {
 			moveAtomicReplace(temporary, targetFile);
@@ -75,9 +83,11 @@ public final class VerifiedFileTransfer {
 		Path targetTemporary = Files.createTempFile(targetParent, "." + targetFile.getFileName() + ".", ".tmp");
 		try {
 			Files.copy(temporary, targetTemporary, StandardCopyOption.REPLACE_EXISTING);
+			ImmutableFiles.allowOwnerWrite(targetTemporary);
 			FileTrees.forceFile(targetTemporary);
 			if (!FileIntegrity.matches(targetTemporary, expectedSize, expectedSha1))
 				throw new IOException("Cross-filesystem promotion failed size/SHA-1 verification: " + targetTemporary, crossFileSystem);
+			ImmutableFiles.protect(targetTemporary);
 			moveAtomicReplace(targetTemporary, targetFile);
 		} finally {
 			Files.deleteIfExists(targetTemporary);
@@ -95,6 +105,7 @@ public final class VerifiedFileTransfer {
 		boolean valid = false;
 		try {
 			Files.copy(sourceFile, temporary, StandardCopyOption.REPLACE_EXISTING);
+			ImmutableFiles.allowOwnerWrite(temporary);
 			FileTrees.forceFile(temporary);
 			valid = FileIntegrity.matches(temporary, expectedSize, expectedSha1);
 			if (!valid) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
@@ -112,7 +123,7 @@ public final class VerifiedFileTransfer {
 	}
 
 	private static void moveAtomicReplace(Path sourceFile, Path targetFile) throws IOException {
-		Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		DurableFiles.replace(sourceFile, targetFile);
 	}
 
 }

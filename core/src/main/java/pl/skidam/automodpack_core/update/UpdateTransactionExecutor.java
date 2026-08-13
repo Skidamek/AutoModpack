@@ -738,9 +738,9 @@ public final class UpdateTransactionExecutor {
 		if (Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 			FileTrees.delete(active);
 		} else if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) {
-			FileTrees.moveDirectory(active, backup);
+			FileTrees.moveRecoverableDirectory(active, backup);
 		}
-		FileTrees.moveDirectory(incoming, active);
+		FileTrees.moveRecoverableDirectory(incoming, active);
 		verifyProjection(active, transaction.projectedFinalState);
 	}
 
