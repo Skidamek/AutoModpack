@@ -33,6 +33,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
 class UpdateTransactionExecutorTest {
 	@TempDir
@@ -502,7 +503,11 @@ class UpdateTransactionExecutorTest {
 
 	private static void assertVerifiedObjectProjection(Path object, Path projection, long size, String hash) throws Exception {
 		assertTrue(FileIntegrity.matches(projection, size, hash));
-		if (Files.getFileStore(object).equals(Files.getFileStore(projection))) assertTrue(Files.isSameFile(object, projection));
+		if (Files.getFileStore(object).equals(Files.getFileStore(projection))) {
+			assertTrue(Files.isSameFile(object, projection));
+			assertTrue(ImmutableFiles.isProtected(object));
+			assertTrue(ImmutableFiles.isProtected(projection));
+		}
 	}
 
 	private static UpdatePlan plan(SelectedModpackTarget target, ClientConfigJsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {
