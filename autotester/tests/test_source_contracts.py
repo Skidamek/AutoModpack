@@ -228,11 +228,11 @@ def test_error_screen_dispatch_requires_a_logged_throwable():
         for path in source_root.rglob("*.java")
     )
 
-    assert "public void failure(FailureRequest request)" in screen_manager
+    assert "public static void failure(FailureRequest request)" in screen_manager
     assert 'LOGGER.error("AutoModpack client failure [{}] while displaying {}", request.category().key(), request.messageKey(), request.cause());' in screen_manager
     assert screen_manager.count("LOGGER.error(") == 1
-    assert "new ScreenManager().error(\"" not in dispatch_sources
-    assert "new ScreenManager().report(\"" not in dispatch_sources
+    assert "ScreenManager.error(\"" not in dispatch_sources
+    assert "ScreenManager.report(\"" not in dispatch_sources
     assert "public void error(Throwable throwable, String... args)" not in screen_manager
     assert "public void report(Throwable throwable, String context)" not in screen_manager
     assert "ScreenManager.INSTANCE" not in dispatch_sources
@@ -249,6 +249,6 @@ def test_storage_cleanup_failure_uses_dedicated_error_screen():
         / "src/main/java/pl/skidam/automodpack/client/ui/ClientStorageMaintenanceScreen.java"
     ).read_text(encoding="utf-8")
 
-    assert "public void failure(FailureRequest request)" in screen_manager
-    assert 'new ScreenManager().failure(FailureRequest.of(exception, "automodpack.error.storage"' in storage_screen
-    assert "new ScreenManager().report(" not in storage_screen
+    assert "public static void failure(FailureRequest request)" in screen_manager
+    assert 'ScreenManager.failure(FailureRequest.of(exception, "automodpack.error.storage"' in storage_screen
+    assert "ScreenManager.report(" not in storage_screen

@@ -65,6 +65,42 @@ final class InstalledModpackController {
 		return storage;
 	}
 
+	SelectionIntent savedSelection(String modpackId) {
+		try {
+			return new ClientSelectionStore(storage.selectionFile()).get(modpackId).orElse(null);
+		} catch (RuntimeException e) {
+			discoveryFailure = e;
+			return null;
+		}
+	}
+
+	void saveSelection(String modpackId, SelectionIntent expected, SelectionIntent target) throws IOException {
+		new ClientSelectionStore(storage.selectionFile()).compareAndSet(modpackId, expected, target);
+	}
+
+	GenerationRecord activeRecord(String modpackId) {
+		try {
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state == null || !modpackId.equals(state.modpackId)) return null;
+			return new ClientGenerationStore(storage).read(state.generationId).orElse(null);
+		} catch (IOException | RuntimeException e) {
+			discoveryFailure = e;
+			return null;
+		}
+	}
+
+	boolean hasInstalledPacks() {
+		return !installed().isEmpty();
+	}
+
+	Pack pack(GenerationRecord record) {
+		return pack(record, record.manifest().modpackId().equals(activeModpackId()), hasConnection(record.manifest().modpackId()));
+	}
+
+	void switchSelection(GenerationRecord record, SelectionIntent expected, SelectionIntent target, String modpackName, Runnable released) {
+		InstalledModpackSwitch.start(storage, record, expected, target, modpackName, true, released);
+	}
+
 	List<Pack> installed() {
 		String activeId = activeModpackId();
 		try {
@@ -175,7 +211,7 @@ final class InstalledModpackController {
 		try {
 			UpdatePlan plan = new UpdatePlan(pack.modpackId(), GenerationTarget.from(pack.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(pack.record().manifest());
-			new ScreenManager().preview(preview, pack.name(),
+			ScreenManager.preview(preview, pack.name(),
 					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> forget(pack, released, removed)),
 					released, false);
 		} catch (Exception e) {
@@ -227,7 +263,7 @@ final class InstalledModpackController {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
 				UpdatePreview preview = deactivation ? removalUpdater.previewDeactivation() : removalUpdater.previewRemoval();
-				new ScreenManager().preview(preview, pack.name(),
+				ScreenManager.preview(preview, pack.name(),
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeActiveRemoval(removalUpdater, deactivation, released, removed)),
 						released, false);
 			} catch (Exception e) {
@@ -310,7 +346,7 @@ final class InstalledModpackController {
 	}
 
 	private void failure(Throwable cause, String messageKey, FailureCategory category) {
-		new ScreenManager().failure(FailureRequest.of(cause, messageKey, category, FailureDestination.CURRENT_SCREEN, null));
+		ScreenManager.failure(FailureRequest.of(cause, messageKey, category, FailureDestination.CURRENT_SCREEN, null));
 	}
 
 	private static Pack pack(GenerationRecord record, boolean active, boolean connectionAvailable) {

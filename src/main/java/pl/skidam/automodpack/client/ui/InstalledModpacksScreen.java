@@ -40,7 +40,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		super.init();
 		if (controller.discoveryFailure() != null && !discoveryFailureShown) {
 			discoveryFailureShown = true;
-			new ScreenManager().failure(FailureRequest.of(controller.discoveryFailure(), "automodpack.error.storage", FailureCategory.STORAGE,
+			ScreenManager.failure(FailureRequest.of(controller.discoveryFailure(), "automodpack.error.storage", FailureCategory.STORAGE,
 					FailureDestination.CURRENT_SCREEN, null));
 		}
 		int rowWidth = panelWidth(PANEL_WIDTH);

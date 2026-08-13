@@ -63,7 +63,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		}
 		finished = true;
 		updater.setFirstInstallLocalModCleanup(archiveExistingMods);
-		new ScreenManager().waiting();
+		ScreenManager.waiting();
 		updater.startConfirmedUpdate();
 	}
 
@@ -80,11 +80,11 @@ public final class FirstConnectScreen extends VersionedScreen {
 				if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) throw new IllegalStateException("Modpack confirmation is no longer active");
 				updater.selectTarget(intent);
 				updater.setFirstInstallLocalModCleanup(archiveExistingMods);
-				new ScreenManager().waiting();
+				ScreenManager.waiting();
 				updater.startConfirmedUpdate();
 			} catch (RuntimeException e) {
 				finished = false;
-				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.MULTIPLAYER, null));
+				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.MULTIPLAYER, null));
 			}
 		};
 		ScreenImpl.setScreen(new ModpackSelectionScreen(this, updater, action));

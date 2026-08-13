@@ -42,10 +42,10 @@ final class GenerationHistoryController {
 				GenerationHistoryIndex historyIndex = store.historyIndex(currentGenerationId).orElseGet(() -> GenerationHistoryIndex.fromHistory(modpackId,
 						availableHistory.stream().map(record -> new GenerationHistoryEntry(record.manifest(), record.metadata())).toList()));
 				HistoricalCatalogueLoader catalogueLoader = new LazyCatalogueLoader(storage, modpackId, availableHistory);
-				new ScreenManager().history(new HistoryViewRequest(historyIndex, availableHistory, modpackName, catalogueLoader, closed));
+				ScreenManager.history(new HistoryViewRequest(historyIndex, availableHistory, modpackName, catalogueLoader, closed));
 			} catch (Exception e) {
 				Minecraft.getInstance().execute(closed);
-				new ScreenManager().failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
+				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 			}
 		});
 	}
