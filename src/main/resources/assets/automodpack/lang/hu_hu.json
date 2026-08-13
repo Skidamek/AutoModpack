@@ -1,4 +1,5 @@
 {
+  "automodpack.storage.sharedObjectsKept": "A megosztott CAS-objektumok megmaradtak, mert más játékpéldányok még használhatják őket.",
   "automodpack.restart.full": "A Modpack letöltve!",
   "automodpack.restart.update": "Egy frissítés letöltve a Modpackhez!",
   "automodpack.restart.select": "A szerver által megkövetelt Modpack kiválasztva!",

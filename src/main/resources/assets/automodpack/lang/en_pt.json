@@ -1,4 +1,5 @@
 {
+  "automodpack.storage.sharedObjectsKept": "Shared CAS cargo stayed aboard because other game instances may still need it.",
   "automodpack.restart.full": "The modpack download be complete, matey!",
   "automodpack.restart.update": "The modpack update be ready to sail!",
   "automodpack.restart.select": "The server's required modpack be chosen.",
