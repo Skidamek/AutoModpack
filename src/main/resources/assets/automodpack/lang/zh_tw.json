@@ -226,7 +226,6 @@
   "automodpack.groupInspector.browseFiles": "瀏覽檔案",
   "automodpack.groupInspector.filesDescription": "此功能提供的檔案",
   "automodpack.groupInspector.group": "群組 %s",
-  "automodpack.groupInspector.tag": "標籤： %s",
   "automodpack.groupInspector.requiresConflicts": "需要：%s  衝突：%s",
   "automodpack.groupInspector.platforms": "平台：%s",
   "automodpack.groupInspector.allPlatforms": "所有支援的平台",

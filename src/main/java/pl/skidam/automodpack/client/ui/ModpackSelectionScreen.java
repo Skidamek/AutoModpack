@@ -266,9 +266,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			int y = listTop + (i - start) * ROW_HEIGHT;
 			if (row.groupId() == null) {
 				Button section = buttonWidget(x, y, rowWidth, 20, sectionLabel(row), press -> {
-					if (row.tagId() != null) toggleCategory(row.tagId());
+					if (row.categoryId() != null) toggleCategory(row.categoryId());
 				});
-				section.active = row.tagId() != null && hasOptionalCategoryGroups(row.tagId());
+				section.active = row.categoryId() != null && hasOptionalCategoryGroups(row.categoryId());
 				this.addRenderableWidget(section);
 				continue;
 			}
@@ -625,18 +625,18 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		List<PageLayout.Range> ranges = new ArrayList<>();
 		for (int start = 0; start < rows.size(); start++) {
 			Row row = rows.get(start);
-			if (row.groupId() != null || row.tagId() == null) continue;
+			if (row.groupId() != null || row.categoryId() == null) continue;
 			int end = start + 1;
-			while (end < rows.size() && rows.get(end).groupId() != null && row.tagId().equals(rows.get(end).tagId())) end++;
+			while (end < rows.size() && rows.get(end).groupId() != null && row.categoryId().equals(rows.get(end).categoryId())) end++;
 			ranges.add(new PageLayout.Range(start, end));
 		}
 		return List.copyOf(ranges);
 	}
 
 	private MutableComponent sectionLabel(Row row) {
-		if (row.tagId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
-		String title = VersionedText.translatable("automodpack.selection.category", categoryLabel(row.tagId())).getString();
-		boolean selected = categorySelected(row.tagId());
+		if (row.categoryId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
+		String title = VersionedText.translatable("automodpack.selection.category", categoryLabel(row.categoryId())).getString();
+		boolean selected = categorySelected(row.categoryId());
 		return VersionedText.literal(truncateToWidth(this.font, (selected ? "[x] " : "[ ] ") + title, panelWidth(ROW_WIDTH) - 12))
 				.withStyle(ChatFormatting.BOLD, selected ? ChatFormatting.GREEN : ChatFormatting.GRAY);
 	}
@@ -846,7 +846,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return handleBackOnEscape(this::back);
 	}
 
-	private record Row(String section, String groupId, String tagId) {}
+	private record Row(String section, String groupId, String categoryId) {}
 
 	private record ManagementAction(ManagementKind kind, MutableComponent label, Runnable action) {}
 

@@ -226,7 +226,6 @@
   "automodpack.groupInspector.browseFiles": "Fájlok böngészése",
   "automodpack.groupInspector.filesDescription": "A funkció által biztosított fájlok",
   "automodpack.groupInspector.group": "Csoport: %s",
-  "automodpack.groupInspector.tag": "Címke: %s",
   "automodpack.groupInspector.requiresConflicts": "Szükséges: %s Ütközések: %s",
   "automodpack.groupInspector.platforms": "Platformok: %s",
   "automodpack.groupInspector.allPlatforms": "Minden támogatott platform",
