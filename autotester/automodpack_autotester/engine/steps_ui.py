@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 
+from ..bridge import BridgeError
 from . import conditions, selectors
 from .registry import verb
 from .util import ClientExited, await_condition, parse_duration
@@ -10,7 +12,13 @@ from .util import ClientExited, await_condition, parse_duration
 _SKIP_CLICK = object()
 
 
-def _await_element(ctx, selector, step, not_found, skip_if=None):
+@dataclass(frozen=True)
+class _ElementMatch:
+    element: dict
+    screen_revision: int | None
+
+
+def _await_element(ctx, selector, step, not_found, skip_if=None, timeout=None):
     """Poll the GUI until ``selector`` matches an element, or time out."""
     timeout = parse_duration(step.get("timeout"), default=30)
 
@@ -18,14 +26,31 @@ def _await_element(ctx, selector, step, not_found, skip_if=None):
         gui = ctx.gui()
         if skip_if and conditions.evaluate(ctx, skip_if, gui):
             return _SKIP_CLICK
-        return selectors.find_one(gui, selector)
+        element = selectors.find_one(gui, selector)
+        return _ElementMatch(element, gui.get("screenRevision")) if element is not None else None
 
     return await_condition(
         candidate,
-        timeout,
+        parse_duration(step.get("timeout"), default=30) if timeout is None else timeout,
         step.get("poll"),
         not_found,
     )
+
+
+def _interact(ctx, selector, step, not_found, action, skip_if=None):
+    deadline = time.monotonic() + parse_duration(step.get("timeout"), default=30)
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(not_found)
+        match = _await_element(ctx, selector, step, not_found, skip_if, remaining)
+        if match is _SKIP_CLICK:
+            return
+        try:
+            return action(match)
+        except BridgeError as error:
+            if error.code != "stale_screen":
+                raise
 
 
 def _gui_diagnostic(gui):
@@ -48,7 +73,13 @@ def click(ctx, step):
     selector.setdefault("enabled", True)  # by default only click clickable elements
     skip_if = ctx.resolve(step.get("skip_if") or {})
     try:
-        el = _await_element(ctx, selector, step, f"no element matched {selector!r}", skip_if)
+        def action(match):
+            payload = {"screen_revision": match.screen_revision}
+            if step.get("enable"):
+                payload["enable"] = True
+            return ctx.bridge.click(int(match.element["id"]), **payload)
+
+        _interact(ctx, selector, step, f"no element matched {selector!r}", action, skip_if)
     except TimeoutError as error:
         if ctx.bridge is None:
             raise
@@ -57,20 +88,13 @@ def click(ctx, step):
         except (ClientExited, RuntimeError, TimeoutError) as snapshot_error:
             raise error from snapshot_error
         raise TimeoutError(f"{error}; {_gui_diagnostic(gui)}") from error
-    if el is _SKIP_CLICK:
-        return
-    if step.get("enable"):
-        ctx.bridge.click(int(el["id"]), enable=True)
-    else:
-        ctx.bridge.click(int(el["id"]))
 
 
 @verb("type", "paste")
 def type_(ctx, step):
     selector = dict(ctx.resolve(step.get("select") or {"role": "textfield"}))
     value = str(ctx.resolve(step.get("value", "")))
-    el = _await_element(ctx, selector, step, f"no text field matched {selector!r}")
-    ctx.bridge.text(int(el["id"]), value)
+    _interact(ctx, selector, step, f"no text field matched {selector!r}", lambda match: ctx.bridge.text(int(match.element["id"]), value, screen_revision=match.screen_revision))
 
 
 @verb("screenshot")

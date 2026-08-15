@@ -11,8 +11,9 @@ loader_version="${6:-}"
 game_dir="${AM_AUTOTEST_GAME_DIR:-/work/game}"
 cache_dir="${AM_AUTOTEST_HMC_CACHE_DIR:-/work/hmc-cache}"
 bridge_token="${AM_AUTOTEST_BRIDGE_TOKEN:?bridge token required}"
-client_timeout="${AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS:-600}"
 render_client="${AM_AUTOTEST_RENDER_CLIENT:-false}"
+prepared_profile="${AM_AUTOTEST_HMC_PREPARED:-false}"
+display_start_seconds="${AM_AUTOTEST_DISPLAY_START_SECONDS:-5}"
 
 mkdir -p "$game_dir" "$cache_dir"
 
@@ -82,7 +83,7 @@ EOF
 # `<loader>:<mc>` target lets HMC pick a different build (for example NeoForge 26.1.0
 # for a configured 26.1.2 target), which makes version-specific service tests invalid.
 launch_target="${loader}:${minecraft}"
-if [ -n "$loader_version" ]; then
+if [ "$prepared_profile" != "true" ] && [ -n "$loader_version" ]; then
     case "$loader" in
         fabric)
             timeout 60 hmc --command "fabric ${minecraft} --uid ${loader_version}"
@@ -137,15 +138,48 @@ EOF
         ;;
 esac
 
-# ── Pre-download Minecraft assets (best-effort, with timeout) ─────
-timeout 20 hmc --command "download ${minecraft}" 2>/dev/null || true
-hmc --command "config -refresh" 2>/dev/null || true
+if [ "$prepared_profile" != "true" ]; then
+    hmc --command "config -refresh" 2>/dev/null || true
+fi
 
 # ── Launch ─────────────────────────────────────────────────────────
 if [ "$render_client" = "true" ]; then
-    exec timeout "$client_timeout" xvfb-run -a -s "-screen 0 ${viewport_width}x480x24 +extension GLX +render -noreset" hmc \
-      --command "launch ${launch_target} -offline --jvm \"${jvmargs}\" ${gameargs}"
+    display_receipt="$(mktemp)"
+    Xvfb -displayfd 3 -screen 0 "${viewport_width}x480x24" +extension GLX +render -noreset 3>"$display_receipt" &
+    xvfb_pid=$!
+    started=$SECONDS
+    while [ ! -s "$display_receipt" ]; do
+        if ! kill -0 "$xvfb_pid" 2>/dev/null; then
+            wait "$xvfb_pid" || true
+            echo "ERROR: Xvfb exited before publishing a display" >&2
+            rm -f "$display_receipt"
+            exit 1
+        fi
+        if (( SECONDS - started >= display_start_seconds )); then
+            echo "ERROR: Xvfb did not publish a display within ${display_start_seconds}s" >&2
+            kill "$xvfb_pid" 2>/dev/null || true
+            wait "$xvfb_pid" 2>/dev/null || true
+            rm -f "$display_receipt"
+            exit 1
+        fi
+        sleep 0.05
+    done
+    export DISPLAY=":$(<"$display_receipt")"
+    rm -f "$display_receipt"
+
+    hmc --command "launch ${launch_target} -offline --jvm \"${jvmargs}\" ${gameargs}" &
+    hmc_pid=$!
+    cleanup() {
+        kill "$hmc_pid" "$xvfb_pid" 2>/dev/null || true
+        wait "$hmc_pid" "$xvfb_pid" 2>/dev/null || true
+    }
+    trap cleanup EXIT TERM INT
+    set +e
+    wait "$hmc_pid"
+    status=$?
+    set -e
+    exit "$status"
 fi
 
-exec timeout "$client_timeout" hmc \
+exec hmc \
   --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"

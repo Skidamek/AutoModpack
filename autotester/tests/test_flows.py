@@ -60,6 +60,9 @@ def _launch_client(ctx, step):
             (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
         ctx.vars["fake_preload_logged"] = True
         ctx.vars["fake_preload_review_logged"] = True
+        latest_log = ctx.game_dir / "logs" / "latest.log"
+        latest_log.parent.mkdir(parents=True, exist_ok=True)
+        latest_log.write_text("Preloaded 2 complete modpack objects in 1ms\nPreload acquired the complete selected target; active projection remains unchanged until player review\n", encoding="utf-8")
 
 
 def _wait_bridge(ctx, step):
