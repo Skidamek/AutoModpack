@@ -20,6 +20,7 @@ from .bridge import BridgeClient
 from .config import CLIENT_GENERATION_STATE_PATHS, REPO_ROOT, Target, load_macros, parse_server_files
 from .mod_fixtures import write_valid_mod_fixture
 from .mods import resolve_mod
+from .supervisor import resource_labels
 from .engine import ClientExited, Context, run_flow
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -59,9 +60,9 @@ def _remove_container(name):
         pass
 
 
-def _ensure_network(name):
+def _ensure_network(name, labels=None):
     _remove_network(name)
-    _docker.networks.create(name, check_duplicate=True)
+    _docker.networks.create(name, check_duplicate=True, labels=labels or {})
 
 
 def _remove_network(name):
@@ -82,13 +83,13 @@ def _remove_volume(name):
         pass
 
 
-def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None):
+def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None, labels=None):
     volumes = {}
     for host, container_path, readonly in mounts:
         volumes[str(host)] = {"bind": container_path, "mode": "ro" if readonly else "rw"}
     kwargs = dict(
         image=image, detach=True, name=name,
-        environment=dict(env), volumes=volumes, command=command, user=user,
+        environment=dict(env), volumes=volumes, command=command, user=user, labels=labels or {},
     )
     # "host" is a network *mode*, not a user-defined network: server and client
     # share the host's network namespace (so the client reaches the server on
@@ -352,7 +353,7 @@ def _launch_server(ctx: Context):
     if ":" not in img:
         tag = str(settings.get("images", {}).get("serverTagTemplate", "java{java}")).format(java=target.java)
         img = f"{img}:{tag}"
-    _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts)
+    _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts, labels=resource_labels(ctx.resource_scope))
 
 
 def _seed_client_options(game_dir: Path) -> None:
@@ -382,7 +383,7 @@ def _seed_client_options(game_dir: Path) -> None:
     options_path.write_text("".join(updated), encoding="utf-8")
 
 
-def _launch_client(ctx: Context):
+def _prepare_client_files(ctx: Context) -> None:
     game_dir = ctx.game_dir
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx.artifact, game_dir / "mods" / "automodpack.jar")
@@ -391,6 +392,8 @@ def _launch_client(ctx: Context):
     _ensure_client_data_root(game_dir)
     _bridge_state(ctx).unlink(missing_ok=True)
 
+
+def _client_cache_paths(ctx: Context) -> tuple[Path, Path]:
     # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
     tid = ctx.target.id.replace(".", "_")
     hmc_cache_root = (ctx.out_dir.parent / ".hmc-cache" / tid).resolve()
@@ -402,10 +405,15 @@ def _launch_client(ctx: Context):
     # dir across parallel targets would reintroduce the installer-corruption race.
     shared_versions = (ctx.out_dir.parent / ".hmc-cache" / "shared-versions" / tid).resolve()
     shared_versions.mkdir(parents=True, exist_ok=True)
+    return hmc_cache_root, shared_versions
+
+
+def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = False) -> None:
+    hmc_cache_root, shared_versions = _client_cache_paths(ctx)
     prepared = _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions)
 
     _run_container(
-        name=ctx.cli_name,
+        name=name,
         image=ctx.client_image,
         network=ctx.net_name,
         env={
@@ -413,11 +421,12 @@ def _launch_client(ctx: Context):
             "AM_AUTOTEST_GAME_DIR": "/work/game",
             "AM_AUTOTEST_HMC_CACHE_DIR": "/work/hmc-cache",
             "AM_AUTOTEST_HMC_PREPARED": str(prepared).lower(),
+            "AM_AUTOTEST_PREPARE_ONLY": str(prepare_only).lower(),
             "AM_AUTOTEST_DISPLAY_START_SECONDS": str(ctx.settings.get("timeouts", {}).get("displayStartSeconds", 5)),
-            "AM_AUTOTEST_RENDER_CLIENT": str(bool(ctx.scenario.get("renderClient", False))).lower(),
+            "AM_AUTOTEST_RENDER_CLIENT": str(bool(ctx.scenario.get("renderClient", False)) and not prepare_only).lower(),
         },
         mounts=[
-            (game_dir, "/work/game", False),
+            (ctx.game_dir, "/work/game", False),
             (hmc_cache_root, "/work/hmc-cache", False),
             (shared_versions, "/work/hmc-shared-versions", False),
         ],
@@ -432,7 +441,13 @@ def _launch_client(ctx: Context):
         ],
         user=f"{_uid()}:{_gid()}",
         entrypoint=["/usr/bin/tini", "--"],
+        labels=resource_labels(ctx.resource_scope),
     )
+
+
+def _launch_client(ctx: Context):
+    _prepare_client_files(ctx)
+    _start_client_container(ctx, ctx.cli_name)
     _jitter_sleep(1)
     _assert_running(ctx.cli_name)
 
@@ -493,8 +508,7 @@ def _client_profile_is_prepared(ctx: Context, hmc_cache_root: Path, shared_versi
 
 
 def _record_prepared_client_profile(ctx: Context) -> None:
-    tid = ctx.target.id.replace(".", "_")
-    hmc_cache_root = (ctx.out_dir.parent / ".hmc-cache" / tid).resolve()
+    hmc_cache_root, _shared_versions = _client_cache_paths(ctx)
     receipt = _client_profile_receipt(hmc_cache_root)
     temporary = receipt.with_suffix(".tmp")
     temporary.write_text(json.dumps(_client_profile_identity(ctx), sort_keys=True) + "\n", encoding="utf-8")
@@ -507,6 +521,42 @@ def _record_prepared_client_profile(ctx: Context) -> None:
 @verb("launch_server")
 def _v_launch_server(ctx: Context, step):
     _launch_server(ctx)
+
+
+def _client_preparation_name(ctx: Context) -> str:
+    return ctx.cli_name.replace("-c-", "-p-", 1)
+
+
+@verb("prepare_client")
+def _v_prepare_client(ctx: Context, _step):
+    """Materialise the HMC loader profile while an independent server starts."""
+    hmc_cache_root, shared_versions = _client_cache_paths(ctx)
+    if _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions):
+        return
+    _prepare_client_files(ctx)
+    name = _client_preparation_name(ctx)
+    _remove_container(name)
+    _start_client_container(ctx, name, prepare_only=True)
+    ctx.vars["client_preparation"] = name
+
+
+def _await_client_preparation(ctx: Context) -> None:
+    name = ctx.vars.pop("client_preparation", None)
+    if not name:
+        return
+    timeout = float(ctx.settings.get("timeouts", {}).get("clientStartSeconds", 600))
+    try:
+        _wait_exited(name, timeout)
+        state = _inspect_container(name).get("State", {})
+        if state.get("ExitCode") != 0:
+            tail = "\n".join(_container_logs(name).splitlines()[-80:])
+            raise RuntimeError(f"Client profile preparation failed (code={state.get('ExitCode', -1)})\n--- logs ---\n{tail}")
+        _record_prepared_client_profile(ctx)
+        hmc_cache_root, shared_versions = _client_cache_paths(ctx)
+        if not _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions):
+            raise RuntimeError("Client profile preparation exited successfully without a valid profile receipt")
+    finally:
+        _remove_container(name)
 
 
 @verb("wait_server")
@@ -873,6 +923,7 @@ def _completed_compaction_receipt(checkpoint, projection, expected_ids, expected
 
 @verb("launch_client")
 def _v_launch_client(ctx: Context, step):
+    _await_client_preparation(ctx)
     _remove_container(ctx.cli_name)
     ctx.bridge = None
     _launch_client(ctx)
@@ -1576,6 +1627,7 @@ def run_case(
     net_name = "host" if net_mode == "host" else f"{resource_prefix}-n-{secrets.token_hex(4)}"[:63]
     srv_name = f"{resource_prefix}-s-{secrets.token_hex(4)}"[:63]
     cli_name = f"{resource_prefix}-c-{secrets.token_hex(4)}"[:63]
+    prep_name = cli_name.replace("-c-", "-p-", 1)
     server_host = "127.0.0.1" if net_mode == "host" else srv_name
     token = secrets.token_hex(16)
     case_seconds = float(settings.get("timeouts", {}).get("caseSeconds", 1800))
@@ -1589,7 +1641,7 @@ def run_case(
             return
         deadline_expired.set()
         logger.error("[%s] case exceeded its %.0fs deadline; removing its Docker resources", target.id, case_seconds)
-        for name in (cli_name, srv_name):
+        for name in (cli_name, prep_name, srv_name):
             try:
                 _remove_container(name)
             except Exception:
@@ -1629,6 +1681,7 @@ def run_case(
             scenario_files=sf.files,
             expected_mods=sf.expected_mods,
             server_host=server_host,
+            resource_scope=resource_scope,
             vars=dict(scenario.get("vars", {}) or {}),
         )
         ctx.logs_provider = lambda which, tail=None: _container_logs(
@@ -1655,7 +1708,7 @@ def run_case(
         if mode != "client-only":
             _prepare_server(ctx)
         if net_name != "host":
-            _ensure_network(net_name)
+            _ensure_network(net_name, resource_labels(resource_scope))
 
         run_flow(ctx, scenario, lib=load_macros(), results=step_results)
 
@@ -1683,7 +1736,7 @@ def run_case(
 
     finally:
         case_finished.set()
-        for name in [cli_name, srv_name]:
+        for name in [cli_name, prep_name, srv_name]:
             try:
                 logs = _container_logs(name)
                 if logs:

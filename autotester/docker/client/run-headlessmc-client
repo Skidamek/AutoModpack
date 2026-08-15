@@ -13,6 +13,7 @@ cache_dir="${AM_AUTOTEST_HMC_CACHE_DIR:-/work/hmc-cache}"
 bridge_token="${AM_AUTOTEST_BRIDGE_TOKEN:?bridge token required}"
 render_client="${AM_AUTOTEST_RENDER_CLIENT:-false}"
 prepared_profile="${AM_AUTOTEST_HMC_PREPARED:-false}"
+prepare_only="${AM_AUTOTEST_PREPARE_ONLY:-false}"
 display_start_seconds="${AM_AUTOTEST_DISPLAY_START_SECONDS:-5}"
 
 mkdir -p "$game_dir" "$cache_dir"
@@ -140,6 +141,10 @@ esac
 
 if [ "$prepared_profile" != "true" ]; then
     hmc --command "config -refresh" 2>/dev/null || true
+fi
+
+if [ "$prepare_only" = "true" ]; then
+    exit 0
 fi
 
 # ── Launch ─────────────────────────────────────────────────────────

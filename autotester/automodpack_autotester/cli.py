@@ -12,6 +12,7 @@ from pathlib import Path
 
 import docker as docker_py
 
+from .cache import deduplicate_asset_objects
 from .config import (
     REPO_ROOT,
     ROOT,
@@ -22,6 +23,7 @@ from .config import (
     scenario_matches_target,
 )
 from .runner import run_case
+from .supervisor import RunSupervisor, reap_orphaned_scopes
 from .validate import validate_scenario
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -286,10 +288,21 @@ def main(argv: list[str] | None = None) -> int:
         s.get("images", {}).get("client", "automodpack-autotest-client:local")
     )
     out_dir.mkdir(parents=True, exist_ok=True)
+    reap_orphaned_scopes()
+    asset_cache = deduplicate_asset_objects(out_dir.parent / ".hmc-cache")
+    if asset_cache.linked_files or asset_cache.invalid_objects or asset_cache.link_failures:
+        logger.info(
+            "HMC assets: linked %d duplicates, reclaimed %.2f GiB, invalid=%d, link failures=%d",
+            asset_cache.linked_files,
+            asset_cache.reclaimed_bytes / (1024 ** 3),
+            asset_cache.invalid_objects,
+            asset_cache.link_failures,
+        )
 
     results: dict = {}
     interrupted = False
     resource_scope = secrets.token_hex(4)
+    supervisor = RunSupervisor(resource_scope)
     try:
         executor = ThreadPoolExecutor(
             max_workers=max(1, args.jobs or rc.get("jobs", 1))
@@ -338,9 +351,12 @@ def main(argv: list[str] | None = None) -> int:
             ok = payload["ok"]
             _write_results(out_dir / "results.json", payload)
             if interrupted:
+                supervisor.close()
                 os._exit(1)
 
+        supervisor.close()
         return 0 if ok else 1
 
     except KeyboardInterrupt:
+        supervisor.close()
         os._exit(1)

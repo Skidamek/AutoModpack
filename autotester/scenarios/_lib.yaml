@@ -26,6 +26,8 @@ boot:
 boot_with_bootstrap:
   - do: launch_server
     name: start server for bootstrap-file import
+  - do: prepare_client
+    name: prepare the client profile while the server starts
   - do: wait_server
     name: wait for server generation and TLS
   - use: read_server_fingerprint

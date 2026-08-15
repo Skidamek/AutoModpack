@@ -457,6 +457,30 @@ def test_client_launcher_does_not_kill_a_healthy_scenario_at_the_startup_deadlin
     assert "xvfb-run" not in source
     assert "Xvfb -displayfd 3" in source
     assert 'prepared_profile="${AM_AUTOTEST_HMC_PREPARED:-false}"' in source
+    assert 'prepare_only="${AM_AUTOTEST_PREPARE_ONLY:-false}"' in source
+
+
+def test_bootstrap_overlaps_profile_preparation_with_server_startup():
+    steps = runner.load_macros()["boot_with_bootstrap"]
+    actions = [step.get("do") or step.get("use") for step in steps]
+
+    assert actions.index("launch_server") < actions.index("prepare_client") < actions.index("wait_server")
+    assert actions.index("seed_bootstrap") < actions.index("launch_client")
+
+
+def test_client_launch_waits_for_successful_profile_preparation(make_ctx, monkeypatch):
+    ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 600}})
+    ctx.vars["client_preparation"] = "client-prepare"
+    calls = []
+    monkeypatch.setattr(runner, "_wait_exited", lambda name, timeout: calls.append(("wait", name, timeout)))
+    monkeypatch.setattr(runner, "_inspect_container", lambda _name: {"State": {"ExitCode": 0}})
+    monkeypatch.setattr(runner, "_record_prepared_client_profile", lambda _ctx: calls.append(("receipt",)))
+    monkeypatch.setattr(runner, "_client_profile_is_prepared", lambda *_args: True)
+    monkeypatch.setattr(runner, "_remove_container", lambda name: calls.append(("remove", name)))
+
+    runner._await_client_preparation(ctx)
+
+    assert calls == [("wait", "client-prepare", 600.0), ("receipt",), ("remove", "client-prepare")]
 
 
 def test_wait_bridge_retries_only_transient_dependency_download(make_ctx, monkeypatch):
