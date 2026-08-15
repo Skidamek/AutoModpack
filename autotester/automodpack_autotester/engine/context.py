@@ -34,6 +34,7 @@ class Context:
     # Address the client uses to reach the server. On bridge networking this is
     # the server container name; on host networking it's localhost.
     server_host: str | None = None
+    resource_scope: str = ""
     vars: dict = field(default_factory=dict)
     bridge: BridgeClient | None = None
     # Injected by the runner so the engine stays decoupled from Docker.

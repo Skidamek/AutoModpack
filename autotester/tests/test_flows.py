@@ -282,6 +282,7 @@ _BUILTIN_VERBS = {
 
 _FAKE_VERBS = {
     "launch_server": _noop,
+    "prepare_client": _noop,
     "wait_server": _noop,
     "launch_client": _launch_client,
     "wait_bridge": _wait_bridge,
