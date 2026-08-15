@@ -10,7 +10,10 @@ images:
 run:
   target: all
   scenario: all
-  jobs: 3
+  # Intel N150 (4C/4T), six-target rendered startup benchmark: jobs=2 finished
+  # the full server+client workload in 316s versus 344s at jobs=3. At jobs=3,
+  # CPU averaged 98.7% and minimum available memory fell from 5.3 GiB to 2.6 GiB.
+  jobs: 2
 
 server:
   memory: 2G
