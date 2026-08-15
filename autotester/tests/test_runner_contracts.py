@@ -43,9 +43,29 @@ def test_targets_command_uses_configured_defaults(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out) == ["selected"]
 
 
+def test_target_selection_accepts_a_bounded_batch():
+    first = _target(id="first")
+    second = _target(id="second")
+
+    requested, selected = cli._select_targets({"first": first, "second": second}, "first,second", {})
+
+    assert requested == [first, second]
+    assert selected == requested
+
+
 def test_sigterm_enters_the_interrupt_cleanup_path():
     with pytest.raises(KeyboardInterrupt):
         cli._interrupt_on_termination(None, None)
+
+
+def test_partial_matrix_cannot_be_reported_as_green():
+    selected = [_target(id="first"), _target(id="second")]
+
+    payload = cli._matrix_payload(selected, {"first": {"target": "first", "ok": True}}, interrupted=False)
+
+    assert payload["ok"] is False
+    assert [result["target"] for result in payload["results"]] == ["first", "second"]
+    assert payload["results"][1]["error"] == "Case did not produce a terminal result"
 
 
 def test_interrupted_run_cleans_only_its_docker_resources(monkeypatch):
@@ -422,16 +442,20 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
     assert json.loads(marker.read_text(encoding="utf-8")) == before
 
 
-def test_client_start_timeout_uses_proven_cache_receipt(make_ctx):
-    ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 180, "clientRunSeconds": 300}})
+def test_client_start_timeout_is_not_a_process_lifetime(make_ctx):
+    ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 600, "clientRunSeconds": 300}})
 
-    assert runner._client_start_timeout(ctx, {}) == 300
+    assert runner._client_start_timeout(ctx, {}) == 600
 
-    runner._record_warm_client_cache(ctx)
-    assert runner._client_start_timeout(ctx, {}) == 180
 
-    ctx.target.loader = "neoforge"
-    assert runner._client_start_timeout(ctx, {}) == 300
+def test_client_launcher_does_not_kill_a_healthy_scenario_at_the_startup_deadline():
+    source = (Path(__file__).parents[1] / "docker/client/run-headlessmc-client").read_text(encoding="utf-8")
+
+    assert "client_timeout" not in source
+    assert 'hmc --command "download ${minecraft}"' not in source
+    assert "xvfb-run" not in source
+    assert "Xvfb -displayfd 3" in source
+    assert 'prepared_profile="${AM_AUTOTEST_HMC_PREPARED:-false}"' in source
 
 
 def test_wait_bridge_retries_only_transient_dependency_download(make_ctx, monkeypatch):
@@ -452,8 +476,7 @@ def test_wait_bridge_retries_only_transient_dependency_download(make_ctx, monkey
     monkeypatch.setattr(runner, "_container_logs", lambda _name: "[LibraryDownloader]: missing dependency\nHTTP connect timed out")
     monkeypatch.setattr(runner, "_remove_container", lambda name: launches.append(("remove", name)))
     monkeypatch.setattr(runner, "_launch_client", lambda launched_ctx: launches.append(("launch", launched_ctx.target.id)))
-    monkeypatch.setattr(runner, "_record_warm_client_cache", lambda _ctx: None)
-
+    monkeypatch.setattr(runner, "_record_prepared_client_profile", lambda _ctx: None)
     runner._v_wait_bridge(ctx, {"timeout": "1s"})
 
     assert launches == [("remove", ctx.cli_name), ("launch", ctx.target.id), ("remove", ctx.cli_name), ("launch", ctx.target.id)]

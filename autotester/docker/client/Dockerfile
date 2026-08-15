@@ -42,6 +42,7 @@ RUN apt-get update \
         unzip \
         bash \
         procps \
+        tini \
         libatomic1 \
         libasound2t64 \
         libgl1-mesa-dri \

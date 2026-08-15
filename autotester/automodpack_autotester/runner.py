@@ -8,6 +8,7 @@ import random
 import re
 import secrets
 import shutil
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -385,6 +386,7 @@ def _launch_client(ctx: Context):
     game_dir = ctx.game_dir
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx.artifact, game_dir / "mods" / "automodpack.jar")
+    _stage_client_runtime_mods(ctx)
     _seed_client_options(game_dir)
     _ensure_client_data_root(game_dir)
     _bridge_state(ctx).unlink(missing_ok=True)
@@ -400,13 +402,8 @@ def _launch_client(ctx: Context):
     # dir across parallel targets would reintroduce the installer-corruption race.
     shared_versions = (ctx.out_dir.parent / ".hmc-cache" / "shared-versions" / tid).resolve()
     shared_versions.mkdir(parents=True, exist_ok=True)
+    prepared = _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions)
 
-    client_run_seconds = int(float(
-        ctx.scenario.get("timeouts", {}).get(
-            "clientRunSeconds",
-            ctx.settings.get("timeouts", {}).get("clientRunSeconds", 600),
-        )
-    ))
     _run_container(
         name=ctx.cli_name,
         image=ctx.client_image,
@@ -415,7 +412,8 @@ def _launch_client(ctx: Context):
             "AM_AUTOTEST_BRIDGE_TOKEN": ctx.token,
             "AM_AUTOTEST_GAME_DIR": "/work/game",
             "AM_AUTOTEST_HMC_CACHE_DIR": "/work/hmc-cache",
-            "AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS": str(client_run_seconds),
+            "AM_AUTOTEST_HMC_PREPARED": str(prepared).lower(),
+            "AM_AUTOTEST_DISPLAY_START_SECONDS": str(ctx.settings.get("timeouts", {}).get("displayStartSeconds", 5)),
             "AM_AUTOTEST_RENDER_CLIENT": str(bool(ctx.scenario.get("renderClient", False))).lower(),
         },
         mounts=[
@@ -433,9 +431,74 @@ def _launch_client(ctx: Context):
             _load_ver(ctx.target),
         ],
         user=f"{_uid()}:{_gid()}",
+        entrypoint=["/usr/bin/tini", "--"],
     )
     _jitter_sleep(1)
     _assert_running(ctx.cli_name)
+
+
+def _stage_client_runtime_mods(ctx: Context) -> None:
+    entries = (ctx.settings.get("clientRuntimeMods", {}) or {}).get(ctx.target.id, []) or []
+    staged = []
+    for entry in entries:
+        mod = resolve_mod(entry, ctx.resolve, target_id=ctx.target.id, timeout=float(ctx.settings.get("timeouts", {}).get("downloadFileSeconds", 180)))
+        destination = ctx.game_dir / "mods" / mod.name
+        shutil.copy2(mod, destination)
+        staged.append(destination)
+    ctx.vars["client_runtime_mods"] = staged
+
+
+def _detach_client_runtime_mods(ctx: Context) -> None:
+    for path in ctx.vars.pop("client_runtime_mods", []):
+        path.unlink(missing_ok=True)
+
+
+def _client_profile_name(target: Target) -> str:
+    loader_version = _load_ver(target)
+    if target.loader == "fabric" and loader_version:
+        return f"fabric-loader-{loader_version}-{target.minecraft}"
+    if target.loader == "forge" and loader_version:
+        return f"{target.minecraft}-forge-{loader_version}"
+    if target.loader == "neoforge" and loader_version:
+        return f"neoforge-{loader_version}"
+    return f"{target.loader}:{target.minecraft}"
+
+
+def _client_profile_identity(ctx: Context) -> dict:
+    try:
+        image_id = _docker.images.get(ctx.client_image).id
+    except docker_py.errors.ImageNotFound:
+        image_id = ctx.client_image
+    return {
+        "minecraft": ctx.target.minecraft,
+        "loader": ctx.target.loader,
+        "loaderVersion": _load_ver(ctx.target),
+        "java": ctx.target.java,
+        "clientImage": image_id,
+        "profile": _client_profile_name(ctx.target),
+    }
+
+
+def _client_profile_receipt(hmc_cache_root: Path) -> Path:
+    return hmc_cache_root / "prepared-profile.json"
+
+
+def _client_profile_is_prepared(ctx: Context, hmc_cache_root: Path, shared_versions: Path) -> bool:
+    profile = _client_profile_name(ctx.target)
+    profile_json = shared_versions / profile / f"{profile}.json"
+    try:
+        return profile_json.is_file() and json.loads(_client_profile_receipt(hmc_cache_root).read_text(encoding="utf-8")) == _client_profile_identity(ctx)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return False
+
+
+def _record_prepared_client_profile(ctx: Context) -> None:
+    tid = ctx.target.id.replace(".", "_")
+    hmc_cache_root = (ctx.out_dir.parent / ".hmc-cache" / tid).resolve()
+    receipt = _client_profile_receipt(hmc_cache_root)
+    temporary = receipt.with_suffix(".tmp")
+    temporary.write_text(json.dumps(_client_profile_identity(ctx), sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temporary, receipt)
 
 
 # ── lifecycle verbs (need Docker; pure UI/IO verbs live in engine/) ───────
@@ -994,7 +1057,8 @@ def _v_wait_bridge(ctx: Context, step):
                 data = json.loads(sf.read_text(encoding="utf-8"))
                 if data.get("status") == "ready":
                     ctx.bridge.request("ping", timeout=5)
-                    _record_warm_client_cache(ctx)
+                    _detach_client_runtime_mods(ctx)
+                    _record_prepared_client_profile(ctx)
                     return
         except Exception:
             pass
@@ -1008,31 +1072,11 @@ def _transient_dependency_download_failure(logs: str) -> bool:
     return any(marker in logs for marker in ("HTTP connect timed out", "Connection reset", "Temporary failure in name resolution"))
 
 
-def _client_cache_receipt(ctx: Context):
-    tid = ctx.target.id.replace(".", "_")
-    path = (ctx.out_dir.parent / ".hmc-cache" / tid / "launch-ready").resolve()
-    return path, f"{ctx.target.loader}:{ctx.target.minecraft}:{_load_ver(ctx.target)}\n"
-
-
 def _client_start_timeout(ctx: Context, step):
     if "timeout" in step:
         return parse_duration(step["timeout"])
-    path, expected = _client_cache_receipt(ctx)
-    try:
-        warm = path.read_text(encoding="utf-8") == expected
-    except OSError:
-        warm = False
     configured = {**ctx.settings.get("timeouts", {}), **ctx.scenario.get("timeouts", {})}
-    key = "clientStartSeconds" if warm else "clientRunSeconds"
-    return float(configured.get(key, 180 if warm else 600))
-
-
-def _record_warm_client_cache(ctx: Context):
-    path, receipt = _client_cache_receipt(ctx)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(receipt, encoding="utf-8")
-    os.replace(temporary, path)
+    return float(configured.get("clientStartSeconds", 600))
 
 
 @verb("connect")
@@ -1538,6 +1582,29 @@ def run_case(
     cli_name = f"{resource_prefix}-c-{secrets.token_hex(4)}"[:63]
     server_host = "127.0.0.1" if net_mode == "host" else srv_name
     token = secrets.token_hex(16)
+    case_seconds = float(settings.get("timeouts", {}).get("caseSeconds", 1800))
+    if case_seconds <= 0:
+        raise ValueError("timeouts.caseSeconds must be positive")
+    deadline_expired = threading.Event()
+    case_finished = threading.Event()
+
+    def expire_case() -> None:
+        if case_finished.wait(case_seconds):
+            return
+        deadline_expired.set()
+        logger.error("[%s] case exceeded its %.0fs deadline; removing its Docker resources", target.id, case_seconds)
+        for name in (cli_name, srv_name):
+            try:
+                _remove_container(name)
+            except Exception:
+                logger.warning("Failed to remove expired case container %s", name)
+        if net_name != "host":
+            try:
+                _remove_network(net_name)
+            except Exception:
+                logger.warning("Failed to remove expired case network %s", net_name)
+
+    threading.Thread(target=expire_case, name=f"deadline-{target.id}", daemon=True).start()
 
     for d in (server_dir, game_dir):
         d.mkdir(parents=True, exist_ok=True)
@@ -1577,6 +1644,14 @@ def run_case(
                 _assert_running(cli_name)
             except RuntimeError as e:
                 raise ClientExited(str(e))
+            client_log = game_dir / "logs" / "latest.log"
+            try:
+                recent_log = client_log.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                return
+            if 'Uncaught exception in thread "automodpack-net"' in recent_log:
+                tail = "\n".join(recent_log.splitlines()[-80:])
+                raise ClientExited(f"AutoModpack network worker crashed\n--- logs ---\n{tail}")
 
         ctx.running_provider = _running
 
@@ -1588,6 +1663,9 @@ def run_case(
 
         run_flow(ctx, scenario, lib=load_macros(), results=step_results)
 
+        if deadline_expired.is_set():
+            raise TimeoutError(f"Case exceeded the configured {case_seconds:.0f}s deadline")
+
         return {
             "target": target.id,
             "scenario": scenario_id,
@@ -1597,16 +1675,18 @@ def run_case(
         }
 
     except Exception as e:
+        error = f"Case exceeded the configured {case_seconds:.0f}s deadline" if deadline_expired.is_set() else str(e)
         return {
             "target": target.id,
             "scenario": scenario_id,
             "ok": False,
             "duration": time.monotonic() - started,
-            "error": str(e),
+            "error": error,
             "steps": step_results,
         }
 
     finally:
+        case_finished.set()
         for name in [cli_name, srv_name]:
             try:
                 logs = _container_logs(name)

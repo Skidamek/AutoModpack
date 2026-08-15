@@ -291,7 +291,7 @@ class FakeBridge:
         return snapshot
 
     # --- actions ----------------------------------------------------------
-    def text(self, element_id: int, value: str, timeout: float = 30) -> dict:
+    def text(self, element_id: int, value: str, timeout: float = 30, **payload) -> dict:
         self.typed[element_id] = value
         if element_id == 1:
             self.fingerprint = value

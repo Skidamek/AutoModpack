@@ -204,6 +204,32 @@ def test_click_skips_when_navigation_already_reached_its_destination(make_ctx):
     steps_ui.click(ctx, {"select": {"text": "multiplayer"}, "skip_if": {"screen": "Play Multiplayer"}, "timeout": "1ms"})
 
 
+def test_click_reselects_after_the_screen_changes_between_snapshot_and_interaction(make_ctx):
+    from automodpack_autotester.bridge import BridgeError
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+
+    class ChangingBridge:
+        def __init__(self):
+            self.revision = 1
+            self.clicks = []
+
+        def gui(self, timeout=30):
+            return {"screenClass": "TitleScreen", "screenRevision": self.revision, "buttons": [{"id": self.revision, "text": "Multiplayer", "enabled": True, "visible": True}]}
+
+        def click(self, element_id, screen_revision=None, **payload):
+            self.clicks.append((element_id, screen_revision))
+            if len(self.clicks) == 1:
+                self.revision = 2
+                raise BridgeError("click", "stale_screen", "GUI screen changed before click")
+
+    ctx.bridge = ChangingBridge()
+    steps_ui.click(ctx, {"select": {"text": "multiplayer"}, "timeout": "1s"})
+
+    assert ctx.bridge.clicks == [(1, 1), (2, 2)]
+
+
 # ── templating ────────────────────────────────────────────────────────────
 
 
