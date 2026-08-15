@@ -230,6 +230,18 @@ def test_click_reselects_after_the_screen_changes_between_snapshot_and_interacti
     assert ctx.bridge.clicks == [(1, 1), (2, 2)]
 
 
+def test_element_lookup_honors_a_shared_interaction_deadline(make_ctx, monkeypatch):
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+    observed = []
+    monkeypatch.setattr(steps_ui, "await_condition", lambda _candidate, timeout, _poll, _message: observed.append(timeout))
+
+    steps_ui._await_element(ctx, {"text": "missing"}, {"timeout": "30s"}, "missing", timeout=0.25)
+
+    assert observed == [0.25]
+
+
 # ── templating ────────────────────────────────────────────────────────────
 
 

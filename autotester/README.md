@@ -32,13 +32,13 @@ uv --project autotester run autotester build-images
 Run one target:
 
 ```bash
-uv --project autotester run autotester run --target 1.21.11-fabric --scenario download-only --jobs 3
+uv --project autotester run autotester run --target 1.21.11-fabric --scenario download-only
 ```
 
 Run the full default matrix:
 
 ```bash
-uv --project autotester run autotester run --target all --scenario all --jobs 3
+uv --project autotester run autotester run --target all --scenario all
 ```
 
 Clean generated output:
