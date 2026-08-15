@@ -89,6 +89,21 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void immutablePlanRecordsRoundTripThroughTheRuntimeGson() {
+		String sourceHash = "a".repeat(HashUtils.SHA1_HEX_LENGTH);
+		String targetHash = "b".repeat(HashUtils.SHA1_HEX_LENGTH);
+		List<Object> values = List.of(
+				new Operation(Root.PROJECTION, "mods/example.jar", OperationType.INSTALL_OBJECT, sourceHash, 12, null),
+				new ProjectedFile(Root.PROJECTION, "mods/example.jar", true, sourceHash, 12),
+				new UpdatePlan.Preservation(Root.GAME_DIR, "mods/local.jar", sourceHash, 12, UpdatePlan.PreservationProof.PLAYER_CONSENT),
+				new UpdatePlan.BaselineCapture(Root.PROJECTION, "config/example.json", targetHash, 9, false),
+				new UpdatePlan.Conflict("pack123", sourceHash, Set.of("example"), "mods/local.jar", sourceHash, 12, "mods/server.jar", targetHash, 14,
+						UpdatePlan.ConflictAction.PRESERVE_LOCAL));
+
+		for (Object value : values) assertEquals(value, ConfigTools.parse(ConfigTools.GSON.toJson(value), value.getClass()));
+	}
+
+	@Test
 	void metadataOnlyUpdateKeepsProjectionAndDoesNotRequireCasObject() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "metadata-only-projection".getBytes(StandardCharsets.UTF_8);

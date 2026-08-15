@@ -55,6 +55,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.imageio.ImageIO;
@@ -70,6 +71,8 @@ public final class AutoTestBridge {
 	private static final AtomicBoolean READY_STATE_PUBLISHED = new AtomicBoolean(false);
 	private static final AtomicBoolean READY_STATE_WRITE_FAILED = new AtomicBoolean(false);
 	private static final AtomicReference<PendingScreenshot> PENDING_SCREENSHOT = new AtomicReference<>();
+	private static final AtomicReference<Screen> OBSERVED_SCREEN = new AtomicReference<>();
+	private static final AtomicLong SCREEN_REVISION = new AtomicLong();
 	private static final long SCREENSHOT_SETTLE_TIMEOUT_SECONDS = 30;
 
 	public static void markReloadFinished() {
@@ -202,6 +205,7 @@ public final class AutoTestBridge {
 		JsonObject o = base();
 		o.addProperty("screenClass", s == null ? null : s.getClass().getName());
 		o.addProperty("title", s == null ? null : s.getTitle().getString());
+		o.addProperty("screenRevision", screenRevision(s));
 		GuiElements elements = elements(s);
 		o.add("buttons", elementsJson(elements.buttons()));
 		o.add("textFields", elementsJson(elements.textFields()));
@@ -213,6 +217,7 @@ public final class AutoTestBridge {
 	private static String click(JsonObject req) {
 		Screen s = currentScreen();
 		if (s == null) return err("no screen");
+		if (screenRevision(s) != optLong(req, "screenRevision", -1)) return err("stale_screen", "GUI screen changed before click");
 
 		int button = optInt(req, "button", 0);
 		int x;
@@ -246,6 +251,7 @@ public final class AutoTestBridge {
 	private static String text(JsonObject req) {
 		Screen s = currentScreen();
 		if (s == null) return err("no screen");
+		if (screenRevision(s) != optLong(req, "screenRevision", -1)) return err("stale_screen", "GUI screen changed before text input");
 
 		int id = optInt(req, "id", -1);
 		GuiElement e = elements(s).byId(id);
@@ -554,6 +560,23 @@ public final class AutoTestBridge {
 		return o.toString();
 	}
 
+	private static String err(String code, String message) {
+		JsonObject o = new JsonObject();
+		o.addProperty("ok", false);
+		o.addProperty("code", code);
+		o.addProperty("error", message);
+		return o.toString();
+	}
+
+	private static long screenRevision(Screen screen) {
+		Screen observed = OBSERVED_SCREEN.get();
+		while (observed != screen) {
+			if (OBSERVED_SCREEN.compareAndSet(observed, screen)) return SCREEN_REVISION.incrementAndGet();
+			observed = OBSERVED_SCREEN.get();
+		}
+		return SCREEN_REVISION.get();
+	}
+
 	private static boolean has(JsonObject o, String k) {
 		JsonElement e = o.get(k);
 		return e != null && !e.isJsonNull();
@@ -567,6 +590,11 @@ public final class AutoTestBridge {
 	private static int optInt(JsonObject o, String k, int d) {
 		JsonElement e = o.get(k);
 		return e != null && !e.isJsonNull() ? e.getAsInt() : d;
+	}
+
+	private static long optLong(JsonObject o, String k, long d) {
+		JsonElement e = o.get(k);
+		return e != null && !e.isJsonNull() ? e.getAsLong() : d;
 	}
 
 	/*? if >= 1.19.2 {*/

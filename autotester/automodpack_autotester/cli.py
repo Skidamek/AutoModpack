@@ -57,6 +57,29 @@ def _cleanup_run_resources(resource_scope: str) -> None:
             pass
 
 
+def _matrix_payload(selected: list, results: dict, interrupted: bool) -> dict:
+    expected = [target.id for target in selected]
+    terminal = dict(results)
+    for target_id in expected:
+        if target_id not in terminal:
+            terminal[target_id] = {
+                "target": target_id,
+                "scenario": "?",
+                "ok": False,
+                "duration": 0,
+                "error": "Case did not produce a terminal result",
+                "steps": [],
+            }
+    complete = set(terminal) == set(expected) and len(terminal) == len(expected)
+    return {"ok": not interrupted and complete and all(result.get("ok", False) for result in terminal.values()), "results": [terminal[target_id] for target_id in expected]}
+
+
+def _write_results(path: Path, payload: dict) -> None:
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+
+
 def _cmd_verbs() -> int:
     from .engine import conditions
     from .engine.registry import describe as describe_verbs
@@ -105,7 +128,7 @@ def _cmd_validate(scenario_name: str | None) -> int:
 
 
 def _select_targets(targets: dict, target_name: str, scenario: dict) -> tuple[list, list]:
-    requested = list(targets.values()) if target_name == "all" else [targets[target_name]]
+    requested = list(targets.values()) if target_name == "all" else [targets[name.strip()] for name in target_name.split(",") if name.strip()]
     return requested, [t for t in requested if scenario_matches_target(scenario, t)]
 
 
@@ -311,10 +334,9 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             signal.signal(signal.SIGTERM, previous_sigterm_handler)
             executor.shutdown(wait=False)
-            ok = all(r.get("ok", False) for r in results.values())
-            (out_dir / "results.json").write_text(
-                json.dumps({"ok": ok, "results": list(results.values())}, indent=2), encoding="utf-8"
-            )
+            payload = _matrix_payload(selected, results, interrupted)
+            ok = payload["ok"]
+            _write_results(out_dir / "results.json", payload)
             if interrupted:
                 os._exit(1)
 

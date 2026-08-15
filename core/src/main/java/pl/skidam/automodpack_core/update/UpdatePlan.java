@@ -8,6 +8,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
+import com.google.gson.annotations.JsonAdapter;
+
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -82,12 +84,14 @@ public record UpdatePlan(
 		PLAYER_CONSENT
 	}
 
+	@JsonAdapter(UpdatePlanJsonAdapters.PreservationAdapter.class)
 	public record Preservation(Root root, String relativePath, String expectedHash, long expectedSize, PreservationProof proof) {
 		public Preservation(Root root, String relativePath, String expectedHash, long expectedSize) {
 			this(root, relativePath, expectedHash, expectedSize, PreservationProof.ACTIVE_LEDGER);
 		}
 	}
 
+	@JsonAdapter(UpdatePlanJsonAdapters.BaselineCaptureAdapter.class)
 	public record BaselineCapture(Root root, String relativePath, String expectedHash, long expectedSize, boolean absent) {}
 
 	public enum ConflictAction {
@@ -95,6 +99,7 @@ public record UpdatePlan(
 		REMOVE_OWNED
 	}
 
+	@JsonAdapter(UpdatePlanJsonAdapters.ConflictAdapter.class)
 	public record Conflict(String modpackId, String conflictId, Set<String> modIds, String sourcePath, String sourceHash, long sourceSize,
 			String targetPath, String targetHash, long targetSize, ConflictAction action) {
 		public Conflict {
@@ -117,6 +122,7 @@ public record UpdatePlan(
 		}
 	}
 
+	@JsonAdapter(UpdatePlanJsonAdapters.OperationAdapter.class)
 	public record Operation(
 			Root root,
 			String relativePath,
@@ -125,6 +131,7 @@ public record UpdatePlan(
 			long expectedSize,
 			String expectedExistingHash) {}
 
+	@JsonAdapter(UpdatePlanJsonAdapters.ProjectedFileAdapter.class)
 	public record ProjectedFile(Root root, String relativePath, boolean present, String expectedHash, long expectedSize) {}
 
 	public record FileKey(Root root, String relativePath) {}
