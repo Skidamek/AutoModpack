@@ -20,8 +20,6 @@ class _ElementMatch:
 
 def _await_element(ctx, selector, step, not_found, skip_if=None, timeout=None):
     """Poll the GUI until ``selector`` matches an element, or time out."""
-    timeout = parse_duration(step.get("timeout"), default=30)
-
     def candidate():
         gui = ctx.gui()
         if skip_if and conditions.evaluate(ctx, skip_if, gui):
