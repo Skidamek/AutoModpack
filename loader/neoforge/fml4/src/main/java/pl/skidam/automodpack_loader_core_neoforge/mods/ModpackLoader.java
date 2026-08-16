@@ -14,8 +14,8 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 public class ModpackLoader implements ModpackLoaderService {
-	public static String CONNECTOR_MODS_PROPERTY = "connector.additionalModLocations";
-	public static List<Path> modsToLoad = new ArrayList<>();
+	private static final String CONNECTOR_MODS_PROPERTY = "connector.additionalModLocations";
+	public static final List<Path> modsToLoad = new ArrayList<>();
 
 	@Override
 	public Set<String> forceCopyServices() {
@@ -28,17 +28,17 @@ public class ModpackLoader implements ModpackLoaderService {
 	@Override
 	public void loadModpack(List<Path> modpackMods) {
 		try {
-			for (Path modpackMod : modpackMods) {
-				if (FileInspection.isModCompatible(modpackMod)) modsToLoad.add(modpackMod);
-			}
-
-			// set for connector
-			String paths = modpackMods.stream().map(Path::toString).collect(Collectors.joining(","));
-			String finalMods = paths + "," + System.getProperty(CONNECTOR_MODS_PROPERTY, "");
-			System.setProperty(CONNECTOR_MODS_PROPERTY, finalMods);
+			modsToLoad.addAll(modpackMods.stream().map(Path::toAbsolutePath).map(Path::normalize).distinct().sorted().filter(FileInspection::isMod).toList());
 		} catch (Exception e) {
 			LOGGER.error("Error while loading modpack", e);
 		}
+	}
+
+	public static void configureConnectorFallback(List<Path> paths) {
+		String configuredPaths = paths.stream().map(Path::toString).collect(Collectors.joining(","));
+		String existingPaths = System.getProperty(CONNECTOR_MODS_PROPERTY, "");
+		String finalPaths = configuredPaths.isEmpty() ? existingPaths : existingPaths.isEmpty() ? configuredPaths : configuredPaths + "," + existingPaths;
+		if (!finalPaths.isEmpty()) System.setProperty(CONNECTOR_MODS_PROPERTY, finalPaths);
 	}
 
 	@Override
