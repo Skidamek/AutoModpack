@@ -1,0 +1,67 @@
+id: roxy-fabric-translation-offline
+description: |
+  Offline / client-only proof that Roxy translates the original Fabric-only Voxy jar from
+  AutoModpack's active projection on NeoForge 1.21.1, without copying it into standard mods/.
+
+  Voxy intentionally declares its original Minecraft 1.21.11 and Sodium 0.8.x constraints.
+  Roxy's in-place IModFileReader rewrites those constraints for NeoForge 1.21.1. Connector is
+  included because exposing the active projection through Connector's additional-location
+  property bypasses Roxy and reproduces the original failure.
+
+  Crash-tolerant: headless software GL may kill the client at the first frame, after loading.
+
+network: host
+mode: client-only
+renderClient: true
+
+timeouts:
+  clientStartSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage Roxy + original Voxy + Connector and rendering dependencies in place
+    mods:
+      - url: https://cdn.modrinth.com/data/Ap78bKTp/versions/O8SWacu9/roxy-1.21.1-NeoForge-0.1.7.jar
+        sha512: a9b3772b2632832740d352890d8cb7d86097aa43f15ce1459d23be1cf89f8eed7224695e4f053e4b159fa487ff8e405fb44387caf33acf9d6fb45934d7983391
+      - url: https://cdn.modrinth.com/data/fxxUqruK/versions/H3w2nVdU/voxy-0.2.16-beta%2B1.21.11.jar
+        sha512: d5159e2e745a9c50f16c67c54303b8a991dc5a1954e5cd7edc235c6f24ad2a045cb493e128717ed4e97352366ae83b03b3d73815342421e631c2a8995c48cccb
+      - url: https://cdn.modrinth.com/data/AANobbMI/versions/jfHZ5pyN/sodium-neoforge-0.8.13-beta.2%2Bmc1.21.1.jar
+        sha512: 6e9273862fb3397b5abea7ad37a65c3cd6d6bcb5cc06634d2b62b49999c00dac8972e4600e1d5b3c3936d0a92ccfad8ed4d04ed065595797d3c1e559f20aa08c
+      - url: https://cdn.modrinth.com/data/Aqlf1Shp/versions/L9bk5uA9/forgified-fabric-api-0.116.15%2B2.3.1%2B1.21.1.jar
+        sha512: de6cc76a406371c6cab8600621ea9bf630a796baaa64afa2103a75cddcc8ab52e0a15a5c3dec9b2ed2cf3efcd7d93c622434eb3e8d007361fdd54f2504c09757
+      - url: https://cdn.modrinth.com/data/u58R1TMW/versions/9Bz9VtV5/connector-2.0.0-beta.16%2B1.21.1-full.jar
+        sha512: 39094eb8c514db0ffc474bf64a95ebb1a55d50db6a68fcb1dc0fcaea2d1d1fdeb44aa73de9b77a07b04cb7d75741f7c0ac9bb63eae5ded225b2bb0695588c064
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  - do: wait_for
+    name: Roxy translated Voxy and both mods loaded in place
+    timeout: 600s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'Roxy.*\(roxy\)'
+          - '\tVoxy .*\(voxy\)'
+  - use: finish_client_only
+  - do: assert
+    name: Roxy translation did not leak Voxy's original Fabric dependency ranges
+    that:
+      all:
+        - only_files:
+            dir: mods
+            patterns: ['automodpack.jar']
+        - log:
+            container: client
+            not_matches:
+              - 'requires version 1\.21\.11 of mod Minecraft'
+              - 'requires version .* of mod Sodium'
+              - 'Missing or unsupported mandatory dependencies'
+              - 'Failed to instantiate IModFileReader'
+              - 'Could not forward IModFileReader'
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
