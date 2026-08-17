@@ -30,11 +30,13 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
+import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
 import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
+import pl.skidam.automodpack_loader_core.client.ClientPendingUpdateRecovery;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
@@ -88,23 +90,51 @@ public class Preload {
 			return;
 		}
 
-		UpdateTransactionExecutor executor;
 		try {
-			executor = UpdateTransactionSupport.executor();
-			executor.validate(transaction);
+			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
+			UpdateTransactionExecutor.Execution execution;
+			boolean replanned = false;
+			if (executor.hasMutableInputDrift(transaction) && !executor.projectionPublicationStarted(transaction)) {
+				execution = replanPendingTransaction(transaction);
+				replanned = true;
+			} else {
+				try {
+					execution = executor.recoverLatest();
+				} catch (UpdateReplanRequiredException e) {
+					execution = replanPendingTransaction(transaction);
+					replanned = true;
+				}
+			}
+			if (execution.replanRequired()) {
+				execution = replanPendingTransaction(execution.transaction() == null ? transaction : execution.transaction());
+				replanned = true;
+			}
+			if (!replanned && execution.success() && executor.hasMutableInputDrift(transaction)) execution = replanPendingTransaction(transaction);
+			if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), "Pending update still requires a fresh plan");
+			finishPendingRecovery(execution, transaction);
+		} catch (UpdateReplanRequiredException e) {
+			throw e;
 		} catch (IOException | RuntimeException e) {
 			quarantineTransaction(e);
-			return;
 		}
+	}
 
-		UpdateTransactionExecutor.Execution execution = executor.recoverLatest();
+	private UpdateTransactionExecutor.Execution replanPendingTransaction(UpdateTransaction transaction) throws IOException {
+		try {
+			return ClientPendingUpdateRecovery.replan(storage, transaction, MODPACK_LOADER, LOADER);
+		} catch (IOException e) {
+			throw new UpdateReplanRequiredException(null, "Pending update could not be replanned; its durable mailbox was retained", e);
+		}
+	}
+
+	private void finishPendingRecovery(UpdateTransactionExecutor.Execution execution, UpdateTransaction original) throws IOException {
 		if (!execution.success()) {
 			DetachedUpdateHelper.launch();
 			new ReLauncher(UpdateType.UPDATE, null).restart(true);
-			UpdateTransaction deferred = execution.transaction() == null ? transaction : execution.transaction();
+			UpdateTransaction deferred = execution.transaction() == null ? original : execution.transaction();
 			throw new UpdateDeferredException(deferred.transactionId, execution.blockedPath(), execution.message());
 		}
-		UpdateTransaction recovered = execution.transaction() == null ? transaction : execution.transaction();
+		UpdateTransaction recovered = execution.transaction() == null ? original : execution.transaction();
 		if (recovered.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			clientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));

@@ -228,6 +228,7 @@ public final class UpdateTransaction {
 	public enum Status {
 		SUCCESS,
 		DEFERRED_LOCKED,
+		REPLAN_REQUIRED,
 		FAILED
 	}
 }

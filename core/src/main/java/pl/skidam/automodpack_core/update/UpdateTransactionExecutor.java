@@ -71,6 +71,10 @@ public final class UpdateTransactionExecutor {
 		public boolean success() {
 			return status == UpdateTransaction.Status.SUCCESS;
 		}
+
+		public boolean replanRequired() {
+			return status == UpdateTransaction.Status.REPLAN_REQUIRED;
+		}
 	}
 
 	public UpdateTransactionExecutor(Context context) {
@@ -115,9 +119,8 @@ public final class UpdateTransactionExecutor {
 			Files.deleteIfExists(storage.transactionFile());
 			return;
 		}
-		if (pending.phase != UpdateTransaction.Phase.DEFERRED) throw new IOException("An update transaction is already active for this game directory");
 		if (pending.purpose == UpdateTransaction.Purpose.SELF_UPDATE || replacement.purpose == UpdateTransaction.Purpose.SELF_UPDATE)
-			throw new IOException("A deferred self-update must finish before another update can start");
+			throw new IOException("A self-update must finish before another update can start");
 		validatePendingReplacementEnvelope(pending);
 		if (Files.exists(storage.backupProjectionDirectory(), LinkOption.NOFOLLOW_LINKS)
 				&& !verifyProjectionQuietly(storage.activeDirectory(), pending.projectedFinalState))
@@ -150,14 +153,54 @@ public final class UpdateTransactionExecutor {
 		return ClientStorageMutation.run(context.storage(), () -> recoverPersisted(null));
 	}
 
+	/** Reports mutable input drift that requires a fresh plan before live mutation can continue. */
+	public boolean hasMutableInputDrift(UpdateTransaction transaction) throws IOException {
+		if (!isModpackTransaction(transaction)) return false;
+		if (projectionPublicationStarted(transaction))
+			return transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+					&& (!overlayStateMatches(transaction) || hasNewerSelection(transaction));
+		if (!Objects.equals(transaction.overlayDigest, context.storage().overlayDigest(transaction.modpackId))) return true;
+		return hasNewerSelection(transaction);
+	}
+
+	private boolean hasNewerSelection(UpdateTransaction transaction) throws IOException {
+		if (!isModpackTransaction(transaction)) return false;
+		return selectionChangedAfterPlanning(transaction);
+	}
+
+	/** Reports whether the live state has already reached the point where only projection publication remains. */
+	public boolean projectionPublicationStarted(UpdateTransaction transaction) {
+		if (!isModpackTransaction(transaction) || transaction.projectedFinalState == null) return false;
+		if (transaction.phase == UpdateTransaction.Phase.PROJECTED || transaction.phase == UpdateTransaction.Phase.SWAPPING
+				|| transaction.phase == UpdateTransaction.Phase.COMMITTED)
+			return true;
+		try {
+			return Files.exists(context.storage().incomingProjectionDirectory(), LinkOption.NOFOLLOW_LINKS)
+					|| Files.exists(context.storage().backupProjectionDirectory(), LinkOption.NOFOLLOW_LINKS);
+		} catch (RuntimeException e) {
+			return false;
+		}
+	}
+
 	private Execution recoverPersisted(String expectedTransactionId) throws IOException {
 		UpdateTransaction pending = readPersistedTransaction();
 		if (pending == null) return new Execution(UpdateTransaction.Status.SUCCESS, null, null, null, null);
 		if (expectedTransactionId != null && !expectedTransactionId.equals(pending.transactionId))
 			throw new IOException("The requested update transaction was superseded by a newer pending request");
-		validate(pending);
-		validateSelectionBeforeMutation(pending);
+		boolean publicationStarted = projectionPublicationStarted(pending);
+		if (!publicationStarted && hasMutableInputDrift(pending)) throw new UpdateReplanRequiredException(null, "Pending update input changed after planning");
+		validateUnchecked(pending, null, !publicationStarted);
+		if (!publicationStarted) validateSelectionBeforeMutation(pending);
 		return executePersisted(pending);
+	}
+
+	private boolean selectionChangedAfterPlanning(UpdateTransaction transaction) throws IOException {
+		SelectionIntent current = new ClientSelectionStore(context.storage().selectionFile()).get(transaction.modpackId).orElse(null);
+		SelectionIntent expected = transaction.expectedPriorIntent();
+		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+				? Objects.equals(current, transaction.targetIntent())
+				: transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL ? current == null : Objects.equals(current, expected);
+		return !Objects.equals(current, expected) && !alreadyCommitted;
 	}
 
 	public UpdateTransaction readPersisted() {
@@ -182,7 +225,7 @@ public final class UpdateTransactionExecutor {
 
 	private void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget) throws IOException {
 		try {
-			validateUnchecked(transaction, selectedTarget);
+			validateUnchecked(transaction, selectedTarget, true);
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
@@ -190,7 +233,7 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	private void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget) throws IOException {
+	private void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs) throws IOException {
 		if (transaction == null) throw new IOException("Transaction is missing");
 		if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported transaction schema");
 		try {
@@ -223,7 +266,7 @@ public final class UpdateTransactionExecutor {
 			if (transaction.plannedClientConfig == null) throw new IOException("Planned client config is missing");
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
 			else validateRemovalClientConfig(transaction);
-			if (!Objects.equals(transaction.overlayDigest, context.storage().overlayDigest(transaction.modpackId)))
+			if (verifyMutableInputs && !Objects.equals(transaction.overlayDigest, context.storage().overlayDigest(transaction.modpackId)))
 				throw new IOException("Client editable overlay changed after planning");
 		} else if (transaction.purpose == UpdateTransaction.Purpose.SELF_UPDATE) validateSelfUpdateMetadata(transaction);
 		else throw new IOException("Unsupported transaction purpose");
@@ -622,6 +665,9 @@ public final class UpdateTransactionExecutor {
 		}
 		AtomicReference<Operation> current = new AtomicReference<>();
 		Path blockedPath = null;
+		boolean publicationStarted = projectionPublicationStarted(transaction);
+		boolean liveAlreadyApplied = isModpackTransaction(transaction) && (publicationStarted || managedStateMatches(transaction));
+		boolean preserveNewerSelection = publicationStarted && selectionChangedAfterPlanning(transaction);
 		try {
 			transaction.resultStatus = null;
 			transaction.resultOperation = null;
@@ -632,9 +678,12 @@ public final class UpdateTransactionExecutor {
 				captureBaselines(transaction);
 				preserveConflicts(transaction);
 				preserveBeforeMutation(transaction);
-				applyOperations(transaction, current);
+				if (!liveAlreadyApplied) applyOperations(transaction, current);
 				current.set(null);
-				verifyManagedFinalState(transaction);
+				if (!publicationStarted) {
+					verifyManagedFinalState(transaction);
+					if (selectionChangedAfterPlanning(transaction)) throw new UpdateReplanRequiredException(null, "Group selection changed while applying the update");
+				}
 				if (transaction.operations.isEmpty()) {
 					verifyProjection(context.storage().activeDirectory(), transaction.projectedFinalState);
 				} else {
@@ -643,8 +692,11 @@ public final class UpdateTransactionExecutor {
 					setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
 					swapProjection(transaction);
 				}
+				if (publicationStarted && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE && (!managedStateMatches(transaction) || preserveNewerSelection))
+					throw new UpdateReplanRequiredException(null, "Mutable client state changed while publishing the update");
 				ModpackJsons.ModpackContentFields target = resolvedTarget(transaction, storedRecord(transaction)).flatTarget();
-				if (transaction.plannedClientConfig != null) ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
+				if (transaction.plannedClientConfig != null && !preserveNewerSelection)
+					ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
 				if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
 					context.beforeManifestAction().run(transaction, target);
 				if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
@@ -669,6 +721,20 @@ public final class UpdateTransactionExecutor {
 		} catch (IOException e) {
 			Operation currentOperation = current.get();
 			if (blockedPath == null && currentOperation != null) blockedPath = resolve(currentOperation, transaction);
+			if (e instanceof UpdateReplanRequiredException replan) {
+				if (blockedPath == null) blockedPath = replan.changedPath();
+				transaction.phase = UpdateTransaction.Phase.DEFERRED;
+				transaction.resultStatus = UpdateTransaction.Status.REPLAN_REQUIRED;
+				transaction.resultOperation = currentOperation == null ? null : currentOperation.operation().name();
+				transaction.resultPath = blockedPath == null ? null : blockedPath.toString();
+				transaction.resultMessage = e.getMessage();
+				try {
+					ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+				} catch (IOException journalFailure) {
+					e.addSuppressed(journalFailure);
+				}
+				return new Execution(UpdateTransaction.Status.REPLAN_REQUIRED, transaction, currentOperation == null ? null : currentOperation.operation().name(), blockedPath, e.getMessage());
+			}
 			if (isLockFailure(e)) {
 				transaction.phase = UpdateTransaction.Phase.DEFERRED;
 				transaction.resultStatus = UpdateTransaction.Status.DEFERRED_LOCKED;
@@ -710,10 +776,7 @@ public final class UpdateTransactionExecutor {
 			current.set(operation);
 			Path target = resolve(operation, transaction);
 			if (FileIntegrity.matches(target, operation.expectedSize(), operation.expectedObjectHash())) continue;
-			if (operation.expectedExistingHash() != null && Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
-				long size = Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) ? Files.size(target) : -1;
-				if (!FileIntegrity.matches(target, size, operation.expectedExistingHash())) throw new IOException("Restore target changed after planning: " + target);
-			}
+			verifyExpectedExisting(operation, target);
 			Path source = context.storage().objectsDirectory().resolve(operation.expectedObjectHash());
 			VerifiedFileTransfer.copyAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash());
 		}
@@ -722,12 +785,31 @@ public final class UpdateTransactionExecutor {
 			current.set(operation);
 			Path target = resolve(operation, transaction);
 			if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
-				if (operation.expectedExistingHash() != null && !operation.expectedExistingHash().equalsIgnoreCase(HashUtils.getHash(target)))
-					throw new IOException("Deletion target changed after planning: " + target);
+				verifyExpectedExisting(operation, target);
 				Files.delete(target);
 			}
 			FileTrees.pruneEmptyAncestors(target, root(operation.root(), transaction));
 		}
+	}
+
+	private void verifyExpectedExisting(Operation operation, Path target) throws IOException {
+		if (operation.root() == Root.OVERLAY) {
+			if (operation.expectedExistingHash() == null) {
+				if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new UpdateReplanRequiredException(target, "Client overlay target appeared after planning: " + target);
+			} else
+				if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
+						|| !FileIntegrity.matches(target, Files.size(target), operation.expectedExistingHash()))
+					throw new UpdateReplanRequiredException(target, "Client overlay target changed after planning: " + target);
+			return;
+		}
+		if (operation.root() != Root.GAME_DIR) return;
+		if (operation.expectedExistingHash() == null) {
+			if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new UpdateReplanRequiredException(target, "Game-directory target appeared after planning: " + target);
+			return;
+		}
+		if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
+				|| !FileIntegrity.matches(target, Files.size(target), operation.expectedExistingHash()))
+			throw new UpdateReplanRequiredException(target, "Game-directory target changed after planning: " + target);
 	}
 
 	private void preserveBeforeMutation(UpdateTransaction transaction) throws IOException {
@@ -765,9 +847,32 @@ public final class UpdateTransactionExecutor {
 			if (projected.root() == Root.PROJECTION) continue;
 			Path target = resolve(projected.root(), projected.relativePath(), transaction);
 			if (projected.present()) {
-				if (!FileIntegrity.matches(target, projected.expectedSize(), projected.expectedHash())) throw new IOException("Projected target verification failed: " + target);
-			} else if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Projected absent target exists: " + target);
+				if (!FileIntegrity.matches(target, projected.expectedSize(), projected.expectedHash()))
+					throw new UpdateReplanRequiredException(target, "Projected target changed during update: " + target);
+			} else
+				if (Files.exists(target, LinkOption.NOFOLLOW_LINKS))
+					throw new UpdateReplanRequiredException(target, "Projected absent target appeared during update: " + target);
 		}
+	}
+
+	private boolean managedStateMatches(UpdateTransaction transaction) {
+		try {
+			verifyManagedFinalState(transaction);
+			return true;
+		} catch (IOException | RuntimeException e) {
+			return false;
+		}
+	}
+
+	private boolean overlayStateMatches(UpdateTransaction transaction) throws IOException {
+		Map<String, UpdatePlan.FileState> expected = new TreeMap<>();
+		for (ProjectedFile projected : transaction.projectedFinalState) {
+			if (projected.root() != Root.OVERLAY) continue;
+			expected.put(normalizeOperationPath(projected.relativePath()), projected.present()
+					? new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true)
+					: new UpdatePlan.FileState(null, -1, false));
+		}
+		return expected.equals(ClientOverlaySnapshot.capture(context.storage(), transaction.modpackId, null).files());
 	}
 
 	private void buildIncomingProjection(UpdateTransaction transaction) throws IOException {
