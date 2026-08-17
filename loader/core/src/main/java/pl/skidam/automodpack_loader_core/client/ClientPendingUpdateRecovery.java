@@ -59,11 +59,14 @@ public final class ClientPendingUpdateRecovery {
 
 	private static UpdateTransactionExecutor.Execution replanRemoval(ClientStorage storage, UpdateTransaction pending, ClientUpdatePlanBuilder builder) throws Exception {
 		ClientUpdatePlanBuilder.RemovalPreparation preparation = builder.prepareRemoval();
-		UpdateTransaction transaction = pending.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL
-				? UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId),
-						preparation.expectedClientConfig())
-				: UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId),
-						preparation.expectedClientConfig());
+		String overlayDigest = storage.overlayDigest(preparation.installed().modpackId);
+		UpdateTransaction transaction;
+		if (pending.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL)
+			transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest,
+					preparation.expectedClientConfig());
+		else
+			transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest,
+					preparation.expectedClientConfig());
 		return UpdateTransactionSupport.executor().commit(transaction);
 	}
 

@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.config;
 
+import java.util.Objects;
+
 public class ClientConfigJsons {
 
 	public static class ClientConfigFieldsV3 {
@@ -20,6 +22,20 @@ public class ClientConfigJsons {
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
 			this.syncLoaderVersion = source.syncLoaderVersion;
 			this.playMusic = source.playMusic;
+		}
+
+		@Override
+		public boolean equals(Object object) {
+			if (this == object) return true;
+			if (!(object instanceof ClientConfigFieldsV3 other)) return false;
+			return updateSelectedModpackOnLaunch == other.updateSelectedModpackOnLaunch && selfUpdater == other.selfUpdater
+					&& syncAutoModpackVersion == other.syncAutoModpackVersion && syncLoaderVersion == other.syncLoaderVersion && playMusic == other.playMusic
+					&& Objects.equals(selectedModpackId, other.selectedModpackId);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(selectedModpackId, updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncLoaderVersion, playMusic);
 		}
 	}
 }

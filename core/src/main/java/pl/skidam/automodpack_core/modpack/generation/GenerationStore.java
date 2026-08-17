@@ -306,7 +306,7 @@ public final class GenerationStore {
 	}
 
 	private Optional<CurrentSnapshot> loadCurrentState(boolean deepVerification, boolean repairProjection) throws IOException {
-		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) requireDirectory(root, "generation store");
+		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) FileTrees.requireDirectory(root, "generation store");
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		readCheckpoint();
 		GenerationJsons.GenerationPointerFields pointer = readCurrentPointer();
@@ -392,7 +392,10 @@ public final class GenerationStore {
 	}
 
 	private GenerationHistoryIndex historyIndex(String generationId) throws IOException {
-		CompactHistory history = readCompactHistory(generationId);
+		return historyIndex(readCompactHistory(generationId));
+	}
+
+	private GenerationHistoryIndex historyIndex(CompactHistory history) throws IOException {
 		GenerationCheckpoint checkpoint = readCheckpoint().orElse(null);
 		if (checkpoint == null) return GenerationHistoryIndex.fromHistory(history.entries().get(0).manifest().modpackId(), history.entries());
 		return checkpoint.historyIndex().append(history.entries());
@@ -404,7 +407,7 @@ public final class GenerationStore {
 			if (!entry.detailsAvailable()) continue;
 			Path path = cataloguePath(entry.stateDigest());
 			if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) continue;
-			requireRegular(path, "generation catalogue");
+			FileTrees.requireRegularFile(path, "generation catalogue");
 			paths.put(GenerationHistoryIndex.catalogueRequestKey(entry.stateDigest()), path);
 		}
 		return paths;
@@ -614,14 +617,14 @@ public final class GenerationStore {
 	}
 
 	private void validateDeletionTargets(List<Path> paths, String description) throws IOException {
-		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) requireRegular(path, description);
+		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) FileTrees.requireRegularFile(path, description);
 	}
 
 	private DeletionResult deleteCompactionFiles(List<Path> paths, String description) throws IOException {
 		long deleted = 0;
 		long bytes = 0;
 		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			requireRegular(path, description);
+			FileTrees.requireRegularFile(path, description);
 			long size = Files.size(path);
 			compactionDeleteHook.beforeDelete(path);
 			if (ImmutableFiles.deleteIfExists(path)) {
@@ -731,7 +734,7 @@ public final class GenerationStore {
 
 	private List<Path> regularFiles(Path directory, String description) throws IOException {
 		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return List.of();
-		requireDirectory(directory, description);
+		FileTrees.requireDirectory(directory, description);
 		try (var paths = Files.list(directory)) {
 			return paths.filter(path -> !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
 					.sorted(Comparator.comparing(value -> value.getFileName().toString())).toList();
@@ -781,7 +784,7 @@ public final class GenerationStore {
 
 	private void verifyPinnedObject(String sha1) throws IOException {
 		Path object = objectPath(sha1);
-		requireRegular(object, "pinned immutable object " + sha1);
+		FileTrees.requireRegularFile(object, "pinned immutable object " + sha1);
 		if (!sha1.equals(HashUtils.getHash(object))) throw new IOException("Pinned immutable object failed SHA-1 verification: " + object);
 	}
 
@@ -803,7 +806,7 @@ public final class GenerationStore {
 	}
 
 	private GenerationJsons.GenerationPointerFields readCurrentPointer() throws IOException {
-		requireRegular(currentPath, "current generation pointer");
+		FileTrees.requireRegularFile(currentPath, "current generation pointer");
 		try {
 			GenerationJsons.GenerationPointerFields pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), GenerationJsons.GenerationPointerFields.class);
 			if (pointer.schemaVersion != CURRENT_POINTER_SCHEMA_VERSION || !isDigest(pointer.generationId))
@@ -818,7 +821,7 @@ public final class GenerationStore {
 
 	private Optional<GenerationCheckpoint> readCheckpoint() throws IOException {
 		if (!Files.exists(checkpointPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
-		requireRegular(checkpointPath, "generation history checkpoint");
+		FileTrees.requireRegularFile(checkpointPath, "generation history checkpoint");
 		try {
 			return Optional.of(GenerationCheckpoint.fromFields(ConfigTools.parse(Files.readString(checkpointPath, StandardCharsets.UTF_8), GenerationJsons.GenerationCheckpointFields.class)));
 		} catch (RuntimeException e) {
@@ -848,7 +851,7 @@ public final class GenerationStore {
 	}
 
 	private GenerationRecord readProjection(Path path) throws IOException {
-		requireRegular(path, "current generation projection");
+		FileTrees.requireRegularFile(path, "current generation projection");
 		try {
 			ModpackJsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), ModpackJsons.CompleteModpackContentFields.class);
 			GenerationPatchNoteHistory.fromFields(fields);
@@ -872,7 +875,7 @@ public final class GenerationStore {
 	}
 
 	private OwnershipDelta readDelta(Path path) throws IOException {
-		requireRegular(path, "generation ownership delta");
+		FileTrees.requireRegularFile(path, "generation ownership delta");
 		try {
 			return OwnershipDelta.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.OwnershipDeltaFields.class));
 		} catch (RuntimeException e) {
@@ -885,7 +888,7 @@ public final class GenerationStore {
 	}
 
 	private CatalogueSnapshot readCatalogue(Path path) throws IOException {
-		requireRegular(path, "generation catalogue snapshot");
+		FileTrees.requireRegularFile(path, "generation catalogue snapshot");
 		try {
 			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.CatalogueSnapshotFields.class));
 			if (!snapshot.stateDigest().equals(catalogueStateDigest(path))) throw new IOException("Catalogue snapshot filename does not match its identity: " + path);
@@ -902,7 +905,7 @@ public final class GenerationStore {
 	}
 
 	private GenerationCommit readCommit(Path path) throws IOException {
-		requireRegular(path, "generation commit");
+		FileTrees.requireRegularFile(path, "generation commit");
 		try {
 			GenerationCommit commit = GenerationCommit.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.GenerationCommitFields.class));
 			if (!commit.generationId().equals(commitGenerationId(path))) throw new IOException("Generation commit filename does not match its identity: " + path);
@@ -919,9 +922,9 @@ public final class GenerationStore {
 	}
 
 	private CompactHistory readCompactHistory(String generationId) throws IOException {
-		requireDirectory(cataloguesDirectory, "generation catalogues");
-		requireDirectory(commitsDirectory, "generation commits");
-		requireDirectory(deltasDirectory, "generation deltas");
+		FileTrees.requireDirectory(cataloguesDirectory, "generation catalogues");
+		FileTrees.requireDirectory(commitsDirectory, "generation commits");
+		FileTrees.requireDirectory(deltasDirectory, "generation deltas");
 		GenerationCheckpoint checkpoint = readCheckpoint().orElse(null);
 		Set<String> visited = new HashSet<>();
 		List<CompactGeneration> reverse = new ArrayList<>();
@@ -1058,7 +1061,7 @@ public final class GenerationStore {
 		if (previousSize != null && previousSize.longValue() != expectedSize)
 			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
 		if (!verified.add(sha1)) return;
-		requireRegular(object, "immutable object " + sha1);
+		FileTrees.requireRegularFile(object, "immutable object " + sha1);
 		if (Files.size(object) != expectedSize || !sha1.equals(HashUtils.getHash(object)))
 			throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
 	}
@@ -1114,7 +1117,7 @@ public final class GenerationStore {
 		CompactHistory history = readCompactHistory(record.metadata().generationId());
 		List<GenerationPatchNoteHistory.Entry> patchNoteHistory = history.patchNotesHistory();
 		GenerationPatchNoteHistory.writeFields(fields, patchNoteHistory);
-		fields.generationHistory = historyIndex(record.metadata().generationId()).toFields();
+		fields.generationHistory = historyIndex(history).toFields();
 		ConfigTools.writeAtomic(currentProjectionPath, fields);
 	}
 
@@ -1146,16 +1149,6 @@ public final class GenerationStore {
 			T existing = reader.read(existingPath);
 			if (!existing.equals(expected)) throw new IOException(description + " already exists with different content: " + existingPath);
 		});
-	}
-
-	private static void requireRegular(Path path, String description) throws IOException {
-		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Invalid " + description + ": expected a regular non-symlink file at " + path);
-	}
-
-	private static void requireDirectory(Path path, String description) throws IOException {
-		if (Files.isSymbolicLink(path) || !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Invalid " + description + " directory: " + path);
 	}
 
 	private static boolean isDigest(String value) {

@@ -104,7 +104,6 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Execution commitPreparedLocked(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
-		if (isModpackTransaction(transaction) && transaction.expectedClientConfig == null) transaction.expectedClientConfig = readClientConfig();
 		validate(transaction, unpublishedTarget);
 		validateSelectionBeforeMutation(transaction);
 		preparePendingReplacement(transaction);
@@ -172,10 +171,11 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private boolean configurationChangedAfterPlanning(UpdateTransaction transaction) throws IOException {
-		if (!isModpackTransaction(transaction) || transaction.expectedClientConfig == null) return false;
-		String current = UpdateTransaction.digest(readClientConfig());
-		if (current.equals(UpdateTransaction.digest(transaction.expectedClientConfig))) return false;
-		return transaction.plannedClientConfig == null || !current.equals(UpdateTransaction.digest(transaction.plannedClientConfig));
+		if (!isModpackTransaction(transaction)) return false;
+		if (transaction.expectedClientConfig == null) return true;
+		ClientConfigJsons.ClientConfigFieldsV3 current = readClientConfig();
+		if (current.equals(transaction.expectedClientConfig)) return false;
+		return transaction.plannedClientConfig == null || !current.equals(transaction.plannedClientConfig);
 	}
 
 	private boolean hasNewerSelection(UpdateTransaction transaction) throws IOException {

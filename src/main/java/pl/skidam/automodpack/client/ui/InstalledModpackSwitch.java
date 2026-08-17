@@ -2,6 +2,8 @@ package pl.skidam.automodpack.client.ui;
 
 import java.io.IOException;
 
+import net.minecraft.client.Minecraft;
+
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -32,12 +34,16 @@ final class InstalledModpackSwitch {
 				updater = updater(storage, target);
 				UpdatePreview preview = updater.previewInstalledSwitch();
 				ModpackUpdater finalUpdater = updater;
-				ScreenManager.preview(preview, modpackName,
+				boolean shown = ScreenManager.preview(preview, modpackName,
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> apply(finalUpdater, release)),
 						(Runnable) () -> {
 							finalUpdater.close();
 							release.run();
 						}, returnToSelection);
+				if (!shown) {
+					finalUpdater.close();
+					Minecraft.getInstance().execute(release);
+				}
 			} catch (Exception e) {
 				if (updater != null) updater.close();
 				release.run();
