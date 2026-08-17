@@ -53,9 +53,9 @@ public class NetUtils {
 	public static final byte CONFIGURATION_CHUNK_SIZE_TYPE = 0x42;
 
 	// Chunk size
-	public static final int DEFAULT_CHUNK_SIZE = 256 * 1024; // 256 KB
-	public static final int MIN_CHUNK_SIZE = 8 * 1024; // 8 KB
-	public static final int MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
+	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
+	public static final int MIN_CHUNK_SIZE = 1024 * 1024; // 1 MiB
+	public static final int MAX_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB
 
 	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
 	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);

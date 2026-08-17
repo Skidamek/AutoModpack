@@ -90,4 +90,34 @@ class ProtocolFrameCodecTest {
 			encoded.release();
 		}
 	}
+
+	@Test
+	void nettyWriterAndReaderHandleDirectPayloadsWithReusableScratch() throws Exception {
+		CompressionCodec codec = CompressionFactory.createCodec(CompressionType.ZSTD);
+		byte[] payload = new byte[DEFAULT_CHUNK_SIZE + 37];
+		for (int i = 0; i < payload.length; i++) payload[i] = (byte) (i * 17);
+
+		ByteBuf source = Unpooled.directBuffer(payload.length).writeBytes(payload);
+		ByteBuf encoded = Unpooled.buffer();
+		ProtocolFrameCodec.FrameScratch writeScratch = new ProtocolFrameCodec.FrameScratch();
+		ProtocolFrameCodec.FrameScratch readScratch = new ProtocolFrameCodec.FrameScratch();
+		try {
+			ProtocolFrameCodec.write(encoded, codec, source, DEFAULT_CHUNK_SIZE, writeScratch);
+			ByteArrayOutputStream decoded = new ByteArrayOutputStream(payload.length);
+			while (encoded.isReadable()) {
+				ByteBuf frame = ProtocolFrameCodec.read(encoded, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE, readScratch);
+				try {
+					byte[] bytes = new byte[frame.readableBytes()];
+					frame.readBytes(bytes);
+					decoded.write(bytes);
+				} finally {
+					frame.release();
+				}
+			}
+			assertArrayEquals(payload, decoded.toByteArray());
+		} finally {
+			source.release();
+			encoded.release();
+		}
+	}
 }
