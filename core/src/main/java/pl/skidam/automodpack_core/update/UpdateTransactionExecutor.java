@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -940,6 +941,8 @@ public final class UpdateTransactionExecutor {
 	public static boolean isLockFailure(IOException exception) {
 		Throwable current = exception;
 		while (current != null) {
+			// Windows reports an open handle that denies delete sharing as AccessDeniedException, without a lock-specific reason.
+			if (current instanceof AccessDeniedException) return true;
 			if (current instanceof FileSystemException fileSystemException) {
 				String detail = (Objects.toString(fileSystemException.getReason(), "") + " " + Objects.toString(fileSystemException.getMessage(), "")).toLowerCase(Locale.ROOT);
 				if (detail.contains("used by another process") || detail.contains("being used by another process") || detail.contains("sharing violation")) return true;
