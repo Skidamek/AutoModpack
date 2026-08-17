@@ -1,8 +1,6 @@
 package pl.skidam.automodpack_core.utils;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.API_HOST;
-import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.summonKey;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -31,7 +29,7 @@ public class Json {
 			connection.setDoOutput(true);
 			connection.connect();
 			if (connection.getResponseCode() == 200) {
-				try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
+				try (InputStreamReader isr = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
 					JsonParser parser = new JsonParser(); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
 					element = parser.parse(isr);
 				}
@@ -49,15 +47,7 @@ public class Json {
 	public static JsonObject fromFile(Path path) throws IOException {
 		if (!Files.exists(path) || !Files.isRegularFile(path)) return null;
 
-		JsonParser parser = new JsonParser();
-		byte[] bytes = Files.readAllBytes(path);
-
-		StringBuilder sb = new StringBuilder();
-		for (Byte b : bytes) {
-			sb.append((char) b.byteValue());
-		}
-
-		return parser.parse(sb.toString()).getAsJsonObject();
+		return new JsonParser().parse(Files.readString(path, StandardCharsets.UTF_8)).getAsJsonObject();
 	}
 
 	public static JsonObject fromUrl(String url) throws IOException {
@@ -71,7 +61,7 @@ public class Json {
 
 		int code = connection.getResponseCode();
 		if (code == 200) {
-			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
+			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
 				element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
 			}
 		} else {
@@ -110,7 +100,7 @@ public class Json {
 
 		int code = connection.getResponseCode();
 		if (code == 200) {
-			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
+			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
 				element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
 			}
 		} else {
@@ -125,56 +115,4 @@ public class Json {
 
 	}
 
-	public static JsonObject fromCurseForgeUrl(final String requestUrl, List<String> listOfMurmur) throws IOException {
-
-		if (listOfMurmur == null || listOfMurmur.isEmpty()) return null;
-
-		JsonObject jsonObject = new JsonObject();
-		Gson gson = new Gson().newBuilder().setPrettyPrinting().create();
-		jsonObject.add("fingerprints", gson.toJsonTree(listOfMurmur));
-		return fromCurseForgeUrl(requestUrl, jsonObject);
-	}
-
-	public static JsonObject fromCurseForgeUrl(final String requestUrl, JsonObject requestBody) throws IOException {
-		if (requestBody == null) return null;
-
-		final String body = requestBody.toString();
-
-		HttpURLConnection connection;
-		URL url = new URL(requestUrl);
-		if (!"https".equalsIgnoreCase(url.getProtocol()) || !API_HOST.equalsIgnoreCase(url.getHost()) || url.getUserInfo() != null
-				|| (url.getPort() != -1 && url.getPort() != 443)) {
-			throw new IOException("Refusing to send the CurseForge API key to an untrusted endpoint");
-		}
-		connection = (HttpURLConnection) url.openConnection();
-		connection.setInstanceFollowRedirects(false);
-		connection.addRequestProperty("Content-Type", "application/json");
-		connection.addRequestProperty("Accept", "application/json");
-		connection.addRequestProperty("x-api-key", summonKey());
-		connection.setConnectTimeout(3000);
-		connection.setReadTimeout(10000);
-		connection.setRequestMethod("POST");
-		connection.setDoOutput(true);
-		connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
-		connection.connect();
-
-		JsonElement element = null;
-
-		int code = connection.getResponseCode();
-		if (code == 200) {
-			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
-				element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
-			}
-		} else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
-			LOGGER.error("CurseForge API authorization failed with HTTP 401");
-		} else {
-			LOGGER.warn("{} responded {} code", url, code);
-		}
-
-		connection.disconnect();
-
-		if (element != null && !element.isJsonArray()) return element.getAsJsonObject();
-
-		return null;
-	}
 }

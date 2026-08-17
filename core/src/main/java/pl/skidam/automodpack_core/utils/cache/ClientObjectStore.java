@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
@@ -272,7 +273,7 @@ public final class ClientObjectStore {
 			requireModpackId(modpackId, "client baseline directory");
 			Path baseline = modpack.resolve("baseline.json");
 			if (!Files.exists(baseline, LinkOption.NOFOLLOW_LINKS)) continue;
-			requireRegular(baseline, "client baseline");
+			FileTrees.requireRegularFile(baseline, "client baseline");
 			ClientStorageJsons.ClientBaselineFields fields = readJson(baseline, ClientStorageJsons.ClientBaselineFields.class, "client baseline");
 			if (fields.schemaVersion != 1 || !modpackId.equals(fields.modpackId) || fields.entries == null) throw new IOException("Client baseline identity is invalid: " + baseline);
 			for (var entry : fields.entries) {
@@ -294,7 +295,7 @@ public final class ClientObjectStore {
 				requireModpackId(modpackId, "client overlay directory");
 				try (Stream<Path> files = Files.walk(modpack)) {
 					for (Path file : files.filter(path -> !path.equals(modpack)).sorted().toList()) {
-						requireNoSymbolicLink(file, "client overlay");
+						FileTrees.requireNoSymbolicLink(file, "client overlay");
 						if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.addOptional(metadata.getOrComputeHash(file), Files.size(file), "client overlay");
 					}
 				}
@@ -325,7 +326,7 @@ public final class ClientObjectStore {
 	private static void collectTransaction(ClientStorage storage, ReferenceSet retained) throws IOException {
 		Path transactionPath = storage.transactionFile();
 		if (!Files.exists(transactionPath, LinkOption.NOFOLLOW_LINKS)) return;
-		requireRegular(transactionPath, "client transaction");
+		FileTrees.requireRegularFile(transactionPath, "client transaction");
 		UpdateTransaction transaction = readJson(transactionPath, UpdateTransaction.class, "client transaction");
 		if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION || transaction.operations == null || transaction.projectedFinalState == null
 				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null || transaction.plannedConflicts == null)
@@ -357,7 +358,7 @@ public final class ClientObjectStore {
 	private static void collectRepair(ClientStorage storage, ReferenceSet retained) throws IOException {
 		Path path = storage.repairJournalFile();
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
-		requireRegular(path, "offline repair journal");
+		FileTrees.requireRegularFile(path, "offline repair journal");
 		ClientStorageJsons.OfflineRepairJournalFields fields = readJson(path, ClientStorageJsons.OfflineRepairJournalFields.class, "offline repair journal");
 		if (fields.schemaVersion != 1 || fields.editableResets == null || fields.unownedMods == null) throw new IOException("Offline repair journal fields are incomplete: " + path);
 		for (var reset : fields.editableResets) {
@@ -411,18 +412,18 @@ public final class ClientObjectStore {
 		total = total.plus(fileTotals(regularFiles(storage.modMetadataDirectory(), "client mod metadata")));
 		total = total.plus(fileTotals(regularFiles(storage.packsDirectory(), "client pack metadata")));
 		for (Path file : List.of(storage.stateFile(), storage.selectionFile(), storage.clientConfigFile(), storage.restartLoopStateFile(), storage.modpackContentTempFile()))
-			if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) total = total.plus(fileTotals(List.of(requireRegular(file, "client metadata"))));
+			if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) total = total.plus(fileTotals(List.of(FileTrees.requireRegularFile(file, "client metadata"))));
 		return total;
 	}
 
 	private static List<String> generationIds(ClientStorage storage) throws IOException {
 		Path root = storage.recordsDirectory();
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
-		requireDirectory(root, "client generation records");
+		FileTrees.requireDirectory(root, "client generation records");
 		try (Stream<Path> paths = Files.list(root)) {
 			List<String> result = new ArrayList<>();
 			for (Path path : paths.sorted().toList()) {
-				requireNoSymbolicLink(path, "client generation records");
+				FileTrees.requireNoSymbolicLink(path, "client generation records");
 				if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generation records contain an unsupported entry: " + path);
 				result.add(path.getFileName().toString());
 			}
@@ -432,11 +433,11 @@ public final class ClientObjectStore {
 
 	private static List<Path> childDirectories(Path root, String description) throws IOException {
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
-		requireDirectory(root, description);
+		FileTrees.requireDirectory(root, description);
 		try (Stream<Path> paths = Files.list(root)) {
 			List<Path> result = new ArrayList<>();
 			for (Path path : paths.sorted().toList()) {
-				requireNoSymbolicLink(path, description);
+				FileTrees.requireNoSymbolicLink(path, description);
 				if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) result.add(path);
 				else if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " contains an unsupported entry: " + path);
 			}
@@ -446,11 +447,11 @@ public final class ClientObjectStore {
 
 	private static List<Path> regularFiles(Path directory, String description) throws IOException {
 		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return List.of();
-		requireDirectory(directory, description);
+		FileTrees.requireDirectory(directory, description);
 		try (Stream<Path> paths = Files.walk(directory)) {
 			List<Path> result = new ArrayList<>();
 			for (Path path : paths.filter(candidate -> !candidate.equals(directory)).sorted().toList()) {
-				requireNoSymbolicLink(path, description);
+				FileTrees.requireNoSymbolicLink(path, description);
 				if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) result.add(path);
 			}
 			return List.copyOf(result);
@@ -460,23 +461,23 @@ public final class ClientObjectStore {
 	private static List<Path> generatedCopyFiles(ClientStorage storage) throws IOException {
 		Path root = storage.generatedCopiesDirectory();
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
-		requireDirectory(root, "client generated-copy state");
+		FileTrees.requireDirectory(root, "client generated-copy state");
 		List<Path> result = new ArrayList<>();
 		try (Stream<Path> packs = Files.list(root)) {
 			for (Path pack : packs.sorted().toList()) {
-				requireNoSymbolicLink(pack, "client generated-copy state");
+				FileTrees.requireNoSymbolicLink(pack, "client generated-copy state");
 				if (!Files.isDirectory(pack, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + pack);
 				requireModpackId(pack.getFileName().toString(), "client generated-copy directory");
 				try (Stream<Path> generations = Files.list(pack)) {
 					for (Path generation : generations.sorted().toList()) {
-						requireNoSymbolicLink(generation, "client generated-copy state");
+						FileTrees.requireNoSymbolicLink(generation, "client generated-copy state");
 						if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
 						String generationId = generation.getFileName().toString();
 						if (!HashUtils.isCanonicalSha1(generationId))
 							throw new IOException("Client generated-copy directory is not canonical: " + generationId);
 						try (Stream<Path> states = Files.list(generation)) {
 							for (Path state : states.sorted().toList()) {
-								requireNoSymbolicLink(state, "client generated-copy state");
+								FileTrees.requireNoSymbolicLink(state, "client generated-copy state");
 								String name = state.getFileName().toString();
 								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || name.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !name.endsWith(".json")
 										|| !HashUtils.isCanonicalSha1(name.substring(0, HashUtils.SHA1_HEX_LENGTH)))
@@ -503,21 +504,6 @@ public final class ClientObjectStore {
 		} catch (RuntimeException e) {
 			throw new IOException(description + " is invalid: " + path, e);
 		}
-	}
-
-	private static Path requireRegular(Path path, String description) throws IOException {
-		requireNoSymbolicLink(path, description);
-		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " is not a regular file: " + path);
-		return path;
-	}
-
-	private static void requireDirectory(Path path, String description) throws IOException {
-		requireNoSymbolicLink(path, description);
-		if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " is not a directory: " + path);
-	}
-
-	private static void requireNoSymbolicLink(Path path, String description) throws IOException {
-		if (Files.isSymbolicLink(path)) throw new IOException(description + " contains a symbolic link: " + path);
 	}
 
 	private static String requireModpackId(String value, String description) throws IOException {

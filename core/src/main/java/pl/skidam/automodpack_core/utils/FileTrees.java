@@ -60,6 +60,24 @@ public final class FileTrees {
 			throw new IOException("Managed " + description + " is not a directory: " + directory);
 	}
 
+	/** Requires a non-symbolic-link regular file. */
+	public static Path requireRegularFile(Path file, String description) throws IOException {
+		requireNoSymbolicLink(file, description);
+		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " is not a regular file: " + file);
+		return file;
+	}
+
+	/** Requires a non-symbolic-link directory. */
+	public static void requireDirectory(Path directory, String description) throws IOException {
+		requireNoSymbolicLink(directory, description);
+		if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " is not a directory: " + directory);
+	}
+
+	/** Requires a path that is not a symbolic link. */
+	public static void requireNoSymbolicLink(Path path, String description) throws IOException {
+		if (Files.isSymbolicLink(path)) throw new IOException(description + " contains a symbolic link: " + path);
+	}
+
 	public static void delete(Path directory) throws IOException {
 		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return;
 		if (Files.isSymbolicLink(directory)) {

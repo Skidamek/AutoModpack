@@ -144,8 +144,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan newPlan = plan(newTarget, clientConfig(newTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
-		UpdateTransaction transaction = UpdateTransaction.create(newPlan, newTarget, storage.overlayDigest(newTarget.manifest().modpackId()));
-		transaction.expectedClientConfig = clientConfig(newTarget.manifest().modpackId());
+		UpdateTransaction transaction = createTransaction(storage, newPlan, newTarget);
 		new ClientGenerationStore(storage).write(newRecord);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 		Files.move(storage.activeDirectory(), storage.backupProjectionDirectory());
@@ -171,8 +170,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
-		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
-		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3();
+		UpdateTransaction transaction = createTransaction(storage, plan, target);
 		new ClientGenerationStore(storage).write(target.generationRecord());
 		Path live = storage.gameDirectory().resolve("config/replanned.json");
 		byte[] newerBytes = "newer-player-file".getBytes(StandardCharsets.UTF_8);
@@ -230,7 +228,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan deferredPlan = plan(deferredTarget, clientConfig(deferredTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/mailbox-deferred.jar", OperationType.INSTALL_OBJECT, deferredHash, deferredBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-deferred.jar", true, deferredHash, deferredBytes.length)));
-		UpdateTransaction deferred = UpdateTransaction.create(deferredPlan, deferredTarget, storage.overlayDigest(deferredTarget.manifest().modpackId()));
+		UpdateTransaction deferred = createTransaction(storage, deferredPlan, deferredTarget);
 		deferred.phase = UpdateTransaction.Phase.DEFERRED;
 		deferred.resultStatus = UpdateTransaction.Status.DEFERRED_LOCKED;
 		new ClientGenerationStore(storage).write(deferredTarget.generationRecord());
@@ -274,7 +272,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/pending-selection.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/pending-selection.jar", true, hash, bytes.length)));
-		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		UpdateTransaction transaction = createTransaction(storage, plan, target);
 		transaction.plannedClientConfig.syncLoaderVersion = false;
 		new ClientGenerationStore(storage).write(record);
 		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
@@ -297,8 +295,8 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/stale.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/stale.jar", true, hash, bytes.length)));
-		UpdateTransaction stale = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
-		UpdateTransaction latest = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		UpdateTransaction stale = createTransaction(storage, plan, target);
+		UpdateTransaction latest = createTransaction(storage, plan, target);
 		latest.phase = UpdateTransaction.Phase.DEFERRED;
 		ConfigTools.writeAtomic(storage.transactionFile(), latest);
 
@@ -322,7 +320,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
 				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId())));
-		UpdateTransaction malformed = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		UpdateTransaction malformed = createTransaction(storage, plan, target);
 		malformed.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3();
 		malformed.plannedConflicts = new ArrayList<>(List.of(plan.conflicts().get(0)));
 		malformed.plannedConflicts.set(0, null);
@@ -553,7 +551,8 @@ class UpdateTransactionExecutorTest {
 		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, "mods/remove.jar", hash, bytes.length)), removal.preservations());
 		assertTrue(removal.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/generated-remove.jar")
 				&& operation.operation() == OperationType.DELETE && generatedHash.equals(operation.expectedExistingHash())));
-		UpdateTransaction transaction = UpdateTransaction.createRemoval(removal, ClientPlatform.LINUX, expected, storage.overlayDigest(target.manifest().modpackId()));
+		UpdateTransaction transaction = UpdateTransaction.createRemoval(removal, ClientPlatform.LINUX, expected, storage.overlayDigest(target.manifest().modpackId()),
+				clientConfig(target.manifest().modpackId()));
 		Files.delete(storage.objectsDirectory().resolve(hash));
 
 		assertTrue(executor.commit(transaction).success());
@@ -609,7 +608,7 @@ class UpdateTransactionExecutorTest {
 				new ClientConfigJsons.ClientConfigFieldsV3()));
 
 		assertTrue(executor.commit(UpdateTransaction.createDeactivation(deactivation, ClientPlatform.LINUX, expected,
-				storage.overlayDigest(target.manifest().modpackId()))).success());
+				storage.overlayDigest(target.manifest().modpackId()), clientConfig(target.manifest().modpackId()))).success());
 
 		assertFalse(Files.exists(live));
 		assertFalse(Files.exists(live.getParent()));
@@ -718,5 +717,11 @@ class UpdateTransactionExecutorTest {
 		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
 		config.selectedModpackId = modpackId;
 		return config;
+	}
+
+	private static UpdateTransaction createTransaction(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target) throws IOException {
+		ClientConfigJsons.ClientConfigFieldsV3 expected = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		return UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
 	}
 }

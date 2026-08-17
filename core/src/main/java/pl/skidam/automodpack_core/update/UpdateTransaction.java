@@ -12,7 +12,6 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -66,10 +65,6 @@ public final class UpdateTransaction {
 
 	public UpdateTransaction() {}
 
-	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest) {
-		return create(plan, target, overlayDigest, null);
-	}
-
 	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
 			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		Objects.requireNonNull(plan, "plan");
@@ -97,17 +92,9 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
-		return createRemoval(plan, platform, expectedPriorIntent, overlayDigest, null);
-	}
-
 	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest,
 			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, overlayDigest, expectedClientConfig);
-	}
-
-	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
-		return createDeactivation(plan, platform, expectedPriorIntent, overlayDigest, null);
 	}
 
 	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest,
@@ -229,16 +216,8 @@ public final class UpdateTransaction {
 		return HexFormat.of().formatHex(digest.digest());
 	}
 
-	public static String digest(ClientConfigJsons.ClientConfigFieldsV3 config) {
-		Objects.requireNonNull(config, "config");
-		MessageDigest digest = HashUtils.newSha1Digest();
-		digest.update("automodpack-client-config-v1\n".getBytes(StandardCharsets.UTF_8));
-		digest.update(ConfigTools.GSON.toJson(config).getBytes(StandardCharsets.UTF_8));
-		return HexFormat.of().formatHex(digest.digest());
-	}
-
 	private static ClientConfigJsons.ClientConfigFieldsV3 copyConfig(ClientConfigJsons.ClientConfigFieldsV3 config) {
-		return config == null ? null : new ClientConfigJsons.ClientConfigFieldsV3(config);
+		return new ClientConfigJsons.ClientConfigFieldsV3(Objects.requireNonNull(config, "expectedClientConfig"));
 	}
 
 	public enum Phase {

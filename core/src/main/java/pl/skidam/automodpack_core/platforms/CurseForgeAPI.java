@@ -3,6 +3,9 @@ package pl.skidam.automodpack_core.platforms;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
@@ -14,8 +17,9 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
-import pl.skidam.automodpack_core.utils.Json;
+import pl.skidam.automodpack_core.protocol.NetUtils;
 
 public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash,
 		String sha1Hash, int modId, String projectPageUrl) {
@@ -34,7 +38,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		List<CurseForgeAPI> curseForgeAPIList = new LinkedList<>();
 
 		try {
-			JsonArray exactMatches = Json.fromCurseForgeUrl(requestUrl, hashes.values().stream().toList()).get("data").getAsJsonObject().get("exactMatches")
+			JsonArray exactMatches = fromCurseForgeUrl(requestUrl, hashes.values().stream().toList()).get("data").getAsJsonObject().get("exactMatches")
 					.getAsJsonArray();
 			for (JsonElement match : exactMatches) {
 				JsonObject JSONObject = match.getAsJsonObject();
@@ -110,7 +114,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		if (modIds.isEmpty()) return Map.of();
 		JsonObject request = new JsonObject();
 		request.add("modIds", new Gson().toJsonTree(modIds));
-		JsonObject response = Json.fromCurseForgeUrl(BASE_URL + "/mods", request);
+		JsonObject response = fromCurseForgeUrl(BASE_URL + "/mods", request);
 		if (response == null || !response.has("data") || !response.get("data").isJsonArray()) return Map.of();
 		Map<Integer, String> urls = new HashMap<>();
 		for (JsonElement element : response.getAsJsonArray("data")) {
@@ -130,6 +134,47 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 
 	private CurseForgeAPI withProjectPageUrl(String url) {
 		return new CurseForgeAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmurHash, sha1Hash, modId, url);
+	}
+
+	private static JsonObject fromCurseForgeUrl(String requestUrl, List<String> murmurHashes) throws IOException {
+		if (murmurHashes == null || murmurHashes.isEmpty()) return null;
+		JsonObject request = new JsonObject();
+		request.add("fingerprints", new Gson().toJsonTree(murmurHashes));
+		return fromCurseForgeUrl(requestUrl, request);
+	}
+
+	private static JsonObject fromCurseForgeUrl(String requestUrl, JsonObject requestBody) throws IOException {
+		if (requestBody == null) return null;
+		URL url = new URL(requestUrl);
+		if (!"https".equalsIgnoreCase(url.getProtocol()) || !API_HOST.equalsIgnoreCase(url.getHost()) || url.getUserInfo() != null
+				|| (url.getPort() != -1 && url.getPort() != 443))
+			throw new IOException("Refusing to send the CurseForge API key to an untrusted endpoint");
+		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+		connection.setInstanceFollowRedirects(false);
+		connection.setRequestProperty("User-Agent", NetUtils.USER_AGENT);
+		connection.setRequestProperty("Content-Type", "application/json");
+		connection.setRequestProperty("Accept", "application/json");
+		connection.setRequestProperty("x-api-key", summonKey());
+		connection.setConnectTimeout(3000);
+		connection.setReadTimeout(10000);
+		connection.setRequestMethod("POST");
+		connection.setDoOutput(true);
+		connection.getOutputStream().write(requestBody.toString().getBytes(StandardCharsets.UTF_8));
+		connection.connect();
+		JsonElement element = null;
+		int code = connection.getResponseCode();
+		if (code == HttpURLConnection.HTTP_OK) {
+			try (InputStreamReader reader = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
+				element = new JsonParser().parse(reader);
+			}
+		} else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
+			LOGGER.error("CurseForge API authorization failed with HTTP 401");
+		} else {
+			LOGGER.warn("{} responded {} code", url, code);
+		}
+		connection.disconnect();
+		if (element != null && !element.isJsonArray()) return element.getAsJsonObject();
+		return null;
 	}
 
 	public static String summonKey() {
