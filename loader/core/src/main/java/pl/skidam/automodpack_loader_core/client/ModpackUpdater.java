@@ -452,11 +452,12 @@ public class ModpackUpdater implements AutoCloseable {
 		clientConfig = preparation.currentConfig();
 		UpdatePreview applied = UpdatePreview.create(preparation.plan(), removalSelection(preparation),
 				remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION).withFeatureManifest(removalManifest(preparation));
-		UpdateTransaction transaction = remove
-				? UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId),
-						preparation.expectedClientConfig())
-				: UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId),
-						preparation.expectedClientConfig());
+		String overlayDigest = storage.overlayDigest(preparation.installed().modpackId);
+		UpdateTransaction transaction;
+		if (remove)
+			transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest, preparation.expectedClientConfig());
+		else
+			transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest, preparation.expectedClientConfig());
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
 		if (execution.success()) {
@@ -818,7 +819,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private boolean hasPlanImpact(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		UpdatePlan plan = prepared.plan();
 		return !plan.operations().isEmpty() || !plan.conflicts().isEmpty() || !plan.preservations().isEmpty() || !plan.baselineCaptures().isEmpty()
-				|| !plan.restartReasons().isEmpty() || !ConfigTools.GSON.toJson(plan.plannedClientConfig()).equals(ConfigTools.GSON.toJson(ClientProjectionView.open(storage).logicalConfig(clientConfig)));
+				|| !plan.restartReasons().isEmpty() || !Objects.equals(plan.plannedClientConfig(), ClientProjectionView.open(storage).logicalConfig(clientConfig));
 	}
 
 	private boolean requestPreparedPlanPreview(ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) throws IOException {
