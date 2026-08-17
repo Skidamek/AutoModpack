@@ -53,15 +53,17 @@ public final class ClientPendingUpdateRecovery {
 		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, target.flatTarget(), null, currentConfig, true), cache, modCache);
 			builder.preparePlanObjects(prepared.plan(), target.flatTarget());
-			return UpdateTransactionSupport.executor().commit(prepared.plan(), target, prepared.overlayDigest());
+			return UpdateTransactionSupport.executor().commit(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
 		}
 	}
 
 	private static UpdateTransactionExecutor.Execution replanRemoval(ClientStorage storage, UpdateTransaction pending, ClientUpdatePlanBuilder builder) throws Exception {
 		ClientUpdatePlanBuilder.RemovalPreparation preparation = builder.prepareRemoval();
 		UpdateTransaction transaction = pending.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL
-				? UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId))
-				: UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
+				? UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId),
+						preparation.expectedClientConfig())
+				: UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId),
+						preparation.expectedClientConfig());
 		return UpdateTransactionSupport.executor().commit(transaction);
 	}
 
@@ -77,8 +79,10 @@ public final class ClientPendingUpdateRecovery {
 		if (configStillDescribesThePendingInput || pending.modpackId.equals(currentConfig.selectedModpackId))
 			record = newer(pendingRecord, newest(generations, pending.modpackId));
 		else {
-			record = ModpackId.isValid(currentConfig.selectedModpackId) ? newest(generations, currentConfig.selectedModpackId) : null;
-			if (record == null) record = pendingRecord;
+			if (!ModpackId.isValid(currentConfig.selectedModpackId))
+				throw new IOException("Selected modpack changed to an invalid or empty ID while replanning the pending update");
+			record = newest(generations, currentConfig.selectedModpackId);
+			if (record == null) throw new IOException("Selected modpack generation is not installed: " + currentConfig.selectedModpackId);
 		}
 		ModpackJsons.CompleteModpackContentFields fields = record.toFields();
 		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());

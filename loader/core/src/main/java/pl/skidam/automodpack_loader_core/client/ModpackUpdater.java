@@ -21,6 +21,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
@@ -447,8 +448,10 @@ public class ModpackUpdater implements AutoCloseable {
 		UpdatePreview applied = UpdatePreview.create(preparation.plan(), removalSelection(preparation),
 				remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION).withFeatureManifest(removalManifest(preparation));
 		UpdateTransaction transaction = remove
-				? UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId))
-				: UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
+				? UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId),
+						preparation.expectedClientConfig())
+				: UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId),
+						preparation.expectedClientConfig());
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
 		if (execution.success()) {
@@ -823,8 +826,9 @@ public class ModpackUpdater implements AutoCloseable {
 		while (true) {
 			UpdatePlan plan = prepared.plan();
 			planBuilder.preparePlanObjects(plan, target.flatTarget());
-			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest());
+			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest(), prepared.expectedClientConfig());
 			if (execution.replanRequired() && !replanned) {
+				ensureSelectedModpackUnchanged(prepared);
 				try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 					prepared = planBuilder.buildPlan(new ClientUpdatePlanBuilder.Input(target, target.flatTarget(), connectionInfo, clientConfig, true), cache, modCache);
 				}
@@ -852,6 +856,13 @@ public class ModpackUpdater implements AutoCloseable {
 			clientConfig = plan.plannedClientConfig();
 			return prepared;
 		}
+	}
+
+	private void ensureSelectedModpackUnchanged(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
+		ClientConfigJsons.ClientConfigFieldsV3 current = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		if (!Objects.equals(current.selectedModpackId, prepared.expectedClientConfig().selectedModpackId))
+			throw new UpdateReplanRequiredException(null, "Selected modpack changed while the update was being applied");
 	}
 
 	private void cleanupOverlayState(UpdatePlan plan, String modpackId) throws IOException {

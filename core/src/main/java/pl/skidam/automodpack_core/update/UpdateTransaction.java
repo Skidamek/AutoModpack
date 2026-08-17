@@ -12,6 +12,7 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -42,6 +43,7 @@ public final class UpdateTransaction {
 	public String targetPlatform;
 	public String selectionDigest;
 	public String overlayDigest;
+	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
 	public boolean expectedPriorSelectionPresent;
 	public List<String> expectedPriorRequestedGroups;
 	public List<String> expectedPriorRequestedCategories;
@@ -65,6 +67,11 @@ public final class UpdateTransaction {
 	public UpdateTransaction() {}
 
 	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest) {
+		return create(plan, target, overlayDigest, null);
+	}
+
+	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(target, "target");
 		if (!plan.modpackId().equals(target.manifest().modpackId())) throw new IllegalArgumentException("Plan and selected target modpack IDs disagree");
@@ -84,20 +91,32 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.selectionDigest = digest(target.selection().intent());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
+		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
 		fillPlan(transaction, plan);
 		transaction.plannedGeneratedCopies = GeneratedCopyState.fromCopies(plan.modpackId(), plan.generationTarget().targetGenerationId(), digest(target.selection().intent()), plan.generatedCopies()).toFields();
 		return transaction;
 	}
 
 	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
-		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, overlayDigest);
+		return createRemoval(plan, platform, expectedPriorIntent, overlayDigest, null);
+	}
+
+	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest,
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
+		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, overlayDigest, expectedClientConfig);
 	}
 
 	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
-		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, overlayDigest);
+		return createDeactivation(plan, platform, expectedPriorIntent, overlayDigest, null);
 	}
 
-	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
+	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest,
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
+		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, overlayDigest, expectedClientConfig);
+	}
+
+	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest,
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(platform, "platform");
 		UpdateTransaction transaction = base(purpose);
@@ -112,6 +131,7 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = List.of();
 		transaction.selectionDigest = digest(expectedPriorIntent);
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
+		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
 		fillPlan(transaction, plan);
 		return transaction;
 	}
@@ -207,6 +227,18 @@ public final class UpdateTransaction {
 		for (String value : intent.requestedCategories().stream().sorted().toList()) digest.update(("category=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		for (String value : intent.excludedGroups().stream().sorted().toList()) digest.update(("excluded=" + value + "\n").getBytes(StandardCharsets.UTF_8));
 		return HexFormat.of().formatHex(digest.digest());
+	}
+
+	public static String digest(ClientConfigJsons.ClientConfigFieldsV3 config) {
+		Objects.requireNonNull(config, "config");
+		MessageDigest digest = HashUtils.newSha1Digest();
+		digest.update("automodpack-client-config-v1\n".getBytes(StandardCharsets.UTF_8));
+		digest.update(ConfigTools.GSON.toJson(config).getBytes(StandardCharsets.UTF_8));
+		return HexFormat.of().formatHex(digest.digest());
+	}
+
+	private static ClientConfigJsons.ClientConfigFieldsV3 copyConfig(ClientConfigJsons.ClientConfigFieldsV3 config) {
+		return config == null ? null : new ClientConfigJsons.ClientConfigFieldsV3(config);
 	}
 
 	public enum Phase {
