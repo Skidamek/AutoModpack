@@ -160,6 +160,34 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void gameDirectoryDriftRequestsAReplanWithoutOverwritingTheNewBytes() throws Exception {
+		ClientStorage storage = storage();
+		byte[] expectedBytes = "expected-game-file".getBytes(StandardCharsets.UTF_8);
+		String expectedHash = store(storage, expectedBytes);
+		SelectedModpackTarget target = target("config/replanned.json", "config", false, expectedHash, expectedBytes.length);
+		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
+		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		new ClientGenerationStore(storage).write(target.generationRecord());
+		Path live = storage.gameDirectory().resolve("config/replanned.json");
+		byte[] newerBytes = "newer-player-file".getBytes(StandardCharsets.UTF_8);
+		Files.createDirectories(live.getParent());
+		Files.write(live, newerBytes);
+		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+
+		UpdateTransactionExecutor.Execution execution = executor(storage).recover(transaction);
+
+		assertTrue(execution.replanRequired());
+		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, execution.status());
+		assertArrayEquals(newerBytes, Files.readAllBytes(live));
+		assertEquals(UpdateTransaction.Phase.DEFERRED, executor(storage).readPersisted().phase);
+		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, executor(storage).readPersisted().resultStatus);
+	}
+
+	@Test
 	void replacesDeferredProjectionRequestInTheFixedMailboxWithTheLatestTarget() throws Exception {
 		ClientStorage storage = storage();
 		byte[] oldBytes = "mailbox-old".getBytes(StandardCharsets.UTF_8);

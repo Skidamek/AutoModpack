@@ -92,12 +92,29 @@ public final class ClientProjectionView {
 	private Snapshot stagedSnapshot(UpdateTransaction pending) throws IOException {
 		if (pending.targetGenerationId == null) throw new IOException("Pending projection target generation is missing");
 		Map<String, UpdatePlan.FileState> files = new LinkedHashMap<>();
+		Map<String, List<UpdatePlan.FileState>> pendingGameStates = new LinkedHashMap<>();
 		for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
 			if (projected == null || projected.root() != UpdatePlan.Root.PROJECTION || !projected.present()) continue;
 			if (!HashUtils.isSha1(projected.expectedHash()) || projected.expectedSize() < 0) throw new IOException("Pending projection file metadata is invalid");
 			files.put(UpdatePlanner.normalize(projected.relativePath()), new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true));
 		}
-		return new Snapshot(stagedTarget(pending), files, pending);
+		for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
+			if (projected == null || projected.root() != UpdatePlan.Root.GAME_DIR) continue;
+			String relative = UpdatePlanner.normalize(projected.relativePath());
+			UpdatePlan.FileState state = projected.present()
+					? new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true)
+					: new UpdatePlan.FileState(null, -1, false);
+			pendingGameStates.computeIfAbsent(relative, ignored -> new ArrayList<>()).add(state);
+		}
+		for (UpdatePlan.BaselineCapture capture : pending.plannedBaselineCaptures) {
+			if (capture == null || capture.root() != UpdatePlan.Root.GAME_DIR) continue;
+			String relative = UpdatePlanner.normalize(capture.relativePath());
+			UpdatePlan.FileState state = capture.absent()
+					? new UpdatePlan.FileState(null, -1, false)
+					: new UpdatePlan.FileState(capture.expectedHash(), capture.expectedSize(), true);
+			pendingGameStates.computeIfAbsent(relative, ignored -> new ArrayList<>()).add(state);
+		}
+		return new Snapshot(stagedTarget(pending), files, pendingGameStates, pending);
 	}
 
 	private Snapshot activeSnapshot(FileMetadataCache cache) throws IOException {
@@ -111,7 +128,7 @@ public final class ClientProjectionView {
 				}
 			}
 		}
-		return new Snapshot(target(), files, null);
+		return new Snapshot(target(), files, Map.of(), null);
 	}
 
 	private ModpackJsons.ModpackContentFields stagedTarget(UpdateTransaction pending) throws IOException {
@@ -147,11 +164,16 @@ public final class ClientProjectionView {
 	public final class Snapshot {
 		private final ModpackJsons.ModpackContentFields target;
 		private final Map<String, UpdatePlan.FileState> files;
+		private final Map<String, List<UpdatePlan.FileState>> pendingGameStates;
 		private final UpdateTransaction pending;
 
-		private Snapshot(ModpackJsons.ModpackContentFields target, Map<String, UpdatePlan.FileState> files, UpdateTransaction pending) {
+		private Snapshot(ModpackJsons.ModpackContentFields target, Map<String, UpdatePlan.FileState> files,
+				Map<String, List<UpdatePlan.FileState>> pendingGameStates, UpdateTransaction pending) {
 			this.target = target;
 			this.files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
+			Map<String, List<UpdatePlan.FileState>> states = new LinkedHashMap<>();
+			for (Map.Entry<String, List<UpdatePlan.FileState>> entry : pendingGameStates.entrySet()) states.put(entry.getKey(), List.copyOf(entry.getValue()));
+			this.pendingGameStates = Collections.unmodifiableMap(states);
 			this.pending = pending;
 		}
 
@@ -161,6 +183,14 @@ public final class ClientProjectionView {
 
 		public Map<String, UpdatePlan.FileState> files() {
 			return files;
+		}
+
+		/** Returns whether the observed live state is one of the states already owned by a pending transaction. */
+		public boolean matchesPendingGameState(String relativePath, UpdatePlan.FileState observed) {
+			if (pending == null || observed == null) return false;
+			String relative = UpdatePlanner.normalize(relativePath);
+			return pendingGameStates.getOrDefault(relative, List.of()).stream().anyMatch(expected -> expected.regularFile() == observed.regularFile()
+					&& expected.size() == observed.size() && Objects.equals(expected.sha1(), observed.sha1()));
 		}
 
 		/** Returns pending managed live paths so a replan can observe their real filesystem state. */

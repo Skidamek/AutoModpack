@@ -47,6 +47,7 @@ public final class UpdateHelperMain {
 						for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
 							UpdateTransactionExecutor.Execution execution = executor.recoverLatest();
 							if (execution.success()) return 0;
+							if (execution.replanRequired()) return 1;
 							if (attempt == MAX_ATTEMPTS) return 1;
 							Thread.sleep(backoff);
 							backoff = Math.min(MAX_BACKOFF_MILLIS, backoff * 2);
