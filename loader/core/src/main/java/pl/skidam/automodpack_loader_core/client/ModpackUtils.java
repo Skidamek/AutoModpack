@@ -265,17 +265,12 @@ public class ModpackUtils {
 			ClientConfigJsons.ClientConfigFieldsV3 currentConfig) {
 		ModpackId.requireValid(modpackId);
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing");
-
-		ClientConfigJsons.ClientConfigFieldsV3 updatedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
-		updatedConfig.selectedModpackId = modpackId;
-		return updatedConfig;
+		return planCachedModpackSelection(modpackId, currentConfig);
 	}
 
 	public static ClientConfigJsons.ClientConfigFieldsV3 planCachedModpackSelection(String modpackId, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) {
 		ModpackId.requireValid(modpackId);
-		ClientConfigJsons.ClientConfigFieldsV3 updatedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
-		updatedConfig.selectedModpackId = modpackId;
-		return updatedConfig;
+		return currentConfig.withSelectedModpackId(modpackId);
 	}
 
 	public static ManifestFetchResult requestServerModpackContent(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser) {

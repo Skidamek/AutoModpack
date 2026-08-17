@@ -56,9 +56,9 @@ public final class ClientProjectionView {
 	}
 
 	/**
-	 * Rebases the caller's current settings on the pending transaction. A pending
-	 * transaction owns the planned selected modpack; the other settings remain caller
-	 * controlled so a change made while the game stayed open cannot be reverted.
+	 * Rebases the persisted settings on the pending transaction. Planned values win
+	 * only while their preconditions still match, so edits made while the game stayed
+	 * open cannot be reverted.
 	 */
 	public ClientConfigJsons.ClientConfigFieldsV3 logicalConfig(ClientConfigJsons.ClientConfigFieldsV3 current) throws IOException {
 		Objects.requireNonNull(current, "current config");
@@ -79,20 +79,11 @@ public final class ClientProjectionView {
 
 	private ClientConfigJsons.ClientConfigFieldsV3 rebaseConfig(ClientConfigJsons.ClientConfigFieldsV3 persisted, UpdateTransaction pending) throws IOException {
 		if (pending.expectedClientConfig == null) throw new IOException("Pending client configuration precondition is missing");
-		ClientConfigJsons.ClientConfigFieldsV3 logical = new ClientConfigJsons.ClientConfigFieldsV3(persisted);
 		ClientConfigJsons.ClientConfigFieldsV3 expected = pending.expectedClientConfig;
 		ClientConfigJsons.ClientConfigFieldsV3 planned = pending.plannedClientConfig;
-		if (Objects.equals(persisted.selectedModpackId, expected.selectedModpackId)) {
-			ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
-			if (active == null || Objects.equals(persisted.selectedModpackId, active.modpackId)) logical.selectedModpackId = planned.selectedModpackId;
-		}
-		if (persisted.updateSelectedModpackOnLaunch == expected.updateSelectedModpackOnLaunch)
-			logical.updateSelectedModpackOnLaunch = planned.updateSelectedModpackOnLaunch;
-		if (persisted.selfUpdater == expected.selfUpdater) logical.selfUpdater = planned.selfUpdater;
-		if (persisted.syncAutoModpackVersion == expected.syncAutoModpackVersion) logical.syncAutoModpackVersion = planned.syncAutoModpackVersion;
-		if (persisted.syncLoaderVersion == expected.syncLoaderVersion) logical.syncLoaderVersion = planned.syncLoaderVersion;
-		if (persisted.playMusic == expected.playMusic) logical.playMusic = planned.playMusic;
-		return logical;
+		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
+		boolean mayUpdateSelectedModpack = active == null || Objects.equals(persisted.selectedModpackId, active.modpackId);
+		return persisted.rebase(expected, planned, mayUpdateSelectedModpack);
 	}
 
 	private ClientConfigJsons.ClientConfigFieldsV3 persistedClientConfig() {
