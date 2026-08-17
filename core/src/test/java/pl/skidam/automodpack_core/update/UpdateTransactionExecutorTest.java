@@ -91,7 +91,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
-	void immutablePlanRecordsRoundTripThroughTheRuntimeGson() {
+	void transactionEntriesRoundTripThroughRuntimeGson() {
 		String sourceHash = "a".repeat(HashUtils.SHA1_HEX_LENGTH);
 		String targetHash = "b".repeat(HashUtils.SHA1_HEX_LENGTH);
 		List<Object> values = List.of(

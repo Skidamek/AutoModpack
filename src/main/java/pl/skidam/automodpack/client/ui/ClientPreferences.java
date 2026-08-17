@@ -13,7 +13,7 @@ final class ClientPreferences {
 	private ClientPreferences() {}
 
 	static void setMusicEnabled(boolean enabled) {
-		clientConfig.playMusic = enabled;
+		clientConfig = clientConfig.withPlayMusic(enabled);
 		try {
 			ConfigTools.writeAtomic(ClientStorage.open(GameDirectory.current()).clientConfigFile(), clientConfig);
 		} catch (IOException e) {

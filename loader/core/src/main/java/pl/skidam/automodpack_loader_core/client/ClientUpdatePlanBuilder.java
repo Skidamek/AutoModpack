@@ -133,8 +133,8 @@ final class ClientUpdatePlanBuilder {
 		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = projectionView.logicalConfig(expectedClientConfig, expectedClientConfig);
-		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
-		if (installed.modpackId.equals(plannedConfig.selectedModpackId)) plannedConfig.selectedModpackId = "";
+		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = currentConfig;
+		if (installed.modpackId.equals(plannedConfig.selectedModpackId)) plannedConfig = plannedConfig.withSelectedModpackId("");
 		SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
