@@ -207,8 +207,8 @@ public final class ClientObjectStore {
 		FileTotals overlays = fileTotals(regularFiles(storage.overlaysDirectory(), "client overlays"));
 		FileTotals baselines = fileTotals(regularFiles(storage.baselinesDirectory(), "client baselines"));
 		FileTotals preservation = fileTotals(regularFiles(storage.preservationDirectory(), "client preservation vault"));
-		FileTotals incoming = fileTotals(regularFiles(storage.incomingDirectory(), "client incoming transactions"));
-		FileTotals backup = fileTotals(regularFiles(storage.backupDirectory(), "client transaction backups"));
+		FileTotals incoming = fileTotals(regularFiles(storage.incomingDirectory(), "client incoming staging"));
+		FileTotals backup = fileTotals(regularFiles(storage.backupDirectory(), "client projection backups"));
 		return new StorageReport(objects.count(), objects.bytes(), references.hashes().size(), referenceTotals.expectedBytes(), referenceTotals.validCount(), referenceTotals.validBytes(),
 				referenceTotals.missingCount(), referenceTotals.invalidCount(), records.count(), records.bytes(), active.count(), active.bytes(), metadata.count(), metadata.bytes(), overlays.count(), overlays.bytes(),
 				baselines.count(), baselines.bytes(), preservation.count(), preservation.bytes(), incoming.count(), incoming.bytes(), backup.count(), backup.bytes());

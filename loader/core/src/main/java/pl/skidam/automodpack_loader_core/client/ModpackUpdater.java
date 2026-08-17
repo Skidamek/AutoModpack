@@ -38,6 +38,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
+import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -171,12 +172,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private ModpackJsons.ModpackContentFields storedTarget() throws IOException {
-		SelectedModpackTarget target = storedSelectedTarget();
-		return target == null ? null : target.flatTarget();
-	}
-
-	private SelectedModpackTarget storedSelectedTarget() throws IOException {
-		return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
+		return ClientProjectionView.open(storage).target();
 	}
 
 	public void selectTarget(SelectionIntent intent) {
@@ -380,7 +376,7 @@ public class ModpackUpdater implements AutoCloseable {
 			throw e;
 		}
 
-		planBuilder.populateStoreFromActive(target, cache);
+		planBuilder.populateStoreFromLogicalProjection(target, cache);
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> stillMissing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
 		if (!stillMissing.isEmpty()) throw new IOException("Verified selected-target objects are still missing after acquisition: " + stillMissing.size());
 		return missing.size();
@@ -788,15 +784,15 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */
-	private boolean requiresReconciliation(ClientUpdatePlanBuilder.PreparedPlan prepared, ModpackJsons.ModpackContentFields installed) {
+	private boolean requiresReconciliation(ClientUpdatePlanBuilder.PreparedPlan prepared, ModpackJsons.ModpackContentFields installed) throws IOException {
 		GenerationTarget installedTarget = installed == null ? null : GenerationTarget.fromFlat(installed);
 		return UpdateReviewPolicy.requiresPlayerReview(false, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared));
 	}
 
-	private boolean hasPlanImpact(ClientUpdatePlanBuilder.PreparedPlan prepared) {
+	private boolean hasPlanImpact(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
 		UpdatePlan plan = prepared.plan();
 		return !plan.operations().isEmpty() || !plan.conflicts().isEmpty() || !plan.preservations().isEmpty() || !plan.baselineCaptures().isEmpty()
-				|| !plan.restartReasons().isEmpty() || !ConfigTools.GSON.toJson(plan.plannedClientConfig()).equals(ConfigTools.GSON.toJson(clientConfig));
+				|| !plan.restartReasons().isEmpty() || !ConfigTools.GSON.toJson(plan.plannedClientConfig()).equals(ConfigTools.GSON.toJson(ClientProjectionView.open(storage).logicalConfig(clientConfig)));
 	}
 
 	private boolean requestPreparedPlanPreview(ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) throws IOException {
@@ -825,7 +821,7 @@ public class ModpackUpdater implements AutoCloseable {
 		planBuilder.preparePlanObjects(plan, target.flatTarget());
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest());
 		if (!execution.success()) {
-			DetachedUpdateHelper.launch(execution.transaction());
+			DetachedUpdateHelper.launch();
 			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
 		}
 		try {
