@@ -453,7 +453,7 @@ class Connection implements AutoCloseable {
 	private final DataOutputStream out;
 	private final ExecutorService executor = Executors.newSingleThreadExecutor();
 	private CompressionCodec compressionCodec;
-	private byte[] networkInputBuffer;
+	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
 
 	public Connection(SSLSocket socket, byte[] secretBytes) throws IOException {
 		if (socket == null || socket.isClosed()) throw new IOException("Server connection is closed");
@@ -468,7 +468,6 @@ class Connection implements AutoCloseable {
 			compressionType = sendCompressionConfig(compressionType);
 			compressionCodec = CompressionFactory.createCodec(compressionType);
 			chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
-			networkInputBuffer = new byte[compressionCodec.maxCompressedLength(chunkSize)];
 			sendEchoConfig();
 		} catch (IOException e) {
 			LOGGER.error("Failed to configure connection", e);
@@ -524,13 +523,13 @@ class Connection implements AutoCloseable {
 		ProtocolFrameCodec.write(out, getCompressionCodec(), payload, chunkSize);
 	}
 
-	private byte[] readProtocolMessageFrame() throws IOException {
-		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, networkInputBuffer);
+	private ProtocolFrameCodec.Frame readProtocolMessageFrame() throws IOException {
+		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, frameScratch);
 	}
 
 	private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
-		byte[] headerData = readProtocolMessageFrame();
-		ByteBuffer headerWrap = ByteBuffer.wrap(headerData);
+		ProtocolFrameCodec.Frame header = readProtocolMessageFrame();
+		ByteBuffer headerWrap = ByteBuffer.wrap(header.data(), 0, header.length());
 
 		byte version = headerWrap.get();
 		byte messageType = headerWrap.get();
@@ -551,16 +550,16 @@ class Connection implements AutoCloseable {
 
 		try (OutputStream fos = LocalFileWriter.open(destination)) {
 			while (receivedBytes < expectedFileSize) {
-				byte[] dataFrame = readProtocolMessageFrame();
-				int toWrite = Math.min(dataFrame.length, (int) (expectedFileSize - receivedBytes));
-				fos.write(dataFrame, 0, toWrite);
+				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
+				int toWrite = Math.min(dataFrame.length(), (int) (expectedFileSize - receivedBytes));
+				fos.write(dataFrame.data(), 0, toWrite);
 				receivedBytes += toWrite;
 				if (chunkCallback != null) chunkCallback.accept(toWrite);
 			}
 		}
 
-		byte[] eotData = readProtocolMessageFrame();
-		if (eotData.length < 2 || eotData[0] != version || eotData[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
+		ProtocolFrameCodec.Frame eot = readProtocolMessageFrame();
+		if (eot.length() < 2 || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
 		return destination;
 	}
 

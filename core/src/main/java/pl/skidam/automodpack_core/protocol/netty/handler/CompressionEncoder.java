@@ -13,14 +13,13 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 public class CompressionEncoder extends MessageToByteEncoder<ByteBuf> {
 	private CompressionCodec codec;
 	private CompressionType compressionType;
+	private final ProtocolFrameCodec.FrameScratch scratch = new ProtocolFrameCodec.FrameScratch();
 
 	@Override
 	protected void encode(ChannelHandlerContext ctx, ByteBuf msg, ByteBuf out) throws Exception {
-		byte[] input = new byte[msg.readableBytes()];
-		msg.readBytes(input);
 		Integer chunkSize = ctx.channel().attr(NettyServer.CHUNK_SIZE).get();
 		if (chunkSize == null) throw new IllegalStateException("Chunk size has not been configured");
-		ProtocolFrameCodec.write(out, codec(ctx), input, chunkSize);
+		ProtocolFrameCodec.write(out, codec(ctx), msg, chunkSize, scratch);
 	}
 
 	private CompressionCodec codec(ChannelHandlerContext ctx) {

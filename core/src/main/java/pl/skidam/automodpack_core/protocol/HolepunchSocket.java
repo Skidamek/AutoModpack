@@ -12,6 +12,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import io.netty.buffer.ByteBuf;
+
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
@@ -26,7 +28,7 @@ public class HolepunchSocket extends Socket {
 	public HolepunchSocket(HolepunchConnection connection) {
 		this.connection = Objects.requireNonNull(connection, "connection");
 		this.in = new HolepunchInputStream();
-		this.out = new HolepunchOutputStream(connection);
+		this.out = new HolepunchOutputStream();
 	}
 
 	public HolepunchSocket() {
@@ -36,7 +38,7 @@ public class HolepunchSocket extends Socket {
 	public synchronized void setConnection(HolepunchConnection connection) {
 		if (closed) throw new IllegalStateException("HolepunchSocket is closed");
 		this.connection = Objects.requireNonNull(connection, "connection");
-		this.out = new HolepunchOutputStream(connection);
+		this.out = new HolepunchOutputStream();
 	}
 
 	public HolepunchHandler handler() {
@@ -66,6 +68,21 @@ public class HolepunchSocket extends Socket {
 		HolepunchOutputStream output = out;
 		if (output == null) throw new IllegalStateException("HolepunchSocket is not connected");
 		return output;
+	}
+
+	void writeBuffer(ByteBuf buffer) throws IOException {
+		int readerIndex = buffer.readerIndex();
+		int readableBytes = buffer.readableBytes();
+		if (readableBytes == 0) return;
+		if (buffer.nioBufferCount() == 1) {
+			writeConnection(buffer.nioBuffer(readerIndex, readableBytes));
+		} else if (buffer.nioBufferCount() > 1) {
+			for (ByteBuffer nioBuffer : buffer.nioBuffers(readerIndex, readableBytes)) writeConnection(nioBuffer);
+		} else {
+			byte[] bytes = new byte[readableBytes];
+			buffer.getBytes(readerIndex, bytes);
+			writeConnection(ByteBuffer.wrap(bytes));
+		}
 	}
 
 	@Override
@@ -181,13 +198,7 @@ public class HolepunchSocket extends Socket {
 		}
 	}
 
-	private static class HolepunchOutputStream extends OutputStream {
-		private final HolepunchConnection connection;
-
-		HolepunchOutputStream(HolepunchConnection connection) {
-			this.connection = connection;
-		}
-
+	private class HolepunchOutputStream extends OutputStream {
 		@Override
 		public void write(int b) throws IOException {
 			write(new byte[]{(byte) b}, 0, 1);
@@ -197,19 +208,23 @@ public class HolepunchSocket extends Socket {
 		public void write(byte[] b, int off, int len) throws IOException {
 			Objects.checkFromIndexSize(off, len, b.length);
 			if (len == 0) return;
-			try {
-				connection.write(ByteBuffer.wrap(b, off, len))
-						.toCompletableFuture()
-						.get(30, TimeUnit.SECONDS);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				throw new IOException("write interrupted", e);
-			} catch (Exception e) {
-				throw new IOException("write failed", e);
-			}
+			HolepunchSocket.this.writeConnection(ByteBuffer.wrap(b, off, len));
 		}
 
 		@Override
 		public void close() {}
+	}
+
+	private void writeConnection(ByteBuffer data) throws IOException {
+		HolepunchConnection activeConnection = connection;
+		if (activeConnection == null) throw new IOException("HolepunchSocket is not connected");
+		try {
+			activeConnection.write(data).toCompletableFuture().get(30, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("write interrupted", e);
+		} catch (Exception e) {
+			throw new IOException("write failed", e);
+		}
 	}
 }

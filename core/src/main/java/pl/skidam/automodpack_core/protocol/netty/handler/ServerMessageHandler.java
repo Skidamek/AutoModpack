@@ -19,7 +19,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.stream.ChunkedNioStream;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
 import pl.skidam.automodpack_core.auth.Secrets;
@@ -121,7 +120,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
 		try {
 			channel = FileChannel.open(path, StandardOpenOption.READ);
-			ChunkedNioStream chunkedStream = new ChunkedNioStream(channel, this.chunkSize);
+			HeapChunkedNioStream chunkedStream = new HeapChunkedNioStream(channel, this.chunkSize);
 
 			ctx.writeAndFlush(chunkedStream).addListener((ChannelFutureListener) future -> {
 				if (future.isSuccess()) {
