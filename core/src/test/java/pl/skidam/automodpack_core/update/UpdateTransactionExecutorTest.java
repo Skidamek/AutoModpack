@@ -145,6 +145,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
 		UpdateTransaction transaction = UpdateTransaction.create(newPlan, newTarget, storage.overlayDigest(newTarget.manifest().modpackId()));
+		transaction.expectedClientConfig = clientConfig(newTarget.manifest().modpackId());
 		new ClientGenerationStore(storage).write(newRecord);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 		Files.move(storage.activeDirectory(), storage.backupProjectionDirectory());
@@ -171,6 +172,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3();
 		new ClientGenerationStore(storage).write(target.generationRecord());
 		Path live = storage.gameDirectory().resolve("config/replanned.json");
 		byte[] newerBytes = "newer-player-file".getBytes(StandardCharsets.UTF_8);
@@ -184,6 +186,30 @@ class UpdateTransactionExecutorTest {
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, execution.status());
 		assertArrayEquals(newerBytes, Files.readAllBytes(live));
 		assertEquals(UpdateTransaction.Phase.DEFERRED, executor(storage).readPersisted().phase);
+		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, executor(storage).readPersisted().resultStatus);
+	}
+
+	@Test
+	void clientConfigurationDriftRequestsAReplanWithoutOverwritingTheNewSettings() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "config-drift".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		SelectedModpackTarget target = target("mods/config-drift.jar", "mod", false, hash, bytes.length);
+		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/config-drift.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/config-drift.jar", true, hash, bytes.length)));
+		ClientConfigJsons.ClientConfigFieldsV3 expected = new ClientConfigJsons.ClientConfigFieldsV3();
+		ConfigTools.writeAtomic(storage.clientConfigFile(), expected);
+		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
+		new ClientGenerationStore(storage).write(target.generationRecord());
+		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(expected);
+		newer.playMusic = false;
+		ConfigTools.writeAtomic(storage.clientConfigFile(), newer);
+
+		UpdateTransactionExecutor.Execution execution = executor(storage).commit(transaction);
+
+		assertTrue(execution.replanRequired());
+		assertFalse(ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().playMusic);
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, executor(storage).readPersisted().resultStatus);
 	}
 
@@ -252,11 +278,14 @@ class UpdateTransactionExecutorTest {
 		transaction.plannedClientConfig.syncLoaderVersion = false;
 		new ClientGenerationStore(storage).write(record);
 		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
+		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(current);
+		current.playMusic = false;
 		ConfigTools.writeAtomic(storage.clientConfigFile(), current);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 
 		assertEquals(target.manifest().modpackId(), ClientProjectionView.open(storage).logicalConfig(current).selectedModpackId);
 		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).syncLoaderVersion);
+		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).playMusic);
 	}
 
 	@Test
@@ -294,6 +323,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId())));
 		UpdateTransaction malformed = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		malformed.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3();
 		malformed.plannedConflicts = new ArrayList<>(List.of(plan.conflicts().get(0)));
 		malformed.plannedConflicts.set(0, null);
 		assertThrows(IOException.class, () -> executor(storage).validate(malformed));

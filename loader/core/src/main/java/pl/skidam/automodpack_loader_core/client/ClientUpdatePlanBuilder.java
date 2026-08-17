@@ -65,18 +65,22 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles, String overlayDigest) {
+	record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles, String overlayDigest,
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		PreparedPlan {
 			originalFiles = Map.copyOf(originalFiles);
 			if (!HashUtils.isCanonicalSha1(overlayDigest)) throw new IllegalArgumentException("Prepared overlay digest is invalid");
+			expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(Objects.requireNonNull(expectedClientConfig, "expectedClientConfig"));
 		}
 	}
 
 	record RemovalPreparation(UpdatePlan plan, ModpackJsons.CompleteModpackContentFields completeFields, ModpackJsons.ModpackContentFields installed,
 			ClientStorageJsons.ClientBaselineFields baseline, SelectionIntent expectedPriorIntent, ClientConfigJsons.ClientConfigFieldsV3 currentConfig,
-			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files) {
+			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files,
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		RemovalPreparation {
 			files = Map.copyOf(files);
+			expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(Objects.requireNonNull(expectedClientConfig, "expectedClientConfig"));
 		}
 	}
 
@@ -86,7 +90,9 @@ final class ClientUpdatePlanBuilder {
 		ClientProjectionView projectionView = ClientProjectionView.open(storage);
 		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 		captureActiveEditableOverlays(cache, projection);
-		ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(input.currentConfig());
+		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(expectedClientConfig);
 		ModpackJsons.ModpackContentFields installed = projection.target();
 		Map<String, ClientOverlaySnapshot> overlaySnapshots = new HashMap<>();
 		ClientOverlaySnapshot targetOverlay = storage.overlaySnapshot(input.target().modpackId, cache);
@@ -111,8 +117,8 @@ final class ClientUpdatePlanBuilder {
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, editableOverlays, forceCopyServices, targetMods, standardMods,
 				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), nestedCopies, selection, plannedConfig, input.consentedLocalModFiles()));
 		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(input.target().loader, input.target().loaderVersion, logicalConfig.syncLoaderVersion, loaderType))
-			return new PreparedPlan(plan, files, targetOverlay.digest());
-		return new PreparedPlan(plan.withRestartReason(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION), files, targetOverlay.digest());
+			return new PreparedPlan(plan, files, targetOverlay.digest(), expectedClientConfig);
+		return new PreparedPlan(plan.withRestartReason(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION), files, targetOverlay.digest(), expectedClientConfig);
 	}
 
 	RemovalPreparation prepareRemoval() throws Exception {
@@ -124,8 +130,9 @@ final class ClientUpdatePlanBuilder {
 				.orElseThrow(() -> new IOException("Active client generation record is missing")).toFields();
 		AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId);
 		ClientStorageJsons.ClientBaselineFields baseline = availableBaseline.fields();
-		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = projectionView.logicalConfig(ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
-				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new));
+		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = projectionView.logicalConfig(expectedClientConfig);
 		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
 		if (installed.modpackId.equals(plannedConfig.selectedModpackId)) plannedConfig.selectedModpackId = "";
 		SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
@@ -138,7 +145,7 @@ final class ClientUpdatePlanBuilder {
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
 			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaseline.objectHashes(), generatedCopies, plannedConfig));
-			return new RemovalPreparation(plan, completeFields, installed, baseline, expectedPriorIntent, currentConfig, plannedConfig, files);
+			return new RemovalPreparation(plan, completeFields, installed, baseline, expectedPriorIntent, currentConfig, plannedConfig, files, expectedClientConfig);
 		}
 	}
 

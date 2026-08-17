@@ -86,7 +86,12 @@ public final class UpdateTransactionExecutor {
 	}
 
 	public Execution commit(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest) throws IOException {
-		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest);
+		return commit(plan, target, overlayDigest, readClientConfig());
+	}
+
+	public Execution commit(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) throws IOException {
+		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest, expectedClientConfig);
 		return commitPrepared(transaction, target);
 	}
 
@@ -99,6 +104,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Execution commitPreparedLocked(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
+		if (isModpackTransaction(transaction) && transaction.expectedClientConfig == null) transaction.expectedClientConfig = readClientConfig();
 		validate(transaction, unpublishedTarget);
 		validateSelectionBeforeMutation(transaction);
 		preparePendingReplacement(transaction);
@@ -156,11 +162,20 @@ public final class UpdateTransactionExecutor {
 	/** Reports mutable input drift that requires a fresh plan before live mutation can continue. */
 	public boolean hasMutableInputDrift(UpdateTransaction transaction) throws IOException {
 		if (!isModpackTransaction(transaction)) return false;
+		boolean configChanged = configurationChangedAfterPlanning(transaction);
 		if (projectionPublicationStarted(transaction))
-			return transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+			return configChanged || transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
 					&& (!overlayStateMatches(transaction) || hasNewerSelection(transaction));
+		if (configChanged) return true;
 		if (!Objects.equals(transaction.overlayDigest, context.storage().overlayDigest(transaction.modpackId))) return true;
 		return hasNewerSelection(transaction);
+	}
+
+	private boolean configurationChangedAfterPlanning(UpdateTransaction transaction) throws IOException {
+		if (!isModpackTransaction(transaction) || transaction.expectedClientConfig == null) return false;
+		String current = UpdateTransaction.digest(readClientConfig());
+		if (current.equals(UpdateTransaction.digest(transaction.expectedClientConfig))) return false;
+		return transaction.plannedClientConfig == null || !current.equals(UpdateTransaction.digest(transaction.plannedClientConfig));
 	}
 
 	private boolean hasNewerSelection(UpdateTransaction transaction) throws IOException {
@@ -205,6 +220,11 @@ public final class UpdateTransactionExecutor {
 
 	public UpdateTransaction readPersisted() {
 		return ConfigTools.read(context.storage().transactionFile(), UpdateTransaction.class).orElse(null);
+	}
+
+	private ClientConfigJsons.ClientConfigFieldsV3 readClientConfig() {
+		return ConfigTools.read(context.storage().clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 	}
 
 	private UpdateTransaction readPersistedTransaction() throws IOException {
@@ -252,6 +272,7 @@ public final class UpdateTransactionExecutor {
 
 		ModpackJsons.ModpackContentFields target = null;
 		if (isModpackPurpose(transaction.purpose)) {
+			if (transaction.expectedClientConfig == null) throw new IOException("Expected client configuration is missing");
 			ModpackId.requireValid(transaction.modpackId);
 			if (selectedTarget != null && transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE)
 				throw new IOException("A supplied update target is only valid for a modpack update transaction");
@@ -407,6 +428,7 @@ public final class UpdateTransactionExecutor {
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
 		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
 				|| transaction.ledgerDigest != null || transaction.targetPlatform != null || transaction.selectionDigest != null || transaction.overlayDigest != null
+				|| transaction.expectedClientConfig != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.expectedPriorRequestedCategories != null
 				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.requestedCategories != null || transaction.excludedGroups != null
 				|| transaction.plannedClientConfig != null || transaction.plannedGeneratedCopies != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty()
@@ -675,6 +697,8 @@ public final class UpdateTransactionExecutor {
 			transaction.resultMessage = null;
 			setPhase(transaction, UpdateTransaction.Phase.PREPARING);
 			if (isModpackTransaction(transaction)) {
+				if (!publicationStarted && configurationChangedAfterPlanning(transaction))
+					throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
 				captureBaselines(transaction);
 				preserveConflicts(transaction);
 				preserveBeforeMutation(transaction);
@@ -683,6 +707,8 @@ public final class UpdateTransactionExecutor {
 				if (!publicationStarted) {
 					verifyManagedFinalState(transaction);
 					if (selectionChangedAfterPlanning(transaction)) throw new UpdateReplanRequiredException(null, "Group selection changed while applying the update");
+					if (configurationChangedAfterPlanning(transaction))
+						throw new UpdateReplanRequiredException(null, "Client configuration changed while applying the update");
 				}
 				if (transaction.operations.isEmpty()) {
 					verifyProjection(context.storage().activeDirectory(), transaction.projectedFinalState);
@@ -692,8 +718,11 @@ public final class UpdateTransactionExecutor {
 					setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
 					swapProjection(transaction);
 				}
-				if (publicationStarted && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE && (!managedStateMatches(transaction) || preserveNewerSelection))
+				if (publicationStarted && isModpackTransaction(transaction)
+						&& (!managedStateMatches(transaction) || preserveNewerSelection || configurationChangedAfterPlanning(transaction)))
 					throw new UpdateReplanRequiredException(null, "Mutable client state changed while publishing the update");
+				if (selectionChangedAfterPlanning(transaction) || configurationChangedAfterPlanning(transaction))
+					throw new UpdateReplanRequiredException(null, "Mutable client configuration changed before update finalization");
 				ModpackJsons.ModpackContentFields target = resolvedTarget(transaction, storedRecord(transaction)).flatTarget();
 				if (transaction.plannedClientConfig != null && !preserveNewerSelection)
 					ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
