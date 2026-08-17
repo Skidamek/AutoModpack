@@ -69,6 +69,21 @@ public final class ClientProjectionView {
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 planned = pending.plannedClientConfig;
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
+		if (pending.expectedClientConfig != null) {
+			// Apply pending values only for settings that still have their planned precondition; newer persisted settings win.
+			logical.selectedModpackId = Objects.equals(persisted.selectedModpackId, pending.expectedClientConfig.selectedModpackId)
+					&& (active == null || Objects.equals(persisted.selectedModpackId, active.modpackId)) ? planned.selectedModpackId : persisted.selectedModpackId;
+			logical.updateSelectedModpackOnLaunch = Objects.equals(persisted.updateSelectedModpackOnLaunch, pending.expectedClientConfig.updateSelectedModpackOnLaunch)
+					? planned.updateSelectedModpackOnLaunch
+					: persisted.updateSelectedModpackOnLaunch;
+			logical.selfUpdater = Objects.equals(persisted.selfUpdater, pending.expectedClientConfig.selfUpdater) ? planned.selfUpdater : persisted.selfUpdater;
+			logical.syncAutoModpackVersion = Objects.equals(persisted.syncAutoModpackVersion, pending.expectedClientConfig.syncAutoModpackVersion)
+					? planned.syncAutoModpackVersion
+					: persisted.syncAutoModpackVersion;
+			logical.syncLoaderVersion = Objects.equals(persisted.syncLoaderVersion, pending.expectedClientConfig.syncLoaderVersion) ? planned.syncLoaderVersion : persisted.syncLoaderVersion;
+			logical.playMusic = Objects.equals(persisted.playMusic, pending.expectedClientConfig.playMusic) ? planned.playMusic : persisted.playMusic;
+			return logical;
+		}
 		if (Objects.equals(current.selectedModpackId, persisted.selectedModpackId)
 				&& (active == null || Objects.equals(current.selectedModpackId, active.modpackId)))
 			logical.selectedModpackId = planned.selectedModpackId;
