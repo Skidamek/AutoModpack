@@ -44,6 +44,7 @@ import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateReviewPolicy;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
@@ -449,6 +450,7 @@ public class ModpackUpdater implements AutoCloseable {
 				? UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId))
 				: UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
+		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
 		if (execution.success()) {
 			clientConfig = preparation.plannedConfig();
 			if (remove) new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
@@ -702,8 +704,8 @@ public class ModpackUpdater implements AutoCloseable {
 
 	// this is run every time we modpack is updated
 	private ApplyResult applyPreparedPlan(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws Exception {
-		executePlan(prepared, target);
-		ApplyResult result = applyResult(prepared.plan());
+		ClientUpdatePlanBuilder.PreparedPlan applied = executePlan(prepared, target);
+		ApplyResult result = applyResult(applied.plan());
 		changelogs.setRestartReasons(result.reasonDescriptions());
 		if (result.requiresRestart()) LOGGER.info("Restart required because: {}", String.join(", ", result.reasonDescriptions()));
 		return result;
@@ -816,27 +818,40 @@ public class ModpackUpdater implements AutoCloseable {
 		return updateRange.featuredNotes().map(GenerationPatchNoteHistory.Entry::patchNotes).orElse("");
 	}
 
-	private void executePlan(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
-		UpdatePlan plan = prepared.plan();
-		planBuilder.preparePlanObjects(plan, target.flatTarget());
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest());
-		if (!execution.success()) {
-			DetachedUpdateHelper.launch();
-			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
-		}
-		try {
-			cleanupOverlayState(plan, target.manifest().modpackId());
-		} catch (IOException e) {
-			LOGGER.warn("Modpack update committed, but stale overlay tombstones could not be cleaned", e);
-		}
-		if (connectionInfo != null && connectionInfo.isComplete()) {
-			try {
-				ConnectionStore.saveConnection(storage, target.manifest().modpackId(), connectionInfo);
-			} catch (IOException e) {
-				throw new IOException("Modpack generation committed but connection state could not be saved", e);
+	private ClientUpdatePlanBuilder.PreparedPlan executePlan(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws Exception {
+		boolean replanned = false;
+		while (true) {
+			UpdatePlan plan = prepared.plan();
+			planBuilder.preparePlanObjects(plan, target.flatTarget());
+			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest());
+			if (execution.replanRequired() && !replanned) {
+				try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+					prepared = planBuilder.buildPlan(new ClientUpdatePlanBuilder.Input(target, target.flatTarget(), connectionInfo, clientConfig, true), cache, modCache);
+				}
+				recordChangelogs(prepared, target);
+				replanned = true;
+				continue;
 			}
+			if (!execution.success()) {
+				if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
+				DetachedUpdateHelper.launch();
+				throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
+			}
+			try {
+				cleanupOverlayState(plan, target.manifest().modpackId());
+			} catch (IOException e) {
+				LOGGER.warn("Modpack update committed, but stale overlay tombstones could not be cleaned", e);
+			}
+			if (connectionInfo != null && connectionInfo.isComplete()) {
+				try {
+					ConnectionStore.saveConnection(storage, target.manifest().modpackId(), connectionInfo);
+				} catch (IOException e) {
+					throw new IOException("Modpack generation committed but connection state could not be saved", e);
+				}
+			}
+			clientConfig = plan.plannedClientConfig();
+			return prepared;
 		}
-		clientConfig = plan.plannedClientConfig();
 	}
 
 	private void cleanupOverlayState(UpdatePlan plan, String modpackId) throws IOException {

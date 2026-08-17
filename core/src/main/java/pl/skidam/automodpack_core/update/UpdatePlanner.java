@@ -618,15 +618,23 @@ public final class UpdatePlanner {
 
 	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size,
 			String expectedExistingHash) {
-		operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, hash, size, expectedExistingHash));
+		String safeExpectedExistingHash = expectedExistingHash;
+		if (safeExpectedExistingHash == null && key.root() == Root.GAME_DIR) safeExpectedExistingHash = expectedExistingHash(operations, projected, key);
+		operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, hash, size, safeExpectedExistingHash));
 		projected.put(key, new FileState(hash, size, true));
 	}
 
 	private static void delete(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String expectedHash) {
-		FileState existing = projected.get(key);
-		String safeExpectedHash = expectedHash != null ? expectedHash : existing == null ? null : existing.sha1();
+		String safeExpectedHash = expectedHash != null ? expectedHash : expectedExistingHash(operations, projected, key);
 		operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.DELETE, null, -1, safeExpectedHash));
 		projected.remove(key);
+	}
+
+	private static String expectedExistingHash(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key) {
+		Operation previous = operations.get(key);
+		if (previous != null) return previous.expectedExistingHash();
+		FileState existing = projected.get(key);
+		return existing != null && existing.regularFile() ? existing.sha1() : null;
 	}
 
 	private static boolean matches(FileState state, String hash, long size) {
