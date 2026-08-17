@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -492,6 +493,11 @@ class UpdateTransactionExecutorTest {
 
 		UpdateTransaction invalid = UpdateTransaction.createSelfUpdate(currentPath, "../outside.jar", replacementHash, replacement.length, currentHash);
 		assertThrows(IOException.class, () -> executor(storage).validate(invalid));
+	}
+
+	@Test
+	void treatsAccessDeniedAsARecoverableStorageLock() {
+		assertTrue(UpdateTransactionExecutor.isLockFailure(new AccessDeniedException("active", "backup", null)));
 	}
 
 	private ClientStorage storage() throws Exception {
