@@ -159,7 +159,7 @@ public class Preload {
 		if (clientConfig.selectedModpackId != null && !clientConfig.selectedModpackId.isBlank()) {
 			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 				LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
-				clientConfig.selectedModpackId = "";
+				clientConfig = clientConfig.withSelectedModpackId("");
 				writeConfig(storage.clientConfigFile(), clientConfig);
 			} else {
 				try {
@@ -348,8 +348,7 @@ public class Preload {
 				if (bootstrap.installsModpack()) {
 					ConnectionStore.saveConnection(storage, targetModpackId,
 							new ConnectionJsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
-					updatedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(clientConfig);
-					updatedClientConfig.selectedModpackId = targetModpackId;
+					updatedClientConfig = clientConfig.withSelectedModpackId(targetModpackId);
 					writeConfig(storage.clientConfigFile(), updatedClientConfig);
 					clientConfig = updatedClientConfig;
 				}

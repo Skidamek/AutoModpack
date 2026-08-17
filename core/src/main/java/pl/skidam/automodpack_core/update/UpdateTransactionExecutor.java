@@ -293,6 +293,9 @@ public final class UpdateTransactionExecutor {
 		else throw new IOException("Unsupported transaction purpose");
 
 		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.projectedFinalState, transaction.modpackId, transaction.purpose);
+		for (Operation operation : transaction.operations)
+			if (operation == null || operation.root() == null || operation.operation() == null || operation.relativePath() == null)
+				throw new IOException("Incomplete transaction operation");
 		List<Operation> sortedOperations = transaction.operations.stream().sorted(OPERATION_ORDER).toList();
 		if (!transaction.operations.equals(sortedOperations)) throw new IOException("Transaction operations are not deterministically ordered");
 		Set<FileKey> operationKeys = new HashSet<>();
@@ -509,6 +512,9 @@ public final class UpdateTransactionExecutor {
 			if (!transaction.plannedBaselineCaptures.isEmpty()) throw new IOException("Only modpack updates can capture baselines");
 			return;
 		}
+		for (BaselineCapture capture : transaction.plannedBaselineCaptures)
+			if (capture == null || capture.root() == null || capture.relativePath() == null || capture.expectedHash() == null)
+				throw new IOException("Invalid baseline capture");
 		List<BaselineCapture> sorted = transaction.plannedBaselineCaptures.stream().sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal())
 				.thenComparing(BaselineCapture::relativePath)).toList();
 		if (!transaction.plannedBaselineCaptures.equals(sorted)) throw new IOException("Baseline captures are not deterministically ordered");
@@ -533,6 +539,9 @@ public final class UpdateTransactionExecutor {
 		}
 		if (target == null) throw new IOException("Preservation validation has no target");
 		if (transaction.plannedPreservations.isEmpty()) return;
+		for (Preservation preservation : transaction.plannedPreservations)
+			if (preservation == null || preservation.root() == null || preservation.relativePath() == null || preservation.expectedHash() == null || preservation.proof() == null)
+				throw new IOException("Invalid preservation");
 		OwnershipLedger activeLedger = cleanupLedger();
 		OwnershipLedger targetLedger = OwnershipLedger.fromFields(target.ownershipLedger);
 		ClientStorageJsons.ClientGenerationStateFields activeState = context.storage().readActiveState();
@@ -599,6 +608,14 @@ public final class UpdateTransactionExecutor {
 			return;
 		}
 		if (target == null) throw new IOException("Conflict validation has no target");
+		for (Conflict conflict : transaction.plannedConflicts) {
+			if (conflict == null) throw new IOException("Conflict identity is invalid");
+			try {
+				conflict.validate();
+			} catch (RuntimeException e) {
+				throw new IOException("Conflict metadata is invalid", e);
+			}
+		}
 		List<Conflict> sorted = transaction.plannedConflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList();
 		if (!transaction.plannedConflicts.equals(sorted)) throw new IOException("Conflicts are not deterministically ordered");
 		OwnershipLedger activeLedger = cleanupLedger();
