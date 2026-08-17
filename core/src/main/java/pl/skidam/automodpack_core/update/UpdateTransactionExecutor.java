@@ -82,8 +82,6 @@ public final class UpdateTransactionExecutor {
 	}
 
 	public Execution commit(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest) throws IOException {
-		ClientStorage storage = context.storage();
-		requireNoActiveTransaction(storage);
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest);
 		return commitPrepared(transaction, target);
 	}
@@ -99,7 +97,7 @@ public final class UpdateTransactionExecutor {
 	private Execution commitPreparedLocked(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
 		validate(transaction, unpublishedTarget);
 		validateSelectionBeforeMutation(transaction);
-		requireNoActiveTransaction(context.storage());
+		preparePendingReplacement(transaction);
 		if (unpublishedTarget != null)
 			new ClientGenerationStore(context.storage()).write(unpublishedTarget.generationRecord(), unpublishedTarget.patchNotesHistory(), unpublishedTarget.historyIndex());
 		ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
@@ -107,21 +105,75 @@ public final class UpdateTransactionExecutor {
 		return executePersisted(transaction);
 	}
 
-	private static void requireNoActiveTransaction(ClientStorage storage) throws IOException {
-		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An update transaction is already active for this game directory");
+	private void preparePendingReplacement(UpdateTransaction replacement) throws IOException {
+		ClientStorage storage = context.storage();
 		if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An offline repair must finish before an update can start");
+		UpdateTransaction pending = readPersistedTransaction();
+		if (pending == null) return;
+		if (pending.phase == UpdateTransaction.Phase.COMMITTED) {
+			cleanupTransactionDirectories(pending);
+			Files.deleteIfExists(storage.transactionFile());
+			return;
+		}
+		if (pending.phase != UpdateTransaction.Phase.DEFERRED) throw new IOException("An update transaction is already active for this game directory");
+		if (pending.purpose == UpdateTransaction.Purpose.SELF_UPDATE || replacement.purpose == UpdateTransaction.Purpose.SELF_UPDATE)
+			throw new IOException("A deferred self-update must finish before another update can start");
+		validatePendingReplacementEnvelope(pending);
+		if (Files.exists(storage.backupProjectionDirectory(), LinkOption.NOFOLLOW_LINKS)
+				&& !verifyProjectionQuietly(storage.activeDirectory(), pending.projectedFinalState))
+			throw new IOException("A deferred projection publication must finish before its request can be replaced");
+		cleanupTransactionDirectories(pending);
+	}
+
+	private void validatePendingReplacementEnvelope(UpdateTransaction pending) throws IOException {
+		try {
+			if (pending.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported deferred transaction schema");
+			UUID.fromString(pending.transactionId);
+			if (!isModpackPurpose(pending.purpose) || pending.projectedFinalState == null)
+				throw new IOException("Deferred transaction envelope is incomplete");
+			ModpackId.requireValid(pending.modpackId);
+			validateFinalState(pending.projectedFinalState, pending.modpackId, pending.purpose);
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Deferred transaction envelope is invalid", e);
+		}
 	}
 
 	public Execution recover(UpdateTransaction transaction) throws IOException {
-		return ClientStorageMutation.run(context.storage(), () -> {
-			validate(transaction);
-			validateSelectionBeforeMutation(transaction);
-			return executePersisted(transaction);
-		});
+		Objects.requireNonNull(transaction, "transaction");
+		return ClientStorageMutation.run(context.storage(), () -> recoverPersisted(transaction.transactionId));
+	}
+
+	/** Recovers the current mailbox contents, never a transaction captured by an earlier process. */
+	public Execution recoverLatest() throws IOException {
+		return ClientStorageMutation.run(context.storage(), () -> recoverPersisted(null));
+	}
+
+	private Execution recoverPersisted(String expectedTransactionId) throws IOException {
+		UpdateTransaction pending = readPersistedTransaction();
+		if (pending == null) return new Execution(UpdateTransaction.Status.SUCCESS, null, null, null, null);
+		if (expectedTransactionId != null && !expectedTransactionId.equals(pending.transactionId))
+			throw new IOException("The requested update transaction was superseded by a newer pending request");
+		validate(pending);
+		validateSelectionBeforeMutation(pending);
+		return executePersisted(pending);
 	}
 
 	public UpdateTransaction readPersisted() {
 		return ConfigTools.read(context.storage().transactionFile(), UpdateTransaction.class).orElse(null);
+	}
+
+	private UpdateTransaction readPersistedTransaction() throws IOException {
+		if (!Files.exists(context.storage().transactionFile(), LinkOption.NOFOLLOW_LINKS)) return null;
+		try {
+			return ConfigTools.read(context.storage().transactionFile(), UpdateTransaction.class)
+					.orElseThrow(() -> new IOException("Persisted update transaction is missing"));
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Persisted update transaction is invalid", e);
+		}
 	}
 
 	public void validate(UpdateTransaction transaction) throws IOException {
@@ -719,7 +771,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void buildIncomingProjection(UpdateTransaction transaction) throws IOException {
-		Path incoming = context.storage().incomingTransactionDirectory(transaction.transactionId);
+		Path incoming = context.storage().incomingProjectionDirectory();
 		FileTrees.delete(incoming);
 		Files.createDirectories(incoming);
 		for (ProjectedFile projected : transaction.projectedFinalState) {
@@ -734,8 +786,8 @@ public final class UpdateTransactionExecutor {
 
 	private void swapProjection(UpdateTransaction transaction) throws IOException {
 		Path active = context.storage().activeDirectory();
-		Path incoming = context.storage().incomingTransactionDirectory(transaction.transactionId);
-		Path backup = context.storage().backupTransactionDirectory(transaction.transactionId);
+		Path incoming = context.storage().incomingProjectionDirectory();
+		Path backup = context.storage().backupProjectionDirectory();
 		if (verifyProjectionQuietly(active, transaction.projectedFinalState)) {
 			FileTrees.delete(incoming);
 			FileTrees.delete(backup);
@@ -778,8 +830,8 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void cleanupTransactionDirectories(UpdateTransaction transaction) throws IOException {
-		FileTrees.delete(context.storage().incomingTransactionDirectory(transaction.transactionId));
-		FileTrees.delete(context.storage().backupTransactionDirectory(transaction.transactionId));
+		FileTrees.delete(context.storage().incomingProjectionDirectory());
+		FileTrees.delete(context.storage().backupProjectionDirectory());
 	}
 
 	private void captureBaselines(UpdateTransaction transaction) throws IOException {

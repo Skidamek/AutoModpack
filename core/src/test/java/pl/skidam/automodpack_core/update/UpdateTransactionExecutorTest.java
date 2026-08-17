@@ -35,6 +35,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 class UpdateTransactionExecutorTest {
 	@TempDir
@@ -146,7 +147,7 @@ class UpdateTransactionExecutorTest {
 		UpdateTransaction transaction = UpdateTransaction.create(newPlan, newTarget, storage.overlayDigest(newTarget.manifest().modpackId()));
 		new ClientGenerationStore(storage).write(newRecord);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
-		Files.move(storage.activeDirectory(), storage.backupTransactionDirectory(transaction.transactionId));
+		Files.move(storage.activeDirectory(), storage.backupProjectionDirectory());
 		Files.createDirectories(storage.activeDirectory().resolve("mods"));
 		Files.writeString(storage.activePath("mods/partial.jar"), "partial", StandardCharsets.UTF_8);
 
@@ -154,8 +155,98 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
 		assertFalse(Files.exists(storage.activePath("mods/partial.jar")));
-		assertFalse(Files.exists(storage.backupTransactionDirectory(transaction.transactionId)));
+		assertFalse(Files.exists(storage.backupProjectionDirectory()));
 		assertFalse(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
+	void replacesDeferredProjectionRequestInTheFixedMailboxWithTheLatestTarget() throws Exception {
+		ClientStorage storage = storage();
+		byte[] oldBytes = "mailbox-old".getBytes(StandardCharsets.UTF_8);
+		String oldHash = store(storage, oldBytes);
+		SelectedModpackTarget installed = target("mods/mailbox-old.jar", "mod", false, oldHash, oldBytes.length);
+		UpdateTransactionExecutor executor = executor(storage);
+		assertTrue(executor.commit(plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/mailbox-old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-old.jar", true, oldHash, oldBytes.length))), installed).success());
+
+		byte[] deferredBytes = "mailbox-deferred".getBytes(StandardCharsets.UTF_8);
+		String deferredHash = store(storage, deferredBytes);
+		SelectedModpackTarget deferredTarget = nextTarget(installed, "mods/mailbox-deferred.jar", deferredHash, deferredBytes.length, Instant.parse("2026-01-02T00:00:00Z"));
+		UpdatePlan deferredPlan = plan(deferredTarget, clientConfig(deferredTarget.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/mailbox-deferred.jar", OperationType.INSTALL_OBJECT, deferredHash, deferredBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-deferred.jar", true, deferredHash, deferredBytes.length)));
+		UpdateTransaction deferred = UpdateTransaction.create(deferredPlan, deferredTarget, storage.overlayDigest(deferredTarget.manifest().modpackId()));
+		deferred.phase = UpdateTransaction.Phase.DEFERRED;
+		deferred.resultStatus = UpdateTransaction.Status.DEFERRED_LOCKED;
+		new ClientGenerationStore(storage).write(deferredTarget.generationRecord());
+		ConfigTools.writeAtomic(storage.transactionFile(), deferred);
+		Files.createDirectories(storage.incomingProjectionDirectory());
+		Files.writeString(storage.incomingProjectionDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
+
+		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			ClientProjectionView.Snapshot view = ClientProjectionView.open(storage).snapshot(cache);
+			assertEquals(deferredTarget.flatTarget().targetGenerationId, view.target().targetGenerationId);
+			assertEquals(new UpdatePlan.FileState(deferredHash, deferredBytes.length, true), view.files().get("mods/mailbox-deferred.jar"));
+			assertTrue(view.sourceCandidates("mods/mailbox-deferred.jar").contains(storage.objectsDirectory().resolve(deferredHash)));
+		}
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-old.jar"), oldBytes.length, oldHash));
+
+		byte[] latestBytes = "mailbox-latest".getBytes(StandardCharsets.UTF_8);
+		String latestHash = store(storage, latestBytes);
+		SelectedModpackTarget latestTarget = nextTarget(deferredTarget, "mods/mailbox-latest.jar", latestHash, latestBytes.length, Instant.parse("2026-01-03T00:00:00Z"));
+		UpdatePlan latestPlan = plan(latestTarget, clientConfig(latestTarget.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/mailbox-latest.jar", OperationType.INSTALL_OBJECT, latestHash, latestBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-latest.jar", true, latestHash, latestBytes.length)));
+
+		assertTrue(executor.commit(latestPlan, latestTarget).success());
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-latest.jar"), latestBytes.length, latestHash));
+		assertFalse(Files.exists(storage.activePath("mods/mailbox-deferred.jar")));
+		assertFalse(Files.exists(storage.incomingProjectionDirectory().resolve("stale.txt")));
+		assertFalse(Files.exists(storage.incomingProjectionDirectory()));
+		assertFalse(Files.exists(storage.backupProjectionDirectory()));
+		assertFalse(Files.exists(storage.transactionFile()));
+	}
+
+	@Test
+	void usesPendingPlannedSelectionAsTheLogicalConfigurationBase() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "pending-selection".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		ModpackJsons.CompleteModpackContentFields fields = fields("mods/pending-selection.jar", "mod", false, hash, bytes.length);
+		fields.modpackId = "def5678";
+		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-02-01T00:00:00Z"), "");
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/pending-selection.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/pending-selection.jar", true, hash, bytes.length)));
+		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		transaction.plannedClientConfig.syncLoaderVersion = false;
+		new ClientGenerationStore(storage).write(record);
+		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
+		ConfigTools.writeAtomic(storage.clientConfigFile(), current);
+		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+
+		assertEquals(target.manifest().modpackId(), ClientProjectionView.open(storage).logicalConfig(current).selectedModpackId);
+		assertFalse(ClientProjectionView.open(storage).logicalConfig(current).syncLoaderVersion);
+	}
+
+	@Test
+	void refusesToRecoverAStaleTransactionObjectAfterMailboxReplacement() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "stale-mailbox".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		SelectedModpackTarget target = target("mods/stale.jar", "mod", false, hash, bytes.length);
+		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/stale.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/stale.jar", true, hash, bytes.length)));
+		UpdateTransaction stale = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		UpdateTransaction latest = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		latest.phase = UpdateTransaction.Phase.DEFERRED;
+		ConfigTools.writeAtomic(storage.transactionFile(), latest);
+
+		assertThrows(IOException.class, () -> executor(storage).recover(stale));
+		assertEquals(latest.transactionId, executor(storage).readPersisted().transactionId);
 	}
 
 	@Test
@@ -540,6 +631,12 @@ class UpdateTransactionExecutorTest {
 		ModpackJsons.CompleteModpackContentFields fields = fields(path, type, editable, hash, size);
 		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
 		return SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+	}
+
+	private static SelectedModpackTarget nextTarget(SelectedModpackTarget parent, String path, String hash, long size, Instant createdAt) {
+		ModpackJsons.CompleteModpackContentFields fields = fields(path, "mod", false, hash, size);
+		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), parent.generationRecord(), createdAt, "");
+		return SelectedModpackTarget.prepare(record.toFields(), parent.selection().intent(), parent.selection().intent(), ClientPlatform.LINUX);
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields fields(String path, String type, boolean editable, String hash, long size) {

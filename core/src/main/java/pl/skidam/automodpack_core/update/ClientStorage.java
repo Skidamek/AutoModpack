@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -62,6 +61,7 @@ public final class ClientStorage {
 	private final Path clientConfigFile;
 	private final Path modpackContentTempFile;
 	private final Path helperDirectory;
+	private final Path helperLeaseFile;
 	private final Path preservationDirectory;
 	private final Path bootstrapFile;
 	private final Path fileMetadataDirectory;
@@ -96,6 +96,7 @@ public final class ClientStorage {
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
 		this.modpackContentTempFile = this.clientDirectory.resolve(CLIENT_CONTENT_TEMP_FILE.getFileName()).normalize();
 		this.helperDirectory = this.clientDirectory.resolve(CLIENT_HELPER_DIR.getFileName()).normalize();
+		this.helperLeaseFile = this.clientDirectory.resolve(CLIENT_HELPER_DIR.getFileName()).resolve(CLIENT_HELPER_LEASE_FILE.getFileName()).normalize();
 		this.preservationDirectory = this.clientDirectory.resolve(CLIENT_PRESERVATION_DIR.getFileName()).normalize();
 		this.bootstrapFile = this.gameDirectory.resolve(BOOTSTRAP_FILE).normalize();
 		this.fileMetadataDirectory = dataLayout.fileMetadataDirectory();
@@ -266,6 +267,10 @@ public final class ClientStorage {
 		return helperDirectory;
 	}
 
+	public Path helperLeaseFile() {
+		return helperLeaseFile;
+	}
+
 	public Path preservationDirectory() {
 		return preservationDirectory;
 	}
@@ -373,12 +378,12 @@ public final class ClientStorage {
 		return baselinesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve("baseline.json").normalize();
 	}
 
-	public Path incomingTransactionDirectory(String transactionId) {
-		return incomingDirectory.resolve(requireTransactionId(transactionId)).normalize();
+	public Path incomingProjectionDirectory() {
+		return incomingDirectory.resolve("projection").normalize();
 	}
 
-	public Path backupTransactionDirectory(String transactionId) {
-		return backupDirectory.resolve(requireTransactionId(transactionId)).normalize();
+	public Path backupProjectionDirectory() {
+		return backupDirectory.resolve("projection").normalize();
 	}
 
 	public String overlayDigest(String modpackId) throws IOException {
@@ -400,8 +405,8 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(overlaysDirectory, "client overlays");
 		FileTrees.createManagedDirectory(baselinesDirectory, "client baselines");
 		FileTrees.createManagedDirectory(generatedCopiesDirectory, "client generated-copy state");
-		FileTrees.createManagedDirectory(incomingDirectory, "client transaction incoming root");
-		FileTrees.createManagedDirectory(backupDirectory, "client transaction backup root");
+		FileTrees.createManagedDirectory(incomingDirectory, "client incoming staging root");
+		FileTrees.createManagedDirectory(backupDirectory, "client projection backup root");
 		FileTrees.createManagedDirectory(helperDirectory, "client update helper");
 		FileTrees.createManagedDirectory(preservationDirectory, "client preservation root");
 	}
@@ -434,7 +439,7 @@ public final class ClientStorage {
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile);
 		validateWithin(gameDirectory, bootstrapFile);
 		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
-				stateFile, transactionFile, repairJournalFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
+				stateFile, transactionFile, repairJournalFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory, helperLeaseFile);
 		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}
 
@@ -450,14 +455,6 @@ public final class ClientStorage {
 	private static String requireDigest(String value, String description) {
 		if (!HashUtils.isSha1(value)) throw new IllegalArgumentException("Invalid " + description);
 		return HashUtils.normalizeSha1(value);
-	}
-
-	private static String requireTransactionId(String value) {
-		try {
-			return UUID.fromString(value).toString();
-		} catch (RuntimeException e) {
-			throw new IllegalArgumentException("Invalid transaction UUID", e);
-		}
 	}
 
 	private static String requireLogicalPath(String value) {

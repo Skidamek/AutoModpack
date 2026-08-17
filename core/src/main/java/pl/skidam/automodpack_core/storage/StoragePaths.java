@@ -26,6 +26,7 @@ public final class StoragePaths {
 	public static final Path CLIENT_TRANSACTION_FILE = CLIENT_DIR.resolve("update-transaction.json");
 	public static final Path CLIENT_CONTENT_TEMP_FILE = CLIENT_DIR.resolve("incoming-content.json.temp");
 	public static final Path CLIENT_HELPER_DIR = CLIENT_DIR.resolve("helper");
+	public static final Path CLIENT_HELPER_LEASE_FILE = CLIENT_HELPER_DIR.resolve("running.lock");
 
 	public static final Path SERVER_DIR = AUTOMODPACK_DIR.resolve("server");
 	public static final Path SERVER_CURRENT_FILE = SERVER_DIR.resolve("current.json");

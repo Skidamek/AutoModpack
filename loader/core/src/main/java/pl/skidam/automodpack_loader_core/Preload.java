@@ -51,7 +51,6 @@ public class Preload {
 			storage = ClientStorage.open(GameDirectory.current());
 			initializeConstants();
 			loadConfigs();
-			DetachedUpdateHelper.cleanupOldHelperJars();
 			recoverPendingRepair();
 			recoverPendingTransaction();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) importBootstrap();
@@ -98,17 +97,19 @@ public class Preload {
 			return;
 		}
 
-		UpdateTransactionExecutor.Execution execution = executor.recover(transaction);
+		UpdateTransactionExecutor.Execution execution = executor.recoverLatest();
 		if (!execution.success()) {
-			DetachedUpdateHelper.launch(transaction);
+			DetachedUpdateHelper.launch();
 			new ReLauncher(UpdateType.UPDATE, null).restart(true);
-			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
+			UpdateTransaction deferred = execution.transaction() == null ? transaction : execution.transaction();
+			throw new UpdateDeferredException(deferred.transactionId, execution.blockedPath(), execution.message());
 		}
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
+		UpdateTransaction recovered = execution.transaction() == null ? transaction : execution.transaction();
+		if (recovered.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			clientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
 		}
-		LOGGER.info("Recovered update transaction {}", transaction.transactionId);
+		LOGGER.info("Recovered update transaction {}", recovered.transactionId);
 	}
 
 	private void quarantineTransaction(Exception reason) throws IOException {
