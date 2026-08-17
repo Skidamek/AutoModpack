@@ -17,9 +17,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
-import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -85,15 +83,15 @@ final class ClientUpdatePlanBuilder {
 	private record AvailableBaseline(ClientStorageJsons.ClientBaselineFields fields, Set<String> objectHashes) {}
 
 	PreparedPlan buildPlan(Input input, FileMetadataCache cache, ModFileCache modCache) throws Exception {
-		captureActiveEditableOverlays(cache);
 		ClientProjectionView projectionView = ClientProjectionView.open(storage);
 		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
+		captureActiveEditableOverlays(cache, projection);
 		ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(input.currentConfig());
 		ModpackJsons.ModpackContentFields installed = projection.target();
 		Map<String, ClientOverlaySnapshot> overlaySnapshots = new HashMap<>();
 		ClientOverlaySnapshot targetOverlay = storage.overlaySnapshot(input.target().modpackId, cache);
 		overlaySnapshots.put(input.target().modpackId, targetOverlay);
-		UpdatePlanner.SelectionContext selection = selectionContext(logicalConfig, projection, cache, overlaySnapshots);
+		UpdatePlanner.SelectionContext selection = selectionContext(projection, cache, overlaySnapshots);
 		GeneratedCopyState previousGeneratedState = installed == null ? null : projection.generatedCopies();
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(input.target(), installed, selection, projection,
 				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), cache, overlaySnapshots);
@@ -133,8 +131,8 @@ final class ClientUpdatePlanBuilder {
 		SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			captureActiveEditableOverlays(cache);
 			ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
+			captureActiveEditableOverlays(cache, projection);
 			GeneratedCopyState generatedCopies = projection.generatedCopies();
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, projection,
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
@@ -194,17 +192,11 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private SelectedModpackTarget storedSelectedTarget() throws IOException {
-		return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
-	}
-
-	private UpdatePlanner.SelectionContext selectionContext(ClientConfigJsons.ClientConfigFieldsV3 currentConfig, ClientProjectionView.Snapshot projection, FileMetadataCache cache,
+	private UpdatePlanner.SelectionContext selectionContext(ClientProjectionView.Snapshot projection, FileMetadataCache cache,
 			Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
-		String previousId = currentConfig.selectedModpackId;
-		if (previousId == null || previousId.isBlank() || !ModpackId.isValid(previousId)) return null;
-		ModpackJsons.ModpackContentFields previousManifest = projection.target() != null && previousId.equals(projection.target().modpackId)
-				? projection.target()
-				: new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).map(SelectedModpackTarget::flatTarget).orElse(null);
+		ModpackJsons.ModpackContentFields previousManifest = projection.target();
+		if (previousManifest == null) return null;
+		String previousId = previousManifest.modpackId;
 		ClientOverlaySnapshot snapshot = overlaySnapshots.get(previousId);
 		if (snapshot == null) {
 			snapshot = storage.overlaySnapshot(previousId, cache);
@@ -229,21 +221,23 @@ final class ClientUpdatePlanBuilder {
 		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
 	}
 
-	private void captureActiveEditableOverlays(FileMetadataCache cache) throws IOException {
-		SelectedModpackTarget activeTarget = storedSelectedTarget();
-		if (activeTarget == null || activeTarget.flatTarget().list == null) return;
-		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.manifest().modpackId()).deletedPaths);
-		for (var item : activeTarget.flatTarget().list) {
+	private void captureActiveEditableOverlays(FileMetadataCache cache, ClientProjectionView.Snapshot projection) throws IOException {
+		ModpackJsons.ModpackContentFields activeTarget = projection.target();
+		if (activeTarget == null || activeTarget.list == null) return;
+		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.modpackId).deletedPaths);
+		for (var item : activeTarget.list) {
 			if (!item.editable) continue;
 			Path live = livePath(item);
-			Path overlay = storage.overlayFile(activeTarget.manifest().modpackId(), item.file);
+			Path overlay = storage.overlayFile(activeTarget.modpackId, item.file);
 			if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) {
+				if (projection.matchesPendingGameState(item.file, new UpdatePlan.FileState(null, -1, false))) continue;
 				Files.deleteIfExists(overlay);
 				deletedPaths.add(UpdatePlanner.normalize(item.file));
 				continue;
 			}
 			String hash = cache.getOrComputeHash(live);
 			long size = Files.size(live);
+			if (projection.matchesPendingGameState(item.file, new UpdatePlan.FileState(hash, size, true))) continue;
 			if (item.sha1.equalsIgnoreCase(hash) && Long.parseLong(item.size) == size) {
 				Files.deleteIfExists(overlay);
 				deletedPaths.remove(UpdatePlanner.normalize(item.file));
@@ -254,7 +248,7 @@ final class ClientUpdatePlanBuilder {
 			VerifiedFileTransfer.copyAtomic(object, overlay, size, hash);
 			deletedPaths.remove(UpdatePlanner.normalize(item.file));
 		}
-		storage.writeOverlayState(activeTarget.manifest().modpackId(), deletedPaths);
+		storage.writeOverlayState(activeTarget.modpackId, deletedPaths);
 	}
 
 	private Path livePath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {
