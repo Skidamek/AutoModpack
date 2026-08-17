@@ -62,38 +62,42 @@ public final class ClientProjectionView {
 	 */
 	public ClientConfigJsons.ClientConfigFieldsV3 logicalConfig(ClientConfigJsons.ClientConfigFieldsV3 current) throws IOException {
 		Objects.requireNonNull(current, "current config");
-		ClientConfigJsons.ClientConfigFieldsV3 logical = new ClientConfigJsons.ClientConfigFieldsV3(current);
 		UpdateTransaction pending = readPending();
-		if (pending == null || pending.plannedClientConfig == null) return logical;
-		ClientConfigJsons.ClientConfigFieldsV3 persisted = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
-				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		if (pending == null || pending.plannedClientConfig == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
+		return rebaseConfig(persistedClientConfig(), pending);
+	}
+
+	/** Resolves a logical config from an already-read persisted config without reading the file again. */
+	public ClientConfigJsons.ClientConfigFieldsV3 logicalConfig(ClientConfigJsons.ClientConfigFieldsV3 current,
+			ClientConfigJsons.ClientConfigFieldsV3 persisted) throws IOException {
+		Objects.requireNonNull(current, "current config");
+		Objects.requireNonNull(persisted, "persisted config");
+		UpdateTransaction pending = readPending();
+		if (pending == null || pending.plannedClientConfig == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
+		return rebaseConfig(persisted, pending);
+	}
+
+	private ClientConfigJsons.ClientConfigFieldsV3 rebaseConfig(ClientConfigJsons.ClientConfigFieldsV3 persisted, UpdateTransaction pending) throws IOException {
+		if (pending.expectedClientConfig == null) throw new IOException("Pending client configuration precondition is missing");
+		ClientConfigJsons.ClientConfigFieldsV3 logical = new ClientConfigJsons.ClientConfigFieldsV3(persisted);
+		ClientConfigJsons.ClientConfigFieldsV3 expected = pending.expectedClientConfig;
 		ClientConfigJsons.ClientConfigFieldsV3 planned = pending.plannedClientConfig;
-		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
-		if (pending.expectedClientConfig != null) {
-			// Apply pending values only for settings that still have their planned precondition; newer persisted settings win.
-			logical.selectedModpackId = Objects.equals(persisted.selectedModpackId, pending.expectedClientConfig.selectedModpackId)
-					&& (active == null || Objects.equals(persisted.selectedModpackId, active.modpackId)) ? planned.selectedModpackId : persisted.selectedModpackId;
-			logical.updateSelectedModpackOnLaunch = Objects.equals(persisted.updateSelectedModpackOnLaunch, pending.expectedClientConfig.updateSelectedModpackOnLaunch)
-					? planned.updateSelectedModpackOnLaunch
-					: persisted.updateSelectedModpackOnLaunch;
-			logical.selfUpdater = Objects.equals(persisted.selfUpdater, pending.expectedClientConfig.selfUpdater) ? planned.selfUpdater : persisted.selfUpdater;
-			logical.syncAutoModpackVersion = Objects.equals(persisted.syncAutoModpackVersion, pending.expectedClientConfig.syncAutoModpackVersion)
-					? planned.syncAutoModpackVersion
-					: persisted.syncAutoModpackVersion;
-			logical.syncLoaderVersion = Objects.equals(persisted.syncLoaderVersion, pending.expectedClientConfig.syncLoaderVersion) ? planned.syncLoaderVersion : persisted.syncLoaderVersion;
-			logical.playMusic = Objects.equals(persisted.playMusic, pending.expectedClientConfig.playMusic) ? planned.playMusic : persisted.playMusic;
-			return logical;
+		if (Objects.equals(persisted.selectedModpackId, expected.selectedModpackId)) {
+			ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
+			if (active == null || Objects.equals(persisted.selectedModpackId, active.modpackId)) logical.selectedModpackId = planned.selectedModpackId;
 		}
-		if (Objects.equals(current.selectedModpackId, persisted.selectedModpackId)
-				&& (active == null || Objects.equals(current.selectedModpackId, active.modpackId)))
-			logical.selectedModpackId = planned.selectedModpackId;
-		if (current.updateSelectedModpackOnLaunch == persisted.updateSelectedModpackOnLaunch)
+		if (persisted.updateSelectedModpackOnLaunch == expected.updateSelectedModpackOnLaunch)
 			logical.updateSelectedModpackOnLaunch = planned.updateSelectedModpackOnLaunch;
-		if (current.selfUpdater == persisted.selfUpdater) logical.selfUpdater = planned.selfUpdater;
-		if (current.syncAutoModpackVersion == persisted.syncAutoModpackVersion) logical.syncAutoModpackVersion = planned.syncAutoModpackVersion;
-		if (current.syncLoaderVersion == persisted.syncLoaderVersion) logical.syncLoaderVersion = planned.syncLoaderVersion;
-		if (current.playMusic == persisted.playMusic) logical.playMusic = planned.playMusic;
+		if (persisted.selfUpdater == expected.selfUpdater) logical.selfUpdater = planned.selfUpdater;
+		if (persisted.syncAutoModpackVersion == expected.syncAutoModpackVersion) logical.syncAutoModpackVersion = planned.syncAutoModpackVersion;
+		if (persisted.syncLoaderVersion == expected.syncLoaderVersion) logical.syncLoaderVersion = planned.syncLoaderVersion;
+		if (persisted.playMusic == expected.playMusic) logical.playMusic = planned.playMusic;
 		return logical;
+	}
+
+	private ClientConfigJsons.ClientConfigFieldsV3 persistedClientConfig() {
+		return ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 	}
 
 	/** Captures the logical projection and immutable source candidates for one planning pass. */

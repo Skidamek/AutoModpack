@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
@@ -34,6 +35,7 @@ import pl.skidam.automodpack_core.storage.StoragePaths;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -496,12 +498,13 @@ public class Commands {
 	private static int previewRevertGeneration(CommandContext<CommandSourceStack> context) {
 		String targetGenerationId = StringArgumentType.getString(context, "generation-id");
 		try {
-			GenerationHistoryEntry target = findRevertTarget(targetGenerationId);
+			List<GenerationHistoryEntry> history = modpackExecutor.technicalHistory();
+			GenerationHistoryEntry target = findRevertTarget(history, targetGenerationId);
 			if (target == null) {
 				send(context, "FAILED: generation target was not found", ChatFormatting.RED, true);
 				return 0;
 			}
-			reportRevertTarget(context, target);
+			reportRevertTarget(context, target, history);
 			send(context, "Confirmation required: /automodpack generate revert " + targetGenerationId + " confirm", ChatFormatting.YELLOW, false);
 			return Command.SINGLE_SUCCESS;
 		} catch (IOException e) {
@@ -513,13 +516,16 @@ public class Commands {
 	private static int revertGeneration(CommandContext<CommandSourceStack> context) {
 		String targetGenerationId = StringArgumentType.getString(context, "generation-id");
 		String notes = optionalArgument(context, "notes");
+		List<GenerationHistoryEntry> history;
+		GenerationHistoryEntry target;
 		try {
-			GenerationHistoryEntry target = findRevertTarget(targetGenerationId);
+			history = modpackExecutor.technicalHistory();
+			target = findRevertTarget(history, targetGenerationId);
 			if (target == null) {
 				send(context, "FAILED: generation target was not found", ChatFormatting.RED, true);
 				return 0;
 			}
-			reportRevertTarget(context, target);
+			reportRevertTarget(context, target, history);
 		} catch (IOException e) {
 			send(context, "FAILED: could not read generation history: " + e.getMessage(), ChatFormatting.RED, true);
 			return 0;
@@ -543,11 +549,11 @@ public class Commands {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static GenerationHistoryEntry findRevertTarget(String targetGenerationId) throws IOException {
-		return modpackExecutor.technicalHistory().stream().filter(entry -> entry.metadata().generationId().equals(targetGenerationId)).findFirst().orElse(null);
+	private static GenerationHistoryEntry findRevertTarget(List<GenerationHistoryEntry> history, String targetGenerationId) {
+		return history.stream().filter(entry -> entry.metadata().generationId().equals(targetGenerationId)).findFirst().orElse(null);
 	}
 
-	private static void reportRevertTarget(CommandContext<CommandSourceStack> context, GenerationHistoryEntry target) {
+	private static void reportRevertTarget(CommandContext<CommandSourceStack> context, GenerationHistoryEntry target, List<GenerationHistoryEntry> history) {
 		send(context, "Revert target", ChatFormatting.YELLOW, target.metadata().createdAt().toString(), ChatFormatting.WHITE, true);
 		send(context, "Target generation", ChatFormatting.WHITE, copyable(target.metadata().generationId()), ChatFormatting.YELLOW, false);
 		send(context, "Target content", ChatFormatting.WHITE, copyable(target.metadata().stateDigest()), ChatFormatting.YELLOW, false);
@@ -555,6 +561,12 @@ public class Commands {
 		int targetFiles = target.manifest().groups().values().stream().mapToInt(group -> group.files().size()).sum();
 		send(context, "Target catalogue", ChatFormatting.WHITE, target.manifest().groups().size() + " groups, " + targetFiles + " files", ChatFormatting.YELLOW, false);
 		if (!target.metadata().patchNotes().isBlank()) send(context, "Target patch notes: " + target.metadata().patchNotes(), ChatFormatting.GRAY, false);
+		if (!history.isEmpty() && !history.get(history.size() - 1).metadata().generationId().equals(target.metadata().generationId())) {
+			GenerationDiff diff = GenerationDiff.between(history.get(history.size() - 1).manifest(), target.manifest());
+			GenerationDiff.Summary summary = diff.summary();
+			send(context, "Changes from current: +" + summary.addedFiles() + " added, " + summary.modifiedFiles() + " changed, " + summary.removedFiles()
+					+ " removed, " + summary.metadataOnlyFiles() + " metadata-only, " + summary.metadataChanges() + " metadata changes", ChatFormatting.YELLOW, false);
+		}
 	}
 
 	private static int generationHistory(CommandContext<CommandSourceStack> context) {
