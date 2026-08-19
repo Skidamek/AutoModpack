@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.GroupManager;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -23,9 +24,14 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.commands.CommandSourceStack;
@@ -108,6 +114,30 @@ public class Commands {
 										.executes(Commands::reload)
 								)
 						)
+						.then(literal("group")
+								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+								.executes(Commands::groupList)
+								.then(literal("--full")
+										.executes(Commands::groupListFull)
+								)
+								.then(literal("new")
+										.then(argument("name", StringArgumentType.string())
+												.executes(Commands::groupNew)
+										)
+								)
+								.then(literal("remove")
+										.then(argument("name", StringArgumentType.string())
+												.executes(Commands::groupRemovePrompt)
+												.then(literal("--yes")
+														.executes(Commands::groupRemoveConfirmed)
+												)
+										)
+								)
+						)
+						.then(literal("confirm")
+								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+								.executes(Commands::confirmPending)
+						)
 		);
 
 		dispatcher.register(
@@ -115,6 +145,164 @@ public class Commands {
 						.executes(Commands::about)
 						.redirect(automodpackNode)
 		);
+	}
+
+	// A dedicated-server console only ever prints a chat component's flat text, ignoring click/hover
+	// events, so a destructive action can't be confirmed with a clickable button there. Instead
+	// "group remove" (without --yes) stashes the actual deletion here and prints instructions to run
+	// "amp confirm" next; expiresAtMillis guards against a stale prompt firing long after the fact.
+	private record PendingConfirmation(Runnable action, long expiresAtMillis) {}
+
+	private static volatile PendingConfirmation pendingConfirmation;
+
+	private static int confirmPending(CommandContext<CommandSourceStack> context) {
+		PendingConfirmation pending = pendingConfirmation;
+		pendingConfirmation = null;
+		if (pending == null || System.currentTimeMillis() > pending.expiresAtMillis()) {
+			send(context, "Nothing to confirm.", ChatFormatting.RED, false);
+			return Command.SINGLE_SUCCESS;
+		}
+
+		pending.action().run();
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int groupList(CommandContext<CommandSourceStack> context) {
+		Util.backgroundExecutor().execute(() -> {
+			for (String groupId : new TreeMap<>(serverConfig.groups).keySet()) {
+				GroupManager.GroupCounts counts = GroupManager.countGroup(groupId);
+				String summary = String.format("%d mods, %d resourcepacks, %d shaders", counts.mods(), counts.resourcepacks(), counts.shaders());
+				send(context, groupId, ChatFormatting.YELLOW, summary, ChatFormatting.WHITE, false);
+			}
+			send(context, "To display full list, type amp group --full", ChatFormatting.GRAY, false);
+		});
+
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int groupListFull(CommandContext<CommandSourceStack> context) {
+		Util.backgroundExecutor().execute(() -> {
+			for (String groupId : new TreeMap<>(serverConfig.groups).keySet()) {
+				send(context, groupId + ":", ChatFormatting.YELLOW, false);
+				sendGroupFileList(context, groupId, "mod", "Mods");
+				sendGroupFileList(context, groupId, "resourcepack", "Resourcepacks");
+				sendGroupFileList(context, groupId, "shader", "Shaders");
+			}
+		});
+
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static void sendGroupFileList(CommandContext<CommandSourceStack> context, String groupId, String type, String label) {
+		List<String> files = GroupManager.listGroupFiles(groupId, type);
+		send(context, "  " + label + " (" + files.size() + "):", ChatFormatting.GREEN, false);
+		for (String file : files) {
+			send(context, "    - " + stripTypeFolder(file), ChatFormatting.GRAY, false);
+		}
+	}
+
+	// Files come back as "/mods/foo.jar", "/resourcepacks/foo.zip", "/shaderpacks/foo.zip" - the leading
+	// folder is already implied by the "Mods"/"Resourcepacks"/"Shaders" sub-header, so drop it here.
+	private static String stripTypeFolder(String file) {
+		int secondSlash = file.indexOf('/', 1);
+		return secondSlash == -1 ? file : file.substring(secondSlash + 1);
+	}
+
+	private static int groupNew(CommandContext<CommandSourceStack> context) {
+		String name = StringArgumentType.getString(context, "name");
+		try {
+			GroupManager.validateName(name);
+		} catch (IllegalArgumentException e) {
+			send(context, e.getMessage(), ChatFormatting.RED, false);
+			return 0;
+		}
+
+		if (serverConfig.groups.keySet().stream().anyMatch(name::equalsIgnoreCase)) {
+			send(context, "A group named \"" + name + "\" already exists!", ChatFormatting.RED, false);
+			return 0;
+		}
+
+		Util.backgroundExecutor().execute(() -> {
+			Path groupDirectory = GroupManager.groupDirectory(name);
+			try {
+				GroupManager.createGroupFolders(groupDirectory);
+			} catch (IOException e) {
+				LOGGER.error("Failed to create group folders", e);
+				send(context, "Failed to create group folders: " + e.getMessage(), ChatFormatting.RED, false);
+				return;
+			}
+
+			Jsons.GroupDeclaration declaration = new Jsons.GroupDeclaration();
+			declaration.displayName = name;
+			Map<String, Jsons.GroupDeclaration> groups = new LinkedHashMap<>(serverConfig.groups);
+			groups.put(name, declaration);
+			serverConfig.groups = groups;
+
+			if (!saveServerConfig(context)) return;
+
+			send(context, "Group created", ChatFormatting.GREEN, copyable(groupDirectory.toAbsolutePath().normalize().toString()), ChatFormatting.YELLOW,
+					true);
+		});
+
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int groupRemovePrompt(CommandContext<CommandSourceStack> context) {
+		String name = StringArgumentType.getString(context, "name");
+		if (!checkGroupRemovable(context, name)) return 0;
+
+		pendingConfirmation = new PendingConfirmation(() -> performGroupRemoval(context, name), System.currentTimeMillis() + 30_000);
+		send(context, "Are you sure you want to delete group \"" + name + "\"? Type \"amp confirm\" to proceed.", ChatFormatting.YELLOW, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int groupRemoveConfirmed(CommandContext<CommandSourceStack> context) {
+		String name = StringArgumentType.getString(context, "name");
+		if (!checkGroupRemovable(context, name)) return 0;
+
+		Util.backgroundExecutor().execute(() -> performGroupRemoval(context, name));
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static boolean checkGroupRemovable(CommandContext<CommandSourceStack> context, String name) {
+		if (!serverConfig.groups.containsKey(name)) {
+			send(context, "No group named \"" + name + "\" exists!", ChatFormatting.RED, false);
+			return false;
+		}
+		if (GroupManager.isRequired(name)) {
+			send(context, "Group \"" + name + "\" is required and cannot be removed.", ChatFormatting.RED, false);
+			return false;
+		}
+		return true;
+	}
+
+	private static void performGroupRemoval(CommandContext<CommandSourceStack> context, String name) {
+		try {
+			GroupManager.deleteGroupFolders(GroupManager.groupDirectory(name));
+		} catch (IOException e) {
+			LOGGER.error("Failed to delete group folders", e);
+			send(context, "Failed to delete group folders: " + e.getMessage(), ChatFormatting.RED, false);
+			return;
+		}
+
+		Map<String, Jsons.GroupDeclaration> groups = new LinkedHashMap<>(serverConfig.groups);
+		groups.remove(name);
+		serverConfig.groups = groups;
+
+		if (!saveServerConfig(context)) return;
+
+		send(context, "Group \"" + name + "\" removed!", ChatFormatting.GREEN, true);
+	}
+
+	private static boolean saveServerConfig(CommandContext<CommandSourceStack> context) {
+		try {
+			ConfigTools.writeAtomic(serverConfigFile, serverConfig);
+			return true;
+		} catch (IOException e) {
+			LOGGER.error("Failed to save server config", e);
+			send(context, "Failed to save server config: " + e.getMessage(), ChatFormatting.RED, false);
+			return false;
+		}
 	}
 
 	private static int fingerprint(CommandContext<CommandSourceStack> context) {
@@ -382,6 +570,7 @@ public class Commands {
 		send(context, "/automodpack generate", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack group [--full]/new/remove", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
