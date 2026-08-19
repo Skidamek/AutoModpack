@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.net.IDN;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -16,21 +14,6 @@ import java.util.Objects;
 
 public class AddressHelpers {
 	private static final int MINECRAFT_DEFAULT_PORT = 25565;
-
-	public static String getPublicIp() {
-		String[] services = {"https://ip.seeip.org/json", "https://api.ipify.org?format=json"};
-
-		for (String service : services) {
-			try {
-				return Objects.requireNonNull(Json.fromUrl(service)).get("ip").getAsString();
-			} catch (Exception ignored) {
-				// Try next service
-			}
-		}
-
-		LOGGER.error("AutoModpack couldn't get your public IP address, please configure it manually.");
-		return null;
-	}
 
 	public static String getLocalIp() {
 		return getNetworkIp(Inet4Address.class);

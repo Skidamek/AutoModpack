@@ -79,11 +79,12 @@ public class ModpackExecutor {
 		if (operation == null) return new PreviewBusy("Another modpack operation is already in progress");
 		try (operation) {
 			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
-			try (ModpackCandidate candidate = buildCandidate(previous)) {
+			GenerationStore.CurrentSnapshot previousSnapshot = previous.orElse(null);
+			try (ModpackCandidate candidate = buildCandidate(previousSnapshot)) {
 				GenerationDiff diff = GenerationDiff.between(previous.map(snapshot -> snapshot.record().manifest()).orElse(null), candidate.manifest());
 				String stateDigest = GenerationIdentity.stateDigest(candidate.manifest());
 				GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
-				return new PreviewReady(candidateState(previous, candidate, stateDigest, diff, notes.source()));
+				return new PreviewReady(candidateState(previousSnapshot, candidate, stateDigest, diff, notes.source()));
 			}
 		} catch (Exception e) {
 			LOGGER.error("Failed to preview modpack generation", e);
@@ -171,7 +172,8 @@ public class ModpackExecutor {
 			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
 			if (expectedStateDigest != null && previous.isEmpty())
 				return new PublishGuardUnsupported("A state guard is unavailable before the root generation is published");
-			try (ModpackCandidate candidate = buildCandidate(previous)) {
+			GenerationStore.CurrentSnapshot previousSnapshot = previous.orElse(null);
+			try (ModpackCandidate candidate = buildCandidate(previousSnapshot)) {
 				GenerationRecord parent = previous.map(GenerationStore.CurrentSnapshot::record).orElse(null);
 				GenerationDiff diff = GenerationDiff.between(parent == null ? null : parent.manifest(), candidate.manifest());
 				String stateDigest = GenerationIdentity.stateDigest(candidate.manifest());
@@ -228,12 +230,6 @@ public class ModpackExecutor {
 			warnings.add("Published generation could not fully replace the active hosting map");
 			LOGGER.warn("Published generation is current but hosting replacement failed", e);
 		}
-		try {
-			cleanupLegacyCatalogue();
-		} catch (Exception e) {
-			warnings.add("Published generation is current but legacy catalogue cleanup failed");
-			LOGGER.warn("Published generation is current but legacy catalogue cleanup failed", e);
-		}
 		if (publication.status() == GenerationStore.PublicationStatus.PUBLISHED && notes != null && notes.isFileSourced()) {
 			GenerationPatchNotes.CleanupResult cleanup = notes.consumeIfUnchanged();
 			if (!cleanup.warning().isEmpty()) warnings.add(cleanup.warning());
@@ -247,7 +243,6 @@ public class ModpackExecutor {
 			GenerationStore.CurrentSnapshot current = generationStore.loadCurrentAndRepair().orElseThrow(() -> new IOException("No current generation pointer exists"));
 			try {
 				replaceHosting(current.hostingPaths());
-				cleanupLegacyCatalogue();
 				return new Loaded(current.record());
 			} catch (Exception e) {
 				LOGGER.error("Failed to activate the current modpack generation", e);
@@ -263,15 +258,15 @@ public class ModpackExecutor {
 		return generationStore.loadCurrent().map(GenerationStore.CurrentSnapshot::record);
 	}
 
-	private CandidateState candidateState(Optional<GenerationStore.CurrentSnapshot> previous, ModpackCandidate candidate, String stateDigest,
+	private CandidateState candidateState(GenerationStore.CurrentSnapshot previous, ModpackCandidate candidate, String stateDigest,
 			GenerationDiff diff, GenerationPatchNotes.Source source) {
-		return new CandidateState(previous.map(GenerationStore.CurrentSnapshot::record), stateDigest, diff, CandidateSummary.from(candidate, diff), Optional.of(source));
+		return new CandidateState(Optional.ofNullable(previous).map(GenerationStore.CurrentSnapshot::record), stateDigest, diff, CandidateSummary.from(candidate, diff), Optional.of(source));
 	}
 
-	private ModpackCandidate buildCandidate(Optional<GenerationStore.CurrentSnapshot> previous) throws IOException, CandidateBuildException {
+	private ModpackCandidate buildCandidate(GenerationStore.CurrentSnapshot previous) throws IOException, CandidateBuildException {
 		validateConfiguration();
 		prepareDirectories();
-		String modpackId = previous.map(snapshot -> ModpackId.requireValid(snapshot.record().manifest().modpackId())).orElseGet(ModpackId::generate);
+		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.record().manifest().modpackId());
 		try (FileMetadataCache fileMetadataCache = FileMetadataCache.open(dataLayout.fileMetadataDirectory());
 				ModFileCache modFileCache = ModFileCache.open(dataLayout.modMetadataDirectory())) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
@@ -312,11 +307,6 @@ public class ModpackExecutor {
 		if (hostServer != null) {
 			hostServer.replacePaths(paths);
 		}
-	}
-
-	private void cleanupLegacyCatalogue() throws IOException {
-		Path legacyCatalogue = groupRoot.resolve(MODPACK_CONTENT_FILE).normalize();
-		if (Files.deleteIfExists(legacyCatalogue)) LOGGER.debug("Removed stale generated catalogue");
 	}
 
 	private static void validateConfiguration() throws CandidateBuildException {
@@ -362,7 +352,7 @@ public class ModpackExecutor {
 	public record CandidateSummary(int groups, int files, int objects, int exclusions, int shadows, GenerationDiff.Summary diff) {
 		public CandidateSummary {
 			if (groups < 0 || files < 0 || objects < 0 || exclusions < 0 || shadows < 0) throw new IllegalArgumentException("Negative generation summary count");
-			diff = Objects.requireNonNull(diff);
+			Objects.requireNonNull(diff, "diff");
 		}
 
 		static CandidateSummary from(ModpackCandidate candidate, GenerationDiff diff) {
@@ -378,11 +368,11 @@ public class ModpackExecutor {
 	public record CandidateState(Optional<GenerationRecord> parent, String candidateStateDigest, GenerationDiff diff, CandidateSummary summary,
 			Optional<GenerationPatchNotes.Source> patchNotesSource) {
 		public CandidateState {
-			parent = parent == null ? Optional.empty() : parent;
+			Objects.requireNonNull(parent, "parent");
 			if (!HashUtils.isCanonicalSha1(candidateStateDigest)) throw new IllegalArgumentException("Invalid candidate state digest");
-			diff = Objects.requireNonNull(diff);
-			summary = Objects.requireNonNull(summary);
-			patchNotesSource = patchNotesSource == null ? Optional.empty() : patchNotesSource;
+			Objects.requireNonNull(diff, "diff");
+			Objects.requireNonNull(summary, "summary");
+			Objects.requireNonNull(patchNotesSource, "patch notes source");
 		}
 
 		CandidateState withPatchNotesSource(GenerationPatchNotes.Source source) {
@@ -398,7 +388,7 @@ public class ModpackExecutor {
 
 	public record PreviewReady(CandidateState state) implements PreviewResult {
 		public PreviewReady {
-			state = Objects.requireNonNull(state);
+			Objects.requireNonNull(state, "state");
 			if (state.patchNotesSource().isEmpty()) throw new IllegalArgumentException("Preview result requires a resolved patch-note source");
 		}
 	}
@@ -411,7 +401,7 @@ public class ModpackExecutor {
 
 	public record PreviewFailed(Throwable failure) implements PreviewResult {
 		public PreviewFailed {
-			failure = Objects.requireNonNull(failure);
+			Objects.requireNonNull(failure, "failure");
 		}
 	}
 
@@ -419,7 +409,7 @@ public class ModpackExecutor {
 
 	public record Reverted(GenerationRecord current, String targetGenerationId, List<String> warnings) implements RevertResult {
 		public Reverted {
-			current = Objects.requireNonNull(current);
+			Objects.requireNonNull(current, "current");
 			if (!HashUtils.isCanonicalSha1(targetGenerationId)) throw new IllegalArgumentException("Invalid rollback target generation ID");
 			warnings = warnings == null ? List.of() : List.copyOf(warnings);
 			if (!targetGenerationId.equals(current.metadata().rollbackTargetGenerationId())) throw new IllegalArgumentException("Revert result target does not match current metadata");
@@ -448,8 +438,8 @@ public class ModpackExecutor {
 
 	public record Published(CandidateState state, GenerationRecord current, List<String> warnings) implements PublishResult {
 		public Published {
-			state = Objects.requireNonNull(state);
-			current = Objects.requireNonNull(current);
+			Objects.requireNonNull(state, "state");
+			Objects.requireNonNull(current, "current");
 			warnings = warnings == null ? List.of() : List.copyOf(warnings);
 			if (!current.metadata().stateDigest().equals(state.candidateStateDigest()))
 				throw new IllegalArgumentException("Published generation state does not match the candidate");
@@ -462,8 +452,8 @@ public class ModpackExecutor {
 
 	public record NoChanges(CandidateState state, GenerationRecord current, List<String> warnings) implements PublishResult {
 		public NoChanges {
-			state = Objects.requireNonNull(state);
-			current = Objects.requireNonNull(current);
+			Objects.requireNonNull(state, "state");
+			Objects.requireNonNull(current, "current");
 			warnings = warnings == null ? List.of() : List.copyOf(warnings);
 			if (!state.diff().isEmpty()) throw new IllegalArgumentException("No-change result must have an empty diff");
 			if (!current.metadata().stateDigest().equals(state.candidateStateDigest()))
@@ -494,7 +484,7 @@ public class ModpackExecutor {
 
 	public record PublishGuardMismatch(CandidateState state, String detail) implements PublishResult {
 		public PublishGuardMismatch {
-			state = Objects.requireNonNull(state);
+			Objects.requireNonNull(state, "state");
 			detail = Objects.requireNonNull(detail);
 			if (state.patchNotesSource().isPresent()) throw new IllegalArgumentException("Guard mismatch cannot resolve patch notes");
 		}
@@ -502,7 +492,7 @@ public class ModpackExecutor {
 
 	public record PublishFailed(Throwable failure) implements PublishResult {
 		public PublishFailed {
-			failure = Objects.requireNonNull(failure);
+			Objects.requireNonNull(failure, "failure");
 		}
 	}
 
@@ -510,7 +500,7 @@ public class ModpackExecutor {
 
 	public record Loaded(GenerationRecord current) implements LoadResult {
 		public Loaded {
-			current = Objects.requireNonNull(current);
+			Objects.requireNonNull(current, "current");
 		}
 	}
 
@@ -522,7 +512,7 @@ public class ModpackExecutor {
 
 	public record LoadFailed(Throwable failure) implements LoadResult {
 		public LoadFailed {
-			failure = Objects.requireNonNull(failure);
+			Objects.requireNonNull(failure, "failure");
 		}
 	}
 }

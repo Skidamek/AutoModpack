@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.client.ui;
+package pl.skidam.automodpack.client.ui.screen;
 
 import java.util.Map;
 
@@ -6,6 +6,7 @@ import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
+import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 

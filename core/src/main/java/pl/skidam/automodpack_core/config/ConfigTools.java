@@ -3,10 +3,15 @@ package pl.skidam.automodpack_core.config;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 import com.google.gson.Gson;
@@ -23,6 +28,8 @@ import com.google.gson.JsonSerializer;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.DurableFiles;
+import pl.skidam.automodpack_core.utils.FileTrees;
 
 public final class ConfigTools {
 	public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
@@ -65,7 +72,27 @@ public final class ConfigTools {
 	}
 
 	public static void writeAtomic(Path path, Object value) throws IOException {
-		AtomicFileWriter.write(path, GSON.toJson(value).getBytes(StandardCharsets.UTF_8));
+		byte[] bytes = GSON.toJson(value).getBytes(StandardCharsets.UTF_8);
+		Path parent = path.toAbsolutePath().normalize().getParent();
+		if (parent == null) throw new IOException("Configuration path has no parent: " + path);
+		Files.createDirectories(parent);
+
+		Path temporary = parent.resolve("." + path.getFileName() + "." + UUID.randomUUID() + ".tmp");
+		try {
+			try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+				ByteBuffer buffer = ByteBuffer.wrap(bytes);
+				while (buffer.hasRemaining()) channel.write(buffer);
+				channel.force(true);
+			}
+			try {
+				DurableFiles.replace(temporary, path);
+			} catch (AtomicMoveNotSupportedException e) {
+				throw new IOException("The filesystem cannot durably replace " + path + "; use a major local filesystem with atomic rename support", e);
+			}
+			FileTrees.forceDirectory(parent);
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
 	}
 
 	private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress> {

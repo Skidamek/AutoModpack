@@ -181,7 +181,7 @@ public class FileInspection {
 		return null;
 	}
 
-	// TODO optimize it by caching and scanning only defined paths
+	/** Scans all nested JAR entries; {@code ModFileCache} caches the resulting inspection by content hash. */
 	private static Set<Mod> scanForNestedMods(FileSystem parentFs) {
 		Set<Mod> nestedMods = new HashSet<>();
 		try (Stream<Path> walk = Files.walk(parentFs.getPath("/"))) {

@@ -9,13 +9,13 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /** Resolves the one shared-or-local AutoModpack data root for an instance. */
 public final class DataRootResolver {
@@ -78,8 +78,8 @@ public final class DataRootResolver {
 			Path gameRoot = canonicalGameRoot(requestedRoot);
 			Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
 			createLocalDataDirectory(gameRoot, automodpackDirectory);
-			Path marker = automodpackDirectory.resolve("data-root.json").normalize();
-			Path lockPath = automodpackDirectory.resolve("data-root.lock").normalize();
+			Path marker = gameRoot.resolve(StoragePaths.DATA_ROOT_MARKER_FILE).normalize();
+			Path lockPath = gameRoot.resolve(StoragePaths.DATA_ROOT_LOCK_FILE).normalize();
 			synchronized (RESOLUTION_LOCK) {
 				try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS); FileLock ignored = channel.lock()) {
 					validateLocalDataDirectory(gameRoot, automodpackDirectory);
@@ -127,10 +127,10 @@ public final class DataRootResolver {
 		if (fields.root == null || fields.root.isBlank()) throw new IOException("AutoModpack data-root marker has no root");
 		Path root = Path.of(fields.root).toAbsolutePath().normalize();
 		if (!probe(root)) throw new IOException("Pinned AutoModpack data root is unavailable: " + root);
-		String ownerPathHash = ownerPathHash(gameRoot);
-		if (fields.ownerId == null || fields.ownerId.isBlank() || !ownerPathHash.equals(fields.ownerPathHash)) {
+		String ownerIdentity = computeOwnerIdentity(gameRoot);
+		if (fields.ownerId == null || fields.ownerId.isBlank() || !ownerIdentity.equals(fields.ownerPathHash)) {
 			fields.ownerId = UUID.randomUUID().toString();
-			fields.ownerPathHash = ownerPathHash;
+			fields.ownerPathHash = ownerIdentity;
 			fields.ownerPath = gameRoot.toString();
 			ConfigTools.writeAtomic(marker, fields);
 		} else if (!gameRoot.toString().equals(fields.ownerPath)) {
@@ -145,12 +145,13 @@ public final class DataRootResolver {
 		fields.root = location.root().toString();
 		fields.shared = location.shared();
 		fields.ownerId = location.ownerId();
-		fields.ownerPathHash = ownerPathHash(gameRoot);
+		fields.ownerPathHash = computeOwnerIdentity(gameRoot);
 		fields.ownerPath = gameRoot.toString();
 		ConfigTools.writeAtomic(marker, fields);
 	}
 
-	private static String ownerPathHash(Path gameRoot) throws IOException {
+	/** Identifies a game installation across symlink aliases without trusting a user-controlled path string. */
+	private static String computeOwnerIdentity(Path gameRoot) throws IOException {
 		Path realRoot = gameRoot.toRealPath();
 		Object fileKey = Files.readAttributes(realRoot, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey();
 		return HashUtils.sha1(fileKey == null ? "real-path\n" + realRoot : "file-key\n" + fileKey);
@@ -172,17 +173,6 @@ public final class DataRootResolver {
 	}
 
 	private static Path platformDataRoot() {
-		String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-		Path base;
-		if (os.contains("win")) {
-			String localAppData = System.getenv("LOCALAPPDATA");
-			base = localAppData == null || localAppData.isBlank() ? Path.of(System.getProperty("user.home"), "AppData", "Local") : Path.of(localAppData);
-		} else if (os.contains("mac") || os.contains("darwin")) {
-			base = Path.of(System.getProperty("user.home"), "Library", "Application Support");
-		} else {
-			String xdgDataHome = System.getenv("XDG_DATA_HOME");
-			base = xdgDataHome == null || xdgDataHome.isBlank() ? Path.of(System.getProperty("user.home"), ".local", "share") : Path.of(xdgDataHome);
-		}
-		return base.resolve("AutoModpack").resolve("data").toAbsolutePath().normalize();
+		return PlatformUtils.userDataDirectory().resolve("AutoModpack").resolve("data").toAbsolutePath().normalize();
 	}
 }
