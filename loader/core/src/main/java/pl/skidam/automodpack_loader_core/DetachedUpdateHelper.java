@@ -6,7 +6,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -19,6 +18,7 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 public final class DetachedUpdateHelper {
@@ -39,7 +39,7 @@ public final class DetachedUpdateHelper {
 		Path helperJar = absoluteHelperDirectory.resolve("automodpack-update-helper-" + UUID.randomUUID() + ".jar");
 		VerifiedFileTransfer.copyAtomic(sourceJar, helperJar, size, hash);
 
-		Path javaExecutable = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java").toAbsolutePath().normalize();
+		Path javaExecutable = Path.of(System.getProperty("java.home"), "bin", PlatformUtils.IS_WIN ? "java.exe" : "java").toAbsolutePath().normalize();
 		if (!Files.isRegularFile(javaExecutable)) throw new IOException("Java executable is missing: " + javaExecutable);
 		String classpath = String.join(File.pathSeparator, helperJar.toString(), runtimeDependency(Gson.class).toString(), runtimeDependency(LogManager.class).toString(),
 				runtimeDependency(LoggerContext.class).toString());
@@ -79,7 +79,4 @@ public final class DetachedUpdateHelper {
 		return path;
 	}
 
-	private static boolean isWindows() {
-		return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
-	}
 }

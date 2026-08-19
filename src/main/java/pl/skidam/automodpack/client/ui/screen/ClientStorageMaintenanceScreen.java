@@ -1,4 +1,6 @@
-package pl.skidam.automodpack.client.ui;
+package pl.skidam.automodpack.client.ui.screen;
+
+import pl.skidam.automodpack.client.ui.*;
 
 import java.util.List;
 import java.util.concurrent.Future;

@@ -96,7 +96,7 @@ public final class SharedObjectOwnership {
 		} catch (RuntimeException e) {
 			return false;
 		}
-		Path marker = gameRoot.resolve("automodpack").resolve("data-root.json").normalize();
+		Path marker = gameRoot.resolve(StoragePaths.DATA_ROOT_MARKER_FILE).normalize();
 		if (Files.notExists(marker, LinkOption.NOFOLLOW_LINKS)) return false;
 		if (Files.isSymbolicLink(marker) || !Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Shared object owner marker is not a regular file: " + marker);
 		StorageJsons.DataRootFields owner = ConfigTools.read(marker, StorageJsons.DataRootFields.class)
