@@ -246,7 +246,7 @@ def test_storage_cleanup_failure_uses_dedicated_error_screen():
     ).read_text(encoding="utf-8")
     storage_screen = (
         project_root
-        / "src/main/java/pl/skidam/automodpack/client/ui/ClientStorageMaintenanceScreen.java"
+        / "src/main/java/pl/skidam/automodpack/client/ui/screen/ClientStorageMaintenanceScreen.java"
     ).read_text(encoding="utf-8")
 
     assert "public static void failure(FailureRequest request)" in screen_manager
