@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.client.ui;
+package pl.skidam.automodpack.client.ui.screen;
 
 import java.io.IOException;
 import java.util.List;

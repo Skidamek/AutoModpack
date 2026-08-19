@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack.client.ui.screen.*;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;

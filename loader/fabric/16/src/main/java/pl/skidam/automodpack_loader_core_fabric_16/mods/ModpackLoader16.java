@@ -293,10 +293,8 @@ public class ModpackLoader16 implements ModpackLoaderService {
 			for (var entry : definitions.entrySet()) {
 
 				if (!candidate.getId().equals(MOD_ID) && adapterMap.containsKey(entry.getKey())) {
-
-					// TODO require restart or erase that package from vm and remove adapter from the map
-
 					FabricGuiEntry.displayCriticalError(new IllegalArgumentException("Duplicate language adapter ID: " + entry.getKey()), true);
+					continue;
 				}
 
 				try {
