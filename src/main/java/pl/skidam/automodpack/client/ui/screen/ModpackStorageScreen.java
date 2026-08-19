@@ -1,9 +1,10 @@
-package pl.skidam.automodpack.client.ui;
+package pl.skidam.automodpack.client.ui.screen;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;

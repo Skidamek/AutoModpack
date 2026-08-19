@@ -63,7 +63,6 @@ These settings control how the file server is exposed to the internet.
 | `bandwidthLimit`         | `0`                                                        | Upload speed limit in Mbps (0 = unlimited).                                                                                                    |
 | `disableInternalTLS`     | `false`                                                    | Disables only AutoModpack's server-side TLS termination. Clients always use TLS; an expert-provided terminator must forward decrypted traffic. |
 | `connectionMode`         | `HOLEPUNCH` on supported targets; `MAGIC_PACKET` otherwise | Selects the exact method advertised to clients and used by built-in handling. Modes do not fall back to one another.                           |
-| `updateIpsOnEveryStart`  | `false`                                                    | Updates advertisedEndpointHost on startup. Useful for dynamic residential IPs.                                                                 |
 | `validateSecrets`        | `true`                                                     | Protects downloads using unique, temporary secrets per user.                                                                                   |
 | `secretLifetime`         | `336`                                                      | How long (in hours) a download secret remains valid.                                                                                           |
 

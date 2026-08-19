@@ -15,6 +15,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Stream;
 
+/** Low-level digest primitives; path-keyed callers add caching through {@code FileMetadataCache}. */
 public final class HashUtils {
 	public static final int SHA1_HEX_LENGTH = 40;
 	private static final String SHA_1 = "SHA-1";

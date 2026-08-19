@@ -7,7 +7,7 @@ import java.util.TreeSet;
 
 import net.minecraft.ChatFormatting;
 
-import pl.skidam.automodpack.client.ui.PagedTextScreen.Line;
+import pl.skidam.automodpack.client.ui.screen.PagedTextScreen.Line;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;

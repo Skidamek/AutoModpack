@@ -29,7 +29,6 @@ public class ServerConfigJsons {
 		public int advertisedEndpointPort = -1;
 		public boolean disableInternalTLS = false;
 		public ModpackConnectionMode connectionMode = ModpackConnectionMode.defaultFor(Constants.MC_VERSION, Constants.LOADER);
-		public boolean updateIpsOnEveryStart = false;
 		public int bandwidthLimit = 0;
 		public boolean validateSecrets = true;
 		public long secretLifetime = 336; // 336 hours = 14 days

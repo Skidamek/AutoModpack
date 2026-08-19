@@ -1,4 +1,6 @@
-package pl.skidam.automodpack.client.ui;
+package pl.skidam.automodpack.client.ui.screen;
+
+import pl.skidam.automodpack.client.ui.*;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;

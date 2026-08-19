@@ -95,7 +95,6 @@ automodpack:
     advertisedEndpointPort: -1
     disableInternalTLS: false
     connectionMode: HOLEPUNCH
-    updateIpsOnEveryStart: false
     bandwidthLimit: 0
     validateSecrets: true
     secretLifetime: 336

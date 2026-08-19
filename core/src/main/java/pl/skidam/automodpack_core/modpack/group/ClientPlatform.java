@@ -4,6 +4,8 @@ import java.util.Locale;
 
 import com.google.gson.annotations.SerializedName;
 
+import pl.skidam.automodpack_core.utils.PlatformUtils;
+
 public enum ClientPlatform {
 	@SerializedName("windows")
 	WINDOWS,
@@ -15,12 +17,9 @@ public enum ClientPlatform {
 	ANDROID;
 
 	public static ClientPlatform current() {
-		String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-		String javaVendor = System.getProperty("java.vendor", "").toLowerCase(Locale.ROOT);
-		String javaVmName = System.getProperty("java.vm.name", "").toLowerCase(Locale.ROOT);
-		if (javaVendor.contains("android") || javaVmName.contains("dalvik") || javaVmName.contains("lemur")) return ANDROID;
-		if (osName.contains("win")) return WINDOWS;
-		if (osName.contains("mac")) return MACOS;
+		if (PlatformUtils.IS_ANDROID) return ANDROID;
+		if (PlatformUtils.IS_WIN) return WINDOWS;
+		if (PlatformUtils.IS_MAC) return MACOS;
 		return LINUX;
 	}
 
