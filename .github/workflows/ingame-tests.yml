@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
       - name: Generate target matrix
         id: matrix
         env:
@@ -49,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
       - name: Build autotest client image
         run: uv --project autotester run autotester build-images
       - name: Export autotest client image
@@ -87,7 +87,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: ./gradlew ":$TARGET:build" -Pautomodpack.autotest
       - name: Install uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.0.1
       - name: Download client image
         uses: actions/download-artifact@v8
         with:
