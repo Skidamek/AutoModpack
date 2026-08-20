@@ -25,7 +25,6 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.DurableFiles;
@@ -121,7 +120,7 @@ public final class ConfigTools {
 				InetSocketAddress endpoint = parseAddress(object, "endpoint", "hostAddress", false);
 				JsonElement modeElement = object.get("connectionMode");
 				ModpackConnectionMode connectionMode = modeElement == null || modeElement.isJsonNull()
-						? ModpackConnectionMode.defaultFor(Constants.MC_VERSION, Constants.LOADER)
+						? ModpackConnectionMode.defaultFor()
 						: context.deserialize(modeElement, ModpackConnectionMode.class);
 				return new ConnectionJsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
 			} catch (IllegalArgumentException e) {

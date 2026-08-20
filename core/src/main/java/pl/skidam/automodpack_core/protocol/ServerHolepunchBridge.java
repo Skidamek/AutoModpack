@@ -16,6 +16,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -32,7 +33,7 @@ import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
 import pl.skidam.mcholepunch.MinecraftProtocol;
-import pl.skidam.mcholepunch.minecraft.HolepunchServerRegistry;
+import pl.skidam.mcholepunch.server.HolepunchServerRegistry;
 
 public final class ServerHolepunchBridge {
 	private static final int EVENT_LOOP_TICK_MILLIS = 10;
@@ -124,24 +125,16 @@ public final class ServerHolepunchBridge {
 				socket;
 				DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()))) {
 			channel = new EmbeddedChannel();
+			AtomicBoolean tlsHandshakeComplete = new AtomicBoolean(server.getSslCtx() == null);
+			AtomicBoolean transportUpgradeStarted = new AtomicBoolean(server.getSslCtx() == null);
 			channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
 			channel.pipeline().addLast("error-printer-first", new ErrorPrinter());
-			if (server.getSslCtx() != null) {
-				SslHandler sslHandler = server.getSslCtx().newHandler(channel.alloc());
+			SslHandler sslHandler = server.getSslCtx() == null ? null : server.getSslCtx().newHandler(channel.alloc());
+			if (sslHandler != null) {
 				sslHandler.handshakeFuture().addListener(future -> {
 					if (future.isSuccess()) {
 						LOGGER.debug("TLS handshake completed via holepunch: {}", remoteAddress);
-						socket.upgradeTransport().thenRun(() -> {
-							try {
-								socket.enableTlsTrafficCamouflage(sslHandler.engine().getSession(), false);
-							} catch (Exception exception) {
-								throw new CompletionException("Failed to enable TLS record camouflage", exception);
-							}
-						}).exceptionally(error -> {
-							LOGGER.debug("TLS record camouflage setup failed via holepunch: {}", remoteAddress, error);
-							socket.close();
-							return null;
-						});
+						tlsHandshakeComplete.set(true);
 					} else {
 						LOGGER.debug("TLS handshake failed via holepunch: {}", remoteAddress, future.cause());
 					}
@@ -169,6 +162,9 @@ public final class ServerHolepunchBridge {
 				}
 
 				pumpEmbeddedChannel(channel, socket);
+				if (tlsHandshakeComplete.get() && transportUpgradeStarted.compareAndSet(false, true)) {
+					startTlsTransportUpgrade(socket, sslHandler, remoteAddress);
+				}
 			}
 
 			pumpEmbeddedChannel(channel, socket);
@@ -178,6 +174,20 @@ public final class ServerHolepunchBridge {
 			sockets.remove(socket);
 			if (channel != null) channel.finishAndReleaseAll();
 		}
+	}
+
+	private static void startTlsTransportUpgrade(HolepunchSocket socket, SslHandler sslHandler, SocketAddress remoteAddress) {
+		socket.prepareTransportUpgrade().thenRun(() -> {
+			try {
+				socket.enableTlsTrafficCamouflage(sslHandler.engine().getSession(), false);
+			} catch (Exception exception) {
+				throw new CompletionException("Failed to enable TLS record camouflage", exception);
+			}
+		}).thenCompose(ignored -> socket.commitTransportUpgrade()).exceptionally(error -> {
+			LOGGER.debug("TLS record camouflage setup failed via holepunch: {}", remoteAddress, error);
+			socket.close();
+			return null;
+		});
 	}
 
 	private static long maxPendingWriteBytes() {

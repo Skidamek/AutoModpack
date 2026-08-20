@@ -30,34 +30,24 @@ class ConfigUtilsTest {
 	}
 
 	@Test
-	void holepunchAvailabilityStartsAt1201OnFabric() {
+	void holepunchIsNotDowngradedForAnyTarget() {
 		String previousVersion = Constants.MC_VERSION;
 		String previousLoader = Constants.LOADER;
 		try {
 			ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 			config.bindPort = 24444;
 
-			Constants.MC_VERSION = "1.20.1";
-			Constants.LOADER = "fabric";
+			for (String[] target : new String[][]{{"1.18.2", "forge"}, {"1.20.1", "forge"}, {"26.2", "neoforge"}}) {
+				Constants.MC_VERSION = target[0];
+				Constants.LOADER = target[1];
+				config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
+				ConfigUtils.normalizeServerConfig(config);
+				assertEquals(ModpackConnectionMode.HOLEPUNCH, config.connectionMode);
+			}
 
-			config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
+			config.connectionMode = null;
 			ConfigUtils.normalizeServerConfig(config);
-			assertEquals(config.connectionMode, ModpackConnectionMode.HOLEPUNCH);
-			assertEquals(24444, config.bindPort);
-
-			Constants.LOADER = "forge";
-
-			config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
-			ConfigUtils.normalizeServerConfig(config);
-			assertEquals(config.connectionMode, ModpackConnectionMode.MAGIC_PACKET);
-			assertEquals(24444, config.bindPort);
-
-			Constants.MC_VERSION = "1.19.2";
-			Constants.LOADER = "fabric";
-
-			config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
-			ConfigUtils.normalizeServerConfig(config);
-			assertEquals(config.connectionMode, ModpackConnectionMode.MAGIC_PACKET);
+			assertEquals(ModpackConnectionMode.HOLEPUNCH, config.connectionMode);
 			assertEquals(24444, config.bindPort);
 		} finally {
 			Constants.MC_VERSION = previousVersion;

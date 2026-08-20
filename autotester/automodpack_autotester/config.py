@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -93,6 +94,21 @@ def load_scenarios() -> dict[str, dict]:
         for f in sorted((ROOT / "scenarios").glob("*.yaml"))
         if not f.name.startswith("_")
     }
+
+
+def connection_path_variants(scenario: dict) -> list[dict]:
+    """Expand a scenario's declared connection-path matrix into case variants."""
+    paths = scenario.get("connectionPaths")
+    if paths is None:
+        return [scenario]
+    variants = []
+    for path in paths:
+        variant = deepcopy(scenario)
+        mode = str(path["mode"]).upper()
+        variant["id"] = f"{scenario['id']}-{mode.lower()}"
+        variant["connectionPath"] = deepcopy(path)
+        variants.append(variant)
+    return variants
 
 
 @lru_cache(maxsize=1)

@@ -10,6 +10,8 @@
     "core.LoginQueryResponseC2SPacketMixin",
     "core.MinecraftServerMixin",
     "core.PlayerManagerMixin",
+    "core.HolepunchConnectionAccessor",
+    "core.HolepunchServerLoginMixin",
     "core.ServerLoginNetworkHandlerAccessor",
     "core.ServerLoginNetworkHandlerMixin",
     "core.ServerNetworkIoMixin"

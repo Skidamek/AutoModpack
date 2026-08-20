@@ -7,6 +7,20 @@ description: |
   available for faster diagnosis; this is the default confidence path.
 renderClient: true
 
+# Run the complete release gate independently through each supported opening.
+# DIRECT uses a dedicated listener while MAGIC_PACKET shares the Minecraft
+# listener and HOLEPUNCH takes over the marked Login stream.
+connectionPaths:
+  - mode: DIRECT
+    bindPort: 25566
+    endpointPort: 25566
+  - mode: MAGIC_PACKET
+    bindPort: -1
+    endpointPort: 25565
+  - mode: HOLEPUNCH
+    bindPort: -1
+    endpointPort: 25565
+
 releaseGate:
   covers:
     - bootstrap
