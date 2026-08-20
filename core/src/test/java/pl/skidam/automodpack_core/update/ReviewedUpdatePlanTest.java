@@ -65,6 +65,19 @@ class ReviewedUpdatePlanTest {
 	}
 
 	@Test
+	void changedVisibleConsequencesCannotBypassReview() {
+		ChangeSet firstConsequences = ChangeSet.of(new ChangeSet.Change("mods/a.jar", ChangeSet.Kind.ADDED,
+				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, null, OBJECT_HASH, "mod", List.of(), List.of()))));
+		ChangeSet changedConsequences = ChangeSet.of(new ChangeSet.Change("mods/a.jar", ChangeSet.Kind.MODIFIED,
+				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, OTHER_HASH, OBJECT_HASH, "mod", List.of(), List.of()))));
+
+		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of(operation("mods/a.jar", OBJECT_HASH)), firstConsequences));
+		UpdatePlan changed = plan(List.of(operation("mods/a.jar", OBJECT_HASH)), changedConsequences);
+
+		assertThrows(IllegalStateException.class, () -> reviewed.requireCompatible(changed));
+	}
+
+	@Test
 	void durableTransactionUsesTheSameExecutionFingerprint() {
 		UpdatePlan plan = plan(List.of(operation("mods/a.jar", OBJECT_HASH)));
 		UpdateTransaction transaction = new UpdateTransaction();
@@ -80,6 +93,7 @@ class ReviewedUpdatePlanTest {
 		transaction.plannedPreservations = plan.preservations();
 		transaction.plannedBaselineCaptures = plan.baselineCaptures();
 		transaction.plannedConflicts = plan.conflicts();
+		transaction.plannedConsequencesDigest = ReviewedUpdatePlan.consequencesDigest(plan.consequences());
 
 		assertTrue(ReviewedUpdatePlan.isCompatible(transaction, plan));
 		transaction.operations = List.of(operation("mods/a.jar", OTHER_HASH));
@@ -87,8 +101,12 @@ class ReviewedUpdatePlanTest {
 	}
 
 	private static UpdatePlan plan(List<Operation> operations) {
+		return plan(operations, ChangeSet.empty());
+	}
+
+	private static UpdatePlan plan(List<Operation> operations, ChangeSet consequences) {
 		return new UpdatePlan("packaa1", new GenerationTarget("packaa1", "a".repeat(40), "", "b".repeat(40), "c".repeat(40)), operations, List.of(),
-				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), consequences);
 	}
 
 	private static Operation operation(String path, String objectHash) {
