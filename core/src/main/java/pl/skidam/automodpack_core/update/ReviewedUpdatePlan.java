@@ -103,13 +103,7 @@ public final class ReviewedUpdatePlan {
 		values(digest, "preservation", safe(transaction.plannedPreservations), ReviewedUpdatePlan::preservation);
 		values(digest, "baseline", safe(transaction.plannedBaselineCaptures), ReviewedUpdatePlan::baseline);
 		values(digest, "conflict", safe(transaction.plannedConflicts), ReviewedUpdatePlan::conflict);
-		if (transaction.plannedGeneratedCopies == null) value(digest, "nestedCopyState", "null");
-		else {
-			value(digest, "nestedCopyStateModpack", transaction.plannedGeneratedCopies.modpackId);
-			value(digest, "nestedCopyStateGeneration", transaction.plannedGeneratedCopies.generationId);
-			value(digest, "nestedCopyStateSelection", transaction.plannedGeneratedCopies.selectionDigest);
-			values(digest, "nestedCopy", safe(transaction.plannedGeneratedCopies.entries), ReviewedUpdatePlan::generatedCopyEntry);
-		}
+		values(digest, "nestedCopy", transaction.plannedGeneratedCopies == null ? List.of() : safe(transaction.plannedGeneratedCopies.entries), ReviewedUpdatePlan::generatedCopyEntry);
 		return digest(digest);
 	}
 
@@ -180,7 +174,7 @@ public final class ReviewedUpdatePlan {
 		value(digest, "path", copy.relativePath());
 		value(digest, "hash", copy.sha1());
 		value(digest, "size", copy.size());
-		set(digest, "ids", copy.ids());
+		// Durable generated-copy state persists the loader-facing execution tuple, not inspection-only IDs.
 		return digest(digest);
 	}
 
