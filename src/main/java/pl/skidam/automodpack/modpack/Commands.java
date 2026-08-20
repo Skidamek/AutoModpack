@@ -12,6 +12,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.security.SharedSecurityPaths;
+import pl.skidam.automodpack_core.security.ServerSecurityPathManager;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
@@ -120,7 +122,29 @@ public class Commands {
         Util.backgroundExecutor().execute(() -> {
             var tempServerConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
             if (tempServerConfig != null) {
-                ConfigUtils.normalizeServerConfig(tempServerConfig, true);
+                ConfigUtils.normalizeServerConfig(tempServerConfig);
+                try {
+                    SharedSecurityPaths resolvedPaths = SharedSecurityPaths.resolve(
+                            tempServerConfig.sharedSecurity,
+                            java.nio.file.Path.of(System.getProperty("user.dir"))
+                    );
+                    boolean sameStorageIdentity = sharedSecurityPaths == null
+                            ? !resolvedPaths.enabled()
+                            : resolvedPaths.hasSameStorageIdentity(sharedSecurityPaths);
+                    if (hostServer != null && hostServer.isRunning() && !sameStorageIdentity) {
+                        send(context, "Stop the modpack host before changing shared security paths.", ChatFormatting.RED, true);
+                        LOGGER.warn("Rejected shared security path change while the modpack host is running");
+                        return;
+                    }
+
+                    resolvedPaths.ensureDirectory();
+                    ServerSecurityPathManager.configure(tempServerConfig);
+                    ConfigTools.save(serverConfigFile, tempServerConfig);
+                } catch (Exception exception) {
+                    send(context, "Error while initializing shared security settings!", ChatFormatting.RED, true);
+                    LOGGER.error("Could not apply shared security settings after config reload", exception);
+                    return;
+                }
                 serverConfig = tempServerConfig;
                 send(context, "AutoModpack server config reloaded!", ChatFormatting.GREEN, true);
             } else {

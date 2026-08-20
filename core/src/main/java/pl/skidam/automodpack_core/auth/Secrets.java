@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.auth;
 
 import pl.skidam.automodpack_core.utils.TimedSet;
+import pl.skidam.automodpack_core.security.SharedSecurityPaths;
 
 import java.net.SocketAddress;
 import java.security.SecureRandom;
@@ -33,8 +34,7 @@ public class Secrets {
         @Override
         public String toString() {
             return "Secret{" +
-                    "secret='" + secret + '\'' +
-                    ", timestamp=" + timestamp +
+                    "timestamp=" + timestamp +
                     '}';
         }
     }
@@ -56,33 +56,41 @@ public class Secrets {
     private static final TimedSet<String> cachedValidSecrets = new TimedSet<>(3500);
 
     public static boolean isSecretValid(String secretStr, SocketAddress address) {
+        if (serverConfig == null)
+            return false;
         if (!serverConfig.validateSecrets)
             return true;
 
-        if (cachedValidSecrets.contains(secretStr))
+        SharedSecurityPaths activeSharedSecurityPaths = sharedSecurityPaths;
+        boolean shared = activeSharedSecurityPaths != null && activeSharedSecurityPaths.enabled();
+        if (!shared && cachedValidSecrets.contains(secretStr))
             return true;
 
-        var playerSecretPair = SecretsStore.getHostSecret(secretStr);
-        if (playerSecretPair == null)
+        final SharedSecretsStore.HostSecretRecord record;
+        try {
+            record = SecretsStore.findHostSecret(secretStr);
+        } catch (Exception exception) {
+            LOGGER.warn("Shared security validation failed closed: {}", exception.getMessage());
+            return false;
+        }
+        if (record == null)
             return false;
 
-        Secret secret = playerSecretPair.getValue();
-        if (secret == null)
-            return false;
-
-        String playerUuid = playerSecretPair.getKey();
-        if (!GAME_CALL.isPlayerAuthorized(address, playerUuid)) // check if associated player is still whitelisted
-            return false;
-
-        long secretLifetime = serverConfig.secretLifetime * 3600; // in seconds
         long currentTime = System.currentTimeMillis() / 1000;
-
-        boolean valid = secret.timestamp() + secretLifetime > currentTime;
-
-        if (!valid)
+        if (record.expiresAt() <= currentTime)
             return false;
 
-        cachedValidSecrets.add(secretStr);
+        if (!shared || activeSharedSecurityPaths.authorizationMode() == SharedSecurityPaths.AuthorizationMode.HOST_RECHECK) {
+            if (!GAME_CALL.isPlayerAuthorized(address, record.playerUuid())) {
+                return false;
+            }
+        }
+
+        // Shared mode deliberately performs a fresh locked read for every
+        // primary authentication, so revocation/replacement is observed.
+        if (!shared) {
+            cachedValidSecrets.add(secretStr);
+        }
 
         return true;
     }

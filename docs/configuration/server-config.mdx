@@ -96,6 +96,84 @@ These settings control how the file server is exposed to the internet.
 | `validateSecrets`       | `true`  | Protects downloads using unique, temporary secrets per user.                                           |
 | `secretLifetime`        | `336`   | How long (in hours) a download secret remains valid.                                                   |
 
+## Shared Security Storage
+
+These settings control optional server-side storage shared by multiple AutoModpack server processes. It is disabled by default; when disabled, AutoModpack keeps using the local `.private` files and legacy behavior. Client secret and known-host files are never placed in shared storage.
+
+Shared security storage works well with [AutoModpack Velocity](https://modrinth.com/plugin/automodpackvelocity) on a Velocity network. The plugin forwards AutoModpack's login-phase data and proxies the TCP download connection from the proxy endpoint to the selected backend, while the backend processes continue to run the regular AutoModpack host. Configure the same shared directory for the processes that issue login secrets and serve downloads; AutoModpack Velocity does not need access to the secret store or the TLS private key. Install and configure the plugin's required login-phase proxy dependency according to its documentation.
+
+| Setting                                  | Default             | Description                                                                                            |
+|------------------------------------------|---------------------|--------------------------------------------------------------------------------------------------------|
+| `sharedSecurity.enabled`                 | `false`             | Enables shared server security storage.                                                                |
+| `sharedSecurity.nodeId`                  | `""`                | Unique identifier of the server process that issues secrets. Required when enabled.                    |
+| `sharedSecurity.directory`               | `""`                | Absolute path or path relative to the server working directory.                                        |
+| `sharedSecurity.secretsFile`             | `host-secrets.json` | Versioned shared secret store.                                                                         |
+| `sharedSecurity.secretsLockFile`         | `host-secrets.lock` | Stable lock file used for secret-store reads and writes.                                               |
+| `sharedSecurity.certificateFile`         | `cert.crt`          | Shared TLS certificate chain.                                                                          |
+| `sharedSecurity.privateKeyFile`          | `key.pem`           | Shared PKCS#8 private key.                                                                             |
+| `sharedSecurity.tlsLockFile`             | `tls.lock`          | Stable lock file used while loading, creating, or restoring TLS material.                              |
+| `sharedSecurity.lockTimeoutMs`           | `10000`             | Maximum time to wait for a shared file lock.                                                           |
+| `sharedSecurity.backupCount`             | `3`                 | Number of validated secret-store backups to retain.                                                    |
+| `sharedSecurity.fsync`                   | `true`              | Forces written files to stable storage before publication.                                             |
+| `sharedSecurity.failClosed`              | `true`              | Rejects authentication when shared storage cannot be read or validated.                                |
+| `sharedSecurity.autoGenerateCertificate` | `false`             | Allows a missing TLS pair to be generated atomically under the TLS lock.                               |
+| `sharedSecurity.authorizationMode`       | `ISSUER_AT_LOGIN`   | Uses the issuing login record for authorization, or `HOST_RECHECK` to repeat the host whitelist check. |
+| `sharedSecurity.maxEntries`              | `10000`             | Maximum number of active shared secret entries.                                                        |
+
+All participating processes must use the same directory and filenames, while each process must have a different `nodeId`. The shared directory must not be included in `syncedFiles`, `host-modpack`, or any client download path. Use a local filesystem with working OS file locks, such as NTFS or ext4; SMB/NFS and other filesystems with unverified `FileLock` semantics are not supported. On Windows, grant access only to the configured service accounts. On POSIX, newly created directories use `0700`, secrets and keys use `0600`, and certificates use `0644` without weakening stricter existing permissions.
+
+### Example: issuing server
+
+```json
+"validateSecrets": true,
+"sharedSecurity": {
+  "enabled": true,
+  "nodeId": "BackendA",
+  "directory": "C:/path/to/automodpack-security",
+  "secretsFile": "host-secrets.json",
+  "secretsLockFile": "host-secrets.lock",
+  "certificateFile": "cert.crt",
+  "privateKeyFile": "key.pem",
+  "tlsLockFile": "tls.lock",
+  "lockTimeoutMs": 10000,
+  "backupCount": 3,
+  "fsync": true,
+  "failClosed": true,
+  "autoGenerateCertificate": false,
+  "authorizationMode": "ISSUER_AT_LOGIN",
+  "maxEntries": 10000
+}
+```
+
+### Example: hosting server
+
+Use the same shared paths and `validateSecrets` setting, but a different `nodeId`:
+
+```json
+"validateSecrets": true,
+"sharedSecurity": {
+  "enabled": true,
+  "nodeId": "HostNode",
+  "directory": "C:/path/to/automodpack-security",
+  "secretsFile": "host-secrets.json",
+  "secretsLockFile": "host-secrets.lock",
+  "certificateFile": "cert.crt",
+  "privateKeyFile": "key.pem",
+  "tlsLockFile": "tls.lock",
+  "lockTimeoutMs": 10000,
+  "backupCount": 3,
+  "fsync": true,
+  "failClosed": true,
+  "autoGenerateCertificate": false,
+  "authorizationMode": "ISSUER_AT_LOGIN",
+  "maxEntries": 10000
+}
+```
+
+On the first clean startup, shared mode may create an empty versioned store. A corrupt primary is preserved as `*.corrupt-*` and restored only from a validated backup. If no backup exists, authentication fails closed. Keep the corrupt file for investigation and stop all participating processes before a manual rollback. Certificate and private-key backups are always handled as a single pair.
+
+Existing local `automodpack/.private/automodpack-secrets.json` entries are not silently imported into shared mode. Keep the local file as a rollback copy; new records are written after the next successful login.
+
 ## Nagging Un-modded Clients
 
 If `requireAutoModpackOnClient` is set to `false`, you can annoy (nag) players who join without the mod installed.

@@ -1,10 +1,12 @@
 package pl.skidam.automodpack_core;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.security.ServerSecurityPathManager;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -39,7 +41,16 @@ public class Server {
         serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
         if (serverConfig != null) {
             serverConfig.syncedFiles = new HashSet<>();
-            serverConfig.validateSecrets = false;
+            ConfigUtils.normalizeServerConfig(serverConfig);
+            ServerSecurityPathManager.configure(serverConfig);
+            if (sharedSecurityPaths != null) {
+                try {
+                    sharedSecurityPaths.ensureDirectory();
+                } catch (Exception exception) {
+                    LOGGER.error("Could not initialize shared security directory", exception);
+                    return;
+                }
+            }
             ConfigTools.save(serverConfigFile, serverConfig);
 
             if (serverConfig.bindPort == -1) {

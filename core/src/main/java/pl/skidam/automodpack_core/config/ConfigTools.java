@@ -97,10 +97,35 @@ public class ConfigTools {
                 Files.createDirectories(configFile.getParent());
             }
 
-            Files.writeString(configFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            JsonElement serialized = GSON.toJsonTree(configObject);
+            if (serialized.isJsonObject() && Files.isRegularFile(configFile)
+                    && configFile.toAbsolutePath().normalize().equals(serverConfigFile.toAbsolutePath().normalize())) {
+                try {
+                    JsonElement existing = new JsonParser().parse(Files.readString(configFile));
+                    if (existing != null && existing.isJsonObject()) {
+                        mergeUnknownFields(existing.getAsJsonObject(), serialized.getAsJsonObject());
+                    }
+                } catch (JsonParseException ignored) {
+                    // Do not replace a malformed configuration while trying
+                    // to preserve unknown fields. The normal loader reports it.
+                }
+            }
+
+            Files.writeString(configFile, GSON.toJson(serialized), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
             LOGGER.error("Couldn't save config! " + configObject.getClass());
             e.printStackTrace();
+        }
+    }
+
+    private static void mergeUnknownFields(JsonObject existing, JsonObject serialized) {
+        for (var entry : existing.entrySet()) {
+            JsonElement current = serialized.get(entry.getKey());
+            if (current == null) {
+                serialized.add(entry.getKey(), entry.getValue().deepCopy());
+            } else if (current.isJsonObject() && entry.getValue().isJsonObject()) {
+                mergeUnknownFields(entry.getValue().getAsJsonObject(), current.getAsJsonObject());
+            }
         }
     }
 
