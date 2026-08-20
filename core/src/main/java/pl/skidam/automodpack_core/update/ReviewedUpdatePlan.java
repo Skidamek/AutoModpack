@@ -5,9 +5,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -254,7 +256,7 @@ public final class ReviewedUpdatePlan {
 		for (String item : encoded) value(digest, label + "Value", item);
 	}
 
-	private static void set(MessageDigest digest, String label, java.util.Set<String> values) {
+	private static void set(MessageDigest digest, String label, Set<String> values) {
 		List<String> sorted = values == null ? List.of() : values.stream().filter(Objects::nonNull).map(value -> value.toLowerCase(Locale.ROOT)).sorted().toList();
 		value(digest, label + "Count", sorted.size());
 		for (String item : sorted) value(digest, label + "Value", item);
@@ -281,7 +283,7 @@ public final class ReviewedUpdatePlan {
 	}
 
 	private static String digest(MessageDigest digest) {
-		return java.util.HexFormat.of().formatHex(digest.digest());
+		return HexFormat.of().formatHex(digest.digest());
 	}
 
 	private static MessageDigest newDigest() {
