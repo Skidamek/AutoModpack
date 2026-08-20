@@ -63,6 +63,28 @@ class ReviewedUpdatePlanTest {
 		assertThrows(IllegalStateException.class, () -> reviewed.requireCompatible(changed));
 	}
 
+	@Test
+	void durableTransactionUsesTheSameExecutionFingerprint() {
+		UpdatePlan plan = plan(List.of(operation("mods/a.jar", OBJECT_HASH)));
+		UpdateTransaction transaction = new UpdateTransaction();
+		transaction.modpackId = plan.modpackId();
+		transaction.targetGenerationId = plan.generationTarget().targetGenerationId();
+		transaction.parentGenerationId = plan.generationTarget().parentGenerationId();
+		transaction.stateDigest = plan.generationTarget().stateDigest();
+		transaction.ledgerDigest = plan.generationTarget().ledgerDigest();
+		transaction.operations = plan.operations();
+		transaction.projectedFinalState = plan.projectedFinalState();
+		transaction.plannedClientConfig = plan.plannedClientConfig();
+		transaction.restartReasons = List.copyOf(plan.restartReasons());
+		transaction.plannedPreservations = plan.preservations();
+		transaction.plannedBaselineCaptures = plan.baselineCaptures();
+		transaction.plannedConflicts = plan.conflicts();
+
+		assertTrue(ReviewedUpdatePlan.isCompatible(transaction, plan));
+		transaction.operations = List.of(operation("mods/a.jar", OTHER_HASH));
+		assertFalse(ReviewedUpdatePlan.isCompatible(transaction, plan));
+	}
+
 	private static UpdatePlan plan(List<Operation> operations) {
 		return new UpdatePlan("packaa1", new GenerationTarget("packaa1", "a".repeat(40), "", "b".repeat(40), "c".repeat(40)), operations, List.of(),
 				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of());
