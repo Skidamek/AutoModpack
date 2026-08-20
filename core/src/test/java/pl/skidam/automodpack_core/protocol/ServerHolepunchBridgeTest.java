@@ -51,6 +51,11 @@ class ServerHolepunchBridgeTest {
 			}
 
 			@Override
+			public CompletableFuture<Void> upgradeTransport() {
+				return CompletableFuture.completedFuture(null);
+			}
+
+			@Override
 			public void close() {}
 		};
 		HolepunchSocket socket = new HolepunchSocket(connection);

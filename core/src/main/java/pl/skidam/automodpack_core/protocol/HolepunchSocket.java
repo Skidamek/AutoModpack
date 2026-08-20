@@ -9,8 +9,13 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+
+import javax.net.ssl.SSLKeyException;
+import javax.net.ssl.SSLSession;
 
 import io.netty.buffer.ByteBuf;
 
@@ -24,6 +29,8 @@ public class HolepunchSocket extends Socket {
 	private volatile HolepunchOutputStream out;
 	private volatile boolean closed;
 	private volatile int soTimeoutMillis;
+	private volatile TrafficCamouflage trafficCamouflage;
+	private final Object writeLock = new Object();
 
 	public HolepunchSocket(HolepunchConnection connection) {
 		this.connection = Objects.requireNonNull(connection, "connection");
@@ -38,6 +45,7 @@ public class HolepunchSocket extends Socket {
 	public synchronized void setConnection(HolepunchConnection connection) {
 		if (closed) throw new IllegalStateException("HolepunchSocket is closed");
 		this.connection = Objects.requireNonNull(connection, "connection");
+		this.trafficCamouflage = null;
 		this.out = new HolepunchOutputStream();
 	}
 
@@ -47,7 +55,7 @@ public class HolepunchSocket extends Socket {
 			public void onRead(ByteBuffer data) {
 				byte[] bytes = new byte[data.remaining()];
 				data.get(bytes);
-				in.feed(bytes);
+				feedReadData(bytes);
 			}
 
 			@Override
@@ -56,6 +64,20 @@ public class HolepunchSocket extends Socket {
 				in.feedEnd();
 			}
 		};
+	}
+
+	public CompletionStage<Void> upgradeTransport() {
+		HolepunchConnection activeConnection = connection;
+		if (activeConnection == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("HolepunchSocket is not connected"));
+		}
+		return activeConnection.upgradeTransport();
+	}
+
+	void enableTlsTrafficCamouflage(SSLSession session, boolean client) throws SSLKeyException {
+		TlsRecordHeaderCamouflage.Pair tlsRecords = TlsRecordHeaderCamouflage.create(session, client);
+		MinecraftFrameCamouflage.Pair minecraftFrames = MinecraftFrameCamouflage.create(session, client);
+		trafficCamouflage = new TrafficCamouflage(tlsRecords, minecraftFrames);
 	}
 
 	@Override
@@ -122,6 +144,25 @@ public class HolepunchSocket extends Socket {
 	}
 
 	void feedReadData(byte[] data) {
+		TrafficCamouflage camouflage = trafficCamouflage;
+		if (camouflage != null && data.length != 0) {
+			try {
+				ByteBuffer input = ByteBuffer.wrap(data);
+				ByteBuffer decodedFrames = ByteBuffer.allocate(data.length);
+				camouflage.minecraftFrames().inbound().decode(input, decodedFrames);
+				if (input.hasRemaining()) throw new IOException("Minecraft frame camouflage did not consume inbound data");
+				decodedFrames.flip();
+				ByteBuffer decodedTls = ByteBuffer.allocate(decodedFrames.remaining());
+				camouflage.tlsRecords().inbound().transform(decodedFrames, decodedTls);
+				if (decodedFrames.hasRemaining()) throw new IOException("TLS camouflage did not consume inbound data");
+				decodedTls.flip();
+				data = new byte[decodedTls.remaining()];
+				decodedTls.get(data);
+			} catch (IOException exception) {
+				close();
+				throw new IllegalStateException("Invalid camouflaged Minecraft/TLS stream", exception);
+			}
+		}
 		in.feed(data);
 	}
 
@@ -216,10 +257,37 @@ public class HolepunchSocket extends Socket {
 	}
 
 	private void writeConnection(ByteBuffer data) throws IOException {
-		HolepunchConnection activeConnection = connection;
-		if (activeConnection == null) throw new IOException("HolepunchSocket is not connected");
+		synchronized (writeLock) {
+			HolepunchConnection activeConnection = connection;
+			if (activeConnection == null) throw new IOException("HolepunchSocket is not connected");
+			ByteBuffer outbound = data.duplicate();
+			TrafficCamouflage camouflage = trafficCamouflage;
+			if (camouflage != null && outbound.hasRemaining()) {
+				ByteBuffer encoded = ByteBuffer.allocate(outbound.remaining());
+				camouflage.tlsRecords().outbound().transform(outbound, encoded);
+				encoded.flip();
+				outbound = encoded;
+			}
+			while (outbound.hasRemaining()) {
+				int chunkLength = camouflage == null ? outbound.remaining() : Math.min(outbound.remaining(), MinecraftFrameCamouflage.MAX_FRAME_LENGTH);
+				ByteBuffer chunk = outbound.slice();
+				chunk.limit(chunkLength);
+				ByteBuffer wire = chunk;
+				if (camouflage != null) {
+					ByteBuffer framed = ByteBuffer.allocate(MinecraftFrameCamouflage.HEADER_LENGTH + chunkLength);
+					camouflage.minecraftFrames().outbound().encode(chunk, framed);
+					framed.flip();
+					wire = framed;
+				}
+				writeToConnection(activeConnection, wire);
+				outbound.position(outbound.position() + chunkLength);
+			}
+		}
+	}
+
+	private static void writeToConnection(HolepunchConnection connection, ByteBuffer data) throws IOException {
 		try {
-			activeConnection.write(data).toCompletableFuture().get(30, TimeUnit.SECONDS);
+			connection.write(data).toCompletableFuture().get(30, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new IOException("write interrupted", e);
@@ -227,4 +295,6 @@ public class HolepunchSocket extends Socket {
 			throw new IOException("write failed", e);
 		}
 	}
+
+	private record TrafficCamouflage(TlsRecordHeaderCamouflage.Pair tlsRecords, MinecraftFrameCamouflage.Pair minecraftFrames) {}
 }
