@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
@@ -89,6 +90,7 @@ public final class ReviewedUpdatePlan {
 		values(digest, "baseline", plan.baselineCaptures(), ReviewedUpdatePlan::baseline);
 		values(digest, "conflict", plan.conflicts(), ReviewedUpdatePlan::conflict);
 		values(digest, "nestedCopy", plan.generatedCopies(), ReviewedUpdatePlan::nestedCopy);
+		value(digest, "consequences", consequencesDigest(plan.consequences()));
 		return digest(digest);
 	}
 
@@ -104,6 +106,43 @@ public final class ReviewedUpdatePlan {
 		values(digest, "baseline", safe(transaction.plannedBaselineCaptures), ReviewedUpdatePlan::baseline);
 		values(digest, "conflict", safe(transaction.plannedConflicts), ReviewedUpdatePlan::conflict);
 		values(digest, "nestedCopy", transaction.plannedGeneratedCopies == null ? List.of() : safe(transaction.plannedGeneratedCopies.entries), ReviewedUpdatePlan::generatedCopyEntry);
+		value(digest, "consequences", transaction.plannedConsequencesDigest);
+		return digest(digest);
+	}
+
+	public static String consequencesDigest(ChangeSet consequences) {
+		Objects.requireNonNull(consequences, "reconciliation consequences");
+		MessageDigest digest = newDigest();
+		values(digest, "change", consequences.changes(), ReviewedUpdatePlan::change);
+		values(digest, "effect", consequences.effects(), ReviewedUpdatePlan::effect);
+		return digest(digest);
+	}
+
+	private static String change(ChangeSet.Change change) {
+		MessageDigest digest = newDigest();
+		value(digest, "path", change.logicalPath());
+		value(digest, "kind", change.kind());
+		values(digest, "occurrence", change.occurrences(), ReviewedUpdatePlan::occurrence);
+		return digest(digest);
+	}
+
+	private static String occurrence(ChangeSet.Occurrence occurrence) {
+		MessageDigest digest = newDigest();
+		value(digest, "location", occurrence.location());
+		value(digest, "path", occurrence.logicalPath());
+		value(digest, "size", occurrence.size());
+		value(digest, "before", occurrence.beforeHash());
+		value(digest, "after", occurrence.afterHash());
+		value(digest, "contentKind", occurrence.contentKind());
+		strings(digest, "featureId", occurrence.featureIds());
+		strings(digest, "reference", occurrence.references());
+		return digest(digest);
+	}
+
+	private static String effect(ChangeSet.Effect effect) {
+		MessageDigest digest = newDigest();
+		value(digest, "category", effect.category());
+		value(digest, "value", effect.value());
 		return digest(digest);
 	}
 
@@ -217,6 +256,12 @@ public final class ReviewedUpdatePlan {
 
 	private static void set(MessageDigest digest, String label, java.util.Set<String> values) {
 		List<String> sorted = values == null ? List.of() : values.stream().filter(Objects::nonNull).map(value -> value.toLowerCase(Locale.ROOT)).sorted().toList();
+		value(digest, label + "Count", sorted.size());
+		for (String item : sorted) value(digest, label + "Value", item);
+	}
+
+	private static void strings(MessageDigest digest, String label, List<String> values) {
+		List<String> sorted = values == null ? List.of() : values.stream().filter(Objects::nonNull).sorted().toList();
 		value(digest, label + "Count", sorted.size());
 		for (String item : sorted) value(digest, label + "Value", item);
 	}

@@ -57,6 +57,7 @@ public final class UpdateTransaction {
 	public List<Preservation> plannedPreservations;
 	public List<BaselineCapture> plannedBaselineCaptures;
 	public List<Conflict> plannedConflicts;
+	public String plannedConsequencesDigest;
 	public ClientStorageJsons.ClientGeneratedCopiesFields plannedGeneratedCopies;
 	public Status resultStatus;
 	public String resultOperation;
@@ -157,6 +158,7 @@ public final class UpdateTransaction {
 		transaction.plannedPreservations = List.copyOf(plan.preservations());
 		transaction.plannedBaselineCaptures = List.copyOf(plan.baselineCaptures());
 		transaction.plannedConflicts = List.copyOf(plan.conflicts());
+		transaction.plannedConsequencesDigest = ReviewedUpdatePlan.consequencesDigest(plan.consequences());
 	}
 
 	private static UpdateTransaction base(Purpose purpose) {
