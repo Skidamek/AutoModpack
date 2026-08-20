@@ -80,8 +80,6 @@ Setting `modpackHost` to `false` disables all built-in listeners and holepunch h
 
 Clients always start TLS after the mode-specific opening. With `disableInternalTLS: true`, AutoModpack expects that TLS to have been terminated elsewhere before traffic reaches its protocol handler. This is an expert setting and does not permit plaintext client connections.
 
-`HOLEPUNCH` is available on every AutoModpack target. `MAGIC_PACKET` and `DIRECT` remain explicit alternatives when their routing topology is preferred; `DIRECT` is never selected automatically.
-
 ## Nagging Un-modded Clients
 
 If `requireAutoModpackOnClient` is set to `false`, you can annoy (nag) players who join without the mod installed.
