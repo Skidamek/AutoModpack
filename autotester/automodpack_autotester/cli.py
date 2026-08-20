@@ -7,6 +7,7 @@ import secrets
 import signal
 import shutil
 import sys
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from .cache import deduplicate_asset_objects
 from .config import (
     REPO_ROOT,
     ROOT,
+    connection_path_variants,
     load_macros,
     load_scenarios,
     load_settings,
@@ -80,6 +82,36 @@ def _write_results(path: Path, payload: dict) -> None:
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     os.replace(temporary, path)
+
+
+def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope):
+    case_results = [
+        run_case(
+            target,
+            deepcopy(variant),
+            out_dir=out_dir,
+            artifact_dir=artifact_dir,
+            client_image=client_image,
+            settings=settings,
+            resource_scope=resource_scope,
+        )
+        for variant in variants
+    ]
+    if len(case_results) == 1:
+        return case_results[0]
+    failures = [
+        f"{result.get('connectionMode', result.get('scenario', '?'))}: {result.get('error', 'failed')}"
+        for result in case_results
+        if not result.get("ok", False)
+    ]
+    return {
+        "target": target.id,
+        "scenario": variants[0].get("id", "?"),
+        "ok": all(result.get("ok", False) for result in case_results),
+        "duration": sum(float(result.get("duration", 0)) for result in case_results),
+        "connectionPaths": case_results,
+        "error": "; ".join(failures) if failures else None,
+    }
 
 
 def _cmd_verbs() -> int:
@@ -273,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
     if not selected:
         print("No targets in scope for this scenario", file=sys.stderr)
         return 1
+    variants = connection_path_variants(scenario)
 
     out_dir = (
         _resolve_settings_path(s, "outDir", "out")
@@ -312,9 +345,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             task_map = {
                 executor.submit(
-                    run_case,
+                    _run_target_cases,
                     t,
-                    scenario,
+                    variants,
                     out_dir=out_dir,
                     artifact_dir=artifact_dir,
                     client_image=client_image,
@@ -329,6 +362,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     f"{'PASS' if r['ok'] else 'FAIL'} {r['target']} {r.get('duration', 0):.1f}s"
                 )
+                for path_result in r.get("connectionPaths", []):
+                    print(
+                        f"  {'PASS' if path_result['ok'] else 'FAIL'} {path_result.get('connectionMode', path_result.get('scenario', '?'))} "
+                        f"{path_result.get('duration', 0):.1f}s"
+                    )
                 if r.get("error"):
                     print(f"  {r['error']}", file=sys.stderr)
 

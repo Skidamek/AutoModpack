@@ -62,7 +62,7 @@ These settings control how the file server is exposed to the internet.
 | `advertisedEndpointPort` | `-1`                                                       | The public TCP port sent to clients as the download endpoint. -1 uses the connected port.                                                      |
 | `bandwidthLimit`         | `0`                                                        | Upload speed limit in Mbps (0 = unlimited).                                                                                                    |
 | `disableInternalTLS`     | `false`                                                    | Disables only AutoModpack's server-side TLS termination. Clients always use TLS; an expert-provided terminator must forward decrypted traffic. |
-| `connectionMode`         | `HOLEPUNCH` on supported targets; `MAGIC_PACKET` otherwise | Selects the exact method advertised to clients and used by built-in handling. Modes do not fall back to one another.                           |
+| `connectionMode`         | `HOLEPUNCH`                                              | Selects the exact method advertised to clients and used by built-in handling. Modes do not fall back to one another.                           |
 | `validateSecrets`        | `true`                                                     | Protects downloads using unique, temporary secrets per user.                                                                                   |
 | `secretLifetime`         | `336`                                                      | How long (in hours) a download secret remains valid.                                                                                           |
 
@@ -80,7 +80,7 @@ Setting `modpackHost` to `false` disables all built-in listeners and holepunch h
 
 Clients always start TLS after the mode-specific opening. With `disableInternalTLS: true`, AutoModpack expects that TLS to have been terminated elsewhere before traffic reaches its protocol handler. This is an expert setting and does not permit plaintext client connections.
 
-On targets without built-in holepunch support, `HOLEPUNCH` is normalized, logged, and saved as `MAGIC_PACKET`. `DIRECT` is never selected automatically.
+`HOLEPUNCH` is available on every AutoModpack target. `MAGIC_PACKET` and `DIRECT` remain explicit alternatives when their routing topology is preferred; `DIRECT` is never selected automatically.
 
 ## Nagging Un-modded Clients
 

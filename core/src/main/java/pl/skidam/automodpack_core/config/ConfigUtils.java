@@ -23,11 +23,7 @@ public class ConfigUtils {
 	}
 
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
-		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.defaultFor(MC_VERSION, LOADER);
-		if (config.connectionMode == ModpackConnectionMode.HOLEPUNCH && !ModpackConnectionMode.isHolepunchAvailable(MC_VERSION, LOADER)) {
-			config.connectionMode = ModpackConnectionMode.MAGIC_PACKET;
-			LOGGER.warn("HOLEPUNCH connection mode is unavailable on " + LOADER + " " + MC_VERSION + ". Falling back to MAGIC_PACKET");
-		}
+		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.defaultFor();
 
 		String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";
 		Pattern pattern = Pattern.compile(prefixPattern);

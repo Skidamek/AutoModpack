@@ -60,9 +60,20 @@ class HolepunchSocketTest {
 		}
 
 		@Override
-		public CompletionStage<Void> upgradeTransport() {
+		public CompletionStage<Void> prepareTransportUpgrade() {
 			return CompletableFuture.completedFuture(null);
 		}
+
+		@Override
+		public CompletionStage<Void> commitTransportUpgrade() {
+			return CompletableFuture.completedFuture(null);
+		}
+
+		@Override
+		public void pauseReads() {}
+
+		@Override
+		public void resumeReads() {}
 
 		@Override
 		public void close() {}
