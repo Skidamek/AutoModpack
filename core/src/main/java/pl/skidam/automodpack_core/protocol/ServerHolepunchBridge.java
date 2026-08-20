@@ -12,6 +12,7 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.Set;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -130,6 +131,17 @@ public final class ServerHolepunchBridge {
 				sslHandler.handshakeFuture().addListener(future -> {
 					if (future.isSuccess()) {
 						LOGGER.debug("TLS handshake completed via holepunch: {}", remoteAddress);
+						socket.upgradeTransport().thenRun(() -> {
+							try {
+								socket.enableTlsTrafficCamouflage(sslHandler.engine().getSession(), false);
+							} catch (Exception exception) {
+								throw new CompletionException("Failed to enable TLS record camouflage", exception);
+							}
+						}).exceptionally(error -> {
+							LOGGER.debug("TLS record camouflage setup failed via holepunch: {}", remoteAddress, error);
+							socket.close();
+							return null;
+						});
 					} else {
 						LOGGER.debug("TLS handshake failed via holepunch: {}", remoteAddress, future.cause());
 					}
