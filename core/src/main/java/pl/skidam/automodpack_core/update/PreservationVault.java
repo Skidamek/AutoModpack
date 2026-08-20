@@ -160,6 +160,39 @@ public final class PreservationVault {
 		return new Snapshot(pack, claims);
 	}
 
+	/** Returns the current-format modpack IDs that have at least one preserved claim. */
+	public static List<String> modpackIds(ClientStorage storage) throws IOException {
+		Objects.requireNonNull(storage, "storage");
+		Path root = storage.preservationDirectory().toAbsolutePath().normalize();
+		validateNoSymbolicLinkDescendants(root, root, "preservation vault");
+		if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
+		if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation vault is not a directory: " + root);
+
+		List<String> packs = new ArrayList<>();
+		try (var paths = Files.list(root)) {
+			for (Path packRoot : paths.sorted(Comparator.comparing(path -> path.getFileName().toString())).toList()) {
+				validateNoSymbolicLinkDescendants(root, packRoot, "preservation vault pack");
+				if (!Files.isDirectory(packRoot, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation vault pack is not a directory: " + packRoot);
+				String pack;
+				try {
+					pack = ModpackId.requireValid(packRoot.getFileName().toString());
+				} catch (RuntimeException e) {
+					throw new IOException("Preservation vault pack identity is invalid: " + packRoot, e);
+				}
+				if (!read(storage, pack).claims().isEmpty()) packs.add(pack);
+			}
+		}
+		return List.copyOf(packs);
+	}
+
+	/** Returns every claim-bearing vault snapshot without manufacturing an installed generation. */
+	public static List<Snapshot> snapshots(ClientStorage storage) throws IOException {
+		Objects.requireNonNull(storage, "storage");
+		List<Snapshot> snapshots = new ArrayList<>();
+		for (String modpackId : modpackIds(storage)) snapshots.add(read(storage, modpackId));
+		return List.copyOf(snapshots);
+	}
+
 	/** Restores to the original game path only when the same pack is active, the path is unowned, and no different file would be overwritten. */
 	public static Path restoreOriginal(ClientStorage storage, String modpackId, String claimId) throws IOException {
 		String pack = ModpackId.requireValid(modpackId);

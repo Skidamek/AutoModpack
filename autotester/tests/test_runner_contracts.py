@@ -488,6 +488,27 @@ def test_client_launcher_does_not_kill_a_healthy_scenario_at_the_startup_deadlin
     assert 'prepare_only="${AM_AUTOTEST_PREPARE_ONLY:-false}"' in source
 
 
+def test_client_launcher_uses_canonical_targets_when_the_profile_is_prepared():
+    source = (Path(__file__).parents[1] / "docker/client/run-headlessmc-client").read_text(encoding="utf-8")
+    prepare_guard = 'if [ "$prepared_profile" != "true" ] && [ -n "$loader_version" ]; then'
+
+    for target in (
+        'launch_target="fabric-loader-${loader_version}-${minecraft}"',
+        'launch_target="${minecraft}-forge-${loader_version}"',
+        'launch_target="neoforge-${loader_version}"',
+    ):
+        assert target in source
+        assert source.index(target) < source.index(prepare_guard)
+
+    # Without a configured loader version there is no exact profile to pin, so
+    # retain the generic target as the deliberate fallback.
+    generic_target = 'launch_target="${loader}:${minecraft}"'
+    assert generic_target in source
+    assert source.index(generic_target) < source.index(prepare_guard)
+    installation = source[source.index(prepare_guard) : source.index("\nfi", source.index(prepare_guard))]
+    assert "launch_target=" not in installation
+
+
 def test_bootstrap_overlaps_profile_preparation_with_server_startup():
     steps = runner.load_macros()["boot_with_bootstrap"]
     actions = [step.get("do") or step.get("use") for step in steps]

@@ -193,11 +193,16 @@ public class ScreenImpl implements ScreenService {
 			Screen parent = Screens.getScreen();
 			if (isTransient(parent)) parent = interactiveParent;
 			parent = switch (request.returnDestination()) {
-				case CURRENT_SCREEN -> parent;
+				case CURRENT_SCREEN -> resumableFailureParent(parent);
 				case MULTIPLAYER -> multiplayerScreen();
 				case TITLE -> new TitleScreen();
 			};
 			Screens.setScreen(new ErrorScreen(parent, request));
+		}
+
+		private static Screen resumableFailureParent(Screen parent) {
+			if (parent == null || parent instanceof FirstConnectScreen || parent instanceof UpdatePreviewScreen) return multiplayerScreen();
+			return parent;
 		}
 
 		public static void title() {

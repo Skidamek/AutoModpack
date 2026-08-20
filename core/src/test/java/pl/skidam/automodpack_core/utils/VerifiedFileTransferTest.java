@@ -4,9 +4,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -61,5 +64,51 @@ class VerifiedFileTransferTest {
 		assertTrue(VerifiedFileTransfer.copyAtomicImmutable(source, target, size, hash));
 		assertTrue(FileIntegrity.matches(target, size, hash));
 		assertTrue(ImmutableFiles.isProtected(target));
+	}
+
+	@Test
+	void crossFilesystemPromotionConsumesSourceAfterSuccessfulPublish() throws IOException {
+		Path sourceDirectory = differentFileStoreDirectory(tempDir);
+		Assumptions.assumeTrue(sourceDirectory != null, "requires a writable second filesystem");
+		Path source = sourceDirectory.resolve("download");
+		try {
+			Files.writeString(source, "verified content", StandardCharsets.UTF_8);
+			Path target = tempDir.resolve("objects/cross-filesystem");
+			String hash = HashUtils.getHash(source);
+			long size = Files.size(source);
+
+			VerifiedFileTransfer.promoteAtomic(source, target, size, hash);
+
+			assertFalse(Files.exists(source));
+			assertTrue(FileIntegrity.matches(target, size, hash));
+		} finally {
+			ImmutableFiles.deleteIfExists(source);
+			if (sourceDirectory != null) Files.deleteIfExists(sourceDirectory);
+		}
+	}
+
+	@Test
+	void failedPromotionLeavesSourceForCallerCleanup() throws IOException {
+		Path source = Files.writeString(tempDir.resolve("failed-promotion-source"), "verified content", StandardCharsets.UTF_8);
+		Path targetParent = Files.writeString(tempDir.resolve("not-a-directory"), "not a directory", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(source);
+		long size = Files.size(source);
+
+		assertThrows(IOException.class, () -> VerifiedFileTransfer.promoteAtomic(source, targetParent.resolve("target"), size, hash));
+		assertTrue(Files.exists(source));
+		ImmutableFiles.deleteIfExists(source);
+	}
+
+	private static Path differentFileStoreDirectory(Path targetRoot) throws IOException {
+		FileStore targetStore = Files.getFileStore(targetRoot);
+		for (Path candidate : List.of(Path.of(System.getProperty("user.home")), Path.of("/dev/shm"), Path.of("/tmp"))) {
+			if (!Files.isDirectory(candidate) || targetStore.equals(Files.getFileStore(candidate))) continue;
+			try {
+				return Files.createTempDirectory(candidate, "verified-transfer-test-");
+			} catch (IOException ignored) {
+				// Try the next writable filesystem.
+			}
+		}
+		return null;
 	}
 }

@@ -83,20 +83,35 @@ EOF
 # Materialise and launch the exact configured loader profile. Launching the generic
 # `<loader>:<mc>` target lets HMC pick a different build (for example NeoForge 26.1.0
 # for a configured 26.1.2 target), which makes version-specific service tests invalid.
-launch_target="${loader}:${minecraft}"
+if [ -n "$loader_version" ]; then
+    case "$loader" in
+        fabric)
+            launch_target="fabric-loader-${loader_version}-${minecraft}"
+            ;;
+        forge)
+            launch_target="${minecraft}-forge-${loader_version}"
+            ;;
+        neoforge)
+            launch_target="neoforge-${loader_version}"
+            ;;
+        *)
+            echo "ERROR: unsupported loader ${loader}" >&2
+            exit 1
+            ;;
+    esac
+else
+    launch_target="${loader}:${minecraft}"
+fi
 if [ "$prepared_profile" != "true" ] && [ -n "$loader_version" ]; then
     case "$loader" in
         fabric)
             timeout 60 hmc --command "fabric ${minecraft} --uid ${loader_version}"
-            launch_target="fabric-loader-${loader_version}-${minecraft}"
             ;;
         forge)
             timeout 180 hmc --command "forge ${minecraft} --uid ${loader_version}"
-            launch_target="${minecraft}-forge-${loader_version}"
             ;;
         neoforge)
             timeout 180 hmc --command "neoforge ${minecraft} --uid ${loader_version}"
-            launch_target="neoforge-${loader_version}"
             ;;
     esac
 fi

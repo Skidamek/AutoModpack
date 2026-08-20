@@ -81,11 +81,11 @@ public final class FileTrees {
 	public static void delete(Path directory) throws IOException {
 		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return;
 		if (Files.isSymbolicLink(directory)) {
-			Files.delete(directory);
+			ImmutableFiles.deleteIfExists(directory);
 			return;
 		}
 		try (Stream<Path> paths = Files.walk(directory)) {
-			for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+			for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) ImmutableFiles.deleteIfExists(path);
 		}
 	}
 

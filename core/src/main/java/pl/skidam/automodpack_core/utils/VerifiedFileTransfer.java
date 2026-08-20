@@ -83,12 +83,15 @@ public final class VerifiedFileTransfer {
 			throw new IOException("Downloaded file failed size/SHA-1 verification: " + temporary);
 		ImmutableFiles.protect(temporary);
 		Path targetParent = requireTargetParent(targetFile);
+		boolean crossFileSystem = false;
 		try {
 			moveAtomicReplace(temporary, targetFile);
-		} catch (AtomicMoveNotSupportedException crossFileSystem) {
-			promoteAcrossFileSystems(temporary, targetFile, targetParent, expectedSize, expectedSha1, crossFileSystem);
+		} catch (AtomicMoveNotSupportedException crossFileSystemFailure) {
+			promoteAcrossFileSystems(temporary, targetFile, targetParent, expectedSize, expectedSha1, crossFileSystemFailure);
+			crossFileSystem = true;
 		}
 		FileTrees.forceDirectory(targetParent);
+		if (crossFileSystem) ImmutableFiles.deleteIfExists(temporary);
 	}
 
 	private static void promoteAcrossFileSystems(Path temporary, Path targetFile, Path targetParent, long expectedSize, String expectedSha1,

@@ -9,8 +9,11 @@ import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
+import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -55,6 +58,7 @@ public final class StoredModpackConnection implements AutoCloseable {
 			if (!modpackId.equals(advertisedRecord.manifest().modpackId())) throw new IOException("Connected modpack identity does not match the installed pack");
 			if (result.content().generationHistory == null) throw new IOException("Server generation history is unavailable");
 			GenerationHistoryIndex historyIndex = GenerationHistoryIndex.fromFields(result.content().generationHistory);
+			if (!modpackId.equals(historyIndex.modpackId())) throw new IOException("Server generation history belongs to another modpack");
 			if (!advertisedRecord.metadata().generationId().equals(historyIndex.currentGenerationId()))
 				throw new IOException("Server generation history does not describe the advertised generation");
 			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, advertisedRecord, historyIndex, storage, client);
@@ -71,6 +75,24 @@ public final class StoredModpackConnection implements AutoCloseable {
 
 	public GenerationHistoryIndex advertisedHistoryIndex() {
 		return advertisedHistoryIndex;
+	}
+
+	/** Returns the complete current-format advertisement validated when this session was opened. */
+	public ModpackJsons.CompleteModpackContentFields advertisedFields() {
+		ModpackJsons.CompleteModpackContentFields fields = advertisedRecord.toFields();
+		fields.generationHistory = advertisedHistoryIndex.toFields();
+		fields.patchNotesHistory = advertisedHistoryIndex.entries().stream().map(entry -> {
+			ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields history = new ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields();
+			history.schemaVersion = GenerationMetadata.CURRENT_SCHEMA_VERSION;
+			history.generationId = entry.generationId();
+			history.parentGenerationId = entry.parentGenerationId();
+			history.createdAt = entry.createdAt().toString();
+			history.patchNotes = entry.patchNotes();
+			history.patchNotesDigest = entry.patchNotesDigest();
+			return history;
+		}).toList();
+		GenerationPatchNoteHistory.fromFields(fields);
+		return fields;
 	}
 
 	/** Downloads and validates one historical catalogue through this authenticated session. */

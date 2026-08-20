@@ -119,6 +119,26 @@ class PreservationVaultTest {
 		assertTrue(Files.exists(storage.objectsDirectory().resolve(hash)));
 	}
 
+	@Test
+	void discoversPreservationOnlyPackAfterItsGenerationRecordsAreForgotten() throws Exception {
+		ClientStorage storage = storage();
+		GenerationRecord installed = installActiveRecord(storage, "mods/server.jar");
+		storage.clearActiveState();
+		Path source = Files.writeString(storage.gamePath("config/local.txt"), "local", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(source);
+		PreservationVault.Claim claim = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/local.txt", hash,
+				Files.size(source));
+
+		new ClientGenerationStore(storage).forgetModpack(MODPACK_ID);
+
+		assertTrue(new ClientGenerationStore(storage).read(installed.metadata().generationId()).isEmpty());
+		assertEquals(List.of(MODPACK_ID), PreservationVault.modpackIds(storage));
+		assertEquals(List.of(MODPACK_ID), PreservationVault.snapshots(storage).stream().map(PreservationVault.Snapshot::modpackId).toList());
+		assertEquals(GENERATION_ID, PreservationVault.read(storage, MODPACK_ID).claims().get(0).generationId(),
+				"discovery must not manufacture a replacement generation identity");
+		assertEquals(claim.claimId(), PreservationVault.read(storage, MODPACK_ID).claims().get(0).claimId());
+	}
+
 	private ClientStorage storage() throws IOException {
 		ClientStorage storage = ClientStorage.open(temporaryDirectory.resolve("game"));
 		Files.createDirectories(storage.modsDirectory());
@@ -126,7 +146,7 @@ class PreservationVaultTest {
 		return storage;
 	}
 
-	private void installActiveRecord(ClientStorage storage, String path) throws Exception {
+	private GenerationRecord installActiveRecord(ClientStorage storage, String path) throws Exception {
 		byte[] bytes = "active-mod".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(Files.write(storage.gamePath(path), bytes));
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
@@ -144,5 +164,6 @@ class PreservationVaultTest {
 		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
 		new ClientGenerationStore(storage).write(record);
 		storage.writeActiveState(record.manifest().modpackId(), record.metadata().generationId());
+		return record;
 	}
 }

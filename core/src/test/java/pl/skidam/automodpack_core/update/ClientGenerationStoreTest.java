@@ -291,6 +291,7 @@ class ClientGenerationStoreTest {
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 		generations.write(first);
 		generations.write(second);
+		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of("main")));
 		storage.writeActiveState(SECOND_PACK, second.metadata().generationId());
 		Path overlay = storage.overlayFile(FIRST_PACK, "config/options.txt");
 		Files.createDirectories(overlay.getParent());
@@ -306,6 +307,7 @@ class ClientGenerationStoreTest {
 		assertFalse(Files.exists(storage.connectionDirectory(FIRST_PACK)));
 		assertFalse(Files.exists(storage.objectsDirectory().resolve(firstHash)));
 		assertTrue(Files.exists(storage.objectsDirectory().resolve(secondHash)));
+		assertTrue(new ClientSelectionStore(storage.selectionFile()).get(FIRST_PACK).isEmpty());
 		assertEquals(second.metadata().generationId(), storage.readActiveState().generationId);
 	}
 

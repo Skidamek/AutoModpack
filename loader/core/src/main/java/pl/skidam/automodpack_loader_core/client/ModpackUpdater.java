@@ -463,7 +463,13 @@ public class ModpackUpdater implements AutoCloseable {
 		if (execution.success()) {
 			reviewed.complete();
 			clientConfig = preparation.plannedConfig();
-			if (remove) new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
+			if (remove) {
+				try {
+					new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
+				} catch (Exception e) {
+					LOGGER.warn("Modpack removal committed, but retained client state cleanup was deferred and can be retried", e);
+				}
+			}
 			changelogs.replaceWith(applied);
 			ApplyResult applyResult = applyResult(preparation.plan());
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
