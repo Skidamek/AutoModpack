@@ -1,0 +1,116 @@
+package pl.skidam.automodpack_core.modpack.generation;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.Test;
+
+import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+
+class GenerationDiffTest {
+	@Test
+	void reportsAllFileClassesMetadataAndCanonicalOrder() {
+		GroupManifest parent = manifest("parent", Map.of("z-removed", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
+				"b-modified", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "old")), "old description", "old-category",
+				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
+		GroupManifest child = manifest("child", Map.of("a-added", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
+				"b-modified", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "new")), "new description", "new-category",
+				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98");
+
+		GenerationDiff diff = GenerationDiff.between(parent, child);
+
+		assertEquals(List.of("a-added", "a-metadata", "b-modified", "z-removed"), diff.files().stream().map(GenerationDiff.FileChange::logicalPath).toList());
+		assertEquals(List.of(GenerationDiff.FileClassification.ADDED, GenerationDiff.FileClassification.METADATA_ONLY,
+				GenerationDiff.FileClassification.MODIFIED, GenerationDiff.FileClassification.REMOVED), diff.files().stream().map(GenerationDiff.FileChange::classification).toList());
+		assertEquals(List.of("main"), diff.groupMetadata().modified());
+		assertEquals(new GenerationDiff.Summary(1, 1, 1, 1, 2), diff.summary());
+		assertEquals(List.of("modpackName"), diff.packMetadata().modified());
+		assertEquals(List.of("Changed pack metadata 'modpackName'", "Changed group 'main'", "Added file 'main/a-added'",
+				"Changed metadata for file 'main/a-metadata'", "Changed file 'main/b-modified'", "Removed file 'main/z-removed'"), diff.humanReadableChanges());
+		assertEquals(4, diff.changeSet().changes().size());
+		assertEquals(List.of("catalogue"), diff.changeSet().changes().get(0).occurrences().stream().map(occurrence -> occurrence.location()).toList());
+		assertEquals(List.of("main"), diff.changeSet().changes().get(0).occurrences().stream().flatMap(occurrence -> occurrence.featureIds().stream()).toList());
+		assertEquals(2, diff.changeSet().effects().size());
+	}
+
+	@Test
+	void reportsGroupCategoryMetadataChanges() {
+		GroupManifest parent = categorizedManifest("old-category");
+		GroupManifest child = categorizedManifest("new-category");
+
+		GenerationDiff diff = GenerationDiff.between(parent, child);
+
+		assertEquals(List.of("main"), diff.groupMetadata().modified());
+		assertFalse(diff.isEmpty());
+	}
+
+	@Test
+	void groupMoveIsRemoveAndAddAndEqualManifestIsEmpty() {
+		GroupManifest parent = manifest("same", Map.of("moved.txt", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null)), "", "", "");
+		GroupManifest moved = manifestWithGroups("same", Map.of("main", Map.of(), "optional", Map.of("moved.txt", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null))));
+		GenerationDiff diff = GenerationDiff.between(parent, moved);
+		assertEquals(2, diff.files().size());
+		assertTrue(diff.files().stream().allMatch(change -> change.classification() == GenerationDiff.FileClassification.ADDED
+				|| change.classification() == GenerationDiff.FileClassification.REMOVED));
+		assertTrue(GenerationDiff.between(parent, parent).isEmpty());
+	}
+
+	@Test
+	void summaryCountsOneEffectivePathWhenGroupsRepeatIt() {
+		ModpackJsons.CompleteModpackContentFields.GroupFileFields oldFile = file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
+		ModpackJsons.CompleteModpackContentFields.GroupFileFields newFile = file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
+		GroupManifest parent = manifestWithGroups("same", Map.of("main", Map.of("shared.txt", oldFile), "optional", Map.of("shared.txt", oldFile)));
+		GroupManifest child = manifestWithGroups("same", Map.of("main", Map.of("shared.txt", newFile), "optional", Map.of("shared.txt", newFile)));
+
+		GenerationDiff diff = GenerationDiff.between(parent, child);
+
+		assertEquals(2, diff.files().size());
+		assertEquals(new GenerationDiff.Summary(0, 1, 0, 0, 0), diff.summary());
+	}
+
+	private static GroupManifest categorizedManifest(String category) {
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.category = category;
+		group.files = Map.of();
+		fields.groups = Map.of("main", group);
+		return GroupManifestValidator.validate(fields);
+	}
+
+	private static GroupManifest manifest(String id, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files, String description, String category,
+			String deletion) {
+		return manifestWithGroups(id, Map.of("main", files), description, category, deletion);
+	}
+
+	private static GroupManifest manifestWithGroups(String id, Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> groups) {
+		return manifestWithGroups(id, groups, "", "", "");
+	}
+
+	private static GroupManifest manifestWithGroups(String id, Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> groups, String description,
+			String category, String deletion) {
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		fields.modpackName = id;
+		Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> declarations = new LinkedHashMap<>();
+		for (var entry : groups.entrySet()) {
+			var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+			group.description = entry.getKey().equals("main") ? description : "";
+			group.files = entry.getValue();
+			declarations.put(entry.getKey(), group);
+		}
+		fields.groups = declarations;
+		return GroupManifestValidator.validate(fields);
+	}
+
+	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields file(String size, String hash, String murmur) {
+		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields(size, "other", false, false, hash, murmur);
+	}
+}

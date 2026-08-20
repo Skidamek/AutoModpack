@@ -15,10 +15,14 @@ import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 public class DownloadManager {
 
@@ -57,12 +61,20 @@ public class DownloadManager {
 
 	private final Semaphore semaphore = new Semaphore(0);
 	private final Speedometer speedometer = new Speedometer();
+	private final ClientStorage storage;
 
-	public DownloadManager() {}
+	public DownloadManager() {
+		this(0, ClientStorage.open(GameDirectory.current()));
+	}
 
 	public DownloadManager(long bytesToDownload) {
+		this(bytesToDownload, ClientStorage.open(GameDirectory.current()));
+	}
+
+	public DownloadManager(long bytesToDownload, ClientStorage storage) {
 		this.totalBytesToDownload.set(bytesToDownload);
 		this.speedometer.setExpectedBytes(bytesToDownload);
+		this.storage = Objects.requireNonNull(storage, "storage");
 	}
 
 	public void attachDownloadClient(DownloadClient downloadClient) {
@@ -236,12 +248,12 @@ public class DownloadManager {
 	}
 
 	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task) {
-		Path storeFile = storeDir.resolve(hashPathPair.hash());
+		Path storeFile = storage.objectsDirectory().resolve(hashPathPair.hash());
 		boolean success = false;
 		boolean interrupted = false;
 
 		try {
-			if (SmartFileUtils.isValidFile(storeFile, task.fileSize, hashPathPair.hash())) {
+			if (FileIntegrity.matches(storeFile, task.fileSize, hashPathPair.hash())) {
 				// CACHE HIT
 				totalBytesDownloaded.addAndGet(task.fileSize);
 				// IMPORTANT: Do NOT add cached bytes to Speedometer.
@@ -250,7 +262,7 @@ public class DownloadManager {
 				success = true;
 			} else {
 				// DOWNLOAD REQUIRED. A corrupt object is never a cache hit.
-				if (Files.exists(storeFile)) Files.delete(storeFile);
+				ImmutableFiles.deleteIfExists(storeFile);
 				success = attemptDownload(hashPathPair, task, storeFile);
 			}
 		} catch (InterruptedException e) {
@@ -272,8 +284,7 @@ public class DownloadManager {
 
 		try {
 			try {
-				Files.createDirectories(storeDir);
-				tempStoreFile = Files.createTempFile(storeDir, "." + hashPathPair.hash() + ".", ".tmp");
+				tempStoreFile = Files.createTempFile(storage.incomingDirectory(), "." + hashPathPair.hash() + ".", ".tmp");
 				activeTemporaryFiles.put(hashPathPair, tempStoreFile);
 			} catch (IOException e) {
 				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
@@ -307,13 +318,13 @@ public class DownloadManager {
 				return false;
 			}
 
-			if (!SmartFileUtils.isValidFile(tempStoreFile, task.fileSize, hashPathPair.hash())) {
+			if (!FileIntegrity.matches(tempStoreFile, task.fileSize, hashPathPair.hash())) {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
 				return false;
 			}
 			try {
-				SmartFileUtils.promoteVerifiedAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash());
+				VerifiedFileTransfer.promoteAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash());
 			} catch (IOException e) {
 				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
 				LOGGER.warn("Failed to persist verified CAS object {}", hashPathPair.hash(), e);

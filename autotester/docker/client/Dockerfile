@@ -33,7 +33,8 @@ FROM ubuntu:26.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HMC_HOME=/work/hmc-cache
 
-# HeadlessMC's LWJGL transformer does not need an X server or desktop Java runtime.
+# Most runs use HeadlessMC's LWJGL transformer. UI screenshot scenarios opt into
+# Xvfb and Mesa so Minecraft renders the real interface in a virtual display.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -41,10 +42,21 @@ RUN apt-get update \
         unzip \
         bash \
         procps \
+        tini \
         libatomic1 \
+        libasound2t64 \
+        libgl1-mesa-dri \
+        libglx-mesa0 \
+        libxcursor1 \
+        libxi6 \
+        libxinerama1 \
+        libxrandr2 \
+        libxxf86vm1 \
         openjdk-17-jre-headless \
         openjdk-21-jre-headless \
         openjdk-25-jre-headless \
+        xauth \
+        xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache \

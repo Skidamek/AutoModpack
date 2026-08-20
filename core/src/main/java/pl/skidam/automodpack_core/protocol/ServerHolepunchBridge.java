@@ -4,7 +4,6 @@ import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -20,17 +19,14 @@ import java.util.concurrent.Executors;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 
+import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
+import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
-import pl.skidam.automodpack_core.protocol.netty.handler.CompressionDecoder;
-import pl.skidam.automodpack_core.protocol.netty.handler.CompressionEncoder;
-import pl.skidam.automodpack_core.protocol.netty.handler.ConfigurationHandler;
+import pl.skidam.automodpack_core.protocol.netty.ProtocolPipeline;
 import pl.skidam.automodpack_core.protocol.netty.handler.ErrorPrinter;
-import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolMessageDecoder;
-import pl.skidam.automodpack_core.protocol.netty.handler.ServerMessageHandler;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
@@ -59,7 +55,7 @@ public final class ServerHolepunchBridge {
 			registration = HolepunchServerRegistry.register(
 					MinecraftProtocol.forMinecraftVersion(MC_VERSION).loginPacketLayout(),
 					bridgeExecutor,
-					4L * 1024 * 1024,
+					maxPendingWriteBytes(),
 					Duration.ofSeconds(10),
 					(username, address, marker) -> new HolepunchHandler() {
 						private volatile HolepunchSocket socket;
@@ -125,14 +121,9 @@ public final class ServerHolepunchBridge {
 		EmbeddedChannel channel = null;
 		try (
 				socket;
-				DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-				DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()))) {
+				DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()))) {
 			channel = new EmbeddedChannel();
 			channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
-			channel.attr(NettyServer.PROTOCOL_VERSION).set(LATEST_SUPPORTED_PROTOCOL_VERSION);
-			channel.attr(NettyServer.COMPRESSION_TYPE).set(CompressionType.ZSTD);
-			channel.attr(NettyServer.CHUNK_SIZE).set(DEFAULT_CHUNK_SIZE);
-
 			channel.pipeline().addLast("error-printer-first", new ErrorPrinter());
 			if (server.getSslCtx() != null) {
 				SslHandler sslHandler = server.getSslCtx().newHandler(channel.alloc());
@@ -148,14 +139,7 @@ public final class ServerHolepunchBridge {
 				LOGGER.debug("TLS termination handled externally for holepunch connection: {}", remoteAddress);
 			}
 
-			channel.pipeline()
-					.addLast("configuration", new ConfigurationHandler())
-					.addLast("compression-encoder", new CompressionEncoder())
-					.addLast("compression-decoder", new CompressionDecoder())
-					.addLast("chunked-write", new ChunkedWriteHandler())
-					.addLast("protocol-msg-decoder", new ProtocolMessageDecoder())
-					.addLast("msg-handler", new ServerMessageHandler(server))
-					.addLast("error-printer-last", new ErrorPrinter());
+			ProtocolPipeline.install(channel, server, remoteAddress);
 
 			socket.setSoTimeout(EVENT_LOOP_TICK_MILLIS);
 			byte[] readBuffer = new byte[8192];
@@ -172,10 +156,10 @@ public final class ServerHolepunchBridge {
 					// The timeout is the event-loop tick while the peer waits for output.
 				}
 
-				pumpEmbeddedChannel(channel, output);
+				pumpEmbeddedChannel(channel, socket);
 			}
 
-			pumpEmbeddedChannel(channel, output);
+			pumpEmbeddedChannel(channel, socket);
 		} catch (Exception e) {
 			LOGGER.debug("AutoModpack holepunch handler ended", e);
 		} finally {
@@ -184,7 +168,41 @@ public final class ServerHolepunchBridge {
 		}
 	}
 
+	private static long maxPendingWriteBytes() {
+		long maxCompressedFrameLength = 0;
+		for (CompressionType type : CompressionType.values()) {
+			if (CompressionFactory.isAvailable(type)) {
+				CompressionCodec codec = CompressionFactory.createCodec(type);
+				maxCompressedFrameLength = Math.max(maxCompressedFrameLength, codec.maxCompressedLength(MAX_CHUNK_SIZE));
+			}
+		}
+		return maxCompressedFrameLength + ProtocolFrameCodec.HEADER_BYTES;
+	}
+
 	static void pumpEmbeddedChannel(EmbeddedChannel channel, DataOutputStream output) throws IOException {
+		pumpEmbeddedChannel(channel, new OutboundSink() {
+			@Override
+			public void write(ByteBuf buffer) throws IOException {
+				buffer.readBytes(output, buffer.readableBytes());
+			}
+
+			@Override
+			public void flush() throws IOException {
+				output.flush();
+			}
+		});
+	}
+
+	static void pumpEmbeddedChannel(EmbeddedChannel channel, HolepunchSocket socket) throws IOException {
+		pumpEmbeddedChannel(channel, new OutboundSink() {
+			@Override
+			public void write(ByteBuf buffer) throws IOException {
+				socket.writeBuffer(buffer);
+			}
+		});
+	}
+
+	private static void pumpEmbeddedChannel(EmbeddedChannel channel, OutboundSink sink) throws IOException {
 		boolean producedOutput = false;
 
 		for (int pass = 0; pass < MAX_PUMP_PASSES; pass++) {
@@ -193,15 +211,15 @@ public final class ServerHolepunchBridge {
 			channel.runPendingTasks();
 			channel.checkException();
 
-			boolean drained = drainOutbound(channel, output);
+			boolean drained = drainOutbound(channel, sink);
 			producedOutput |= drained;
 			if (!drained) break;
 		}
 
-		if (producedOutput) output.flush();
+		if (producedOutput) sink.flush();
 	}
 
-	private static boolean drainOutbound(EmbeddedChannel channel, DataOutputStream output) throws IOException {
+	private static boolean drainOutbound(EmbeddedChannel channel, OutboundSink sink) throws IOException {
 		boolean producedOutput = false;
 		Object message;
 
@@ -211,12 +229,19 @@ public final class ServerHolepunchBridge {
 				if (!(message instanceof ByteBuf buffer)) {
 					throw new IOException("Unexpected outbound message type: " + message.getClass().getName());
 				}
-				buffer.readBytes(output, buffer.readableBytes());
+				sink.write(buffer);
 			} finally {
 				ReferenceCountUtil.release(message);
 			}
 		}
 
 		return producedOutput;
+	}
+
+	@FunctionalInterface
+	private interface OutboundSink {
+		void write(ByteBuf buffer) throws IOException;
+
+		default void flush() throws IOException {}
 	}
 }

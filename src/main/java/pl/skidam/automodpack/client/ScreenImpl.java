@@ -1,18 +1,29 @@
 package pl.skidam.automodpack.client;
 
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack.client.ui.*;
-import pl.skidam.automodpack_core.utils.FetchManager;
+import pl.skidam.automodpack.client.ui.screen.*;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
+import pl.skidam.automodpack_loader_core.screen.HistoricalCatalogueLoader;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
+import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
-import java.nio.file.Path;
 import java.util.Optional;
+import java.util.Locale;
+import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 
 public class ScreenImpl implements ScreenService {
 
@@ -21,48 +32,54 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void download(Object... args) {
-		executeOnClient(() -> Screens.download(args[0], args[1]));
+	public void download(DownloadManager downloadManager, String modpackName) {
+		executeOnClient(() -> Screens.download(downloadManager, modpackName));
 	}
 
 	@Override
-	public void fetch(Object... args) {
-		executeOnClient(() -> Screens.fetch(args[0]));
+	public void changelog(Object parent, Changelogs changelogs) {
+		executeOnClient(() -> Screens.changelog((Screen) parent, changelogs));
 	}
 
 	@Override
-	public void changelog(Object... args) {
-		executeOnClient(() -> Screens.changelog(args[0], args[1], args[2]));
+	public void restart(UpdateType updateType, Changelogs changelogs) {
+		executeOnClient(() -> Screens.restart(updateType, changelogs));
 	}
 
 	@Override
-	public void restart(Object... args) {
-		executeOnClient(() -> Screens.restart(args[0], args[1], args[2]));
+	public void completeWithoutRestart() {
+		executeOnClient(Screens::multiplayer);
 	}
 
 	@Override
-	public void danger(Object... args) {
-		executeOnClient(() -> Screens.danger(args[0]));
+	public void welcome(ModpackUpdater modpackUpdater) {
+		executeOnClient(() -> Screens.welcome(modpackUpdater));
 	}
 
 	@Override
-	public void error(String... args) {
-		executeOnClient(() -> Screens.error(args));
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
+		executeOnClient(() -> Screens.preview(preview, modpackName, continueAction, cancelAction, returnToSelection));
+		return true;
 	}
 
 	@Override
-	public void menu(Object... args) {
-		executeOnClient(() -> Screens.menu(args.length > 0 ? args[0] : null));
+	public void history(HistoryViewRequest request) {
+		executeOnClient(() -> Screens.history(request));
 	}
 
 	@Override
-	public void title(Object... args) {
+	public void failure(FailureRequest request) {
+		executeOnClient(() -> Screens.failure(request));
+	}
+
+	@Override
+	public void title() {
 		executeOnClient(Screens::title);
 	}
 
 	@Override
-	public void validation(Object... args) {
-		executeOnClient(() -> Screens.validation(args[0], args[1], args[2], args[3]));
+	public void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {
+		executeOnClient(() -> Screens.validation((Screen) parent, fingerprint, validated, canceled));
 	}
 
 	@Override
@@ -73,7 +90,7 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public Optional<String> getScreenString() {
 		Screen screen = Screens.getScreen();
-		return Optional.of(screen.getTitle().getString().toLowerCase());
+		return Optional.ofNullable(screen).map(current -> current.getTitle().getString().toLowerCase(Locale.ROOT));
 	}
 
 	@Override
@@ -81,7 +98,21 @@ public class ScreenImpl implements ScreenService {
 		return Optional.ofNullable(Screens.getScreen());
 	}
 
+	public static void setScreen(Screen screen) {
+		Screens.setScreen(screen);
+	}
+
+	public static void multiplayer() {
+		Screens.multiplayer();
+	}
+
+	public static void repairSelection(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+		executeOnClient(() -> Screens.repairSelection(fields, savedSelection, selectionAction, cancelAction));
+	}
+
 	private static class Screens {
+		private static Screen interactiveParent;
+
 		private static Screen getScreen() {
 			/*? if >=26.2 {*/
 			return Minecraft.getInstance().gui.screen();
@@ -91,6 +122,12 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void setScreen(Screen screen) {
+			Screen current = Screens.getScreen();
+			if (isTransient(screen)) {
+				if (!isTransient(current)) interactiveParent = current;
+			} else {
+				interactiveParent = null;
+			}
 			/*? if >=26.2 {*/
 			Minecraft.getInstance().gui.setScreen(screen);
 			/*?} else {*/
@@ -98,40 +135,75 @@ public class ScreenImpl implements ScreenService {
 			*//*?}*/
 		}
 
-		public static void download(Object downloadManager, Object header) {
-			Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
+		public static void download(DownloadManager downloadManager, String modpackName) {
+			Screens.setScreen(new DownloadScreen(downloadManager, modpackName));
 		}
 
-		public static void fetch(Object fetchManager) {
-			Screens.setScreen(new FetchScreen((FetchManager) fetchManager));
+		public static void changelog(Screen parent, Changelogs changelogs) {
+			Screens.setScreen(new ChangelogScreen(parent, changelogs));
 		}
 
-		public static void changelog(Object parent, Object modpackDir, Object changelog) {
-			Screens.setScreen(new ChangelogScreen((Screen) parent, (Path) modpackDir, (Changelogs) changelog));
+		public static void restart(UpdateType updateType, Changelogs changelogs) {
+			Screens.setScreen(new RestartScreen(updateType, changelogs));
 		}
 
-		public static void restart(Object modpackDir, Object updateType, Object changelogs) {
-			Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
+		public static void welcome(ModpackUpdater modpackUpdater) {
+			Screens.setScreen(new FirstConnectScreen(modpackUpdater));
 		}
 
-		public static void danger(Object modpackUpdaterInstance) {
-			Screens.setScreen(new DangerScreen((ModpackUpdater) modpackUpdaterInstance));
+		public static void preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
+			Screen parent = Screens.getScreen();
+			if (isTransient(parent)) parent = interactiveParent;
+			parent = previewParent(parent);
+			interactiveParent = null;
+			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, returnToSelection, continueAction, cancelAction));
 		}
 
-		public static void error(String... errors) {
-			Screens.setScreen(new ErrorScreen(errors));
+		private static Screen previewParent(Screen parent) {
+			if (parent instanceof FirstConnectScreen) return parent;
+			if (parent instanceof ModpackSelectionScreen selection && (!selection.isUpdateFlow() || selection.isConfirmationFlow())) return parent;
+			return multiplayerScreen();
+		}
+
+		private static boolean isTransient(Screen screen) {
+			return screen instanceof PreparingScreen || screen instanceof DownloadScreen;
+		}
+
+		public static void history(HistoryViewRequest request) {
+			Screen parent = Screens.getScreen();
+			Screens.setScreen(new ContentHistoryScreen(parent, request.historyIndex(), request.availableHistory(), request.modpackName(), request.catalogueLoader(), request.closed()));
+		}
+
+		public static void failure(FailureRequest request) {
+			Screen parent = Screens.getScreen();
+			if (isTransient(parent)) parent = interactiveParent;
+			parent = switch (request.returnDestination()) {
+				case CURRENT_SCREEN -> parent;
+				case MULTIPLAYER -> multiplayerScreen();
+				case TITLE -> new TitleScreen();
+			};
+			Screens.setScreen(new ErrorScreen(parent, request));
 		}
 
 		public static void title() {
 			Screens.setScreen(new TitleScreen());
 		}
 
-		public static void menu(Object parent) {
-			Screens.setScreen(ModpackSelectionScreen.forSelectedModpack((Screen) parent));
+		public static void multiplayer() {
+			Screens.setScreen(multiplayerScreen());
 		}
 
-		public static void validation(Object parent, Object serverFingerprint, Object validatedCallback, Object canceledCallback) {
-			Screens.setScreen(new FingerprintVerificationScreen((Screen) parent, (String) serverFingerprint, (Runnable) validatedCallback, (Runnable) canceledCallback));
+		private static Screen multiplayerScreen() {
+			return new JoinMultiplayerScreen(new TitleScreen());
+		}
+
+		public static void repairSelection(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+			GroupManifest manifest = GenerationRecord.fromFields(fields).manifest();
+			Screens.setScreen(ModpackSelectionScreen.repair(multiplayerScreen(), manifest, savedSelection, selectionAction, cancelAction));
+		}
+
+		public static void validation(Screen parent, String fingerprint, Runnable validated, Runnable canceled) {
+			Screens.setScreen(new FingerprintVerificationScreen(parent, fingerprint, validated, canceled));
 		}
 
 		public static void waiting() {

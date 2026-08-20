@@ -1,15 +1,19 @@
 package pl.skidam.automodpack_core.protocol.netty.message;
 
+import java.util.Arrays;
+
+import pl.skidam.automodpack_core.auth.Secrets;
+
 public abstract class ProtocolMessage {
 	private final byte version; // 1 byte
 	private final byte type; // 1 byte
 	private final byte[] secret; // 32 bytes
 
 	public ProtocolMessage(byte version, byte type, byte[] secret) {
-		if (secret.length != 32) throw new IllegalArgumentException("Secret must be 32 bytes");
+		if (secret.length != Secrets.BYTE_LENGTH) throw new IllegalArgumentException("Secret must be " + Secrets.BYTE_LENGTH + " bytes");
 		this.version = version;
 		this.type = type;
-		this.secret = secret;
+		this.secret = Arrays.copyOf(secret, secret.length);
 	}
 
 	public byte getVersion() {
@@ -21,6 +25,6 @@ public abstract class ProtocolMessage {
 	}
 
 	public byte[] getSecret() {
-		return secret;
+		return Arrays.copyOf(secret, secret.length);
 	}
 }

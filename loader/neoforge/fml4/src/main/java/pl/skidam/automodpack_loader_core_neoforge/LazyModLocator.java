@@ -25,7 +25,7 @@ public class LazyModLocator implements IDependencyLocator {
 		}
 
 		// Replay the dependency locators of early-service jars (e.g. Ixeris) so their real
-		// (inner) mod loads in place, from the modpack folder, without being copied to the
+		// (inner) mod loads in place, from the active projection, without being copied to the
 		// standard mods directory.
 		List<Path> earlyServiceJars = new ArrayList<>();
 		for (Path path : ModpackLoader.modsToLoad) {

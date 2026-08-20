@@ -39,7 +39,8 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
@@ -60,7 +61,7 @@ public class DownloadClient implements AutoCloseable {
 
 	private static final int MAX_CONNECTIONS = 5;
 
-	private final Jsons.ConnectionInfo connectionInfo;
+	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final byte[] secretBytes;
 	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
@@ -76,7 +77,7 @@ public class DownloadClient implements AutoCloseable {
 
 	private record TlsCandidate(SSLSocket socket, CustomizableTrustManager trustManager) {}
 
-	private DownloadClient(Jsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
+	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
 			TransportRoute route) {
 		this.connectionInfo = connectionInfo;
 		this.secretBytes = secretBytes == null ? null : secretBytes.clone();
@@ -85,7 +86,7 @@ public class DownloadClient implements AutoCloseable {
 		this.sessionTrust = new CustomizableTrustManager.SessionTrust(AddressHelpers.formatAddress(connectionInfo.origin), connectionInfo.expectedFingerprint);
 	}
 
-	public static CompletableFuture<DownloadClient> createAsync(Jsons.ConnectionInfo connectionInfo, byte[] secretBytes,
+	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
 		if (connectionInfo == null || !connectionInfo.isComplete())
 			return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing"));
@@ -104,7 +105,7 @@ public class DownloadClient implements AutoCloseable {
 		});
 	}
 
-	private static CompletableFuture<TransportRoute> resolveRouteAsync(Jsons.ConnectionInfo connectionInfo) {
+	private static CompletableFuture<TransportRoute> resolveRouteAsync(ConnectionJsons.ConnectionInfo connectionInfo) {
 		if (connectionInfo.connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 			return HolepunchClient.resolve(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort()).toCompletableFuture()
 					.thenApply(route -> new TransportRoute(null, route));
@@ -380,8 +381,10 @@ public class DownloadClient implements AutoCloseable {
 		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
 	}
 
-	public CompletableFuture<Path> requestRefresh(byte[][] fileHashes, Path destination) {
-		return withConnection(connection -> connection.sendRefreshRequest(fileHashes, destination));
+	/** Downloads one authenticated historical catalogue advertised by the current generation index. */
+	public CompletableFuture<Path> downloadHistoricalCatalogue(String stateDigest, Path destination, IntConsumer chunkCallback) {
+		String requestKey = GenerationHistoryIndex.catalogueRequestKey(stateDigest);
+		return downloadFile(requestKey.getBytes(StandardCharsets.UTF_8), destination, chunkCallback);
 	}
 
 	static boolean isSelfSigned(X509Certificate certificate) {
@@ -450,7 +453,7 @@ class Connection implements AutoCloseable {
 	private final DataOutputStream out;
 	private final ExecutorService executor = Executors.newSingleThreadExecutor();
 	private CompressionCodec compressionCodec;
-	private byte[] networkInputBuffer;
+	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
 
 	public Connection(SSLSocket socket, byte[] secretBytes) throws IOException {
 		if (socket == null || socket.isClosed()) throw new IOException("Server connection is closed");
@@ -465,7 +468,6 @@ class Connection implements AutoCloseable {
 			compressionType = sendCompressionConfig(compressionType);
 			compressionCodec = CompressionFactory.createCodec(compressionType);
 			chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
-			networkInputBuffer = new byte[compressionCodec.maxCompressedLength(chunkSize)];
 			sendEchoConfig();
 		} catch (IOException e) {
 			LOGGER.error("Failed to configure connection", e);
@@ -506,34 +508,6 @@ class Connection implements AutoCloseable {
 		}, executor);
 	}
 
-	public CompletableFuture<Path> sendRefreshRequest(byte[][] fileHashes, Path destination) {
-		return CompletableFuture.supplyAsync(() -> {
-			Exception exception = null;
-			try {
-				ByteArrayOutputStream baos = new ByteArrayOutputStream();
-				DataOutputStream dos = new DataOutputStream(baos);
-				dos.writeByte(protocolVersion);
-				dos.writeByte(REFRESH_REQUEST_TYPE);
-				dos.write(secretBytes);
-				dos.writeInt(fileHashes.length);
-				if (fileHashes.length > 0) {
-					dos.writeInt(fileHashes[0].length);
-					for (byte[] hash : fileHashes) {
-						dos.write(hash);
-					}
-				}
-
-				writeProtocolMessage(baos.toByteArray());
-				return readFileResponse(destination, null);
-			} catch (Exception e) {
-				exception = e;
-				throw new CompletionException(e);
-			} finally {
-				finalBlock(exception);
-			}
-		}, executor);
-	}
-
 	private void finalBlock(Exception exception) {
 		try {
 			int available;
@@ -546,47 +520,16 @@ class Connection implements AutoCloseable {
 	}
 
 	private void writeProtocolMessage(byte[] payload) throws IOException {
-		CompressionCodec codec = getCompressionCodec();
-		int offset = 0;
-
-		while (offset < payload.length) {
-			int bytesToSend = Math.min(payload.length - offset, this.chunkSize);
-			byte[] chunk = new byte[bytesToSend];
-			System.arraycopy(payload, offset, chunk, 0, bytesToSend);
-
-			byte[] compressedChunk = codec.compress(chunk);
-			out.writeInt(compressedChunk.length);
-			out.writeInt(chunk.length);
-			out.write(compressedChunk);
-
-			offset += bytesToSend;
-		}
-		out.flush();
+		ProtocolFrameCodec.write(out, getCompressionCodec(), payload, chunkSize);
 	}
 
-	private byte[] readProtocolMessageFrame() throws IOException {
-		int compressedLength = in.readInt();
-		int originalLength = in.readInt();
-
-		if (originalLength < 0 || originalLength > chunkSize) {
-			throw new IOException("Frame original length (" + originalLength + ") exceeds chunk size (" + chunkSize + ")");
-		}
-
-		int maxCompressedLength = getCompressionCodec().maxCompressedLength(originalLength);
-		if (compressedLength < 0 || compressedLength > maxCompressedLength) {
-			throw new IOException("Frame compressed length (" + compressedLength + ") exceeds codec limit (" + maxCompressedLength + ")");
-		}
-
-		if (compressedLength > networkInputBuffer.length) throw new IOException("Compressed length exceeds buffer capacity");
-
-		in.readFully(networkInputBuffer, 0, compressedLength);
-
-		return getCompressionCodec().decompress(networkInputBuffer, 0, compressedLength, originalLength);
+	private ProtocolFrameCodec.Frame readProtocolMessageFrame() throws IOException {
+		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, frameScratch);
 	}
 
 	private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
-		byte[] headerData = readProtocolMessageFrame();
-		ByteBuffer headerWrap = ByteBuffer.wrap(headerData);
+		ProtocolFrameCodec.Frame header = readProtocolMessageFrame();
+		ByteBuffer headerWrap = ByteBuffer.wrap(header.data(), 0, header.length());
 
 		byte version = headerWrap.get();
 		byte messageType = headerWrap.get();
@@ -607,16 +550,16 @@ class Connection implements AutoCloseable {
 
 		try (OutputStream fos = LocalFileWriter.open(destination)) {
 			while (receivedBytes < expectedFileSize) {
-				byte[] dataFrame = readProtocolMessageFrame();
-				int toWrite = Math.min(dataFrame.length, (int) (expectedFileSize - receivedBytes));
-				fos.write(dataFrame, 0, toWrite);
+				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
+				int toWrite = Math.min(dataFrame.length(), (int) (expectedFileSize - receivedBytes));
+				fos.write(dataFrame.data(), 0, toWrite);
 				receivedBytes += toWrite;
 				if (chunkCallback != null) chunkCallback.accept(toWrite);
 			}
 		}
 
-		byte[] eotData = readProtocolMessageFrame();
-		if (eotData.length < 2 || eotData[0] != version || eotData[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
+		ProtocolFrameCodec.Frame eot = readProtocolMessageFrame();
+		if (eot.length() < 2 || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
 		return destination;
 	}
 

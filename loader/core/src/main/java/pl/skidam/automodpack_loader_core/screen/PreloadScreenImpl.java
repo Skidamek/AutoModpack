@@ -2,35 +2,46 @@ package pl.skidam.automodpack_loader_core.screen;
 
 import java.util.Optional;
 
+import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_loader_core.client.Changelogs;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.utils.DownloadManager;
+import pl.skidam.automodpack_loader_core.utils.UpdateType;
+
 public class PreloadScreenImpl implements ScreenService {
 
 	// We leave this all empty
 	@Override
-	public void download(Object... args) {}
+	public void download(DownloadManager downloadManager, String modpackName) {}
 
 	@Override
-	public void fetch(Object... args) {}
+	public void changelog(Object parent, Changelogs changelogs) {}
 
 	@Override
-	public void changelog(Object... args) {}
+	public void restart(UpdateType updateType, Changelogs changelogs) {}
 
 	@Override
-	public void restart(Object... args) {}
+	public void completeWithoutRestart() {}
 
 	@Override
-	public void danger(Object... args) {}
+	public void welcome(ModpackUpdater modpackUpdater) {}
 
 	@Override
-	public void error(String... args) {}
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
+		return false;
+	}
 
 	@Override
-	public void menu(Object... args) {}
+	public void history(HistoryViewRequest request) {}
 
 	@Override
-	public void title(Object... args) {}
+	public void failure(FailureRequest request) {}
 
 	@Override
-	public void validation(Object... args) {}
+	public void title() {}
+
+	@Override
+	public void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {}
 
 	@Override
 	public void waiting() {}

@@ -2,7 +2,7 @@ package pl.skidam.automodpack.client.ui.widget;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
-import java.util.Map;
+import java.util.List;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ObjectSelectionList;
@@ -23,38 +23,29 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
 
 	private boolean scrolling;
 
-	public ListEntryWidget(Map<String, String> changelogs, Minecraft client, int width, int height, int top, int bottom, int itemHeight) {
+	public ListEntryWidget(List<Row> rows, Minecraft client, int width, int height, int top, int bottom, int itemHeight) {
 		/*? if <1.20.3 {*/
 		/*super(client, width, height, top, bottom, itemHeight);
 		*//*?} else {*/
-		super(client, width, height - 90, top, itemHeight);
+		super(client, width, Math.max(itemHeight, bottom - top), top, itemHeight);
 		/*?}*/
 		this.centerListVertically = true;
 
 		this.clearEntries();
 
-		if (changelogs == null || changelogs.isEmpty()) {
-			ListEntry entry = new ListEntry(VersionedText.literal("No changelogs found").withStyle(ChatFormatting.BOLD), true, this.minecraft);
+		if (rows == null || rows.isEmpty()) {
+			ListEntry entry = new ListEntry(VersionedText.translatable("automodpack.changelog.noChanges").withStyle(ChatFormatting.BOLD), true, this.minecraft);
 			this.addEntry(entry);
 			return;
 		}
 
-		for (Map.Entry<String, String> changelog : changelogs.entrySet()) {
-			String textString = changelog.getKey();
-			String mainPageUrl = changelog.getValue();
-
-			MutableComponent text = VersionedText.literal(textString);
-
-			if (textString.startsWith("+")) {
-				text = text.withStyle(ChatFormatting.GREEN);
-			} else if (textString.startsWith("-")) {
-				text = text.withStyle(ChatFormatting.RED);
-			}
-
-			ListEntry entry = new ListEntry(text, mainPageUrl, false, this.minecraft);
+		for (Row row : rows) {
+			ListEntry entry = new ListEntry(row.text(), row.mainPageUrl(), false, this.minecraft);
 			this.addEntry(entry);
 		}
 	}
+
+	public record Row(MutableComponent text, String mainPageUrl) {}
 
 	/*? if <=1.20.2 {*/
 	/*public void render(/^? if <1.20 {^/  /^PoseStack  ^//^?} else {^/ GuiGraphics /^?}^/  matrices, int mouseX, int mouseY, float delta) {
@@ -70,13 +61,12 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
 
 	public final ListEntry getEntryAtPos(double x, double y) {
 		/*? if >= 1.21.9 {*/
-		int int_5 = Mth.floor(y - (double) getTop()) + (int) this.getScrollAmount() - 4;
-		int index = int_5 / this.defaultEntryHeight; // TODO: check if this is correct, not sure where itemHeight went
+		return super.getEntryAtPosition(x, y);
 		/*?} else {*/
 		/*int int_5 = Mth.floor(y - (double) getTop()) - this.headerHeight + (int) this.getScrollAmount() - 4;
 		int index = int_5 / this.itemHeight;
-		*//*?}*/
 		return x < (double) this.getScrollbarPosition() && x >= (double) getRowLeft() && x <= (double) (getRowLeft() + getRowWidth()) && index >= 0 && int_5 >= 0 && index < this.getItemCount() ? this.children().get(index) : null;
+		*//*?}*/
 	}
 
 	public int getTop() {
@@ -111,7 +101,7 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
 				}
 			}
 
-			return this.scrolling;
+			return super.mouseClicked(mouseButtonEvent, bl);
 		}
 	}
 	/*?} else {*/
@@ -138,20 +128,12 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
 	}
 	*//*?}*/
 
-	@Override
-	public void setSelected(ListEntry entry) {
-		super.setSelected(entry);
-		if (entry != null) {
-			this.centerScrollOn(entry);
-		}
-	}
-
 	protected int getScrollbarPosition() {
-		return this.width - 6;
+		return Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
 	}
 
 	@Override
 	public int getRowWidth() {
-		return super.getRowWidth() + 120;
+		return Math.min(420, Math.max(1, this.width - 20));
 	}
 }

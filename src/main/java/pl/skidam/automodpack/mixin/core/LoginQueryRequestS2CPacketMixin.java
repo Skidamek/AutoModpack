@@ -9,9 +9,8 @@ import net.minecraft.network.protocol.login.custom.CustomQueryPayload;
 import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import pl.skidam.automodpack.networking.PayloadHelper;
 import pl.skidam.automodpack.networking.server.LoginRequestPayload;
 import pl.skidam.automodpack_core.Constants;
@@ -26,11 +25,10 @@ public class LoginQueryRequestS2CPacketMixin {
 	/*? if >=1.20.2 {*/
 	@Shadow @Final private static int MAX_PAYLOAD_SIZE;
 
-	@Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
-	private static void readPayload(Identifier id, FriendlyByteBuf buf, CallbackInfoReturnable<CustomQueryPayload> cir) {
-		if (id.getNamespace().equals(Constants.MOD_ID)) {
-			cir.setReturnValue(new LoginRequestPayload(id, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE)));
-		}
+	@WrapMethod(method = "readPayload")
+	private static CustomQueryPayload readPayload(Identifier id, FriendlyByteBuf buf, Operation<CustomQueryPayload> original) {
+		if (id.getNamespace().equals(Constants.MOD_ID)) return new LoginRequestPayload(id, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE));
+		return original.call(id, buf);
 	}
 	/*?}*/
 }

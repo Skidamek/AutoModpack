@@ -20,6 +20,26 @@ boot:
     name: wait for the client test bridge
   - use: connect_to_server
 
+# The release gate deliberately exercises the file-based bootstrap path. The
+# server must publish first so the fixture can write the actual modpack ID and
+# live TLS fingerprint before the client starts its Preload phase.
+boot_with_bootstrap:
+  - do: launch_server
+    name: start server for bootstrap-file import
+  - do: prepare_client
+    name: prepare the client profile while the server starts
+  - do: wait_server
+    name: wait for server generation and TLS
+  - use: read_server_fingerprint
+  - do: seed_bootstrap
+    name: write live automodpack-bootstrap.json before client preload
+  - do: launch_client
+    name: start client with bootstrap file present
+  - do: wait_bridge
+    name: wait for client preload and test bridge
+  - do: assert_bootstrap_import
+    name: verify Preload imported and deleted bootstrap state
+
 # Scrape the one-time certificate fingerprint out of the server log into a var.
 read_server_fingerprint:
   - do: wait_for
@@ -44,6 +64,9 @@ accept_certificate:
       all:
         - element: { role: textfield }
         - element: { text: verify, enabled: true }
+  - do: screenshot
+    name: capture the shortened certificate fingerprint
+    file: certificate-verification
   - do: type
     name: enter the fingerprint
     select: { role: textfield }
@@ -51,11 +74,12 @@ accept_certificate:
   - do: click
     name: click verify
     select: { text: verify }
-  - do: assert
+  - do: wait_for
     name: transition directly to AutoModpack UI
-    that:
+    timeout: 20s
+    until:
       all:
-        - screen: [PreparingScreen, DangerScreen, DownloadScreen, FetchScreen, RestartScreen]
+        - screen: [PreparingScreen, FirstConnectScreen, UpdatePreviewScreen, DownloadScreen, FetchScreen, RestartScreen]
         - screen_not: DisconnectedScreen
   - do: wait_for
     name: wait for the certificate to be accepted
@@ -63,26 +87,49 @@ accept_certificate:
     until:
       no_element: { text: verify }
 
-# Confirm the download prompt and wait for the modpack to land on disk.
+# Accept the first-connection prompt, approve the update preview, and wait for
+# the modpack to land on disk.
 download_modpack:
   - do: wait_for
-    name: wait for the download prompt
+    name: wait for the first-connection prompt
     timeout: 90s
     until:
-      element: { text: download, enabled: true }
+      element: { text: continue, enabled: true }
+  - do: screenshot
+    name: capture the first-connection prompt
+    file: first-connect
   - do: click
-    name: confirm download
-    select: { text: download }
+    name: accept first connection
+    select: { text: continue }
+  - do: wait_for
+    name: wait for the update preview
+    timeout: 90s
+    until:
+      element: { text: update, enabled: true }
+  - do: screenshot
+    name: capture the update preview
+    file: update-preview
+  - do: click
+    name: approve update
+    select: { text: update }
   - do: wait_file
     name: wait for the modpack marker file
-    path: "${modpack_dir}/${marker}"
+    path: "${active_dir}/${marker}"
     timeout: 300s
 
 # Click the post-download "restart required" button and wait for the client to exit.
 restart_client:
+  - do: wait_for
+    name: wait for the restart screen
+    timeout: 20s
+    until:
+      screen: RestartScreen
+  - do: screenshot
+    name: capture the completed update summary
+    file: update-complete
   - do: click
     name: confirm restart
-    select: { text_any: ["close the game", "restart", "quit"] }
+    select: { role: button, index: 1 }
     timeout: 20s
   - do: wait_client_exit
     name: wait for the client to close
@@ -113,3 +160,36 @@ rejoin:
   - use: connect_to_server
   - do: wait_join
     name: wait until the player is in-game
+
+# Navigate from the title screen to the vanilla multiplayer screen. The settings
+# button under test is injected there, so this keeps the release scenario honest
+# about the real entry point instead of calling the screen directly.
+open_multiplayer:
+  - do: click
+    name: open vanilla multiplayer
+    select: { text: multiplayer }
+    skip_if: { screen: Play Multiplayer }
+  - do: wait_for
+    name: wait for multiplayer screen
+    timeout: 20s
+    until: { screen: Play Multiplayer }
+
+open_pack_manager:
+  - do: click
+    name: open modpack settings from multiplayer
+    select: { text: modpack settings }
+  - do: wait_for
+    name: wait for modpack settings
+    until: { screen: ModpackSelectionScreen }
+  - do: screenshot
+    name: capture modpack settings before manager action
+    file: all-pack-settings
+  - do: click
+    name: open installed pack manager
+    select: { text: pack manager }
+  - do: wait_for
+    name: wait for installed pack manager
+    until: { screen: InstalledModpacksScreen }
+  - do: screenshot
+    name: capture installed pack manager
+    file: all-installed-pack-manager

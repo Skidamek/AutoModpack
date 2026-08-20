@@ -5,14 +5,19 @@ import java.nio.file.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.loader.*;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.loader.GameCallService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.loader.NullGameCall;
+import pl.skidam.automodpack_core.loader.NullLoaderManager;
+import pl.skidam.automodpack_core.loader.NullModpackLoader;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
-// More or less constants
-// TODO cleanup
-public class Constants {
+/** Process-wide runtime state retained for loader compatibility. */
+public final class Constants {
 	public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
 	public static final String MOD_ID = "automodpack"; // For real its "automodpack_mod" but we use this for resource locations etc.
 	public static Boolean DEBUG = false;
@@ -26,46 +31,9 @@ public class Constants {
 	public static ModpackLoaderService MODPACK_LOADER = new NullModpackLoader();
 	public static GameCallService GAME_CALL = new NullGameCall();
 	public static Path THIS_MOD_JAR;
-	public static Path MODS_DIR;
 	public static ModpackExecutor modpackExecutor;
 	public static NettyServer hostServer;
-	public static Jsons.ServerConfigFieldsV3 serverConfig;
-	public static Jsons.ClientConfigFieldsV3 clientConfig;
-	public static Jsons.KnownHostsFields knownHosts;
-	public static final Path automodpackDir = Path.of("automodpack");
-	public static final Path storeDir = automodpackDir.resolve("store");
-	public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
-	// TODO More server modpacks
-	// Main - required
-	// Addons - optional addon packs
-	// Switches - optional or required packs, chosen by the player, only one can be installed at a time
-	public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
-	public static Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
-	public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
-	public static Path clientLocalMetadataFile = automodpackDir.resolve("automodpack-client-metadata.json");
-	public static Path cacheDir = automodpackDir.resolve("cache");
-	public static Path hashCacheDBFile = cacheDir.resolve("hash-cache.db");
-	public static Path modCacheDBFile = cacheDir.resolve("mod-cache.db");
-	public static Path clientSelectionFile = automodpackDir.resolve("automodpack-client-selection.json");
-	public static Path clientDummyFilesFile = automodpackDir.resolve("automodpack-dummy-files.json");
-	public static Path clientDeletionTimeStamps = automodpackDir.resolve("automodpack-deletion-timestamps-files.json");
-	public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
-	public static final Path privateDir = automodpackDir.resolve(".private");
-	public static final Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");
-	public static final Path knownHostsFile = privateDir.resolve("automodpack-known-hosts.json");
-	public static final Path knownHostsBootstrapFile = automodpackDir.resolve("automodpack-bootstrap.json");
-	public static final Path transactionFile = privateDir.resolve("update-transaction.json");
-	public static final Path transactionResultFile = privateDir.resolve("update-transaction-result.json");
-	public static final Path helperDir = cacheDir.resolve("update-helper");
-	public static final Path serverCertFile = privateDir.resolve("cert.crt");
-	public static final Path serverPrivateKeyFile = privateDir.resolve("key.pem");
-
-	// Client
-	public static final Path modpackContentTempFile = automodpackDir.resolve("automodpack-content.json.temp");
-	public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
-	public static final Path clientSecretsFile = privateDir.resolve("automodpack-client-secrets.json");
-	public static final Path modpacksDir = automodpackDir.resolve("modpacks");
-
-	public static Path selectedModpackDir;
-
+	public static ServerConfigJsons.ServerConfigFieldsV3 serverConfig;
+	public static ClientConfigJsons.ClientConfigFieldsV3 clientConfig;
+	private Constants() {}
 }

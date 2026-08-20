@@ -1,8 +1,6 @@
 package pl.skidam.automodpack_core.utils;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.API_HOST;
-import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.summonKey;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -16,6 +14,8 @@ import java.util.List;
 
 import com.google.gson.*;
 
+import pl.skidam.automodpack_core.protocol.NetUtils;
+
 @SuppressWarnings("deprecation")
 public class Json {
 	public static JsonArray fromUrlAsArray(String url) {
@@ -23,13 +23,13 @@ public class Json {
 
 		try {
 			HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-			connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
+			connection.setRequestProperty("User-Agent", NetUtils.USER_AGENT);
 			connection.setConnectTimeout(5000);
 			connection.setReadTimeout(5000);
 			connection.setDoOutput(true);
 			connection.connect();
 			if (connection.getResponseCode() == 200) {
-				try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
+				try (InputStreamReader isr = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
 					JsonParser parser = new JsonParser(); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
 					element = parser.parse(isr);
 				}
@@ -47,20 +47,12 @@ public class Json {
 	public static JsonObject fromFile(Path path) throws IOException {
 		if (!Files.exists(path) || !Files.isRegularFile(path)) return null;
 
-		JsonParser parser = new JsonParser();
-		byte[] bytes = Files.readAllBytes(path);
-
-		StringBuilder sb = new StringBuilder();
-		for (Byte b : bytes) {
-			sb.append((char) b.byteValue());
-		}
-
-		return parser.parse(sb.toString()).getAsJsonObject();
+		return new JsonParser().parse(Files.readString(path, StandardCharsets.UTF_8)).getAsJsonObject();
 	}
 
 	public static JsonObject fromUrl(String url) throws IOException {
 		HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-		connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
+		connection.setRequestProperty("User-Agent", NetUtils.USER_AGENT);
 		connection.setConnectTimeout(5000);
 		connection.setReadTimeout(5000);
 		connection.connect();
@@ -69,7 +61,7 @@ public class Json {
 
 		int code = connection.getResponseCode();
 		if (code == 200) {
-			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
+			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
 				element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
 			}
 		} else {
@@ -108,7 +100,7 @@ public class Json {
 
 		int code = connection.getResponseCode();
 		if (code == 200) {
-			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
+			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
 				element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
 			}
 		} else {
@@ -123,51 +115,4 @@ public class Json {
 
 	}
 
-	public static JsonObject fromCurseForgeUrl(final String requestUrl, List<String> listOfMurmur) throws IOException {
-
-		if (listOfMurmur == null || listOfMurmur.isEmpty()) return null;
-
-		JsonObject jsonObject = new JsonObject();
-		Gson gson = new Gson().newBuilder().setPrettyPrinting().create();
-		jsonObject.add("fingerprints", gson.toJsonTree(listOfMurmur));
-
-		final String body = jsonObject.toString();
-
-		HttpURLConnection connection;
-		URL url = new URL(requestUrl);
-		if (!"https".equalsIgnoreCase(url.getProtocol()) || !API_HOST.equalsIgnoreCase(url.getHost()) || url.getUserInfo() != null
-				|| (url.getPort() != -1 && url.getPort() != 443)) {
-			throw new IOException("Refusing to send the CurseForge API key to an untrusted endpoint");
-		}
-		connection = (HttpURLConnection) url.openConnection();
-		connection.setInstanceFollowRedirects(false);
-		connection.addRequestProperty("Content-Type", "application/json");
-		connection.addRequestProperty("Accept", "application/json");
-		connection.addRequestProperty("x-api-key", summonKey());
-		connection.setConnectTimeout(3000);
-		connection.setReadTimeout(10000);
-		connection.setRequestMethod("POST");
-		connection.setDoOutput(true);
-		connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
-		connection.connect();
-
-		JsonElement element = null;
-
-		int code = connection.getResponseCode();
-		if (code == 200) {
-			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
-				element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
-			}
-		} else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
-			LOGGER.error("CurseForge API authorization failed with HTTP 401");
-		} else {
-			LOGGER.warn("{} responded {} code", url, code);
-		}
-
-		connection.disconnect();
-
-		if (element != null && !element.isJsonArray()) return element.getAsJsonObject();
-
-		return null;
-	}
 }

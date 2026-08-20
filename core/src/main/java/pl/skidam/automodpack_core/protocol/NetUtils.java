@@ -1,10 +1,13 @@
 package pl.skidam.automodpack_core.protocol;
 
+import static pl.skidam.automodpack_core.Constants.AM_VERSION;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.*;
@@ -26,10 +29,8 @@ import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 
-import pl.skidam.automodpack_core.utils.LockFreeInputStream;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
-
 public class NetUtils {
+	public static final String USER_AGENT = "github/skidamek/automodpack/" + AM_VERSION;
 
 	// Magic numbers
 	public static final int MAGIC_AMMH = 0x414D4D48;
@@ -43,7 +44,6 @@ public class NetUtils {
 	public static final byte ECHO_TYPE = 0x00;
 	public static final byte FILE_REQUEST_TYPE = 0x01;
 	public static final byte FILE_RESPONSE_TYPE = 0x02;
-	public static final byte REFRESH_REQUEST_TYPE = 0x03;
 	public static final byte END_OF_TRANSMISSION = 0x04;
 	public static final byte ERROR = 0x05;
 
@@ -53,9 +53,9 @@ public class NetUtils {
 	public static final byte CONFIGURATION_CHUNK_SIZE_TYPE = 0x42;
 
 	// Chunk size
-	public static final int DEFAULT_CHUNK_SIZE = 256 * 1024; // 256 KB
-	public static final int MIN_CHUNK_SIZE = 8 * 1024; // 8 KB
-	public static final int MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
+	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
+	public static final int MIN_CHUNK_SIZE = 1024 * 1024; // 1 MiB
+	public static final int MAX_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB
 
 	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
 	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);
@@ -81,6 +81,11 @@ public class NetUtils {
 	public static String shortenFingerprint(String fingerprint) {
 		if (fingerprint == null || fingerprint.length() <= 19) return fingerprint;
 		return fingerprint.substring(0, 8) + "…" + fingerprint.substring(fingerprint.length() - 8);
+	}
+
+	public static String shortenFingerprint(String fingerprint, int visibleCharactersPerSide) {
+		if (fingerprint == null || visibleCharactersPerSide < 1 || fingerprint.length() <= visibleCharactersPerSide * 2 + 3) return fingerprint;
+		return fingerprint.substring(0, visibleCharactersPerSide) + "..." + fingerprint.substring(fingerprint.length() - visibleCharactersPerSide);
 	}
 
 	public static KeyPair generateKeyPair() throws Exception {
@@ -143,13 +148,13 @@ public class NetUtils {
 
 	public static void saveCertificate(X509Certificate cert, Path path) throws Exception {
 		String certPem = "-----BEGIN CERTIFICATE-----\n" + formatBase64(cert.getEncoded()) + "-----END CERTIFICATE-----\n";
-		SmartFileUtils.createParentDirs(path);
-		Files.writeString(path, certPem);
+		if (path.getParent() != null) Files.createDirectories(path.getParent());
+		Files.writeString(path, certPem, StandardCharsets.UTF_8);
 	}
 
 	public static X509Certificate loadCertificate(Path path) throws Exception {
 		if (!Files.exists(path)) return null;
-		try (InputStream in = new LockFreeInputStream(path)) {
+		try (InputStream in = Files.newInputStream(path)) {
 			CertificateFactory cf = CertificateFactory.getInstance("X.509");
 			return (X509Certificate) cf.generateCertificate(in);
 		}
@@ -158,8 +163,8 @@ public class NetUtils {
 	public static void savePrivateKey(PrivateKey key, Path path) throws Exception {
 		PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(key.getEncoded());
 		String keyPem = "-----BEGIN PRIVATE KEY-----\n" + formatBase64(keySpec.getEncoded()) + "-----END PRIVATE KEY-----\n";
-		SmartFileUtils.createParentDirs(path);
-		Files.writeString(path, keyPem);
+		if (path.getParent() != null) Files.createDirectories(path.getParent());
+		Files.writeString(path, keyPem, StandardCharsets.UTF_8);
 	}
 
 	private static String formatBase64(byte[] derEncodedBytes) {

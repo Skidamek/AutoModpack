@@ -1,7 +1,7 @@
 id: cross-platform-services-offline
 description: |
   Offline / client-only proof that two mods which used to be force-copied on NeoForge 1.21.1
-  now load straight from AutoModpack's modpack folder, with NO copy into standard mods/.
+  now load straight from AutoModpack's active projection, with NO copy into standard mods/.
 
   - Async Logger ships a NeoForge GraphicsBootstrapper + IDependencyLocator, but ALSO ships
     Forge-namespace service files (net.minecraftforge.forgespi.*) for cross-platform builds.
@@ -9,7 +9,7 @@ description: |
     Now the service set is scoped to the running loader, so Async Logger is eligible and its
     GraphicsBootstrapper fires in place - which is what activates its async log4j context.
   - spark ships only relocated library service files (no loader service), so it loads as an
-    ordinary modpack-folder mod.
+    ordinary active-projection mod.
 
   Crash-tolerant: headless software GL may kill the client after load.
 
@@ -17,14 +17,14 @@ network: host
 mode: client-only
 
 timeouts:
-  clientRunSeconds: 1200
+  clientStartSeconds: 1200
 
 targets:
   - 1.21.1-neoforge
 
 flow:
   - do: stage_modpack
-    name: stage Async Logger + spark into the modpack folder (NOT standard mods/)
+    name: stage Async Logger + spark into the active projection (NOT standard mods/)
     mods:
       - url: https://cdn.modrinth.com/data/zvNzKfGF/versions/jTWBuKYG/asynclogger-2.1.1%2B1.21.1-neoforge.jar
         sha512: bc4ce4a3ff47d11bba5f369b310b5d218179134515ccb840da0afa5d1b8926ff63f7f10858861261bf532708989c89219fda839f6c5139d51abe5a07ad65a37e

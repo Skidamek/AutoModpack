@@ -1,28 +1,32 @@
 package pl.skidam.automodpack_core.utils;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
-import static pl.skidam.automodpack_core.Constants.privateDir;
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.function.LongSupplier;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Stops rapid updater restart loops which repeatedly fail to converge. */
 public final class UpdateLoopDetector {
 	private static final int STATE_VERSION = 1;
 	private static final int MAX_ALLOWED_RESTARTS = 2;
 	private static final Duration RESTART_WINDOW = Duration.ofMinutes(3);
-	private static final Path STATE_FILE = privateDir.resolve("automodpack-restart-state.json");
-
 	private final Path stateFile;
 	private final LongSupplier currentTimeMillis;
 
 	public UpdateLoopDetector() {
-		this(STATE_FILE, System::currentTimeMillis);
+		this(ClientStorage.open(GameDirectory.current()).restartLoopStateFile(), System::currentTimeMillis);
+	}
+
+	public UpdateLoopDetector(Path stateFile) {
+		this(stateFile, System::currentTimeMillis);
 	}
 
 	UpdateLoopDetector(Path stateFile, LongSupplier currentTimeMillis) {
@@ -60,7 +64,7 @@ public final class UpdateLoopDetector {
 	private State load() {
 		try {
 			if (!Files.isRegularFile(stateFile)) return null;
-			State state = GSON.fromJson(Files.readString(stateFile), State.class);
+			State state = GSON.fromJson(Files.readString(stateFile, StandardCharsets.UTF_8), State.class);
 			return isValid(state) ? state : null;
 		} catch (Exception e) {
 			LOGGER.warn("Failed to load restart-loop state; allowing restart", e);

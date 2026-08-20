@@ -20,6 +20,7 @@ import net.fabricmc.loader.impl.metadata.VersionOverrides;
 import net.fabricmc.loader.impl.util.SystemProperties;
 
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
@@ -31,20 +32,20 @@ public class ModpackLoader15 implements ModpackLoaderService {
 	@Override
 	public void loadModpack(List<Path> modpackMods) {
 
-		Path modpackModsDir = null;
+		Path activeModsDirectory = null;
 
 		for (Path path : modpackMods) {
-			modpackModsDir = path.toAbsolutePath().normalize().getParent();
+			activeModsDirectory = path.toAbsolutePath().normalize().getParent();
 			break;
 		}
 
-		if (modpackModsDir == null) return;
+		if (activeModsDirectory == null) return;
 
 		try {
-			LOGGER.info("Discovering mods from {}", modpackModsDir.getParent().getFileName() + "/" + modpackModsDir.getFileName());
+			LOGGER.info("Discovering mods from {}", activeModsDirectory.getParent().getFileName() + "/" + activeModsDirectory.getFileName());
 
 			List<ModCandidate> candidates;
-			candidates = (List<ModCandidate>) discoverMods(modpackModsDir);
+			candidates = (List<ModCandidate>) discoverMods(activeModsDirectory);
 			candidates = (List<ModCandidate>) resolveMods(candidates);
 
 			METHOD_DUMP_MOD_LIST.invoke(FabricLoaderImpl.INSTANCE, candidates);
@@ -57,15 +58,14 @@ public class ModpackLoader15 implements ModpackLoaderService {
 	}
 
 	@Override
-	public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir, FileMetadataCache cache) {
-		Path modpackModsDir = modpackDir.resolve("mods");
-		Path standardModsDir = MODS_DIR;
+	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
+		Path activeModsDirectory = activeProjectionDirectory.resolve(ModpackPathPolicy.MODS_ROOT);
 
 		List<ModCandidate> modpackNestedMods = new ArrayList<>();
 		List<ModCandidate> standardNestedMods = new ArrayList<>();
 
 		try {
-			List<ModCandidate> candidates = (List<ModCandidate>) discoverMods(modpackModsDir);
+			List<ModCandidate> candidates = (List<ModCandidate>) discoverMods(activeModsDirectory);
 			candidates.forEach(it -> applyPaths(it, false));
 
 			for (ModCandidate candidate : candidates) {
@@ -74,7 +74,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 				List<ModCandidate> nestedMods = getNestedMods(candidate);
 				nestedMods = getOnlyNewestMods(nestedMods);
 
-				boolean isStandard = !candidate.getPaths().get(0).toAbsolutePath().toString().contains(modpackModsDir.toAbsolutePath().toString());
+				boolean isStandard = !candidate.getPaths().get(0).toAbsolutePath().toString().contains(activeModsDirectory.toAbsolutePath().toString());
 				if (isStandard) {
 					standardNestedMods.addAll(nestedMods);
 				} else {
@@ -211,13 +211,13 @@ public class ModpackLoader15 implements ModpackLoaderService {
 		return latestMods;
 	}
 
-	private Collection<ModCandidate> discoverMods(Path modpackModsDir) throws ModResolutionException, IllegalAccessException {
+	private Collection<ModCandidate> discoverMods(Path modsDirectory) throws ModResolutionException, IllegalAccessException {
 		ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));
 
-		LOGGER.info("Discovering mods from {}", modpackModsDir.getParent().getFileName() + "/" + modpackModsDir.getFileName());
+		LOGGER.info("Discovering mods from {}", modsDirectory.getParent().getFileName() + "/" + modsDirectory.getFileName());
 
 		List<?> candidateFinders = List.of(new ModContainerModCandidateFinder((List<ModContainer>) FabricLanguageAdapter.getAllMods().stream().toList()),
-				new DirectoryModCandidateFinder(modpackModsDir, FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()));
+				new DirectoryModCandidateFinder(modsDirectory, FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()));
 
 		FIELD_CANDIDATE_FINDERS.set(discoverer, candidateFinders);
 
@@ -296,10 +296,8 @@ public class ModpackLoader15 implements ModpackLoaderService {
 			for (var entry : definitions.entrySet()) {
 
 				if (!candidate.getId().equals(MOD_ID) && adapterMap.containsKey(entry.getKey())) {
-
-					// TODO require restart or erase that package from vm and remove adapter from the map
-
 					FabricGuiEntry.displayCriticalError(new IllegalArgumentException("Duplicate language adapter ID: " + entry.getKey()), true);
+					continue;
 				}
 
 				try {

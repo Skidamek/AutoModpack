@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+class BridgeError(RuntimeError):
+    def __init__(self, op: str, code: str | None, message: str):
+        super().__init__(f"Bridge error on '{op}': {message}")
+        self.code = code
+
+
 @dataclass
 class BridgeClient:
     game_dir: Path
@@ -29,7 +35,7 @@ class BridgeClient:
                 data = json.loads(rsp.read_text(encoding="utf-8"))
                 rsp.unlink(missing_ok=True)
                 if not data.get("ok"):
-                    raise RuntimeError(f"Bridge error on '{op}': {data.get('error', data)}")
+                    raise BridgeError(op, data.get("code"), str(data.get("error", data)))
                 return data
             time.sleep(random.uniform(0.03, 0.07))
         raise TimeoutError(f"Bridge did not respond to '{op}' after {timeout}s")
@@ -37,11 +43,19 @@ class BridgeClient:
     def gui(self, timeout: float = 30) -> dict:
         return self.request("gui", timeout=timeout)
 
-    def click(self, element_id: int, timeout: float = 30, **payload) -> dict:
+    def click(self, element_id: int, timeout: float = 30, screen_revision: int | None = None, **payload) -> dict:
+        if screen_revision is not None:
+            payload["screenRevision"] = screen_revision
         return self.request("click", timeout=timeout, id=element_id, **payload)
 
-    def text(self, element_id: int, value: str, timeout: float = 30) -> dict:
-        return self.request("text", timeout=timeout, id=element_id, text=value)
+    def text(self, element_id: int, value: str, timeout: float = 30, screen_revision: int | None = None) -> dict:
+        payload = {"id": element_id, "text": value}
+        if screen_revision is not None:
+            payload["screenRevision"] = screen_revision
+        return self.request("text", timeout=timeout, **payload)
+
+    def screenshot(self, name: str, timeout: float = 30) -> dict:
+        return self.request("screenshot", timeout=timeout, name=name)
 
     def connect(self, host: str, timeout: float = 30) -> dict:
         return self.request("connect", timeout=timeout, host=host)

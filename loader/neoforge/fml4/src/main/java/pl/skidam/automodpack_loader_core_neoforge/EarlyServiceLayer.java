@@ -2,13 +2,9 @@ package pl.skidam.automodpack_loader_core_neoforge;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -39,7 +35,7 @@ import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
 import net.neoforged.neoforgespi.locating.IModFile;
 import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
-import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
@@ -47,7 +43,7 @@ import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
 /**
  * Holds the per-jar child SERVICE module layers built by {@link EarlyServiceBootstrapper}
- * for NeoForge mods that ship "early services" inside the selected modpack folder, and
+ * for NeoForge mods that ship "early services" inside the active projection, and
  * replays their mod-locating services (which only the loader's SERVICE layer would
  * normally run) into AutoModpack's own discovery so the mods load in place - without
  * being copied into the standard {@code mods/} directory.
@@ -76,13 +72,13 @@ public final class EarlyServiceLayer {
 	static final List<String> ACTIVELY_RUN_SERVICES = List.of(GRAPHICS_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE,
 			MOD_FILE_READER_SERVICE, COREMOD_SERVICE, TRANSFORMATION_SERVICE);
 
-	// Every service we can host from the modpack folder, so a mod shipping only these never needs
+	// Every service we can host from the active projection, so a mod shipping only these never needs
 	// copying: the actively-run ones above, plus language loaders (passive - picked up from the GAME
 	// layer). Single source of truth for both the copy decision and the in-place bootstrapper.
 	//
 	// ImmediateWindowProvider is deliberately NOT here (though it IS in knownServices): NeoForge picks
 	// the early-window provider and creates the window in the same call, before and out of reach of
-	// anything we can do from the modpack folder, so a mod needing it must force-copy to mods/.
+	// anything we can do from the active projection, so a mod needing it must force-copy to mods/.
 	public static final Set<String> HANDLEABLE_SERVICES = Stream.concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
 			.collect(Collectors.toUnmodifiableSet());
 
@@ -197,7 +193,7 @@ public final class EarlyServiceLayer {
 			for (String service : ACTIVELY_RUN_SERVICES) {
 				if (Files.exists(fs.getPath(service))) {
 					activelyRun = true;
-					impls.put(service, readServiceImpls(fs, service));
+					impls.put(service, LoaderServiceFiles.readImplementations(fs, service));
 				}
 			}
 		} catch (Exception e) {
@@ -333,7 +329,7 @@ public final class EarlyServiceLayer {
 	}
 
 	/**
-	 * Whether this jar's early services can all be run from the modpack folder. It must declare at
+	 * Whether this jar's early services can all be run from the active projection. It must declare at
 	 * its root at least one service we actively run in place (a {@code GraphicsBootstrapper}, a
 	 * candidate/dependency locator, an {@code IModFileReader}, or a coremod's {@code ICoreMod}) AND
 	 * ship no service outside {@link #HANDLEABLE_SERVICES}. Anything else is left for the
@@ -833,21 +829,4 @@ public final class EarlyServiceLayer {
 	}
 
 	/** Reads the implementation class names listed in a {@code META-INF/services/...} file. */
-	private static List<String> readServiceImpls(FileSystem fs, String serviceFile) {
-		List<String> impls = new ArrayList<>();
-		Path service = fs.getPath(serviceFile);
-		if (!Files.exists(service)) return impls;
-		try (InputStream is = Files.newInputStream(service); BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-			String line;
-			while ((line = reader.readLine()) != null) {
-				int comment = line.indexOf('#');
-				if (comment >= 0) line = line.substring(0, comment);
-				line = line.trim();
-				if (!line.isEmpty()) impls.add(line);
-			}
-		} catch (Exception e) {
-			LOGGER.error("[AutoModpack] Failed to read {}", serviceFile, e);
-		}
-		return impls;
-	}
 }

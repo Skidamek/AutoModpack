@@ -1,68 +1,78 @@
 package pl.skidam.automodpack_loader_core.screen;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
+import java.util.Objects;
 import java.util.Optional;
 
-public class ScreenManager implements ScreenService {
+import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_loader_core.client.Changelogs;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.utils.DownloadManager;
+import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
-	public static ScreenService INSTANCE = new PreloadScreenImpl();
+public final class ScreenManager {
 
-	@Override
-	public void download(Object... args) {
-		INSTANCE.download(args);
+	private static volatile ScreenService instance = new PreloadScreenImpl();
+
+	private ScreenManager() {}
+
+	public static void install(ScreenService screenService) {
+		instance = Objects.requireNonNull(screenService, "screenService");
 	}
 
-	@Override
-	public void fetch(Object... args) {
-		INSTANCE.fetch(args);
+	public static void download(DownloadManager downloadManager, String modpackName) {
+		instance.download(downloadManager, modpackName);
 	}
 
-	@Override
-	public void changelog(Object... args) {
-		INSTANCE.changelog(args);
+	public static void changelog(Object parent, Changelogs changelogs) {
+		instance.changelog(parent, changelogs);
 	}
 
-	@Override
-	public void restart(Object... args) {
-		INSTANCE.restart(args);
+	public static void restart(UpdateType updateType, Changelogs changelogs) {
+		instance.restart(updateType, changelogs);
 	}
 
-	@Override
-	public void danger(Object... args) {
-		INSTANCE.danger(args);
+	public static void completeWithoutRestart() {
+		instance.completeWithoutRestart();
 	}
 
-	@Override
-	public void error(String... args) {
-		INSTANCE.error(args);
+	public static void welcome(ModpackUpdater modpackUpdater) {
+		instance.welcome(modpackUpdater);
 	}
 
-	@Override
-	public void menu(Object... args) {
-		INSTANCE.menu(args);
+	public static boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
+		return instance.preview(preview, modpackName, continueAction, cancelAction, returnToSelection);
 	}
 
-	@Override
-	public void title(Object... args) {
-		INSTANCE.title(args);
+	public static void history(HistoryViewRequest request) {
+		instance.history(Objects.requireNonNull(request, "history request"));
 	}
 
-	@Override
-	public void validation(Object... args) {
-		INSTANCE.validation(args);
+	/** Logs and presents an operational failure exactly once through the installed screen adapter. */
+	public static void failure(FailureRequest request) {
+		Objects.requireNonNull(request, "request");
+		LOGGER.error("AutoModpack client failure [{}] while displaying {}", request.category().key(), request.messageKey(), request.cause());
+		instance.failure(request);
 	}
 
-	@Override
-	public void waiting() {
-		INSTANCE.waiting();
+	public static void title() {
+		instance.title();
 	}
 
-	@Override
-	public Optional<String> getScreenString() {
-		return INSTANCE.getScreenString();
+	public static void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {
+		instance.validation(parent, fingerprint, validated, canceled);
 	}
 
-	@Override
-	public Optional<Object> getScreen() {
-		return INSTANCE.getScreen();
+	public static void waiting() {
+		instance.waiting();
+	}
+
+	public static Optional<String> getScreenString() {
+		return instance.getScreenString();
+	}
+
+	public static Optional<Object> getScreen() {
+		return instance.getScreen();
 	}
 }

@@ -2,25 +2,33 @@ package pl.skidam.automodpack_loader_core.screen;
 
 import java.util.Optional;
 
+import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_loader_core.client.Changelogs;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.utils.DownloadManager;
+import pl.skidam.automodpack_loader_core.utils.UpdateType;
+
 public interface ScreenService {
 
-	void download(Object... args);
+	void download(DownloadManager downloadManager, String modpackName);
 
-	void fetch(Object... args);
+	void changelog(Object parent, Changelogs changelogs);
 
-	void changelog(Object... args);
+	void restart(UpdateType updateType, Changelogs changelogs);
 
-	void restart(Object... args);
+	void completeWithoutRestart();
 
-	void danger(Object... args);
+	void welcome(ModpackUpdater modpackUpdater);
 
-	void error(String... args);
+	boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection);
 
-	void menu(Object... args);
+	void history(HistoryViewRequest request);
 
-	void title(Object... args);
+	void failure(FailureRequest request);
 
-	void validation(Object... args);
+	void title();
+
+	void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled);
 
 	void waiting();
 

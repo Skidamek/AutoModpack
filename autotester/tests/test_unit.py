@@ -111,6 +111,17 @@ def test_wait_for_passes_on_marker_in_final_logs_at_exit(make_ctx):
     wait_for(ctx, _log_step("READY", timeout="30s"))  # must not raise
 
 
+def test_wait_for_server_log_does_not_require_client(make_ctx):
+    """Server readiness can be checked before the bootstrap client is launched."""
+    from automodpack_autotester.engine.steps_ui import wait_for
+
+    ctx = make_ctx()
+    ctx.logs_provider = lambda which, tail=None: "Certificate fingerprint: AB:CD:EF" if which == "server" else ""
+    ctx.running_provider = lambda: (_ for _ in ()).throw(ClientExited("client not launched yet"))
+
+    wait_for(ctx, {"until": {"log": {"container": "server", "matches": "fingerprint"}}, "timeout": "30s"})
+
+
 # ── selectors ─────────────────────────────────────────────────────────────
 
 
@@ -150,6 +161,87 @@ def test_selector_no_match():
     assert selectors.find_one(GUI, {"text": "nope"}) is None
 
 
+def test_click_timeout_reports_disabled_gui_state(make_ctx, monkeypatch):
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+
+    class SnapshotBridge:
+        def gui(self, timeout=30):
+            return {
+                "screenClass": "TitleScreen",
+                "title": "Minecraft",
+                "buttons": [{"id": 8, "text": "multiplayer", "enabled": False, "visible": True}],
+            }
+
+        def click(self, element_id, **payload):
+            raise AssertionError("click must not be sent for a disabled element")
+
+    ctx.bridge = SnapshotBridge()
+    monkeypatch.setattr(steps_ui, "await_condition", lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError("no element matched")))
+
+    with pytest.raises(TimeoutError, match=r"current screen: 'TitleScreen'.*multiplayer.*enabled.*False"):
+        steps_ui.click(ctx, {"select": {"text": "multiplayer"}})
+
+
+def test_click_skips_when_navigation_already_reached_its_destination(make_ctx):
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+
+    class MultiplayerBridge:
+        def gui(self, timeout=30):
+            return {
+                "screenClass": "net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen",
+                "title": "Play Multiplayer",
+                "buttons": [{"id": 3, "text": "Direct Connection", "enabled": True, "visible": True}],
+            }
+
+        def click(self, element_id, **payload):
+            raise AssertionError("click must not be sent after navigation reached its destination")
+
+    ctx.bridge = MultiplayerBridge()
+    steps_ui.click(ctx, {"select": {"text": "multiplayer"}, "skip_if": {"screen": "Play Multiplayer"}, "timeout": "1ms"})
+
+
+def test_click_reselects_after_the_screen_changes_between_snapshot_and_interaction(make_ctx):
+    from automodpack_autotester.bridge import BridgeError
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+
+    class ChangingBridge:
+        def __init__(self):
+            self.revision = 1
+            self.clicks = []
+
+        def gui(self, timeout=30):
+            return {"screenClass": "TitleScreen", "screenRevision": self.revision, "buttons": [{"id": self.revision, "text": "Multiplayer", "enabled": True, "visible": True}]}
+
+        def click(self, element_id, screen_revision=None, **payload):
+            self.clicks.append((element_id, screen_revision))
+            if len(self.clicks) == 1:
+                self.revision = 2
+                raise BridgeError("click", "stale_screen", "GUI screen changed before click")
+
+    ctx.bridge = ChangingBridge()
+    steps_ui.click(ctx, {"select": {"text": "multiplayer"}, "timeout": "1s"})
+
+    assert ctx.bridge.clicks == [(1, 1), (2, 2)]
+
+
+def test_element_lookup_honors_a_shared_interaction_deadline(make_ctx, monkeypatch):
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+    observed = []
+    monkeypatch.setattr(steps_ui, "await_condition", lambda _candidate, timeout, _poll, _message: observed.append(timeout))
+
+    steps_ui._await_element(ctx, {"text": "missing"}, {"timeout": "30s"}, "missing", timeout=0.25)
+
+    assert observed == [0.25]
+
+
 # ── templating ────────────────────────────────────────────────────────────
 
 
@@ -185,6 +277,28 @@ def test_condition_screen_and_element(make_ctx):
     assert conditions.evaluate(ctx, {"no_element": {"text": "missing"}}, gui=GUI) is True
 
 
+def test_condition_vanilla_title_screen_uses_semantic_snapshot(make_ctx):
+    ctx = make_ctx()
+    condition = {
+        "all": [
+            {"screen": "Title Screen"},
+            {"element": {"role": "button", "text": "Singleplayer", "enabled": True, "visible": True}},
+            {"element": {"role": "button", "text": "Multiplayer", "enabled": True, "visible": True}},
+        ]
+    }
+    mapped_title = {
+        "screenClass": "net.minecraft.class_442",
+        "title": "Title Screen",
+        "buttons": [
+            {"id": 1, "text": "Singleplayer", "enabled": True, "visible": True},
+            {"id": 2, "text": "Multiplayer", "enabled": True, "visible": True},
+        ],
+    }
+    assert conditions.evaluate(ctx, condition, gui=mapped_title) is True
+    assert conditions.evaluate(ctx, condition, gui={**mapped_title, "title": "Play Multiplayer"}) is False
+    assert conditions.evaluate(ctx, condition, gui={**mapped_title, "buttons": mapped_title["buttons"][1:]}) is False
+
+
 def test_condition_screen_none(make_ctx):
     ctx = make_ctx()
     assert conditions.evaluate(ctx, {"screen_none": True}, gui={"screenClass": None}) is True
@@ -193,7 +307,7 @@ def test_condition_screen_none(make_ctx):
 
 def test_condition_file_and_gone(make_ctx):
     ctx = make_ctx()
-    (ctx.game_dir / "here.txt").write_text("x")
+    (ctx.game_dir / "here.txt").write_text("x", encoding="utf-8")
     assert conditions.evaluate(ctx, {"file": "here.txt"}) is True
     assert conditions.evaluate(ctx, {"file_gone": "nope.txt"}) is True
     assert conditions.evaluate(ctx, {"file": "nope.txt"}) is False
@@ -213,6 +327,33 @@ def test_condition_log_captures_variable(make_ctx):
                     "capture": {"fp": 1}}}
     assert conditions.evaluate(ctx, cond) is True
     assert ctx.vars["fp"] == "AB:CD:EF"
+
+
+def test_screenshot_verb_records_artifact(make_ctx):
+    from automodpack_autotester.engine.steps_ui import screenshot
+    from .conftest import FakeBridge
+
+    ctx = make_ctx()
+    ctx.bridge = FakeBridge(ctx)
+    screenshot(ctx, {"name": "capture prompt", "file": "first-connect"})
+
+    assert ctx.bridge.screenshots == ["first-connect"]
+    assert (ctx.game_dir / "automodpack/autotest/screenshots/first-connect.png").is_file()
+    assert ctx.vars["screenshot"].endswith("first-connect.png")
+
+
+def test_screenshot_verb_captures_the_currently_rendered_screen(make_ctx):
+    from automodpack_autotester.engine.steps_ui import screenshot
+    from .conftest import FakeBridge
+
+    ctx = make_ctx()
+    ctx.bridge = FakeBridge(ctx)
+    ctx.bridge.screen = "settings"
+    assert ctx.bridge.rendered_screen == "title"
+
+    screenshot(ctx, {"file": "settings"})
+
+    assert ctx.bridge.rendered_screens["settings"] == "settings"
 
 
 # ── executor ──────────────────────────────────────────────────────────────
@@ -355,7 +496,7 @@ def test_log_file_target_reads_game_dir_artifact(make_ctx):
     ctx = make_ctx()
     debug = ctx.game_dir / "logs" / "debug.log"
     debug.parent.mkdir(parents=True, exist_ok=True)
-    debug.write_text("Mixin: Added class metadata for Workarounds$Reference\n")
+    debug.write_text("Mixin: Added class metadata for Workarounds$Reference\n", encoding="utf-8")
     cond = {"log": {"file": "logs/debug.log", "matches": r"Added class metadata for \S+Reference"}}
     assert conditions.evaluate(ctx, cond) is True
     # Missing file is empty, not an error.

@@ -24,7 +24,7 @@ import pl.skidam.automodpack_loader_core.Preload;
  *
  * <p>
  * {@code onLoad} is also where AutoModpack runs its update/reconcile step ({@link Preload}) and
- * builds the shared child layer for the modpack folder's early-service jars ({@link
+ * builds the shared child layer for the active projection's early-service jars ({@link
  * EarlyServiceLayer#bootstrap}) - the earliest hook Forge gives any mod, before {@link
  * EarlyModLocator#scanCandidates}. Running the update this early means a mod-list change is
  * already reflected in the folder discovery that happens later in the same boot.

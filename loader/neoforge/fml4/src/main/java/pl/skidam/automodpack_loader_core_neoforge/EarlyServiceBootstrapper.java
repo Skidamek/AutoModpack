@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 import cpw.mods.cl.JarModuleFinder;
 import cpw.mods.cl.ModuleClassLoader;
@@ -19,6 +18,9 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
 import pl.skidam.automodpack_loader_core.Preload;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
@@ -46,21 +48,20 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
 			// Run our own update/reconcile step first, before anything below reads the modpack
 			// folder, so an update that changes which mods are early-service mods is already
-			// reflected in the folder we scan below. Also loads the config and publishes
-			// Constants.selectedModpackDir / Constants.MODS_DIR, which everything below reads.
+			// reflected in the active projection we scan below.
 			ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
 			new Preload();
 			progress.complete();
 
-			// Set by Preload only when a modpack is selected on a client - null means nothing to do.
-			Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
-			if (modpackMods == null || !Files.isDirectory(modpackMods)) return;
+			ClientStorage storage = ClientStorage.open(GameDirectory.current());
+			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
+			if (!Files.isDirectory(activeModsDirectory)) return;
 
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, EarlyServiceLayer::eligibleForInPlace);
+			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
 
 			if (earlyServiceJars.isEmpty()) return;
 
-			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the modpack folder in place", earlyServiceJars.size());
+			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 
 			ModuleLayer serviceLayer = getClass().getModule().getLayer();
 			if (serviceLayer == null) {
@@ -71,7 +72,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			bootstrapJars(earlyServiceJars, serviceLayer, arguments);
 
 			EarlyServiceLayer.instantiateTransformationServices();
-			EarlyServiceBridgePlugin.ensureRunsFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
+			EarlyServiceBridgePlugin.registerFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
 		} catch (Throwable t) {
 			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 		}

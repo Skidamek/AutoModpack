@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 
+import pl.skidam.automodpack_core.protocol.ProtocolFrameCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
@@ -12,15 +13,13 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 public class CompressionEncoder extends MessageToByteEncoder<ByteBuf> {
 	private CompressionCodec codec;
 	private CompressionType compressionType;
+	private final ProtocolFrameCodec.FrameScratch scratch = new ProtocolFrameCodec.FrameScratch();
 
 	@Override
 	protected void encode(ChannelHandlerContext ctx, ByteBuf msg, ByteBuf out) throws Exception {
-		byte[] input = new byte[msg.readableBytes()];
-		msg.readBytes(input);
-		byte[] compressed = codec(ctx).compress(input);
-		out.writeInt(compressed.length);
-		out.writeInt(input.length);
-		out.writeBytes(compressed);
+		Integer chunkSize = ctx.channel().attr(NettyServer.CHUNK_SIZE).get();
+		if (chunkSize == null) throw new IllegalStateException("Chunk size has not been configured");
+		ProtocolFrameCodec.write(out, codec(ctx), msg, chunkSize, scratch);
 	}
 
 	private CompressionCodec codec(ChannelHandlerContext ctx) {

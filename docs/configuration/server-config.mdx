@@ -27,12 +27,10 @@ These settings control which files are sent to the client and which files the cl
 | `syncedFiles`                      | `["/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*"]` | List of relative paths to sync to the client. Supports wildcards.                                                                                                                                 |
 | `allowEditsInFiles`                | `["/options.txt", "/config/**"]`                                           | Files clients download once but can edit locally. Updates to these files on the server are ignored by the client. Supports wildcards.                                                             |
 | `overwriteEditableFiles`           | `[]`                                                                       | Editable files to overwrite when their server version changes. Paths must also match `allowEditsInFiles`. Local edits are otherwise preserved. Supports wildcards.                                |
-| `forceCopyFilesToStandardLocation` | `[]`                                                                       | Forces specific files to copy to the standard Minecraft folder instead of the AutoModpack instance folder. Supports wildcards. Avoid using this option when possible, it breaks seamless updates. |
-| `nonModpackFilesToDelete`          | `[]`                                                                       | List of files to request deletion from the client (e.g., old mods). See Deleting Files below.                                                                                                     |
 
 ## Globbing wildcards
 
-For `syncedFiles`, `allowEditsInFiles`, `overwriteEditableFiles` and `forceCopyFilesToStandardLocation`, use the following patterns relative to the server root:
+For `syncedFiles`, `allowEditsInFiles` and `overwriteEditableFiles`, use the following patterns relative to the server root:
 
 - `*` : Matches files in a single directory (e.g., `/mods/*.jar`).
 - `**` : Matches files recursively in all subdirectories (e.g., `/kubejs/**`).
@@ -40,45 +38,17 @@ For `syncedFiles`, `allowEditsInFiles`, `overwriteEditableFiles` and `forceCopyF
 
 Read more about globbing on the [Globbing Wikipedia article](https://wikipedia.org/wiki/Glob_(programming)#Syntax).
 
-## Deleting Files (nonModpackFilesToDelete)
+## Managed File Cleanup
 
-If you simply want to remove a file from your modpack, **don't use** this option, instead just delete the file from your server.
+AutoModpack automatically cleans up files that the modpack previously managed but that are absent from the selected target. Each generation includes a cumulative ownership ledger with every historical SHA-1 hash and size for each managed path.
 
-This feature allows you to remove specific files from a client's machine which are not part of the modpack being synced. This is useful for cleaning up old mods or files that may conflict with the current modpack.
+The client deletes a file only when all of the following conditions are met:
 
-**Note:** This feature is stricter for security reasons. It requires exact file hashes and does not support wildcards.
+- The path is a normalized file path in a managed game or standard `mods` location.
+- The local entry is a regular file.
+- The local SHA-1 hash and size match one of the historical entries in the ownership ledger.
 
-### How to Configure
-
-This setting accepts a list of objects containing a path and a SHA1 hash.
-
-- **Exact Match:** The client checks if the file exists at the path and matches the hash. If yes, it is deleted.
-- **Parent Scan:** If the file isn't found at the exact path or only a parent directory is provided, the client scans the directory for any file matching the hash and deletes it.
-
-### Example
-
-```json
-"nonModpackFilesToDelete": {
-  "/mods/lithium-fabric-0.15.1+mc1.21.1.jar": "6038cf136da413753345bf9d48e5798241439894",
-  "/mods/": "97452cfadfde1f8f8c67838643019eabafa58fbb"
-},
-```
-
-<details>
-<summary>How to get the SHA1 Hash</summary>
-
-You must provide the hash for the specific version of the file you want to delete.
-
-### Option 1: Linux Command Line
-
-```bash
-sha1sum path/to/file
-```
-
-### Option 2: Online Tools
-
-You can use a browser-based calculator like [SHA1 File Checksum](https://emn178.github.io/online-tools/sha1_checksum.html).
-</details>
+Files with changed contents and player-local paths are preserved. Before deletion, AutoModpack preserves the file bytes in the client content store. There is no configuration setting for arbitrary client-file deletion.
 
 ## Network & Hosting
 
@@ -93,7 +63,6 @@ These settings control how the file server is exposed to the internet.
 | `bandwidthLimit`         | `0`                                                        | Upload speed limit in Mbps (0 = unlimited).                                                                                                    |
 | `disableInternalTLS`     | `false`                                                    | Disables only AutoModpack's server-side TLS termination. Clients always use TLS; an expert-provided terminator must forward decrypted traffic. |
 | `connectionMode`         | `HOLEPUNCH` on supported targets; `MAGIC_PACKET` otherwise | Selects the exact method advertised to clients and used by built-in handling. Modes do not fall back to one another.                           |
-| `updateIpsOnEveryStart`  | `false`                                                    | Updates advertisedEndpointHost on startup. Useful for dynamic residential IPs.                                                                 |
 | `validateSecrets`        | `true`                                                     | Protects downloads using unique, temporary secrets per user.                                                                                   |
 | `secretLifetime`         | `336`                                                      | How long (in hours) a download secret remains valid.                                                                                           |
 

@@ -1,10 +1,12 @@
 package pl.skidam.automodpack_core.protocol.netty;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
@@ -24,15 +26,15 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
-import pl.skidam.automodpack_core.utils.ObservableMap;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public class NettyServer {
 
@@ -41,7 +43,7 @@ public class NettyServer {
 	public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
 	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
 	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
-	private final Map<String, Path> paths = new ConcurrentHashMap<>();
+	private volatile Map<String, Path> paths = Map.of();
 	private MultithreadEventLoopGroup eventLoopGroup;
 	private ChannelFuture serverChannel;
 	private volatile boolean sharedMagicEnabled;
@@ -68,18 +70,33 @@ public class NettyServer {
 		return certificateFingerprint;
 	}
 
-	public void setPaths(ObservableMap<String, Path> paths) {
-		this.paths.putAll(paths.getMap());
-		paths.addOnPutCallback(this.paths::put);
-		paths.addOnRemoveCallback(this.paths::remove);
+	public void replacePaths(Map<String, Path> paths) {
+		replacePaths(new GenerationHosting(paths));
 	}
 
-	public void removePaths(ObservableMap<String, Path> paths) {
-		paths.getMap().forEach(this.paths::remove);
+	public void replacePaths(GenerationHosting hosting) {
+		this.paths = hosting.asMap();
 	}
 
-	public Optional<Path> getPath(String hash) {
-		return Optional.ofNullable(paths.get(hash));
+	public Map<String, Path> getPathsSnapshot() {
+		return paths;
+	}
+
+	public Optional<Path> getPath(String requestKey) {
+		if (requestKey == null) return Optional.empty();
+		if (requestKey.isEmpty()) return regularPath(paths.get(""));
+		if (requestKey.startsWith(GenerationHistoryIndex.CATALOGUE_REQUEST_PREFIX)) {
+			String stateDigest = requestKey.substring(GenerationHistoryIndex.CATALOGUE_REQUEST_PREFIX.length());
+			if (!HashUtils.isCanonicalSha1(stateDigest)) return Optional.empty();
+			return regularPath(paths.get(GenerationHistoryIndex.catalogueRequestKey(stateDigest)));
+		}
+		if (!HashUtils.isSha1(requestKey)) return Optional.empty();
+
+		return regularPath(paths.get(HashUtils.normalizeSha1(requestKey)));
+	}
+
+	private static Optional<Path> regularPath(Path path) {
+		return path != null && !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ? Optional.of(path) : Optional.empty();
 	}
 
 	public synchronized Optional<ChannelFuture> start() {
@@ -93,12 +110,10 @@ public class NettyServer {
 			return Optional.empty();
 		}
 
-		if (paths.isEmpty()) {
-			LOGGER.warn("No file to host. Can't start modpack hosting.");
+		if (getPath("").isEmpty()) {
+			LOGGER.warn("No current generation record is prepared. Can't start modpack hosting.");
 			return Optional.empty();
 		}
-
-		updateAdvertisedAddress();
 
 		ModpackConnectionMode connectionMode = serverConfig.connectionMode;
 		if (connectionMode == ModpackConnectionMode.DIRECT && serverConfig.bindPort == -1) {
@@ -172,38 +187,20 @@ public class NettyServer {
 			return;
 		}
 
-		if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
+		if (!Files.exists(SERVER_CERT_FILE) || !Files.exists(SERVER_PRIVATE_KEY_FILE)) {
 			KeyPair keyPair = NetUtils.generateKeyPair();
 			X509Certificate cert = NetUtils.selfSign(keyPair);
-			NetUtils.saveCertificate(cert, serverCertFile);
-			NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+			NetUtils.saveCertificate(cert, SERVER_CERT_FILE);
+			NetUtils.savePrivateKey(keyPair.getPrivate(), SERVER_PRIVATE_KEY_FILE);
 		}
 
-		X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
+		X509Certificate cert = NetUtils.loadCertificate(SERVER_CERT_FILE);
 		if (cert == null) throw new IllegalStateException("Server certificate couldn't be loaded");
 
-		sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
+		sslCtx = SslContextBuilder.forServer(SERVER_CERT_FILE.toFile(), SERVER_PRIVATE_KEY_FILE.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
 				.ciphers(Arrays.asList("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256")).sessionTimeout(1800).build();
 		certificateFingerprint = NetUtils.getFingerprint(cert);
 		if (certificateFingerprint != null) LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
-	}
-
-	private void updateAdvertisedAddress() {
-		if (!serverConfig.updateIpsOnEveryStart) return;
-
-		String publicIp = AddressHelpers.getPublicIp();
-		if (publicIp != null) {
-			serverConfig.advertisedEndpointHost = publicIp;
-			LOGGER.warn("Setting Host IP to {}", serverConfig.advertisedEndpointHost);
-		} else {
-			LOGGER.error("Couldn't get public IP, please change it manually!");
-		}
-
-		try {
-			ConfigTools.writeAtomic(serverConfigFile, serverConfig);
-		} catch (Exception e) {
-			LOGGER.error("Failed to save updated advertised endpoint", e);
-		}
 	}
 
 	public boolean isSharedMagicEnabled() {

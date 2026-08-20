@@ -6,9 +6,9 @@ import org.junit.jupiter.api.Test;
 
 class CertificateTrustEntryTest {
 	@Test
-	void migratesProductionKnownHostFingerprintToTypedEntry() {
+	void deserializesTypedTrustEntriesInKnownHostsState() {
 		String fingerprint = "ab".repeat(32);
-		Jsons.KnownHostsFields trust = ConfigTools.GSON.fromJson("{\"hosts\":{\"play.example.com\":\"" + fingerprint + "\"}}", Jsons.KnownHostsFields.class);
+		ConnectionJsons.KnownHostsFields trust = ConfigTools.GSON.fromJson("{\"hosts\":{\"play.example.com\":\"" + fingerprint + "\"}}", ConnectionJsons.KnownHostsFields.class);
 
 		assertEquals(fingerprint, trust.hosts.get("play.example.com").fingerprint);
 		assertEquals("TOFU", trust.hosts.get("play.example.com").reason);

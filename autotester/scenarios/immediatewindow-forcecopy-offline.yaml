@@ -4,12 +4,13 @@ description: |
   (ModpackLoaderService.forceCopyServices = ImmediateWindowProvider): Simple Custom Early
   Loading ships ONLY META-INF/services/net.neoforged.neoforgespi.earlywindow.ImmediateWindowProvider
   (no mods.toml, no nested jars). NeoForge picks the early-window provider and creates the window
-  in the same call, before and out of reach of anything AutoModpack can do from the modpack folder,
-  so this jar must NOT load in place - it must be copied into standard mods/ by the workaround in
+  in the same call, before and out of reach of anything AutoModpack can do from the active projection,
+  so this jar must NOT load in place - it must be copied into standard mods/ by the dedicated loader
+  placement rule in
   ModpackUtils.correctFilesLocations.
 
   The plain client-only staging (updateSelectedModpackOnLaunch=false) deliberately skips file
-  reconciliation, so this scenario stages a matching automodpack-content.json and re-enables
+  reconciliation, so this scenario stages a matching immutable generation and re-enables
   update-on-launch: with no server reachable (and no stored secret) Preload falls back to the
   local content and runs the full apply path offline. First boot: the jar appears in standard
   mods/, AutoModpack requests a restart, and the client exits. Second boot: the
@@ -23,22 +24,21 @@ network: host
 mode: client-only
 
 timeouts:
-  clientRunSeconds: 1200
+  clientStartSeconds: 1200
 
 targets:
   - 1.21.1-neoforge
 
 flow:
   - do: stage_modpack
-    name: stage Simple Custom Early Loading into the modpack folder (NOT standard mods/)
+    name: stage Simple Custom Early Loading into the active projection (NOT standard mods/)
     config:
       updateSelectedModpackOnLaunch: true
-    manifest: true
     mods:
       - url: https://cdn.modrinth.com/data/Bi8o4aLw/versions/G5bmC36h/SimpleCustomEarlyLoading-2.2-neoforge.jar
         sha512: 5fa2487129c5367c80528e196ad9b606a10067786852c01f5ab09fd1804d2dbde1b1e074c7ddb969b8503104b2b575ae42e74f9560e386e2942cbd0506958c71
   - do: launch_client
-    name: first boot - the apply path must force-copy the jar to standard mods/
+    name: first boot - the apply path must place the jar in standard mods/
   - do: wait_for
     name: force-copy completed and AutoModpack asked for a restart
     timeout: 420s

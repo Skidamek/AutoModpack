@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
+import signal
 import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -10,6 +12,7 @@ from pathlib import Path
 
 import docker as docker_py
 
+from .cache import deduplicate_asset_objects
 from .config import (
     REPO_ROOT,
     ROOT,
@@ -20,10 +23,15 @@ from .config import (
     scenario_matches_target,
 )
 from .runner import run_case
+from .supervisor import RunSupervisor, reap_orphaned_scopes
 from .validate import validate_scenario
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _interrupt_on_termination(_signum, _frame) -> None:
+    raise KeyboardInterrupt
 
 
 def _resolve_settings_path(s: dict, key: str, default: str) -> Path:
@@ -32,18 +40,46 @@ def _resolve_settings_path(s: dict, key: str, default: str) -> Path:
     return (REPO_ROOT / p).resolve() if not p.is_absolute() else p.resolve()
 
 
-def _kill_amp_containers() -> None:
+def _cleanup_run_resources(resource_scope: str) -> None:
+    prefix = f"amp-{resource_scope}-"
     client = docker_py.from_env()
-    for c in client.containers.list(all=True, filters={"name": "amp-"}):
+    for c in client.containers.list(all=True):
+        if not c.name.startswith(prefix):
+            continue
         try:
             c.remove(force=True)
         except Exception:
             pass
-    for n in client.networks.list(filters={"name": "amp-"}):
+    for n in client.networks.list():
+        if not n.name.startswith(prefix):
+            continue
         try:
             n.remove()
         except Exception:
             pass
+
+
+def _matrix_payload(selected: list, results: dict, interrupted: bool) -> dict:
+    expected = [target.id for target in selected]
+    terminal = dict(results)
+    for target_id in expected:
+        if target_id not in terminal:
+            terminal[target_id] = {
+                "target": target_id,
+                "scenario": "?",
+                "ok": False,
+                "duration": 0,
+                "error": "Case did not produce a terminal result",
+                "steps": [],
+            }
+    complete = set(terminal) == set(expected) and len(terminal) == len(expected)
+    return {"ok": not interrupted and complete and all(result.get("ok", False) for result in terminal.values()), "results": [terminal[target_id] for target_id in expected]}
+
+
+def _write_results(path: Path, payload: dict) -> None:
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
 
 
 def _cmd_verbs() -> int:
@@ -67,6 +103,14 @@ def _cmd_validate(scenario_name: str | None) -> int:
     macros = load_macros()
     scenarios = load_scenarios()
     targets = load_targets()
+    settings = load_settings()
+    if scenario_name in (None, "all"):
+        if "all" not in scenarios:
+            print("FAIL release gate: scenarios/all.yaml is missing")
+            return 1
+        if str(settings.get("run", {}).get("scenario", "")) != "all":
+            print("FAIL release gate: settings.yaml run.scenario must be 'all'")
+            return 1
     if scenario_name:
         if scenario_name not in scenarios:
             print(f"No such scenario: {scenario_name}", file=sys.stderr)
@@ -86,13 +130,13 @@ def _cmd_validate(scenario_name: str | None) -> int:
 
 
 def _select_targets(targets: dict, target_name: str, scenario: dict) -> tuple[list, list]:
-    requested = list(targets.values()) if target_name == "all" else [targets[target_name]]
+    requested = list(targets.values()) if target_name == "all" else [targets[name.strip()] for name in target_name.split(",") if name.strip()]
     return requested, [t for t in requested if scenario_matches_target(scenario, t)]
 
 
 def _selection_defaults(settings: dict) -> tuple[str, str]:
     run = settings.get("run", {})
-    return str(run.get("scenario", "sync")), str(run.get("target", "all"))
+    return str(run.get("scenario", "all")), str(run.get("target", "all"))
 
 
 def _cmd_targets(scenario_name: str | None, target_name: str | None) -> int:
@@ -244,13 +288,27 @@ def main(argv: list[str] | None = None) -> int:
         s.get("images", {}).get("client", "automodpack-autotest-client:local")
     )
     out_dir.mkdir(parents=True, exist_ok=True)
+    reap_orphaned_scopes()
+    asset_cache = deduplicate_asset_objects(out_dir.parent / ".hmc-cache")
+    if asset_cache.linked_files or asset_cache.invalid_objects or asset_cache.link_failures:
+        logger.info(
+            "HMC assets: linked %d duplicates, reclaimed %.2f GiB, invalid=%d, link failures=%d",
+            asset_cache.linked_files,
+            asset_cache.reclaimed_bytes / (1024 ** 3),
+            asset_cache.invalid_objects,
+            asset_cache.link_failures,
+        )
 
     results: dict = {}
     interrupted = False
+    resource_scope = secrets.token_hex(4)
+    supervisor = RunSupervisor(resource_scope)
     try:
         executor = ThreadPoolExecutor(
             max_workers=max(1, args.jobs or rc.get("jobs", 1))
         )
+        previous_sigterm_handler = signal.signal(signal.SIGTERM, _interrupt_on_termination)
+        task_map = {}
         try:
             task_map = {
                 executor.submit(
@@ -261,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
                     artifact_dir=artifact_dir,
                     client_image=client_image,
                     settings=s,
+                    resource_scope=resource_scope,
                 ): t
                 for t in selected
             }
@@ -279,22 +338,25 @@ def main(argv: list[str] | None = None) -> int:
             for ff in task_map:
                 ff.cancel()
             try:
-                _kill_amp_containers()
+                _cleanup_run_resources(resource_scope)
             except KeyboardInterrupt:
                 print("Force exit.", file=sys.stderr)
                 os._exit(1)
             print("Cleanup complete.", file=sys.stderr)
 
         finally:
+            signal.signal(signal.SIGTERM, previous_sigterm_handler)
             executor.shutdown(wait=False)
-            ok = all(r.get("ok", False) for r in results.values())
-            (out_dir / "results.json").write_text(
-                json.dumps({"ok": ok, "results": list(results.values())}, indent=2)
-            )
+            payload = _matrix_payload(selected, results, interrupted)
+            ok = payload["ok"]
+            _write_results(out_dir / "results.json", payload)
             if interrupted:
+                supervisor.close()
                 os._exit(1)
 
+        supervisor.close()
         return 0 if ok else 1
 
     except KeyboardInterrupt:
+        supervisor.close()
         os._exit(1)

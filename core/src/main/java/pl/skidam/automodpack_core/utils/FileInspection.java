@@ -35,6 +35,9 @@ public class FileInspection {
 	public record HashPathPair(String hash, Path path) {}
 
 	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) implements Serializable {
+		public Mod at(Path newPath) {
+			return new Mod(IDs, hash, version, newPath, deps, nestedMods);
+		}
 
 		// Magic to de/serialize Path properly
 
@@ -132,7 +135,7 @@ public class FileInspection {
 		Set<String> rootIds = new HashSet<>(metadata.provides());
 		rootIds.add(metadata.modId());
 		try (Stream<Path> walk = Files.walk(fs.getPath("/"))) {
-			return walk.filter(path -> path.toString().endsWith(".jar")).anyMatch(path -> nestedModHasAnyId(path, rootIds));
+			return walk.filter(JarUtils::isRegularJar).anyMatch(path -> nestedModHasAnyId(path, rootIds));
 		} catch (IOException e) {
 			LOGGER.debug("Failed to inspect nested mod IDs");
 			return false;
@@ -154,7 +157,17 @@ public class FileInspection {
 	}
 
 	private static boolean isJarInvalid(Path file) {
-		return file == null || !Files.exists(file) || !file.getFileName().toString().endsWith(".jar");
+		if (file == null || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return true;
+		if (JarUtils.hasJarExtension(file)) return false;
+		try (InputStream input = Files.newInputStream(file)) {
+			int first = input.read();
+			int second = input.read();
+			int third = input.read();
+			int fourth = input.read();
+			return !(first == 'P' && second == 'K' && ((third == 3 && fourth == 4) || (third == 5 && fourth == 6) || (third == 7 && fourth == 8)));
+		} catch (IOException e) {
+			return true;
+		}
 	}
 
 	private static <T> T extractBasicInfo(Path file, Function<ModMetadata, T> extractor) {
@@ -168,12 +181,12 @@ public class FileInspection {
 		return null;
 	}
 
-	// TODO optimize it by caching and scanning only defined paths
+	/** Scans all nested JAR entries; {@code ModFileCache} caches the resulting inspection by content hash. */
 	private static Set<Mod> scanForNestedMods(FileSystem parentFs) {
 		Set<Mod> nestedMods = new HashSet<>();
 		try (Stream<Path> walk = Files.walk(parentFs.getPath("/"))) {
 			for (Path path : walk.toList()) {
-				if (path.toString().endsWith(".jar") && !path.equals(parentFs.getPath("/"))) {
+				if (JarUtils.isRegularJar(path) && !path.equals(parentFs.getPath("/"))) {
 					try (InputStream is = Files.newInputStream(path)) {
 						Mod nested = readModFromStream(path, is);
 						if (nested != null) nestedMods.add(nested);
@@ -211,7 +224,7 @@ public class FileInspection {
 
 					if (name.endsWith(".toml")) metadata = parseTomlMetadata(reader);
 					else metadata = parseJsonMetadata(reader);
-				} else if (name.endsWith(".jar")) {
+				} else if (JarUtils.hasJarExtension(name)) {
 					// Wrap ZIS to protect current stream position
 					Mod child = readModFromStream(virtualPath.resolve(name), new FilterInputStream(zis) {
 						@Override

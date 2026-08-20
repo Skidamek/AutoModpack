@@ -2,16 +2,11 @@ package pl.skidam.automodpack_loader_core_neoforge;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.lang.reflect.Field;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -19,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
@@ -28,11 +24,11 @@ import pl.skidam.automodpack_core.utils.FileInspection;
  * grows via its private {@code appendLoader(name, List<JarContents>)}. Because
  * {@code FMLLoader.buildTransformingLoader()} always does
  * {@code gameLoader.setFallbackClassLoader(currentClassLoader)}, growing that same chain with a
- * modpack-folder jar's classes BEFORE the game loader is built makes them resolve through that
+ * active-projection jar's classes BEFORE the game loader is built makes them resolve through that
  * native fallback with no manual class/resource bridging, {@code addReads}, or {@code Unsafe}.
  *
  * <p>
- * This class inspects and registers modpack-folder early-service jars. Once appended, FML discovers
+ * This class inspects and registers active-projection early-service jars. Once appended, FML discovers
  * their locators, readers, language loaders, and class processors through its native ServiceLoader
  * passes; AutoModpack only invokes GraphicsBootstrapper early because that pass already happened.
  */
@@ -142,7 +138,7 @@ public final class EarlyServiceLayer {
 			eligible = !services.isEmpty() && HANDLEABLE_SERVICES.containsAll(services);
 			standalone = Files.exists(fs.getPath("META-INF/neoforge.mods.toml")) && !FileInspection.hasNestedModWithSameId(fs);
 			if (Files.exists(fs.getPath(GRAPHICS_BOOTSTRAPPER_SERVICE))) {
-				impls.put(GRAPHICS_BOOTSTRAPPER_SERVICE, readServiceImpls(fs, GRAPHICS_BOOTSTRAPPER_SERVICE));
+				impls.put(GRAPHICS_BOOTSTRAPPER_SERVICE, LoaderServiceFiles.readImplementations(fs, GRAPHICS_BOOTSTRAPPER_SERVICE));
 			}
 		} catch (Exception e) {
 			LOGGER.warn("[AutoModpack] Could not inspect {}; not handling it in place", jar.getFileName(), e);
@@ -163,21 +159,4 @@ public final class EarlyServiceLayer {
 		return info(jar).standalone();
 	}
 
-	private static List<String> readServiceImpls(FileSystem fs, String serviceFile) {
-		List<String> impls = new ArrayList<>();
-		Path service = fs.getPath(serviceFile);
-		if (!Files.exists(service)) return impls;
-		try (InputStream is = Files.newInputStream(service); BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-			String line;
-			while ((line = reader.readLine()) != null) {
-				int comment = line.indexOf('#');
-				if (comment >= 0) line = line.substring(0, comment);
-				line = line.trim();
-				if (!line.isEmpty()) impls.add(line);
-			}
-		} catch (Exception e) {
-			LOGGER.error("[AutoModpack] Failed to read {}", serviceFile, e);
-		}
-		return impls;
-	}
 }

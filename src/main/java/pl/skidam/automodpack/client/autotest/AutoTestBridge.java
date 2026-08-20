@@ -4,7 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -18,6 +20,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
+import pl.skidam.automodpack.client.ScreenImpl;
 /*? if >= 1.21.10 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -32,6 +35,7 @@ import net.minecraft.network.chat.Component;
 *//*?}*/
 
 import java.io.IOException;
+import java.awt.image.BufferedImage;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -41,13 +45,20 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
+import javax.imageio.ImageIO;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -55,14 +66,22 @@ public final class AutoTestBridge {
 	private static final AtomicBoolean STARTED = new AtomicBoolean(false);
 	private static volatile Path bridgeDir;
 	private static final AtomicBoolean CLIENT_READY = new AtomicBoolean(false);
-	private static volatile boolean reloadFinished = false;
+	private static final AtomicBoolean RELOAD_FINISHED = new AtomicBoolean(false);
+	private static final Object READY_STATE_LOCK = new Object();
+	private static final AtomicBoolean READY_STATE_PUBLISHED = new AtomicBoolean(false);
+	private static final AtomicBoolean READY_STATE_WRITE_FAILED = new AtomicBoolean(false);
+	private static final AtomicReference<PendingScreenshot> PENDING_SCREENSHOT = new AtomicReference<>();
+	private static final AtomicReference<Screen> OBSERVED_SCREEN = new AtomicReference<>();
+	private static final AtomicLong SCREEN_REVISION = new AtomicLong();
+	private static final long SCREENSHOT_SETTLE_TIMEOUT_SECONDS = 30;
 
 	public static void markReloadFinished() {
-		reloadFinished = true;
+		RELOAD_FINISHED.set(true);
+		onClientReady();
 	}
 
 	public static boolean hasReloadFinished() {
-		return reloadFinished;
+		return RELOAD_FINISHED.get();
 	}
 
 	public static void start() {
@@ -96,20 +115,29 @@ public final class AutoTestBridge {
 	}
 
 	public static void onClientReady() {
-		if (!CLIENT_READY.compareAndSet(false, true)) return;
-		Path dir = bridgeDir;
-		if (dir == null) return;
-		try {
-			writeFile(dir.resolve("bridge-state.json"), "{\"status\":\"ready\"}");
-			LOGGER.info("AutoModpack autotest: client ready, wrote bridge-state.json");
-		} catch (IOException e) {
-			LOGGER.error("Cannot write client-ready state", e);
+		CLIENT_READY.set(true);
+		publishReadyState();
+	}
+
+	private static void publishReadyState() {
+		if (!CLIENT_READY.get()) return;
+		synchronized (READY_STATE_LOCK) {
+			if (READY_STATE_PUBLISHED.get()) return;
+			Path dir = bridgeDir;
+			if (dir == null) return;
+			try {
+				writeFile(dir.resolve("bridge-state.json"), "{\"status\":\"ready\"}");
+				READY_STATE_PUBLISHED.set(true);
+				READY_STATE_WRITE_FAILED.set(false);
+				LOGGER.info("AutoModpack autotest: client ready, wrote bridge-state.json");
+			} catch (IOException e) {
+				if (READY_STATE_WRITE_FAILED.compareAndSet(false, true)) LOGGER.error("Cannot write client-ready state", e);
+			}
 		}
 	}
 
 	private static void run(Path gameDir, String token) {
 		Path dir = gameDir.resolve("automodpack/autotest");
-		bridgeDir = dir;
 		try {
 			Files.createDirectories(dir);
 		} catch (IOException e) {
@@ -117,11 +145,14 @@ public final class AutoTestBridge {
 			return;
 		}
 
+		bridgeDir = dir;
 		LOGGER.info("AutoModpack bridge ready at {}", dir);
+		publishReadyState();
 		Path cmd = dir.resolve("bridge-command.json");
 		Path rsp = dir.resolve("bridge-response.json");
 		while (true) {
 			try {
+				if (CLIENT_READY.get() && !READY_STATE_PUBLISHED.get()) publishReadyState();
 				if (Files.exists(cmd)) {
 					String json = Files.readString(cmd, StandardCharsets.UTF_8);
 					Files.delete(cmd);
@@ -157,6 +188,7 @@ public final class AutoTestBridge {
 			case "gui" -> onMain(() -> gui().toString());
 			case "click" -> onMain(() -> click(req));
 			case "text" -> onMain(() -> text(req));
+			case "screenshot" -> screenshot(req);
 			case "connect" -> onMain(() -> connect(req));
 			case "disconnect" -> onMain(AutoTestBridge::disconnect);
 			case "quit" -> onMain(AutoTestBridge::quit);
@@ -165,7 +197,7 @@ public final class AutoTestBridge {
 	}
 
 	private static Screen currentScreen() {
-		return (Screen) new ScreenManager().getScreen().orElse(null);
+		return (Screen) ScreenManager.getScreen().orElse(null);
 	}
 
 	private static JsonObject gui() {
@@ -173,6 +205,7 @@ public final class AutoTestBridge {
 		JsonObject o = base();
 		o.addProperty("screenClass", s == null ? null : s.getClass().getName());
 		o.addProperty("title", s == null ? null : s.getTitle().getString());
+		o.addProperty("screenRevision", screenRevision(s));
 		GuiElements elements = elements(s);
 		o.add("buttons", elementsJson(elements.buttons()));
 		o.add("textFields", elementsJson(elements.textFields()));
@@ -184,6 +217,7 @@ public final class AutoTestBridge {
 	private static String click(JsonObject req) {
 		Screen s = currentScreen();
 		if (s == null) return err("no screen");
+		if (screenRevision(s) != optLong(req, "screenRevision", -1)) return err("stale_screen", "GUI screen changed before click");
 
 		int button = optInt(req, "button", 0);
 		int x;
@@ -217,6 +251,7 @@ public final class AutoTestBridge {
 	private static String text(JsonObject req) {
 		Screen s = currentScreen();
 		if (s == null) return err("no screen");
+		if (screenRevision(s) != optLong(req, "screenRevision", -1)) return err("stale_screen", "GUI screen changed before text input");
 
 		int id = optInt(req, "id", -1);
 		GuiElement e = elements(s).byId(id);
@@ -226,6 +261,142 @@ public final class AutoTestBridge {
 
 		editBox.setValue(optString(req, "text"));
 		return ok();
+	}
+
+	private static String screenshot(JsonObject req) throws Exception {
+		if (!Boolean.getBoolean("automodpack.autotest.render")) {
+			throw new IOException("screenshots require a scenario with renderClient: true");
+		}
+		Path dir = bridgeDir;
+		if (dir == null) throw new IOException("bridge directory is unavailable");
+		String name = screenshotName(optString(req, "name"));
+		Path screenshots = dir.resolve("screenshots");
+		Files.createDirectories(screenshots);
+		Path path = screenshots.resolve(name + ".png");
+		CompletableFuture<String> captured = new CompletableFuture<>();
+		Minecraft minecraft = Minecraft.getInstance();
+		minecraft.execute(() -> queueScreenshot(captured, path));
+		try {
+			return captured.get(SCREENSHOT_SETTLE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+		} catch (TimeoutException e) {
+			PendingScreenshot pending = PENDING_SCREENSHOT.get();
+			if (pending != null && pending.captured() == captured && PENDING_SCREENSHOT.compareAndSet(pending, null)) pending.logTimeout();
+			throw new IOException("screenshot did not settle within " + SCREENSHOT_SETTLE_TIMEOUT_SECONDS + " seconds", e);
+		}
+	}
+
+	private static void queueScreenshot(CompletableFuture<String> captured, Path path) {
+		Screen targetScreen = currentScreen();
+		if (targetScreen == null) {
+			LOGGER.error("AutoModpack autotest screenshot {} rejected: there is no active screen", path.getFileName());
+			captured.completeExceptionally(new IOException("cannot capture a screenshot without an active screen"));
+			return;
+		}
+		if (!PENDING_SCREENSHOT.compareAndSet(null, new PendingScreenshot(captured, path, targetScreen))) {
+			captured.completeExceptionally(new IOException("another screenshot is already pending"));
+		}
+	}
+
+	public static void onFrameRendered() {
+		PendingScreenshot pending = PENDING_SCREENSHOT.get();
+		if (pending == null) return;
+		RenderedFrameState state = RenderedFrameState.capture();
+		if (!pending.observe(state)) return;
+		if (!PENDING_SCREENSHOT.compareAndSet(pending, null)) return;
+		try {
+			Minecraft minecraft = Minecraft.getInstance();
+			/*? if >=26.2 {*/
+			Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), 1, image -> completeScreenshot(pending.captured(), pending.path(), image));
+		/*?} else if >=1.21.6 {*/
+			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), 1, image -> completeScreenshot(pending.captured(), pending.path(), image));
+			*//*?} else if >=1.21.5 {*/
+			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), image -> completeScreenshot(pending.captured(), pending.path(), image));
+			*//*?} else {*/
+			/*completeScreenshot(pending.captured(), pending.path(), Screenshot.takeScreenshot(minecraft.getMainRenderTarget()));
+			*//*?}*/
+		} catch (Exception e) {
+			pending.captured().completeExceptionally(e);
+		}
+	}
+
+	private static final class PendingScreenshot {
+		private final CompletableFuture<String> captured;
+		private final Path path;
+		private final Screen targetScreen;
+		private volatile RenderedFrameState lastState;
+		private RenderedFrameState previousState;
+
+		private PendingScreenshot(CompletableFuture<String> captured, Path path, Screen targetScreen) {
+			this.captured = captured;
+			this.path = path;
+			this.targetScreen = targetScreen;
+		}
+
+		private boolean observe(RenderedFrameState state) {
+			lastState = state;
+			boolean settled = state.isSettledAfter(previousState, targetScreen);
+			previousState = state;
+			return settled;
+		}
+
+		private void logTimeout() {
+			RenderedFrameState state = lastState;
+			LOGGER.error("AutoModpack autotest screenshot {} did not settle: {}", path.getFileName(), state == null ? "no rendered frame observed" : state.describeFor(targetScreen));
+		}
+
+		private CompletableFuture<String> captured() {
+			return captured;
+		}
+
+		private Path path() {
+			return path;
+		}
+	}
+
+	private record RenderedFrameState(Screen screen, boolean overlayVisible) {
+		private static RenderedFrameState capture() {
+			Minecraft minecraft = Minecraft.getInstance();
+			/*? if >=26.2 {*/
+			// Since 26.2 Gui owns the render overlay; sample it after GameRenderer rendered the frame.
+			return new RenderedFrameState(currentScreen(), minecraft.gui.overlay() != null);
+			/*?} else {*/
+			/*return new RenderedFrameState(currentScreen(), minecraft.getOverlay() != null);
+			*//*?}*/
+		}
+
+		private boolean isSettledAfter(RenderedFrameState previous, Screen targetScreen) {
+			return previous != null && screen == targetScreen && previous.screen == targetScreen && !overlayVisible && !previous.overlayVisible && screen == previous.screen;
+		}
+
+		private String describeFor(Screen targetScreen) {
+			return "targetScreen=" + targetScreen.getClass().getName() + ", renderedScreen=" + (screen == null ? "<none>" : screen.getClass().getName()) + ", overlayVisible=" + overlayVisible;
+		}
+	}
+
+	private static void completeScreenshot(CompletableFuture<String> captured, Path path, NativeImage source) {
+		try (source) {
+			BufferedImage image = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+			image.setRGB(0, 0, source.getWidth(), source.getHeight(), source.makePixelArray(), 0, source.getWidth());
+			if (!ImageIO.write(image, "png", path.toFile())) throw new IOException("Java PNG encoder is unavailable");
+			JsonObject response = base();
+			response.addProperty("path", "automodpack/autotest/screenshots/" + path.getFileName());
+			response.addProperty("width", source.getWidth());
+			response.addProperty("height", source.getHeight());
+			captured.complete(response.toString());
+		} catch (Exception e) {
+			captured.completeExceptionally(e);
+		}
+	}
+
+	private static String screenshotName(String requested) {
+		String source = requested.isBlank() ? "screen" : requested;
+		StringBuilder safe = new StringBuilder();
+		for (int index = 0; index < source.length(); index++) {
+			char character = source.charAt(index);
+			if (Character.isLetterOrDigit(character) || character == '-' || character == '_') safe.append(character);
+			else if (safe.length() > 0 && safe.charAt(safe.length() - 1) != '-') safe.append('-');
+		}
+		return safe.length() == 0 ? "screen" : safe.toString();
 	}
 
 	private static String connect(JsonObject req) {
@@ -251,17 +422,20 @@ public final class AutoTestBridge {
 	private static String disconnect() {
 		Minecraft minecraft = Minecraft.getInstance();
 		if (minecraft.level == null) {
-			minecraft.gui.setScreen(new TitleScreen());
+			ScreenImpl.setScreen(new TitleScreen());
 			return ok();
 		}
 
 		/*? if >=1.21.6 {*/
 		minecraft.level.disconnect(translatable("multiplayer.status.quitting"));
 		minecraft.clearClientLevel(new GenericMessageScreen(translatable("multiplayer.disconnect.generic")));
-		/*?} else {*/
+		ScreenImpl.setScreen(new TitleScreen());
+		/*?} else if >=1.21.1 {*/
+		/*minecraft.disconnect(new TitleScreen());
+		*//*?} else {*/
 		/*minecraft.level.disconnect();
+		minecraft.clearLevel(new TitleScreen());
 		*//*?}*/
-		minecraft.gui.setScreen(new TitleScreen());
 		return ok();
 	}
 
@@ -346,7 +520,7 @@ public final class AutoTestBridge {
 	}
 
 	private static Set<Object> newSeenSet() {
-		return java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+		return Collections.newSetFromMap(new IdentityHashMap<>());
 	}
 
 	private static <T> String onMain(ThrowingSupplier<T> supplier) throws Exception {
@@ -386,6 +560,23 @@ public final class AutoTestBridge {
 		return o.toString();
 	}
 
+	private static String err(String code, String message) {
+		JsonObject o = new JsonObject();
+		o.addProperty("ok", false);
+		o.addProperty("code", code);
+		o.addProperty("error", message);
+		return o.toString();
+	}
+
+	private static long screenRevision(Screen screen) {
+		Screen observed = OBSERVED_SCREEN.get();
+		while (observed != screen) {
+			if (OBSERVED_SCREEN.compareAndSet(observed, screen)) return SCREEN_REVISION.incrementAndGet();
+			observed = OBSERVED_SCREEN.get();
+		}
+		return SCREEN_REVISION.get();
+	}
+
 	private static boolean has(JsonObject o, String k) {
 		JsonElement e = o.get(k);
 		return e != null && !e.isJsonNull();
@@ -399,6 +590,11 @@ public final class AutoTestBridge {
 	private static int optInt(JsonObject o, String k, int d) {
 		JsonElement e = o.get(k);
 		return e != null && !e.isJsonNull() ? e.getAsInt() : d;
+	}
+
+	private static long optLong(JsonObject o, String k, long d) {
+		JsonElement e = o.get(k);
+		return e != null && !e.isJsonNull() ? e.getAsLong() : d;
 	}
 
 	/*? if >= 1.19.2 {*/

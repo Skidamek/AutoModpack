@@ -3,6 +3,7 @@ description: |
   Full round trip: boot, trust the certificate, sync the modpack, verify the files,
   restart the client, rejoin, and confirm the player reaches the game with the
   modpack applied.
+renderClient: true
 
 flow:
   - use: boot
@@ -11,7 +12,7 @@ flow:
   - do: verify_files
     name: verify all synced files are present
   - do: assert
-    name: standard mods/ dir holds only the AutoModpack loader jar (modpack mods stay in the modpack folder)
+    name: standard mods/ dir holds only the AutoModpack loader jar (modpack mods stay in the active projection)
     that:
       only_files:
         dir: mods

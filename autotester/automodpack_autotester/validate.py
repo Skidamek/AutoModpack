@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from urllib.parse import urlparse
 
 from .config import scenario_matches_target
@@ -17,6 +18,37 @@ _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")
 _COUNT_FIELDS = ("count", "min_count", "max_count")
 _REMOTE_MOD_FIELDS = {"url", "sha512", "name"}
 _SHA512 = re.compile(r"[0-9a-fA-F]{128}")
+_PRESERVATION_REASONS = {"SERVER_REMOVAL", "MODPACK_REMOVAL", "MODPACK_DEACTIVATION", "LOCAL_CONFLICT", "STRICT_INSTALL", "STRICT_REPAIR", "EDITABLE_RESET"}
+_PRESERVATION_STATUSES = {"AVAILABLE", "RESTORED", "SAVED_COPY"}
+_RELEASE_GATE_CAPABILITIES = frozenset({
+    "bootstrap",
+    "groups",
+    "patch-notes",
+    "multiplayer-settings",
+    "pack-switching",
+    "generation-update",
+    "conflict-preservation",
+    "preservation-vault",
+    "storage-maintenance",
+    "server-history-compaction",
+    "server-generation-rollback",
+    "server-object-gc",
+    "fresh-generation-deletion",
+    "removal",
+    "secure-bootstrap",
+    "offline-repair",
+    "repair-cas-integrity",
+    "first-install-cleanup-consent",
+    "repair-ui-navigation",
+    "storage-verification",
+})
+_RELEASE_GATE_REQUIRED_VERBS = {
+    "server-generation-rollback": "rollback_server_generation",
+    "server-object-gc": "collect_server_objects",
+    "offline-repair": "mutate_client_file",
+    "repair-cas-integrity": "mutate_active_object",
+    "storage-verification": "assert_client_object",
+}
 
 
 def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None) -> list[str]:
@@ -24,6 +56,25 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
 
     if not isinstance(scenario.get("id"), str) or not scenario["id"].strip():
         problems.append("scenario needs a non-empty string 'id'")
+    if scenario.get("id") == "all":
+        release_macros = dict(macros)
+        release_macros.update(scenario.get("sequences") or {})
+        declared = scenario.get("releaseGate", {}).get("covers", [])
+        if not isinstance(declared, list) or len(declared) != len(_RELEASE_GATE_CAPABILITIES) or set(declared) != _RELEASE_GATE_CAPABILITIES:
+            problems.append(f"release-gate scenario must declare exactly these capabilities: {sorted(_RELEASE_GATE_CAPABILITIES)}")
+        generations = (scenario.get("serverFiles", {}) or {}).get("generations")
+        if not isinstance(generations, list) or len(generations) < 2:
+            problems.append("release-gate scenario needs at least two serverFiles.generations entries")
+        for capability, required_verb in _RELEASE_GATE_REQUIRED_VERBS.items():
+            if not _contains_verb(scenario.get("flow", []), required_verb, release_macros):
+                problems.append(f"release-gate scenario must cover {capability} with verb {required_verb!r}")
+    generations = (scenario.get("serverFiles", {}) or {}).get("generations")
+    if generations is not None:
+        if not isinstance(generations, list):
+            problems.append("serverFiles.generations must be a list")
+        else:
+            for index, generation in enumerate(generations):
+                _check_generation_files(generation, problems, f"serverFiles.generations[{index}]")
 
     mode = str(scenario.get("mode", "full")).lower()
     if mode not in _VALID_MODES:
@@ -109,6 +160,86 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                 problems.append(f"unknown verb: {verb!r}")
             if verb == "stage_modpack":
                 _check_stage_modpack(step, problems, scoped_targets, label)
+            elif verb == "publish_server_generation":
+                _check_publish_generation(step, problems, label)
+            elif verb == "assert_generation":
+                _check_generation_assertion(step, problems, label)
+            elif verb in ("assert_file_content", "wait_file_content", "write_file", "mutate_client_file", "mutate_active_object", "assert_client_object", "mutate_preservation_object", "seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_preservation_claim"):
+                if not isinstance(step.get("path"), str) or not step["path"].strip():
+                    if verb not in ("assert_preservation_claim", "mutate_preservation_object"):
+                        problems.append(f"{label}.path: expected a non-empty relative path")
+                if verb in ("wait_file_content", "write_file") and not isinstance(step.get("content"), str):
+                    problems.append(f"{label}.content: expected a string")
+                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture", "assert_preservation_claim", "mutate_preservation_object") and step.get("fixture") is not None:
+                    _check_mod_fixture(step.get("fixture"), problems, f"{label}.fixture")
+                if verb in ("seed_unowned_local_file", "seed_same_path_conflict", "seed_mod_fixture", "assert_mod_fixture") and step.get("fixture") is not None and isinstance(step.get("path"), str) and not step["path"].lower().endswith(".jar"):
+                    problems.append(f"{label}.path: valid mod fixtures must use a .jar path")
+                if verb == "seed_unowned_local_file" and step.get("fixture") is None and isinstance(step.get("path"), str) and step["path"].lower().endswith(".jar"):
+                    problems.append(f"{label}.fixture: .jar paths require a valid mod fixture mapping")
+                if verb == "seed_mod_fixture" and step.get("fixture") is None:
+                    problems.append(f"{label}.fixture: this verb requires a valid mod fixture mapping")
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and (not isinstance(step.get("packId"), str) or not step["packId"].strip()):
+                    problems.append(f"{label}.packId: expected a non-empty pack ID")
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "content" in step and not isinstance(step["content"], str):
+                    problems.append(f"{label}.content: expected a string")
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "originalPath" in step and (not isinstance(step["originalPath"], str) or not step["originalPath"].strip()):
+                    problems.append(f"{label}.originalPath: expected a non-empty relative path")
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "reason" in step and step["reason"] not in _PRESERVATION_REASONS:
+                    problems.append(f"{label}.reason: unknown preservation reason {step['reason']!r}")
+                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "status" in step and step["status"] not in _PRESERVATION_STATUSES:
+                    problems.append(f"{label}.status: unknown preservation status {step['status']!r}")
+                if verb in ("mutate_client_file", "mutate_active_object", "mutate_preservation_object") and step.get("action") not in ("corrupt", "delete"):
+                    problems.append(f"{label}.action: expected 'corrupt' or 'delete'")
+                for field in ("present", "valid", "objectValid"):
+                    if field in step and not isinstance(step[field], bool):
+                        problems.append(f"{label}.{field}: expected a boolean")
+                if "count" in step and (not isinstance(step["count"], int) or isinstance(step["count"], bool) or step["count"] < 0):
+                    problems.append(f"{label}.count: expected a non-negative integer")
+
+
+def _contains_verb(steps, wanted, macros, stack=()):
+    if not isinstance(steps, list):
+        return False
+    for raw in steps:
+        if isinstance(raw, str):
+            if raw == wanted:
+                return True
+            if raw in macros and raw not in stack and _contains_verb(macros[raw], wanted, macros, (*stack, raw)):
+                return True
+        elif isinstance(raw, dict):
+            if raw.get("do") == wanted:
+                return True
+            name = raw.get("use")
+            if name == wanted:
+                return True
+            if name in macros and name not in stack and _contains_verb(macros[name], wanted, macros, (*stack, name)):
+                return True
+            if _contains_verb(raw.get("steps"), wanted, macros, stack):
+                return True
+    return False
+
+
+def _check_generation_files(generation, problems, where):
+    if not isinstance(generation, dict):
+        problems.append(f"{where}: expected a mapping")
+        return
+    files = generation.get("files", [])
+    if not isinstance(files, list):
+        problems.append(f"{where}.files: expected a list")
+        return
+    for index, item in enumerate(files):
+        location = f"{where}.files[{index}]"
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not item["path"].strip():
+            problems.append(f"{location}: expected a mapping with a non-empty path")
+            continue
+        path = Path(item["path"])
+        if path.is_absolute() or ".." in path.parts:
+            problems.append(f"{location}.path: path must stay inside the server modpack")
+        fixture = item.get("fixture")
+        if fixture is not None:
+            _check_mod_fixture(fixture, problems, f"{location}.fixture")
+            if not item["path"].lower().endswith(".jar"):
+                problems.append(f"{location}.path: valid mod fixtures must use a .jar path")
 
 
 def _check_duration(value, problems, where):
@@ -192,6 +323,48 @@ def _check_stage_modpack(step, problems, scoped_targets, where):
         name = entry.get("name")
         if name is not None and (not isinstance(name, str) or not name or "/" in name or "\\" in name):
             problems.append(f"{loc}.name: expected a plain filename")
+    if "recordOnly" in step and not isinstance(step["recordOnly"], bool):
+        problems.append(f"{where}.recordOnly: expected a boolean")
+    if "packId" in step and (not isinstance(step["packId"], str) or not step["packId"].strip()):
+        problems.append(f"{where}.packId: expected a non-empty string")
+    files = step.get("files", [])
+    if not isinstance(files, list):
+        problems.append(f"{where}.files: expected a list")
+    else:
+        for index, item in enumerate(files):
+            if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not item["path"].strip():
+                problems.append(f"{where}.files[{index}]: expected a mapping with a non-empty path")
+            elif "fixture" in item:
+                _check_mod_fixture(item["fixture"], problems, f"{where}.files[{index}].fixture")
+                if not item["path"].lower().endswith(".jar"):
+                    problems.append(f"{where}.files[{index}].path: valid mod fixtures must use a .jar path")
+            if isinstance(item, dict) and "editable" in item and not isinstance(item["editable"], bool):
+                problems.append(f"{where}.files[{index}].editable: expected a boolean")
+
+
+def _check_mod_fixture(value, problems, where):
+    if not isinstance(value, dict):
+        problems.append(f"{where}: expected a mapping")
+        return
+    for field in ("modId", "version", "marker"):
+        if not isinstance(value.get(field), str) or not value[field].strip():
+            problems.append(f"{where}.{field}: expected a non-empty string")
+
+
+def _check_publish_generation(step, problems, where):
+    value = step.get("generation", 1)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        problems.append(f"{where}.generation: expected a positive integer")
+
+
+def _check_generation_assertion(step, problems, where):
+    groups = step.get("groups", {})
+    if not isinstance(groups, dict):
+        problems.append(f"{where}.groups: expected a mapping")
+        return
+    for group_id, requirements in groups.items():
+        if not isinstance(group_id, str) or not group_id.strip() or not isinstance(requirements, dict):
+            problems.append(f"{where}.groups: expected string IDs mapped to field mappings")
 
 
 def _check_per_target(value, scoped_targets, problems, where, validator):

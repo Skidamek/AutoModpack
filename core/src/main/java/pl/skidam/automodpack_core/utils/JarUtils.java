@@ -3,10 +3,25 @@ package pl.skidam.automodpack_core.utils;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.lang.reflect.Method;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.CodeSource;
+import java.util.Locale;
 
 public class JarUtils {
+	private static final String JAR_SUFFIX = ".jar";
+
+	public static boolean hasJarExtension(Path path) {
+		return path != null && path.getFileName() != null && hasJarExtension(path.getFileName().toString());
+	}
+
+	public static boolean hasJarExtension(String filename) {
+		return filename != null && filename.toLowerCase(Locale.ROOT).endsWith(JAR_SUFFIX);
+	}
+
+	public static boolean isRegularJar(Path path) {
+		return hasJarExtension(path) && Files.isRegularFile(path);
+	}
 
 	public static Path getJarPath(Class<?> clazz) {
 		try {

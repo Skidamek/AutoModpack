@@ -2,16 +2,12 @@ package pl.skidam.automodpack_loader_core_forge;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.lang.module.Configuration;
 import java.lang.module.ModuleFinder;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -41,7 +37,11 @@ import cpw.mods.modlauncher.api.ITransformer;
 import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
@@ -59,7 +59,7 @@ import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
  * <p>
  * Handled services - {@code ITransformationService} (forwarded by
  * {@link AutoModpackTransformationService}), {@code IModLocator}, and {@code IDependencyLocator} -
- * let a mod shipping only these load straight from the modpack folder with no copy.
+ * let a mod shipping only these load straight from the active projection with no copy.
  */
 public final class EarlyServiceLayer {
 
@@ -74,7 +74,7 @@ public final class EarlyServiceLayer {
 	// transformation service's lifecycle is forwarded (see AutoModpackTransformationService).
 	static final List<String> ACTIVELY_RUN_SERVICES = List.of(CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE, TRANSFORMATION_SERVICE);
 
-	// Every service hostable from the modpack folder without copying: the actively-run ones above,
+	// Every service hostable from the active projection without copying: the actively-run ones above,
 	// plus language providers (passive - picked up from the GAME layer).
 	public static final Set<String> HANDLEABLE_SERVICES = Stream.concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
 			.collect(Collectors.toUnmodifiableSet());
@@ -112,7 +112,7 @@ public final class EarlyServiceLayer {
 				}
 			}
 		} catch (Throwable t) {
-			LOGGER.warn("[AutoModpack] Could not read the loader's early-service list; using the built-in fallback", t);
+			LOGGER.warn("[AutoModpack] Could not read the loader's early-service list; using the built-in fallback ({}: {})", t.getClass().getName(), t.getMessage());
 			excluded.add(CANDIDATE_LOCATOR_SERVICE);
 			excluded.add(TRANSFORMATION_SERVICE);
 		}
@@ -161,16 +161,15 @@ public final class EarlyServiceLayer {
 		if (!BOOTSTRAPPED.compareAndSet(false, true)) return;
 
 		try {
-			// selectedModpackDir is published by Preload (run just before this) and set only when a
-			// modpack is selected on a client.
-			Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
-			if (modpackMods == null || !Files.isDirectory(modpackMods)) return;
+			ClientStorage storage = ClientStorage.open(GameDirectory.current());
+			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
+			if (!Files.isDirectory(activeModsDirectory)) return;
 
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, EarlyServiceLayer::eligibleForInPlace);
+			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
 
 			if (earlyServiceJars.isEmpty()) return;
 
-			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the modpack folder in place", earlyServiceJars.size());
+			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 
 			ModuleLayer serviceLayer = EarlyServiceLayer.class.getModule().getLayer();
 			if (serviceLayer == null) {
@@ -193,7 +192,7 @@ public final class EarlyServiceLayer {
 				}
 			}
 
-			EarlyServiceBridgePlugin.ensureRunsFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
+			EarlyServiceBridgePlugin.registerFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
 		} catch (Throwable t) {
 			LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 		}
@@ -298,7 +297,7 @@ public final class EarlyServiceLayer {
 			for (String service : ACTIVELY_RUN_SERVICES) {
 				if (Files.exists(fs.getPath(service))) {
 					activelyRun = true;
-					impls.put(service, readServiceImpls(fs, service));
+					impls.put(service, LoaderServiceFiles.readImplementations(fs, service));
 				}
 			}
 		} catch (Exception e) {
@@ -313,7 +312,7 @@ public final class EarlyServiceLayer {
 	}
 
 	/**
-	 * Whether this jar's early services can all be run from the modpack folder: it must declare at
+	 * Whether this jar's early services can all be run from the active projection: it must declare at
 	 * least one actively-run service, ship no service outside {@link #HANDLEABLE_SERVICES}, and be a
 	 * jar native Forge would itself exclude from mod discovery for the SERVICE layer. The last part is
 	 * what makes in-place treatment safe - such a jar never loads as a plain mod natively, so replaying
@@ -709,21 +708,4 @@ public final class EarlyServiceLayer {
 		}
 	}
 
-	private static List<String> readServiceImpls(FileSystem fs, String serviceFile) {
-		List<String> impls = new ArrayList<>();
-		Path service = fs.getPath(serviceFile);
-		if (!Files.exists(service)) return impls;
-		try (InputStream is = Files.newInputStream(service); BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-			String line;
-			while ((line = reader.readLine()) != null) {
-				int comment = line.indexOf('#');
-				if (comment >= 0) line = line.substring(0, comment);
-				line = line.trim();
-				if (!line.isEmpty()) impls.add(line);
-			}
-		} catch (Exception e) {
-			LOGGER.error("[AutoModpack] Failed to read {}", serviceFile, e);
-		}
-		return impls;
-	}
 }

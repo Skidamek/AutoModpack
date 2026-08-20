@@ -1,0 +1,88 @@
+id: installed-group-acquisition
+description: |
+  Install only the required group, then select an optional group whose object was
+  never cached. The installed-pack switch must acquire it through the saved
+  authenticated connection before applying the reviewed selection.
+renderClient: true
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: wait_generation
+    name: wait for the required-only installation
+    patchNotes: "Installed group acquisition fixture."
+    timeout: 300s
+  - use: restart_client
+  - use: rejoin
+  - do: disconnect
+    name: return to the title screen
+  - use: open_multiplayer
+  - do: click
+    name: open the installed modpack settings
+    select: { text: Modpack settings }
+  - do: wait_for
+    name: show the unchanged required-only selection
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: "[ ] Optional Feature" }
+        - element: { text: Save, enabled: false }
+  - do: click
+    name: select the never-cached optional group
+    select: { text: Optional Feature }
+  - do: wait_for
+    name: enable save for the changed selection
+    until:
+      all:
+        - element: { text: "[x] Optional Feature" }
+        - element: { text: Save, enabled: true }
+  - do: click
+    name: save the changed installed selection
+    select: { text: Save }
+  - do: wait_for
+    name: acquire the missing object and show its review
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: apply the acquired optional group
+    select: { text: Update }
+  - do: wait_for
+    name: require restart for the changed group selection
+    timeout: 90s
+    until: { screen: RestartScreen }
+  - do: assert_file_content
+    name: verify the never-cached optional file was installed
+    path: config/amp-installed-optional.txt
+    content: "downloaded on selection\n"
+  - do: quit
+    name: stop after the installed group switch succeeded
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    automodpack:
+      config:
+        groups:
+          main:
+            displayName: Core
+            required: true
+            defaultSelected: true
+            syncedFiles: ["/config/amp-installed-base.txt"]
+          optional:
+            displayName: Optional Feature
+            syncedFiles: ["/config/amp-installed-optional.txt"]
+
+serverFiles:
+  modpackName: Installed Group Acquisition
+  marker: config/amp-installed-base.txt
+  generations:
+    - patchNotes: "Installed group acquisition fixture."
+      files:
+        - { group: main, path: config/amp-installed-base.txt, content: "required base\n" }
+        - { group: optional, path: config/amp-installed-optional.txt, content: "downloaded on selection\n" }

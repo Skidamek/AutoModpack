@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.config;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
 
 import java.io.IOException;
 import java.util.*;
@@ -10,25 +11,23 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ConfigUtils {
 
-	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV3 config, boolean saveAfter) {
+	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config, boolean saveAfter) {
 		normalizeServerConfig(config);
 		if (saveAfter) {
 			try {
-				ConfigTools.writeAtomic(serverConfigFile, config);
+				ConfigTools.writeAtomic(SERVER_CONFIG_FILE, config);
 			} catch (IOException e) {
 				throw new ConfigTools.ConfigException("Failed to save server configuration", e);
 			}
 		}
 	}
 
-	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV3 config) {
+	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.defaultFor(MC_VERSION, LOADER);
 		if (config.connectionMode == ModpackConnectionMode.HOLEPUNCH && !ModpackConnectionMode.isHolepunchAvailable(MC_VERSION, LOADER)) {
 			config.connectionMode = ModpackConnectionMode.MAGIC_PACKET;
 			LOGGER.warn("HOLEPUNCH connection mode is unavailable on " + LOADER + " " + MC_VERSION + ". Falling back to MAGIC_PACKET");
 		}
-
-		Map<String, String> fixedNonModpackFilesToDelete = new LinkedHashMap<>(config.nonModpackFilesToDelete.size());
 
 		String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";
 		Pattern pattern = Pattern.compile(prefixPattern);
@@ -43,31 +42,8 @@ public class ConfigUtils {
 				group.syncedFiles = normalizeSyncedFiles(group.syncedFiles, pattern);
 				group.allowEditsInFiles = normalizePathRules(group.allowEditsInFiles, "allowEditsInFiles", pattern);
 				group.overwriteEditableFiles = normalizePathRules(group.overwriteEditableFiles, "overwriteEditableFiles", pattern);
-				group.forceCopyFilesToStandardLocation = normalizePathRules(group.forceCopyFilesToStandardLocation, "forceCopyFilesToStandardLocation",
-						pattern);
 			}
 		}
-
-		for (var entry : config.nonModpackFilesToDelete.entrySet()) {
-			var file = entry.getKey();
-			var hash = entry.getValue();
-			if (file == null) {
-				LOGGER.warn("Ignored null key in nonModpackFilesToDelete.");
-				continue;
-			}
-			var trimmed = file.trim();
-			if (trimmed.isEmpty()) {
-				LOGGER.warn("Ignored empty key in nonModpackFilesToDelete.");
-				continue;
-			}
-			var fixed = pattern.matcher(trimmed).replaceFirst("");
-			if (!fixed.equals(trimmed)) {
-				LOGGER.info("Normalized nonModpackFilesToDelete entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", file, fixed);
-			}
-			fixedNonModpackFilesToDelete.put(prefixSlash(fixed), hash);
-		}
-
-		config.nonModpackFilesToDelete = fixedNonModpackFilesToDelete;
 	}
 
 	private static Set<String> normalizeSyncedFiles(Set<String> syncedFiles, Pattern hostModpackPattern) {
