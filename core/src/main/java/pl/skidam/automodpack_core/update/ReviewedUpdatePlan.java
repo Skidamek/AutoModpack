@@ -205,7 +205,6 @@ public final class ReviewedUpdatePlan {
 		value(digest, "syncAutoModpackVersion", config.syncAutoModpackVersion);
 		value(digest, "syncLoaderVersion", config.syncLoaderVersion);
 		value(digest, "playMusic", config.playMusic);
-		value(digest, "reviewUpdates", config.reviewUpdates);
 	}
 
 	private static <T> void values(MessageDigest digest, String label, List<T> values, Encoder<T> encoder) {
