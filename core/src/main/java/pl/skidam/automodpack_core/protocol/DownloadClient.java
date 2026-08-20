@@ -25,10 +25,12 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
@@ -149,10 +151,33 @@ public class DownloadClient implements AutoCloseable {
 		try {
 			plainSocket.setSoTimeout(10000);
 			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) performMagicHandshake(plainSocket);
-			return new TlsCandidate(wrapWithTls(plainSocket, context), trustManager);
+			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
+			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket, tlsSocket);
+			return new TlsCandidate(tlsSocket, trustManager);
 		} catch (IOException e) {
 			closeQuietly(plainSocket);
 			throw e;
+		}
+	}
+
+	private void awaitTransportUpgrade(HolepunchSocket socket, SSLSocket tlsSocket) throws IOException {
+		try {
+			CompletionStage<Void> upgraded = socket.upgradeTransport().thenRun(() -> {
+				try {
+					socket.enableTlsTrafficCamouflage(tlsSocket.getSession(), true);
+				} catch (Exception exception) {
+					throw new CompletionException("Failed to enable TLS record camouflage", exception);
+				}
+			});
+			upgraded.toCompletableFuture().get(15, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Holepunch transport upgrade interrupted", e);
+		} catch (ExecutionException e) {
+			Throwable cause = e.getCause() == null ? e : e.getCause();
+			throw new IOException("Holepunch transport upgrade failed", cause);
+		} catch (TimeoutException e) {
+			throw new IOException("Holepunch transport upgrade timed out", e);
 		}
 	}
 

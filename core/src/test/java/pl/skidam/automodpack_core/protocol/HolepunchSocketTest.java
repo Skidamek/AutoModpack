@@ -60,6 +60,11 @@ class HolepunchSocketTest {
 		}
 
 		@Override
+		public CompletionStage<Void> upgradeTransport() {
+			return CompletableFuture.completedFuture(null);
+		}
+
+		@Override
 		public void close() {}
 	}
 }
