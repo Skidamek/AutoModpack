@@ -11,10 +11,10 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 
 import net.minecraft.network.chat.Component;
 
@@ -51,8 +51,9 @@ public abstract class EditServerScreenMixin extends Screen {
 		super(title);
 	}
 
-	@Inject(method = "init", at = @At("RETURN"))
-	private void automodpack$addPinStatus(CallbackInfo ci) {
+	@WrapMethod(method = "init")
+	private void automodpack$addPinStatus(Operation<Void> original) {
+		original.call();
 		var origin = toOrigin(serverData.ip);
 		var trust = CertificateTrustStore.get(origin);
 		if (trust == null) return;
@@ -72,13 +73,15 @@ public abstract class EditServerScreenMixin extends Screen {
 		addRenderableWidget(button);
 	}
 
-	@Inject(method = "onAdd", at = @At("HEAD"), cancellable = true)
-	private void automodpack$rejectMalformedPin(CallbackInfo ci) {
+	@WrapMethod(method = "onAdd")
+	private void automodpack$rejectMalformedPin(Operation<Void> original) {
 		ServerAddressPin.Parsed parsed = ServerAddressPin.parse(ipEdit.getValue());
-		if (!parsed.isMalformed()) return;
-		ScreenManager.failure(FailureRequest.of(new IllegalArgumentException(parsed.error()), "automodpack.pin.invalid", FailureCategory.SECURITY,
-				FailureDestination.CURRENT_SCREEN, null));
-		ci.cancel();
+		if (parsed.isMalformed()) {
+			ScreenManager.failure(FailureRequest.of(new IllegalArgumentException(parsed.error()), "automodpack.pin.invalid", FailureCategory.SECURITY,
+					FailureDestination.CURRENT_SCREEN, null));
+			return;
+		}
+		original.call();
 	}
 
 	@ModifyExpressionValue(method = "onAdd", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/components/EditBox;getValue()Ljava/lang/String;", ordinal = 1))
