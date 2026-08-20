@@ -1,5 +1,8 @@
 package pl.skidam.automodpack_loader_core.mods;
 
+import java.nio.file.Path;
+import java.util.List;
+
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
