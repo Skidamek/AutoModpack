@@ -120,6 +120,7 @@ public class ScreenImpl implements ScreenService {
 
 	private static class Screens {
 		private static Screen interactiveParent;
+		private static final LoadingTransition LOADING_TRANSITION = new LoadingTransition(ScreenImpl::executeOnClient);
 
 		private static Screen getScreen() {
 			/*? if >=26.2 {*/
@@ -130,6 +131,20 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void setScreen(Screen screen) {
+			if (isTransient(screen)) {
+				beginTransient(screen);
+				return;
+			}
+			LOADING_TRANSITION.complete(() -> setScreenNow(screen));
+		}
+
+		private static void beginTransient(Screen screen) {
+			Screen current = Screens.getScreen();
+			if (!isTransient(current)) interactiveParent = current;
+			LOADING_TRANSITION.begin(() -> setScreenNow(screen));
+		}
+
+		private static void setScreenNow(Screen screen) {
 			Screen current = Screens.getScreen();
 			if (isTransient(screen)) {
 				if (!isTransient(current)) interactiveParent = current;

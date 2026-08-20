@@ -23,7 +23,7 @@ This audit intentionally improves the shared structure before adding features. T
 - Add a focused geometry test only if the pure layout rules change. The important invariants are row order, no overlap, centered groups, measured minimums, and a footer bottom margin.
 - If the installed-pack details list grows beyond the current auxiliary rows, split actions into explicit sections before introducing scrolling. Keep lifecycle actions separate from inspection and storage actions.
 - The broad release-gate run now covers the `UpdatePlanner`/`UpdateTransactionExecutor` preservation invariant when activating Pack B after Pack A has a local edit. The planner no longer emits a preservation record for a path already present in the projected final state, and the regression is covered by `UpdatePlannerTest`.
-- The separate loading/waiting UX pass is intentionally not folded into this audit commit. It will research the vanilla waiting pattern and centralize delayed appearance/minimum visibility for genuinely asynchronous work.
+- The separate loading/waiting UX pass is intentionally kept outside the audit commit. It is implemented in the follow-up commit and documented in `gui-loading-ux.md`, including the vanilla waiting pattern and centralized delayed appearance/minimum visibility for genuinely asynchronous work.
 
 ## Current hand-off
 
