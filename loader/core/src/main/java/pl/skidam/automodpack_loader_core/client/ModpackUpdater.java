@@ -25,11 +25,13 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -516,11 +518,13 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 
 		Set<String> standardModsHashes;
-		List<Path> modpackMods = List.of();
+		Set<String> activeModPaths = Optional.ofNullable(storedTarget()).map(target -> target.list.stream()
+				.filter(item -> ModpackPathPolicy.isActiveMod(item.file, item.type)).map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet())).orElseGet(Set::of);
 
 		// 1. Collect hashes of existing standard mods into a Set for fast lookup
 		try (Stream<Path> standardModsStream = Files.list(storage.modsDirectory())) {
-			standardModsHashes = standardModsStream.filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")) // Check extension/type before
+			standardModsHashes = standardModsStream.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+					&& path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar")) // Check extension/type before
 					.map(cache::getHashOrNull) // Safe wrapper for IOException
 					.filter(Objects::nonNull).collect(Collectors.toSet()); // Use Set for O(1) performance
 		} catch (IOException e) {
@@ -529,21 +533,31 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 
 		// 2. Filter modpack mods excluding those already present in standard mods
-		Path activeModsDirectory = storage.activePath("mods");
-		if (Files.exists(activeModsDirectory)) {
-			try (Stream<Path> activeMods = Files.list(activeModsDirectory)) {
+		Path activeModsDirectory = storage.activePath("mods").toAbsolutePath().normalize();
+		List<Path> modpackMods = List.of();
+		if (Files.isDirectory(activeModsDirectory, LinkOption.NOFOLLOW_LINKS)) {
+			try (Stream<Path> activeMods = Files.walk(activeModsDirectory)) {
 				final Set<String> finalStandardModsHashes = standardModsHashes;
-				modpackMods = activeMods.filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")).filter(mod -> {
-					String modHash = cache.getHashOrNull(mod);
-					// Only load if hash is valid AND not found in standard set
-					return modHash != null && !finalStandardModsHashes.contains(modHash);
-				}).toList();
+				modpackMods = activeMods.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+						&& path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+						.map(path -> activeModLogicalPath(activeModsDirectory, path)).filter(Objects::nonNull).filter(activeModPaths::contains)
+						.map(logicalPath -> SmartFileUtils.getPath(storage.activeDirectory(), logicalPath)).filter(mod -> {
+							String modHash = cache.getHashOrNull(mod);
+							// Only load if hash is valid AND not found in standard set
+							return modHash != null && !finalStandardModsHashes.contains(modHash);
+						}).toList();
 			} catch (IOException e) {
 				LOGGER.error("Failed to list modpack mods directory", e);
 			}
 		}
 
-		MODPACK_LOADER.loadModpack(modpackMods);
+		MODPACK_LOADER.loadModpack(new ModpackLoadRequest(activeModsDirectory, modpackMods));
+	}
+
+	private static String activeModLogicalPath(Path activeModsDirectory, Path path) {
+		Path normalized = path.toAbsolutePath().normalize();
+		if (!normalized.startsWith(activeModsDirectory) || normalized.equals(activeModsDirectory)) return null;
+		return "mods/" + UpdatePlanner.normalize(activeModsDirectory.relativize(normalized).toString());
 	}
 
 	public void startUpdate(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {

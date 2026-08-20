@@ -222,6 +222,7 @@ public final class UpdatePlanner {
 
 		for (var item : targetItems.values()) {
 			String relative = normalize(item.file);
+			boolean activeMod = ModpackPathPolicy.isActiveMod(relative, item.type);
 			FileKey modpackKey = new FileKey(Root.PROJECTION, relative);
 			FileState existing = projected.get(modpackKey);
 			boolean installedHashChanged = !hashesEqual(item.sha1, Optional.ofNullable(installedItems.get(relative)).map(old -> old.sha1).orElse(null));
@@ -232,9 +233,9 @@ public final class UpdatePlanner {
 			if (overlay == null && projected.containsKey(new FileKey(Root.OVERLAY, relative)))
 				delete(operations, projected, new FileKey(Root.OVERLAY, relative), projected.get(new FileKey(Root.OVERLAY, relative)).sha1());
 			if (!matches(existing, item.sha1, parseSize(item.size)))
-				install(operations, projected, modpackKey, item.sha1, parseSize(item.size), "mod".equals(item.type));
+				install(operations, projected, modpackKey, item.sha1, parseSize(item.size), activeMod);
 
-			boolean copyToLive = !"mod".equals(item.type) || forceCopyPaths.contains(relative) || overlay != null;
+			boolean copyToLive = !activeMod || forceCopyPaths.contains(relative) || overlay != null;
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {
 				FileState live = projected.get(liveKey);
@@ -244,8 +245,8 @@ public final class UpdatePlanner {
 					String liveHash = overlay == null ? item.sha1 : overlay.sha1();
 					long liveSize = overlay == null ? parseSize(item.size) : overlay.size();
 					if (!matches(live, liveHash, liveSize)) {
-						install(operations, projected, liveKey, liveHash, liveSize, "mod".equals(item.type));
-						if ("mod".equals(item.type)) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
+						install(operations, projected, liveKey, liveHash, liveSize, activeMod);
+						if (activeMod) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
 					}
 				}
 			}
