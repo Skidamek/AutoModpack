@@ -75,7 +75,9 @@ public class ModpackUpdater implements AutoCloseable {
 	private final ClientStorage storage;
 	private final ClientUpdatePlanBuilder planBuilder;
 	private volatile FetchManager sourceFetchManager;
-	private ClientUpdatePlanBuilder.PreparedPlan cachedSwitchPlan;
+	private ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> cachedSwitchPlan;
+	private ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewedUpdatePlan;
+	private ReviewedClientPlan<ClientUpdatePlanBuilder.RemovalPreparation> reviewedRemovalPlan;
 	private static final Comparator<RecoveryFile> RECOVERY_FILE_ORDER = Comparator.comparing(RecoveryFile::logicalPath).thenComparing(RecoveryFile::sha1)
 			.thenComparingLong(RecoveryFile::size);
 
@@ -133,7 +135,7 @@ public class ModpackUpdater implements AutoCloseable {
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(
 					new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, true), cache, modCache);
 			planBuilder.ensurePlanObjects(prepared.plan(), selectedTarget.flatTarget());
-			cachedSwitchPlan = prepared;
+			cachedSwitchPlan = ReviewedClientPlan.pending(prepared, prepared.plan());
 			List<GenerationPatchNoteHistory.Entry> missedPatchNotes = GenerationPatchNoteHistory.after(selectedTarget.patchNotesHistory(), "");
 			return UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, null,
 					selectedTarget.generationRecord().metadata().patchNotes(), missedPatchNotes);
@@ -142,11 +144,13 @@ public class ModpackUpdater implements AutoCloseable {
 
 	/** Applies the last cached switch plan through the normal atomic transaction executor. */
 	public void applyCachedSwitch() throws Exception {
-		ClientUpdatePlanBuilder.PreparedPlan prepared = cachedSwitchPlan;
-		if (prepared == null || selectedTarget == null) throw new IllegalStateException("Cached switch was not prepared");
+		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = cachedSwitchPlan;
+		if (reviewed == null || selectedTarget == null) throw new IllegalStateException("Cached switch was not prepared");
+		if (!reviewed.isApproved()) reviewed.approve();
+		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
 		try {
 			recordChangelogs(prepared, selectedTarget);
-			ApplyResult applyResult = applyPreparedPlan(prepared, selectedTarget);
+			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
 			restartAfterApply(applyResult);
 		} catch (UpdateDeferredException e) {
@@ -371,17 +375,22 @@ public class ModpackUpdater implements AutoCloseable {
 	public UpdatePreview previewRemoval() throws Exception {
 		ClientUpdatePlanBuilder.RemovalPreparation preparation = planBuilder.prepareRemoval();
 		clientConfig = preparation.currentConfig();
+		reviewedRemovalPlan = ReviewedClientPlan.pending(preparation, preparation.plan());
 		return UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation), true, preparation.baseline(),
 				preparation.completeFields().generation == null ? "" : preparation.completeFields().generation.patchNotes);
 	}
 
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
 	public UpdateTransactionExecutor.Execution removeModpack() throws Exception {
-		ClientUpdatePlanBuilder.RemovalPreparation preparation = planBuilder.prepareRemoval();
+		ReviewedClientPlan<ClientUpdatePlanBuilder.RemovalPreparation> reviewed = reviewedRemovalPlan;
+		if (reviewed == null) throw new IllegalStateException("Modpack removal was not prepared");
+		if (!reviewed.isApproved()) reviewed.approve();
+		ClientUpdatePlanBuilder.RemovalPreparation preparation = reviewed.prepared();
 		clientConfig = preparation.currentConfig();
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), storage.overlayDigest(preparation.installed().modpackId));
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 		if (execution.success()) {
+			reviewed.complete();
 			clientConfig = preparation.plannedConfig();
 			try {
 				storage.clearOverlay(preparation.installed().modpackId);
@@ -559,57 +568,22 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	private void startUpdateAfterPreview(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
+	private void startUpdateAfterPreview() {
 		long start = System.currentTimeMillis();
-		ClientUpdatePlanBuilder.PreparedPlan finalPlan;
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
-			requireLiveConnection();
-			// Don't download files which already exist
-			ModpackUtils.populateStoreFromCWD(filesToUpdate, cache, storage);
-			var finalFilesToUpdate = ModpackUtils.identifyUncachedFiles(filesToUpdate, cache, storage);
-
-			long startFetching = System.currentTimeMillis();
-			for (ModpackJsons.ModpackContentFields.ModpackContentItem serverItem : finalFilesToUpdate) totalBytesToDownload += Long.parseLong(serverItem.size);
-			FetchManager fetchManager = ensureSourceFetch(finalFilesToUpdate);
-
-			// DOWNLOAD
-			try {
-				if (!downloadModpack(finalFilesToUpdate, startFetching, fetchManager)) {
-					reportFailedDownloads(start);
-					close();
-					return;
-				}
-			} catch (Exception e) {
-				if (downloadManager != null) downloadManager.cancelAllAndShutdown();
-				throw e;
-			}
-
-			finalPlan = planBuilder.buildPlan(new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, true), cache, modCache);
-		} catch (SocketTimeoutException | ConnectException e) {
-			String host = connectionInfo == null || connectionInfo.endpoint == null ? "modpack host" : "Modpack host of " + connectionInfo.endpoint.getHostString();
-			LOGGER.error("{} is not responding", host, e);
-			new ScreenManager().error("automodpack.error.critical", host + " is not responding", "automodpack.error.logs");
-			close();
-			return;
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			LOGGER.info("Interrupted the download");
-			close();
-			return;
-		} catch (Exception e) {
-			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
-			LOGGER.error("Critical error while acquiring modpack objects", e);
+		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = reviewedUpdatePlan;
+		if (reviewed == null || !reviewed.isApproved()) {
+			LOGGER.warn("Update approval callback arrived without an approved prepared plan");
 			close();
 			return;
 		}
-
-		applyApprovedPlan(finalPlan, start);
+		applyApprovedPlan(reviewed, start);
 	}
 
-	private ApplyStatus applyApprovedPlan(ClientUpdatePlanBuilder.PreparedPlan plan, long start) {
+	private ApplyStatus applyApprovedPlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, long start) {
 		try {
-			recordChangelogs(plan, selectedTarget);
-			ApplyResult applyResult = applyPreparedPlan(plan, selectedTarget);
+			ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
+			recordChangelogs(prepared, selectedTarget);
+			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
 			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 			restartAfterApply(applyResult);
@@ -722,8 +696,10 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	// this is run every time we modpack is updated
-	private ApplyResult applyPreparedPlan(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws Exception {
-		executePlan(prepared, target);
+	private ApplyResult applyPreparedPlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, SelectedModpackTarget target) throws Exception {
+		if (!reviewed.isApproved()) throw new IllegalStateException("Update plan has not been approved");
+		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
+		executePlan(reviewed, target);
 		UpdatePlan plan = prepared.plan();
 
 		EnumSet<RestartReason> restartReasons = plan.restartReasons().stream().map(reason -> RestartReason.valueOf(reason.name()))
@@ -775,30 +751,58 @@ public class ModpackUpdater implements AutoCloseable {
 		return Map.copyOf(resolved);
 	}
 
+	/** Acquires all mutable target inputs before creating the plan that the player reviews. */
+	private ClientUpdatePlanBuilder.PreparedPlan preparePlanForReview(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) throws Exception {
+		startSourceFetch();
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+			requireLiveConnection();
+			Set<ModpackJsons.ModpackContentFields.ModpackContentItem> requested = filesToUpdate == null ? Set.of() : filesToUpdate;
+			ModpackUtils.populateStoreFromCWD(requested, cache, storage);
+			Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missing = ModpackUtils.identifyUncachedFiles(requested, cache, storage);
+			totalBytesToDownload = missing.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
+			try {
+				if (!downloadModpack(missing, System.currentTimeMillis(), ensureSourceFetch(missing))) {
+					reportFailedDownloads(System.currentTimeMillis());
+					throw new IOException("One or more modpack objects could not be acquired");
+				}
+			} catch (Exception e) {
+				if (downloadManager != null) downloadManager.cancelAllAndShutdown();
+				throw e;
+			}
+			return planBuilder.buildPlan(new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, true), cache, modCache);
+		}
+	}
+
 	private PreviewRequestResult requestUpdatePreview(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
-			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(
-					new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, false), cache, modCache);
-			if (!requiresPlayerReview(prepared, firstConnection)) {
-				return switch (applyApprovedPlan(prepared, System.currentTimeMillis())) {
-					case APPLIED -> PreviewRequestResult.APPLIED;
-					case DEFERRED -> PreviewRequestResult.DEFERRED;
-					case FAILED -> PreviewRequestResult.FAILED;
-				};
-			}
-			startSourceFetch();
-			Runnable continueAction = () -> {
-				if (firstConnection && !confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return;
-				startUpdateAfterPreview(filesToUpdate);
+		ClientUpdatePlanBuilder.PreparedPlan prepared = preparePlanForReview(filesToUpdate);
+		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = ReviewedClientPlan.pending(prepared, prepared.plan());
+		reviewedUpdatePlan = reviewed;
+		if (!requiresPlayerReview(prepared, firstConnection)) {
+			reviewed.approve();
+			return switch (applyApprovedPlan(reviewed, System.currentTimeMillis())) {
+				case APPLIED -> PreviewRequestResult.APPLIED;
+				case DEFERRED -> PreviewRequestResult.DEFERRED;
+				case FAILED -> PreviewRequestResult.FAILED;
 			};
-			Runnable cancelAction = firstConnection
-					? () -> confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING)
-					: this::close;
-			return requestPreparedPlanPreview(prepared, continueAction, cancelAction, firstConnection)
-					? PreviewRequestResult.PREVIEW_SHOWN
-					: PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		}
+		Runnable continueAction = () -> {
+			if (!reviewed.isApproved()) reviewed.approve();
+			if (firstConnection && !confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return;
+			startUpdateAfterPreview();
+		};
+		Runnable cancelAction = firstConnection
+				? () -> {
+					reviewed.cancel();
+					confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
+				}
+				: () -> {
+					reviewed.cancel();
+					close();
+				};
+		return requestPreparedPlanPreview(prepared, continueAction, cancelAction, firstConnection)
+				? PreviewRequestResult.PREVIEW_SHOWN
+				: PreviewRequestResult.PREVIEW_NOT_SHOWN;
 	}
 
 	/** A review is required for first install, a changed generation identity, or any plan impact when enabled by the client. */
@@ -832,7 +836,8 @@ public class ModpackUpdater implements AutoCloseable {
 		return state != null && selectedTarget != null && selectedTarget.manifest().modpackId().equals(state.modpackId) ? state.generationId : "";
 	}
 
-	private void executePlan(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
+	private void executePlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, SelectedModpackTarget target) throws IOException {
+		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
 		UpdatePlan plan = prepared.plan();
 		planBuilder.ensurePlanObjects(plan, target.flatTarget());
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest());
@@ -840,6 +845,7 @@ public class ModpackUpdater implements AutoCloseable {
 			DetachedUpdateHelper.launch(execution.transaction());
 			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
 		}
+		reviewed.complete();
 		try {
 			cleanupOverlayState(plan, target.manifest().modpackId());
 		} catch (IOException e) {
@@ -875,6 +881,9 @@ public class ModpackUpdater implements AutoCloseable {
 		if (sourceFetch != null && !sourceFetch.isComplete()) sourceFetch.cancel();
 		DownloadManager manager = downloadManager;
 		if (manager != null && manager.isRunning()) manager.cancelAllAndShutdown();
+		if (reviewedUpdatePlan != null && reviewedUpdatePlan.isApproved()) reviewedUpdatePlan.cancel();
+		if (reviewedRemovalPlan != null && reviewedRemovalPlan.isApproved()) reviewedRemovalPlan.cancel();
+		if (cachedSwitchPlan != null && cachedSwitchPlan.isApproved()) cachedSwitchPlan.cancel();
 		if (closed.compareAndSet(false, true) && downloadClient != null) downloadClient.close();
 	}
 

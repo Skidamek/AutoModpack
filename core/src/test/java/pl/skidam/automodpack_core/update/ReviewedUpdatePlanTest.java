@@ -1,0 +1,74 @@
+package pl.skidam.automodpack_core.update;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
+import java.util.Set;
+
+import org.junit.jupiter.api.Test;
+
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
+import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
+import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+
+class ReviewedUpdatePlanTest {
+	private static final String OBJECT_HASH = "1111111111111111111111111111111111111111";
+	private static final String OTHER_HASH = "2222222222222222222222222222222222222222";
+
+	@Test
+	void reviewHasOneFiniteLifecycle() {
+		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of(operation("mods/a.jar", OBJECT_HASH))));
+
+		assertEquals(ReviewedUpdatePlan.State.PENDING_REVIEW, reviewed.state());
+		assertFalse(reviewed.isApproved());
+
+		reviewed.approve();
+		reviewed.complete();
+
+		assertEquals(ReviewedUpdatePlan.State.APPLIED, reviewed.state());
+		assertThrows(IllegalStateException.class, reviewed::cancel);
+		assertThrows(IllegalStateException.class, reviewed::approve);
+	}
+
+	@Test
+	void cancellationCannotBeReapprovedOrCompleted() {
+		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of()));
+
+		reviewed.cancel();
+
+		assertEquals(ReviewedUpdatePlan.State.CANCELLED, reviewed.state());
+		assertThrows(IllegalStateException.class, reviewed::approve);
+		assertThrows(IllegalStateException.class, reviewed::complete);
+	}
+
+	@Test
+	void equivalentPlansHaveStableOrderIndependentFingerprint() {
+		UpdatePlan first = plan(List.of(operation("mods/a.jar", OBJECT_HASH), operation("config/a.json", OTHER_HASH)));
+		UpdatePlan reordered = plan(List.of(operation("config/a.json", OTHER_HASH), operation("mods/a.jar", OBJECT_HASH)));
+
+		assertEquals(ReviewedUpdatePlan.executionDigest(first), ReviewedUpdatePlan.executionDigest(reordered));
+		ReviewedUpdatePlan.pending(first).requireCompatible(reordered);
+	}
+
+	@Test
+	void changedConsequencesCannotBypassReview() {
+		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of(operation("mods/a.jar", OBJECT_HASH))));
+		UpdatePlan changed = plan(List.of(operation("mods/a.jar", OTHER_HASH)));
+
+		assertThrows(IllegalStateException.class, () -> reviewed.requireCompatible(changed));
+	}
+
+	private static UpdatePlan plan(List<Operation> operations) {
+		return new UpdatePlan("packaa1", new GenerationTarget("packaa1", "a".repeat(40), "", "b".repeat(40), "c".repeat(40)), operations, List.of(),
+				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of());
+	}
+
+	private static Operation operation(String path, String objectHash) {
+		return new Operation(Root.PROJECTION, path, OperationType.INSTALL_OBJECT, objectHash, 1, null);
+	}
+}
