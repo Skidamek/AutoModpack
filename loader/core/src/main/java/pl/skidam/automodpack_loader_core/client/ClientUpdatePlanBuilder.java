@@ -21,6 +21,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -326,7 +327,7 @@ final class ClientUpdatePlanBuilder {
 
 	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
-		for (var item : target.list.stream().filter(value -> "mod".equals(value.type)).sorted(Comparator.comparing(value -> value.file)).toList()) {
+		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(value.file, value.type)).sorted(Comparator.comparing(value -> value.file)).toList()) {
 			long size = Long.parseLong(item.size);
 			Path source = storage.objectsDirectory().resolve(item.sha1);
 			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
@@ -356,16 +357,19 @@ final class ClientUpdatePlanBuilder {
 		Files.createDirectories(storage.incomingDirectory());
 		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
-			Path inspectionMods = inspectionDirectory.resolve("mods");
-			Files.createDirectories(inspectionMods);
-			for (var item : target.list.stream().filter(value -> "mod".equals(value.type)).toList()) {
+			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(value.file, value.type)).toList()) {
 				Path source = storage.objectsDirectory().resolve(item.sha1);
 				if (!SmartFileUtils.isValidFile(source, Long.parseLong(item.size), item.sha1)) source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
 				if (!SmartFileUtils.isValidFile(source, Long.parseLong(item.size), item.sha1)) continue;
-				SmartFileUtils.copyVerifiedAtomic(source, inspectionMods.resolve(Path.of(UpdatePlanner.normalize(item.file)).getFileName()), Long.parseLong(item.size), item.sha1);
+				String logicalPath = UpdatePlanner.normalize(item.file);
+				Path inspectionPath = inspectionDirectory.resolve(logicalPath).normalize();
+				if (!inspectionPath.startsWith(inspectionDirectory)) throw new IOException("Mod inspection path escaped its temporary directory: " + item.file);
+				Files.createDirectories(inspectionPath.getParent());
+				SmartFileUtils.copyVerifiedAtomic(source, inspectionPath, Long.parseLong(item.size), item.sha1);
 			}
 
 			List<UpdatePlan.NestedCopy> copies = new ArrayList<>();
+			Set<String> targetPaths = new HashSet<>();
 			for (FileInspection.Mod mod : modpackLoader.getModpackNestedConflicts(inspectionDirectory, cache)) {
 				if (mod.path() == null || mod.hash() == null || !Files.isRegularFile(mod.path())) continue;
 				long size = Files.size(mod.path());
@@ -374,6 +378,7 @@ final class ClientUpdatePlanBuilder {
 				Path targetPath = storage.modsDirectory().resolve(mod.path().getFileName()).normalize();
 				if (!targetPath.startsWith(storage.gameDirectory())) throw new IOException("Nested mod target escaped the game directory: " + targetPath);
 				String relativePath = UpdatePlanner.normalize(storage.gameDirectory().relativize(targetPath).toString());
+				if (!targetPaths.add(relativePath)) throw new IOException("Nested mod conflicts share a loader-facing target path: " + relativePath);
 				copies.add(new UpdatePlan.NestedCopy(relativePath, mod.hash(), size, mod.IDs()));
 			}
 			return copies;
@@ -390,7 +395,7 @@ final class ClientUpdatePlanBuilder {
 		if (forceCopyServices.isEmpty()) return forceCopyMods;
 
 		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
-			if (!item.type.equals("mod")) continue;
+			if (!ModpackPathPolicy.isActiveMod(item.file, item.type)) continue;
 			long size = Long.parseLong(item.size);
 			Path modPath = storage.objectsDirectory().resolve(item.sha1);
 			if (!SmartFileUtils.isValidFile(modPath, size, item.sha1)) modPath = SmartFileUtils.getPath(storage.activeDirectory(), item.file);

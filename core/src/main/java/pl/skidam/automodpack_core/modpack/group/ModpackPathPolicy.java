@@ -31,7 +31,7 @@ public final class ModpackPathPolicy {
 			return false;
 		}
 		if (isPlayerLocal(normalized)) return false;
-		if ("mod".equals(type)) return isModPath(normalized);
+		if ("mod".equals(type)) return isActiveMod(normalized, type);
 		String firstComponent = firstComponent(normalized);
 		String lowerFirstComponent = firstComponent.toLowerCase(Locale.ROOT);
 		if (RESERVED_LIVE_ROOTS.contains(lowerFirstComponent) && !firstComponent.equals(lowerFirstComponent)) return false;
@@ -42,6 +42,15 @@ public final class ModpackPathPolicy {
 
 	public static boolean isModPath(String logicalPath) {
 		return logicalPath.startsWith("mods/") && logicalPath.length() > "mods/".length();
+	}
+
+	public static boolean isActiveMod(String logicalPath, String type) {
+		if (!"mod".equals(type)) return false;
+		try {
+			return isModPath(LogicalPath.requireCanonical(logicalPath));
+		} catch (RuntimeException e) {
+			return false;
+		}
 	}
 
 	private static String firstComponent(String logicalPath) {
