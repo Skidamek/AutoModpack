@@ -229,7 +229,6 @@ public final class UpdatePlanner {
 			if (!matches(existing, item.sha1, parseSize(item.size)))
 				install(operations, projected, modpackKey, item.sha1, parseSize(item.size));
 
-			boolean activeMod = ModpackPathPolicy.isActiveMod(relative, item.type);
 			boolean copyToLive = !activeMod || forceCopyPaths.contains(relative) || overlay != null;
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {
