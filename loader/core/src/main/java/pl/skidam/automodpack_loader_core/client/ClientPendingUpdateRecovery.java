@@ -17,6 +17,8 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.ReviewedUpdatePlan;
+import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -52,6 +54,8 @@ public final class ClientPendingUpdateRecovery {
 		SelectedModpackTarget target = targetFor(storage, pending, currentConfig);
 		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, target.flatTarget(), null, currentConfig, true), cache, modCache);
+			if (!ReviewedUpdatePlan.isCompatible(pending, prepared.plan()))
+				throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending update consequences; a new review is required");
 			builder.preparePlanObjects(prepared.plan(), target.flatTarget());
 			return UpdateTransactionSupport.executor().commit(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
 		}
@@ -67,6 +71,8 @@ public final class ClientPendingUpdateRecovery {
 		else
 			transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest,
 					preparation.expectedClientConfig());
+		if (!ReviewedUpdatePlan.isCompatible(pending, preparation.plan()))
+			throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending removal consequences; a new review is required");
 		return UpdateTransactionSupport.executor().commit(transaction);
 	}
 
