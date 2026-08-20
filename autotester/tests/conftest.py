@@ -77,6 +77,8 @@ class FakeBridge:
         self.rendered_screens: dict[str, str] = {}
         self.secondary_pack = False
         self.selected_pack = "A"
+        self.detail_pack: str | None = None
+        self.pack_removed = False
         self.pending_pack: str | None = None
         self.pack_b_files: list[tuple[Path, bytes | str]] = []
         self.update_available = False
@@ -114,6 +116,7 @@ class FakeBridge:
                 "buttons": [{"id": 27, "text": "Core", "enabled": False, "visible": True},
                             {"id": 28, "text": "Client", "enabled": True, "visible": True},
 							{"id": 29, "text": ("[+] Visuals (required by Addon)" if self.dependency else "Visuals"), "enabled": True, "visible": True},
+							{"id": 39, "text": "< Prev", "enabled": False, "visible": True},
                             {"id": 30, "text": "Next >", "enabled": True, "visible": True},
                             {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
                 "textFields": [],
@@ -132,9 +135,18 @@ class FakeBridge:
             },
             "group2": {
                 "screenClass": "ModpackSelectionScreen",
-                "buttons": [{"id": 38, "text": "Windows-only (unavailable)", "enabled": False, "visible": True},
+                "buttons": [{"id": 48, "text": ("[+] Visuals (required by Addon)" if self.dependency else "Visuals"), "enabled": True, "visible": True},
+                            {"id": 49, "text": "Category: Visuals", "enabled": True, "visible": True},
+                            {"id": 38, "text": "Windows-only (unavailable)", "enabled": False, "visible": True},
+                            {"id": 39, "text": "< Prev", "enabled": True, "visible": True},
                             {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
                             {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
+                "textFields": [],
+            },
+            "feature_conflict": {
+                "screenClass": "FeatureConflictScreen",
+                "buttons": [{"id": 50, "text": "Use Alternative", "enabled": True, "visible": True},
+                            {"id": 51, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "preview": {
@@ -169,10 +181,15 @@ class FakeBridge:
                 "buttons": self._manager_buttons(),
                 "textFields": [],
             },
+            "details": {
+                "screenClass": "ModpackDetailsScreen",
+                "buttons": self._details_buttons(),
+                "textFields": [],
+            },
             "storage": {
                 "screenClass": "ClientStorageMaintenanceScreen",
                 "buttons": [
-                    {"id": 46, "text": "Cleanup complete" if self.storage_complete else "Clean local storage", "enabled": not self.storage_running and not self.storage_complete, "visible": True},
+                    {"id": 46, "text": "Clean local storage", "enabled": not self.storage_running, "visible": True},
                     {"id": 47, "text": "Back", "enabled": True, "visible": True},
                 ],
                 "textFields": [],
@@ -204,7 +221,7 @@ class FakeBridge:
                             {"id": 62, "text": "Generation 2", "enabled": True, "visible": True},
                             {"id": 63, "text": "Pack B v2 removes the incompatible mod.", "enabled": False, "visible": True},
                             {"id": 58, "text": "Back", "enabled": True, "visible": True},
-                            {"id": 59, "text": "View all patch notes", "enabled": True, "visible": True},
+                            {"id": 59, "text": "Patch notes", "enabled": True, "visible": True},
                             {"id": 66, "text": "Files", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -266,11 +283,13 @@ class FakeBridge:
             self.screen = "group1"
         elif element_id == 34:
             self.conflict = True
+            self.screen = "feature_conflict"
+        elif element_id == 50:
             self.screen = "group1"
         elif element_id == 25 or element_id == 35:
             self.screen = "group1" if self.screen == "group2" else self.screen
         elif element_id == 39:
-            self.screen = "group0" if self.screen == "group1" else self.screen
+            self.screen = "group0" if self.screen == "group1" else "group1" if self.screen == "group2" else self.screen
         elif element_id == 5:
             if self.screen == "preview":
                 if self.pending_pack is not None:
@@ -289,20 +308,23 @@ class FakeBridge:
             self.screen = "settings"
         elif element_id == 8:
             self.screen = "multiplayer"
-        elif element_id == 9:
-            if self.selected_pack == "A":
-                self.screen = "settings"
-            else:
-                self.pending_pack = "A"
-                self.screen = "selection"
-        elif element_id == 11:
-            self.pending_pack = "B"
-            self.screen = "selection"
+        elif element_id == 9 and self.screen == "manager":
+            self.detail_pack = "A"
+            self.screen = "details"
+        elif element_id == 11 and self.screen == "manager":
+            self.detail_pack = "B"
+            self.screen = "details"
         elif element_id == 10:
             self.screen = "manager"
         elif element_id == 12:
+            if self.screen == "details":
+                self.pending_pack = self.detail_pack
             self.screen = "preview"
         elif element_id == 13:
+            self.screen = "settings" if self.screen == "details" else "manager"
+        elif element_id == 41 and self.screen == "details":
+            self.screen = "removal_preview"
+        elif element_id == 52:
             self.screen = "manager"
         elif element_id == 14:
             self.screen = self.history_parent
@@ -325,7 +347,7 @@ class FakeBridge:
             self.screen = "removal_preview"
         elif element_id == 42:
             self._remove_active_pack()
-            self.screen = "title"
+            self.screen = "manager"
         elif element_id == 43:
             self.screen = "quarantine"
         elif element_id == 44:
@@ -390,6 +412,7 @@ class FakeBridge:
         shutil.copy2(overlay, target)
 
     def _remove_active_pack(self) -> None:
+        self.pack_removed = True
         active = self.ctx.game_dir / "automodpack" / "client" / "active"
         if active.exists():
             shutil.rmtree(active)
@@ -546,22 +569,29 @@ class FakeBridge:
         self.quarantine_restored = True
 
     def _manager_buttons(self) -> list[dict]:
-        if not self.secondary_pack:
-            state = "active" if self.selected_pack == "A" else "switch"
-            return [{"id": 9, "text": f"Pack A  [{state}]  connected", "enabled": True, "visible": True},
-                    {"id": 70, "text": "Update", "enabled": self.selected_pack == "A", "visible": True},
-                    {"id": 71, "text": "Deactivate", "enabled": self.selected_pack == "A", "visible": True},
-                    {"id": 41, "text": "Remove", "enabled": True, "visible": True},
+        if self.pack_removed:
+            return [{"id": 47, "text": "Back", "enabled": True, "visible": True},
                     {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
-        a_state = "active" if self.selected_pack == "A" else "switch"
-        b_state = "active" if self.selected_pack == "B" else "switch"
-        return [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
-                {"id": 70, "text": "Update", "enabled": self.selected_pack == "A", "visible": True},
-                {"id": 71, "text": "Deactivate", "enabled": self.selected_pack == "A", "visible": True},
-                {"id": 41, "text": "Remove", "enabled": True, "visible": True},
-                {"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
-                {"id": 11, "text": f"Pack B  [{b_state}]  local record", "enabled": True, "visible": True},
-                {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
+        if not self.secondary_pack:
+            rows = [{"id": 9, "text": f"Pack A  [{'active' if self.selected_pack == 'A' else 'switch'}]  connected", "enabled": True, "visible": True}]
+        else:
+            a_state = "active" if self.selected_pack == "A" else "switch"
+            b_state = "active" if self.selected_pack == "B" else "switch"
+            rows = [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
+                    {"id": 11, "text": f"Pack B  [{b_state}]  local record", "enabled": True, "visible": True}]
+        return rows + [{"id": 47, "text": "Back", "enabled": True, "visible": True},
+                       {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
+
+    def _details_buttons(self) -> list[dict]:
+        pack = self.detail_pack or self.selected_pack
+        if pack != self.selected_pack:
+            actions = [{"id": 12, "text": "Activate", "enabled": True, "visible": True}]
+        else:
+            actions = [{"id": 70, "text": "Update", "enabled": True, "visible": True},
+                       {"id": 13, "text": "Modpack settings", "enabled": True, "visible": True},
+                       {"id": 71, "text": "Deactivate", "enabled": True, "visible": True},
+                       {"id": 41, "text": "Remove", "enabled": True, "visible": True}]
+        return actions + [{"id": 52, "text": "Back", "enabled": True, "visible": True}]
 
     def _write_manifest(self) -> None:
         groups = self.ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}).get("config", {}).get("groups", {})

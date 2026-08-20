@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -7,6 +8,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -43,16 +45,14 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int actionWidth = actionButtonWidth(310, 3);
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 0), this.height - 28, actionWidth, 20,
-				returnToSelection ? VersionedText.translatable("automodpack.back") : VersionedText.translatable("automodpack.cancel"), button -> cancel()));
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 1), this.height - 28, actionWidth, 20,
-				VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()));
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 3, 2), this.height - 28, actionWidth, 20,
-				VersionedText.translatable(actionKey(mode)), button -> continueUpdate()));
+		List<ActionRow> rows = new ArrayList<>();
 		if (!preview.patchNotesHistory().isEmpty())
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, this.height - 52, 150, 20,
-					VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
+			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
+		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(returnToSelection ? VersionedText.translatable("automodpack.back") : VersionedText.translatable("automodpack.cancel"), button -> cancel()),
+				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
+				primaryAction(VersionedText.translatable(actionKey(mode)), button -> continueUpdate())));
+		this.addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
 	}
 
 	private static List<String> references(String location, String path, Map<UpdatePlan.FileKey, List<String>> urls) {

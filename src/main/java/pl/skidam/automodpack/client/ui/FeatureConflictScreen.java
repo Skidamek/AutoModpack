@@ -6,6 +6,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -30,12 +31,9 @@ public final class FeatureConflictScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int width = actionButtonWidth(PANEL_WIDTH, 2);
-		int y = this.height / 2 + 28;
-		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, 2, 0), y, width, 20,
-				VersionedText.translatable("automodpack.selection.keepCurrent"), button -> ScreenImpl.setScreen(parent)));
-		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, 2, 1), y, width, 20,
-				VersionedText.translatable("automodpack.selection.useFeature", preferredName).withStyle(ChatFormatting.BOLD), button -> confirm()));
+		this.addActionArea(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.selection.keepCurrent"), button -> ScreenImpl.setScreen(parent)),
+				primaryAction(VersionedText.translatable("automodpack.selection.useFeature", preferredName).withStyle(ChatFormatting.BOLD), button -> confirm())));
 	}
 
 	private void confirm() {
@@ -56,7 +54,6 @@ public final class FeatureConflictScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		ScreenImpl.setScreen(parent);
-		return false;
+		return handleBackOnEscape(() -> ScreenImpl.setScreen(parent));
 	}
 }

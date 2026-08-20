@@ -442,9 +442,10 @@ public class ModpackUpdater implements AutoCloseable {
 		if (execution.success()) {
 			reviewed.complete();
 			clientConfig = preparation.plannedConfig();
+			GroupManifest manifest = removalManifest(preparation);
 			if (remove) new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
 			UpdatePreview applied = UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation),
-					remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION, preparation.baseline(), "", List.of()).withFeatureManifest(removalManifest(preparation));
+					remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION, preparation.baseline(), "", List.of()).withFeatureManifest(manifest);
 			changelogs.replaceWith(applied, Map.of());
 			ApplyResult applyResult = applyResult(preparation.plan());
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());

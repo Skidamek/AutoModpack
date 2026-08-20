@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -37,17 +38,14 @@ public final class FirstConnectScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int actionY = this.height - 28;
-		int twoButtonWidth = actionButtonWidth(310, 2);
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 0), actionY, twoButtonWidth, 20,
-				VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()));
-		this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 1), actionY, twoButtonWidth, 20,
-				VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults()));
-		int optionalY = actionY - 26;
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY, 150, 20, VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize()));
-		if (GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes())) {
-			this.addRenderableWidget(buttonWidget(this.width / 2 - 75, optionalY - 26, 150, 20, VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes()));
-		}
+		List<ActionRow> rows = new ArrayList<>();
+		if (GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes()))
+			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
+		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize())));
+		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()),
+				primaryAction(VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults())));
+		this.addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
 	}
 
 	private void continueWithDefaults() {
@@ -170,7 +168,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return false;
+		return handleBackOnEscape(this::cancel);
 	}
 
 }

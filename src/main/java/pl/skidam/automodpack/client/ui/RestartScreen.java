@@ -1,10 +1,13 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Button;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -16,9 +19,6 @@ public class RestartScreen extends VersionedScreen {
 
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
-	private Button cancelButton;
-	private Button restartButton;
-	private Button changelogsButton;
 
 	public RestartScreen(UpdateType updateType, Changelogs changelogs) {
 		super(VersionedText.translatable("automodpack.restart.title"));
@@ -31,33 +31,14 @@ public class RestartScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-
-		initWidgets();
-
-		this.addRenderableWidget(cancelButton);
-		this.addRenderableWidget(restartButton);
-		this.addRenderableWidget(changelogsButton);
-
-		if (changelogs == null || (changelogs.changedFiles().isEmpty() && changelogs.removedFiles().isEmpty() && changelogs.latestPatchNotes().isBlank())) changelogsButton.active = false;
-	}
-
-	public void initWidgets() {
 		assert this.minecraft != null;
-
-		int buttonWidth = actionButtonWidth(310, 2);
-		cancelButton = buttonWidget(actionButtonX(310, 2, 0), this.height - 74, buttonWidth, 20, VersionedText.translatable("automodpack.restart.cancel"), button -> {
-			ScreenImpl.setScreen(null);
-		});
-
-		restartButton = buttonWidget(actionButtonX(310, 2, 1), this.height - 74, buttonWidth, 20,
-				VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> {
-					minecraft.stop();
-				});
-
-		changelogsButton = buttonWidget(this.width / 2 - 75, this.height - 48, 150, 20, VersionedText.translatable("automodpack.changelog.view"),
-				button -> {
-					new ScreenManager().changelog(this, changelogs);
-				});
+		boolean hasChangelogs = changelogs != null && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty() || !changelogs.latestPatchNotes().isBlank());
+		List<ActionRow> rows = new ArrayList<>();
+		if (hasChangelogs) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.changelog.view"), button -> new ScreenManager().changelog(this, changelogs))));
+		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.restart.cancel"), button -> ScreenImpl.setScreen(null)),
+				primaryAction(VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
+		this.addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
 	}
 
 	@Override
@@ -95,6 +76,6 @@ public class RestartScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return false;
+		return handleBackOnEscape(() -> ScreenImpl.setScreen(null));
 	}
 }

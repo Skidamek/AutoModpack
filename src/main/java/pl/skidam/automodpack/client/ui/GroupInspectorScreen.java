@@ -8,6 +8,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -37,12 +38,9 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int buttonWidth = actionButtonWidth(PANEL_WIDTH, 2);
-		int y = this.height - 28;
-		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, 2, 0), y, buttonWidth, 20,
-				VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
-		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, 2, 1), y, buttonWidth, 20,
-				VersionedText.translatable("automodpack.groupInspector.browseFiles"), button -> browseFiles()));
+		this.addActionArea(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)),
+				primaryAction(VersionedText.translatable("automodpack.groupInspector.browseFiles"), button -> browseFiles())));
 	}
 
 	private void browseFiles() {
@@ -136,7 +134,6 @@ public final class GroupInspectorScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		ScreenImpl.setScreen(parent);
-		return false;
+		return handleBackOnEscape(() -> ScreenImpl.setScreen(parent));
 	}
 }

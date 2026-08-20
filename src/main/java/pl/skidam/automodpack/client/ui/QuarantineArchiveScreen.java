@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
 
@@ -11,6 +12,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.QuarantineArchive;
@@ -61,30 +63,27 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 			int y = 72 + (index - start) * ROW_HEIGHT;
 			if (activePack) {
 				int rowWidth = panelWidth(310);
-				Button restore = buttonWidget(panelLeft(310) + rowWidth - 72, y + 9, 72, 20, VersionedText.translatable("automodpack.quarantine.restore"), press -> restore(entry));
+				int restoreWidth = Math.max(ActionAreaLayout.MIN_BUTTON_WIDTH, this.font.width(VersionedText.translatable("automodpack.quarantine.restore").getString()) + 16);
+				restoreWidth = Math.min(rowWidth, restoreWidth);
+				Button restore = buttonWidget(panelLeft(310) + rowWidth - restoreWidth, y + 9, restoreWidth, 20, VersionedText.translatable("automodpack.quarantine.restore"), press -> restore(entry));
 				restore.active = !busy && !loading;
 				this.addRenderableWidget(restore);
 			}
 		}
 		boolean hasPagination = pageCount > 1;
-		int actionCount = hasPagination ? 3 : 1;
-		int actionWidth = actionButtonWidth(310, actionCount);
-		int actionY = this.height - 28;
+		List<ActionRow> rows = new ArrayList<>();
 		if (hasPagination) {
-			Button previous = buttonWidget(actionButtonX(310, 3, 0), actionY, actionWidth, 20, VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1));
-			previous.active = page > 0;
-			this.addRenderableWidget(previous);
-			Button pageLabel = buttonWidget(actionButtonX(310, 3, 1), actionY, actionWidth, 20, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount), press -> {});
-			pageLabel.active = false;
-			this.addRenderableWidget(pageLabel);
-			Button next = buttonWidget(actionButtonX(310, 3, 2), actionY, actionWidth, 20, VersionedText.translatable("automodpack.ui.next"), press -> changePage(1));
-			next.active = page + 1 < pageCount;
-			this.addRenderableWidget(next);
-		} else {
-			this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 1, 1, 0), actionY, actionWidth, 20, VersionedText.translatable("automodpack.back"), press -> back()));
+			rows.add(actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+					navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1)),
+					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
+					navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> changePage(1))));
 		}
-		if (hasPagination) this.addRenderableWidget(buttonWidget(centeredActionButtonX(310, 3, 1, 0), actionY - 26, actionButtonWidth(310, 3), 20,
-				VersionedText.translatable("automodpack.back"), press -> back()));
+		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
+		List<Button> actionButtons = addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
+		if (hasPagination) {
+			actionButtons.get(0).active = !busy && page > 0;
+			actionButtons.get(2).active = !busy && page + 1 < pageCount;
+		}
 	}
 
 	private void loadSnapshot() {
@@ -197,7 +196,8 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 		int pageSize = rowsPerPage();
 		int start = page * pageSize;
 		int end = Math.min(values.size(), start + pageSize);
-		int textWidth = panelWidth(310) - (activePack ? 82 : 8);
+		int restoreWidth = activePack ? Math.min(panelWidth(310), Math.max(ActionAreaLayout.MIN_BUTTON_WIDTH, this.font.width(VersionedText.translatable("automodpack.quarantine.restore").getString()) + 16)) : 0;
+		int textWidth = panelWidth(310) - (activePack ? restoreWidth + 8 : 8);
 		for (int index = start; index < end; index++) {
 			QuarantineArchive.ArchiveEntry entry = values.get(index);
 			int y = 72 + (index - start) * ROW_HEIGHT;
@@ -210,7 +210,6 @@ public final class QuarantineArchiveScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		back();
-		return false;
+		return handleBackOnEscape(this::back);
 	}
 }

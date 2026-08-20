@@ -11,6 +11,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
@@ -22,20 +23,14 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private static final int ROW_HEIGHT = 34;
 
 	private final Screen parent;
-	private final String returnModpackId;
 	private final InstalledModpackController controller;
 	private List<InstalledModpackController.Pack> entries;
 	private int page;
 	private boolean discoveryFailureShown;
 
 	public InstalledModpacksScreen(Screen parent) {
-		this(parent, null);
-	}
-
-	InstalledModpacksScreen(Screen parent, String returnModpackId) {
 		super(VersionedText.translatable("automodpack.packManager.title"));
 		this.parent = parent;
-		this.returnModpackId = returnModpackId;
 		this.controller = new InstalledModpackController();
 		this.entries = controller.installed();
 	}
@@ -55,8 +50,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		int listBottomWithoutPagination = actionY - 8;
 		int rowsWithoutPagination = Math.max(1, (listBottomWithoutPagination - listTop) / ROW_HEIGHT);
 		boolean showPagination = entries.size() > rowsWithoutPagination;
-		int paginationY = showPagination ? actionY - ROW_HEIGHT : -1;
-		int listBottom = showPagination ? paginationY - 8 : listBottomWithoutPagination;
+		int listBottom = showPagination ? actionY - 20 - actionRowGap() - 8 : listBottomWithoutPagination;
 		int rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
 		int pageCount = Math.max(1, (int) Math.ceil((double) entries.size() / rowsPerPage));
 		if (page >= pageCount) page = pageCount - 1;
@@ -70,43 +64,35 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		}
 
 		if (showPagination) {
-			int paginationWidth = actionButtonWidth(PANEL_WIDTH, 3);
-			Button previous = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 0), paginationY, paginationWidth, 20,
-					VersionedText.translatable("automodpack.ui.previous"), press -> {
-						if (page > 0) {
-							page--;
-							rebuild();
-						}
-					});
-			previous.active = page > 0;
-			this.addRenderableWidget(previous);
-			Button pageLabel = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 1), paginationY, paginationWidth, 20,
-					VersionedText.translatable("automodpack.ui.page", page + 1, pageCount), press -> {});
-			pageLabel.active = false;
-			this.addRenderableWidget(pageLabel);
-			Button next = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 2), paginationY, paginationWidth, 20,
-					VersionedText.translatable("automodpack.ui.next"), press -> {
-						if (page < pageCount - 1) {
-							page++;
-							rebuild();
-						}
-					});
-			next.active = page < pageCount - 1;
-			this.addRenderableWidget(next);
+			List<ActionRow> rows = List.of(
+					actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+							navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
+								if (page > 0) {
+									page--;
+									rebuild();
+								}
+							}),
+							disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
+							navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
+								if (page < pageCount - 1) {
+									page++;
+									rebuild();
+								}
+							})),
+					actionRow(ActionAreaLayout.RowKind.FOOTER,
+							secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
+							optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller.storage())))));
+			List<Button> actionButtons = addActionArea(PANEL_WIDTH, actionY, rows.toArray(ActionRow[]::new));
+			actionButtons.get(0).active = page > 0;
+			actionButtons.get(2).active = page < pageCount - 1;
+			return;
 		}
-
-		int footerWidth = actionButtonWidth(PANEL_WIDTH, 2);
-		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, 2, 0), actionY, footerWidth, 20,
-				VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller.storage()))));
-		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, 2, 1), actionY, footerWidth, 20,
-				VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
+		this.addActionArea(PANEL_WIDTH, actionY, actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
+				optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller.storage())))));
 	}
 
 	private void open(InstalledModpackController.Pack entry) {
-		if (entry.modpackId().equals(returnModpackId)) {
-			ScreenImpl.setScreen(parent);
-			return;
-		}
 		ScreenImpl.setScreen(new ModpackDetailsScreen(this, controller, entry));
 	}
 
@@ -138,5 +124,10 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 					.orElse(VersionedText.translatable("automodpack.packManager.noActive").getString());
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, active, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, 44, TextColors.WHITE);
 		}
+	}
+
+	@Override
+	public boolean shouldCloseOnEsc() {
+		return handleBackOnEscape(() -> ScreenImpl.setScreen(parent));
 	}
 }

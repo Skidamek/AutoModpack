@@ -26,6 +26,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -233,12 +234,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		// Once saved, the screen becomes a restart prompt: the new selection only takes effect after
 		// a relaunch, so there is nothing left to toggle here.
 		if (saved) {
-			int buttonWidth = actionButtonWidth(310, 2);
-			int y = this.height / 2 + 20;
-			this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 0), y, buttonWidth, 20,
-					VersionedText.translatable("automodpack.selection.later"), press -> ScreenImpl.setScreen(parent)));
-			this.addRenderableWidget(buttonWidget(actionButtonX(310, 2, 1), y, buttonWidth, 20,
-					VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop()));
+			this.addActionAreaAt(310, this.height / 2 + 20, actionRow(ActionAreaLayout.RowKind.FOOTER,
+					secondaryAction(VersionedText.translatable("automodpack.selection.later"), press -> ScreenImpl.setScreen(parent)),
+					primaryAction(VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop())));
 			return;
 		}
 
@@ -247,13 +245,15 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int managementRows = managementRowCount(managementActions.size());
 		int reservedManagementRows = Math.max(1, managementRows);
 		// Keep page breaks and list-to-control spacing stable when a flow hides the management row.
-		int actionY = this.height - 24;
-		int managementTop = actionY - managementRows * ROW_HEIGHT;
-		int listBottomWithoutPagination = actionY - reservedManagementRows * ROW_HEIGHT - BOTTOM_CONTROLS_GAP;
+		int actionY = this.height - 28;
+		int rowsWithoutPaginationActions = reservedManagementRows + 1;
+		int controlsHeightWithoutPagination = rowsWithoutPaginationActions * ActionAreaLayout.BUTTON_HEIGHT + (rowsWithoutPaginationActions - 1) * actionRowGap();
+		int listBottomWithoutPagination = actionY - (controlsHeightWithoutPagination - ActionAreaLayout.BUTTON_HEIGHT) - BOTTOM_CONTROLS_GAP;
 		int rowsWithoutPagination = Math.max(1, (listBottomWithoutPagination - listTop) / ROW_HEIGHT);
 		boolean showPagination = rows.size() > rowsWithoutPagination;
-		int paginationY = showPagination ? managementTop - ROW_HEIGHT : -1;
-		int listBottom = showPagination ? paginationY - BOTTOM_CONTROLS_GAP : listBottomWithoutPagination;
+		int controlsRows = managementRows + 1 + (showPagination ? 1 : 0);
+		int controlsHeight = controlsRows * ActionAreaLayout.BUTTON_HEIGHT + (controlsRows - 1) * actionRowGap();
+		int listBottom = actionY - (controlsHeight - ActionAreaLayout.BUTTON_HEIGHT) - BOTTOM_CONTROLS_GAP;
 		int rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
 		List<PageLayout.Range> pages = PageLayout.paginate(rows.size(), rowsPerPage, categoryRanges());
 
@@ -279,78 +279,80 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 			String groupId = row.groupId();
 			var group = groups.get(groupId);
-			Button button = buttonWidget(x, y, rowWidth - 68, 20, rowLabel(groupId, group), press -> toggle(groupId));
+			int infoWidth = infoButtonWidth();
+			Button button = buttonWidget(x, y, rowWidth - infoWidth - 4, 20, rowLabel(groupId, group), press -> toggle(groupId));
 			// Required groups, forced groups, dependencies and unavailable groups are shown so the player
 			// can understand the target, but only optional compatible choices are togglable.
 			button.active = group != null && canToggle(groupId, group);
 			MutableComponent tooltip = rowTooltip(groupId, group);
 			if (tooltip != null) setTooltip(button, tooltip);
 			this.addRenderableWidget(button);
-			Button inspect = buttonWidget(x + rowWidth - 64, y, 64, 20, VersionedText.translatable("automodpack.ui.info"), press -> inspect(groupId));
+			Button inspect = buttonWidget(x + rowWidth - infoWidth, y, infoWidth, 20, VersionedText.translatable("automodpack.ui.info"), press -> inspect(groupId));
 			inspect.active = group != null;
 			if (tooltip != null) setTooltip(inspect, tooltip);
 			this.addRenderableWidget(inspect);
 		}
 
+		List<ActionRow> actionRows = new ArrayList<>();
 		if (showPagination) {
-			int paginationWidth = actionButtonWidth(ROW_WIDTH, 3);
-			Button previous = buttonWidget(centeredActionButtonX(ROW_WIDTH, 3, 3, 0), paginationY, paginationWidth, 20, VersionedText.translatable("automodpack.ui.previous"), press -> {
-				if (page > 0) {
-					page--;
-					rebuild();
-				}
-			});
-			previous.active = page > 0;
-			this.addRenderableWidget(previous);
-			Button pageLabel = buttonWidget(centeredActionButtonX(ROW_WIDTH, 3, 3, 1), paginationY, paginationWidth, 20,
-					VersionedText.translatable("automodpack.ui.page", page + 1, pageCount), press -> {});
-			pageLabel.active = false;
-			this.addRenderableWidget(pageLabel);
-			Button next = buttonWidget(centeredActionButtonX(ROW_WIDTH, 3, 3, 2), paginationY, paginationWidth, 20, VersionedText.translatable("automodpack.ui.next"), press -> {
-				if (page < pageCount - 1) {
-					page++;
-					rebuild();
-				}
-			});
-			next.active = page < pageCount - 1;
-			this.addRenderableWidget(next);
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+					navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
+						if (page > 0) {
+							page--;
+							rebuild();
+						}
+					}),
+					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
+					navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
+						if (page < pageCount - 1) {
+							page++;
+							rebuild();
+						}
+					})));
 		}
-
-		if (!managementActions.isEmpty()) {
-			for (int index = 0; index < managementActions.size(); index++) {
-				ManagementAction action = managementActions.get(index);
-				int row = index / 3;
-				int rowStart = row * 3;
-				int rowCount = Math.min(3, managementActions.size() - rowStart);
-				int managementWidth = actionButtonWidth(ROW_WIDTH, rowCount);
-				Button button = buttonWidget(centeredActionButtonX(ROW_WIDTH, rowCount, rowCount, index - rowStart), managementTop + row * ROW_HEIGHT,
-						managementWidth, 20, action.label(), press -> action.action().run());
-				this.addRenderableWidget(button);
-				if (action.kind() == ManagementKind.RECOVERY) this.recoveryButton = button;
-				if (action.kind() == ManagementKind.QUARANTINE) this.quarantineButton = button;
-				if (action.kind() == ManagementKind.HISTORY) this.historyButton = button;
-				if (action.kind() == ManagementKind.FILES) this.filesButton = button;
+		for (int index = 0; index < managementActions.size(); index += 3) {
+			int end = Math.min(managementActions.size(), index + 3);
+			List<ActionDefinition> definitions = new ArrayList<>(end - index);
+			for (int actionIndex = index; actionIndex < end; actionIndex++) {
+				ManagementAction action = managementActions.get(actionIndex);
+				definitions.add(optionalAction(action.label(), press -> action.action().run()));
 			}
-			updateManagementButtons();
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, definitions.toArray(ActionDefinition[]::new)));
 		}
-
-		int actionWidth = actionButtonWidth(ROW_WIDTH, 3);
-		this.addRenderableWidget(buttonWidget(actionButtonX(ROW_WIDTH, 3, 0), actionY, actionWidth, 20, VersionedText.translatable("automodpack.selection.cancel"), press -> back()));
-
-		this.addRenderableWidget(buttonWidget(actionButtonX(ROW_WIDTH, 3, 1), actionY, actionWidth, 20, VersionedText.translatable("automodpack.selection.reset"), press -> {
-			SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
-			chosen.clear();
-			chosen.addAll(defaults.requestedGroups());
-			chosenCategories.clear();
-			excluded.clear();
-			reresolveDefault();
-		}));
 
 		String saveLabel = selectionAction != null ? "automodpack.selection.preview" : managerEntry && !activeModpack ? "automodpack.packManager.reviewSwitch" : "automodpack.selection.save";
-		this.saveButton = buttonWidget(actionButtonX(ROW_WIDTH, 3, 2), actionY, actionWidth, 20,
-				VersionedText.translatable(saveLabel).withStyle(ChatFormatting.BOLD), press -> save());
+		SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
+		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.selection.cancel"), press -> back()),
+				optionalAction(VersionedText.translatable("automodpack.selection.reset"), press -> {
+					chosen.clear();
+					chosen.addAll(defaults.requestedGroups());
+					chosenCategories.clear();
+					excluded.clear();
+					reresolveDefault();
+				}),
+				primaryAction(VersionedText.translatable(saveLabel).withStyle(ChatFormatting.BOLD), press -> save())));
+		List<Button> actionButtons = this.addActionArea(ROW_WIDTH, actionY, actionRows.toArray(ActionRow[]::new));
+		int actionIndex = 0;
+		if (showPagination) {
+			actionButtons.get(actionIndex++).active = page > 0;
+			actionIndex++;
+			actionButtons.get(actionIndex++).active = page < pageCount - 1;
+		}
+		recoveryButton = null;
+		quarantineButton = null;
+		historyButton = null;
+		filesButton = null;
+		for (ManagementAction action : managementActions) {
+			Button button = actionButtons.get(actionIndex++);
+			if (action.kind() == ManagementKind.RECOVERY) recoveryButton = button;
+			if (action.kind() == ManagementKind.QUARANTINE) quarantineButton = button;
+			if (action.kind() == ManagementKind.HISTORY) historyButton = button;
+			if (action.kind() == ManagementKind.FILES) filesButton = button;
+		}
+		this.saveButton = actionButtons.get(actionIndex + 2);
 		this.saveButton.active = canSave();
-		this.addRenderableWidget(this.saveButton);
+		updateManagementButtons();
 	}
 
 	public boolean isUpdateFlow() {
@@ -614,7 +616,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void requestPackManager() {
-		ScreenImpl.setScreen(openedFromManager ? parent : new InstalledModpacksScreen(this, modpackId));
+		ScreenImpl.setScreen(openedFromManager ? parent : new InstalledModpacksScreen(this));
 	}
 
 	private void save() {
@@ -680,7 +682,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private MutableComponent sectionLabel(Row row) {
 		if (row.tagId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
-		String title = categoryLabel(row.tagId());
+		String title = VersionedText.translatable("automodpack.selection.category", categoryLabel(row.tagId())).getString();
 		boolean selected = categorySelected(row.tagId());
 		return VersionedText.literal(truncateToWidth(this.font, (selected ? "[x] " : "[ ] ") + title, panelWidth(ROW_WIDTH) - 12))
 				.withStyle(ChatFormatting.BOLD, selected ? ChatFormatting.GREEN : ChatFormatting.GRAY);
@@ -766,7 +768,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	/** Keeps a row's state explanation visible when the optional file metrics do not fit. */
 	private String formatRowLabel(String marker, String name, String metrics, String status) {
-		int maxWidth = panelWidth(ROW_WIDTH) - 76;
+		int maxWidth = groupLabelWidth();
 		String full = marker + name + " " + metrics + (status == null ? "" : " " + status);
 		if (status == null || this.font.width(full) <= maxWidth) return truncateToWidth(this.font, full, maxWidth);
 
@@ -779,7 +781,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private MutableComponent rowLabel(String text, ChatFormatting color) {
-		return VersionedText.literal(truncateToWidth(this.font, text, panelWidth(ROW_WIDTH) - 76)).withStyle(color);
+		return VersionedText.literal(truncateToWidth(this.font, text, groupLabelWidth())).withStyle(color);
+	}
+
+	private int groupLabelWidth() {
+		return Math.max(1, panelWidth(ROW_WIDTH) - infoButtonWidth() - 12);
 	}
 
 	private static boolean isMandatory(GroupManifest manifest, GroupManifest.Group group) {
@@ -884,13 +890,16 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		back();
-		return false;
+		return handleBackOnEscape(this::back);
 	}
 
 	private record Row(String section, String groupId, String tagId) {}
 
 	private record ManagementAction(ManagementKind kind, MutableComponent label, Runnable action) {}
+
+	private int infoButtonWidth() {
+		return Math.max(64, this.font.width(VersionedText.translatable("automodpack.ui.info").getString()) + 16);
+	}
 
 	private enum ManagementKind { RECOVERY, QUARANTINE, HISTORY, FILES, MANAGER }
 }

@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 from automodpack_autotester.config import (
+    CLIENT_GENERATION_STATE_PATHS,
     load_macros,
     load_scenarios,
     parse_server_files,
@@ -152,7 +153,7 @@ def _wait_exit(ctx, step):
 
 def _reset_client_generation(ctx, step):
     ctx.bridge._reset_client_generation()
-    for relative in ("records", "active", "active-state.json", "data/objects"):
+    for relative in CLIENT_GENERATION_STATE_PATHS:
         path = ctx.game_dir / "automodpack" / "client" / relative
         if path.is_dir():
             shutil.rmtree(path)

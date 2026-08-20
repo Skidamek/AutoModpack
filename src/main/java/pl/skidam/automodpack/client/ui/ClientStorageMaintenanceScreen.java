@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.List;
 import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
@@ -10,6 +11,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -41,20 +43,16 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int actionWidth = actionButtonWidth(PANEL_WIDTH, 3);
 		int actionY = this.height - 28;
 		String verifyLabel = busy && operation == Operation.VERIFY ? "automodpack.storage.verifyingButton" : "automodpack.storage.verify";
-		Button verify = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 0), actionY, actionWidth, 20,
-				VersionedText.translatable(verifyLabel), button -> verify());
-		verify.active = !busy && !closed;
-		this.addRenderableWidget(verify);
 		String actionLabel = busy && operation == Operation.COMPACT ? "automodpack.storage.runningButton" : "automodpack.storage.confirm";
-		Button maintenance = buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 1), actionY, actionWidth, 20,
-				VersionedText.translatable(actionLabel), button -> compact());
-		maintenance.active = !busy && !closed;
-		this.addRenderableWidget(maintenance);
-		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, 3, 2), actionY, actionWidth, 20,
-				VersionedText.translatable("automodpack.back"), button -> closeToParent()));
+		List<Button> buttons = addActionArea(PANEL_WIDTH, actionY,
+				actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable(verifyLabel), button -> verify())),
+				actionRow(ActionAreaLayout.RowKind.FOOTER,
+						secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent()),
+						primaryAction(VersionedText.translatable(actionLabel), button -> compact())));
+		buttons.get(0).active = !busy && !closed;
+		buttons.get(2).active = !busy && !closed;
 	}
 
 	private void verify() {
@@ -147,7 +145,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		int textWidth = Math.max(1, this.width - 20);
+		int textWidth = panelWidth(PANEL_WIDTH);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
 		int y = 32;
 		y = drawWrapped(matrices, VersionedText.translatable("automodpack.storage.description").getString(), y, textWidth, TextColors.LIGHT_GRAY);
@@ -186,8 +184,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		closeToParent();
-		return false;
+		return handleBackOnEscape(this::closeToParent);
 	}
 
 	private enum Operation { VERIFY, COMPACT }

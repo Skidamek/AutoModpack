@@ -19,6 +19,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
@@ -85,28 +86,27 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		super.init();
 		int bottomY = this.height - 28;
 		boolean hasPagination = pageCount() > 1;
-		int navigationY = hasPagination ? bottomY - 24 : -1;
-		int actionWidth = actionButtonWidth(PANEL_WIDTH, 3);
-		this.previousButton = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 0), navigationY, actionWidth, ROW_HEIGHT, VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1));
-		this.nextButton = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 2), navigationY, actionWidth, ROW_HEIGHT, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
-		updateNavigation();
+		List<ActionRow> actionRows = new ArrayList<>();
 		if (hasPagination) {
-			this.addRenderableWidget(this.previousButton);
-			Button pageLabel = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 1), navigationY, actionWidth, ROW_HEIGHT,
-					VersionedText.translatable("automodpack.ui.page", page + 1, pageCount()), button -> {});
-			pageLabel.active = false;
-			this.addRenderableWidget(pageLabel);
-			this.addRenderableWidget(this.nextButton);
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+					navigationAction(VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1)),
+					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount())),
+					navigationAction(VersionedText.translatable("automodpack.ui.next"), button -> changePage(1))));
 		}
-
-		int bottomButtonCount = 1 + (hasPatchNotesHistory() ? 1 : 0) + (hasLocalFiles() ? 1 : 0);
-		int bottomIndex = 0;
-		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, bottomButtonCount, bottomIndex++), bottomY, actionWidth, ROW_HEIGHT,
-				VersionedText.translatable("automodpack.back"), button -> back()));
-		if (hasPatchNotesHistory()) this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, bottomButtonCount, bottomIndex++), bottomY, actionWidth, ROW_HEIGHT,
-				VersionedText.translatable("automodpack.patchNotes.button"), button -> openPatchNotes()));
-		if (hasLocalFiles()) this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 3, bottomButtonCount, bottomIndex), bottomY, actionWidth, ROW_HEIGHT,
-				VersionedText.translatable("automodpack.management.files"), button -> openFiles()));
+		List<ActionDefinition> footerActions = new ArrayList<>();
+		footerActions.add(secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()));
+		if (hasPatchNotesHistory()) footerActions.add(optionalAction(VersionedText.translatable("automodpack.patchNotes.button"), button -> openPatchNotes()));
+		if (hasLocalFiles()) footerActions.add(primaryAction(VersionedText.translatable("automodpack.management.files"), button -> openFiles()));
+		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, footerActions.toArray(ActionDefinition[]::new)));
+		List<Button> actionButtons = this.addActionArea(PANEL_WIDTH, bottomY, actionRows.toArray(ActionRow[]::new));
+		if (hasPagination) {
+			this.previousButton = actionButtons.get(0);
+			this.nextButton = actionButtons.get(2);
+		} else {
+			this.previousButton = null;
+			this.nextButton = null;
+		}
+		updateNavigation();
 
 		int start = page * rowsPerPage();
 		int end = Math.min(entries.size(), start + rowsPerPage());
@@ -321,8 +321,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		back();
-		return false;
+		return handleBackOnEscape(this::back);
 	}
 
 	private record LoadedEntry(CatalogueSnapshot catalogue, GroupManifest parentManifest) {}

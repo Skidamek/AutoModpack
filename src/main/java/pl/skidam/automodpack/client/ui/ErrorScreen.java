@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.List;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
@@ -14,6 +16,7 @@ import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 
@@ -38,36 +41,39 @@ public class ErrorScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-
 		initWidgets();
-
-		this.addRenderableWidget(logsButton);
-		this.addRenderableWidget(copyButton);
-		if (retryButton != null) this.addRenderableWidget(retryButton);
-		this.addRenderableWidget(backButton);
 	}
 
 	private void initWidgets() {
-		int buttonWidth = actionButtonWidth(310, 2);
-		int left = panelLeft(310);
-		int right = left + buttonWidth + actionRowGap();
-		int firstRowY = this.height - 52;
-		int secondRowY = this.height - 28;
+		List<ActionRow> rows;
 		if (request.retryAction() != null) {
-			retryButton = buttonWidget(left, firstRowY, buttonWidth, 20,
-				VersionedText.translatable("automodpack.error.retry"), button -> retry());
-			logsButton = buttonWidget(right, firstRowY, buttonWidth, 20,
-				VersionedText.translatable("automodpack.error.openLogs"), button -> openLogs());
-			copyButton = buttonWidget(left, secondRowY, buttonWidth, 20,
-				VersionedText.translatable(copied ? "automodpack.error.copied" : "automodpack.error.copyDetails"), button -> copyDetails());
-			backButton = buttonWidget(right, secondRowY, buttonWidth, 20, VersionedText.translatable("automodpack.back"), button -> back());
-			return;
+			rows = List.of(
+					actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+							primaryAction(VersionedText.translatable("automodpack.error.retry"), button -> retry()),
+							optionalAction(VersionedText.translatable("automodpack.error.openLogs"), button -> openLogs())),
+					actionRow(ActionAreaLayout.RowKind.FOOTER,
+							optionalAction(VersionedText.translatable(copied ? "automodpack.error.copied" : "automodpack.error.copyDetails"), button -> copyDetails()),
+							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+		} else {
+			rows = List.of(
+					actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+							optionalAction(VersionedText.translatable("automodpack.error.openLogs"), button -> openLogs()),
+							optionalAction(VersionedText.translatable(copied ? "automodpack.error.copied" : "automodpack.error.copyDetails"), button -> copyDetails())),
+					actionRow(ActionAreaLayout.RowKind.FOOTER,
+							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		}
-		logsButton = buttonWidget(left, firstRowY, buttonWidth, 20,
-				VersionedText.translatable("automodpack.error.openLogs"), button -> openLogs());
-		copyButton = buttonWidget(right, firstRowY, buttonWidth, 20,
-				VersionedText.translatable(copied ? "automodpack.error.copied" : "automodpack.error.copyDetails"), button -> copyDetails());
-		backButton = buttonWidget(centeredActionButtonX(310, 1, 1, 0), secondRowY, actionButtonWidth(310, 1), 20, VersionedText.translatable("automodpack.back"), button -> back());
+		List<Button> buttons = this.addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
+		if (request.retryAction() != null) {
+			retryButton = buttons.get(0);
+			logsButton = buttons.get(1);
+			copyButton = buttons.get(2);
+			backButton = buttons.get(3);
+		} else {
+			retryButton = null;
+			logsButton = buttons.get(0);
+			copyButton = buttons.get(1);
+			backButton = buttons.get(2);
+		}
 	}
 
 	private void back() {
@@ -129,7 +135,6 @@ public class ErrorScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		back();
-		return false;
+		return handleBackOnEscape(this::back);
 	}
 }

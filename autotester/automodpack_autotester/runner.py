@@ -16,7 +16,7 @@ from pathlib import Path
 import docker as docker_py
 
 from .bridge import BridgeClient
-from .config import REPO_ROOT, Target, load_macros, parse_server_files
+from .config import CLIENT_GENERATION_STATE_PATHS, REPO_ROOT, Target, load_macros, parse_server_files
 from .mod_fixtures import write_valid_mod_fixture
 from .mods import resolve_mod
 from .engine import ClientExited, Context, run_flow
@@ -578,8 +578,8 @@ def _v_rollback_server_generation(ctx: Context, step):
         raise AssertionError(f"server rollback has no valid retained ancestor: {ancestor_ids}")
     target_commit = _read_server_json(ctx, f"commits/{target_id}.json", "retained generation commit")
     state_digest = str(target_commit.get("stateDigest", ""))
-    ledger_digest = str(target_commit.get("ledgerDigest", ""))
-    if not re.fullmatch(r"[0-9a-f]{40}", state_digest) or not re.fullmatch(r"[0-9a-f]{40}", ledger_digest) or not (ctx.server_dir / "automodpack" / "server" / "catalogues" / f"{state_digest}.json").is_file():
+    target_ledger_digest = str(target_commit.get("ledgerDigest", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", state_digest) or not re.fullmatch(r"[0-9a-f]{40}", target_ledger_digest) or not (ctx.server_dir / "automodpack" / "server" / "catalogues" / f"{state_digest}.json").is_file():
         raise AssertionError(f"server rollback target metadata is not retained: {target_id}")
     notes = str(step.get("notes", "Release gate rollback verification.")).strip()
     if not notes:
@@ -607,7 +607,8 @@ def _v_rollback_server_generation(ctx: Context, step):
             return None
         if str(after_current.get("rollbackTargetGenerationId", "")) != target_id or str(after_current.get("patchNotes", "")) != notes:
             return None
-        if str(after_current.get("stateDigest", "")) != state_digest or str(after_current.get("ledgerDigest", "")) != ledger_digest:
+        after_ledger_digest = str(after_current.get("ledgerDigest", ""))
+        if str(after_current.get("stateDigest", "")) != state_digest or not re.fullmatch(r"[0-9a-f]{40}", after_ledger_digest):
             return None
         history_ids = [str(entry.get("generationId", "")) for entry in after_history if isinstance(entry, dict)]
         expected_history_ids = [str(entry.get("generationId", "")) for entry in history] + [new_id]
@@ -619,7 +620,7 @@ def _v_rollback_server_generation(ctx: Context, step):
         if current_history.get(new_id, {}).get("patchNotes") != notes:
             return None
         commit = _read_server_json(ctx, f"commits/{new_id}.json", "server rollback commit")
-        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id:
+        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id or str(commit.get("stateDigest", "")) != state_digest or str(commit.get("ledgerDigest", "")) != after_ledger_digest:
             return None
         return after_pointer, after_projection
 
@@ -721,7 +722,8 @@ def _v_compact_server_history(ctx: Context, step):
         server_root / "deltas" / f"{generation_id}.json"
         for generation_id in expected_superseded_ids
     }
-    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "compact", "confirm"])
+    boundary_id = expected_ids[-1]
+    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "compact", "before", boundary_id, "confirm"])
     output = result.output.decode("utf-8", errors="replace") if result.output else ""
     if result.exit_code != 0:
         raise RuntimeError(f"server history compaction command failed ({result.exit_code}): {output}")
@@ -791,12 +793,12 @@ def _v_launch_client(ctx: Context, step):
 
 @verb("reset_client_generation")
 def _v_reset_client_generation(ctx: Context, _step):
-    """Reset only records, active projection, active state, and object CAS for a fresh-client test.
+    """Reset generation-owned durable state and object CAS for a fresh-client test.
 
     Trust and connection data remain in place deliberately, as do all ordinary game files such as mods/.
     """
     client = ctx.game_dir / "automodpack" / "client"
-    for relative in ("records", "active", "active-state.json", "data/objects"):
+    for relative in CLIENT_GENERATION_STATE_PATHS:
         path = client / relative
         if path.is_dir():
             shutil.rmtree(path)

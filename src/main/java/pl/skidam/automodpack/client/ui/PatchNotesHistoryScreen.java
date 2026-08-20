@@ -10,6 +10,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -53,16 +54,23 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		this.displayLines = buildDisplayLines();
-		int y = this.height - 28;
-		int buttonWidth = actionButtonWidth(310, 3);
 		boolean hasPagination = pageCount() > 1;
-		this.previousButton = buttonWidget(actionButtonX(310, 3, 1), y, buttonWidth, 20, VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1));
-		this.nextButton = buttonWidget(actionButtonX(310, 3, 2), y, buttonWidth, 20, VersionedText.translatable("automodpack.ui.next"), button -> changePage(1));
+		List<ActionRow> rows = new ArrayList<>();
 		if (hasPagination) {
-			this.addRenderableWidget(this.previousButton);
-			this.addRenderableWidget(this.nextButton);
+			rows.add(actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+					navigationAction(VersionedText.translatable("automodpack.ui.previous"), button -> changePage(-1)),
+					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount())),
+					navigationAction(VersionedText.translatable("automodpack.ui.next"), button -> changePage(1))));
 		}
-		this.addRenderableWidget(buttonWidget(hasPagination ? actionButtonX(310, 3, 0) : centeredActionButtonX(310, 3, 1, 0), y, buttonWidth, 20, VersionedText.translatable("automodpack.back"), button -> back()));
+		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+		List<Button> buttons = addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
+		if (hasPagination) {
+			this.previousButton = buttons.get(0);
+			this.nextButton = buttons.get(2);
+		} else {
+			this.previousButton = null;
+			this.nextButton = null;
+		}
 		updateNavigation();
 	}
 
@@ -99,8 +107,8 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 
 	private void updateNavigation() {
 		page = Math.max(0, Math.min(pageCount() - 1, page));
-		previousButton.active = page > 0;
-		nextButton.active = page + 1 < pageCount();
+		if (previousButton != null) previousButton.active = page > 0;
+		if (nextButton != null) nextButton.active = page + 1 < pageCount();
 	}
 
 	private void changePage(int amount) {
@@ -130,15 +138,11 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 			ChatFormatting color = line.startsWith(generationPrefix) ? ChatFormatting.YELLOW : ChatFormatting.WHITE;
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(color), left, 50 + (index - start) * LINE_HEIGHT, TextColors.WHITE);
 		}
-		if (pageCount() > 1)
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 42,
-					TextColors.WHITE);
 	}
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		back();
-		return false;
+		return handleBackOnEscape(this::back);
 	}
 
 	private record DisplayEntry(Instant createdAt, String patchNotes) {}

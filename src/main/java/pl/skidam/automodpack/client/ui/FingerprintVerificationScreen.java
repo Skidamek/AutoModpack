@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.List;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
@@ -11,6 +13,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
@@ -58,38 +61,25 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	public void initWidgets() {
 		assert this.minecraft != null;
 
-		// Text field for fingerprint input (same size as skip screen)
-		this.textField = new EditBox(this.font, this.width / 2 - 170, this.height / 2 + 15, 340, 20,
+		int fieldLeft = panelLeft(340);
+		int fieldWidth = Math.max(1, panelWidth(340) - 24);
+		this.textField = new EditBox(this.font, fieldLeft, this.height / 2 + 15, fieldWidth, 20,
 				VersionedText.literal("")
 		);
 		this.textField.setMaxLength(64);
 
-		// Back button (left)
-		this.backButton = buttonWidget(this.width / 2 - 155, this.height - 48, 100, 20,
-				VersionedText.translatable("automodpack.back"),
-				button -> {
+		List<Button> buttons = addActionArea(340, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.back"), button -> {
 					ScreenImpl.setScreen(parent);
-					if (!this.validated) {
-						this.canceledCallback.run();
-					}
-				}
-		);
+					if (!this.validated) this.canceledCallback.run();
+				}),
+				optionalAction(VersionedText.translatable("automodpack.skip"), button -> ScreenImpl.setScreen(new SkipVerificationScreen(this, this.validatedCallback))),
+				primaryAction(VersionedText.translatable("automodpack.validation.verify").withStyle(ChatFormatting.BOLD), button -> verifyFingerprint())));
+		this.backButton = buttons.get(0);
+		this.skipButton = buttons.get(1);
+		this.verifyButton = buttons.get(2);
 
-		// Skip verification button (middle)
-		this.skipButton = buttonWidget(this.width / 2 - 50, this.height - 48, 100, 20,
-				VersionedText.translatable("automodpack.skip"),
-				button -> {
-					assert this.minecraft != null;
-					ScreenImpl.setScreen(new SkipVerificationScreen(this, this.validatedCallback));
-				});
-
-		// Verify button (right - primary action, bold)
-		this.verifyButton = buttonWidget(this.width / 2 + 55, this.height - 48, 100, 20,
-				VersionedText.translatable("automodpack.validation.verify").withStyle(ChatFormatting.BOLD),
-				button -> verifyFingerprint());
-
-		// Wiki button (icon button aligned to the right of text field)
-		this.wikiButton = iconButtonWidget(this.width / 2 + 22 + 150, this.height / 2 + 15, 20, 16,
+		this.wikiButton = iconButtonWidget(fieldLeft + panelWidth(340) - 20, this.height / 2 + 15, 20, 16,
 				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
 				"link", VersionedText.translatable("automodpack.learnmore"));
 
@@ -169,7 +159,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 
 	@Override
 	public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
-		if (textField.isFocused() && keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
+		if (textField.isFocused() && isEnterKey(keyCode)) {
 			if (verifyButton.active) {
 				verifyFingerprint();
 				return true;
@@ -180,6 +170,9 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return false;
+		return handleBackOnEscape(() -> {
+			ScreenImpl.setScreen(parent);
+			if (!validated) canceledCallback.run();
+		});
 	}
 }

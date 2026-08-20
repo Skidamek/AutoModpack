@@ -1,7 +1,9 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.Button;
@@ -133,7 +135,89 @@ public class VersionedScreen extends Screen {
 	}
 
 	protected final int actionRowGap() {
-		return 8;
+		return ActionAreaLayout.GAP;
+	}
+
+	protected final ActionDefinition secondaryAction(Component message, Button.OnPress onPress) {
+		return action(message, onPress, ActionAreaLayout.Role.SECONDARY, true);
+	}
+
+	protected final ActionDefinition optionalAction(Component message, Button.OnPress onPress) {
+		return action(message, onPress, ActionAreaLayout.Role.OPTIONAL, true);
+	}
+
+	protected final ActionDefinition primaryAction(Component message, Button.OnPress onPress) {
+		return action(message, onPress, ActionAreaLayout.Role.PRIMARY, true);
+	}
+
+	protected final ActionDefinition navigationAction(Component message, Button.OnPress onPress) {
+		return action(message, onPress, ActionAreaLayout.Role.NAVIGATION, true);
+	}
+
+	protected final ActionDefinition disabledNavigationAction(Component message) {
+		return action(message, button -> {}, ActionAreaLayout.Role.NAVIGATION, false);
+	}
+
+	private ActionDefinition action(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled) {
+		return new ActionDefinition(message, onPress, role, enabled);
+	}
+
+	protected final ActionRow actionRow(ActionAreaLayout.RowKind kind, ActionDefinition... actions) {
+		return new ActionRow(kind, List.of(actions));
+	}
+
+	protected final List<Button> addActionArea(int preferredPanelWidth, int bottomY, ActionRow... rows) {
+		return addActionArea(preferredPanelWidth, bottomY, false, rows);
+	}
+
+	protected final List<Button> addActionAreaAt(int preferredPanelWidth, int topY, ActionRow... rows) {
+		return addActionArea(preferredPanelWidth, topY, true, rows);
+	}
+
+	protected final int actionAreaTop(int preferredPanelWidth, int bottomY, ActionRow... rows) {
+		return buildActionArea(preferredPanelWidth, bottomY, false, rows).layout().top();
+	}
+
+	private List<Button> addActionArea(int preferredPanelWidth, int anchorY, boolean fromTop, ActionRow... rows) {
+		ActionArea area = buildActionArea(preferredPanelWidth, anchorY, fromTop, rows);
+		List<Button> buttons = new ArrayList<>(area.layout().placements().size());
+		for (ActionAreaLayout.Placement placement : area.layout().placements()) {
+			ActionDefinition definition = area.definitions().get(placement.id());
+			Button button = buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), definition.message(), definition.onPress());
+			button.active = definition.enabled();
+			this.addRenderableWidget(button);
+			buttons.add(button);
+		}
+		return buttons;
+	}
+
+	private ActionArea buildActionArea(int preferredPanelWidth, int anchorY, boolean fromTop, ActionRow... rows) {
+		List<ActionAreaLayout.Row> geometryRows = new ArrayList<>();
+		Map<String, ActionDefinition> definitions = new HashMap<>();
+		for (int rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+			ActionRow row = rows[rowIndex];
+			List<ActionAreaLayout.Action> geometryActions = new ArrayList<>();
+			for (int actionIndex = 0; actionIndex < row.actions().size(); actionIndex++) {
+				String id = rowIndex + ":" + actionIndex;
+				ActionDefinition definition = row.actions().get(actionIndex);
+				int minimumWidth = Math.max(ActionAreaLayout.MIN_BUTTON_WIDTH, this.font.width(definition.message().getString()) + 16);
+				geometryActions.add(new ActionAreaLayout.Action(id, ActionAreaLayout.preferredWidth(row.actions().size()), minimumWidth, definition.role()));
+				definitions.put(id, definition);
+			}
+			geometryRows.add(new ActionAreaLayout.Row(row.kind(), geometryActions));
+		}
+
+		int left = panelLeft(preferredPanelWidth);
+		int width = panelWidth(preferredPanelWidth);
+		ActionAreaLayout.Layout layout = fromTop
+				? ActionAreaLayout.fromTop(left, anchorY, width, actionRowGap(), geometryRows)
+				: ActionAreaLayout.fromBottom(left, anchorY + ActionAreaLayout.BUTTON_HEIGHT, width, actionRowGap(), geometryRows);
+		return new ActionArea(layout, definitions);
+	}
+
+	protected final boolean handleBackOnEscape(Runnable backAction) {
+		backAction.run();
+		return false;
 	}
 
 	protected final int actionButtonWidth(int preferredPanelWidth, int buttonCount) {
@@ -165,7 +249,7 @@ public class VersionedScreen extends Screen {
 	public static String truncateToWidth(Font font, String text, int maxWidth) {
 		if (text == null || text.isEmpty() || maxWidth <= 0) return "";
 		if (font.width(text) <= maxWidth) return text;
-		String ellipsis = "...";
+		String ellipsis = "…";
 		if (font.width(ellipsis) >= maxWidth) return fitPrefix(font, text, maxWidth);
 		return fitPrefix(font, text, maxWidth - font.width(ellipsis)).stripTrailing() + ellipsis;
 	}
@@ -200,7 +284,7 @@ public class VersionedScreen extends Screen {
 		if (lines.isEmpty()) lines.add("");
 		if (truncated) {
 			int last = lines.size() - 1;
-			lines.set(last, truncateToWidth(font, lines.get(last) + "...", maxWidth));
+			lines.set(last, truncateToWidth(font, lines.get(last) + "…", maxWidth));
 		}
 		return lines;
 	}
@@ -209,6 +293,10 @@ public class VersionedScreen extends Screen {
 		int end = text.length();
 		while (end > 0 && font.width(text.substring(0, end)) > maxWidth) end--;
 		return text.substring(0, end);
+	}
+
+	protected final boolean isEnterKey(int keyCode) {
+		return keyCode == 257 || keyCode == 335;
 	}
 
 	/*? if >= 1.20.2 {*/
@@ -237,11 +325,62 @@ public class VersionedScreen extends Screen {
 	public static void setTooltip(Button button, Component tooltip) {
 		button.setTooltip(Tooltip.create(tooltip));
 	}
+
 	/*?} else {*/
 	/*public static void setTooltip(Button button, Component tooltip) {
 		// Legacy buttons have no tooltip API. Keep their existing message unchanged.
 	}
 	*//*?}*/
+
+	protected static final class ActionDefinition {
+		private final Component message;
+		private final Button.OnPress onPress;
+		private final ActionAreaLayout.Role role;
+		private final boolean enabled;
+
+		private ActionDefinition(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled) {
+			this.message = message;
+			this.onPress = onPress;
+			this.role = role;
+			this.enabled = enabled;
+		}
+
+		private Component message() {
+			return message;
+		}
+
+		private Button.OnPress onPress() {
+			return onPress;
+		}
+
+		private ActionAreaLayout.Role role() {
+			return role;
+		}
+
+		private boolean enabled() {
+			return enabled;
+		}
+	}
+
+	protected static final class ActionRow {
+		private final ActionAreaLayout.RowKind kind;
+		private final List<ActionDefinition> actions;
+
+		private ActionRow(ActionAreaLayout.RowKind kind, List<ActionDefinition> actions) {
+			this.kind = kind;
+			this.actions = List.copyOf(actions);
+		}
+
+		private ActionAreaLayout.RowKind kind() {
+			return kind;
+		}
+
+		private List<ActionDefinition> actions() {
+			return actions;
+		}
+	}
+
+	private record ActionArea(ActionAreaLayout.Layout layout, Map<String, ActionDefinition> definitions) {}
 
 	/*? if <=1.20 {*/
 	/*public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {

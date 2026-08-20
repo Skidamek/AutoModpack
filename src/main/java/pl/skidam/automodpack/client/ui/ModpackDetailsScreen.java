@@ -8,6 +8,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -15,7 +16,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 /** A single, calm entry point for all actions on one installed modpack. */
 public final class ModpackDetailsScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 320;
-	private static final int ACTION_HEIGHT = 22;
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
@@ -40,28 +40,25 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
 		actions.add(new Action("automodpack.management.files", this::openFiles));
 		actions.add(new Action("automodpack.packDetails.storage", this::openStorage));
+		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate));
 		actions.add(new Action("automodpack.management.remove", this::remove));
 		int columns = actions.size() > 3 ? 2 : 1;
-		int width = actionButtonWidth(PANEL_WIDTH, columns);
-		int y = 100;
-		for (int index = 0; index < actions.size(); index++) {
-			Action action = actions.get(index);
-			int column = index % columns;
-			int row = index / columns;
-			addAction(actionButtonX(PANEL_WIDTH, columns, column), y + row * (ACTION_HEIGHT + 4), width, action.labelKey(), action.action());
+		List<ActionRow> rows = new ArrayList<>();
+		for (int index = 0; index < actions.size(); index += columns) {
+			int end = Math.min(actions.size(), index + columns);
+			List<ActionDefinition> rowActions = new ArrayList<>(end - index);
+			for (int rowIndex = index; rowIndex < end; rowIndex++) {
+				Action action = actions.get(rowIndex);
+				rowActions.add(rowIndex == 0
+						? primaryAction(VersionedText.translatable(action.labelKey()), button -> action.action().run())
+						: optionalAction(VersionedText.translatable(action.labelKey()), button -> action.action().run()));
+			}
+			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, rowActions.toArray(ActionDefinition[]::new)));
 		}
-
-		int backY = this.height - 28;
-		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 1, 1, 0), backY, actionButtonWidth(PANEL_WIDTH, 1), 20,
-				VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
+		for (Button button : addActionAreaAt(PANEL_WIDTH, 100, rows.toArray(ActionRow[]::new))) actionButtons.add(button);
+		this.addActionArea(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
 		updateActions();
-	}
-
-	private Button addAction(int x, int y, int width, String labelKey, Runnable action) {
-		Button button = buttonWidget(x, y, width, ACTION_HEIGHT, VersionedText.translatable(labelKey), press -> action.run());
-		this.addRenderableWidget(button);
-		actionButtons.add(button);
-		return button;
 	}
 
 	private record Action(String labelKey, Runnable action) {}
@@ -103,6 +100,13 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		controller.remove(pack, this::released, () -> ScreenImpl.setScreen(new InstalledModpacksScreen(parent)));
 	}
 
+	private void deactivate() {
+		if (busy) return;
+		busy = true;
+		updateActions();
+		controller.deactivate(pack, this::released);
+	}
+
 	private void released() {
 		busy = false;
 		updateActions();
@@ -114,7 +118,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		int width = Math.max(1, this.width - 20);
+		int width = panelWidth(PANEL_WIDTH);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(pack.name()).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
 		String state = pack.active() ? VersionedText.translatable("automodpack.packManager.active", pack.name()).getString() : VersionedText.translatable("automodpack.packManager.noActive").getString();
@@ -133,7 +137,6 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		ScreenImpl.setScreen(parent);
-		return false;
+		return handleBackOnEscape(() -> ScreenImpl.setScreen(parent));
 	}
 }

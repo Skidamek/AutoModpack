@@ -1,9 +1,13 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -26,20 +30,17 @@ public final class ModpackStorageScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		int x = panelLeft(PANEL_WIDTH);
-		int width = panelWidth(PANEL_WIDTH);
-		int y = 76;
+		List<ActionRow> actions = new ArrayList<>();
 		if (controller.hasRecovery(pack)) {
-			this.addRenderableWidget(buttonWidget(x, y, width, 22, VersionedText.translatable("automodpack.management.recovery"), button -> openRecovery()));
-			y += 26;
+			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.recovery"), button -> openRecovery())));
 		}
 		if (controller.hasQuarantine(pack)) {
-			this.addRenderableWidget(buttonWidget(x, y, width, 22, VersionedText.translatable("automodpack.management.quarantine"), button -> openQuarantine()));
-			y += 26;
+			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.quarantine"), button -> openQuarantine())));
 		}
-		this.addRenderableWidget(buttonWidget(x, y, width, 22, VersionedText.translatable("automodpack.packDetails.localStorage"), button -> openLocalStorage()));
-		this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 1, 1, 0), this.height - 28, actionButtonWidth(PANEL_WIDTH, 1), 20,
-				VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
+		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryAction(VersionedText.translatable("automodpack.packDetails.localStorage"), button -> openLocalStorage())));
+		this.addActionAreaAt(PANEL_WIDTH, 76, actions.toArray(ActionRow[]::new));
+		this.addActionArea(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
 	}
 
 	private void openRecovery() {
@@ -62,7 +63,6 @@ public final class ModpackStorageScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		ScreenImpl.setScreen(parent);
-		return false;
+		return handleBackOnEscape(() -> ScreenImpl.setScreen(parent));
 	}
 }

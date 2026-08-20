@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,6 +19,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.widget.ChangeBrowserWidget;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
@@ -46,6 +48,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private Button detailsButton;
 	private Button openPageButton;
 	private int browserTop;
+	private int browserBottom;
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames) {
 		this(parent, heading, description, changes, featureNames, null);
@@ -88,24 +91,21 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.addRenderableWidget(this.featureButton);
 		this.addRenderableWidget(this.modeButton);
 		updateControlLabels();
-		rebuildBrowser();
-
-		int buttonCount = auxiliaryAction == null ? 3 : 4;
-		int buttonWidth = actionButtonWidth(PANEL_WIDTH, buttonCount);
-		this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, buttonCount, 0), this.height - 28, buttonWidth, 20,
-				VersionedText.translatable("automodpack.back"), button -> back()));
-		this.detailsButton = buttonWidget(actionButtonX(PANEL_WIDTH, buttonCount, 1), this.height - 28, buttonWidth, 20, VersionedText.literal(""), button -> toggleDetails());
-		this.addRenderableWidget(this.detailsButton);
-		this.openPageButton = buttonWidget(actionButtonX(PANEL_WIDTH, buttonCount, 2), this.height - 28, buttonWidth, 20,
-				VersionedText.translatable("automodpack.changelog.noPage"), button -> openSelectedPage());
-		this.openPageButton.active = false;
-		this.addRenderableWidget(this.openPageButton);
+		List<ActionRow> actionRows = new ArrayList<>();
 		if (auxiliaryAction != null) {
-			Button auxiliaryButton = buttonWidget(actionButtonX(PANEL_WIDTH, buttonCount, 3), this.height - 28, buttonWidth, 20,
-					auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this));
-			auxiliaryButton.active = auxiliaryAction.active();
-			this.addRenderableWidget(auxiliaryButton);
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this))));
 		}
+		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
+				optionalAction(VersionedText.literal(""), button -> toggleDetails()),
+				optionalAction(VersionedText.translatable("automodpack.changelog.noPage"), button -> openSelectedPage())));
+		List<Button> actionButtons = this.addActionArea(PANEL_WIDTH, this.height - 28, actionRows.toArray(ActionRow[]::new));
+		int footerOffset = auxiliaryAction == null ? 0 : 1;
+		this.detailsButton = actionButtons.get(footerOffset + 1);
+		this.openPageButton = actionButtons.get(footerOffset + 2);
+		if (auxiliaryAction != null) actionButtons.get(0).active = auxiliaryAction.active();
+		this.browserBottom = actionAreaTop(PANEL_WIDTH, this.height - 28, actionRows.toArray(ActionRow[]::new)) - 8;
+		rebuildBrowser();
 		updateDetailsLabel();
 	}
 
@@ -116,7 +116,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature));
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, mode, filter).collapse(collapsedFolders);
 		this.browser = new ChangeBrowserWidget(projection, collapsedFolders, featureNames, technicalDetails, this::toggleFolder,
-				this.minecraft, this.width, this.height, browserTop, this.height - 48);
+				this.minecraft, this.width, this.height, browserTop, browserBottom);
 		this.addRenderableWidget(this.browser);
 	}
 
@@ -223,8 +223,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		back();
-		return false;
+		return handleBackOnEscape(this::back);
 	}
 
 	public record BrowserAction(Component label, Consumer<Screen> action, boolean active) {
