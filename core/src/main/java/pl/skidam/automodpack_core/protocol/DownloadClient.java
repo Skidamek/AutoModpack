@@ -25,7 +25,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -162,22 +161,17 @@ public class DownloadClient implements AutoCloseable {
 
 	private void awaitTransportUpgrade(HolepunchSocket socket, SSLSocket tlsSocket) throws IOException {
 		try {
-			CompletionStage<Void> upgraded = socket.upgradeTransport().thenRun(() -> {
-				try {
-					socket.enableTlsTrafficCamouflage(tlsSocket.getSession(), true);
-				} catch (Exception exception) {
-					throw new CompletionException("Failed to enable TLS record camouflage", exception);
-				}
-			});
-			upgraded.toCompletableFuture().get(15, TimeUnit.SECONDS);
+			socket.prepareTransportUpgrade().toCompletableFuture().get(15, TimeUnit.SECONDS);
+			socket.enableTlsTrafficCamouflage(tlsSocket.getSession(), true);
+			socket.commitTransportUpgrade().toCompletableFuture().get(15, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new IOException("Holepunch transport upgrade interrupted", e);
 		} catch (ExecutionException e) {
 			Throwable cause = e.getCause() == null ? e : e.getCause();
-			throw new IOException("Holepunch transport upgrade failed", cause);
+			throw new IOException("Holepunch transport handoff failed", cause);
 		} catch (TimeoutException e) {
-			throw new IOException("Holepunch transport upgrade timed out", e);
+			throw new IOException("Holepunch transport handoff timed out", e);
 		}
 	}
 

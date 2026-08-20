@@ -222,7 +222,17 @@ def _prepare_server(ctx: Context):
     (srv_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx.artifact, srv_dir / "mods" / "automodpack.jar")
     cfg = dict(ctx.settings.get("automodpack", {}).get("config", {}))
-    cfg.update((ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {}))
+    topology_config = (ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {})
+    cfg.update(topology_config)
+    connection_path = ctx.scenario.get("connectionPath") or {}
+    if connection_path:
+        cfg["connectionMode"] = str(connection_path["mode"]).upper()
+        if "bindPort" in connection_path:
+            cfg["bindPort"] = connection_path["bindPort"]
+        if "advertisedEndpointHost" in connection_path:
+            cfg["advertisedEndpointHost"] = connection_path["advertisedEndpointHost"]
+        if "endpointPort" in connection_path:
+            cfg["advertisedEndpointPort"] = connection_path["endpointPort"]
     cfg["modpackName"] = ctx.modpack_name
     cfg["acceptedLoaders"] = [ctx.target.loader]
     (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
@@ -984,7 +994,7 @@ def _v_seed_bootstrap(ctx: Context, step):
     if not modpack_id:
         raise RuntimeError(f"live server projection has no modpackId: {projection_path}")
     origin = str(ctx.resolve(step.get("origin", "${server.host}"))).strip()
-    endpoint = str(ctx.resolve(step.get("endpoint", "${server.host}"))).strip()
+    endpoint = str(ctx.resolve(step.get("endpoint", "${server.endpoint}"))).strip()
     connection_mode = str(step.get("connectionMode") or server_config.get("connectionMode") or "").strip().upper()
     if not origin or not endpoint or not connection_mode:
         raise RuntimeError("bootstrap requires origin, endpoint, and connectionMode")
@@ -1616,6 +1626,7 @@ def run_case(
 ) -> dict:
     started = time.monotonic()
     scenario_id = scenario.get("id", "?")
+    connection_mode = str((scenario.get("connectionPath") or {}).get("mode", "")).upper() or None
     net_mode = transport(scenario, settings)
     mode = scenario_mode(scenario)
     case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
@@ -1682,7 +1693,10 @@ def run_case(
             expected_mods=sf.expected_mods,
             server_host=server_host,
             resource_scope=resource_scope,
-            vars=dict(scenario.get("vars", {}) or {}),
+            vars={
+                **dict(scenario.get("vars", {}) or {}),
+                "server_endpoint_port": int((scenario.get("connectionPath") or {}).get("endpointPort", 25565)),
+            },
         )
         ctx.logs_provider = lambda which, tail=None: _container_logs(
             srv_name if which == "server" else cli_name, tail=tail
@@ -1718,6 +1732,7 @@ def run_case(
         return {
             "target": target.id,
             "scenario": scenario_id,
+            "connectionMode": connection_mode,
             "ok": True,
             "duration": time.monotonic() - started,
             "steps": step_results,
@@ -1728,6 +1743,7 @@ def run_case(
         return {
             "target": target.id,
             "scenario": scenario_id,
+            "connectionMode": connection_mode,
             "ok": False,
             "duration": time.monotonic() - started,
             "error": error,

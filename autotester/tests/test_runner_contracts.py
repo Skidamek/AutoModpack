@@ -68,6 +68,34 @@ def test_partial_matrix_cannot_be_reported_as_green():
     assert payload["results"][1]["error"] == "Case did not produce a terminal result"
 
 
+def test_connection_path_matrix_runs_every_path(monkeypatch, tmp_path):
+    seen = []
+
+    def fake_run_case(target, scenario, **_kwargs):
+        mode = scenario["connectionPath"]["mode"]
+        seen.append(mode)
+        return {"target": target.id, "scenario": scenario["id"], "connectionMode": mode, "ok": True, "duration": 1}
+
+    monkeypatch.setattr(cli, "run_case", fake_run_case)
+    result = cli._run_target_cases(
+        _target(),
+        [
+            {"id": "all-direct", "connectionPath": {"mode": "DIRECT"}},
+            {"id": "all-magic", "connectionPath": {"mode": "MAGIC_PACKET"}},
+            {"id": "all-holepunch", "connectionPath": {"mode": "HOLEPUNCH"}},
+        ],
+        out_dir=tmp_path,
+        artifact_dir=tmp_path,
+        client_image="client",
+        settings={},
+        resource_scope="scope",
+    )
+
+    assert seen == ["DIRECT", "MAGIC_PACKET", "HOLEPUNCH"]
+    assert result["ok"] is True
+    assert [path["connectionMode"] for path in result["connectionPaths"]] == seen
+
+
 def test_interrupted_run_cleans_only_its_docker_resources(monkeypatch):
     class Resource:
         def __init__(self, name):

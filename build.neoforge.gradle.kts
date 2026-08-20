@@ -36,11 +36,7 @@ dependencies {
 	implementation(project(":loader-core")) { isTransitive = false }
 
 	compileOnly(":mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
-	if (sc.current.parsed >= "1.21.1") {
-		// NeoForge keeps Mojmap runtime names across these targets, so every release reuses the same
-		// Java 21 mixin shim while the client still selects the exact Minecraft wire protocol.
-		jarJar(implementation(":mcholepunch-neoforge:$mcholepunchVersion") { isTransitive = false })
-	}
+	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 }
 
 tasks {

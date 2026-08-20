@@ -12,6 +12,7 @@ from .engine.util import parse_duration
 
 _VALID_MODES = {"full", "client-only"}
 _VALID_NETWORKS = {"bridge", "host"}
+_VALID_CONNECTION_MODES = {"DIRECT", "MAGIC_PACKET", "HOLEPUNCH"}
 _COND_FIELDS = ("when", "until", "that")
 _DURATION_FIELDS = ("timeout", "poll", "duration")
 _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")
@@ -68,6 +69,9 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
         for capability, required_verb in _RELEASE_GATE_REQUIRED_VERBS.items():
             if not _contains_verb(scenario.get("flow", []), required_verb, release_macros):
                 problems.append(f"release-gate scenario must cover {capability} with verb {required_verb!r}")
+        path_modes = {str(path.get("mode", "")).upper() for path in scenario.get("connectionPaths", []) if isinstance(path, dict)}
+        if path_modes != _VALID_CONNECTION_MODES:
+            problems.append(f"release-gate scenario must cover all connection modes: {sorted(_VALID_CONNECTION_MODES)}")
     generations = (scenario.get("serverFiles", {}) or {}).get("generations")
     if generations is not None:
         if not isinstance(generations, list):
@@ -83,6 +87,8 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
     net = scenario.get("network")
     if net is not None and str(net).lower() not in _VALID_NETWORKS:
         problems.append(f"unknown network {net!r} (expected one of {sorted(_VALID_NETWORKS)})")
+
+    _check_connection_paths(scenario.get("connectionPaths"), problems)
 
     for name, value in (scenario.get("timeouts") or {}).items():
         _check_duration(value, problems, f"timeouts.{name}")
@@ -111,6 +117,32 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
 
     _walk(flow, known_macros, problems, stack=(), scoped_targets=scoped_targets)
     return problems
+
+
+def _check_connection_paths(paths, problems):
+    if paths is None:
+        return
+    if not isinstance(paths, list) or not paths:
+        problems.append("connectionPaths must be a non-empty list")
+        return
+    modes = set()
+    for index, path in enumerate(paths):
+        where = f"connectionPaths[{index}]"
+        if not isinstance(path, dict):
+            problems.append(f"{where}: expected a mapping")
+            continue
+        mode = str(path.get("mode", "")).upper()
+        if mode not in _VALID_CONNECTION_MODES:
+            problems.append(f"{where}.mode: expected one of {sorted(_VALID_CONNECTION_MODES)}, got {path.get('mode')!r}")
+        if mode in modes:
+            problems.append(f"{where}.mode: duplicate connection mode {mode!r}")
+        modes.add(mode)
+        for field in ("bindPort", "endpointPort"):
+            value = path.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < -1 or value > 65535 or value == 0:
+                problems.append(f"{where}.{field}: expected an integer port or -1, got {value!r}")
+        if mode == "DIRECT" and path.get("bindPort", -1) == -1:
+            problems.append(f"{where}.bindPort: DIRECT needs a built-in listener for an end-to-end case")
 
 
 def _target_pattern_matches(pattern: str, target_id: str) -> bool:

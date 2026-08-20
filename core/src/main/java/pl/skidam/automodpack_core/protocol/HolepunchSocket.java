@@ -66,12 +66,20 @@ public class HolepunchSocket extends Socket {
 		};
 	}
 
-	public CompletionStage<Void> upgradeTransport() {
+	CompletionStage<Void> prepareTransportUpgrade() {
 		HolepunchConnection activeConnection = connection;
 		if (activeConnection == null) {
 			return CompletableFuture.failedFuture(new IllegalStateException("HolepunchSocket is not connected"));
 		}
-		return activeConnection.upgradeTransport();
+		return activeConnection.prepareTransportUpgrade();
+	}
+
+	CompletionStage<Void> commitTransportUpgrade() {
+		HolepunchConnection activeConnection = connection;
+		if (activeConnection == null) {
+			return CompletableFuture.failedFuture(new IllegalStateException("HolepunchSocket is not connected"));
+		}
+		return activeConnection.commitTransportUpgrade();
 	}
 
 	void enableTlsTrafficCamouflage(SSLSession session, boolean client) throws SSLKeyException {

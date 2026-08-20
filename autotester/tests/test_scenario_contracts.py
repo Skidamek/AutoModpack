@@ -6,6 +6,7 @@ import types
 
 from automodpack_autotester import runner
 from automodpack_autotester.config import (
+    connection_path_variants,
     load_macros,
     load_scenarios,
     load_targets,
@@ -32,6 +33,22 @@ def test_shipped_scenarios_validate():
     targets = load_targets()
     for name, scenario in load_scenarios().items():
         assert validate_scenario(scenario, macros, targets) == [], name
+
+
+def test_connection_path_variants_keep_modes_independent():
+    scenario = {
+        "id": "paths",
+        "connectionPaths": [
+            {"mode": "DIRECT", "bindPort": 25566, "endpointPort": 25566},
+            {"mode": "MAGIC_PACKET", "bindPort": -1, "endpointPort": 25565},
+        ],
+    }
+
+    variants = connection_path_variants(scenario)
+
+    assert [variant["id"] for variant in variants] == ["paths-direct", "paths-magic_packet"]
+    assert [variant["connectionPath"]["mode"] for variant in variants] == ["DIRECT", "MAGIC_PACKET"]
+    assert "connectionPath" not in scenario
 
 
 def test_validation_rejects_generation_fixture_on_non_jar_path():

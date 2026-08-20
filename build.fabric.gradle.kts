@@ -39,17 +39,7 @@ dependencies {
 	implementation(project(":loader-core")) { isTransitive = false }
 
 	compileOnly(":mcholepunch-core:$mcholepunchVersion")
-	if (sc.current.parsed >= "1.20.1") {
-		// Fabric 1.20–1.21.x shares intermediary runtime names; Fabric 26.x uses Mojmap.
-		val adapterName =
-			if (sc.current.parsed >= "26.1") {
-				"mcholepunch-fabric-mojmap"
-			} else {
-				"mcholepunch-fabric-intermediary"
-			}
-		val adapter = modImplementation(":$adapterName:$mcholepunchVersion") { isTransitive = false }
-		include(adapter!!)
-	}
+	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion")
 
 	minecraft("com.mojang:minecraft:$minecraftVersion")
 	if (!fabric.isUnobf) {
