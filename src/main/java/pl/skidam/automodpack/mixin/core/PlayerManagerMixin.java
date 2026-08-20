@@ -9,9 +9,8 @@ import net.minecraft.network.chat.TextColor;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.modpack.GameHelpers;
@@ -30,11 +29,13 @@ import static pl.skidam.automodpack_core.Constants.serverConfig;
 public class PlayerManagerMixin {
 
 /*? if >1.20.3 {*/
-	@Inject(at = @At("TAIL"), method = "placeNewPlayer")
-	private void onPlayerConnect(Connection connection, ServerPlayer player, CommonListenerCookie clientData, CallbackInfo ci) {
+	@WrapMethod(method = "placeNewPlayer")
+	private void onPlayerConnect(Connection connection, ServerPlayer player, CommonListenerCookie clientData, Operation<Void> original) {
+		original.call(connection, player, clientData);
 /*?} else {*/
-/*@Inject(at = @At("TAIL"), method = "placeNewPlayer")
-private void onPlayerConnect(Connection netManager, ServerPlayer player, CallbackInfo ci) {
+/*@WrapMethod(method = "placeNewPlayer")
+private void onPlayerConnect(Connection netManager, ServerPlayer player, Operation<Void> original) {
+original.call(netManager, player);
 *//*?}*/
 		GameProfile profile = player.getGameProfile();
 		String playerName = GameHelpers.getPlayerName(profile);
