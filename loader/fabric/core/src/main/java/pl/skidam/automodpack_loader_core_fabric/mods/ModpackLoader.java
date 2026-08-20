@@ -2,6 +2,7 @@ package pl.skidam.automodpack_loader_core_fabric.mods;
 
 import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
