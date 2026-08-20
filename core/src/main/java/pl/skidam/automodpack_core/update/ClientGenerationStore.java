@@ -388,6 +388,9 @@ public final class ClientGenerationStore {
 			GenerationRecord record = read(generationId).orElseThrow(() -> new IOException("Client generation record is missing: " + generationId));
 			if (normalizedModpackId.equals(record.manifest().modpackId())) matchingGenerationIds.add(generationId);
 		}
+		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
+		SelectionIntent expectedSelection = selections.get(normalizedModpackId).orElse(null);
+		selections.remove(normalizedModpackId, expectedSelection);
 		for (String generationId : matchingGenerationIds) FileTrees.delete(storage.generationDirectory(generationId));
 		FileTrees.delete(storage.generatedCopiesPackDirectory(normalizedModpackId));
 		storage.clearOverlay(normalizedModpackId);

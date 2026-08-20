@@ -31,6 +31,8 @@ public class FileMetadataCache implements AutoCloseable {
 
 	private static final SharedCacheRegistry<FileMetadataCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final String RECORD_SUFFIX = ".json";
+	private static final long NANOSECONDS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
+	private static final long UNAVAILABLE_CHANGE_TIME_NANOS = Long.MIN_VALUE;
 
 	private final Path recordsDirectory;
 	private final Map<String, CachedFile> hotRecords = new HashMap<>();
@@ -196,9 +198,9 @@ public class FileMetadataCache implements AutoCloseable {
 	private static long changeTimeNanos(Path path) {
 		try {
 			Object value = Files.getAttribute(path, "unix:ctime", LinkOption.NOFOLLOW_LINKS);
-			return value instanceof FileTime time ? toNanos(time) : Long.MIN_VALUE;
+			return value instanceof FileTime time ? toNanos(time) : UNAVAILABLE_CHANGE_TIME_NANOS;
 		} catch (IOException | UnsupportedOperationException | IllegalArgumentException e) {
-			return Long.MIN_VALUE;
+			return UNAVAILABLE_CHANGE_TIME_NANOS;
 		}
 	}
 
@@ -231,11 +233,16 @@ public class FileMetadataCache implements AutoCloseable {
 		return null;
 	}
 
-	private static boolean isCacheValid(CachedFile cached, FileFingerprint fingerprint) {
+	static boolean isCacheValid(CachedFile cached, FileFingerprint fingerprint) {
 		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
 				&& cached.creationTimeNanos() == fingerprint.creationTimeNanos() && cached.changeTimeNanos() == fingerprint.changeTimeNanos()
 				&& cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey())
-				&& Math.floorDiv(fingerprint.lastModifiedNanos(), 1_000_000_000L) != Math.floorDiv(cached.validatedAtNanos(), 1_000_000_000L);
+				&& isFingerprintNonRacy(cached, fingerprint);
+	}
+
+	private static boolean isFingerprintNonRacy(CachedFile cached, FileFingerprint fingerprint) {
+		if (fingerprint.changeTimeNanos() != UNAVAILABLE_CHANGE_TIME_NANOS) return true;
+		return Math.floorDiv(fingerprint.lastModifiedNanos(), NANOSECONDS_PER_SECOND) < Math.floorDiv(cached.validatedAtNanos(), NANOSECONDS_PER_SECOND);
 	}
 
 	public String getHashOrNull(Path path) {

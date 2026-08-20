@@ -1,7 +1,9 @@
 package pl.skidam.automodpack_core.utils.cache;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -132,5 +134,19 @@ class FileMetadataCacheTest {
 			assertEquals(expectedHash, cache.getOrComputeHash(file));
 			assertEquals(sentinel, Files.getLastModifiedTime(record));
 		}
+	}
+
+	@Test
+	void rejectsFutureModifiedTimeOnlyWhenChangeTimeIsUnavailable() {
+		long validatedAt = 1_700_000_000L * 1_000_000_000L;
+		long futureModified = validatedAt + 2 * 1_000_000_000L;
+		FileMetadataCache.FileFingerprint unavailableChangeTime = new FileMetadataCache.FileFingerprint(futureModified, 1L, Long.MIN_VALUE, 4L, "key");
+		FileMetadataCache.CachedFile unavailableRecord = new FileMetadataCache.CachedFile("path", "hash", futureModified, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
+
+		assertFalse(FileMetadataCache.isCacheValid(unavailableRecord, unavailableChangeTime));
+
+		FileMetadataCache.FileFingerprint availableChangeTime = new FileMetadataCache.FileFingerprint(futureModified, 1L, 2L, 4L, "key");
+		FileMetadataCache.CachedFile availableRecord = new FileMetadataCache.CachedFile("path", "hash", futureModified, 1L, 2L, 4L, "key", validatedAt);
+		assertTrue(FileMetadataCache.isCacheValid(availableRecord, availableChangeTime));
 	}
 }

@@ -123,8 +123,32 @@ public final class GroupManifestValidator {
 				}
 			}
 			validateAliasOwners(platform, manifest, aliases, false, errors);
+			validateAncestorOwners(platform, manifest, aliases, errors);
 			validateAliasOwners(platform, manifest, modBasenameAliases, true, errors);
 		}
+	}
+
+	private static void validateAncestorOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, List<String> errors) {
+		List<PathOwner> owners = aliases.values().stream().flatMap(Collection::stream).toList();
+		for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
+			PathPair pair = ancestorPair(owners.get(i), owners.get(j), platform);
+			if (pair == null) continue;
+			if (pair.ancestor().groupId().equals(pair.descendant().groupId()) || coSelectable(manifest, pair.ancestor().groupId(), pair.descendant().groupId())) {
+				String ownerDescription = pair.ancestor().groupId().equals(pair.descendant().groupId())
+						? "group '" + pair.ancestor().groupId() + "'"
+						: "co-selectable groups '" + pair.ancestor().groupId() + "' and '" + pair.descendant().groupId() + "'";
+				errors.add(platform.id() + ": file path '" + pair.ancestor().path() + "' cannot be an ancestor of '" + pair.descendant().path() + "' in "
+						+ ownerDescription);
+			}
+		}
+	}
+
+	private static PathPair ancestorPair(PathOwner first, PathOwner second, ClientPlatform platform) {
+		String firstKey = platformPathKey(first.path(), platform);
+		String secondKey = platformPathKey(second.path(), platform);
+		if (secondKey.startsWith(firstKey + "/")) return new PathPair(first, second);
+		if (firstKey.startsWith(secondKey + "/")) return new PathPair(second, first);
+		return null;
 	}
 
 	private static void validateAliasOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, boolean modBasenames,
@@ -165,6 +189,8 @@ public final class GroupManifestValidator {
 	}
 
 	private record PathOwner(String groupId, String path) {}
+
+	private record PathPair(PathOwner ancestor, PathOwner descendant) {}
 
 	private static void validateReferences(Map<String, GroupManifest.Group> groups, List<String> errors) {
 		for (var entry : groups.entrySet()) {
