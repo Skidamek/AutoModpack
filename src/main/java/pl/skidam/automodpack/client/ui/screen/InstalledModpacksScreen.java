@@ -18,6 +18,7 @@ import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.update.PreservationVault;
 
 /** Lists locally installed packs; lifecycle actions live behind the details screen. */
 public final class InstalledModpacksScreen extends VersionedScreen {
@@ -27,6 +28,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private final Screen parent;
 	private final InstalledModpackController controller;
 	private List<InstalledModpackController.Pack> entries;
+	private List<PreservationVault.Snapshot> orphanedPreservations;
 	private int page;
 	private boolean discoveryFailureShown;
 
@@ -34,7 +36,12 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		super(VersionedText.translatable("automodpack.packManager.title"));
 		this.parent = parent;
 		this.controller = new InstalledModpackController();
+		refreshEntries();
+	}
+
+	private void refreshEntries() {
 		this.entries = controller.installed();
+		this.orphanedPreservations = controller.orphanedPreservations();
 	}
 
 	@Override
@@ -51,17 +58,24 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		int actionY = this.height - 28;
 		int listBottomWithoutPagination = actionY - 8;
 		int rowsWithoutPagination = Math.max(1, (listBottomWithoutPagination - listTop) / ROW_HEIGHT);
-		boolean showPagination = entries.size() > rowsWithoutPagination;
+		int totalEntries = entries.size() + orphanedPreservations.size();
+		boolean showPagination = totalEntries > rowsWithoutPagination;
 		int listBottom = showPagination ? actionY - 20 - actionRowGap() - 8 : listBottomWithoutPagination;
 		int rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
-		int pageCount = Math.max(1, (int) Math.ceil((double) entries.size() / rowsPerPage));
+		int pageCount = Math.max(1, (int) Math.ceil((double) totalEntries / rowsPerPage));
 		if (page >= pageCount) page = pageCount - 1;
 
 		int start = page * rowsPerPage;
-		for (int index = start; index < Math.min(entries.size(), start + rowsPerPage); index++) {
-			InstalledModpackController.Pack entry = entries.get(index);
+		for (int index = start; index < Math.min(totalEntries, start + rowsPerPage); index++) {
 			int y = listTop + (index - start) * ROW_HEIGHT;
-			Button row = buttonWidget(x, y, rowWidth, 28, rowLabel(entry, rowWidth), press -> open(entry));
+			Button row;
+			if (index < entries.size()) {
+				InstalledModpackController.Pack entry = entries.get(index);
+				row = buttonWidget(x, y, rowWidth, 28, rowLabel(entry, rowWidth), press -> open(entry));
+			} else {
+				PreservationVault.Snapshot snapshot = orphanedPreservations.get(index - entries.size());
+				row = buttonWidget(x, y, rowWidth, 28, orphanedLabel(snapshot, rowWidth), press -> open(snapshot));
+			}
 			this.addRenderableWidget(row);
 		}
 
@@ -98,10 +112,22 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		ScreenImpl.setScreen(new ModpackDetailsScreen(this, controller, entry));
 	}
 
+	private void open(PreservationVault.Snapshot snapshot) {
+		ScreenImpl.setScreen(new PreservationVaultScreen(this, controller, snapshot.modpackId(), snapshot.modpackId(), false, () -> {
+			refreshEntries();
+			rebuild();
+		}));
+	}
+
 	private MutableComponent rowLabel(InstalledModpackController.Pack entry, int width) {
 		String state = VersionedText.translatable(entry.active() ? "automodpack.packManager.activeMarker" : "automodpack.packManager.reviewMarker").getString();
 		String connection = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.connected" : "automodpack.packManager.localRecord").getString();
 		return VersionedText.literal(truncateToWidth(this.font, entry.name() + "  " + state + "  " + connection, width - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
+	}
+
+	private MutableComponent orphanedLabel(PreservationVault.Snapshot snapshot, int width) {
+		String label = snapshot.modpackId() + "  " + VersionedText.translatable("automodpack.management.preservedFiles").getString();
+		return VersionedText.literal(truncateToWidth(this.font, label, width - 12)).withStyle(ChatFormatting.YELLOW);
 	}
 
 	private void rebuild() {
@@ -116,7 +142,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packManager.title").withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
-		String description = entries.isEmpty()
+		boolean hasEntries = !entries.isEmpty() || !orphanedPreservations.isEmpty();
+		String description = !hasEntries
 				? VersionedText.translatable("automodpack.packManager.empty").getString()
 				: VersionedText.translatable("automodpack.packManager.description").getString();
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 20, 2);
@@ -130,6 +157,10 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 					.map(entry -> VersionedText.translatable("automodpack.packManager.active", entry.name()).getString())
 					.orElse(VersionedText.translatable("automodpack.packManager.noActive").getString());
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, active, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, descriptionLines.size() > 1 ? 50 : 44, TextColors.WHITE);
+		}
+		if (entries.isEmpty() && !orphanedPreservations.isEmpty()) {
+			drawCenteredTextWithShadow(matrices, this.font,
+					VersionedText.translatable("automodpack.management.preservedFiles").withStyle(ChatFormatting.YELLOW), this.width / 2, descriptionLines.size() > 1 ? 50 : 44, TextColors.WHITE);
 		}
 	}
 

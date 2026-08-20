@@ -249,6 +249,34 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
+	void rejectsFileDirectoryConflictWithinOneGroup() {
+		var fields = catalogue();
+		var group = group(fileOfType("mod"));
+		group.files = Map.of("outside", fileOfType("mod"), "outside/nested.jar", fileOfType("mod"));
+		fields.groups = Map.of("main", group);
+
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsCoSelectableFileDirectoryConflict() {
+		var fields = catalogue();
+		fields.groups = linkedGroups("main", groupAt("outside", fileOfType("mod")), "visuals", groupAt("outside/nested.jar", fileOfType("mod")));
+
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void acceptsFileDirectoryPathsForMutuallyExclusiveGroups() {
+		var fields = catalogue();
+		var first = groupAt("outside", fileOfType("mod"));
+		first.breaksWith = Set.of("second");
+		fields.groups = linkedGroups("first", first, "second", groupAt("outside/nested.jar", fileOfType("mod")));
+
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
 	void acceptsSameModBasenameOutsideLiveModsDirectory() {
 		var fields = catalogue();
 		fields.groups = linkedGroups("main", groupAt("mods/main.jar", fileOfType("mod")), "resourcepack", groupAt("resourcepacks/main.jar", fileOfType("mod")),

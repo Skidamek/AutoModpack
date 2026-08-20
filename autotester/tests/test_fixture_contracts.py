@@ -352,6 +352,64 @@ def test_record_only_staging_does_not_replace_active_state(make_ctx):
     )
     assert len(records) == 1
     assert json.loads(records[0].read_text(encoding="utf-8"))["modpackName"] == "Pack B"
+    assert not (ctx.game_dir / "automodpack/client-config.json").exists()
+    assert not (
+        ctx.game_dir
+        / "automodpack/client/data/packs/packbbb/connection.json"
+    ).exists()
+
+
+def test_offline_staging_does_not_create_connection_state_by_default(make_ctx):
+    ctx = make_ctx()
+
+    runner._v_stage_modpack(
+        ctx,
+        {
+            "packId": "packaaa",
+            "files": [{"path": "config/offline.txt", "content": "offline"}],
+        },
+    )
+
+    config = json.loads(
+        (ctx.game_dir / "automodpack/client-config.json").read_text(encoding="utf-8")
+    )
+    assert config["updateSelectedModpackOnLaunch"] is False
+    assert "modpackConnections" not in config
+    assert not (
+        ctx.game_dir
+        / "automodpack/client/data/packs/packaaa/connection.json"
+    ).exists()
+
+
+def test_offline_update_fallback_writes_the_production_connection_record(make_ctx):
+    ctx = make_ctx(server_host="127.0.0.1")
+
+    runner._v_stage_modpack(
+        ctx,
+        {
+            "packId": "packaaa",
+            "config": {"updateSelectedModpackOnLaunch": True},
+            "files": [{"path": "config/offline.txt", "content": "offline"}],
+        },
+    )
+
+    connection_path = (
+        ctx.game_dir
+        / "automodpack/client/data/packs/packaaa/connection.json"
+    )
+    assert json.loads(connection_path.read_text(encoding="utf-8")) == {
+        "connection": {
+            "origin": "127.0.0.1:25565",
+            "endpoint": "127.0.0.1:25565",
+            "connectionMode": "DIRECT",
+        },
+        "secrets": {},
+    }
+    config = json.loads(
+        (ctx.game_dir / "automodpack/client-config.json").read_text(encoding="utf-8")
+    )
+    assert config["updateSelectedModpackOnLaunch"] is True
+    assert "modpackConnections" not in config
 
 
 def test_record_only_staging_links_same_pack_history(make_ctx):

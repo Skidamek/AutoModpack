@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -21,6 +22,7 @@ import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
@@ -88,7 +90,7 @@ final class InstalledModpackController {
 	}
 
 	boolean hasInstalledPacks() {
-		return !installed().isEmpty();
+		return !installed().isEmpty() || !orphanedPreservations().isEmpty();
 	}
 
 	Pack pack(GenerationRecord record) {
@@ -106,6 +108,17 @@ final class InstalledModpackController {
 					.sorted(Comparator.comparing(InstalledModpackController::name, String.CASE_INSENSITIVE_ORDER))
 					.map(record -> pack(record, record.manifest().modpackId().equals(activeId), hasConnection(record.manifest().modpackId())))
 					.toList();
+		} catch (IOException | RuntimeException e) {
+			discoveryFailure = e;
+			return List.of();
+		}
+	}
+
+	/** Returns claim-bearing vault snapshots whose installed generation records no longer exist. */
+	List<PreservationVault.Snapshot> orphanedPreservations() {
+		try {
+			Set<String> installedIds = new ClientGenerationStore(storage).installedRecords().stream().map(record -> record.manifest().modpackId()).collect(Collectors.toSet());
+			return PreservationVault.snapshots(storage).stream().filter(snapshot -> !installedIds.contains(snapshot.modpackId())).toList();
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return List.of();
@@ -169,11 +182,11 @@ final class InstalledModpackController {
 			try {
 				SelectedModpackTarget target;
 				try (StoredModpackConnection connection = StoredModpackConnection.open(storage, pack.modpackId(), true)) {
-					GenerationRecord downloaded = connection.advertisedRecord();
+					ModpackJsons.CompleteModpackContentFields advertised = connection.advertisedFields();
 					SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
 					target = savedSelection == null
-							? SelectedModpackTarget.prepareDefault(downloaded.toFields(), ClientPlatform.current())
-							: SelectedModpackTarget.prepare(downloaded.toFields(), savedSelection, savedSelection, ClientPlatform.current());
+							? SelectedModpackTarget.prepareDefault(advertised, ClientPlatform.current())
+							: SelectedModpackTarget.prepare(advertised, savedSelection, savedSelection, ClientPlatform.current());
 					updater = connection.newUpdater(target, storage);
 				}
 				ModpackUtils.UpdateCheckResult updateResult = ModpackUtils.isUpdate(target.flatTarget(), storage);

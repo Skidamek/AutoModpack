@@ -1559,26 +1559,39 @@ def _v_stage_modpack(ctx: Context, step):
     }, indent=2) + "\n", encoding="utf-8")
 
     # A client config that selects the staged pack and disables the launch update,
-    # so Preload loads it locally (no server contact, no file reconciliation). The
-    # modpackConnections entry needs a complete origin/endpoint pair or Preload self-updates
-    # instead of loading; the endpoint is never dialed when update-on-launch is off.
+    # so Preload loads it locally (no server contact, no file reconciliation).
     host = ctx.server_host or "127.0.0.1"
     addr = host if ":" in host else f"{host}:25565"
     cfg = {
         "DO_NOT_CHANGE_IT": 3,
         "selectedModpackId": modpack_id,
         "updateSelectedModpackOnLaunch": False,
-        "modpackConnections": {
-            modpack_id: {
-                "origin": addr,
-                "endpoint": addr,
-                "connectionMode": "DIRECT",
-            }
-        },
     }
     cfg.update(ctx.resolve(step.get("config", {}) or {}))
     automodpack.mkdir(parents=True, exist_ok=True)
     (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+    # The offline fallback that explicitly enables launch updates still needs the
+    # current production connection-store record. It is deliberately created only
+    # for that path; ordinary offline staging and recordOnly staging stay local.
+    if cfg["updateSelectedModpackOnLaunch"]:
+        connection_path = data_root / "packs" / modpack_id / "connection.json"
+        connection_path.parent.mkdir(parents=True, exist_ok=True)
+        connection_path.write_text(
+            json.dumps(
+                {
+                    "connection": {
+                        "origin": addr,
+                        "endpoint": addr,
+                        "connectionMode": "DIRECT",
+                    },
+                    "secrets": {},
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
 
 @verb("seed_cas")
