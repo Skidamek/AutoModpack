@@ -9,9 +9,8 @@ import net.minecraft.network.protocol.login.custom.CustomQueryAnswerPayload;
 import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import pl.skidam.automodpack.networking.LoginNetworkingIDs;
 import pl.skidam.automodpack.networking.PayloadHelper;
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;
@@ -28,21 +27,20 @@ public class LoginQueryResponseC2SPacketMixin {
 	@Final
 	private static int MAX_PAYLOAD_SIZE;
 
-	@Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
-	private static void readResponse(int queryId, FriendlyByteBuf buf, CallbackInfoReturnable<CustomQueryAnswerPayload> cir) {
+	@WrapMethod(method = "readPayload")
+	private static CustomQueryAnswerPayload readResponse(int queryId, FriendlyByteBuf buf, Operation<CustomQueryAnswerPayload> original) {
 		Identifier automodpackID = LoginNetworkingIDs.getByValue(queryId);
 		if (automodpackID == null) {
-			return;
+			return original.call(queryId, buf);
 		}
 
 		boolean hasPayload = buf.readBoolean();
 
 		if (!hasPayload) {
-			cir.setReturnValue(null);
-			return;
+			return null;
 		}
 
-		cir.setReturnValue(new LoginResponsePayload(automodpackID, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE)));
+		return new LoginResponsePayload(automodpackID, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE));
 	}
 	/*?}*/
 }
