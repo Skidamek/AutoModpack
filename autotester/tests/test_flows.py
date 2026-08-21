@@ -61,6 +61,9 @@ def _launch_client(ctx, step):
             (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
         ctx.vars["fake_preload_logged"] = True
         ctx.vars["fake_preload_review_logged"] = True
+        latest_log = ctx.game_dir / "logs" / "latest.log"
+        latest_log.parent.mkdir(parents=True, exist_ok=True)
+        latest_log.write_text("Preloaded 2 complete modpack objects in 1ms\nPreload acquired the complete selected target; active projection remains unchanged until player review\n", encoding="utf-8")
 
 
 def _wait_bridge(ctx, step):
@@ -166,6 +169,14 @@ def _reset_client_generation(ctx, step):
     ctx.bridge.screen = "title"
 
 
+def _reset_isolated_client_objects(ctx, step):
+    objects = ctx.game_dir / "automodpack" / "client" / "data" / "objects"
+    if objects.is_dir():
+        shutil.rmtree(objects)
+    else:
+        objects.unlink(missing_ok=True)
+
+
 def _stage_modpack(ctx, step):
     if step.get("recordOnly") and ctx.bridge is not None:
         ctx.bridge.secondary_pack = True
@@ -264,6 +275,7 @@ _BUILTIN_VERBS = {
 
 _FAKE_VERBS = {
     "launch_server": _noop,
+    "prepare_client": _noop,
     "wait_server": _noop,
     "launch_client": _launch_client,
     "wait_bridge": _wait_bridge,
@@ -273,7 +285,8 @@ _FAKE_VERBS = {
     "disconnect": _disconnect,
     "wait_client_exit": _wait_client_exit,
     "wait_exit": _wait_exit,
-    "reset_client_generation": _reset_client_generation,
+	"reset_client_generation": _reset_client_generation,
+	"reset_isolated_client_objects": _reset_isolated_client_objects,
     "stage_modpack": _stage_modpack,
     "publish_server_generation": _publish_server_generation,
     "compact_server_history": _compact_server_history,
@@ -401,10 +414,10 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     # Repair is available only for the active pack. Its destructive choices default to keep.
     bridge.pack_a_installed = True
     bridge.secondary_pack = True
-    bridge.details_pack = "B"
+    bridge.detail_pack = "B"
     bridge.screen = "details"
     assert not any(button["text"] == "Repair" for button in bridge.gui()["buttons"])
-    bridge.details_pack = "A"
+    bridge.detail_pack = "A"
     assert any(button["text"] == "Repair" for button in bridge.gui()["buttons"])
     bridge.click(70)
     buttons = bridge.gui()["buttons"]

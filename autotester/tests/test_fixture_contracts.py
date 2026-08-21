@@ -88,8 +88,8 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     (client / "baselines/packaaa/baseline.json").write_text("{}", encoding="utf-8")
     (client / "overlays/packaaa/config").mkdir(parents=True)
     (client / "overlays/packaaa/config/editable.txt").write_text("local", encoding="utf-8")
-    (client / "quarantine/packaaa").mkdir(parents=True)
-    (client / "quarantine/packaaa/manifest.json").write_text("{}", encoding="utf-8")
+    (client / "preservation/packaaa").mkdir(parents=True)
+    (client / "preservation/packaaa/claims.json").write_text("{}", encoding="utf-8")
     (client / "data/objects").mkdir(parents=True)
     (client / "data/objects" / ("a" * 40)).write_bytes(b"cached")
     (client / "data/known-hosts.json").write_text('{"hosts": {}}', encoding="utf-8")
@@ -111,11 +111,13 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     assert not (client / "active").exists()
     assert not (client / "baselines").exists()
     assert not (client / "overlays").exists()
-    assert not (client / "data/objects").exists()
+    assert (client / "data/objects").exists()
     assert not (client / "active-state.json").exists()
-    assert not (client / "quarantine").exists()
+    assert not (client / "preservation").exists()
     assert_valid_mod_fixture((ctx.game_dir / "mods/old.jar").read_bytes(), fixture)
     assert (client / "data/known-hosts.json").read_text(encoding="utf-8") == '{"hosts": {}}'
+    runner._v_reset_isolated_client_objects(ctx, {})
+    assert not (client / "data/objects").exists()
     assert (
         client / "data/packs/packaaa/connection.json"
     ).read_text(encoding="utf-8") == '{"connection": {}}'

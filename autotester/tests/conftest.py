@@ -121,7 +121,7 @@ class FakeBridge:
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "first_connection": {
                 "screenClass": "FirstConnectScreen",
-                "buttons": [{"id": 3, "text": "Continue" if not self._first_install_local_mods() else "Continue and keep mods", "enabled": True, "visible": True},
+                "buttons": [{"id": 3, "text": "Continue" if not self._first_install_local_mods() else "Continue with defaults" if self.first_install_archive_existing else "Continue and keep mods", "enabled": True, "visible": True},
                             {"id": 18, "text": "Customize groups", "enabled": True, "visible": True},
                             *([{"id": 89, "text": (f"[x] Preserve and remove {len(self._first_install_local_mods())} existing files" if self.first_install_archive_existing else f"[ ] Keep {len(self._first_install_local_mods())} existing files in mods"), "enabled": True, "visible": True}] if self._first_install_local_mods() else []),
                             {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
@@ -216,7 +216,7 @@ class FakeBridge:
             },
             "pack_storage": {
                 "screenClass": "ModpackStorageScreen",
-                "buttons": [*([{"id": 79, "text": "Preserved files", "enabled": True, "visible": True}] if self._claims(self._pack_id(self.detail_pack))[1] else []),
+                "buttons": [*([{"id": 79, "text": "Preserved files", "enabled": True, "visible": True}] if self.detail_pack is not None and self._claims(self._pack_id(self.detail_pack))[1] else []),
                             {"id": 81, "text": "Clean local storage", "enabled": True, "visible": True},
                             {"id": 82, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
@@ -297,7 +297,7 @@ class FakeBridge:
         return snapshot
 
     # --- actions ----------------------------------------------------------
-    def text(self, element_id: int, value: str, timeout: float = 30) -> dict:
+    def text(self, element_id: int, value: str, timeout: float = 30, **payload) -> dict:
         self.typed[element_id] = value
         if element_id == 1:
             self.fingerprint = value
@@ -422,21 +422,21 @@ class FakeBridge:
             self.vault_claim_selected = False
             self.vault_parent = "settings"
             self.screen = "vault_conflict"
-        elif element_id == 49:
+        elif element_id == 49 and self.screen == "vault_conflict":
             self.vault_claim_selected = True
             self.selected_claim_path = "mods/amp-autotest-conflict.jar"
             self.screen = "vault_conflict"
-        elif element_id == 44:
+        elif element_id == 44 and self.screen == "vault_conflict":
             if self._active_pack_owns_selected_claim("packbbb"):
                 self.error_parent = "vault_conflict"
                 self.screen = "error"
             else:
                 self._restore_preservation_original()
                 self.screen = "vault_conflict"
-        elif element_id == 45:
+        elif element_id == 45 and self.screen == "vault_conflict":
             self._save_preservation_copy()
             self.screen = "vault_conflict"
-        elif element_id == 48:
+        elif element_id == 48 and self.screen == "vault_conflict":
             self.screen = self.vault_parent
         elif element_id == 46:
             if self.screen == "manager":
@@ -565,7 +565,7 @@ class FakeBridge:
 
     def _first_install_local_mods(self) -> list[Path]:
         mods = self.ctx.game_dir / "mods"
-        if self.pack_a_installed or not mods.is_dir():
+        if (self.ctx.game_dir / "automodpack/client/active-state.json").is_file() or not mods.is_dir():
             return []
         return sorted(path for path in mods.iterdir() if path.is_file() and path.name != "automodpack.jar")
 

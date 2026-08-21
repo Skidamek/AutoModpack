@@ -126,7 +126,7 @@ public class FileMetadataCache implements AutoCloseable {
 		}
 	}
 
-		/** Hashes stable bytes without consulting or publishing cache state. */
+	/** Hashes stable bytes without consulting or publishing cache state. */
 	public String hash(Path file) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
 		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
