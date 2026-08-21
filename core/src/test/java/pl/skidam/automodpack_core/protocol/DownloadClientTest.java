@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.skidam.automodpack_core.protocol.NetUtils.BATCH_FILE_REQUEST_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_CHUNK_SIZE_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_COMPRESSION_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_ECHO_TYPE;
@@ -9,6 +10,8 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.FILE_REQUEST_TYPE;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -17,6 +20,7 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -52,6 +56,7 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
@@ -171,6 +176,72 @@ class DownloadClientTest {
 
 				server.allowResponses(5);
 				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(5, TimeUnit.SECONDS);
+			}
+		}
+	}
+
+	@Test
+	void batchRequestUsesOneFrameAndKeepsItemFailuresIndependent(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		String fingerprint = NetUtils.getFingerprint(certificate);
+		try (BatchServer server = new BatchServer(keyPair, certificate)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS)) {
+				String firstKey = "0123456789abcdef0123456789abcdef01234567";
+				String missingKey = "abcdef0123456789abcdef0123456789abcdef01";
+				Path firstDestination = directory.resolve("first");
+				List<DownloadResult> results = client.downloadBatch(List.of(new DownloadRequest(1, firstKey, firstDestination, 3, null),
+						new DownloadRequest(2, missingKey, directory.resolve("missing"), 0, null))).get(5, TimeUnit.SECONDS);
+
+				assertTrue(server.requestReceived().get(5, TimeUnit.SECONDS));
+				assertEquals(1, server.requestCount());
+				assertTrue(results.get(0).success());
+				assertFalse(results.get(1).success());
+				assertArrayEquals("one".getBytes(StandardCharsets.UTF_8), Files.readAllBytes(firstDestination));
+			}
+		}
+	}
+
+	@Test
+	void fallsBackToSequentialLegacyRequestsForAV1Peer(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		String fingerprint = NetUtils.getFingerprint(certificate);
+		try (BatchServer server = new BatchServer(keyPair, certificate, true, false)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS)) {
+				List<DownloadResult> results = client.downloadBatch(List.of(new DownloadRequest(1, "0123456789abcdef0123456789abcdef01234567", directory.resolve("one"), 3, null),
+						new DownloadRequest(2, "abcdef0123456789abcdef0123456789abcdef01", directory.resolve("two"), 3, null))).get(5, TimeUnit.SECONDS);
+
+				assertTrue(server.requestReceived().get(5, TimeUnit.SECONDS));
+				assertEquals(2, server.requestCount());
+				assertTrue(results.stream().allMatch(DownloadResult::success));
+				assertArrayEquals("one".getBytes(StandardCharsets.UTF_8), Files.readAllBytes(directory.resolve("one")));
+				assertArrayEquals("two".getBytes(StandardCharsets.UTF_8), Files.readAllBytes(directory.resolve("two")));
+			}
+		}
+	}
+
+	@Test
+	void localDestinationFailureDoesNotPoisonFollowingBatchItem(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		String fingerprint = NetUtils.getFingerprint(certificate);
+		try (BatchServer server = new BatchServer(keyPair, certificate, false, true)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
+			Path destinationDirectory = Files.createDirectory(directory.resolve("destination-directory"));
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS)) {
+				List<DownloadResult> results = client.downloadBatch(List.of(new DownloadRequest(1, "0123456789abcdef0123456789abcdef01234567", directory.resolve("one"), 3, null),
+						new DownloadRequest(2, "abcdef0123456789abcdef0123456789abcdef01", destinationDirectory, 3, null))).get(5, TimeUnit.SECONDS);
+
+				assertTrue(results.get(0).success());
+				assertFalse(results.get(1).success());
+				assertEquals(DownloadFailure.Kind.LOCAL_STORAGE, results.get(1).failure().orElseThrow().kind());
+				assertArrayEquals("one".getBytes(StandardCharsets.UTF_8), Files.readAllBytes(directory.resolve("one")));
 			}
 		}
 	}
@@ -396,6 +467,161 @@ class DownloadClientTest {
 		public void close() throws Exception {
 			if (socket != null) socket.close();
 			server.close();
+			executor.shutdownNow();
+		}
+	}
+
+	private static final class BatchServer implements AutoCloseable {
+		private final SSLServerSocket server;
+		private final ExecutorService executor = Executors.newSingleThreadExecutor();
+		private final List<SSLSocket> sockets = new CopyOnWriteArrayList<>();
+		private final CompletableFuture<Boolean> requestReceived = new CompletableFuture<>();
+		private final AtomicInteger requestCount = new AtomicInteger();
+		private final boolean legacyPeer;
+		private final boolean secondItemSuccess;
+
+		BatchServer(KeyPair keyPair, X509Certificate certificate) throws Exception {
+			this(keyPair, certificate, false, false);
+		}
+
+		BatchServer(KeyPair keyPair, X509Certificate certificate, boolean legacyPeer, boolean secondItemSuccess) throws Exception {
+			server = (SSLServerSocket) serverContext(keyPair, certificate).getServerSocketFactory().createServerSocket(0, 1, InetAddress.getLoopbackAddress());
+			server.setEnabledProtocols(new String[]{"TLSv1.3"});
+			this.legacyPeer = legacyPeer;
+			this.secondItemSuccess = secondItemSuccess;
+			executor.execute(this::serve);
+		}
+
+		int port() {
+			return server.getLocalPort();
+		}
+
+		int requestCount() {
+			return requestCount.get();
+		}
+
+		CompletableFuture<Boolean> requestReceived() {
+			return requestReceived;
+		}
+
+		private void serve() {
+			try {
+				SSLSocket socket = (SSLSocket) server.accept();
+				sockets.add(socket);
+				socket.setEnabledProtocols(new String[]{"TLSv1.3"});
+				socket.startHandshake();
+				DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+				DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+				int version = in.readUnsignedByte();
+				if (in.readUnsignedByte() != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected compression request");
+				in.readUnsignedByte();
+				out.writeByte(legacyPeer ? 1 : version);
+				out.writeByte(CONFIGURATION_COMPRESSION_TYPE);
+				out.writeByte(CompressionType.GZIP.wireId());
+				out.flush();
+
+				version = in.readUnsignedByte();
+				if (in.readUnsignedByte() != CONFIGURATION_CHUNK_SIZE_TYPE) throw new IOException("Unexpected chunk request");
+				int chunkSize = in.readInt();
+				out.writeByte(legacyPeer ? 1 : version);
+				out.writeByte(CONFIGURATION_CHUNK_SIZE_TYPE);
+				out.writeInt(chunkSize);
+				out.flush();
+				in.readUnsignedByte();
+				if (in.readUnsignedByte() != CONFIGURATION_ECHO_TYPE) throw new IOException("Unexpected echo request");
+
+				CompressionCodec codec = CompressionFactory.createCodec(CompressionType.GZIP);
+				if (legacyPeer) {
+					for (int itemId = 1; itemId <= 2; itemId++) {
+						byte[] request = LeasingServer.readFrame(in, codec);
+						if (request.length < 2 || request[1] != FILE_REQUEST_TYPE) throw new IOException("Unexpected legacy request");
+						requestCount.incrementAndGet();
+						LeasingServer.writeFrame(out, codec, legacyHeader(version, 3));
+						LeasingServer.writeFrame(out, codec, itemId == 1 ? "one".getBytes(StandardCharsets.UTF_8) : "two".getBytes(StandardCharsets.UTF_8));
+						LeasingServer.writeFrame(out, codec, new byte[]{(byte) version, END_OF_TRANSMISSION});
+					}
+					requestReceived.complete(true);
+					return;
+				}
+				byte[] request = LeasingServer.readFrame(in, codec);
+				if (request.length < 2 || request[1] != BATCH_FILE_REQUEST_TYPE) throw new IOException("Unexpected batch request");
+				requestCount.incrementAndGet();
+				DataInputStream batch = new DataInputStream(new ByteArrayInputStream(request));
+				batch.readUnsignedByte();
+				batch.readUnsignedByte();
+				batch.skipNBytes(Secrets.BYTE_LENGTH);
+				int itemCount = batch.readInt();
+				if (itemCount != 2) throw new IOException("Unexpected item count");
+				int firstId = batch.readInt();
+				int firstKeyLength = batch.readInt();
+				batch.skipNBytes(firstKeyLength);
+				int secondId = batch.readInt();
+				int secondKeyLength = batch.readInt();
+				batch.skipNBytes(secondKeyLength);
+				if (firstId != 1 || secondId != 2) throw new IOException("Unexpected item IDs");
+
+				LeasingServer.writeFrame(out, codec, successHeader(version, firstId, 3));
+				LeasingServer.writeFrame(out, codec, "one".getBytes(StandardCharsets.UTF_8));
+				LeasingServer.writeFrame(out, codec, itemEot(version, firstId));
+				if (secondItemSuccess) {
+					LeasingServer.writeFrame(out, codec, successHeader(version, secondId, 3));
+					LeasingServer.writeFrame(out, codec, "two".getBytes(StandardCharsets.UTF_8));
+					LeasingServer.writeFrame(out, codec, itemEot(version, secondId));
+				} else {
+					LeasingServer.writeFrame(out, codec, failureHeader(version, secondId, "missing"));
+				}
+				requestReceived.complete(true);
+			} catch (Exception e) {
+				requestReceived.completeExceptionally(e);
+			}
+		}
+
+		private static byte[] successHeader(int version, int itemId, long fileSize) throws IOException {
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			DataOutputStream out = new DataOutputStream(bytes);
+			out.writeByte(version);
+			out.writeByte(NetUtils.BATCH_ITEM_RESPONSE_TYPE);
+			out.writeInt(itemId);
+			out.writeByte(DownloadBatchProtocol.ITEM_SUCCESS);
+			out.writeLong(fileSize);
+			return bytes.toByteArray();
+		}
+
+		private static byte[] legacyHeader(int version, long fileSize) throws IOException {
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			DataOutputStream out = new DataOutputStream(bytes);
+			out.writeByte(version);
+			out.writeByte(NetUtils.FILE_RESPONSE_TYPE);
+			out.writeLong(fileSize);
+			return bytes.toByteArray();
+		}
+
+		private static byte[] failureHeader(int version, int itemId, String message) throws IOException {
+			byte[] messageBytes = message.getBytes(StandardCharsets.UTF_8);
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			DataOutputStream out = new DataOutputStream(bytes);
+			out.writeByte(version);
+			out.writeByte(NetUtils.BATCH_ITEM_RESPONSE_TYPE);
+			out.writeInt(itemId);
+			out.writeByte(DownloadBatchProtocol.ITEM_FAILURE);
+			out.writeInt(messageBytes.length);
+			out.write(messageBytes);
+			return bytes.toByteArray();
+		}
+
+		private static byte[] itemEot(int version, int itemId) throws IOException {
+			ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+			DataOutputStream out = new DataOutputStream(bytes);
+			out.writeByte(version);
+			out.writeByte(END_OF_TRANSMISSION);
+			out.writeInt(itemId);
+			return bytes.toByteArray();
+		}
+
+		@Override
+		public void close() throws Exception {
+			server.close();
+			for (SSLSocket socket : sockets) socket.close();
 			executor.shutdownNow();
 		}
 	}

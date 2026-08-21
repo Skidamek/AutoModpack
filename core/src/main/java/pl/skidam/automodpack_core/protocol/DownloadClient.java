@@ -20,8 +20,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -32,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
+import java.util.function.Predicate;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
@@ -372,6 +376,10 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	private <T> CompletableFuture<T> withConnection(Function<Connection, CompletableFuture<T>> operation) {
+		return withConnection(operation, ignored -> true);
+	}
+
+	private <T> CompletableFuture<T> withConnection(Function<Connection, CompletableFuture<T>> operation, Predicate<T> healthyResult) {
 		return acquireConnection().thenCompose(connection -> {
 			CompletableFuture<T> future;
 			try {
@@ -379,7 +387,7 @@ public class DownloadClient implements AutoCloseable {
 			} catch (Exception e) {
 				future = CompletableFuture.failedFuture(e);
 			}
-			return future.whenComplete((ignored, error) -> releaseConnection(connection, error == null));
+			return future.whenComplete((result, error) -> releaseConnection(connection, error == null && healthyResult.test(result)));
 		});
 	}
 
@@ -398,6 +406,46 @@ public class DownloadClient implements AutoCloseable {
 
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
 		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
+	}
+
+	public CompletableFuture<List<DownloadResult>> downloadBatch(List<DownloadRequest> requests) {
+		DownloadBatchProtocol.validateItems(requests);
+		List<DownloadRequest> stableRequests = List.copyOf(requests);
+		if (stableRequests.isEmpty()) return CompletableFuture.completedFuture(List.of());
+
+		CompletableFuture<List<DownloadResult>> result = new CompletableFuture<>();
+		acquireConnection().whenComplete((connection, acquireError) -> {
+			if (acquireError != null) {
+				result.completeExceptionally(unwrap(acquireError));
+				return;
+			}
+			if (result.isCancelled()) {
+				releaseConnection(connection, false);
+				return;
+			}
+
+			CompletableFuture<Connection.BatchOutcome> operation;
+			try {
+				operation = connection.sendDownloadBatch(stableRequests);
+			} catch (Exception e) {
+				releaseConnection(connection, false);
+				result.completeExceptionally(e);
+				return;
+			}
+
+			result.whenComplete((ignored, error) -> {
+				if (result.isCancelled()) {
+					releaseConnection(connection, false);
+					operation.cancel(true);
+				}
+			});
+			operation.whenComplete((outcome, error) -> {
+				releaseConnection(connection, error == null && outcome != null && outcome.healthy());
+				if (error != null) result.completeExceptionally(unwrap(error));
+				else result.complete(outcome.results());
+			});
+		});
+		return result;
 	}
 
 	/** Downloads one authenticated historical catalogue advertised by the current generation index. */
@@ -471,6 +519,7 @@ class Connection implements AutoCloseable {
 	private final DataInputStream in;
 	private final DataOutputStream out;
 	private final ExecutorService executor = Executors.newSingleThreadExecutor();
+	private volatile boolean closed;
 	private CompressionCodec compressionCodec;
 	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
 
@@ -504,38 +553,86 @@ class Connection implements AutoCloseable {
 
 	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
 		if (destination == null) throw new IllegalArgumentException("Destination cannot be null");
+		byte[] requestKey = fileHash.clone();
 
 		return CompletableFuture.supplyAsync(() -> {
-			Exception exception = null;
 			try {
-				ByteArrayOutputStream baos = new ByteArrayOutputStream(64 + fileHash.length);
-				DataOutputStream dos = new DataOutputStream(baos);
-				dos.writeByte(protocolVersion);
-				dos.writeByte(FILE_REQUEST_TYPE);
-				dos.write(secretBytes);
-				dos.writeInt(fileHash.length);
-				dos.write(fileHash);
-
-				writeProtocolMessage(baos.toByteArray());
-				return readFileResponse(destination, chunkCallback);
+				writeLegacyRequest(requestKey);
+				return readFileResponse(destination, chunkCallback, null);
 			} catch (Exception e) {
-				exception = e;
 				throw new CompletionException(e);
-			} finally {
-				finalBlock(exception);
 			}
 		}, executor);
 	}
 
-	private void finalBlock(Exception exception) {
-		try {
-			int available;
-			while ((available = in.available()) > 0) {
-				in.skipBytes(available);
+	CompletableFuture<BatchOutcome> sendDownloadBatch(List<DownloadRequest> requests) {
+		return CompletableFuture.supplyAsync(() -> sendDownloadBatchNow(requests), executor);
+	}
+
+	private BatchOutcome sendDownloadBatchNow(List<DownloadRequest> requests) {
+		Map<Integer, DownloadResult> results = new LinkedHashMap<>();
+		boolean healthy = true;
+		if (protocolVersion >= DownloadBatchProtocol.VERSION) {
+			try {
+				writeBatchRequest(requests);
+				for (DownloadRequest request : requests) results.put(request.itemId(), readBatchItem(request));
+			} catch (Exception e) {
+				healthy = false;
+				addUnresolvedResults(requests, results, closed ? DownloadFailure.Kind.CANCELLED : DownloadFailure.Kind.PROTOCOL, e);
 			}
-		} catch (IOException e) {
-			if (exception == null) throw new CompletionException(e);
+		} else {
+			for (DownloadRequest request : requests) {
+				try {
+					writeLegacyRequest(request.key().getBytes(StandardCharsets.UTF_8));
+					readFileResponse(request.destination(), request.chunkCallback(), request.expectedFileSize());
+					results.put(request.itemId(), DownloadResult.success(request));
+				} catch (Exception e) {
+					healthy = false;
+					DownloadFailure.Kind kind = closed
+							? DownloadFailure.Kind.CANCELLED
+							: e instanceof LocalStorageException ? DownloadFailure.Kind.LOCAL_STORAGE : DownloadFailure.Kind.REMOTE;
+					addUnresolvedResults(requests, results, kind, e);
+					break;
+				}
+			}
 		}
+
+		List<DownloadResult> orderedResults = new ArrayList<>(requests.size());
+		for (DownloadRequest request : requests) orderedResults.add(results.get(request.itemId()));
+		return new BatchOutcome(List.copyOf(orderedResults), healthy);
+	}
+
+	private static void addUnresolvedResults(List<DownloadRequest> requests, Map<Integer, DownloadResult> results, DownloadFailure.Kind kind, Throwable cause) {
+		for (DownloadRequest request : requests) results.putIfAbsent(request.itemId(), DownloadResult.failure(request, kind, cause));
+	}
+
+	private void writeLegacyRequest(byte[] fileKey) throws IOException {
+		ByteArrayOutputStream baos = new ByteArrayOutputStream(64 + fileKey.length);
+		DataOutputStream dos = new DataOutputStream(baos);
+		dos.writeByte(protocolVersion);
+		dos.writeByte(FILE_REQUEST_TYPE);
+		dos.write(secretBytes);
+		dos.writeInt(fileKey.length);
+		dos.write(fileKey);
+		writeProtocolMessage(baos.toByteArray());
+	}
+
+	private void writeBatchRequest(List<DownloadRequest> requests) throws IOException {
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		DataOutputStream dos = new DataOutputStream(baos);
+		dos.writeByte(protocolVersion);
+		dos.writeByte(BATCH_FILE_REQUEST_TYPE);
+		dos.write(secretBytes);
+		dos.writeInt(requests.size());
+		for (DownloadRequest request : requests) {
+			byte[] keyBytes = request.key().getBytes(StandardCharsets.UTF_8);
+			dos.writeInt(request.itemId());
+			dos.writeInt(keyBytes.length);
+			dos.write(keyBytes);
+		}
+		byte[] payload = baos.toByteArray();
+		if (payload.length > DownloadBatchProtocol.MAX_REQUEST_BYTES) throw new IOException("Batch request is too large");
+		writeProtocolMessage(payload);
 	}
 
 	private void writeProtocolMessage(byte[] payload) throws IOException {
@@ -546,41 +643,127 @@ class Connection implements AutoCloseable {
 		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, frameScratch);
 	}
 
-	private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
+	private DownloadResult readBatchItem(DownloadRequest request) throws IOException {
 		ProtocolFrameCodec.Frame header = readProtocolMessageFrame();
 		ByteBuffer headerWrap = ByteBuffer.wrap(header.data(), 0, header.length());
+		requireRemaining(headerWrap, Byte.BYTES + Byte.BYTES + Integer.BYTES + Byte.BYTES);
+		byte version = headerWrap.get();
+		byte messageType = headerWrap.get();
+		int itemId = headerWrap.getInt();
+		byte status = headerWrap.get();
+		if (version != protocolVersion || messageType != BATCH_ITEM_RESPONSE_TYPE || itemId != request.itemId()) throw new IOException("Invalid batch item response identity");
+
+		if (status == DownloadBatchProtocol.ITEM_FAILURE) {
+			requireRemaining(headerWrap, Integer.BYTES);
+			int errorLength = headerWrap.getInt();
+			if (errorLength < 0 || errorLength > DownloadBatchProtocol.MAX_ERROR_BYTES || headerWrap.remaining() != errorLength)
+				throw new IOException("Invalid batch item error length");
+			byte[] errorBytes = new byte[errorLength];
+			headerWrap.get(errorBytes);
+			return DownloadResult.failure(request, DownloadFailure.Kind.REMOTE,
+					new IOException("Server error: " + new String(errorBytes, StandardCharsets.UTF_8)));
+		}
+		if (status != DownloadBatchProtocol.ITEM_SUCCESS) throw new IOException("Unknown batch item status: " + status);
+		if (headerWrap.remaining() != Long.BYTES) throw new IOException("Invalid batch item success header");
+		long expectedFileSize = headerWrap.getLong();
+		if (expectedFileSize < 0 || expectedFileSize != request.expectedFileSize()) throw new IOException("Batch item size does not match the requested file");
+		return readBatchBody(request, version, expectedFileSize);
+	}
+
+	private DownloadResult readBatchBody(DownloadRequest request, byte version, long expectedFileSize) throws IOException {
+		OutputStream output = null;
+		DownloadFailure failure = null;
+		try {
+			output = LocalFileWriter.open(request.destination());
+		} catch (LocalStorageException e) {
+			failure = new DownloadFailure(DownloadFailure.Kind.LOCAL_STORAGE, e);
+		}
+
+		long receivedBytes = 0;
+		try {
+			while (receivedBytes < expectedFileSize) {
+				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
+				int frameLength = dataFrame.length();
+				if (frameLength <= 0 || (long) frameLength > expectedFileSize - receivedBytes) throw new IOException("Batch item data exceeds the declared file size");
+				if (output != null) {
+					try {
+						output.write(dataFrame.data(), 0, frameLength);
+						if (request.chunkCallback() != null) request.chunkCallback().accept(frameLength);
+					} catch (IOException e) {
+						failure = new DownloadFailure(DownloadFailure.Kind.LOCAL_STORAGE, e);
+						DownloadClient.closeQuietly(output);
+						output = null;
+					}
+				}
+				receivedBytes += frameLength;
+			}
+		} finally {
+			if (output != null) {
+				try {
+					output.close();
+				} catch (IOException e) {
+					failure = new DownloadFailure(DownloadFailure.Kind.LOCAL_STORAGE, e);
+				}
+			}
+		}
+
+		ProtocolFrameCodec.Frame eot = readProtocolMessageFrame();
+		if (eot.length() != Byte.BYTES + Byte.BYTES + Integer.BYTES || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION
+				|| ByteBuffer.wrap(eot.data(), 2, Integer.BYTES).getInt() != request.itemId())
+			throw new IOException("Invalid batch item EOT");
+		return failure == null ? DownloadResult.success(request) : new DownloadResult(request, Optional.of(failure));
+	}
+
+	private Path readFileResponse(Path destination, IntConsumer chunkCallback, Long requestedFileSize) throws IOException {
+		ProtocolFrameCodec.Frame header = readProtocolMessageFrame();
+		ByteBuffer headerWrap = ByteBuffer.wrap(header.data(), 0, header.length());
+		requireRemaining(headerWrap, Byte.BYTES + Byte.BYTES);
 
 		byte version = headerWrap.get();
 		byte messageType = headerWrap.get();
 
 		if (messageType == ERROR) {
+			requireRemaining(headerWrap, Integer.BYTES);
 			int errLen = headerWrap.getInt();
+			if (errLen < 0 || headerWrap.remaining() != errLen) throw new IOException("Invalid server error length");
 			byte[] errBytes = new byte[errLen];
 			headerWrap.get(errBytes);
 			throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
 		}
 
-		if (messageType == END_OF_TRANSMISSION) return destination;
+		if (messageType == END_OF_TRANSMISSION) {
+			if (headerWrap.hasRemaining()) throw new IOException("Invalid empty-file response");
+			return destination;
+		}
 
 		if (messageType != FILE_RESPONSE_TYPE) throw new IOException("Unexpected message type: " + messageType);
+		if (headerWrap.remaining() != Long.BYTES) throw new IOException("Invalid file response header");
 
 		long expectedFileSize = headerWrap.getLong();
+		if (expectedFileSize < 0 || (requestedFileSize != null && expectedFileSize != requestedFileSize)) throw new IOException("File size does not match the request");
 		long receivedBytes = 0;
 
 		try (OutputStream fos = LocalFileWriter.open(destination)) {
 			while (receivedBytes < expectedFileSize) {
 				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
-				int toWrite = Math.min(dataFrame.length(), (int) (expectedFileSize - receivedBytes));
-				fos.write(dataFrame.data(), 0, toWrite);
-				receivedBytes += toWrite;
-				if (chunkCallback != null) chunkCallback.accept(toWrite);
+				int frameLength = dataFrame.length();
+				if (frameLength <= 0 || (long) frameLength > expectedFileSize - receivedBytes) throw new IOException("File data exceeds the declared size");
+				fos.write(dataFrame.data(), 0, frameLength);
+				receivedBytes += frameLength;
+				if (chunkCallback != null) chunkCallback.accept(frameLength);
 			}
 		}
 
 		ProtocolFrameCodec.Frame eot = readProtocolMessageFrame();
-		if (eot.length() < 2 || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
+		if (eot.length() != Byte.BYTES + Byte.BYTES || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
 		return destination;
 	}
+
+	private static void requireRemaining(ByteBuffer buffer, int bytes) throws IOException {
+		if (buffer.remaining() < bytes) throw new IOException("Protocol frame is truncated");
+	}
+
+	record BatchOutcome(List<DownloadResult> results, boolean healthy) {}
 
 	private CompressionType sendCompressionConfig(CompressionType desiredCompression) throws IOException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -639,6 +822,7 @@ class Connection implements AutoCloseable {
 
 	@Override
 	public void close() {
+		closed = true;
 		try {
 			socket.close();
 		} catch (Exception ignored) {

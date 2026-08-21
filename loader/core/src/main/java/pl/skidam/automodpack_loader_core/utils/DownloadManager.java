@@ -13,7 +13,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
+import pl.skidam.automodpack_core.protocol.DownloadBatchProtocol;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.DownloadFailure;
+import pl.skidam.automodpack_core.protocol.DownloadRequest;
+import pl.skidam.automodpack_core.protocol.DownloadResult;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -36,6 +40,7 @@ public class DownloadManager {
 
 	private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
+	private static final String INTERNAL_SOURCE = "internal_client";
 
 	private final ExecutorService downloadExecutor;
 
@@ -98,11 +103,11 @@ public class DownloadManager {
 		QueuedDownload task = new QueuedDownload(file, sources, fileSize, 0, successCallback, failureCallback);
 		queuedDownloads.put(hashPathPair, task);
 		totalFilesAdded++;
-		downloadNext();
+		if (!INTERNAL_SOURCE.equals(predictSource(task)) || downloadClient == null) downloadNext();
 	}
 
 	private synchronized void downloadNext() {
-		if (downloadsInProgress.size() >= MAX_DOWNLOADS_IN_PROGRESS || queuedDownloads.isEmpty()) return;
+		if (cancelled || downloadExecutor.isShutdown() || downloadsInProgress.size() >= MAX_DOWNLOADS_IN_PROGRESS || queuedDownloads.isEmpty()) return;
 
 		// --- 1. CALCULATE METRICS ---
 
@@ -212,32 +217,56 @@ public class DownloadManager {
 
 		if (bestTask == null) return;
 
-		// --- EXECUTE ---
-		queuedDownloads.remove(bestKey);
-		activeDownloadsPerSource.merge(bestSource, 1, Integer::sum);
+		int availableSlots = MAX_DOWNLOADS_IN_PROGRESS - downloadsInProgress.size();
+		List<Map.Entry<FileInspection.HashPathPair, QueuedDownload>> selectedEntries;
+		if (INTERNAL_SOURCE.equals(bestSource)) {
+			selectedEntries = queuedDownloads.entrySet().stream().filter(entry -> INTERNAL_SOURCE.equals(predictSource(entry.getValue())))
+					.filter(entry -> activeDownloadsPerSource.getOrDefault(INTERNAL_SOURCE, 0) < MAX_DOWNLOADS_IN_PROGRESS)
+					.sorted(Comparator.comparingLong((Map.Entry<FileInspection.HashPathPair, QueuedDownload> entry) -> entry.getValue().fileSize)
+							.thenComparing(entry -> entry.getKey().hash()))
+					.limit(Math.min(availableSlots, DownloadBatchProtocol.MAX_ITEM_COUNT)).toList();
+		} else {
+			selectedEntries = List.of(Map.entry(bestKey, bestTask));
+		}
+		if (selectedEntries.isEmpty()) return;
 
-		final FileInspection.HashPathPair key = bestKey;
-		final QueuedDownload task = bestTask;
-		final String activeDomain = bestSource;
+		List<ScheduledDownload> scheduled = new ArrayList<>(selectedEntries.size());
+		for (Map.Entry<FileInspection.HashPathPair, QueuedDownload> entry : selectedEntries) {
+			FileInspection.HashPathPair key = entry.getKey();
+			QueuedDownload task = entry.getValue();
+			if (!queuedDownloads.remove(key, task)) continue;
+			String activeDomain = predictSource(task);
+			activeDownloadsPerSource.merge(activeDomain, 1, Integer::sum);
+			CompletableFuture<Void> future = new CompletableFuture<>();
+			DownloadData data = new DownloadData(future, task.file, activeDomain, task.fileSize);
+			downloadsInProgress.put(key, data);
+			scheduled.add(new ScheduledDownload(scheduled.size() + 1, key, task, data));
+		}
+		if (scheduled.isEmpty()) return;
 
-		LOGGER.info("Queuning download for: {} {} {}", task.file, task.fileSize, activeDomain);
-
-		CompletableFuture<Void> future = new CompletableFuture<>();
-		downloadsInProgress.put(key, new DownloadData(future, task.file, activeDomain, task.fileSize));
+		LOGGER.info("Queueing {} download{}", scheduled.size(), scheduled.size() == 1 ? "" : "s");
 		try {
 			downloadExecutor.execute(() -> {
+				Throwable fatalError = null;
 				try {
-					processDownloadTask(key, task);
-					future.complete(null);
+					if (scheduled.size() == 1) processDownloadTask(scheduled.get(0).key(), scheduled.get(0).task());
+					else processHostBatch(scheduled);
 				} catch (Throwable error) {
-					LOGGER.error("Fatal error executing download task for {}", task.file.getFileName(), error);
-					future.completeExceptionally(error);
+					fatalError = error;
+					LOGGER.error("Fatal error executing download batch", error);
+				} finally {
+					for (ScheduledDownload item : scheduled) {
+						if (fatalError == null) item.data().future.complete(null);
+						else item.data().future.completeExceptionally(fatalError);
+					}
 				}
 			});
 		} catch (RuntimeException error) {
-			downloadsInProgress.remove(key);
-			activeDownloadsPerSource.compute(activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
-			future.completeExceptionally(error);
+			for (ScheduledDownload item : scheduled) {
+				downloadsInProgress.remove(item.key());
+				activeDownloadsPerSource.compute(item.data().activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
+				item.data().future.completeExceptionally(error);
+			}
 			throw error;
 		}
 	}
@@ -246,7 +275,7 @@ public class DownloadManager {
 		int numberOfIndexes = task.sources.size();
 		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
 		if (task.sources.size() > sourceIndex) return getDomainFromUrl(task.sources.get(sourceIndex).url());
-		return "internal_client";
+		return INTERNAL_SOURCE;
 	}
 
 	private String getDomainFromUrl(String url) {
@@ -288,6 +317,100 @@ public class DownloadManager {
 		} finally {
 			cleanupAndFinalize(hashPathPair, task, storeFile, success, interrupted);
 		}
+	}
+
+	private void processHostBatch(List<ScheduledDownload> scheduled) {
+		List<HostBatchItem> items = scheduled.stream().map(item -> new HostBatchItem(item, storage.objectsDirectory().resolve(item.key().hash()))).toList();
+		try {
+			for (HostBatchItem item : items) {
+				if (FileIntegrity.matches(item.storeFile, item.task().fileSize, item.key().hash())) {
+					totalBytesDownloaded.addAndGet(item.task().fileSize);
+					item.success = true;
+					continue;
+				}
+				try {
+					ImmutableFiles.deleteIfExists(item.storeFile);
+					item.temporaryFile = Files.createTempFile(storage.incomingDirectory(), "." + item.key().hash() + ".", ".tmp");
+					activeTemporaryFiles.put(item.key(), item.temporaryFile);
+					item.request = new DownloadRequest(item.scheduled().itemId(), item.key().hash(), item.temporaryFile, item.task().fileSize, this::updateNetworkProgress);
+				} catch (IOException e) {
+					item.task().lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+					LOGGER.warn("Failed to create temporary CAS object {}", item.key().hash(), e);
+				}
+			}
+
+			List<DownloadRequest> requests = items.stream().map(HostBatchItem::request).filter(Objects::nonNull).toList();
+			if (!requests.isEmpty()) {
+				if (downloadClient == null) {
+					for (HostBatchItem item : items) if (item.request != null) item.task().lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+				} else {
+					try {
+						List<DownloadResult> results = downloadClient.downloadBatch(requests).get();
+						Map<Integer, HostBatchItem> itemsById = new HashMap<>();
+						for (HostBatchItem item : items) if (item.request != null) itemsById.put(item.request.itemId(), item);
+						for (DownloadResult result : results) {
+							HostBatchItem item = itemsById.remove(result.request().itemId());
+							if (item == null) continue;
+							if (result.success()) item.transportSuccess = true;
+							else applyBatchFailure(item, result.failure().orElseThrow());
+						}
+						for (HostBatchItem item : itemsById.values()) item.task().lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+						for (HostBatchItem item : items) if (item.request != null) item.interrupted = true;
+					} catch (ExecutionException | CancellationException e) {
+						for (HostBatchItem item : items) if (item.request != null) item.task().lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+					}
+				}
+			}
+
+			for (HostBatchItem item : items) {
+				if (item.success || item.interrupted || item.task().lastFailureCategory != null || !item.transportSuccess) continue;
+				if (!FileIntegrity.matches(item.temporaryFile, item.task().fileSize, item.key().hash())) {
+					item.task().lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+					LOGGER.warn("Size or hash mismatch for downloaded file {}", item.task().file.getFileName());
+					continue;
+				}
+				try {
+					VerifiedFileTransfer.promoteAtomic(item.temporaryFile, item.storeFile, item.task().fileSize, item.key().hash());
+					item.temporaryFile = null;
+					item.task().lastFailureCategory = null;
+					item.success = true;
+				} catch (IOException e) {
+					item.task().lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+					LOGGER.warn("Failed to persist verified CAS object {}", item.key().hash(), e);
+				}
+			}
+		} catch (RuntimeException e) {
+			for (HostBatchItem item : items) {
+				if (!item.success && !item.interrupted && item.task().lastFailureCategory == null) item.task().lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+			}
+			LOGGER.error("Failed to process host download batch", e);
+		} finally {
+			for (HostBatchItem item : items) {
+				activeTemporaryFiles.remove(item.key());
+				if (item.temporaryFile != null) {
+					try {
+						Files.deleteIfExists(item.temporaryFile);
+					} catch (IOException ignored) {
+					}
+				}
+				try {
+					cleanupAndFinalize(item.key(), item.task(), item.storeFile, item.success, item.interrupted, false);
+				} catch (Throwable error) {
+					LOGGER.error("Failed to finalize host download {}", item.task().file, error);
+				}
+			}
+			if (!cancelled) downloadNext();
+		}
+	}
+
+	private void applyBatchFailure(HostBatchItem item, DownloadFailure failure) {
+		if (failure.kind() == DownloadFailure.Kind.CANCELLED) {
+			item.interrupted = true;
+			return;
+		}
+		item.task().lastFailureCategory = failure.kind() == DownloadFailure.Kind.LOCAL_STORAGE ? FailureCategory.LOCAL_STORAGE : FailureCategory.REMOTE_SOURCE;
 	}
 
 	private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path storeFile) throws InterruptedException {
@@ -359,6 +482,10 @@ public class DownloadManager {
 	}
 
 	private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, boolean success, boolean interrupted) {
+		cleanupAndFinalize(key, task, storeFile, success, interrupted, true);
+	}
+
+	private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, boolean success, boolean interrupted, boolean scheduleNext) {
 		DownloadData data = downloadsInProgress.remove(key);
 
 		if (data != null && data.activeDomain != null) {
@@ -381,12 +508,12 @@ public class DownloadManager {
 				handleRetry(key, task, interrupted);
 			}
 		} finally {
-			if (!interrupted) downloadNext();
+			if (!interrupted && scheduleNext) downloadNext();
 		}
 	}
 
 	private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {
-		if (interrupted) {
+		if (interrupted || cancelled) {
 			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
 			return;
 		}
@@ -427,6 +554,8 @@ public class DownloadManager {
 	}
 
 	public void joinAll() throws InterruptedException {
+		// Host-only work is coalesced until the caller has finished enqueueing its manifest.
+		downloadNext();
 		semaphore.acquire(totalFilesAdded);
 		if (downloadExecutor.isShutdown()) throw new InterruptedException();
 		semaphore.release(totalFilesAdded);
@@ -460,6 +589,7 @@ public class DownloadManager {
 	public void cancelAllAndShutdown() {
 		cancelled = true;
 		queuedDownloads.clear();
+		if (downloadClient != null) downloadClient.close();
 		downloadsInProgress.forEach((k, v) -> v.future.cancel(true));
 		activeTemporaryFiles.values().forEach(path -> {
 			try {
@@ -471,7 +601,7 @@ public class DownloadManager {
 		semaphore.release(totalFilesAdded);
 		downloadsInProgress.clear();
 		downloadedCount = 0;
-		downloadExecutor.shutdown();
+		downloadExecutor.shutdownNow();
 	}
 
 	public Map<FileInspection.HashPathPair, AcquisitionResult> getAcquisitionResults() {
@@ -487,6 +617,43 @@ public class DownloadManager {
 	}
 
 	// --- Inner Classes ---
+
+	private record ScheduledDownload(int itemId, FileInspection.HashPathPair key, QueuedDownload task, DownloadData data) {}
+
+	private static final class HostBatchItem {
+		private final ScheduledDownload scheduled;
+		private final FileInspection.HashPathPair key;
+		private final QueuedDownload task;
+		private final Path storeFile;
+		private Path temporaryFile;
+		private DownloadRequest request;
+		private boolean transportSuccess;
+		private boolean success;
+		private boolean interrupted;
+
+		private HostBatchItem(ScheduledDownload scheduled, Path storeFile) {
+			this.scheduled = scheduled;
+			this.key = scheduled.key();
+			this.task = scheduled.task();
+			this.storeFile = storeFile;
+		}
+
+		private ScheduledDownload scheduled() {
+			return scheduled;
+		}
+
+		private FileInspection.HashPathPair key() {
+			return key;
+		}
+
+		private QueuedDownload task() {
+			return task;
+		}
+
+		private DownloadRequest request() {
+			return request;
+		}
+	}
 
 	public static class QueuedDownload {
 		public final Path file;

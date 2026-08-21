@@ -37,7 +37,8 @@ public class NetUtils {
 	public static final int MAGIC_AMOK = 0x414D4F4B;
 
 	// Protocol versions
-	public static final byte LATEST_SUPPORTED_PROTOCOL_VERSION = 0x01;
+	public static final byte BATCH_PROTOCOL_VERSION = 0x02;
+	public static final byte LATEST_SUPPORTED_PROTOCOL_VERSION = BATCH_PROTOCOL_VERSION;
 
 	// Message types and configuration message types should not overlap
 	// Message types
@@ -46,6 +47,8 @@ public class NetUtils {
 	public static final byte FILE_RESPONSE_TYPE = 0x02;
 	public static final byte END_OF_TRANSMISSION = 0x04;
 	public static final byte ERROR = 0x05;
+	public static final byte BATCH_FILE_REQUEST_TYPE = 0x06;
+	public static final byte BATCH_ITEM_RESPONSE_TYPE = 0x07;
 
 	// Configuration message types
 	public static final byte CONFIGURATION_ECHO_TYPE = 0x40;

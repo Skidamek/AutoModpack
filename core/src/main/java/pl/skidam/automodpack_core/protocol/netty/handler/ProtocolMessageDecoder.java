@@ -2,13 +2,19 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.protocol.DownloadBatchProtocol;
+import pl.skidam.automodpack_core.protocol.netty.message.request.BatchFileRequestMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
 
@@ -54,9 +60,50 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
 				in.readBytes(fileHash);
 				out.add(new FileRequestMessage(version, secret, fileHash));
 				break;
+			case BATCH_FILE_REQUEST_TYPE :
+				decodeBatch(version, secret, in, out);
+				break;
 			default :
 				throw new IllegalArgumentException("Unknown message type: " + type);
 		}
+	}
+
+	private static void decodeBatch(byte version, byte[] secret, ByteBuf in, List<Object> out) {
+		if (in.readableBytes() < Integer.BYTES) {
+			in.resetReaderIndex();
+			return;
+		}
+
+		int itemCount = in.readInt();
+		if (itemCount < 0 || itemCount > DownloadBatchProtocol.MAX_ITEM_COUNT) throw new IllegalArgumentException("Invalid batch item count: " + itemCount);
+		List<BatchFileRequestMessage.Item> items = new ArrayList<>(itemCount);
+		Set<Integer> itemIds = new HashSet<>(itemCount);
+		long requestBytes = COMMON_HEADER_LENGTH + Integer.BYTES;
+		for (int index = 0; index < itemCount; index++) {
+			if (in.readableBytes() < Integer.BYTES * 2) {
+				in.resetReaderIndex();
+				return;
+			}
+
+			int itemId = in.readInt();
+			int keyLength = in.readInt();
+			if (itemId <= 0 || !itemIds.add(itemId)) throw new IllegalArgumentException("Batch item IDs must be positive and unique");
+			if (keyLength <= 0 || keyLength > DownloadBatchProtocol.MAX_KEY_BYTES) throw new IllegalArgumentException("Invalid batch key length: " + keyLength);
+			if (in.readableBytes() < keyLength) {
+				in.resetReaderIndex();
+				return;
+			}
+
+			byte[] keyBytes = new byte[keyLength];
+			in.readBytes(keyBytes);
+			String key = new String(keyBytes, StandardCharsets.UTF_8);
+			DownloadBatchProtocol.validateKey(key, keyBytes);
+			requestBytes += Integer.BYTES + Integer.BYTES + keyLength;
+			if (requestBytes > DownloadBatchProtocol.MAX_REQUEST_BYTES) throw new IllegalArgumentException("Batch request is too large");
+			items.add(new BatchFileRequestMessage.Item(itemId, key));
+		}
+
+		out.add(new BatchFileRequestMessage(version, secret, items));
 	}
 
 	private static int readFieldLength(ByteBuf in) {

@@ -12,14 +12,21 @@ import io.netty.handler.stream.ChunkedInput;
 final class HeapChunkedNioStream implements ChunkedInput<ByteBuf> {
 	private final ReadableByteChannel input;
 	private final int chunkSize;
+	private final long expectedLength;
 	private long progress;
 	private boolean endOfInput;
 
 	HeapChunkedNioStream(ReadableByteChannel input, int chunkSize) {
+		this(input, chunkSize, -1);
+	}
+
+	HeapChunkedNioStream(ReadableByteChannel input, int chunkSize, long expectedLength) {
 		if (input == null) throw new NullPointerException("input");
 		if (chunkSize <= 0) throw new IllegalArgumentException("chunkSize must be positive");
+		if (expectedLength < -1) throw new IllegalArgumentException("expectedLength must not be less than -1");
 		this.input = input;
 		this.chunkSize = chunkSize;
+		this.expectedLength = expectedLength;
 	}
 
 	@Override
@@ -40,12 +47,18 @@ final class HeapChunkedNioStream implements ChunkedInput<ByteBuf> {
 	@Override
 	public ByteBuf readChunk(ByteBufAllocator allocator) throws Exception {
 		if (endOfInput) return null;
-		ByteBuf chunk = allocator.heapBuffer(chunkSize, chunkSize);
+		long remaining = expectedLength < 0 ? chunkSize : expectedLength - progress;
+		if (remaining <= 0) {
+			endOfInput = true;
+			return null;
+		}
+		int requested = (int) Math.min(chunkSize, remaining);
+		ByteBuf chunk = allocator.heapBuffer(requested, requested);
 		boolean success = false;
 		try {
-			ByteBuffer destination = chunk.nioBuffer(0, chunkSize);
+			ByteBuffer destination = chunk.nioBuffer(0, requested);
 			int length = 0;
-			while (length < chunkSize) {
+			while (length < requested) {
 				int read = input.read(destination);
 				if (read < 0) {
 					endOfInput = true;
@@ -66,7 +79,7 @@ final class HeapChunkedNioStream implements ChunkedInput<ByteBuf> {
 
 	@Override
 	public long length() {
-		return -1;
+		return expectedLength;
 	}
 
 	@Override
