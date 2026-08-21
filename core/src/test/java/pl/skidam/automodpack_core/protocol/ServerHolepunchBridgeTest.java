@@ -51,6 +51,11 @@ class ServerHolepunchBridgeTest {
 			}
 
 			@Override
+			public boolean isRaw() {
+				return false;
+			}
+
+			@Override
 			public CompletableFuture<Void> prepareTransportUpgrade() {
 				return CompletableFuture.completedFuture(null);
 			}

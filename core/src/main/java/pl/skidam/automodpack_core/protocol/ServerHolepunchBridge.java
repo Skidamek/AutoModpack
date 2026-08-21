@@ -83,7 +83,16 @@ public final class ServerHolepunchBridge {
 							if (openedSocket == null) return;
 							byte[] bytes = new byte[data.remaining()];
 							data.get(bytes);
-							openedSocket.feedReadData(bytes);
+							openedSocket.feedPlainReadData(bytes);
+						}
+
+						@Override
+						public void onRawRead(ByteBuffer data) {
+							HolepunchSocket openedSocket = socket;
+							if (openedSocket == null) return;
+							byte[] bytes = new byte[data.remaining()];
+							data.get(bytes);
+							openedSocket.feedCamouflagedReadData(bytes);
 						}
 
 						@Override
@@ -127,6 +136,7 @@ public final class ServerHolepunchBridge {
 			channel = new EmbeddedChannel();
 			AtomicBoolean tlsHandshakeComplete = new AtomicBoolean(server.getSslCtx() == null);
 			AtomicBoolean transportUpgradeStarted = new AtomicBoolean(server.getSslCtx() == null);
+			AtomicBoolean transportUpgradeInProgress = new AtomicBoolean(false);
 			channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
 			channel.pipeline().addLast("error-printer-first", new ErrorPrinter());
 			SslHandler sslHandler = server.getSslCtx() == null ? null : server.getSslCtx().newHandler(channel.alloc());
@@ -161,9 +171,15 @@ public final class ServerHolepunchBridge {
 					// The timeout is the event-loop tick while the peer waits for output.
 				}
 
+				// Hold produced output while the transport upgrade is in flight: bytes written in
+				// that window must not enter the pre-raw stream queue, they have to be submitted
+				// after the raw switch so HolepunchSocket camouflages them and the peer decodes
+				// them from onRawRead. The EmbeddedChannel buffers them until pumping resumes.
+				if (transportUpgradeInProgress.get()) continue;
 				pumpEmbeddedChannel(channel, socket);
 				if (tlsHandshakeComplete.get() && transportUpgradeStarted.compareAndSet(false, true)) {
-					startTlsTransportUpgrade(socket, sslHandler, remoteAddress);
+					transportUpgradeInProgress.set(true);
+					startTlsTransportUpgrade(socket, sslHandler, remoteAddress, transportUpgradeInProgress);
 				}
 			}
 
@@ -176,7 +192,7 @@ public final class ServerHolepunchBridge {
 		}
 	}
 
-	private static void startTlsTransportUpgrade(HolepunchSocket socket, SslHandler sslHandler, SocketAddress remoteAddress) {
+	private static void startTlsTransportUpgrade(HolepunchSocket socket, SslHandler sslHandler, SocketAddress remoteAddress, AtomicBoolean inProgress) {
 		socket.prepareTransportUpgrade().thenRun(() -> {
 			try {
 				socket.enableTlsTrafficCamouflage(sslHandler.engine().getSession(), false);
@@ -187,7 +203,7 @@ public final class ServerHolepunchBridge {
 			LOGGER.debug("TLS record camouflage setup failed via holepunch: {}", remoteAddress, error);
 			socket.close();
 			return null;
-		});
+		}).whenComplete((ignored, error) -> inProgress.set(false));
 	}
 
 	private static long maxPendingWriteBytes() {
