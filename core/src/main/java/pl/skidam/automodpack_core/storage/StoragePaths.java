@@ -28,7 +28,7 @@ public final class StoragePaths {
 	public static final Path CLIENT_HELPER_DIR = CLIENT_DIR.resolve("helper");
 	public static final Path CLIENT_HELPER_LEASE_FILE = CLIENT_HELPER_DIR.resolve("running.lock");
 	public static final Path DATA_ROOT_MARKER_FILE = AUTOMODPACK_DIR.resolve("data-root.json");
-	public static final Path DATA_ROOT_LOCK_FILE = AUTOMODPACK_DIR.resolve("data-root.lock");
+	public static final Path DATA_ROOT_LOCK_FILE = Path.of(".automodpack-data-root.lock");
 
 	public static final Path SERVER_DIR = AUTOMODPACK_DIR.resolve("server");
 	public static final Path SERVER_CURRENT_FILE = SERVER_DIR.resolve("current.json");

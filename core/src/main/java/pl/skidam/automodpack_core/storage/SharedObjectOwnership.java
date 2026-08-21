@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
@@ -73,12 +74,10 @@ public final class SharedObjectOwnership {
 					throw new IOException("Shared object ownership root contains an unsupported entry: " + path);
 				StorageJsons.ObjectOwnershipFields fields = ConfigTools.read(path, StorageJsons.ObjectOwnershipFields.class)
 						.orElseThrow(() -> new IOException("Shared object ownership receipt is empty: " + path));
-				if (!liveOwner(layout, fields)) {
-					Files.deleteIfExists(path);
-					continue;
-				}
+				String ownerId = requireOwnerId(fields.ownerId);
+				if (fields.ownerPath == null || fields.ownerPath.isBlank()) throw new IOException("Shared object ownership receipt has no owner path: " + path);
 				String receiptId = path.getFileName().toString().substring(0, path.getFileName().toString().length() - ".json".length());
-				String expectedReceiptId = fields.ownerId + "." + requireComponent(fields.component);
+				String expectedReceiptId = ownerId + "." + requireComponent(fields.component);
 				if (!expectedReceiptId.equals(receiptId) || fields.objectHashes == null) throw new IOException("Shared object ownership identity is invalid: " + path);
 				Set<String> hashes = canonical(Set.copyOf(fields.objectHashes));
 				if (!List.copyOf(hashes).equals(fields.objectHashes)) throw new IOException("Shared object ownership receipt is not canonical: " + path);
@@ -88,27 +87,12 @@ public final class SharedObjectOwnership {
 		return Collections.unmodifiableSet(result);
 	}
 
-	private static boolean liveOwner(DataRootResolver.Layout layout, StorageJsons.ObjectOwnershipFields fields) throws IOException {
-		if (fields.ownerPath == null || fields.ownerPath.isBlank()) return false;
-		Path gameRoot;
+	private static String requireOwnerId(String ownerId) throws IOException {
 		try {
-			gameRoot = Path.of(fields.ownerPath).toAbsolutePath().normalize();
+			return UUID.fromString(ownerId).toString();
 		} catch (RuntimeException e) {
-			return false;
+			throw new IOException("Invalid shared object ownership owner ID", e);
 		}
-		Path marker = gameRoot.resolve(StoragePaths.DATA_ROOT_MARKER_FILE).normalize();
-		if (Files.notExists(marker, LinkOption.NOFOLLOW_LINKS)) return false;
-		if (Files.isSymbolicLink(marker) || !Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Shared object owner marker is not a regular file: " + marker);
-		StorageJsons.DataRootFields owner = ConfigTools.read(marker, StorageJsons.DataRootFields.class)
-				.orElseThrow(() -> new IOException("Shared object owner marker is empty: " + marker));
-		if (owner.ownerId == null || owner.root == null) return false;
-		Path ownerRoot;
-		try {
-			ownerRoot = Path.of(owner.root).toAbsolutePath().normalize();
-		} catch (RuntimeException e) {
-			return false;
-		}
-		return fields.ownerId.equals(owner.ownerId) && layout.root().equals(ownerRoot);
 	}
 
 	private static Set<String> canonical(Set<String> hashes) throws IOException {

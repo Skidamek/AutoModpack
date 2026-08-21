@@ -17,10 +17,12 @@ public enum ClientPlatform {
 	ANDROID;
 
 	public static ClientPlatform current() {
-		if (PlatformUtils.IS_ANDROID) return ANDROID;
-		if (PlatformUtils.IS_WIN) return WINDOWS;
-		if (PlatformUtils.IS_MAC) return MACOS;
-		return LINUX;
+		return switch (PlatformUtils.operatingSystem()) {
+			case WINDOWS -> WINDOWS;
+			case MACOS -> MACOS;
+			case LINUX -> LINUX;
+			case ANDROID -> ANDROID;
+		};
 	}
 
 	public static ClientPlatform parse(String value) {

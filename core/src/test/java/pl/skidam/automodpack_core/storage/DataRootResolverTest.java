@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.storage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
+import pl.skidam.automodpack_core.update.ClientStorage;
 
 class DataRootResolverTest {
 	@TempDir
@@ -35,6 +37,7 @@ class DataRootResolverTest {
 
 		assertEquals(canonical.ownerId(), throughAlias.ownerId());
 		assertEquals(game.toRealPath(), throughAlias.ownerPath());
+		assertSame(ClientStorage.open(game), ClientStorage.open(alias));
 	}
 
 	@Test
