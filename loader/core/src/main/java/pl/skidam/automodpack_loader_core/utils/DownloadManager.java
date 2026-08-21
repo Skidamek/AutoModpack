@@ -37,8 +37,7 @@ public class DownloadManager {
 	private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
 
-	private final ExecutorService downloadExecutor = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS,
-			new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
+	private final ExecutorService downloadExecutor;
 
 	private final HttpFileDownloader httpDownloader = new HttpFileDownloader();
 	private DownloadClient downloadClient = null;
@@ -72,9 +71,15 @@ public class DownloadManager {
 	}
 
 	public DownloadManager(long bytesToDownload, ClientStorage storage) {
+		this(bytesToDownload, storage, Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS,
+				new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build()));
+	}
+
+	DownloadManager(long bytesToDownload, ClientStorage storage, ExecutorService downloadExecutor) {
 		this.totalBytesToDownload.set(bytesToDownload);
 		this.speedometer.setExpectedBytes(bytesToDownload);
 		this.storage = Objects.requireNonNull(storage, "storage");
+		this.downloadExecutor = Objects.requireNonNull(downloadExecutor, "downloadExecutor");
 	}
 
 	public void attachDownloadClient(DownloadClient downloadClient) {
@@ -217,15 +222,24 @@ public class DownloadManager {
 
 		LOGGER.info("Queuning download for: {} {} {}", task.file, task.fileSize, activeDomain);
 
-		CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-			try {
-				processDownloadTask(key, task);
-			} catch (Exception e) {
-				LOGGER.error("Fatal error executing download task for {}", task.file.getFileName(), e);
-			}
-		}, downloadExecutor);
-
+		CompletableFuture<Void> future = new CompletableFuture<>();
 		downloadsInProgress.put(key, new DownloadData(future, task.file, activeDomain, task.fileSize));
+		try {
+			downloadExecutor.execute(() -> {
+				try {
+					processDownloadTask(key, task);
+					future.complete(null);
+				} catch (Throwable error) {
+					LOGGER.error("Fatal error executing download task for {}", task.file.getFileName(), error);
+					future.completeExceptionally(error);
+				}
+			});
+		} catch (RuntimeException error) {
+			downloadsInProgress.remove(key);
+			activeDownloadsPerSource.compute(activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
+			future.completeExceptionally(error);
+			throw error;
+		}
 	}
 
 	private String predictSource(QueuedDownload task) {
@@ -353,17 +367,22 @@ public class DownloadManager {
 			}
 		}
 
-		if (success) {
-			downloadedCount++;
-			acquisitionResults.put(key, new AcquisitionResult(true, null));
-			LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
-			task.successCallback.run();
-			semaphore.release();
-		} else {
-			handleRetry(key, task, interrupted);
+		try {
+			if (success) {
+				downloadedCount++;
+				acquisitionResults.put(key, new AcquisitionResult(true, null));
+				LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
+				try {
+					task.successCallback.run();
+				} finally {
+					semaphore.release();
+				}
+			} else {
+				handleRetry(key, task, interrupted);
+			}
+		} finally {
+			if (!interrupted) downloadNext();
 		}
-
-		if (!interrupted) downloadNext();
 	}
 
 	private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {
@@ -379,8 +398,11 @@ public class DownloadManager {
 			FailureCategory category = task.lastFailureCategory == null ? FailureCategory.REMOTE_SOURCE : task.lastFailureCategory;
 			acquisitionResults.put(key, new AcquisitionResult(false, category));
 			LOGGER.error("Permanently failed to download {} ({})", task.file.getFileName(), category);
-			task.failureCallback.accept(category);
-			semaphore.release();
+			try {
+				task.failureCallback.accept(category);
+			} finally {
+				semaphore.release();
+			}
 		}
 	}
 
