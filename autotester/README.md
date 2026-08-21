@@ -134,8 +134,8 @@ A step is either a bare name (`- quit`, or a macro name) or a mapping with a
 | Key | Meaning |
 | --- | --- |
 | `name` | Human-readable label shown in logs and `results.json`. |
-| `when` | A condition; the step runs only if it holds. |
-| `repeat` | Run the step N times. |
+| `when` | A condition; the step runs only if it holds. With `repeat`, it is re-checked before every iteration and stops the loop once it no longer holds. |
+| `repeat` | Run the step at most N times; combined with `when` it becomes "do while the condition holds". |
 | `optional` | If the step fails, log it and continue instead of failing the run. |
 
 ### Networking, modes, and scoping

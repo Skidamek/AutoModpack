@@ -1080,9 +1080,18 @@ flow:
   - do: click
     name: reopen the preservation vault after repair
     select: { text: Preserved files }
+  - do: wait_for
+    name: wait for the vault listing to expose its pager
+    timeout: 30s
+    until:
+      any:
+        - element: { text: config/amp-autotest-gamma.cfg, visible: true }
+        - element: { text: "Next >", enabled: true }
   - do: click
-    name: browse to the next preservation page after repair created more claims
-    select: { text: Next > }
+    name: browse forward to the removed-file claim page
+    select: { text: "Next >" }
+    when: { no_element: { text: config/amp-autotest-gamma.cfg, visible: true } }
+    repeat: 12
   - do: click
     name: select the removed-file claim for deletion
     select: { text: config/amp-autotest-gamma.cfg }
