@@ -225,7 +225,6 @@ public final class GenerationStore {
 	public StorageReport measureStorage() throws IOException {
 		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			recoverCompactionLocked();
 			return measureStorageLocked();
 		}
 	}
@@ -247,7 +246,6 @@ public final class GenerationStore {
 	public CompactionPreview previewCompaction(String boundaryGenerationId) throws IOException {
 		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			recoverCompactionLocked();
 			return previewCompactionLocked(boundaryGenerationId);
 		}
 	}

@@ -296,7 +296,7 @@ public final class ClientObjectStore {
 				try (Stream<Path> files = Files.walk(modpack)) {
 					for (Path file : files.filter(path -> !path.equals(modpack)).sorted().toList()) {
 						FileTrees.requireNoSymbolicLink(file, "client overlay");
-						if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.addOptional(metadata.getOrComputeHash(file), Files.size(file), "client overlay");
+						if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.addOptional(metadata.hash(file), Files.size(file), "client overlay");
 					}
 				}
 			}
