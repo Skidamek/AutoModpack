@@ -46,6 +46,7 @@ class ClientObjectStoreTest {
 		Files.createDirectories(storage.overlayFile(MODPACK_ID, "config/options.txt").getParent());
 		Files.writeString(storage.overlayFile(MODPACK_ID, "config/options.txt"), "referenced", StandardCharsets.UTF_8);
 		Files.writeString(storage.fileMetadataDirectory().resolve("cache.json"), "metadata", StandardCharsets.UTF_8);
+		long metadataFilesBefore = regularFileCount(storage.fileMetadataDirectory());
 
 		ClientObjectStore.StorageReport report = ClientObjectStore.measure(storage);
 
@@ -58,6 +59,7 @@ class ClientObjectStoreTest {
 		assertTrue(report.overlayBytes() > 0);
 		assertTrue(report.referencedObjectCoverageRatio().orElseThrow() == 1.0);
 		assertTrue(Files.exists(storage.objectsDirectory().resolve(orphan)));
+		assertEquals(metadataFilesBefore, regularFileCount(storage.fileMetadataDirectory()));
 	}
 
 	@Test
@@ -115,7 +117,7 @@ class ClientObjectStoreTest {
 	}
 
 	@Test
-	void collectionRetiresReceiptAfterItsInstallationIsRemoved() throws Exception {
+	void collectionRetainsReceiptWhileItsInstallationIsUnavailable() throws Exception {
 		Path sharedData = temporaryDirectory.resolve("shared-data");
 		ClientStorage first = storage("first-game", sharedData, true);
 		ClientStorage removed = storage("removed-game", sharedData, true);
@@ -125,8 +127,8 @@ class ClientObjectStoreTest {
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
 
-		assertEquals(1, result.deletedObjectCount());
-		assertFalse(Files.exists(first.objectsDirectory().resolve(hash)));
+		assertEquals(0, result.deletedObjectCount());
+		assertTrue(Files.exists(first.objectsDirectory().resolve(hash)));
 	}
 
 	@Test
@@ -209,6 +211,12 @@ class ClientObjectStoreTest {
 
 	private ClientStorage storage() throws Exception {
 		return storage("game", temporaryDirectory.resolve("data"), false);
+	}
+
+	private static long regularFileCount(Path root) throws IOException {
+		try (var paths = Files.walk(root)) {
+			return paths.filter(Files::isRegularFile).count();
+		}
 	}
 
 	private ClientStorage storage(String gameName, Path dataDirectory, boolean shared) throws Exception {

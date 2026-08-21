@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 class ModFileCacheTest {
 	@TempDir
@@ -62,7 +63,7 @@ class ModFileCacheTest {
 	void forcedReinspectionReplacesContentMetadataWithoutTrustingItsRecord() throws Exception {
 		Path source = temporaryDirectory.resolve("source.jar");
 		writeMod(source);
-		String hash = pl.skidam.automodpack_core.utils.HashUtils.getHash(source);
+		String hash = HashUtils.getHash(source);
 		Path records = temporaryDirectory.resolve("mod-metadata");
 		Path record = records.resolve(hash.substring(0, 2)).resolve(hash + ".json");
 		Files.createDirectories(record.getParent());
