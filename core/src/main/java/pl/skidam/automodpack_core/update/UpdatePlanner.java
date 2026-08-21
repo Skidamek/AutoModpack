@@ -152,7 +152,7 @@ public final class UpdatePlanner {
 			OwnershipLedger.Content current = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!ledgerEntry.historicalHashes().contains(current)) continue;
 			ClientStorageJsons.ClientBaselineFields.EntryFields baseline = baselines.get(ledgerEntry.logicalPath());
-			if (restoreOwnedLiveFile(key, state, baseline, input.availableBaselineObjects(), projected, operations, preservations))
+			if (restoreOwnedLiveFile(key, state, baseline, input.availableBaselineObjects(), true, projected, operations, preservations))
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
 
@@ -207,8 +207,11 @@ public final class UpdatePlanner {
 			}
 		}
 
-		if (installedLedger != null) planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), input.selection(), projected, operations, preservations, restartReasons);
-		else planServerKnownCleanup(ledger, targetItems.keySet(), projected, operations, preservations, restartReasons);
+		if (installedLedger != null)
+			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), input.selection(), !input.installedManifest().modpackId.equals(target.modpackId), projected, operations,
+					preservations, restartReasons);
+		else
+			planServerKnownCleanup(ledger, targetItems.keySet(), projected, operations, preservations, restartReasons);
 		if (input.installedManifest() != null && !Objects.equals(input.installedManifest().selectedGroups, target.selectedGroups))
 			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
 		if (input.installedManifest() == null || isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
@@ -284,7 +287,8 @@ public final class UpdatePlanner {
 		captures.addAll(planned.values());
 	}
 
-	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> installedPaths, Set<String> targetPaths, SelectionContext selection, Map<FileKey, FileState> projected,
+	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> installedPaths, Set<String> targetPaths, SelectionContext selection, boolean preserveReplacedBytes,
+			Map<FileKey, FileState> projected,
 			Map<FileKey, Operation> operations, List<Preservation> preservations, EnumSet<RestartReason> restartReasons) {
 		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselines = selection == null ? Map.of() : baselineEntries(selection.baseline(), ledger.modpackId());
 		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
@@ -303,7 +307,7 @@ public final class UpdatePlanner {
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 				continue;
 			}
-			if (restoreOwnedLiveFile(key, state, baseline, selection.availableBaselineObjects(), projected, operations, preservations))
+			if (restoreOwnedLiveFile(key, state, baseline, selection.availableBaselineObjects(), preserveReplacedBytes, projected, operations, preservations))
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
 	}
@@ -320,7 +324,7 @@ public final class UpdatePlanner {
 	}
 
 	private static boolean restoreOwnedLiveFile(FileKey key, FileState state, ClientStorageJsons.ClientBaselineFields.EntryFields baseline,
-			Set<String> availableBaselineObjects, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, List<Preservation> preservations) {
+			Set<String> availableBaselineObjects, boolean preserveReplacedBytes, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, List<Preservation> preservations) {
 		if (baseline != null && baselineMatches(state, baseline)) return false;
 		String currentHash = state.sha1().toLowerCase(Locale.ROOT);
 		// Callers prove these exact bytes belong to the installed selection before a missing
@@ -333,7 +337,7 @@ public final class UpdatePlanner {
 		if (!HashUtils.isSha1(baseline.objectHash) || baseline.size < 0) return false;
 		String baselineHash = HashUtils.normalizeSha1(baseline.objectHash);
 		if (!availableBaselineObjects.contains(baselineHash)) return false;
-		preservations.add(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
+		if (preserveReplacedBytes) preservations.add(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
 		install(operations, projected, key, baselineHash, baseline.size, currentHash);
 		return true;
 	}
