@@ -140,7 +140,8 @@ class SharedSecretsStoreTest {
 
     @Test
     void multipleJvmWorkersMergeIntoOneStore() throws Exception {
-        String java = Path.of(System.getProperty("java.home"), "bin", "java.exe").toString();
+        String javaExecutable = System.getProperty("os.name").toLowerCase().contains("win") ? "java.exe" : "java";
+        String java = Path.of(System.getProperty("java.home"), "bin", javaExecutable).toString();
         String classPath = System.getProperty("java.class.path");
         List<Process> processes = new ArrayList<>();
         int processCount = 4;

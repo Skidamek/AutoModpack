@@ -70,8 +70,9 @@ public class Secrets {
         try {
             record = SecretsStore.findHostSecret(secretStr);
         } catch (Exception exception) {
-            LOGGER.warn("Shared security validation failed closed: {}", exception.getMessage());
-            return false;
+            boolean failClosed = !shared || activeSharedSecurityPaths.failClosed();
+            LOGGER.warn("Shared security validation failed {}: {}", failClosed ? "closed" : "open", exception.getMessage());
+            return !failClosed;
         }
         if (record == null)
             return false;

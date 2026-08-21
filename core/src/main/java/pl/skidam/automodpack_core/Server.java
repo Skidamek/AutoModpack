@@ -43,6 +43,9 @@ public class Server {
             serverConfig.syncedFiles = new HashSet<>();
             ConfigUtils.normalizeServerConfig(serverConfig);
             ServerSecurityPathManager.configure(serverConfig);
+            if (!ServerSecurityPathManager.isEnabled()) {
+                serverConfig.validateSecrets = false;
+            }
             if (sharedSecurityPaths != null) {
                 try {
                     sharedSecurityPaths.ensureDirectory();
