@@ -52,6 +52,13 @@ public final class DownloadBatchProtocol {
 		if ((!objectKey && !catalogueKey) || !key.equals(new String(keyBytes, StandardCharsets.UTF_8))) throw new IllegalArgumentException("Invalid canonical batch key");
 	}
 
+	public static String expectedContentSha1(String key) {
+		if (HashUtils.isCanonicalSha1(key)) return key;
+		String prefix = GenerationHistoryIndex.CATALOGUE_REQUEST_PREFIX;
+		if (key != null && key.startsWith(prefix) && HashUtils.isCanonicalSha1(key.substring(prefix.length()))) return key.substring(prefix.length());
+		throw new IllegalArgumentException("Invalid canonical batch key");
+	}
+
 	public interface Item {
 		int itemId();
 

@@ -89,6 +89,8 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
 			int keyLength = in.readInt();
 			if (itemId <= 0 || !itemIds.add(itemId)) throw new IllegalArgumentException("Batch item IDs must be positive and unique");
 			if (keyLength <= 0 || keyLength > DownloadBatchProtocol.MAX_KEY_BYTES) throw new IllegalArgumentException("Invalid batch key length: " + keyLength);
+			requestBytes += Integer.BYTES + Integer.BYTES + keyLength;
+			if (requestBytes > DownloadBatchProtocol.MAX_REQUEST_BYTES) throw new IllegalArgumentException("Batch request is too large");
 			if (in.readableBytes() < keyLength) {
 				in.resetReaderIndex();
 				return;
@@ -98,8 +100,6 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
 			in.readBytes(keyBytes);
 			String key = new String(keyBytes, StandardCharsets.UTF_8);
 			DownloadBatchProtocol.validateKey(key, keyBytes);
-			requestBytes += Integer.BYTES + Integer.BYTES + keyLength;
-			if (requestBytes > DownloadBatchProtocol.MAX_REQUEST_BYTES) throw new IllegalArgumentException("Batch request is too large");
 			items.add(new BatchFileRequestMessage.Item(itemId, key));
 		}
 

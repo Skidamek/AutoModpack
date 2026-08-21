@@ -7,6 +7,7 @@ import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
@@ -121,10 +122,8 @@ public final class ServerHolepunchBridge {
 
 	private static void runProtocol(NettyServer server, HolepunchSocket socket, SocketAddress remoteAddress) {
 		EmbeddedChannel channel = null;
-		try (
-				socket;
-				DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()))) {
-			channel = new EmbeddedChannel();
+		try (DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()))) {
+			channel = newTransportChannel(socket);
 			AtomicBoolean tlsHandshakeComplete = new AtomicBoolean(server.getSslCtx() == null);
 			AtomicBoolean transportUpgradeStarted = new AtomicBoolean(server.getSslCtx() == null);
 			channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
@@ -144,7 +143,7 @@ public final class ServerHolepunchBridge {
 				LOGGER.debug("TLS termination handled externally for holepunch connection: {}", remoteAddress);
 			}
 
-			ProtocolPipeline.install(channel, server, remoteAddress);
+			ProtocolPipeline.installInline(channel, server, remoteAddress);
 
 			socket.setSoTimeout(EVENT_LOOP_TICK_MILLIS);
 			byte[] readBuffer = new byte[8192];
@@ -173,7 +172,12 @@ public final class ServerHolepunchBridge {
 		} finally {
 			sockets.remove(socket);
 			if (channel != null) channel.finishAndReleaseAll();
+			socket.close();
 		}
+	}
+
+	static EmbeddedChannel newTransportChannel(HolepunchSocket socket) {
+		return new HolepunchEmbeddedChannel(socket);
 	}
 
 	private static void startTlsTransportUpgrade(HolepunchSocket socket, SslHandler sslHandler, SocketAddress remoteAddress) {
@@ -265,5 +269,25 @@ public final class ServerHolepunchBridge {
 		void write(ByteBuf buffer) throws IOException;
 
 		default void flush() throws IOException {}
+	}
+
+	private static final class HolepunchEmbeddedChannel extends EmbeddedChannel {
+		private final HolepunchSocket socket;
+
+		private HolepunchEmbeddedChannel(HolepunchSocket socket) {
+			this.socket = socket;
+		}
+
+		@Override
+		protected void handleOutboundMessage(Object message) {
+			try {
+				if (!(message instanceof ByteBuf buffer)) throw new IOException("Unexpected outbound message type: " + message.getClass().getName());
+				socket.writeBuffer(buffer);
+			} catch (IOException e) {
+				throw new UncheckedIOException(e);
+			} finally {
+				ReferenceCountUtil.release(message);
+			}
+		}
 	}
 }

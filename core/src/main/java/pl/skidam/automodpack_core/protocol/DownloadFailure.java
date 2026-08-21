@@ -12,6 +12,7 @@ public record DownloadFailure(Kind kind, Throwable cause) {
 		REMOTE,
 		LOCAL_STORAGE,
 		PROTOCOL,
+		INTEGRITY,
 		CANCELLED
 	}
 }

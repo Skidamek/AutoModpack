@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -79,5 +80,51 @@ class ServerHolepunchBridgeTest {
 		assertArrayEquals(payload, bytes.toByteArray());
 		socket.close();
 		channel.finishAndReleaseAll();
+	}
+
+	@Test
+	void transportChannelWritesChunksWithoutRetainingAnOutboundQueue() throws Exception {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		HolepunchConnection connection = new HolepunchConnection() {
+			@Override
+			public CompletableFuture<Void> write(ByteBuffer data) {
+				ByteBuffer copy = data.duplicate();
+				byte[] chunk = new byte[copy.remaining()];
+				copy.get(chunk);
+				bytes.writeBytes(chunk);
+				return CompletableFuture.completedFuture(null);
+			}
+
+			@Override
+			public CompletableFuture<Void> prepareTransportUpgrade() {
+				return CompletableFuture.completedFuture(null);
+			}
+
+			@Override
+			public CompletableFuture<Void> commitTransportUpgrade() {
+				return CompletableFuture.completedFuture(null);
+			}
+
+			@Override
+			public void pauseReads() {}
+
+			@Override
+			public void resumeReads() {}
+
+			@Override
+			public void close() {}
+		};
+		HolepunchSocket socket = new HolepunchSocket(connection);
+		EmbeddedChannel channel = ServerHolepunchBridge.newTransportChannel(socket);
+		channel.pipeline().addLast(new ChunkedWriteHandler());
+		byte[] payload = new byte[20 * 1024];
+		for (int i = 0; i < payload.length; i++) payload[i] = (byte) i;
+
+		channel.writeAndFlush(new ChunkedStream(new ByteArrayInputStream(payload), 1024)).syncUninterruptibly();
+
+		assertArrayEquals(payload, bytes.toByteArray());
+		assertNull(channel.readOutbound());
+		channel.finishAndReleaseAll();
+		socket.close();
 	}
 }

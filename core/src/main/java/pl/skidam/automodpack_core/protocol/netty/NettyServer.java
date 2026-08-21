@@ -25,6 +25,8 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
+import io.netty.util.concurrent.DefaultEventExecutorGroup;
+import io.netty.util.concurrent.EventExecutorGroup;
 
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
@@ -43,8 +45,10 @@ public class NettyServer {
 	public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
 	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
 	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
+	private final Set<Channel> offloadedTransferChannels = ConcurrentHashMap.newKeySet();
 	private volatile Map<String, Path> paths = Map.of();
 	private MultithreadEventLoopGroup eventLoopGroup;
+	private EventExecutorGroup transferExecutorGroup;
 	private ChannelFuture serverChannel;
 	private volatile boolean sharedMagicEnabled;
 	private String certificateFingerprint;
@@ -64,6 +68,21 @@ public class NettyServer {
 
 	public Map<Channel, String> getConnections() {
 		return connections;
+	}
+
+	synchronized EventExecutorGroup transferExecutorGroup() {
+		if (transferExecutorGroup == null || transferExecutorGroup.isShuttingDown()) {
+			// :core:benchmarkProtocolTransfer measures saturation; leave one processor available for channel I/O.
+			int transferThreads = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
+			transferExecutorGroup = new DefaultEventExecutorGroup(transferThreads,
+					new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server Transfer #%d").setDaemon(true).build());
+		}
+		return transferExecutorGroup;
+	}
+
+	void registerOffloadedTransferChannel(Channel channel) {
+		offloadedTransferChannels.add(channel);
+		channel.closeFuture().addListener(ignored -> offloadedTransferChannels.remove(channel));
 	}
 
 	public String getCertificateFingerprint() {
@@ -211,6 +230,8 @@ public class NettyServer {
 		boolean stopped = true;
 		sharedMagicEnabled = false;
 		ServerHolepunchBridge.close();
+		for (Channel channel : List.copyOf(offloadedTransferChannels)) channel.close().syncUninterruptibly();
+		offloadedTransferChannels.clear();
 
 		try {
 			if (serverChannel != null) serverChannel.channel().close().sync();
@@ -232,6 +253,16 @@ public class NettyServer {
 			stopped = false;
 		} finally {
 			eventLoopGroup = null;
+		}
+
+		try {
+			if (transferExecutorGroup != null) transferExecutorGroup.shutdownGracefully().sync();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			LOGGER.error("Interrupted while stopping server transfer executor", e);
+			stopped = false;
+		} finally {
+			transferExecutorGroup = null;
 		}
 
 		sslCtx = null;

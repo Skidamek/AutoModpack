@@ -19,6 +19,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HexFormat;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,11 +29,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 import java.util.function.Predicate;
@@ -50,6 +54,7 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchOptions;
@@ -350,12 +355,14 @@ public class DownloadClient implements AutoCloseable {
 
 		while (!connectionWaiters.isEmpty() && !availableConnections.isEmpty()) {
 			CompletableFuture<Connection> waiter = connectionWaiters.remove();
+			if (waiter.isCancelled()) continue;
 			Connection connection = availableConnections.remove();
 			waiter.complete(connection);
 		}
 
 		while (!closed && !connectionWaiters.isEmpty() && allConnections.size() + openingConnections < MAX_CONNECTIONS) {
 			CompletableFuture<Connection> waiter = connectionWaiters.remove();
+			if (waiter.isCancelled()) continue;
 			openingConnections++;
 			openConnectionAsync().whenComplete((connection, error) -> {
 				synchronized (poolLock) {
@@ -414,7 +421,16 @@ public class DownloadClient implements AutoCloseable {
 		if (stableRequests.isEmpty()) return CompletableFuture.completedFuture(List.of());
 
 		CompletableFuture<List<DownloadResult>> result = new CompletableFuture<>();
-		acquireConnection().whenComplete((connection, acquireError) -> {
+		CompletableFuture<Connection> acquisition = acquireConnection();
+		result.whenComplete((ignored, error) -> {
+			if (result.isCancelled()) {
+				synchronized (poolLock) {
+					connectionWaiters.remove(acquisition);
+				}
+				acquisition.cancel(false);
+			}
+		});
+		acquisition.whenComplete((connection, acquireError) -> {
 			if (acquireError != null) {
 				result.completeExceptionally(unwrap(acquireError));
 				return;
@@ -424,7 +440,7 @@ public class DownloadClient implements AutoCloseable {
 				return;
 			}
 
-			CompletableFuture<Connection.BatchOutcome> operation;
+			Connection.BatchOperation operation;
 			try {
 				operation = connection.sendDownloadBatch(stableRequests);
 			} catch (Exception e) {
@@ -433,16 +449,19 @@ public class DownloadClient implements AutoCloseable {
 				return;
 			}
 
+			AtomicBoolean released = new AtomicBoolean();
 			result.whenComplete((ignored, error) -> {
 				if (result.isCancelled()) {
-					releaseConnection(connection, false);
+					if (released.compareAndSet(false, true)) releaseConnection(connection, false);
 					operation.cancel(true);
+					operation.finished().join();
 				}
 			});
-			operation.whenComplete((outcome, error) -> {
-				releaseConnection(connection, error == null && outcome != null && outcome.healthy());
+			operation.completion().whenComplete((outcome, error) -> {
+				if (released.compareAndSet(false, true)) releaseConnection(connection, error == null && outcome != null && outcome.healthy());
 				if (error != null) result.completeExceptionally(unwrap(error));
-				else result.complete(outcome.results());
+				else if (outcome != null) result.complete(outcome.results());
+				else result.completeExceptionally(new IOException("Batch operation completed without a result"));
 			});
 		});
 		return result;
@@ -519,6 +538,7 @@ class Connection implements AutoCloseable {
 	private final DataInputStream in;
 	private final DataOutputStream out;
 	private final ExecutorService executor = Executors.newSingleThreadExecutor();
+	private final Set<BatchOperation> batchOperations = ConcurrentHashMap.newKeySet();
 	private volatile boolean closed;
 	private CompressionCodec compressionCodec;
 	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
@@ -565,14 +585,46 @@ class Connection implements AutoCloseable {
 		}, executor);
 	}
 
-	CompletableFuture<BatchOutcome> sendDownloadBatch(List<DownloadRequest> requests) {
-		return CompletableFuture.supplyAsync(() -> sendDownloadBatchNow(requests), executor);
+	BatchOperation sendDownloadBatch(List<DownloadRequest> requests) {
+		CompletableFuture<BatchOutcome> completion = new CompletableFuture<>();
+		CompletableFuture<Void> finished = new CompletableFuture<>();
+		AtomicBoolean started = new AtomicBoolean();
+		FutureTask<Void> task = new FutureTask<>(() -> {
+			try {
+				completion.complete(sendDownloadBatchNow(requests));
+			} catch (Throwable error) {
+				completion.completeExceptionally(error);
+			} finally {
+				finished.complete(null);
+			}
+			return null;
+		}) {
+			@Override
+			public void run() {
+				started.set(true);
+				try {
+					super.run();
+				} finally {
+					if (isCancelled()) finished.complete(null);
+				}
+			}
+
+			@Override
+			protected void done() {
+				if (!started.get()) finished.complete(null);
+			}
+		};
+		BatchOperation operation = new BatchOperation(completion, finished, task);
+		batchOperations.add(operation);
+		completion.whenComplete((ignored, error) -> batchOperations.remove(operation));
+		executor.execute(task);
+		return operation;
 	}
 
 	private BatchOutcome sendDownloadBatchNow(List<DownloadRequest> requests) {
 		Map<Integer, DownloadResult> results = new LinkedHashMap<>();
 		boolean healthy = true;
-		if (protocolVersion >= DownloadBatchProtocol.VERSION) {
+		if (protocolVersion == DownloadBatchProtocol.VERSION) {
 			try {
 				writeBatchRequest(requests);
 				for (DownloadRequest request : requests) results.put(request.itemId(), readBatchItem(request));
@@ -580,7 +632,7 @@ class Connection implements AutoCloseable {
 				healthy = false;
 				addUnresolvedResults(requests, results, closed ? DownloadFailure.Kind.CANCELLED : DownloadFailure.Kind.PROTOCOL, e);
 			}
-		} else {
+		} else if (protocolVersion == LEGACY_PROTOCOL_VERSION) {
 			for (DownloadRequest request : requests) {
 				try {
 					writeLegacyRequest(request.key().getBytes(StandardCharsets.UTF_8));
@@ -595,6 +647,9 @@ class Connection implements AutoCloseable {
 					break;
 				}
 			}
+		} else {
+			healthy = false;
+			addUnresolvedResults(requests, results, DownloadFailure.Kind.PROTOCOL, new IOException("Unsupported negotiated download protocol version: " + protocolVersion));
 		}
 
 		List<DownloadResult> orderedResults = new ArrayList<>(requests.size());
@@ -673,6 +728,7 @@ class Connection implements AutoCloseable {
 	private DownloadResult readBatchBody(DownloadRequest request, byte version, long expectedFileSize) throws IOException {
 		OutputStream output = null;
 		DownloadFailure failure = null;
+		var digest = HashUtils.newSha1Digest();
 		try {
 			output = LocalFileWriter.open(request.destination());
 		} catch (LocalStorageException e) {
@@ -685,6 +741,7 @@ class Connection implements AutoCloseable {
 				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
 				int frameLength = dataFrame.length();
 				if (frameLength <= 0 || (long) frameLength > expectedFileSize - receivedBytes) throw new IOException("Batch item data exceeds the declared file size");
+				digest.update(dataFrame.data(), 0, frameLength);
 				if (output != null) {
 					try {
 						output.write(dataFrame.data(), 0, frameLength);
@@ -711,6 +768,11 @@ class Connection implements AutoCloseable {
 		if (eot.length() != Byte.BYTES + Byte.BYTES + Integer.BYTES || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION
 				|| ByteBuffer.wrap(eot.data(), 2, Integer.BYTES).getInt() != request.itemId())
 			throw new IOException("Invalid batch item EOT");
+		if (failure == null) {
+			String actualSha1 = HexFormat.of().formatHex(digest.digest());
+			if (!DownloadBatchProtocol.expectedContentSha1(request.key()).equals(actualSha1))
+				failure = new DownloadFailure(DownloadFailure.Kind.INTEGRITY, new IOException("Downloaded bytes do not match the requested content key"));
+		}
 		return failure == null ? DownloadResult.success(request) : new DownloadResult(request, Optional.of(failure));
 	}
 
@@ -733,6 +795,10 @@ class Connection implements AutoCloseable {
 
 		if (messageType == END_OF_TRANSMISSION) {
 			if (headerWrap.hasRemaining()) throw new IOException("Invalid empty-file response");
+			if (requestedFileSize != null && requestedFileSize != 0) throw new IOException("Empty response does not match the requested file size");
+			try (OutputStream ignored = LocalFileWriter.open(destination)) {
+				// An empty response still has to materialize the requested destination.
+			}
 			return destination;
 		}
 
@@ -764,6 +830,13 @@ class Connection implements AutoCloseable {
 	}
 
 	record BatchOutcome(List<DownloadResult> results, boolean healthy) {}
+
+	record BatchOperation(CompletableFuture<BatchOutcome> completion, CompletableFuture<Void> finished, FutureTask<Void> task) {
+		void cancel(boolean mayInterruptIfRunning) {
+			completion.cancel(mayInterruptIfRunning);
+			task.cancel(mayInterruptIfRunning);
+		}
+	}
 
 	private CompressionType sendCompressionConfig(CompressionType desiredCompression) throws IOException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -827,6 +900,7 @@ class Connection implements AutoCloseable {
 			socket.close();
 		} catch (Exception ignored) {
 		}
+		batchOperations.forEach(operation -> operation.cancel(true));
 		executor.shutdownNow();
 	}
 }

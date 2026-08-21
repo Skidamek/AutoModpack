@@ -38,6 +38,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 	private final Deque<ResolvedBatchItem> batchQueue = new ArrayDeque<>();
 	private boolean batchTransferActive;
 	private boolean legacyTransferActive;
+	private HeapChunkedNioStream activeTransferStream;
 
 	public ServerMessageHandler(NettyServer server) {
 		this.server = server;
@@ -45,6 +46,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
 	@Override
 	public void handlerRemoved(ChannelHandlerContext ctx) {
+		closeActiveTransferStream();
 		batchQueue.clear();
 		batchTransferActive = false;
 		legacyTransferActive = false;
@@ -117,6 +119,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
 			Path path = optionalPath.get();
 			try {
+				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Path is no longer a regular file");
 				long fileSize = Files.size(path);
 				if (fileSize < 0) throw new IOException("Negative file size");
 				batchQueue.add(new ResolvedBatchItem(item.itemId(), path, fileSize, null));
@@ -138,8 +141,9 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		}
 
 		FileChannel channel = null;
+		boolean headerQueued = false;
 		try {
-			if (item.fileSize() > 0) channel = FileChannel.open(item.path(), StandardOpenOption.READ);
+			if (item.fileSize() > 0) channel = FileChannel.open(item.path(), StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
 			ByteBuf responseHeader = ctx.alloc().buffer(2 + Integer.BYTES + Byte.BYTES + Long.BYTES);
 			responseHeader.writeByte(protocolVersion);
 			responseHeader.writeByte(BATCH_ITEM_RESPONSE_TYPE);
@@ -147,9 +151,10 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 			responseHeader.writeByte(DownloadBatchProtocol.ITEM_SUCCESS);
 			responseHeader.writeLong(item.fileSize());
 			ChannelFuture headerFuture = writeControlAndFlush(ctx, responseHeader);
+			headerQueued = true;
 			if (item.fileSize() == 0) {
 				if (channel != null) channel.close();
-				headerFuture.addListener(completed -> {
+				onCompletion(ctx, headerFuture, completed -> {
 					if (!completed.isSuccess()) {
 						closeBatchConnection(ctx);
 						return;
@@ -160,12 +165,14 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 			}
 
 			HeapChunkedNioStream stream = new HeapChunkedNioStream(channel, chunkSize, item.fileSize());
+			activeTransferStream = stream;
 			ChannelFuture streamFuture = ctx.writeAndFlush(stream);
-			streamFuture.addListener(future -> {
+			onCompletion(ctx, streamFuture, future -> {
 				if (!future.isSuccess() || stream.progress() != item.fileSize()) {
 					closeBatchConnection(ctx);
 					return;
 				}
+				if (activeTransferStream == stream) activeTransferStream = null;
 				advanceBatch(ctx, sendItemEot(ctx, item.itemId()));
 			});
 		} catch (Exception e) {
@@ -176,12 +183,16 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 					// The channel is already unusable.
 				}
 			}
-			advanceBatch(ctx, sendItemFailure(ctx, item.itemId(), "File transfer could not be opened"));
+			if (headerQueued) {
+				closeBatchConnection(ctx);
+			} else {
+				advanceBatch(ctx, sendItemFailure(ctx, item.itemId(), "File transfer could not be opened"));
+			}
 		}
 	}
 
 	private void advanceBatch(ChannelHandlerContext ctx, ChannelFuture future) {
-		future.addListener(completed -> {
+		onCompletion(ctx, future, completed -> {
 			if (!completed.isSuccess()) {
 				closeBatchConnection(ctx);
 				return;
@@ -215,7 +226,19 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 	private void closeBatchConnection(ChannelHandlerContext ctx) {
 		batchQueue.clear();
 		batchTransferActive = false;
+		closeActiveTransferStream();
 		ctx.close();
+	}
+
+	private void closeActiveTransferStream() {
+		HeapChunkedNioStream stream = activeTransferStream;
+		activeTransferStream = null;
+		if (stream == null) return;
+		try {
+			stream.close();
+		} catch (Exception ignored) {
+			// The channel is already being closed.
+		}
 	}
 
 	private boolean validateSecret(ChannelHandlerContext ctx, SocketAddress address, byte[] secret) {
@@ -245,7 +268,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		responseHeader.writeByte(this.protocolVersion);
 		responseHeader.writeByte(FILE_RESPONSE_TYPE);
 		responseHeader.writeLong(fileSize);
-		writeControlAndFlush(ctx, responseHeader).addListener(future -> {
+		onCompletion(ctx, writeControlAndFlush(ctx, responseHeader), future -> {
 			if (!future.isSuccess()) {
 				legacyTransferActive = false;
 				ctx.close();
@@ -260,15 +283,16 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		ReadableByteChannel channel = null;
 
 		try {
-			channel = FileChannel.open(path, StandardOpenOption.READ);
+			channel = FileChannel.open(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS);
 			HeapChunkedNioStream chunkedStream = new HeapChunkedNioStream(channel, this.chunkSize);
+			activeTransferStream = chunkedStream;
 
-			ctx.writeAndFlush(chunkedStream).addListener((ChannelFutureListener) future -> {
+			onCompletion(ctx, ctx.writeAndFlush(chunkedStream), future -> {
 				if (future.isSuccess()) {
+					if (activeTransferStream == chunkedStream) activeTransferStream = null;
 					sendEOT(ctx);
 				} else {
-					Throwable cause = future.cause();
-					sendError(ctx, this.protocolVersion, "File transfer error: " + (cause != null ? cause.getMessage() : "Unknown"));
+					closeTransferConnection(ctx);
 				}
 			});
 
@@ -280,8 +304,15 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 					// Ignored
 				}
 			}
-			sendError(ctx, this.protocolVersion, "File transfer error: " + e.getMessage());
+			legacyTransferActive = false;
+			ctx.close();
 		}
+	}
+
+	private void closeTransferConnection(ChannelHandlerContext ctx) {
+		legacyTransferActive = false;
+		closeActiveTransferStream();
+		ctx.close();
 	}
 
 	public Optional<Path> resolvePath(final String sha1) {
@@ -303,10 +334,20 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		ByteBuf eot = ctx.alloc().buffer(2);
 		eot.writeByte(this.protocolVersion);
 		eot.writeByte(END_OF_TRANSMISSION);
-		writeControlAndFlush(ctx, eot).addListener(future -> {
+		onCompletion(ctx, writeControlAndFlush(ctx, eot), future -> {
 			legacyTransferActive = false;
 			if (!future.isSuccess()) ctx.close();
 		});
+	}
+
+	private static void onCompletion(ChannelHandlerContext ctx, ChannelFuture future, ChannelFutureListener listener) {
+		future.addListener(completed -> ctx.executor().execute(() -> {
+			try {
+				listener.operationComplete((ChannelFuture) completed);
+			} catch (Exception e) {
+				ctx.fireExceptionCaught(e);
+			}
+		}));
 	}
 
 	private static ChannelFuture writeControlAndFlush(ChannelHandlerContext ctx, Object message) {

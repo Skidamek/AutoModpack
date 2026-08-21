@@ -54,8 +54,7 @@ public class DownloadManager {
 	public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
 	private final Map<FileInspection.HashPathPair, Path> activeTemporaryFiles = new ConcurrentHashMap<>();
 	private final Map<FileInspection.HashPathPair, AcquisitionResult> acquisitionResults = new ConcurrentHashMap<>();
-
-	private final Map<String, Integer> activeDownloadsPerSource = new ConcurrentHashMap<>();
+	private final Set<ActiveTransfer> activeTransfers = new HashSet<>();
 
 	// --- PROGRESS TRACKING ---
 	private final AtomicLong totalBytesToDownload = new AtomicLong(0);
@@ -107,7 +106,7 @@ public class DownloadManager {
 	}
 
 	private synchronized void downloadNext() {
-		if (cancelled || downloadExecutor.isShutdown() || downloadsInProgress.size() >= MAX_DOWNLOADS_IN_PROGRESS || queuedDownloads.isEmpty()) return;
+		if (cancelled || downloadExecutor.isShutdown() || activeTransfers.size() >= MAX_DOWNLOADS_IN_PROGRESS || queuedDownloads.isEmpty()) return;
 
 		// --- 1. CALCULATE METRICS ---
 
@@ -144,8 +143,8 @@ public class DownloadManager {
 
 		int activeBig = 0;
 		int activeSmall = 0;
-		for (DownloadData d : downloadsInProgress.values()) {
-			if (d.fileSize > avgSize) activeBig++;
+		for (ActiveTransfer transfer : activeTransfers) {
+			if (transfer.big) activeBig++;
 			else activeSmall++;
 		}
 
@@ -184,7 +183,7 @@ public class DownloadManager {
 			if (isBig != preferBig) continue;
 
 			String source = predictSource(task);
-			int activeInSource = activeDownloadsPerSource.getOrDefault(source, 0);
+			int activeInSource = activeTransfersForSource(source);
 
 			// Source Cap (Optional: set to 2 or 3 per source if needed)
 			if (activeInSource >= MAX_DOWNLOADS_IN_PROGRESS) continue;
@@ -206,7 +205,7 @@ public class DownloadManager {
 			for (Map.Entry<FileInspection.HashPathPair, QueuedDownload> entry : queuedDownloads.entrySet()) {
 				QueuedDownload task = entry.getValue();
 				String source = predictSource(task);
-				if (activeDownloadsPerSource.getOrDefault(source, 0) < MAX_DOWNLOADS_IN_PROGRESS) {
+				if (activeTransfersForSource(source) < MAX_DOWNLOADS_IN_PROGRESS) {
 					bestKey = entry.getKey();
 					bestTask = task;
 					bestSource = source;
@@ -217,14 +216,18 @@ public class DownloadManager {
 
 		if (bestTask == null) return;
 
-		int availableSlots = MAX_DOWNLOADS_IN_PROGRESS - downloadsInProgress.size();
+		int availableSlots = MAX_DOWNLOADS_IN_PROGRESS - activeTransfers.size();
 		List<Map.Entry<FileInspection.HashPathPair, QueuedDownload>> selectedEntries;
-		if (INTERNAL_SOURCE.equals(bestSource)) {
-			selectedEntries = queuedDownloads.entrySet().stream().filter(entry -> INTERNAL_SOURCE.equals(predictSource(entry.getValue())))
-					.filter(entry -> activeDownloadsPerSource.getOrDefault(INTERNAL_SOURCE, 0) < MAX_DOWNLOADS_IN_PROGRESS)
+		boolean batchSmallFiles = INTERNAL_SOURCE.equals(bestSource) && bestTask.fileSize <= avgSize;
+		if (batchSmallFiles) {
+			List<Map.Entry<FileInspection.HashPathPair, QueuedDownload>> eligibleEntries = queuedDownloads.entrySet().stream()
+					.filter(entry -> INTERNAL_SOURCE.equals(predictSource(entry.getValue())))
+					.filter(entry -> entry.getValue().fileSize <= avgSize)
 					.sorted(Comparator.comparingLong((Map.Entry<FileInspection.HashPathPair, QueuedDownload> entry) -> entry.getValue().fileSize)
 							.thenComparing(entry -> entry.getKey().hash()))
-					.limit(Math.min(availableSlots, DownloadBatchProtocol.MAX_ITEM_COUNT)).toList();
+					.toList();
+			int balancedBatchSize = divideRoundUp(eligibleEntries.size(), availableSlots);
+			selectedEntries = eligibleEntries.subList(0, Math.min(eligibleEntries.size(), Math.min(balancedBatchSize, DownloadBatchProtocol.MAX_ITEM_COUNT)));
 		} else {
 			selectedEntries = List.of(Map.entry(bestKey, bestTask));
 		}
@@ -235,14 +238,14 @@ public class DownloadManager {
 			FileInspection.HashPathPair key = entry.getKey();
 			QueuedDownload task = entry.getValue();
 			if (!queuedDownloads.remove(key, task)) continue;
-			String activeDomain = predictSource(task);
-			activeDownloadsPerSource.merge(activeDomain, 1, Integer::sum);
 			CompletableFuture<Void> future = new CompletableFuture<>();
-			DownloadData data = new DownloadData(future, task.file, activeDomain, task.fileSize);
+			DownloadData data = new DownloadData(future, task.file, task.fileSize);
 			downloadsInProgress.put(key, data);
 			scheduled.add(new ScheduledDownload(scheduled.size() + 1, key, task, data));
 		}
 		if (scheduled.isEmpty()) return;
+		ActiveTransfer activeTransfer = new ActiveTransfer(bestSource, scheduled.get(0).task().fileSize > avgSize);
+		activeTransfers.add(activeTransfer);
 
 		LOGGER.info("Queueing {} download{}", scheduled.size(), scheduled.size() == 1 ? "" : "s");
 		try {
@@ -259,16 +262,33 @@ public class DownloadManager {
 						if (fatalError == null) item.data().future.complete(null);
 						else item.data().future.completeExceptionally(fatalError);
 					}
+					finishTransfer(activeTransfer);
 				}
 			});
 		} catch (RuntimeException error) {
+			activeTransfers.remove(activeTransfer);
 			for (ScheduledDownload item : scheduled) {
 				downloadsInProgress.remove(item.key());
-				activeDownloadsPerSource.compute(item.data().activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
 				item.data().future.completeExceptionally(error);
 			}
 			throw error;
 		}
+		if (activeTransfers.size() < MAX_DOWNLOADS_IN_PROGRESS && !queuedDownloads.isEmpty()) downloadNext();
+	}
+
+	private int activeTransfersForSource(String source) {
+		int active = 0;
+		for (ActiveTransfer transfer : activeTransfers) if (transfer.source.equals(source)) active++;
+		return active;
+	}
+
+	private static int divideRoundUp(int dividend, int divisor) {
+		return dividend / divisor + (dividend % divisor == 0 ? 0 : 1);
+	}
+
+	private synchronized void finishTransfer(ActiveTransfer transfer) {
+		activeTransfers.remove(transfer);
+		if (!cancelled) downloadNext();
 	}
 
 	private String predictSource(QueuedDownload task) {
@@ -321,6 +341,7 @@ public class DownloadManager {
 
 	private void processHostBatch(List<ScheduledDownload> scheduled) {
 		List<HostBatchItem> items = scheduled.stream().map(item -> new HostBatchItem(item, storage.objectsDirectory().resolve(item.key().hash()))).toList();
+		CompletableFuture<List<DownloadResult>> batchFuture = null;
 		try {
 			for (HostBatchItem item : items) {
 				if (FileIntegrity.matches(item.storeFile, item.task().fileSize, item.key().hash())) {
@@ -345,7 +366,8 @@ public class DownloadManager {
 					for (HostBatchItem item : items) if (item.request != null) item.task().lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				} else {
 					try {
-						List<DownloadResult> results = downloadClient.downloadBatch(requests).get();
+						batchFuture = downloadClient.downloadBatch(requests);
+						List<DownloadResult> results = batchFuture.get();
 						Map<Integer, HostBatchItem> itemsById = new HashMap<>();
 						for (HostBatchItem item : items) if (item.request != null) itemsById.put(item.request.itemId(), item);
 						for (DownloadResult result : results) {
@@ -356,9 +378,12 @@ public class DownloadManager {
 						}
 						for (HostBatchItem item : itemsById.values()) item.task().lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 					} catch (InterruptedException e) {
+						if (batchFuture != null) batchFuture.cancel(true);
 						Thread.currentThread().interrupt();
 						for (HostBatchItem item : items) if (item.request != null) item.interrupted = true;
-					} catch (ExecutionException | CancellationException e) {
+					} catch (CancellationException e) {
+						for (HostBatchItem item : items) if (item.request != null) item.interrupted = true;
+					} catch (ExecutionException e) {
 						for (HostBatchItem item : items) if (item.request != null) item.task().lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 					}
 				}
@@ -366,9 +391,8 @@ public class DownloadManager {
 
 			for (HostBatchItem item : items) {
 				if (item.success || item.interrupted || item.task().lastFailureCategory != null || !item.transportSuccess) continue;
-				if (!FileIntegrity.matches(item.temporaryFile, item.task().fileSize, item.key().hash())) {
-					item.task().lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-					LOGGER.warn("Size or hash mismatch for downloaded file {}", item.task().file.getFileName());
+				if (cancelled) {
+					item.interrupted = true;
 					continue;
 				}
 				try {
@@ -396,12 +420,11 @@ public class DownloadManager {
 					}
 				}
 				try {
-					cleanupAndFinalize(item.key(), item.task(), item.storeFile, item.success, item.interrupted, false);
+					cleanupAndFinalize(item.key(), item.task(), item.storeFile, item.success, item.interrupted);
 				} catch (Throwable error) {
 					LOGGER.error("Failed to finalize host download {}", item.task().file, error);
 				}
 			}
-			if (!cancelled) downloadNext();
 		}
 	}
 
@@ -482,33 +505,23 @@ public class DownloadManager {
 	}
 
 	private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, boolean success, boolean interrupted) {
-		cleanupAndFinalize(key, task, storeFile, success, interrupted, true);
-	}
-
-	private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, boolean success, boolean interrupted, boolean scheduleNext) {
+		if (cancelled) {
+			success = false;
+			interrupted = true;
+		}
 		DownloadData data = downloadsInProgress.remove(key);
 
-		if (data != null && data.activeDomain != null) {
-			synchronized (this) {
-				activeDownloadsPerSource.compute(data.activeDomain, (k, v) -> (v == null || v <= 1) ? null : v - 1);
+		if (success) {
+			downloadedCount++;
+			acquisitionResults.put(key, new AcquisitionResult(true, null));
+			LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
+			try {
+				task.successCallback.run();
+			} finally {
+				semaphore.release();
 			}
-		}
-
-		try {
-			if (success) {
-				downloadedCount++;
-				acquisitionResults.put(key, new AcquisitionResult(true, null));
-				LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
-				try {
-					task.successCallback.run();
-				} finally {
-					semaphore.release();
-				}
-			} else {
-				handleRetry(key, task, interrupted);
-			}
-		} finally {
-			if (!interrupted && scheduleNext) downloadNext();
+		} else {
+			handleRetry(key, task, interrupted);
 		}
 	}
 
@@ -591,15 +604,11 @@ public class DownloadManager {
 		queuedDownloads.clear();
 		if (downloadClient != null) downloadClient.close();
 		downloadsInProgress.forEach((k, v) -> v.future.cancel(true));
-		activeTemporaryFiles.values().forEach(path -> {
-			try {
-				Files.deleteIfExists(path);
-			} catch (IOException ignored) {
-			}
-		});
-		activeTemporaryFiles.clear();
 		semaphore.release(totalFilesAdded);
 		downloadsInProgress.clear();
+		synchronized (this) {
+			activeTransfers.clear();
+		}
 		downloadedCount = 0;
 		downloadExecutor.shutdownNow();
 	}
@@ -619,6 +628,16 @@ public class DownloadManager {
 	// --- Inner Classes ---
 
 	private record ScheduledDownload(int itemId, FileInspection.HashPathPair key, QueuedDownload task, DownloadData data) {}
+
+	private static final class ActiveTransfer {
+		private final String source;
+		private final boolean big;
+
+		private ActiveTransfer(String source, boolean big) {
+			this.source = source;
+			this.big = big;
+		}
+	}
 
 	private static final class HostBatchItem {
 		private final ScheduledDownload scheduled;
@@ -677,13 +696,11 @@ public class DownloadManager {
 	public static class DownloadData {
 		public CompletableFuture<Void> future;
 		public Path file;
-		public String activeDomain;
 		public long fileSize;
 
-		DownloadData(CompletableFuture<Void> f, Path p, String d, long s) {
+		DownloadData(CompletableFuture<Void> f, Path p, long s) {
 			future = f;
 			file = p;
-			activeDomain = d;
 			fileSize = s;
 		}
 

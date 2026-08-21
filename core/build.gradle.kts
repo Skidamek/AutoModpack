@@ -70,6 +70,14 @@ tasks.named<Test>("test") {
 	useJUnitPlatform()
 }
 
+tasks.register<JavaExec>("benchmarkProtocolTransfer") {
+	group = "verification"
+	description = "Measures protocol chunk read/compression throughput, latency, and allocation"
+	dependsOn(tasks.named("testClasses"))
+	classpath = sourceSets.test.get().runtimeClasspath
+	mainClass = "pl.skidam.automodpack_core.protocol.netty.handler.ProtocolTransferBenchmark"
+}
+
 // Configure the ShadowJar task
 tasks.named<ShadowJar>("shadowJar") {
 	archiveBaseName.set("automodpack-server")

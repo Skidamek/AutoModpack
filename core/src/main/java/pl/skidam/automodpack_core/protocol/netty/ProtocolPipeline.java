@@ -4,6 +4,7 @@ import java.net.SocketAddress;
 
 import io.netty.channel.Channel;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.concurrent.EventExecutorGroup;
 
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
@@ -20,15 +21,23 @@ public final class ProtocolPipeline {
 	private ProtocolPipeline() {}
 
 	public static void install(Channel channel, NettyServer server, SocketAddress remoteAddress) {
+		server.registerOffloadedTransferChannel(channel);
+		install(channel, server, remoteAddress, server.transferExecutorGroup());
+	}
+
+	public static void installInline(Channel channel, NettyServer server, SocketAddress remoteAddress) {
+		install(channel, server, remoteAddress, channel.eventLoop());
+	}
+
+	private static void install(Channel channel, NettyServer server, SocketAddress remoteAddress, EventExecutorGroup transferExecutor) {
 		channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
 		channel.attr(NettyServer.PROTOCOL_VERSION).set(NetUtils.LATEST_SUPPORTED_PROTOCOL_VERSION);
 		CompressionType defaultCompression = CompressionFactory.isAvailable(CompressionType.ZSTD) ? CompressionType.ZSTD : CompressionType.GZIP;
 		channel.attr(NettyServer.COMPRESSION_TYPE).set(defaultCompression);
 		channel.attr(NettyServer.CHUNK_SIZE).set(NetUtils.DEFAULT_CHUNK_SIZE);
-
-		channel.pipeline().addLast("configuration-handler", new ConfigurationHandler()).addLast("compression-encoder", new CompressionEncoder())
-				.addLast("compression-decoder", new CompressionDecoder()).addLast("chunked-write", new ChunkedWriteHandler())
-				.addLast("protocol-msg-decoder", new ProtocolMessageDecoder()).addLast("msg-handler", new ServerMessageHandler(server))
+		channel.pipeline().addLast("configuration-handler", new ConfigurationHandler()).addLast(transferExecutor, "compression-encoder", new CompressionEncoder())
+				.addLast("compression-decoder", new CompressionDecoder()).addLast(transferExecutor, "chunked-write", new ChunkedWriteHandler())
+				.addLast("protocol-msg-decoder", new ProtocolMessageDecoder()).addLast(transferExecutor, "msg-handler", new ServerMessageHandler(server))
 				.addLast("error-printer-last", new ErrorPrinter());
 	}
 }

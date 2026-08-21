@@ -61,6 +61,7 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 class DownloadClientTest {
 
@@ -189,7 +190,7 @@ class DownloadClientTest {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS)) {
-				String firstKey = "0123456789abcdef0123456789abcdef01234567";
+				String firstKey = HashUtils.sha1("one");
 				String missingKey = "abcdef0123456789abcdef0123456789abcdef01";
 				Path firstDestination = directory.resolve("first");
 				List<DownloadResult> results = client.downloadBatch(List.of(new DownloadRequest(1, firstKey, firstDestination, 3, null),
@@ -213,7 +214,7 @@ class DownloadClientTest {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS)) {
-				List<DownloadResult> results = client.downloadBatch(List.of(new DownloadRequest(1, "0123456789abcdef0123456789abcdef01234567", directory.resolve("one"), 3, null),
+				List<DownloadResult> results = client.downloadBatch(List.of(new DownloadRequest(1, HashUtils.sha1("one"), directory.resolve("one"), 3, null),
 						new DownloadRequest(2, "abcdef0123456789abcdef0123456789abcdef01", directory.resolve("two"), 3, null))).get(5, TimeUnit.SECONDS);
 
 				assertTrue(server.requestReceived().get(5, TimeUnit.SECONDS));
@@ -235,7 +236,7 @@ class DownloadClientTest {
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
 			Path destinationDirectory = Files.createDirectory(directory.resolve("destination-directory"));
 			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5, TimeUnit.SECONDS)) {
-				List<DownloadResult> results = client.downloadBatch(List.of(new DownloadRequest(1, "0123456789abcdef0123456789abcdef01234567", directory.resolve("one"), 3, null),
+				List<DownloadResult> results = client.downloadBatch(List.of(new DownloadRequest(1, HashUtils.sha1("one"), directory.resolve("one"), 3, null),
 						new DownloadRequest(2, "abcdef0123456789abcdef0123456789abcdef01", destinationDirectory, 3, null))).get(5, TimeUnit.SECONDS);
 
 				assertTrue(results.get(0).success());

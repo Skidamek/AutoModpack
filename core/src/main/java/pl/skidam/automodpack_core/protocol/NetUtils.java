@@ -37,6 +37,7 @@ public class NetUtils {
 	public static final int MAGIC_AMOK = 0x414D4F4B;
 
 	// Protocol versions
+	public static final byte LEGACY_PROTOCOL_VERSION = 0x01;
 	public static final byte BATCH_PROTOCOL_VERSION = 0x02;
 	public static final byte LATEST_SUPPORTED_PROTOCOL_VERSION = BATCH_PROTOCOL_VERSION;
 
