@@ -8,14 +8,13 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import java.io.ByteArrayInputStream
-import java.io.File
 import java.util.jar.JarFile
 import java.util.zip.ZipInputStream
 
 abstract class MergedJarAuditTask : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.NONE)
-    abstract val mergedJarPath: RegularFileProperty
+    abstract val mergedJar: RegularFileProperty
 
     @get:Input
     abstract val maxJarBytes: Property<Long>
@@ -25,7 +24,7 @@ abstract class MergedJarAuditTask : DefaultTask() {
 
     @TaskAction
     fun audit() {
-        val jarFile = File(mergedJarPath.get().asFile.readText())
+        val jarFile = mergedJar.get().asFile
         if (!jarFile.isFile) throw GradleException("Merged jar not found: ${jarFile.absolutePath}")
         if (jarFile.length() > maxJarBytes.get()) {
             throw GradleException("${jarFile.name} is ${jarFile.length()} bytes, exceeding the ${maxJarBytes.get()} byte merged-jar budget")
