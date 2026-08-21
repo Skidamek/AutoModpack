@@ -125,6 +125,8 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     assert (
         ctx.game_dir / "automodpack/client-config.json"
     ).read_text(encoding="utf-8") == '{"selectedModpackId": "packaaa"}'
+    runner._v_reset_isolated_client_objects(ctx, {})
+    assert not (client / "data/objects").exists()
 
 
 def test_unowned_local_fixture_writes_a_valid_cross_loader_archive(make_ctx):

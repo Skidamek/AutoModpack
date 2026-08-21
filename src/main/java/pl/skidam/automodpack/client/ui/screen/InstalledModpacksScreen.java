@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack.client.ui.TextColors;
 
 import java.util.List;
 

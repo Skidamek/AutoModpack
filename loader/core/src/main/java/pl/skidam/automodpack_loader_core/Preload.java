@@ -66,8 +66,8 @@ public class Preload {
 
 	private void recoverPendingRepair() throws IOException {
 		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return;
-		var receipt = new ClientOfflineRepair(storage, MODPACK_LOADER).recover();
-		LOGGER.info("Recovered offline repair for {} (complete: {})", receipt.before().modpackId(), receipt.complete());
+		new ClientOfflineRepair(storage, MODPACK_LOADER).recover()
+				.ifPresent(receipt -> LOGGER.info("Recovered offline repair for {} (complete: {})", receipt.before().modpackId(), receipt.complete()));
 	}
 
 	private static void writeConfig(Path path, Object value) {

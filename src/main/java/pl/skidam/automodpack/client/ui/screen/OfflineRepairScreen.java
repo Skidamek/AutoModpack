@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.*;
-
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -13,6 +12,9 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.UiFormat;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -70,9 +72,30 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		}
 
 		List<OfflineRepair.EditableResetCandidate> candidates = prepared.editableResetCandidates();
-		int pageSize = rowsPerPage(listTop);
+		boolean needsUpdate = prepared.requiresUpdate();
+		boolean canUpdate = needsUpdate && updateAction != null;
+		List<ActionRow> actions = new ArrayList<>();
+		boolean showKeepAll = !candidates.isEmpty() && !selectedEditablePaths.isEmpty();
+		if (showKeepAll) actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+				optionalAction(VersionedText.translatable("automodpack.repair.keepAllEditable"), press -> keepAllEditable())));
+		List<ActionDefinition> primaryActions = new ArrayList<>();
+		primaryActions.add(primaryAction(VersionedText.translatable(needsUpdate ? "automodpack.repair.available" : "automodpack.repair.apply"), press -> apply()));
+		if (canUpdate) primaryActions.add(optionalAction(VersionedText.translatable("automodpack.repair.updateAndFinish"), press -> updateAndFinish()));
+		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryActions.toArray(ActionDefinition[]::new)));
+		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.cancel"), press -> back())));
+		int pageSize = rowsPerPage(listTop, actionAreaTop(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)));
 		int pageCount = pageCount(candidates.size(), pageSize);
+		if (pageCount > 1) {
+			int navigationIndex = showKeepAll ? 1 : 0;
+			actions.add(navigationIndex, navigationRow(pageCount));
+			pageSize = rowsPerPage(listTop, actionAreaTop(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)));
+			pageCount = pageCount(candidates.size(), pageSize);
+		}
 		page = Math.max(0, Math.min(pageCount - 1, page));
+		if (pageCount > 1) {
+			int navigationIndex = showKeepAll ? 1 : 0;
+			actions.set(navigationIndex, navigationRow(pageCount));
+		}
 		int start = page * pageSize;
 		for (int index = start; index < Math.min(candidates.size(), start + pageSize); index++) {
 			OfflineRepair.EditableResetCandidate candidate = candidates.get(index);
@@ -83,53 +106,31 @@ public final class OfflineRepairScreen extends VersionedScreen {
 			choice.active = !busy;
 			this.addRenderableWidget(choice);
 		}
-
-		int actionY = this.height - 28;
-		boolean needsUpdate = prepared.requiresUpdate();
-		boolean canUpdate = needsUpdate && updateAction != null;
-		int primaryCount = canUpdate ? 2 : 1;
-		int primaryY = actionY - 24;
-		int primaryWidth = actionButtonWidth(PANEL_WIDTH, primaryCount);
-		Button repairButton = buttonWidget(actionButtonX(PANEL_WIDTH, primaryCount, 0), primaryY, primaryWidth, 20,
-				VersionedText.translatable(needsUpdate ? "automodpack.repair.available" : "automodpack.repair.apply"), press -> apply());
-		repairButton.active = !busy && hasRepairWork();
-		this.addRenderableWidget(repairButton);
-		if (canUpdate) {
-			Button update = buttonWidget(actionButtonX(PANEL_WIDTH, primaryCount, 1), primaryY, primaryWidth, 20,
-					VersionedText.translatable("automodpack.repair.updateAndFinish"), press -> updateAndFinish());
-			update.active = !busy;
-			this.addRenderableWidget(update);
-		}
-		this.addRenderableWidget(buttonWidget(x, actionY, width, 20,
-				VersionedText.translatable("automodpack.cancel"), press -> back()));
-
+		List<Button> actionButtons = addActionArea(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new));
+		int actionIndex = 0;
+		if (showKeepAll) actionButtons.get(actionIndex++).active = !busy;
 		if (pageCount > 1) {
-			int navigationY = primaryY - 24;
-			int navigationWidth = actionButtonWidth(PANEL_WIDTH, 3);
-			Button previous = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 0), navigationY, navigationWidth, 20, VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1));
-			previous.active = !busy && page > 0;
-			this.addRenderableWidget(previous);
-			Button pageLabel = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 1), navigationY, navigationWidth, 20, VersionedText.translatable("automodpack.ui.page", page + 1, pageCount), press -> {});
-			pageLabel.active = false;
-			this.addRenderableWidget(pageLabel);
-			Button next = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 2), navigationY, navigationWidth, 20, VersionedText.translatable("automodpack.ui.next"), press -> changePage(1));
-			next.active = !busy && page + 1 < pageCount;
-			this.addRenderableWidget(next);
+			actionButtons.get(actionIndex++).active = !busy && page > 0;
+			actionIndex++;
+			actionButtons.get(actionIndex++).active = !busy && page + 1 < pageCount;
 		}
-
-		if (!candidates.isEmpty() && !selectedEditablePaths.isEmpty()) {
-			Button keepAll = buttonWidget(x, primaryY - (pageCount > 1 ? 48 : 24), width, 20, VersionedText.translatable("automodpack.repair.keepAllEditable"), press -> keepAllEditable());
-			keepAll.active = !busy;
-			this.addRenderableWidget(keepAll);
-		}
+		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();
+		if (canUpdate) actionButtons.get(actionIndex).active = !busy;
 	}
 
 	private boolean hasRepairWork() {
 		return prepared.findings().stream().anyMatch(OfflineRepair.Finding::locallyRepairable) || !selectedEditablePaths.isEmpty() || archiveUnownedMods && !prepared.unownedModPaths().isEmpty();
 	}
 
-	private int rowsPerPage(int listTop) {
-		return Math.max(1, (this.height - listTop - 108) / ROW_HEIGHT);
+	private int rowsPerPage(int listTop, int actionTop) {
+		return Math.max(1, (actionTop - listTop - actionRowGap()) / ROW_HEIGHT);
+	}
+
+	private ActionRow navigationRow(int pageCount) {
+		return actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+				navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1)),
+				disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
+				navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> changePage(1)));
 	}
 
 	private static int pageCount(int size, int pageSize) {

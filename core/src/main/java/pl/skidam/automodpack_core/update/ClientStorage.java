@@ -70,11 +70,11 @@ public final class ClientStorage {
 	private final Path knownHostsFile;
 	private final Path knownHostsLockFile;
 
-	private ClientStorage(Path gameDirectory) {
-		this.gameDirectory = requireDirectoryPath(gameDirectory, "game directory");
+	private ClientStorage(DataRootResolver.Location dataLocation) {
+		this.dataLocation = Objects.requireNonNull(dataLocation, "data location");
+		this.gameDirectory = requireDirectoryPath(dataLocation.ownerPath(), "game directory");
 		this.automodpackDirectory = this.gameDirectory.resolve(AUTOMODPACK_DIR).normalize();
 		this.clientDirectory = this.gameDirectory.resolve(CLIENT_DIR).normalize();
-		this.dataLocation = DataRootResolver.resolve(this.gameDirectory);
 		this.dataDirectory = dataLocation.root();
 		this.sharedDataDirectory = dataLocation.shared();
 		DataRootResolver.Layout dataLayout = dataLocation.layout();
@@ -108,17 +108,18 @@ public final class ClientStorage {
 	}
 
 	public static synchronized ClientStorage open(Path gameDirectory) {
-		Path normalized = requireDirectoryPath(gameDirectory, "game directory");
-		WeakReference<ClientStorage> reference = OPEN_STORAGE.get(normalized);
+		DataRootResolver.Location dataLocation = DataRootResolver.resolve(requireDirectoryPath(gameDirectory, "game directory"));
+		Path canonicalGameDirectory = dataLocation.ownerPath();
+		WeakReference<ClientStorage> reference = OPEN_STORAGE.get(canonicalGameDirectory);
 		ClientStorage existing = reference == null ? null : reference.get();
 		if (existing != null) return existing;
 		OPEN_STORAGE.entrySet().removeIf(entry -> entry.getValue().get() == null);
-		ClientStorage storage = new ClientStorage(normalized);
+		ClientStorage storage = new ClientStorage(dataLocation);
 		try {
 			storage.initialize();
 			new ClientGenerationStore(storage).recoverCompaction();
 			if (storage.sharedDataDirectory()) ClientObjectStore.publishOwnership(storage);
-			OPEN_STORAGE.put(normalized, new WeakReference<>(storage));
+			OPEN_STORAGE.put(canonicalGameDirectory, new WeakReference<>(storage));
 			return storage;
 		} catch (IOException e) {
 			throw new IllegalStateException("Cannot initialize client storage for " + storage.gameDirectory, e);

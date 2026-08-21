@@ -77,11 +77,11 @@ public final class DataRootResolver {
 		try {
 			Path gameRoot = canonicalGameRoot(requestedRoot);
 			Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
-			createLocalDataDirectory(gameRoot, automodpackDirectory);
 			Path marker = gameRoot.resolve(StoragePaths.DATA_ROOT_MARKER_FILE).normalize();
 			Path lockPath = gameRoot.resolve(StoragePaths.DATA_ROOT_LOCK_FILE).normalize();
 			synchronized (RESOLUTION_LOCK) {
 				try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS); FileLock ignored = channel.lock()) {
+					createLocalDataDirectory(gameRoot, automodpackDirectory);
 					validateLocalDataDirectory(gameRoot, automodpackDirectory);
 					if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) return loadPinned(marker, gameRoot);
 					Path sharedRoot = platformDataRoot();

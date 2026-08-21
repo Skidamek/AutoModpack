@@ -39,7 +39,7 @@ public final class DetachedUpdateHelper {
 		Path helperJar = absoluteHelperDirectory.resolve("automodpack-update-helper-" + UUID.randomUUID() + ".jar");
 		VerifiedFileTransfer.copyAtomic(sourceJar, helperJar, size, hash);
 
-		Path javaExecutable = Path.of(System.getProperty("java.home"), "bin", PlatformUtils.IS_WIN ? "java.exe" : "java").toAbsolutePath().normalize();
+		Path javaExecutable = Path.of(System.getProperty("java.home"), "bin", PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS ? "java.exe" : "java").toAbsolutePath().normalize();
 		if (!Files.isRegularFile(javaExecutable)) throw new IOException("Java executable is missing: " + javaExecutable);
 		String classpath = String.join(File.pathSeparator, helperJar.toString(), runtimeDependency(Gson.class).toString(), runtimeDependency(LogManager.class).toString(),
 				runtimeDependency(LoggerContext.class).toString());

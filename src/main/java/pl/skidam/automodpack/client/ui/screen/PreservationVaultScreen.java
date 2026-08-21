@@ -1,8 +1,7 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.*;
-
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -13,6 +12,9 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.UiFormat;
+import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -44,6 +46,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private boolean presentingFailure;
 	private boolean closed;
 	private int page;
+	private int pageSize = 1;
 	private Future<?> work;
 
 	public PreservationVaultScreen(Screen parent, InstalledModpackController controller, String modpackId, String modpackName, boolean activePack, Runnable closedCallback) {
@@ -61,9 +64,23 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		super.init();
 		if (!loading && snapshot == null) load();
 		List<PreservationVault.Claim> claims = claims();
-		int pageSize = rowsPerPage();
+		PreservationVault.Claim selected = selected();
+		String deleteKey = selected != null && selected.claimId().equals(pendingDeleteClaimId) ? "automodpack.vault.confirmDelete" : "automodpack.vault.delete";
+		List<ActionRow> actions = new ArrayList<>();
+		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+				primaryAction(VersionedText.translatable("automodpack.vault.restore"), press -> restore()),
+				optionalAction(VersionedText.translatable("automodpack.vault.saveCopy"), press -> saveCopy()),
+				optionalAction(VersionedText.translatable(deleteKey), press -> delete())));
+		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
+		pageSize = rowsPerPage(actionAreaTop(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)));
 		int pageCount = Math.max(1, (claims.size() + pageSize - 1) / pageSize);
+		if (pageCount > 1) {
+			actions.add(1, navigationRow(pageCount));
+			pageSize = rowsPerPage(actionAreaTop(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)));
+			pageCount = Math.max(1, (claims.size() + pageSize - 1) / pageSize);
+		}
 		page = Math.max(0, Math.min(pageCount - 1, page));
+		if (pageCount > 1) actions.set(1, navigationRow(pageCount));
 		int start = page * pageSize;
 		int width = panelWidth(PANEL_WIDTH);
 		int x = panelLeft(PANEL_WIDTH);
@@ -77,33 +94,13 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			this.addRenderableWidget(select);
 		}
 
-		PreservationVault.Claim selected = selected();
-		int actionY = this.height - 52;
-		int actionWidth = actionButtonWidth(PANEL_WIDTH, 3);
-		Button restore = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 0), actionY, actionWidth, 20, VersionedText.translatable("automodpack.vault.restore"), press -> restore());
-		restore.active = !busy && selected != null && activePack && selected.sourceRoot() == UpdatePlan.Root.GAME_DIR;
-		this.addRenderableWidget(restore);
-		Button copy = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 1), actionY, actionWidth, 20, VersionedText.translatable("automodpack.vault.saveCopy"), press -> saveCopy());
-		copy.active = !busy && selected != null;
-		this.addRenderableWidget(copy);
-		String deleteKey = selected != null && selected.claimId().equals(pendingDeleteClaimId) ? "automodpack.vault.confirmDelete" : "automodpack.vault.delete";
-		Button delete = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 2), actionY, actionWidth, 20, VersionedText.translatable(deleteKey), press -> delete());
-		delete.active = !busy && selected != null;
-		this.addRenderableWidget(delete);
-
-		int footerY = this.height - 28;
+		List<Button> actionButtons = addActionArea(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new));
+		actionButtons.get(0).active = !busy && selected != null && activePack && selected.sourceRoot() == UpdatePlan.Root.GAME_DIR;
+		actionButtons.get(1).active = !busy && selected != null;
+		actionButtons.get(2).active = !busy && selected != null;
 		if (pageCount > 1) {
-			int footerWidth = actionButtonWidth(PANEL_WIDTH, 3);
-			Button previous = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 0), footerY, footerWidth, 20, VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1));
-			previous.active = !busy && page > 0;
-			this.addRenderableWidget(previous);
-			this.addRenderableWidget(buttonWidget(actionButtonX(PANEL_WIDTH, 3, 1), footerY, footerWidth, 20, VersionedText.translatable("automodpack.back"), press -> back()));
-			Button next = buttonWidget(actionButtonX(PANEL_WIDTH, 3, 2), footerY, footerWidth, 20, VersionedText.translatable("automodpack.ui.next"), press -> changePage(1));
-			next.active = !busy && page + 1 < pageCount;
-			this.addRenderableWidget(next);
-		} else {
-			this.addRenderableWidget(buttonWidget(centeredActionButtonX(PANEL_WIDTH, 1, 1, 0), footerY, actionButtonWidth(PANEL_WIDTH, 1), 20,
-					VersionedText.translatable("automodpack.back"), press -> back()));
+			actionButtons.get(3).active = !busy && page > 0;
+			actionButtons.get(5).active = !busy && page + 1 < pageCount;
 		}
 	}
 
@@ -139,8 +136,15 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		return claims().stream().filter(claim -> claim.claimId().equals(selectedClaimId)).findFirst().orElse(null);
 	}
 
-	private int rowsPerPage() {
-		return Math.max(1, (this.height - 128) / ROW_HEIGHT);
+	private static int rowsPerPage(int actionTop) {
+		return Math.max(1, (actionTop - 60) / ROW_HEIGHT);
+	}
+
+	private ActionRow navigationRow(int pageCount) {
+		return actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+				navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1)),
+				disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
+				navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> changePage(1)));
 	}
 
 	private void select(PreservationVault.Claim claim) {
@@ -260,8 +264,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		if (restoreFailed) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.restoreUnavailable").withStyle(ChatFormatting.AQUA), this.width / 2, 52, TextColors.WHITE);
 		else if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		List<PreservationVault.Claim> claims = claims();
-		int start = page * rowsPerPage();
-		for (int index = start; index < Math.min(claims.size(), start + rowsPerPage()); index++) {
+		int start = page * pageSize;
+		for (int index = start; index < Math.min(claims.size(), start + pageSize); index++) {
 			PreservationVault.Claim claim = claims.get(index);
 			int y = 88 + (index - start) * ROW_HEIGHT;
 			String metadata = reason(claim.reason()) + "  |  " + status(claim.status());

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.UiFormat;
 
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 
