@@ -10,11 +10,16 @@ base {
 
 repositories {
 	mavenCentral()
+	flatDir {
+		name = "mcholepunchLibs"
+		dirs(rootProject.file("libs"))
+	}
 }
 
 val gsonVersion = versionProperty("versionLoaderGson")
 val log4jVersion = versionProperty("versionLoaderCoreLog4j")
 val tomljVersion = versionProperty("versionTomlj")
+val junitVersion = versionProperty("versionJunit")
 
 dependencies {
 	implementation(project(":core"))
@@ -23,6 +28,8 @@ dependencies {
 	implementation("com.google.code.gson:gson:$gsonVersion")
 	implementation("org.apache.logging.log4j:log4j-core:$log4jVersion")
 	implementation("org.tomlj:tomlj:$tomljVersion")
+	testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitVersion")
 }
 
 java {
@@ -35,4 +42,8 @@ java {
 
 tasks.withType<JavaCompile> {
 	options.encoding = "UTF-8"
+}
+
+tasks.named<Test>("test") {
+	useJUnitPlatform()
 }
