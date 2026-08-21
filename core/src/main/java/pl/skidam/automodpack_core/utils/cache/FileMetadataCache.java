@@ -126,6 +126,20 @@ public class FileMetadataCache implements AutoCloseable {
 		}
 	}
 
+		/** Hashes stable bytes without consulting or publishing cache state. */
+	public String hash(Path file) throws IOException {
+		Path absPath = file.toAbsolutePath().normalize();
+		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+		if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
+		String pathKey = absPath.toString();
+		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
+		synchronized (locks[lockIndex]) {
+			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
+			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
+			return computed.hash();
+		}
+	}
+
 	public String getOrComputeHashWithAttributes(Path file, BasicFileAttributes attrs) {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();

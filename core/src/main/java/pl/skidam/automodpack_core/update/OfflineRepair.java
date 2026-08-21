@@ -20,14 +20,12 @@ import java.util.stream.Stream;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
-import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 /**
  * Offline integrity inspection and repair for the active, locally installed generation.
@@ -129,8 +127,8 @@ public final class OfflineRepair {
 
 	/** Performs a read-only, cache-bypassing inspection. */
 	public Prepared inspect(Request request) throws IOException {
-		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
-			return analyze(request, fileCache, modCache).prepared();
+		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			return analyze(request, fileCache).prepared();
 		}
 	}
 
@@ -145,8 +143,8 @@ public final class OfflineRepair {
 		Set<String> requestedEditableResets = normalizedSelection(editableResetPaths);
 		Set<String> requestedUnownedMods = normalizedSelection(unownedModPaths);
 		Request request = prepared.request();
-		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
-			Analysis current = analyze(request, fileCache, modCache);
+		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			Analysis current = analyze(request, fileCache);
 			requireSamePinnedIdentity(prepared, current.prepared());
 			requireSelections(current.prepared(), requestedEditableResets, requestedUnownedMods);
 			long repairedCas = 0;
@@ -161,7 +159,7 @@ public final class OfflineRepair {
 				fileCache.rehash(expected.path());
 			}
 
-			Analysis withRepairedCas = analyze(request, fileCache, modCache);
+			Analysis withRepairedCas = analyze(request, fileCache);
 			long repairedFiles = 0;
 			for (Expected expected : withRepairedCas.expected().values().stream().filter(value -> value.place() != Place.CAS).sorted(Expected.ORDER).toList()) {
 				Observation observation = withRepairedCas.observations().get(expected.path());
@@ -175,11 +173,11 @@ public final class OfflineRepair {
 				fileCache.rehash(expected.path());
 			}
 
-			Analysis locallyRepaired = analyze(request, fileCache, modCache);
+			Analysis locallyRepaired = analyze(request, fileCache);
 			long resetEditable = resetEditableFiles(request, locallyRepaired, requestedEditableResets, fileCache);
-			Analysis afterEditableReset = analyze(request, fileCache, modCache);
+			Analysis afterEditableReset = analyze(request, fileCache);
 			long archivedUnowned = archiveUnownedMods(request, afterEditableReset, requestedUnownedMods, fileCache);
-			Prepared after = analyze(request, fileCache, modCache).prepared();
+			Prepared after = analyze(request, fileCache).prepared();
 			requireSamePinnedIdentity(prepared, after);
 			return new Receipt(current.prepared(), after, repairedCas, repairedFiles, resetEditable, archivedUnowned);
 		}
@@ -245,12 +243,11 @@ public final class OfflineRepair {
 		if (!Set.copyOf(prepared.unownedModPaths()).containsAll(unowned)) throw new IOException("Unowned-mod selection contains a stale path");
 	}
 
-	private Analysis analyze(Request request, FileMetadataCache fileCache, ModFileCache modCache) throws IOException {
+	private Analysis analyze(Request request, FileMetadataCache fileCache) throws IOException {
 		Objects.requireNonNull(request, "repair request");
 		assertPinned(request);
 		Map<Path, Expected> expected = new LinkedHashMap<>();
 		Map<Path, Observation> observations = new HashMap<>();
-		Set<Path> modFiles = new TreeSet<>();
 		Map<String, EditableResetCandidate> editable = new TreeMap<>();
 		String modpackId = request.activeTarget().manifest().modpackId();
 		String generationId = request.activeTarget().generationTarget().targetGenerationId();
@@ -261,10 +258,8 @@ public final class OfflineRepair {
 		for (var item : request.activeTarget().flatTarget().list.stream().sorted(Comparator.comparing(value -> UpdatePlanner.normalize(value.file))).toList()) {
 			String logicalPath = UpdatePlanner.normalize(item.file);
 			Content content = new Content(item.sha1, parseSize(item.size));
-			boolean mod = ModpackContentType.MOD.equals(item.type);
 			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
 			addExpected(expected, new Expected(Place.PROJECTION, logicalPath, storage.activeDirectory(), storage.activePath(logicalPath), content));
-			if (mod) modFiles.add(storage.activePath(logicalPath));
 
 			Path livePath = storage.gamePath(logicalPath);
 			if (item.editable) {
@@ -277,7 +272,6 @@ public final class OfflineRepair {
 							new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectsDirectory().resolve(overlay.hash()).normalize(), new Content(overlay.hash(), overlay.size())));
 			} else if (!ModpackPathPolicy.isActiveMod(logicalPath, item.type) || request.forceCopyPaths().contains(logicalPath)) {
 				addExpected(expected, new Expected(Place.LIVE, logicalPath, storage.gameDirectory(), livePath, content));
-				if (mod) modFiles.add(livePath);
 			}
 		}
 
@@ -288,7 +282,6 @@ public final class OfflineRepair {
 			addExpected(expected, new Expected(Place.CAS, entry.logicalPath(), storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
 			Path live = storage.gamePath(entry.logicalPath());
 			addExpected(expected, new Expected(Place.GENERATED_COPY, entry.logicalPath(), storage.gameDirectory(), live, content));
-			modFiles.add(live);
 		}
 		addBaselineObjects(expected, modpackId);
 		for (PreservationVault.Claim claim : PreservationVault.read(storage, modpackId).claims()) {
@@ -311,12 +304,8 @@ public final class OfflineRepair {
 
 		Set<String> ownedLiveMods = new TreeSet<>();
 		for (Expected value : expected.values()) if ((value.place() == Place.LIVE || value.place() == Place.GENERATED_COPY) && ModpackPathPolicy.isModPath(value.logicalPath())) ownedLiveMods.add(value.logicalPath());
-		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations, modFiles);
+		List<String> unownedMods = inspectMods(request.protectedModPath(), ownedLiveMods, fileCache, observations);
 		for (Expected value : expected.values()) observe(value.path(), value.root(), fileCache, observations);
-		for (Path modFile : modFiles) {
-			Observation observation = observations.get(modFile.toAbsolutePath().normalize());
-			if (observation != null && !observation.unsupported()) modCache.reinspectMod(modFile, fileCache);
-		}
 
 		Map<Content, List<Path>> sources = new HashMap<>();
 		for (Observation observation : observations.values())
@@ -377,8 +366,7 @@ public final class OfflineRepair {
 		}
 	}
 
-	private List<String> inspectMods(Path protectedModPath, Set<String> ownedLiveMods, FileMetadataCache fileCache, Map<Path, Observation> observations,
-			Set<Path> modFiles) throws IOException {
+	private List<String> inspectMods(Path protectedModPath, Set<String> ownedLiveMods, FileMetadataCache fileCache, Map<Path, Observation> observations) throws IOException {
 		Path root = storage.modsDirectory();
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Mods path is not a directory: " + root);
@@ -389,7 +377,6 @@ public final class OfflineRepair {
 				Path normalized = path.toAbsolutePath().normalize();
 				String logicalPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(normalized).toString());
 				observe(normalized, storage.gameDirectory(), fileCache, observations);
-				modFiles.add(normalized);
 				if (!ownedLiveMods.contains(logicalPath) && !normalized.equals(protectedModPath)) unowned.add(logicalPath);
 			}
 		}
@@ -410,7 +397,7 @@ public final class OfflineRepair {
 			observations.put(normalized, unsupported);
 			return unsupported;
 		}
-		String hash = fileCache.rehash(normalized);
+		String hash = fileCache.hash(normalized);
 		Observation observation = new Observation(normalized, hash, Files.size(normalized), false);
 		observations.put(normalized, observation);
 		return observation;
@@ -437,7 +424,7 @@ public final class OfflineRepair {
 	private static Path verifiedSource(Collection<Path> candidates, Path target, Content content, FileMetadataCache fileCache) throws IOException {
 		for (Path candidate : candidates) {
 			if (candidate.equals(target) || !Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(candidate)) continue;
-			String hash = fileCache.rehash(candidate);
+			String hash = fileCache.hash(candidate);
 			if (content.hash().equals(hash) && Files.size(candidate) == content.size()) return candidate;
 		}
 		return null;
