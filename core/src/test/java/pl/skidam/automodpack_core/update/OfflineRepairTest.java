@@ -158,7 +158,7 @@ class OfflineRepairTest {
 		journal.unownedMods = List.of(unowned);
 		ConfigTools.writeAtomic(storage.repairJournalFile(), journal);
 
-		OfflineRepair.Receipt receipt = repair.recover(request);
+		OfflineRepair.Receipt receipt = repair.recover(request).orElseThrow();
 
 		assertTrue(FileIntegrity.matches(live, expectedBytes.length, hash));
 		assertFalse(Files.exists(extra));

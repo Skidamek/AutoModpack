@@ -8,6 +8,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -47,7 +48,7 @@ public final class ClientOfflineRepair {
 	}
 
 	/** Resumes a player-approved repair before normal update or projection loading starts. */
-	public OfflineRepair.Receipt recover() throws IOException {
+	public Optional<OfflineRepair.Receipt> recover() throws IOException {
 		return repair.recover(request());
 	}
 
