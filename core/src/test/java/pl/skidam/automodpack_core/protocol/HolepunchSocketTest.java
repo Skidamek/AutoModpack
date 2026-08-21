@@ -60,6 +60,11 @@ class HolepunchSocketTest {
 		}
 
 		@Override
+		public boolean isRaw() {
+			return false;
+		}
+
+		@Override
 		public CompletionStage<Void> prepareTransportUpgrade() {
 			return CompletableFuture.completedFuture(null);
 		}

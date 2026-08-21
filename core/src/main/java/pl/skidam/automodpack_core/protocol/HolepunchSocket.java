@@ -55,7 +55,14 @@ public class HolepunchSocket extends Socket {
 			public void onRead(ByteBuffer data) {
 				byte[] bytes = new byte[data.remaining()];
 				data.get(bytes);
-				feedReadData(bytes);
+				in.feed(bytes);
+			}
+
+			@Override
+			public void onRawRead(ByteBuffer data) {
+				byte[] bytes = new byte[data.remaining()];
+				data.get(bytes);
+				feedCamouflagedReadData(bytes);
 			}
 
 			@Override
@@ -151,7 +158,11 @@ public class HolepunchSocket extends Socket {
 		}
 	}
 
-	void feedReadData(byte[] data) {
+	void feedPlainReadData(byte[] data) {
+		in.feed(data);
+	}
+
+	void feedCamouflagedReadData(byte[] data) {
 		TrafficCamouflage camouflage = trafficCamouflage;
 		if (camouflage != null && data.length != 0) {
 			try {
@@ -268,8 +279,12 @@ public class HolepunchSocket extends Socket {
 		synchronized (writeLock) {
 			HolepunchConnection activeConnection = connection;
 			if (activeConnection == null) throw new IOException("HolepunchSocket is not connected");
+			// The camouflage applies exactly to the raw post-handoff stream era: bytes written
+			// before the transport handoff completes stay plain TLS, bytes written after it are
+			// framed and header-masked. isRaw() flips once and never back, so the sender-side
+			// decision matches the receiver's onRead/onRawRead split byte for byte.
+			TrafficCamouflage camouflage = activeConnection.isRaw() ? trafficCamouflage : null;
 			ByteBuffer outbound = data.duplicate();
-			TrafficCamouflage camouflage = trafficCamouflage;
 			if (camouflage != null && outbound.hasRemaining()) {
 				ByteBuffer encoded = ByteBuffer.allocate(outbound.remaining());
 				camouflage.tlsRecords().outbound().transform(outbound, encoded);
