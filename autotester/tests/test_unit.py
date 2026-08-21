@@ -369,6 +369,12 @@ def _t_boom(ctx, step):
     raise RuntimeError("kaboom")
 
 
+@verb("t_flip")
+def _t_flip(ctx, step):
+    ctx.vars.setdefault("log", []).append(step.get("tag", "?"))
+    (ctx.game_dir / "flip.txt").touch()
+
+
 def test_executor_macro_and_group_expansion(make_ctx):
     ctx = make_ctx()
     lib = {"greet": [{"do": "t_rec", "tag": "a"}, {"do": "t_rec", "tag": "b"}]}
@@ -393,6 +399,18 @@ def test_executor_when_gate_and_repeat(make_ctx):
     }
     run_flow(ctx, scenario)
     assert ctx.vars["log"] == ["x", "x", "x"]
+
+
+def test_executor_when_stops_repeat_loop_once_condition_breaks(make_ctx):
+    ctx = make_ctx()
+    scenario = {
+        "flow": [
+            {"do": "t_flip", "tag": "loop", "when": {"not": {"file": "flip.txt"}}, "repeat": 5},
+            {"do": "t_rec", "tag": "done"},
+        ]
+    }
+    run_flow(ctx, scenario)
+    assert ctx.vars["log"] == ["loop", "done"]
 
 
 def test_executor_when_and_repeat_apply_to_macros_and_groups(make_ctx):

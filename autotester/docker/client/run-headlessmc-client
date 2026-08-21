@@ -56,7 +56,7 @@ export JAVA_HOME="${java_bin%/bin/java}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
 # ── Build JVM arguments ───────────────────────────────────────────
-jvmargs="-Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dautomodpack.autotest.render=${render_client} -Dcom.mojang.text2speech=false -Djava.awt.headless=true"
+jvmargs="-Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dautomodpack.autotest.render=${render_client} -Dcom.mojang.text2speech=false -Djava.awt.headless=true -Dmcholepunch.debug=true"
 viewport_width=854
 if [ "$render_client" = "true" ]; then
     # GUI scale 2 turns this into Minecraft's 320x240 minimum logical canvas.

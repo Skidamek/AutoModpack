@@ -320,6 +320,8 @@ def _launch_server(ctx: Context):
         if val:
             env[v] = val
     env.update({str(k): str(v) for k, v in (topo.get("env", {}) or {}).items()})
+    # Keep holepunch transport tracing on so any mid-login close leaves a receipt.
+    env.setdefault("JVM_OPTS", "-Dmcholepunch.debug=true")
     if scenario.get("serverFiles", {}).get("generations"):
         env.setdefault("ENABLE_RCON", "true")
         env.setdefault("RCON_PASSWORD", "amp-autotest")
