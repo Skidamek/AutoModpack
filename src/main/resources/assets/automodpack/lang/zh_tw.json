@@ -30,11 +30,7 @@
   "automodpack.firstConnect.noPatchNotes": "沒有針對此內容發布補丁說明。",
   "automodpack.firstConnect.bundleExplanation": "群組是可選功能的組合。",
   "automodpack.firstConnect.continue": "繼續使用預設值",
-  "automodpack.firstConnect.continueKeepMods": "繼續並保留模組",
-  "automodpack.firstConnect.archiveExistingOff": "[ ] 保留 mods 資料夾中的 %s 個現有檔案",
-  "automodpack.firstConnect.archiveExistingOn": "[x] 先儲存並移除 %s 個現有檔案",
-  "automodpack.firstConnect.existingModsKeep": "偵測到 %s 個現有檔案。預設會保留它們。",
-  "automodpack.firstConnect.existingModsArchive": "移除前會先儲存 %s 個現有檔案。",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "自訂群組",
   "automodpack.firstConnect.cancel": "請勿下載",
   "automodpack.patchNotes.latest": "最新補丁說明",
@@ -323,5 +319,7 @@
   "automodpack.error.titleLine": "[AutoModpack] %s！",
   "automodpack.error.removalIncomplete": "模組包移除未完成",
   "automodpack.error.deactivationIncomplete": "模組包停用未完成",
-  "automodpack.error.repair": "本機模組包修復未完成"
+  "automodpack.error.repair": "本機模組包修復未完成",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }

@@ -30,11 +30,7 @@
   "automodpack.firstConnect.noPatchNotes": "˙ʇuǝʇuoɔ sᴉɥʇ ɹoɟ pǝɥsᴉןqnd ǝɹǝʍ sǝʇou ɥɔʇɐd oN",
   "automodpack.firstConnect.bundleExplanation": "˙sǝɹnʇɐǝɟ ןɐuoᴉʇdo ɟo sǝןpunq ǝɹɐ sdnoɹפ",
   "automodpack.firstConnect.continue": "sʇןnɐɟǝp ɥʇᴉʍ ǝnuᴉʇuoƆ",
-  "automodpack.firstConnect.continueKeepMods": "spoɯ dǝǝʞ puɐ ǝnuᴉʇuoƆ",
-  "automodpack.firstConnect.archiveExistingOff": " dǝǝʞ [ ]%sspoɯ uᴉ sǝןᴉɟ ƃuᴉʇsᴉxǝ ",
-  "automodpack.firstConnect.archiveExistingOn": " ǝʌoɯǝɹ puɐ ǝʌɹǝsǝɹԀ [x]%ssǝןᴉɟ ƃuᴉʇsᴉxǝ ",
-  "automodpack.firstConnect.existingModsKeep": "%s˙ʇןnɐɟǝp ʎq ʇdǝʞ ǝq ןןᴉʍ ʎǝɥ⊥ ˙pǝʇɔǝʇǝp sǝןᴉɟ ƃuᴉʇsᴉxǝ ",
-  "automodpack.firstConnect.existingModsArchive": "%s˙ןɐʌoɯǝɹ ǝɹoɟǝq pǝʌɹǝsǝɹd ǝq ןןᴉʍ sǝןᴉɟ ƃuᴉʇsᴉxǝ ",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "sdnoɹƃ ǝzᴉɯoʇsnƆ",
   "automodpack.firstConnect.cancel": "pɐoןuʍop ʇou o◖",
   "automodpack.patchNotes.latest": "sǝʇou ɥɔʇɐd ʇsǝʇɐ⅃",
@@ -323,5 +319,7 @@
   "automodpack.error.titleLine": " [ʞɔɐdpoWoʇn∀]%s¡",
   "automodpack.error.removalIncomplete": "ǝʇǝןdɯoɔ ʇou pᴉp ןɐʌoɯǝɹ ʞɔɐdpoɯ ǝɥ⊥",
   "automodpack.error.deactivationIncomplete": "ǝʇǝןdɯoɔ ʇou pᴉp uoᴉʇɐʌᴉʇɔɐǝp ʞɔɐdpoɯ ǝɥ⊥",
-  "automodpack.error.repair": "ǝʇǝןdɯoɔ ʇou pᴉp ɹᴉɐdǝɹ ʞɔɐdpoɯ ןɐɔoן ǝɥ⊥"
+  "automodpack.error.repair": "ǝʇǝןdɯoɔ ʇou pᴉp ɹᴉɐdǝɹ ʞɔɐdpoɯ ןɐɔoן ǝɥ⊥",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }

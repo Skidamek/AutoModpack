@@ -30,11 +30,7 @@
   "automodpack.firstConnect.noPatchNotes": "Nenhuma nota de atualização foi publicada para este conteúdo.",
   "automodpack.firstConnect.bundleExplanation": "Os grupos são conjuntos de recursos opcionais.",
   "automodpack.firstConnect.continue": "Continuar com os padrões",
-  "automodpack.firstConnect.continueKeepMods": "Continuar e manter os mods",
-  "automodpack.firstConnect.archiveExistingOff": "[ ] Manter %s arquivos existentes em mods",
-  "automodpack.firstConnect.archiveExistingOn": "[x] Preservar e remover %s arquivos existentes",
-  "automodpack.firstConnect.existingModsKeep": "%s arquivos existentes detectados. Eles serão mantidos por padrão.",
-  "automodpack.firstConnect.existingModsArchive": "%s arquivos existentes serão preservados antes da remoção.",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "Personalizar grupos",
   "automodpack.firstConnect.cancel": "Não baixar",
   "automodpack.patchNotes.latest": "Notas de atualização mais recentes",
@@ -323,5 +319,7 @@
   "automodpack.error.titleLine": "[AutoModpack] %s!",
   "automodpack.error.removalIncomplete": "A remoção do modpack não foi concluída",
   "automodpack.error.deactivationIncomplete": "A desativação do modpack não foi concluída",
-  "automodpack.error.repair": "O reparo local do modpack não foi concluído"
+  "automodpack.error.repair": "O reparo local do modpack não foi concluído",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }

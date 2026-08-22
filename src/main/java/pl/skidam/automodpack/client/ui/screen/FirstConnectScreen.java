@@ -42,20 +42,22 @@ public final class FirstConnectScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
+		this.addActionArea(310, this.height - 28, buildRows());
+	}
+
+	private ActionRow[] buildRows() {
 		List<ActionRow> rows = new ArrayList<>();
 		if (GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes()))
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (updater.firstInstallLocalModCount() > 0) {
-			String cleanupKey = archiveExistingMods ? "automodpack.firstConnect.archiveExistingOn" : "automodpack.firstConnect.archiveExistingOff";
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-					optionalAction(VersionedText.translatable(cleanupKey, updater.firstInstallLocalModCount()), button -> toggleExistingMods())));
+					optionalAction(VersionedText.translatable("automodpack.firstConnect.archiveExistingOff", updater.firstInstallLocalModCount()), button -> toggleExistingMods())));
 		}
 		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize())));
-		String continueKey = updater.firstInstallLocalModCount() > 0 && !archiveExistingMods ? "automodpack.firstConnect.continueKeepMods" : "automodpack.firstConnect.continue";
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()),
-				primaryAction(VersionedText.translatable(continueKey).withStyle(ChatFormatting.BOLD), button -> continueWithDefaults())));
-		this.addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
+				primaryAction(VersionedText.translatable("automodpack.firstConnect.continue").withStyle(ChatFormatting.BOLD), button -> continueWithDefaults())));
+		return rows.toArray(ActionRow[]::new);
 	}
 
 	private void continueWithDefaults() {
@@ -122,18 +124,22 @@ public final class FirstConnectScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = target.manifest().modpackName().isBlank() ? "AutoModpack" : target.manifest().modpackName();
 		ResolvedSelection selection = target.selection();
+		int contentBottom = actionAreaTop(310, this.height - 28, buildRows()) - 6;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.description").withStyle(ChatFormatting.GRAY), this.width / 2, 31,
 				TextColors.WHITE);
 		int y = 51;
 		if (!updater.getPatchNotes().isBlank()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.patchNotes").withStyle(ChatFormatting.YELLOW), this.width / 2, y,
-					TextColors.WHITE);
+			if (y + 9 <= contentBottom) {
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.patchNotes").withStyle(ChatFormatting.YELLOW), this.width / 2, y,
+						TextColors.WHITE);
+			}
 			for (String line : wrapToWidth(this.font, updater.getPatchNotes(), Math.max(1, this.width - 20), 2)) {
 				y += 13;
+				if (y + 9 > contentBottom) break;
 				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
 			}
-		} else {
+		} else if (y + 9 <= contentBottom) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.noPatchNotes").withStyle(ChatFormatting.GRAY), this.width / 2, y,
 					TextColors.WHITE);
 		}
@@ -142,24 +148,29 @@ public final class FirstConnectScreen extends VersionedScreen {
 		long bytes = target.flatTarget().list.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
 		String summary = truncateToWidth(this.font,
 				VersionedText.translatable("automodpack.firstConnect.selectedSummary", selection.selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(bytes)).getString(), this.width - 20);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
+		if (y + 9 <= contentBottom)
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
 		y += 16;
 		if (updater.firstInstallLocalModCount() > 0) {
 			String existingKey = archiveExistingMods ? "automodpack.firstConnect.existingModsArchive" : "automodpack.firstConnect.existingModsKeep";
-			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.translatable(existingKey, updater.firstInstallLocalModCount()).withStyle(archiveExistingMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY),
-					this.width / 2, y, TextColors.WHITE);
-			y += 16;
+			for (String line : wrapToWidth(this.font, VersionedText.translatable(existingKey, updater.firstInstallLocalModCount()).getString(), Math.max(1, this.width - 20), 3)) {
+				if (y + 9 > contentBottom) break;
+				drawCenteredTextWithShadow(matrices, this.font,
+						VersionedText.literal(line).withStyle(archiveExistingMods ? ChatFormatting.GRAY : ChatFormatting.YELLOW),
+						this.width / 2, y, TextColors.WHITE);
+				y += 13;
+			}
+			y += 3;
 		}
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.bundleExplanation").withStyle(ChatFormatting.GRAY), this.width / 2, y,
+		if (y + 9 <= contentBottom) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.bundleExplanation").withStyle(ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += 16;
 		String requested = names(target.manifest().groups(), selection.intent().requestedGroups());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.requestedGroups", requested).withStyle(ChatFormatting.WHITE), this.width / 2, y,
+		if (y + 9 <= contentBottom) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.requestedGroups", requested).withStyle(ChatFormatting.WHITE), this.width / 2, y,
 				TextColors.WHITE);
 		y += 14;
 		String groups = names(target.manifest().groups(), selection.selectedGroups());
-		drawCenteredTextWithShadow(matrices, this.font,
+		if (y + 9 <= contentBottom) drawCenteredTextWithShadow(matrices, this.font,
 				VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.firstConnect.includedGroups", groups).getString(), this.width - 20)).withStyle(ChatFormatting.WHITE),
 				this.width / 2, y,
 				TextColors.WHITE);

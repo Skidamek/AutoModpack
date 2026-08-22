@@ -30,11 +30,7 @@
   "automodpack.firstConnect.noPatchNotes": "NO patch notes were published for this content.",
   "automodpack.firstConnect.bundleExplanation": "Groups r bundles of optshunal features.",
   "automodpack.firstConnect.continue": "CAN HAS defaults",
-  "automodpack.firstConnect.continueKeepMods": "Continue n Kep mods",
-  "automodpack.firstConnect.archiveExistingOff": "[ ] Kep %s existing fylez in mods",
-  "automodpack.firstConnect.archiveExistingOn": "[x] Preserve n remuv %s existing fylez",
-  "automodpack.firstConnect.existingModsKeep": "%s existing fylez detected. They will be kept by default.",
-  "automodpack.firstConnect.existingModsArchive": "%s existing fylez will be preservd before removal.",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "Kustomize groupz",
   "automodpack.firstConnect.cancel": "Do not downlode",
   "automodpack.patchNotes.latest": "laytest patch notes",
@@ -323,5 +319,7 @@
   "automodpack.error.titleLine": "[AutoModpak] %s!",
   "automodpack.error.removalIncomplete": "teh modpak removal did not complete",
   "automodpack.error.deactivationIncomplete": "teh modpak deactivation did not complete",
-  "automodpack.error.repair": "teh local modpak fix did not complete"
+  "automodpack.error.repair": "teh local modpak fix did not complete",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }

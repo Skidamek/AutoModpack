@@ -8,7 +8,6 @@
   "automodpack.restart.secDescription": "Do you want to restart now?",
   "automodpack.restart.confirm": "Yes, close the game",
   "automodpack.restart.cancel": "No, return to the game",
-
   "automodpack.selection.title": "Modpack settings",
   "automodpack.selection.description": "Choose which optional parts of the modpack you want.",
   "automodpack.selection.saved": "Your selection was saved.",
@@ -23,7 +22,6 @@
   "automodpack.selection.shortButton": "Settings",
   "automodpack.selection.preview": "Preview target",
   "automodpack.selection.categoryExplanation": "Category buttons select their groups. AutoModpack saves category choices separately from individual groups.",
-
   "automodpack.firstConnect.title": "Set up this modpack",
   "automodpack.firstConnect.description": "Review the default content before downloading.",
   "automodpack.firstConnect.requestedGroups": "Requested groups: %s",
@@ -32,14 +30,9 @@
   "automodpack.firstConnect.noPatchNotes": "No patch notes were published for this content.",
   "automodpack.firstConnect.bundleExplanation": "Groups are bundles of optional features.",
   "automodpack.firstConnect.continue": "Continue with defaults",
-  "automodpack.firstConnect.continueKeepMods": "Continue and keep mods",
-  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing files in mods",
-  "automodpack.firstConnect.archiveExistingOn": "[x] Preserve and remove %s existing files",
-  "automodpack.firstConnect.existingModsKeep": "%s existing files detected. They will be kept by default.",
-  "automodpack.firstConnect.existingModsArchive": "%s existing files will be preserved before removal.",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "Customize groups",
   "automodpack.firstConnect.cancel": "Do not download",
-
   "automodpack.patchNotes.latest": "Latest patch notes",
   "automodpack.patchNotes.none": "No patch notes published.",
   "automodpack.patchNotes.all": "View all patch notes",
@@ -69,13 +62,11 @@
   "automodpack.packDetails.storageDescription": "Open preserved files or remove unused modpack data.",
   "automodpack.packDetails.localStorage": "Clean local storage",
   "automodpack.packDetails.working": "Working...",
-
   "automodpack.changelog.view": "View changelogs",
   "automodpack.changelog.noChanges": "No changes found.",
   "automodpack.changelog.openPage": "Open project page",
   "automodpack.changelog.noPage": "No project page",
   "automodpack.changelog.latestNote": "Latest patch note: %s",
-
   "automodpack.browser.search": "Search files",
   "automodpack.browser.all": "All",
   "automodpack.browser.contentFilter": "Content: %s",
@@ -109,12 +100,10 @@
   "automodpack.browser.content.resourcepack": "Resource pack",
   "automodpack.browser.content.mc_options": "Minecraft options",
   "automodpack.browser.content.other": "Other",
-
   "automodpack.download.calculating": "Calculating...",
   "automodpack.download.eta": "Time left: %s",
   "automodpack.download.downloading": "Downloading:",
   "automodpack.download.noFiles": "No files to download!",
-
   "automodpack.error": "Something went wrong!",
   "automodpack.error.openLogs": "Open logs",
   "automodpack.error.copyDetails": "Copy details",
@@ -135,7 +124,6 @@
   "automodpack.error.update": "AutoModpack did not apply the modpack update.",
   "automodpack.error.corruptState": "AutoModpack found invalid local modpack data.",
   "automodpack.error.internal": "AutoModpack encountered an unexpected problem.",
-
   "automodpack.validation.title": "Certificate verification",
   "automodpack.validation.description1": "Verification protects you from man-in-the-middle attacks.",
   "automodpack.validation.description2": "You must do this once. Get the fingerprint from the server operator.",
@@ -143,14 +131,12 @@
   "automodpack.validation.confirm.text": "Paste the full fingerprint to verify:",
   "automodpack.validation.verify": "Verify",
   "automodpack.validation.failed": "The fingerprints do not match. An attacker can be using a false server identity.",
-
   "automodpack.validation.skip.title": "Security risk",
   "automodpack.validation.skip.warning1": "Without verification, attackers can inject malicious mods.",
   "automodpack.validation.skip.warning2": "Mods can access your files and run arbitrary code.",
   "automodpack.validation.skip.instruction": "Skip only if you know what you are doing.",
   "automodpack.validation.skip.confirm.text": "Type the phrase below to confirm:",
   "automodpack.validation.skip.failed": "Wrong text",
-
   "automodpack.retry": "Try again",
   "automodpack.cancel": "Cancel",
   "automodpack.back": "Back",
@@ -173,7 +159,6 @@
   "automodpack.wait": "Please wait...",
   "automodpack.skip": "Skip",
   "automodpack.learnmore": "Learn more",
-
   "automodpack.pin.active": "Certificate pin (%s): %s (click to remove)",
   "automodpack.pin.reason.address": "address",
   "automodpack.pin.reason.seed": "bootstrap seed",
@@ -181,14 +166,12 @@
   "automodpack.pin.removed": "Certificate pin removed",
   "automodpack.pin.invalid": "Invalid pinned address. Paste the complete address provided by the server operator.",
   "automodpack.pin.mismatch": "Pinned certificate mismatch!",
-
   "automodpack.ui.previous": "< Prev",
   "automodpack.ui.next": "Next >",
   "automodpack.ui.page": "%s / %s",
   "automodpack.ui.info": "Info",
   "automodpack.ui.none": "none",
   "automodpack.ui.general": "General",
-
   "automodpack.changelog.title": "Changelog",
   "automodpack.history.title": "Content history",
   "automodpack.history.titleNamed": "%s content history",
@@ -208,11 +191,9 @@
   "automodpack.history.details.empty": "No catalogue changes.",
   "automodpack.files.title": "%s owned files",
   "automodpack.files.description": "Complete installed modpack file catalogue.",
-
   "automodpack.firstConnect.selectedSummary": "Selected groups: %s  Files: %s  Content size: %s",
   "automodpack.firstConnect.includedGroups": "Included groups: %s",
   "automodpack.firstConnect.unavailableOldChoices": "Unavailable old choices: %s",
-
   "automodpack.groupInspector.title": "Feature details",
   "automodpack.groupInspector.browseFiles": "Browse files",
   "automodpack.groupInspector.filesDescription": "Files supplied by this feature",
@@ -223,7 +204,6 @@
   "automodpack.groupInspector.optional": "Optional",
   "automodpack.groupInspector.status": "%s  |  %s files",
   "automodpack.groupInspector.noDescription": "No description published.",
-
   "automodpack.selection.platformSummary": "Platform: %s  Selected groups: %s",
   "automodpack.selection.category": "Category: %s",
   "automodpack.selection.requiredAlways": "Required: always included",
@@ -259,7 +239,6 @@
   "automodpack.selection.sourcesCancelled": "Third-party sources: lookup canceled. Server download remains available",
   "automodpack.selection.sourcesResolving": "Third-party sources: resolving (%s / %s files matched)",
   "automodpack.selection.sourcesResolved": "Third-party sources: %s / %s files matched. Unmatched files use the server",
-
   "automodpack.management.remove": "Remove",
   "automodpack.management.update": "Update",
   "automodpack.management.repair": "Repair",
@@ -269,18 +248,15 @@
   "automodpack.management.preservedFiles": "Preserved files",
   "automodpack.management.history": "History",
   "automodpack.management.files": "Files",
-
   "automodpack.packManager.activeMarker": "[active]",
   "automodpack.packManager.reviewMarker": "[review switch]",
   "automodpack.packManager.connected": "connected",
   "automodpack.packManager.localRecord": "local record",
-
   "automodpack.patchNotes.title": "Patch-note history",
   "automodpack.patchNotes.titleNamed": "%s patch-note history",
   "automodpack.patchNotes.description": "All received generation notes",
   "automodpack.patchNotes.entry": "Update %s",
   "automodpack.patchNotes.empty": "No patch notes are available.",
-
   "automodpack.repair.title": "Repair modpack",
   "automodpack.repair.titleNamed": "Repair %s",
   "automodpack.repair.healthy": "Managed files passed every integrity check",
@@ -299,7 +275,6 @@
   "automodpack.repair.updateNeededOffline": "Some bytes are unavailable locally. Update when the server is available.",
   "automodpack.repair.working": "Checking and repairing local files...",
   "automodpack.repair.receipt": "Rebuilt CAS: %s  Repaired: %s  Reset: %s  Archived: %s",
-
   "automodpack.vault.title": "Preserved files",
   "automodpack.vault.titleNamed": "%s preserved files",
   "automodpack.vault.loading": "Loading preserved files...",
@@ -322,7 +297,6 @@
   "automodpack.vault.reason.strict_install": "Clean installation",
   "automodpack.vault.reason.strict_repair": "Repair cleanup",
   "automodpack.vault.reason.editable_reset": "Editable reset",
-
   "automodpack.update.title": "Review update",
   "automodpack.update.deactivationTitle": "Deactivate modpack",
   "automodpack.update.deactivateNamed": "Deactivate %s",
@@ -337,7 +311,6 @@
   "automodpack.update.apply": "Update",
   "automodpack.update.staleSelection": "Some previously selected content is no longer available.",
   "automodpack.update.groupsSelected": "%s content groups selected",
-
   "automodpack.preparing.title": "Preparing update",
   "automodpack.restart.title": "Restart",
   "automodpack.download.title": "Download",
@@ -346,5 +319,7 @@
   "automodpack.error.titleLine": "[AutoModpack] %s!",
   "automodpack.error.removalIncomplete": "The modpack removal did not complete",
   "automodpack.error.deactivationIncomplete": "The modpack deactivation did not complete",
-  "automodpack.error.repair": "The local modpack repair did not complete"
+  "automodpack.error.repair": "The local modpack repair did not complete",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }

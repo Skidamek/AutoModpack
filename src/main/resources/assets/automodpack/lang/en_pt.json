@@ -30,11 +30,7 @@
   "automodpack.firstConnect.noPatchNotes": "No patch notes were published for this cargo.",
   "automodpack.firstConnect.bundleExplanation": "Crews be bundles of optional features.",
   "automodpack.firstConnect.continue": "Sail with defaults",
-  "automodpack.firstConnect.continueKeepMods": "Sail on and keep the mods",
-  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing files in mods aboard",
-  "automodpack.firstConnect.archiveExistingOn": "[x] Stash and remove %s existing files",
-  "automodpack.firstConnect.existingModsKeep": "%s existing files spotted. They stay aboard by default.",
-  "automodpack.firstConnect.existingModsArchive": "%s existing files be stashed before removal.",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "Customize crews",
   "automodpack.firstConnect.cancel": "Do not download, matey",
   "automodpack.patchNotes.latest": "Latest captain's notes",
@@ -323,5 +319,7 @@
   "automodpack.error.titleLine": "[AutoModpack] %s!",
   "automodpack.error.removalIncomplete": "The modpack removal did not complete aboard",
   "automodpack.error.deactivationIncomplete": "The modpack deactivation did not complete aboard",
-  "automodpack.error.repair": "The local modpack repair did not complete aboard"
+  "automodpack.error.repair": "The local modpack repair did not complete aboard",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }

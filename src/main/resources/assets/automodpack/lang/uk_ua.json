@@ -30,11 +30,7 @@
   "automodpack.firstConnect.noPatchNotes": "Для цього вмісту не було опубліковано нотаток про виправлення.",
   "automodpack.firstConnect.bundleExplanation": "Групи — це набори додаткових функцій.",
   "automodpack.firstConnect.continue": "Продовжити зі стандартними налаштуваннями",
-  "automodpack.firstConnect.continueKeepMods": "Продовжити й залишити моди",
-  "automodpack.firstConnect.archiveExistingOff": "[ ] Залишити %s наявних файлів у mods",
-  "automodpack.firstConnect.archiveExistingOn": "[x] Зберегти й видалити %s наявних файлів",
-  "automodpack.firstConnect.existingModsKeep": "Виявлено наявних файлів: %s. Типово їх буде збережено.",
-  "automodpack.firstConnect.existingModsArchive": "Перед видаленням буде збережено наявних файлів: %s.",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "Налаштувати групи",
   "automodpack.firstConnect.cancel": "Не завантажувати",
   "automodpack.patchNotes.latest": "Нотатки до останніх виправлень",
@@ -323,5 +319,7 @@
   "automodpack.error.titleLine": "[AutoModpack] %s!",
   "automodpack.error.removalIncomplete": "Видалення модпака не завершено",
   "automodpack.error.deactivationIncomplete": "Вимкнення модпака не завершено",
-  "automodpack.error.repair": "Відновлення локального модпака не завершено"
+  "automodpack.error.repair": "Відновлення локального модпака не завершено",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }
