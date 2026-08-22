@@ -1,11 +1,14 @@
 package pl.skidam.automodpack_core.storage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -53,11 +56,27 @@ class DataRootResolverTest {
 		assertThrows(IllegalStateException.class, () -> DataRootResolver.resolve(game));
 	}
 
+	@Test
+	void unusablePinnedRootHealsByResolvingANewRoot() throws Exception {
+		Path game = Files.createDirectory(temporaryDirectory.resolve("heal-game"));
+		Path blocked = temporaryDirectory.resolve("blocked").resolve("data");
+		Files.writeString(temporaryDirectory.resolve("blocked"), "not a directory", StandardCharsets.UTF_8);
+		writeMarker(game, blocked);
+		String home = System.getProperty("user.home");
+		System.setProperty("user.home", temporaryDirectory.toString());
+		try {
+			DataRootResolver.Location location = DataRootResolver.resolve(game);
+			assertNotEquals(blocked, location.root(), "unusable pin must not be kept");
+			assertTrue(Files.isDirectory(location.root()), "resolver must select a usable root when the pinned one is gone");
+		} finally {
+			System.setProperty("user.home", home);
+		}
+	}
+
 	private static void writeMarker(Path game, Path data) throws IOException {
 		Files.createDirectory(game.resolve("automodpack"));
 		StorageJsons.DataRootFields marker = new StorageJsons.DataRootFields();
 		marker.root = data.toString();
-		marker.shared = true;
 		ConfigTools.writeAtomic(game.resolve("automodpack/data-root.json"), marker);
 	}
 }

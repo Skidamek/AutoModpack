@@ -42,7 +42,6 @@ public final class ClientStorage {
 	private final Path clientDirectory;
 	private final DataRootResolver.Location dataLocation;
 	private final Path dataDirectory;
-	private final boolean sharedDataDirectory;
 	private final Path objectsDirectory;
 	private final Path recordsDirectory;
 	private final Path overlaysDirectory;
@@ -76,7 +75,6 @@ public final class ClientStorage {
 		this.automodpackDirectory = this.gameDirectory.resolve(AUTOMODPACK_DIR).normalize();
 		this.clientDirectory = this.gameDirectory.resolve(CLIENT_DIR).normalize();
 		this.dataDirectory = dataLocation.root();
-		this.sharedDataDirectory = dataLocation.shared();
 		DataRootResolver.Layout dataLayout = dataLocation.layout();
 		this.objectsDirectory = dataLayout.objectsDirectory();
 		this.recordsDirectory = this.clientDirectory.resolve(CLIENT_RECORDS_DIR.getFileName()).normalize();
@@ -118,7 +116,7 @@ public final class ClientStorage {
 		try {
 			storage.initialize();
 			new ClientGenerationStore(storage).recoverCompaction();
-			if (storage.sharedDataDirectory()) ClientObjectStore.publishOwnership(storage);
+			ClientObjectStore.publishOwnership(storage);
 			OPEN_STORAGE.put(canonicalGameDirectory, new WeakReference<>(storage));
 			return storage;
 		} catch (IOException e) {
@@ -148,10 +146,6 @@ public final class ClientStorage {
 
 	public DataRootResolver.Location dataLocation() {
 		return dataLocation;
-	}
-
-	public boolean sharedDataDirectory() {
-		return sharedDataDirectory;
 	}
 
 	public Path objectsDirectory() {

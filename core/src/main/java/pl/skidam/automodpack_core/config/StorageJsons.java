@@ -6,7 +6,6 @@ public class StorageJsons {
 
 	public static class DataRootFields {
 		public String root = "";
-		public boolean shared;
 		public String ownerId = "";
 		public String ownerPathHash = "";
 		public String ownerPath = "";

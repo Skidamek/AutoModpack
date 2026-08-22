@@ -459,14 +459,14 @@ public final class GenerationStore {
 	}
 
 	private void publishOwnershipWith(GroupManifest additionalManifest) throws IOException {
-		if (dataLocation == null || !dataLocation.shared()) return;
+		if (dataLocation == null) return;
 		TreeSet<String> hashes = currentOwnershipHashes();
 		addManifestHashes(additionalManifest, hashes);
 		SharedObjectOwnership.publish(dataLocation, "server", hashes);
 	}
 
 	private void publishCurrentOwnership() throws IOException {
-		if (dataLocation != null && dataLocation.shared()) SharedObjectOwnership.publish(dataLocation, "server", currentOwnershipHashes());
+		if (dataLocation != null) SharedObjectOwnership.publish(dataLocation, "server", currentOwnershipHashes());
 	}
 
 	private TreeSet<String> currentOwnershipHashes() throws IOException {
