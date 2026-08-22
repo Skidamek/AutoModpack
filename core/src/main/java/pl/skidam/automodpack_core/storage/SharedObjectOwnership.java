@@ -34,7 +34,6 @@ public final class SharedObjectOwnership {
 
 	/** Publishes the owner's complete current receipt before state starts depending on it. */
 	public static void publish(DataRootResolver.Location location, String component, Set<String> referencedHashes) throws IOException {
-		if (!location.shared()) return;
 		withLock(location, () -> {
 			writeOwner(location, component, canonical(referencedHashes));
 			return null;
@@ -44,7 +43,6 @@ public final class SharedObjectOwnership {
 	/** Updates this owner and runs one collection decision against one locked global snapshot. */
 	public static <T> T withGlobalReferences(DataRootResolver.Location location, String component, Set<String> referencedHashes, ReferencedOperation<T> operation) throws IOException {
 		Set<String> canonical = canonical(referencedHashes);
-		if (!location.shared()) return operation.run(canonical);
 		return withLock(location, () -> {
 			writeOwner(location, component, canonical);
 			return operation.run(readAllOwners(location.layout()));

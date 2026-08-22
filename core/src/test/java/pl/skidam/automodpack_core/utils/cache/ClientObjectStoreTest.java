@@ -86,8 +86,8 @@ class ClientObjectStoreTest {
 	@Test
 	void sharedStoreCollectionRetainsObjectsOwnedByAnotherInstance() throws Exception {
 		Path sharedData = temporaryDirectory.resolve("shared-data");
-		ClientStorage first = storage("first-game", sharedData, true);
-		ClientStorage second = storage("second-game", sharedData, true);
+		ClientStorage first = storage("first-game", sharedData);
+		ClientStorage second = storage("second-game", sharedData);
 		byte[] bytes = "second-instance-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(second, bytes);
 		String orphan = store(first, "shared-orphan");
@@ -106,7 +106,7 @@ class ClientObjectStoreTest {
 	@Test
 	void copiedDataRootMarkerGetsANewOwnerIdentity() throws Exception {
 		Path sharedData = temporaryDirectory.resolve("shared-data");
-		ClientStorage original = storage("original-game", sharedData, true);
+		ClientStorage original = storage("original-game", sharedData);
 		Path cloneRoot = temporaryDirectory.resolve("cloned-game");
 		Files.createDirectories(cloneRoot.resolve("automodpack"));
 		Files.copy(original.gameDirectory().resolve("automodpack/data-root.json"), cloneRoot.resolve("automodpack/data-root.json"));
@@ -119,8 +119,8 @@ class ClientObjectStoreTest {
 	@Test
 	void collectionRetainsReceiptWhileItsInstallationIsUnavailable() throws Exception {
 		Path sharedData = temporaryDirectory.resolve("shared-data");
-		ClientStorage first = storage("first-game", sharedData, true);
-		ClientStorage removed = storage("removed-game", sharedData, true);
+		ClientStorage first = storage("first-game", sharedData);
+		ClientStorage removed = storage("removed-game", sharedData);
 		String hash = store(removed, "removed-instance-object");
 		ClientObjectStore.publishOwnership(removed, Set.of(hash));
 		FileTrees.delete(removed.gameDirectory());
@@ -210,7 +210,7 @@ class ClientObjectStoreTest {
 	}
 
 	private ClientStorage storage() throws Exception {
-		return storage("game", temporaryDirectory.resolve("data"), false);
+		return storage("game", temporaryDirectory.resolve("data"));
 	}
 
 	private static long regularFileCount(Path root) throws IOException {
@@ -219,12 +219,11 @@ class ClientObjectStoreTest {
 		}
 	}
 
-	private ClientStorage storage(String gameName, Path dataDirectory, boolean shared) throws Exception {
+	private ClientStorage storage(String gameName, Path dataDirectory) throws Exception {
 		Path game = temporaryDirectory.resolve(gameName);
 		Files.createDirectories(game.resolve("automodpack"));
 		StorageJsons.DataRootFields dataRoot = new StorageJsons.DataRootFields();
 		dataRoot.root = dataDirectory.toString();
-		dataRoot.shared = shared;
 		ConfigTools.writeAtomic(game.resolve("automodpack/data-root.json"), dataRoot);
 		ClientStorage storage = ClientStorage.open(game);
 		return storage;

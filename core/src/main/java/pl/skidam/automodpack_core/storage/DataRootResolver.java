@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.storage;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
@@ -58,7 +60,7 @@ public final class DataRootResolver {
 		}
 	}
 
-	public record Location(Path root, boolean shared, String ownerId, Path ownerPath) {
+	public record Location(Path root, String ownerId, Path ownerPath) {
 		public Location {
 			root = Objects.requireNonNull(root, "root").toAbsolutePath().normalize();
 			ownerId = UUID.fromString(Objects.requireNonNull(ownerId, "owner ID")).toString();
@@ -83,16 +85,15 @@ public final class DataRootResolver {
 				try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS); FileLock ignored = channel.lock()) {
 					createLocalDataDirectory(gameRoot, automodpackDirectory);
 					validateLocalDataDirectory(gameRoot, automodpackDirectory);
-					if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) return loadPinned(marker, gameRoot);
-					Path sharedRoot = platformDataRoot();
-					if (probe(sharedRoot)) {
-						Location location = new Location(sharedRoot, true, UUID.randomUUID().toString(), gameRoot);
-						writePinned(marker, location, gameRoot);
-						return location;
+					if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) {
+						// The pin is a hint about a past decision, not an authority: if the pinned root
+						// became unavailable (moved home dir, Docker, cleanup), heal by re-resolving.
+						StringBuilder failure = new StringBuilder();
+						Location pinned = loadPinned(marker, gameRoot, failure);
+						if (pinned != null) return pinned;
+						LOGGER.warn("Previously used AutoModpack data root is unavailable ({}); selecting a new one (cached downloads will re-sync)", failure);
 					}
-					Path fallback = automodpackDirectory.resolve("data").normalize();
-					if (!probe(fallback)) throw new IOException("Neither shared nor local AutoModpack data storage is writable");
-					Location location = new Location(fallback, false, UUID.randomUUID().toString(), gameRoot);
+					Location location = selectRoot(gameRoot);
 					writePinned(marker, location, gameRoot);
 					return location;
 				}
@@ -120,13 +121,26 @@ public final class DataRootResolver {
 		if (!gameRoot.equals(realDirectory.getParent())) throw new IOException("AutoModpack data directory resolves outside the game directory: " + directory);
 	}
 
-	private static Location loadPinned(Path marker, Path gameRoot) throws IOException {
-		if (Files.isSymbolicLink(marker) || !Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("AutoModpack data-root marker is not a regular file: " + marker);
-		StorageJsons.DataRootFields fields = ConfigTools.read(marker, StorageJsons.DataRootFields.class).orElseThrow(() -> new IOException("AutoModpack data-root marker is empty"));
-		if (fields.root == null || fields.root.isBlank()) throw new IOException("AutoModpack data-root marker has no root");
+	private static Location loadPinned(Path marker, Path gameRoot, StringBuilder failure) throws IOException {
+		if (Files.isSymbolicLink(marker) || !Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)) {
+			failure.append("marker is not a regular file: ").append(marker);
+			return null;
+		}
+		StorageJsons.DataRootFields fields = ConfigTools.read(marker, StorageJsons.DataRootFields.class).orElse(null);
+		if (fields == null) {
+			failure.append("marker is empty");
+			return null;
+		}
+		if (fields.root == null || fields.root.isBlank()) {
+			failure.append("marker has no root");
+			return null;
+		}
 		Path root = Path.of(fields.root).toAbsolutePath().normalize();
-		if (!probe(root)) throw new IOException("Pinned AutoModpack data root is unavailable: " + root);
+		String reason = probe(root);
+		if (reason != null) {
+			failure.append(root).append(" is unusable: ").append(reason);
+			return null;
+		}
 		String ownerIdentity = computeOwnerIdentity(gameRoot);
 		if (fields.ownerId == null || fields.ownerId.isBlank() || !ownerIdentity.equals(fields.ownerPathHash)) {
 			fields.ownerId = UUID.randomUUID().toString();
@@ -137,13 +151,22 @@ public final class DataRootResolver {
 			fields.ownerPath = gameRoot.toString();
 			ConfigTools.writeAtomic(marker, fields);
 		}
-		return new Location(root, fields.shared, fields.ownerId, gameRoot);
+		return new Location(root, fields.ownerId, gameRoot);
+	}
+
+	private static Location selectRoot(Path gameRoot) throws IOException {
+		Path sharedRoot = platformDataRoot();
+		String sharedFailure = probe(sharedRoot);
+		if (sharedFailure != null) LOGGER.warn("Shared AutoModpack data root {} is unusable ({}); falling back to instance-local storage", sharedRoot, sharedFailure);
+		Path root = sharedFailure == null ? sharedRoot : gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).resolve("data").normalize();
+		String localFailure = probe(root);
+		if (localFailure != null) throw new IOException("Neither shared nor local AutoModpack data storage is writable: " + sharedFailure + "; " + localFailure);
+		return new Location(root, UUID.randomUUID().toString(), gameRoot);
 	}
 
 	private static void writePinned(Path marker, Location location, Path gameRoot) throws IOException {
 		StorageJsons.DataRootFields fields = new StorageJsons.DataRootFields();
 		fields.root = location.root().toString();
-		fields.shared = location.shared();
 		fields.ownerId = location.ownerId();
 		fields.ownerPathHash = computeOwnerIdentity(gameRoot);
 		fields.ownerPath = gameRoot.toString();
@@ -157,18 +180,21 @@ public final class DataRootResolver {
 		return HashUtils.sha1(fileKey == null ? "real-path\n" + realRoot : "file-key\n" + fileKey);
 	}
 
-	private static boolean probe(Path root) {
+	/** Returns null when the root is usable, otherwise a one-line reason it is not. */
+	private static String probe(Path root) {
+		Path normalized = root.toAbsolutePath().normalize();
+		if (Files.exists(normalized, LinkOption.NOFOLLOW_LINKS) && Files.isSymbolicLink(normalized)) return "symbolic link";
 		try {
-			Path normalized = root.toAbsolutePath().normalize();
-			if (Files.exists(normalized, LinkOption.NOFOLLOW_LINKS) && Files.isSymbolicLink(normalized)) return false;
 			Files.createDirectories(normalized);
-			if (!Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS)) return false;
+			if (!Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS)) return "not a directory";
 			Path probe = Files.createTempFile(normalized, ".write-probe-", ".tmp");
 			Files.writeString(probe, "AutoModpack\n", StandardCharsets.UTF_8);
 			Files.deleteIfExists(probe);
-			return true;
-		} catch (IOException | RuntimeException e) {
-			return false;
+			return null;
+		} catch (IOException e) {
+			return e.toString();
+		} catch (RuntimeException e) {
+			return e.toString();
 		}
 	}
 

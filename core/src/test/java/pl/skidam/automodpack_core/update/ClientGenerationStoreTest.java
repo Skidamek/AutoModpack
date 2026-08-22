@@ -356,7 +356,6 @@ class ClientGenerationStoreTest {
 		Files.createDirectories(game.resolve("automodpack"));
 		StorageJsons.DataRootFields dataRoot = new StorageJsons.DataRootFields();
 		dataRoot.root = temporaryDirectory.resolve("data").toString();
-		dataRoot.shared = false;
 		ConfigTools.writeAtomic(game.resolve("automodpack/data-root.json"), dataRoot);
 		ClientStorage storage = ClientStorage.open(game);
 		Files.createDirectories(storage.modsDirectory());
