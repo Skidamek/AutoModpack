@@ -322,5 +322,6 @@
   "automodpack.error.repair": "A reparação local do modpack não foi concluída",
   "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
   "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault.",
-  "automodpack.firstConnect.archiveExistingOn": "[x] Keep %s existing mod files"
+  "automodpack.firstConnect.archiveExistingOn": "[x] Keep %s existing mod files",
+  "automodpack.firstConnect.cleanupTooltip": "Applies to: %s"
 }

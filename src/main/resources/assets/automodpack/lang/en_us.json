@@ -32,6 +32,7 @@
   "automodpack.firstConnect.continue": "Continue with defaults",
   "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.archiveExistingOn": "[x] Keep %s existing mod files",
+  "automodpack.firstConnect.cleanupTooltip": "Applies to: %s",
   "automodpack.firstConnect.customize": "Customize groups",
   "automodpack.firstConnect.cancel": "Do not download",
   "automodpack.patchNotes.latest": "Latest patch notes",

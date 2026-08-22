@@ -718,7 +718,8 @@ class FakeBridge:
             self.ctx.path(rel).unlink(missing_ok=True)
 
     def _write_modpack(self) -> None:
-        if self.first_install_archive_existing:
+        # The checkbox is "Keep existing mod files": checked = keep, unchecked = removal consent.
+        if not self.first_install_archive_existing:
             for source in self._first_install_local_mods():
                 self._vault_claim("packaaa", f"mods/{source.name}", source.read_bytes(), "STRICT_INSTALL")
                 source.unlink()
