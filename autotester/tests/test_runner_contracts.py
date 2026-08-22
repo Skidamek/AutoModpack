@@ -7,6 +7,7 @@ import json
 import threading
 import time
 import types
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -361,9 +362,20 @@ def test_artifact_resolution_uses_target_id(tmp_path):
         artifact_pattern="automodpack-mc{id}-*.jar",
     )
     artifact = tmp_path / "automodpack-mc26.1-fabric-test.jar"
-    artifact.touch()
+    with zipfile.ZipFile(artifact, "w") as jar:
+        jar.writestr("pl/skidam/automodpack/client/autotest/AutoTestBridge.class", b"")
 
     assert runner._resolve_artifact(target, tmp_path) == artifact.resolve()
+
+
+def test_artifact_resolution_rejects_release_mode_artifact(tmp_path):
+    target = _target(artifact_pattern="automodpack-mc{id}-*.jar")
+    artifact = tmp_path / "automodpack-mc1.21.1-neoforge-test.jar"
+    with zipfile.ZipFile(artifact, "w") as jar:
+        jar.writestr("fabric.mod.json", "{}")
+
+    with pytest.raises(RuntimeError, match="rebuild with -Pautomodpack.autotest"):
+        runner._resolve_artifact(target, tmp_path)
 
 
 def test_artifact_resolution_rejects_ambiguous_matches(tmp_path):

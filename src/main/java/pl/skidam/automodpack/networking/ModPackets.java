@@ -35,11 +35,19 @@ public class ModPackets {
 	}
 
 	public static void registerC2SPackets() {
-		ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, HandshakeC2SPacket::receive);
-		ClientLoginNetworking.registerGlobalReceiver(DATA, DataC2SPacket::receive);
-
-		// For single player to work, also need to register server side packets
+		// Client registration lives in a dedicated holder class so that loading or verifying
+		// ModPackets on a dedicated server can never eagerly resolve net.minecraft.client types:
+		// the holder is only classloaded when this method actually runs on a client, and it is the
+		// only server-reachable class allowed to reference client-only packet handlers.
+		ClientPacketRegistration.register();
 		registerS2CPackets();
+	}
+
+	private static class ClientPacketRegistration {
+		static void register() {
+			ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, HandshakeC2SPacket::receive);
+			ClientLoginNetworking.registerGlobalReceiver(DATA, DataC2SPacket::receive);
+		}
 	}
 
 	public static void registerS2CPackets() {

@@ -10,6 +10,7 @@ import secrets
 import shutil
 import threading
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1626,7 +1627,17 @@ def _resolve_artifact(target: Target, artifact_dir: Path) -> Path:
         raise RuntimeError(
             f"Ambiguous artifacts for {target.id} matching {pattern!r}: {names}"
         )
-    return matches[0].resolve()
+    artifact = matches[0].resolve()
+    with zipfile.ZipFile(artifact) as jar:
+        names = set(jar.namelist())
+    if "META-INF/jarjar/automodpack-mod.jar" in names:
+        with zipfile.ZipFile(artifact) as jar, jar.open("META-INF/jarjar/automodpack-mod.jar") as nested, zipfile.ZipFile(nested) as mod_jar:
+            names.update(mod_jar.namelist())
+    if not any(name.startswith("pl/skidam/automodpack/client/autotest/") and name.endswith(".class") for name in names):
+        raise RuntimeError(
+            f"Artifact {artifact} has no AutoTestBridge classes; rebuild with -Pautomodpack.autotest before running the autotester"
+        )
+    return artifact
 
 
 def run_case(
