@@ -24,6 +24,8 @@ import java.util.*;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
+import pl.skidam.automodpack_core.security.SharedTlsMaterial;
+import pl.skidam.automodpack_core.security.ServerSecurityPathManager;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.ObservableMap;
@@ -90,35 +92,33 @@ public class NettyServer {
                     LOGGER.error("Internal TLS cannot be disabled. You have to bind modpack host on a separate port, preferably also on a loopback address or atleast some private one.");
                 }
 
-                if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
-                    // Create a self-signed certificate
-                    KeyPair keyPair = NetUtils.generateKeyPair();
-                    X509Certificate cert = NetUtils.selfSign(keyPair);
+                if (ServerSecurityPathManager.isEnabled()) {
+                    SharedTlsMaterial.withLockedMaterial(sharedSecurityPaths, material -> {
+                        certificateFingerprint = material.fingerprint();
+                        sslCtx = buildSslContext();
+                        return null;
+                    });
+                } else {
+                    X509Certificate cert;
+                    if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
+                        // Create a self-signed certificate
+                        KeyPair keyPair = NetUtils.generateKeyPair();
+                        cert = NetUtils.selfSign(keyPair);
 
-                    // save it to the file
-                    NetUtils.saveCertificate(cert, serverCertFile);
-                    NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+                        // Preserve the legacy local mode behaviour.
+                        NetUtils.saveCertificate(cert, serverCertFile);
+                        NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+                    } else {
+                        cert = NetUtils.loadCertificate(serverCertFile);
+                    }
+
+                    if (cert == null) {
+                        throw new IllegalStateException("Server certificate couldn't be loaded");
+                    }
+                    // Keep the legacy local mode behaviour unchanged.
+                    sslCtx = buildSslContext();
+                    certificateFingerprint = NetUtils.getFingerprint(cert);
                 }
-
-                X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
-
-                if (cert == null) {
-                    throw new IllegalStateException("Server certificate couldn't be loaded");
-                }
-
-                // Shiny TLS 1.3
-                sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
-                        .sslProvider(SslProvider.JDK)
-                        .protocols("TLSv1.3")
-                        .ciphers(Arrays.asList(
-                                "TLS_AES_128_GCM_SHA256",
-                                "TLS_AES_256_GCM_SHA384",
-                                "TLS_CHACHA20_POLY1305_SHA256"))
-                        .sessionTimeout(1800)
-                        .build();
-
-                // generate sha256 from cert as a fingerprint
-                certificateFingerprint = NetUtils.getFingerprint(cert);
                 if (certificateFingerprint != null) {
                     LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
                 }
@@ -172,6 +172,18 @@ public class NettyServer {
         }
 
         return Optional.ofNullable(serverChannel);
+    }
+
+    private SslContext buildSslContext() throws Exception {
+        return SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
+                .sslProvider(SslProvider.JDK)
+                .protocols("TLSv1.3")
+                .ciphers(Arrays.asList(
+                        "TLS_AES_128_GCM_SHA256",
+                        "TLS_AES_256_GCM_SHA384",
+                        "TLS_CHACHA20_POLY1305_SHA256"))
+                .sessionTimeout(1800)
+                .build();
     }
 
     public boolean shouldHost() {

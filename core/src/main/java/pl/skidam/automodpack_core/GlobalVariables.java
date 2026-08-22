@@ -6,6 +6,7 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.*;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.security.SharedSecurityPaths;
 
 import java.nio.file.Path;
 
@@ -42,10 +43,13 @@ public class GlobalVariables {
     public static Path clientDeletionTimeStamps = automodpackDir.resolve("automodpack-deletion-timestamps-files.json");
     public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
     public static final Path privateDir = automodpackDir.resolve(".private");
-    public static final Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");
+    // These paths remain mutable because server config is loaded after this
+    // class is initialized. Client-only files intentionally stay local.
+    public static Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");
     public static final Path knownHostsFile = privateDir.resolve("automodpack-known-hosts.json");
-    public static final Path serverCertFile = privateDir.resolve("cert.crt");
-    public static final Path serverPrivateKeyFile = privateDir.resolve("key.pem");
+    public static Path serverCertFile = privateDir.resolve("cert.crt");
+    public static Path serverPrivateKeyFile = privateDir.resolve("key.pem");
+    public static volatile SharedSecurityPaths sharedSecurityPaths;
 
 
     // Client
@@ -55,4 +59,5 @@ public class GlobalVariables {
     public static final Path modpacksDir = automodpackDir.resolve("modpacks");
 
     public static Path selectedModpackDir;
+
 }

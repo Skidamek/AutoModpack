@@ -15,6 +15,10 @@ public class ConfigUtils {
     }
 
     public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config) {
+        if (config.sharedSecurity == null) {
+            config.sharedSecurity = new Jsons.SharedSecurityFields();
+        }
+
         Set<String> fixedSyncedFiles = new HashSet<>(config.syncedFiles.size());
         Set<String> fixedAllowEditsInFiles = new HashSet<>(config.allowEditsInFiles.size());
         Set<String> fixedForceCopyFilesToStandardLocation = new HashSet<>(config.forceCopyFilesToStandardLocation.size());

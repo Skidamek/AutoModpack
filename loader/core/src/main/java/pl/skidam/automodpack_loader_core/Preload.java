@@ -6,6 +6,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.*;
+import pl.skidam.automodpack_core.security.ServerSecurityPathManager;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
@@ -171,6 +172,17 @@ public class Preload {
             }
 
             ConfigUtils.normalizeServerConfig(serverConfig);
+
+            // Resolve shared security paths only after the server config has
+            // been loaded. This must happen before any host secret or TLS use.
+            ServerSecurityPathManager.configure(serverConfig);
+            if (sharedSecurityPaths != null) {
+                try {
+                    sharedSecurityPaths.ensureDirectory();
+                } catch (IOException exception) {
+                    throw new IllegalStateException("Could not initialize shared security directory", exception);
+                }
+            }
 
             // Save changes
             ConfigTools.save(serverConfigFile, serverConfig);

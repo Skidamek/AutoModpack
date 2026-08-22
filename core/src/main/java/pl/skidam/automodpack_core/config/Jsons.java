@@ -115,6 +115,7 @@ public class Jsons {
         public long secretLifetime = 336; // 336 hours = 14 days
         public boolean selfUpdater = false;
         public Set<String> acceptedLoaders = new HashSet<>();
+        public SharedSecurityFields sharedSecurity = new SharedSecurityFields();
 
         public static class FileToDelete { // Same as in ModpackContentFields.FileToDelete but without timestamp
             public final String file;
@@ -124,6 +125,53 @@ public class Jsons {
                 this.file = file;
                 this.sha1 = sha1;
             }
+        }
+    }
+
+    /**
+     * Optional server-side storage shared by multiple AutoModpack JVMs.
+     * The default keeps the pre-4.0.6 local-file behaviour unchanged.
+     */
+    public static class SharedSecurityFields {
+        public boolean enabled = false;
+        public String nodeId = "";
+        public String directory = "";
+        public String secretsFile = "host-secrets.json";
+        public String secretsLockFile = "host-secrets.lock";
+        public String certificateFile = "cert.crt";
+        public String privateKeyFile = "key.pem";
+        public String tlsLockFile = "tls.lock";
+        public long lockTimeoutMs = 10000;
+        public int backupCount = 3;
+        public boolean fsync = true;
+        public boolean failClosed = true;
+        public boolean autoGenerateCertificate = false;
+        public String authorizationMode = "ISSUER_AT_LOGIN";
+        public int maxEntries = 10000;
+    }
+
+    public static class SharedSecretsFields {
+        public int formatVersion = 1;
+        public long generation = 0;
+        public Map<String, SharedSecretEntry> entries = new HashMap<>();
+        public String checksum = "";
+    }
+
+    public static class SharedSecretEntry {
+        public String playerUuid;
+        public String issuerNodeId;
+        public long issuedAt;
+        public long expiresAt;
+
+        public SharedSecretEntry() {
+            // Gson constructor
+        }
+
+        public SharedSecretEntry(String playerUuid, String issuerNodeId, long issuedAt, long expiresAt) {
+            this.playerUuid = playerUuid;
+            this.issuerNodeId = issuerNodeId;
+            this.issuedAt = issuedAt;
+            this.expiresAt = expiresAt;
         }
     }
 

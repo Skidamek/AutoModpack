@@ -13,15 +13,19 @@ import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Collection;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HexFormat;
+import java.util.ArrayList;
+import java.util.List;
 
 public class NetUtils {
 
@@ -110,6 +114,93 @@ public class NetUtils {
             CertificateFactory cf = CertificateFactory.getInstance("X.509");
             return (X509Certificate) cf.generateCertificate(in);
         }
+    }
+
+    public static List<X509Certificate> loadCertificateChain(Path path) throws Exception {
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalStateException("Certificate file does not exist: " + path.toAbsolutePath().normalize());
+        }
+        try (InputStream in = new LockFreeInputStream(path)) {
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            Collection<? extends java.security.cert.Certificate> certificates = cf.generateCertificates(in);
+            List<X509Certificate> result = new ArrayList<>(certificates.size());
+            for (java.security.cert.Certificate certificate : certificates) {
+                if (!(certificate instanceof X509Certificate x509Certificate)) {
+                    throw new GeneralSecurityException("Certificate chain contains a non-X.509 certificate");
+                }
+                result.add(x509Certificate);
+            }
+            if (result.isEmpty()) {
+                throw new GeneralSecurityException("Certificate chain is empty");
+            }
+            return result;
+        }
+    }
+
+    public static PrivateKey loadPrivateKey(Path path) throws Exception {
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalStateException("Private key file does not exist: " + path.toAbsolutePath().normalize());
+        }
+        String pem = Files.readString(path, StandardCharsets.US_ASCII);
+        String encoded = pem
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replaceAll("\\s", "");
+        if (encoded.isBlank()) {
+            throw new GeneralSecurityException("Private key PEM is empty");
+        }
+        byte[] der;
+        try {
+            der = Base64.getDecoder().decode(encoded);
+        } catch (IllegalArgumentException exception) {
+            throw new GeneralSecurityException("Private key PEM is not valid base64", exception);
+        }
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(der);
+        List<String> algorithms = List.of("RSA", "EC", "Ed25519", "DSA");
+        for (String algorithm : algorithms) {
+            try {
+                return KeyFactory.getInstance(algorithm).generatePrivate(keySpec);
+            } catch (GeneralSecurityException ignored) {
+                // Try the next standard PKCS#8 algorithm.
+            }
+        }
+        throw new GeneralSecurityException("Unsupported or invalid PKCS#8 private key");
+    }
+
+    /**
+     * Parse the complete chain, validate its validity window and prove that
+     * the leaf public key matches the PKCS#8 private key.
+     */
+    public static X509Certificate validateCertificateAndPrivateKey(Path certificatePath, Path privateKeyPath) throws Exception {
+        List<X509Certificate> chain = loadCertificateChain(certificatePath);
+        for (X509Certificate certificate : chain) {
+            certificate.checkValidity();
+        }
+        X509Certificate leaf = chain.get(0);
+        PrivateKey privateKey = loadPrivateKey(privateKeyPath);
+        if (!leaf.getPublicKey().getAlgorithm().equalsIgnoreCase(privateKey.getAlgorithm())) {
+            throw new GeneralSecurityException("Certificate public key algorithm does not match private key algorithm");
+        }
+
+        String signatureAlgorithm = switch (privateKey.getAlgorithm().toUpperCase()) {
+            case "RSA" -> "SHA256withRSA";
+            case "EC" -> "SHA256withECDSA";
+            case "DSA" -> "SHA256withDSA";
+            case "ED25519" -> "Ed25519";
+            default -> throw new GeneralSecurityException("Unsupported private key algorithm: " + privateKey.getAlgorithm());
+        };
+        byte[] challenge = new byte[32];
+        SecureRandom.getInstanceStrong().nextBytes(challenge);
+        Signature signature = Signature.getInstance(signatureAlgorithm);
+        signature.initSign(privateKey);
+        signature.update(challenge);
+        byte[] proof = signature.sign();
+        signature.initVerify(leaf.getPublicKey());
+        signature.update(challenge);
+        if (!signature.verify(proof)) {
+            throw new GeneralSecurityException("Certificate and private key do not match");
+        }
+        return leaf;
     }
 
     public static void savePrivateKey(PrivateKey key, Path path) throws Exception {
