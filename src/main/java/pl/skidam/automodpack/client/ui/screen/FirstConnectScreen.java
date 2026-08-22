@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.Button;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
@@ -30,7 +31,10 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public final class FirstConnectScreen extends VersionedScreen {
 	private final ModpackUpdater updater;
 	private final SelectedModpackTarget target;
-	private boolean archiveExistingMods;
+	// Unchecked by default: existing mods are preserved in the vault, then removed unless the player checks this.
+	// Checked = keep the existing mods in place; nothing is removed.
+	private boolean keepExistingMods;
+	private Button cleanupButton;
 	private boolean finished;
 
 	public FirstConnectScreen(ModpackUpdater updater) {
@@ -43,6 +47,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		this.addActionArea(310, this.height - 28, buildRows());
+		refreshCleanupTooltip();
 	}
 
 	private ActionRow[] buildRows() {
@@ -50,7 +55,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		if (GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes()))
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (updater.firstInstallLocalModCount() > 0) {
-			String cleanupKey = archiveExistingMods ? "automodpack.firstConnect.archiveExistingOn" : "automodpack.firstConnect.archiveExistingOff";
+			String cleanupKey = keepExistingMods ? "automodpack.firstConnect.archiveExistingOn" : "automodpack.firstConnect.archiveExistingOff";
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 					optionalAction(VersionedText.translatable(cleanupKey, updater.firstInstallLocalModCount()), button -> toggleExistingMods())));
 		}
@@ -68,15 +73,28 @@ public final class FirstConnectScreen extends VersionedScreen {
 			return;
 		}
 		finished = true;
-		updater.setFirstInstallLocalModCleanup(archiveExistingMods);
+		updater.setFirstInstallLocalModCleanup(!keepExistingMods);
 		ScreenManager.waiting();
 		updater.startConfirmedUpdate();
 	}
 
 	private void toggleExistingMods() {
 		if (finished) return;
-		archiveExistingMods = !archiveExistingMods;
+		keepExistingMods = !keepExistingMods;
+		updater.setFirstInstallLocalModCleanup(!keepExistingMods);
 		rebuild();
+	}
+
+	/** Hover help for the cleanup toggle: names the exact files the choice applies to. */
+	private void refreshCleanupTooltip() {
+		if (updater.firstInstallLocalModCount() <= 0) return;
+		for (var child : this.children()) {
+			if (!(child instanceof Button button)) continue;
+			if (!button.getMessage().getString().contains("Keep " + updater.firstInstallLocalModCount() + " existing mod files")) continue;
+			String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", updater.firstInstallLocalModPaths()), 240, 8));
+			setTooltip(button, VersionedText.translatable("automodpack.firstConnect.cleanupTooltip", joined));
+			return;
+		}
 	}
 
 	private void customize() {
@@ -85,7 +103,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 			try {
 				if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) throw new IllegalStateException("Modpack confirmation is no longer active");
 				updater.selectTarget(intent);
-				updater.setFirstInstallLocalModCleanup(archiveExistingMods);
+				updater.setFirstInstallLocalModCleanup(!keepExistingMods);
 				ScreenManager.waiting();
 				updater.startConfirmedUpdate();
 			} catch (RuntimeException e) {
@@ -153,11 +171,11 @@ public final class FirstConnectScreen extends VersionedScreen {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
 		y += 16;
 		if (updater.firstInstallLocalModCount() > 0) {
-			String existingKey = archiveExistingMods ? "automodpack.firstConnect.existingModsArchive" : "automodpack.firstConnect.existingModsKeep";
+			String existingKey = keepExistingMods ? "automodpack.firstConnect.existingModsKeep" : "automodpack.firstConnect.existingModsArchive";
 			for (String line : wrapToWidth(this.font, VersionedText.translatable(existingKey, updater.firstInstallLocalModCount()).getString(), Math.max(1, this.width - 20), 3)) {
 				if (y + 9 > contentBottom) break;
 				drawCenteredTextWithShadow(matrices, this.font,
-						VersionedText.literal(line).withStyle(archiveExistingMods ? ChatFormatting.GRAY : ChatFormatting.YELLOW),
+						VersionedText.literal(line).withStyle(keepExistingMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY),
 						this.width / 2, y, TextColors.WHITE);
 				y += 13;
 			}
