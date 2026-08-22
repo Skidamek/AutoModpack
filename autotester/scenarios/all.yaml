@@ -1217,14 +1217,14 @@ flow:
     name: opt out of keeping existing mods
     select: { text: "[ ] Keep 2 existing mod files" }
   - do: wait_for
-    name: stay on first-install consent after opting out
-    until: { element: { text: "[ ] Keep 2 existing mod files", enabled: true } }
+    name: show unchecked-to-checked toggle after opting out
+    until: { element: { text: "[x] Keep 2 existing mod files", enabled: true } }
   - do: screenshot
     name: capture explicit first-install cleanup consent
     file: all-first-install-cleanup-consent
   - do: click
     name: revoke first-install cleanup once before final consent
-    select: { text: "[ ] Keep 2 existing mod files" }
+    select: { text: "[x] Keep 2 existing mod files" }
   - do: click
     name: give final first-install cleanup consent
     select: { text: "[ ] Keep 2 existing mod files" }

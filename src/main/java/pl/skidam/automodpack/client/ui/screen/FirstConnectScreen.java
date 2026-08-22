@@ -50,8 +50,9 @@ public final class FirstConnectScreen extends VersionedScreen {
 		if (GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes()))
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (updater.firstInstallLocalModCount() > 0) {
+			String cleanupKey = archiveExistingMods ? "automodpack.firstConnect.archiveExistingOn" : "automodpack.firstConnect.archiveExistingOff";
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-					optionalAction(VersionedText.translatable("automodpack.firstConnect.archiveExistingOff", updater.firstInstallLocalModCount()), button -> toggleExistingMods())));
+					optionalAction(VersionedText.translatable(cleanupKey, updater.firstInstallLocalModCount()), button -> toggleExistingMods())));
 		}
 		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,

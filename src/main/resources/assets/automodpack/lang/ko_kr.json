@@ -321,5 +321,6 @@
   "automodpack.error.deactivationIncomplete": "모드팩 비활성화가 완료되지 않았습니다",
   "automodpack.error.repair": "로컬 모드팩 복구가 완료되지 않았습니다",
   "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
-  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault.",
+  "automodpack.firstConnect.archiveExistingOn": "[x] Keep %s existing mod files"
 }
