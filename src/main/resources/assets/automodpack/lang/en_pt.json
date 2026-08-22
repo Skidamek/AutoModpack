@@ -321,5 +321,6 @@
   "automodpack.error.deactivationIncomplete": "The modpack deactivation did not complete aboard",
   "automodpack.error.repair": "The local modpack repair did not complete aboard",
   "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
-  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault.",
+  "automodpack.firstConnect.archiveExistingOn": "[x] Keep %s existing mod files"
 }

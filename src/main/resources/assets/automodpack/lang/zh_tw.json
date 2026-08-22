@@ -321,5 +321,6 @@
   "automodpack.error.deactivationIncomplete": "模組包停用未完成",
   "automodpack.error.repair": "本機模組包修復未完成",
   "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
-  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault.",
+  "automodpack.firstConnect.archiveExistingOn": "[x] Keep %s existing mod files"
 }

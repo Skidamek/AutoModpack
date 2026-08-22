@@ -402,10 +402,15 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     ctx.bridge = bridge
 
     # First-install cleanup is explicit and reversible before confirmation; keeping mods is the default.
-    # The toggle button label never changes; the status line carries the state (yellow keeps, gray removes).
+    # The toggle flips only its [ ]/[x] glyph (same width); the status line carries the state (yellow keeps, gray removes).
     for name in ("local-one.jar", "local-two.jar"):
         (ctx.game_dir / "mods" / name).write_bytes(b"local")
     bridge.screen = "first_connection"
+    assert any(button["text"] == "[ ] Keep 2 existing mod files" for button in bridge.gui()["buttons"])
+    bridge.click(89)
+    assert any(button["text"] == "[x] Keep 2 existing mod files" for button in bridge.gui()["buttons"])
+    assert all("Archive" not in button["text"] for button in bridge.gui()["buttons"])
+    bridge.click(89)
     assert any(button["text"] == "[ ] Keep 2 existing mod files" for button in bridge.gui()["buttons"])
     assert any(button["text"] == "Continue with defaults" for button in bridge.gui()["buttons"])
 
