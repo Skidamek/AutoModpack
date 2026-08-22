@@ -35,7 +35,10 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 **Location:** `~/automodpack/automodpack-server.json`
 
 **Example Configuration:**
-```json
+
+<CodeTabs>
+
+```json !!tabs
 {
   "modpackHost": true,
   "generateModpackOnStart": true,
@@ -55,13 +58,18 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 }
 ```
 
+</CodeTabs>
+
 **Key Configuration Options:**
 
 - **`syncedFiles`**: List of files and folders to sync to clients. Use `*` for wildcards and `**` for recursive matching. Prefix with `!` to exclude
 - **`allowEditsInFiles`**: Files that clients can edit locally. These files are downloaded once and not updated automatically
   - **Example:** To always update FancyMenu configs, remove `/config/**` from `allowEditsInFiles`
   - **⚠️ Warning:** Removing `/config/**` will make ALL config files non-editable. If you only want specific config folders to be always updated, use exclusions instead:
-    ```json
+
+    <CodeTabs>
+
+    ```json !!tabs
     "syncedFiles": [
       "/config/**"
     ],
@@ -70,6 +78,8 @@ Restart your game. Your server's modpack should now be loaded, and you should be
       "!/config/fancymenu/**"
     ]
     ```
+
+    </CodeTabs>
 - **`forceCopyFilesToStandardLocation`**: Use with caution. Forces files to be copied to the standard Minecraft folders (breaks seamless updates)
 - **Other options**: See the [full configuration page](configuration/server-config) for detailed explanations of all settings
 
@@ -78,12 +88,17 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 - **Client-side mods**: Place in `~/automodpack/host-modpack/main/mods` (e.g., visual enhancements)
 - **Server-side mods (synced)**: Place in the standard `mods` folder; they will be synced to clients
 - **Excluding server-only mods example**:
-  ```json
+
+  <CodeTabs>
+
+  ```json !!tabs
   "syncedFiles": [
     "/mods/*.jar",
     "!/mods/lithostitched-fabric*.jar"
   ]
   ```
+
+  </CodeTabs>
 
 ---
 
@@ -107,7 +122,10 @@ After installation, restart Minecraft to load the modpack.
 - For files that must always be in sync (e.g., specific configs), ensure they are in `syncedFiles` and not in `allowEditsInFiles`
 
 **Example for FancyMenu configs:**
-```json
+
+<CodeTabs>
+
+```json !!tabs
 "syncedFiles": [
   "/config/fancymenu/**"
 ],
@@ -115,6 +133,8 @@ After installation, restart Minecraft to load the modpack.
   "/options.txt"
 ]
 ```
+
+</CodeTabs>
 
 This ensures FancyMenu configs are always updated, while players can still edit their options.
 

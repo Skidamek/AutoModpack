@@ -10,6 +10,8 @@
 | `updateSelectedModpackOnLaunch`  | `true`           | Turn on/off automatic modpack updates when launching the game.                                                                     |
 | `selfUpdater`                    | `false`          | Turn on/off automodpack self-updates. This does not affect the mod's activity in installing modpacks.                              |
 | `syncAutoModpackVersion`         | `true`           | Turn on/off automatic syncing of AutoModpack version with the server.                                                              |
-| `syncLoaderVersion`              | `false`          | Turn on/off automatic syncing of the modloader version with the server. (EXPERIMENTAL - it works only on prism launcher and forks) |
+| `syncLoaderVersion`              | `true`           | Turn on/off automatic syncing of the modloader version with the server. (EXPERIMENTAL - it works only on prism launcher and forks) |
 | `playMusic`                      | `true`           | Turn on/off elevator music while downloading modpack in game.                                                                      |
 | `allowRemoteNonModpackDeletions` | `true`           | Allow remote server to delete non-modpack files from your client.                                                                  |
+
+> #### **Note:** Loader version syncing matches the server's loader version exactly, not only newer ones. If the server advertises an *older* loader version than the one installed locally, the client will be synced back to match the server. Server owners should keep their `loaderVersion` accurate.

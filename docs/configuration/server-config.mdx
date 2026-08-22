@@ -56,12 +56,17 @@ This setting accepts a list of objects containing a path and a SHA1 hash.
 
 ### Example
 
-```json
+
+<CodeTabs>
+
+```json !!tabs
 "nonModpackFilesToDelete": {
   "/mods/lithium-fabric-0.15.1+mc1.21.1.jar": "6038cf136da413753345bf9d48e5798241439894",
   "/mods/": "97452cfadfde1f8f8c67838643019eabafa58fbb"
 },
 ```
+
+</CodeTabs>
 
 <details>
 <summary>How to get the SHA1 Hash</summary>
@@ -70,9 +75,14 @@ You must provide the hash for the specific version of the file you want to delet
 
 ### Option 1: Linux Command Line
 
-```bash
+
+<CodeTabs>
+
+```bash !!tabs
 sha1sum path/to/file
 ```
+
+</CodeTabs>
 
 ### Option 2: Online Tools
 

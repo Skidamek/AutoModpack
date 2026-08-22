@@ -5,7 +5,7 @@ plugins {
     id("net.fabricmc.fabric-loom") version "1.17-SNAPSHOT" apply false
     id("net.neoforged.moddev") version "2.0.142" apply false
     id("com.gradleup.shadow") version "9.6.1" apply false
-    id("org.moddedmc.wiki.toolkit") version "0.4+"
+    id("org.moddedmc.wiki.toolkit") version "0.4.3"
 }
 
 wiki {

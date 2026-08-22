@@ -21,7 +21,10 @@ Si vous hébergez le modpack sur un sous-domaine ou domaine différent de celui 
 
 Installez Certbot sur votre PC ou serveur, puis exécutez la commande suivante et suivez les instructions fournies par Certbot pour obtenir un certificat pour votre domaine :
 
-```bash
+
+<CodeTabs>
+
+```bash !!tabs
 # certbot certonly --manual --preferred-challenges dns -d <modpack-host-domain> -d <minecraft-server-domain>
 
 
@@ -72,3 +75,7 @@ Si votre serveur est vulnérable et que vous ne vérifiez pas le certificat, vou
 * mots de passe robustes
 * authentification à deux facteurs
 * mises à jour régulières de votre logiciel serveur
+
+```
+
+</CodeTabs>

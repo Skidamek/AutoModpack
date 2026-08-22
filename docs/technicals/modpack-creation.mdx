@@ -25,7 +25,10 @@ The `host-modpack` folder is synced implicitly, it doesn't require config, autom
 
 Assuming you have the following server file structure:
 
-```
+
+<CodeTabs>
+
+```text !!tabs
 ├── automodpack
 │   ├── automodpack-client.json
 │   ├── automodpack-server.json
@@ -62,6 +65,9 @@ Assuming you have the following server file structure:
 
 ```
 
+</CodeTabs>
+
+
 With a [server config](../configuration/server-config) of:
 
 | Setting                            | Values                                                                     |
@@ -72,7 +78,10 @@ With a [server config](../configuration/server-config) of:
 
 
 The resulting modpack on client would contain:
-```
+
+<CodeTabs>
+
+```text !!tabs
 ├── config
 │   ├── my-super.conf (editable)
 │   └── shadow.txt (editable)
@@ -92,6 +101,9 @@ The resulting modpack on client would contain:
 └── shaderpacks
     └── the-ultimate-shader.zip
 ```
+
+</CodeTabs>
+
 
 As you can see there are files included using both methods, they complement each other these two make up our single modpack bucket/group (currently named `main` - in the future there will be custom grouping available).
 
