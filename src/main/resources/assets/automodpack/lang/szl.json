@@ -8,7 +8,6 @@
   "automodpack.restart.secDescription": "Chcesz terŏz resztartnōńć?",
   "automodpack.restart.confirm": "Ja, zawrzij gre",
   "automodpack.restart.cancel": "Niy, wrōć do gry",
-
   "automodpack.selection.title": "Nastŏwienia modpaka",
   "automodpack.selection.description": "Wybier, kere ôpcjonalne kōnsek modpaka chcesz.",
   "automodpack.selection.saved": "Twōj wybōr je zapisany.",
@@ -23,7 +22,6 @@
   "automodpack.selection.shortButton": "Nastŏwienia",
   "automodpack.selection.preview": "Podglōnd celu",
   "automodpack.selection.categoryExplanation": "Prziski kategoryji wybiyrajōm jejich gōpy. AutoModpak zapisuje wybory kategoryji ôsobno ôd wyborōw pojedynczych gōp.",
-
   "automodpack.firstConnect.title": "Nastŏw tyn modpak",
   "automodpack.firstConnect.description": "Ôbejrzij dōmyślnō zawartość, niż jō sćiōngniesz.",
   "automodpack.firstConnect.requestedGroups": "Żŏndane gōpy: %s",
@@ -32,14 +30,9 @@
   "automodpack.firstConnect.noPatchNotes": "Dlo tyj zawartości niy wydano żŏdnych notatek ô zmianach.",
   "automodpack.firstConnect.bundleExplanation": "Gōpy to paczki ôpcjonalnych funkcyj.",
   "automodpack.firstConnect.continue": "Jedź dali z dōmyślnymi",
-  "automodpack.firstConnect.continueKeepMods": "Jedź dali i ôstŏw mody",
-  "automodpack.firstConnect.archiveExistingOff": "[ ] Ôstŏw %s istniōncych plikōw w folderze mods",
-  "automodpack.firstConnect.archiveExistingOn": "[x] Zachowōj i wyciep %s istniōncych plikōw",
-  "automodpack.firstConnect.existingModsKeep": "Wykryto %s istniōncych plikōw. Dōmyślnie zostanōm.",
-  "automodpack.firstConnect.existingModsArchive": "%s istniōncych plikōw bydzie zachowanych przed wyciepniyncym.",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "Nastŏw gōpy",
   "automodpack.firstConnect.cancel": "Niy sćiōngŏj",
-
   "automodpack.patchNotes.latest": "Nojnowŏższe notatki ô zmianach",
   "automodpack.patchNotes.none": "Niy ma wydanych notatek ô zmianach.",
   "automodpack.patchNotes.all": "Pokŏż wszyjske notatki ô zmianach",
@@ -50,7 +43,6 @@
   "automodpack.summary.noRestart": "Resztart niy bydzie potrzebny",
   "automodpack.summary.restartRequired": "Resztart je potrzebny",
   "automodpack.summary.restartReason": "Powōd resztartu: %s",
-
   "automodpack.packManager.title": "Zainstalowane modpaki",
   "automodpack.packManager.description": "Wybier modpak, coby ôbejrzeć jego gōpy. Wybranie wiersza niy aktywuje modpaka.",
   "automodpack.packManager.empty": "Na tym klijyncie niy ma dostympnych kōmpletnych zŏpisōw modpakōw.",
@@ -70,13 +62,11 @@
   "automodpack.packDetails.storageDescription": "Ôtwōrz zachowane pliki abo wyciep niypotrzebne dane modpaka.",
   "automodpack.packDetails.localStorage": "Wyczyść lokalne dane",
   "automodpack.packDetails.working": "Robiymy...",
-
   "automodpack.changelog.view": "Pokŏż historyjo zmian",
   "automodpack.changelog.noChanges": "Niy znŏdłech żŏdnych zmian.",
   "automodpack.changelog.openPage": "Ôtwōrz strōna projektu",
   "automodpack.changelog.noPage": "Niy ma strōny projektu",
   "automodpack.changelog.latestNote": "Nojnowŏższy wpis ô zmianach: %s",
-
   "automodpack.browser.search": "Szukej plikōw",
   "automodpack.browser.all": "Wszyjske",
   "automodpack.browser.contentFilter": "Zawartość: %s",
@@ -110,12 +100,10 @@
   "automodpack.browser.content.resourcepack": "Paczka zasobōw",
   "automodpack.browser.content.mc_options": "Ôpcyje Minecrafta",
   "automodpack.browser.content.other": "Inksze",
-
   "automodpack.download.calculating": "Liczymy...",
   "automodpack.download.eta": "Czas do kōńca: %s",
   "automodpack.download.downloading": "Sćiōngōmy:",
   "automodpack.download.noFiles": "Niy ma żŏdnych plikōw do sćiōngniyncio!",
-
   "automodpack.error": "Coś sie skopało!",
   "automodpack.error.openLogs": "Ôtwōrz logi",
   "automodpack.error.copyDetails": "Kopiuj szczegōły",
@@ -136,7 +124,6 @@
   "automodpack.error.update": "AutoModpak niy poradziōł wrazić aktualizacyji modpaka.",
   "automodpack.error.corruptState": "AutoModpak znŏdł niyplatne lokalne dane modpaka.",
   "automodpack.error.internal": "AutoModpak trefiōł na niespodziany feler.",
-
   "automodpack.validation.title": "Sprawdzanie certyfikatu",
   "automodpack.validation.description1": "Sprawdzanie chrōni cie przed atakami typu man-in-the-middle.",
   "automodpack.validation.description2": "Trza to zrobić ino rŏz. Weź sztympel ôd operatora serwera.",
@@ -144,14 +131,12 @@
   "automodpack.validation.confirm.text": "Wklej cołki sztympel, coby go sprawdzić:",
   "automodpack.validation.verify": "Sprawdź",
   "automodpack.validation.failed": "Sztymple sie niy zgadzajōm. Napastnik może udŏwać serwer.",
-
   "automodpack.validation.skip.title": "Ryzyko bezpieczyństwa",
   "automodpack.validation.skip.warning1": "Bez sprawdzynio napastniki mogōm wciepnōńć złośliwe mody.",
   "automodpack.validation.skip.warning2": "Mody mogōm mieć dostymp do twoich plikōw i wykonywać libowolny kod.",
   "automodpack.validation.skip.instruction": "Ômiń ino wtedy, kej wiysz, co robisz.",
   "automodpack.validation.skip.confirm.text": "Wpisz niżyj podanō fraza, coby potwiyrdzić:",
   "automodpack.validation.skip.failed": "Zły tekst",
-
   "automodpack.retry": "Sprōbuj jeszcze rŏz",
   "automodpack.cancel": "Ôdwołej",
   "automodpack.back": "Wrōć",
@@ -174,7 +159,6 @@
   "automodpack.wait": "Czekej...",
   "automodpack.skip": "Ômiń",
   "automodpack.learnmore": "Dowiydz sie wiyncyj",
-
   "automodpack.pin.active": "Przibity certyfikat (%s): %s (kliknij, coby wyciepać)",
   "automodpack.pin.reason.address": "adres",
   "automodpack.pin.reason.seed": "ziarno startowe",
@@ -182,14 +166,12 @@
   "automodpack.pin.removed": "Przibity certyfikat wyciepany",
   "automodpack.pin.invalid": "Niyplatny przibity adres. Wklej cołki adres ôd administratōra serwera.",
   "automodpack.pin.mismatch": "Przibity certyfikat sie niy zgadzŏ!",
-
   "automodpack.ui.previous": "< Przedni",
   "automodpack.ui.next": "Dali >",
   "automodpack.ui.page": "%s / %s",
   "automodpack.ui.info": "Informacyjo",
   "automodpack.ui.none": "nic",
   "automodpack.ui.general": "Ôgōlne",
-
   "automodpack.changelog.title": "Historyjo zmian",
   "automodpack.history.title": "Historyjo zawartości",
   "automodpack.history.titleNamed": "Historyjo zawartości %s",
@@ -209,11 +191,9 @@
   "automodpack.history.details.empty": "Niy ma żŏdnych zmiōn katalogu.",
   "automodpack.files.title": "%s plikōw ôd modpaka",
   "automodpack.files.description": "Cołki spis zainstalowanych plikōw modpaka.",
-
   "automodpack.firstConnect.selectedSummary": "Wybrane gōpy: %s  Pliki: %s  Rozmiar zawartości: %s",
   "automodpack.firstConnect.includedGroups": "Dołōne gōpy: %s",
   "automodpack.firstConnect.unavailableOldChoices": "Niydostympne stare wybory: %s",
-
   "automodpack.groupInspector.title": "Szczegōły funkcyji",
   "automodpack.groupInspector.browseFiles": "Przejrzij pliki",
   "automodpack.groupInspector.filesDescription": "Pliki dŏne ôd tyj funkcyji",
@@ -224,7 +204,6 @@
   "automodpack.groupInspector.optional": "Ôpcjonalne",
   "automodpack.groupInspector.status": "%s  |  %s plikōw",
   "automodpack.groupInspector.noDescription": "Niy ma wydanego ôpisu.",
-
   "automodpack.selection.platformSummary": "Platforma: %s  Wybrane gōpy: %s",
   "automodpack.selection.category": "Kategoryjo: %s",
   "automodpack.selection.requiredAlways": "Wymŏgane: zawdy dołōne",
@@ -260,7 +239,6 @@
   "automodpack.selection.sourcesCancelled": "Zewnyntrzne źrōdła: szukanie ôdwołane. Sćiōnganie ze serwera dali funguje",
   "automodpack.selection.sourcesResolving": "Zewnyntrzne źrōdła: szukōmy (%s / %s plikōw pasuje)",
   "automodpack.selection.sourcesResolved": "Zewnyntrzne źrōdła: %s / %s plikōw pasuje. Niyznŏlezione pliki lecōm ze serwera",
-
   "automodpack.management.remove": "Wyciep",
   "automodpack.management.update": "Aktualizuj",
   "automodpack.management.repair": "Napraw",
@@ -270,18 +248,15 @@
   "automodpack.management.preservedFiles": "Zachowane pliki",
   "automodpack.management.history": "Historyjo",
   "automodpack.management.files": "Pliki",
-
   "automodpack.packManager.activeMarker": "[aktywny]",
   "automodpack.packManager.reviewMarker": "[ôbejrzij przełōnczynie]",
   "automodpack.packManager.connected": "połōnczōny",
   "automodpack.packManager.localRecord": "lokalny zŏpis",
-
   "automodpack.patchNotes.title": "Historyjo notatek ô zmianach",
   "automodpack.patchNotes.titleNamed": "Historyjo notatek ô zmianach %s",
   "automodpack.patchNotes.description": "Wszyjske dostane notatki generacyjōw",
   "automodpack.patchNotes.entry": "Aktualizacyjo %s",
   "automodpack.patchNotes.empty": "Niy ma dostympnych notatek ô zmianach.",
-
   "automodpack.repair.title": "Napraw modpak",
   "automodpack.repair.titleNamed": "Napraw %s",
   "automodpack.repair.healthy": "Zarzōndzane pliki przeszły wszyjske sprawdzania spōjności",
@@ -300,7 +275,6 @@
   "automodpack.repair.updateNeededOffline": "Niykere bajty niy sōm dostympne lokalnie. Zaktualizuj, kej serwer bydzie dostympny.",
   "automodpack.repair.working": "Sprawdzōmy i naprawiōmy lokalne pliki...",
   "automodpack.repair.receipt": "CAS zbudowane na nowo: %s  Naprawione: %s  Zresetowane: %s  Zachowane: %s",
-
   "automodpack.vault.title": "Zachowane pliki",
   "automodpack.vault.titleNamed": "%s zachowanych plikōw",
   "automodpack.vault.loading": "Ładujymy zachowane pliki...",
@@ -323,7 +297,6 @@
   "automodpack.vault.reason.strict_install": "Czystŏ instalacyjo",
   "automodpack.vault.reason.strict_repair": "Porzōndkowanie przi naprawie",
   "automodpack.vault.reason.editable_reset": "Reset edytowalnego pliku",
-
   "automodpack.update.title": "Ôbejrzij aktualizacyjo",
   "automodpack.update.deactivationTitle": "Wyłōncz modpak",
   "automodpack.update.deactivateNamed": "Wyłōncz %s",
@@ -338,7 +311,6 @@
   "automodpack.update.apply": "Aktualizuj",
   "automodpack.update.staleSelection": "Niykere piyrwy wybrane treści niy sōm już dostympne.",
   "automodpack.update.groupsSelected": "Wybrane gōpy zawartości: %s",
-
   "automodpack.preparing.title": "Przigotowanie aktualizacyji",
   "automodpack.restart.title": "Resztart",
   "automodpack.download.title": "Sćiōnganie",
@@ -347,5 +319,7 @@
   "automodpack.error.titleLine": "[AutoModpak] %s!",
   "automodpack.error.removalIncomplete": "Wyciepniyncie modpaka niy skōńczyło sie",
   "automodpack.error.deactivationIncomplete": "Wyłōnczyniy modpaka niy skōńczyło sie",
-  "automodpack.error.repair": "Lokalnŏ naprawa modpaka niy skōńczyła sie"
+  "automodpack.error.repair": "Lokalnŏ naprawa modpaka niy skōńczyła sie",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }

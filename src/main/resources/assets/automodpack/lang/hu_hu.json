@@ -30,11 +30,7 @@
   "automodpack.firstConnect.noPatchNotes": "Ehhez a tartalomhoz nem tettek közzé javítási megjegyzéseket.",
   "automodpack.firstConnect.bundleExplanation": "A csoportok választható szolgáltatások csomagjai.",
   "automodpack.firstConnect.continue": "Folytatás az alapértelmezésekkel",
-  "automodpack.firstConnect.continueKeepMods": "Folytatás a modok megtartásával",
-  "automodpack.firstConnect.archiveExistingOff": "[ ] %s meglévő fájl megtartása a mods mappában",
-  "automodpack.firstConnect.archiveExistingOn": "[x] %s meglévő fájl megőrzése és eltávolítása",
-  "automodpack.firstConnect.existingModsKeep": "%s meglévő fájlt találtunk. Alapértelmezés szerint megmaradnak.",
-  "automodpack.firstConnect.existingModsArchive": "%s meglévő fájlt megőrzünk az eltávolítás előtt.",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "Csoportok testreszabása",
   "automodpack.firstConnect.cancel": "Ne töltse le",
   "automodpack.patchNotes.latest": "Legújabb javítási megjegyzések",
@@ -323,5 +319,7 @@
   "automodpack.error.titleLine": "[AutoModpack] %s!",
   "automodpack.error.removalIncomplete": "A modpack eltávolítása nem fejeződött be",
   "automodpack.error.deactivationIncomplete": "A modpack kikapcsolása nem fejeződött be",
-  "automodpack.error.repair": "A helyi modpack javítása nem fejeződött be"
+  "automodpack.error.repair": "A helyi modpack javítása nem fejeződött be",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }

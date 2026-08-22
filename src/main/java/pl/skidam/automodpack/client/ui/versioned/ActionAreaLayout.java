@@ -94,11 +94,26 @@ public final class ActionAreaLayout {
 		List<Action> actions = row.actions();
 		int count = actions.size();
 		int available = Math.max(1, width - rowGap * (count - 1));
-		int preferredTotal = actions.stream().mapToInt(Action::preferredWidth).sum();
-		int minimumTotal = actions.stream().mapToInt(action -> Math.min(width, action.minimumWidth())).sum();
-		if (preferredTotal <= available || minimumTotal <= available) {
-			int[] widths = actions.stream().mapToInt(Action::preferredWidth).toArray();
-			if (preferredTotal > available) shrink(widths, actions, available);
+		int[] widths = actions.stream().mapToInt(action -> Math.max(action.preferredWidth(), Math.min(width, action.minimumWidth()))).toArray();
+		if (fits(widths, available)) {
+			int groupWidth = 0;
+			for (int buttonWidth : widths) groupWidth += buttonWidth;
+			groupWidth += rowGap * (count - 1);
+			int x = left + (width - groupWidth) / 2;
+			List<Placement> placements = new ArrayList<>(count);
+			for (int index = 0; index < count; index++) {
+				Action action = actions.get(index);
+				int buttonWidth = widths[index];
+				placements.add(new Placement(action.id(), x, top, buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
+				x += buttonWidth + rowGap;
+			}
+			return new RowLayout(placements, BUTTON_HEIGHT);
+		}
+
+		// Grown widths overflow the row: shrink back toward each button's minimum so the row
+		// stays on one line whenever possible; stack only when even minimums cannot fit.
+		shrink(widths, actions, available);
+		if (fits(widths, available)) {
 			int groupWidth = 0;
 			for (int buttonWidth : widths) groupWidth += buttonWidth;
 			groupWidth += rowGap * (count - 1);
@@ -123,16 +138,24 @@ public final class ActionAreaLayout {
 		return new RowLayout(placements, count * BUTTON_HEIGHT + (count - 1) * rowGap);
 	}
 
-	private static void shrink(int[] widths, List<Action> actions, int available) {
+	private static boolean fits(int[] widths, int available) {
 		int total = 0;
 		for (int width : widths) total += width;
-		while (total > available) {
+		return total <= available;
+	}
+
+	/** Reduces grown widths toward each button's minimum until the row fits on one line. */
+	private static void shrink(int[] widths, List<Action> actions, int available) {
+		int budget = available;
+		for (int width : widths) budget -= width;
+		if (budget >= 0) return;
+		while (budget < 0) {
 			boolean reduced = false;
-			for (int index = 0; index < widths.length && total > available; index++) {
-				int minimum = Math.min(available, actions.get(index).minimumWidth());
+			for (int index = 0; index < widths.length && budget < 0; index++) {
+				int minimum = actions.get(index).minimumWidth();
 				if (widths[index] > minimum) {
 					widths[index]--;
-					total--;
+					budget++;
 					reduced = true;
 				}
 			}

@@ -30,11 +30,7 @@
   "automodpack.firstConnect.noPatchNotes": "이 콘텐츠에 대한 패치 노트가 게시되지 않았습니다.",
   "automodpack.firstConnect.bundleExplanation": "그룹은 선택적 기능의 번들입니다.",
   "automodpack.firstConnect.continue": "기본값으로 계속",
-  "automodpack.firstConnect.continueKeepMods": "계속하고 모드 유지",
-  "automodpack.firstConnect.archiveExistingOff": "[ ] mods 폴더의 기존 파일 %s개 유지",
-  "automodpack.firstConnect.archiveExistingOn": "[x] 기존 파일 %s개를 보존한 후 제거",
-  "automodpack.firstConnect.existingModsKeep": "기존 파일 %s개가 감지되었습니다. 기본적으로 유지됩니다.",
-  "automodpack.firstConnect.existingModsArchive": "기존 파일 %s개를 제거하기 전에 보존합니다.",
+  "automodpack.firstConnect.archiveExistingOff": "[ ] Keep %s existing mod files",
   "automodpack.firstConnect.customize": "그룹 맞춤설정",
   "automodpack.firstConnect.cancel": "다운로드하지 않음",
   "automodpack.patchNotes.latest": "최신 패치 노트",
@@ -323,5 +319,7 @@
   "automodpack.error.titleLine": "[AutoModpack] %s!",
   "automodpack.error.removalIncomplete": "모드팩 제거가 완료되지 않았습니다",
   "automodpack.error.deactivationIncomplete": "모드팩 비활성화가 완료되지 않았습니다",
-  "automodpack.error.repair": "로컬 모드팩 복구가 완료되지 않았습니다"
+  "automodpack.error.repair": "로컬 모드팩 복구가 완료되지 않았습니다",
+  "automodpack.firstConnect.existingModsKeep": "%s existing mod files detected. They can cause issues with the modpack.",
+  "automodpack.firstConnect.existingModsArchive": "%s existing mod files will be removed from the mods folder and preserved in the vault."
 }
