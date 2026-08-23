@@ -369,6 +369,14 @@ public final class ClientGenerationStore {
 		return List.copyOf(newest.values());
 	}
 
+	/** Returns the newest installed record for one modpack, or empty when that modpack is not installed. */
+	public Optional<GenerationRecord> installedRecord(String modpackId) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		for (GenerationRecord record : installedRecords())
+			if (normalizedModpackId.equals(record.manifest().modpackId())) return Optional.of(record);
+		return Optional.empty();
+	}
+
 	/** Deletes every retained local artifact for one inactive modpack and collects objects no longer referenced by another pack. */
 	public void forgetModpack(String modpackId) throws IOException {
 		ClientStorageMutation.run(storage, () -> {
