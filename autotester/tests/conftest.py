@@ -112,16 +112,16 @@ class FakeBridge:
 
     def gui(self, timeout: float = 30) -> dict:
         snapshots = {
-            "title": {"screenClass": "TitleScreen", "title": "Title Screen", "buttons": [{"id": 6, "text": "Singleplayer", "enabled": True, "visible": True}, {"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}], "textFields": []},
+            "title": {"screenClass": "TitleScreen", "title": "Title Screen", "buttons": [{"id": 6, "text": "Singleplayer", "enabled": True, "visible": True, "key": "menu.singleplayer"}, {"id": 8, "text": "Multiplayer", "enabled": True, "visible": True, "key": "menu.multiplayer"}], "textFields": []},
             "cert": {
                 "screenClass": "CertScreen",
-                "buttons": [{"id": 2, "text": "Verify", "enabled": True, "visible": True}],
+                "buttons": [{"id": 2, "text": "Verify", "enabled": True, "visible": True, "key": "automodpack.validation.verify"}],
                 "textFields": [{"id": 1, "text": "", "enabled": True, "visible": True}],
             },
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "first_connection": {
                 "screenClass": "FirstConnectScreen",
-                "buttons": [{"id": 3, "text": "Continue" if not self._first_install_local_mods() else "Continue with defaults", "enabled": True, "visible": True},
+                "buttons": [{"id": 3, "text": "Continue" if not self._first_install_local_mods() else "Continue with defaults", "enabled": True, "visible": True, "key": "automodpack.firstConnect.continue"},
                             {"id": 18, "text": "Customize groups", "enabled": True, "visible": True},
                             *([{"id": 89, "text": (f"[x] Keep {len(self._first_install_local_mods())} existing mod files" if self.first_install_archive_existing else f"[ ] Keep {len(self._first_install_local_mods())} existing mod files"), "enabled": True, "visible": True}] if self._first_install_local_mods() else []),
                             {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
@@ -168,7 +168,7 @@ class FakeBridge:
             },
             "preview": {
                 "screenClass": "UpdatePreviewScreen",
-                "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True},
+                "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True, "key": "automodpack.update.apply"},
                             {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True},
                             {"id": 104, "text": "Cancel", "enabled": True, "visible": True}],
                 "textFields": [],
@@ -181,8 +181,8 @@ class FakeBridge:
             "restart": {
                 "screenClass": "RestartScreen",
                 "buttons": [
-                    {"id": 6, "text": "No, back to the game", "enabled": True, "visible": True},
-                    {"id": 4, "text": "Yes, close the game", "enabled": True, "visible": True},
+                    {"id": 6, "text": "No, back to the game", "enabled": True, "visible": True, "key": "automodpack.restart.cancel"},
+                    {"id": 4, "text": "Yes, close the game", "enabled": True, "visible": True, "key": "automodpack.restart.confirm"},
                     {"id": 40, "text": "View changelogs", "enabled": True, "visible": True},
                 ],
                 "textFields": [],
@@ -190,7 +190,7 @@ class FakeBridge:
             "multiplayer": {
                 "screenClass": "JoinMultiplayerScreen",
                 "title": "Play Multiplayer",
-                "buttons": [{"id": 7, "text": "Modpack settings", "enabled": True, "visible": True},
+                "buttons": [{"id": 7, "text": "Modpack settings", "enabled": True, "visible": True, "key": "automodpack.selection.button"},
                             {"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -244,7 +244,7 @@ class FakeBridge:
             },
             "settings": {
                 "screenClass": "ModpackSelectionScreen",
-                "buttons": [{"id": 10, "text": "Pack manager", "enabled": True, "visible": True},
+                "buttons": [{"id": 10, "text": "Pack manager", "enabled": True, "visible": True, "key": "automodpack.packManager.switch"},
                             {"id": 13, "text": "Save", "enabled": True, "visible": True},
                             {"id": 57, "text": "History", "enabled": True, "visible": True},
                             {"id": 66, "text": "Files", "enabled": True, "visible": True},

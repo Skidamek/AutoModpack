@@ -38,6 +38,25 @@ def test_legacy_forge_keeps_loader_classes_out_of_nested_mod():
     )
 
 
+def test_autotest_bridge_dumps_attached_widgets_with_translation_keys():
+    source = (
+        Path(__file__).parents[2]
+        / "src/main/java/pl/skidam/automodpack/client/autotest/AutoTestBridge.java"
+    ).read_text(encoding="utf-8")
+    elements = source[
+        source.index("private static GuiElements elements(Screen screen)") : source.index(
+            "private static JsonArray elementsJson"
+        )
+    ]
+    assert "getDeclaredFields" not in source
+    assert "findWidgets" not in source
+    assert "screen.children()" in elements
+    assert "collectAttachedWidgets" in elements
+    assert 'o.addProperty("key", key)' in source
+    assert "TranslatableContents" in source
+    assert "getKey()" in source
+
+
 def test_autotest_bridge_readiness_is_level_triggered():
     source = (
         Path(__file__).parents[2]

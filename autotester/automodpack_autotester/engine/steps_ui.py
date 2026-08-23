@@ -60,6 +60,7 @@ def _gui_diagnostic(gui):
                     "role": role,
                     "id": element.get("id"),
                     "text": str(element.get("text")),
+                    "key": element.get("key"),
                     "enabled": bool(element.get("enabled", False)),
                 })
     return f"current screen: {gui.get('screenClass')!r}; title: {gui.get('title')!r}; visible elements: {visible!r}"
@@ -69,6 +70,7 @@ def _gui_diagnostic(gui):
 def click(ctx, step):
     selector = dict(ctx.resolve(step.get("select") or {}))
     selector.setdefault("enabled", True)  # by default only click clickable elements
+    selector.setdefault("visible", True)
     skip_if = ctx.resolve(step.get("skip_if") or {})
     try:
         def action(match):

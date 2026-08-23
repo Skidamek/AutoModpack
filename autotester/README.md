@@ -230,12 +230,20 @@ condition keys, generated straight from the registry — no need to grep `@verb(
 ```yaml
 select:
   role: button        # button | textfield | any (default)
+  key: automodpack.cancel  # translation key (preferred: survives copy edits)
+  key_any: [automodpack.selection.button, automodpack.selection.shortButton]
   text: Verify        # exact match preferred, else substring (case-insensitive)
   text_any: [ok, yes] # any of these
   class: Btn          # substring of the element's class
-  enabled: true       # filter by enabled / visible
+  enabled: true       # filter by enabled
+  visible: true       # default true; hidden widgets (plain-text placeholders) never match
   index: -1           # pick the Nth match (negative counts from the end)
 ```
+
+Prefer `key:` for chrome that comes from `en_us.json` (`Continue`, `Update`, `Back`). Keep `text:`
+for fixture data and glyph state (`[x] Visuals`, pack names). The bridge dumps only widgets
+attached through `Screen.children()` so a focused button leftover from `rebuildWidgets` cannot
+satisfy `element` / `no_element`.
 
 ### Conditions
 
