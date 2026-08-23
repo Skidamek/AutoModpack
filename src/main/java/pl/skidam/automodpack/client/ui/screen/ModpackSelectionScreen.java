@@ -649,40 +649,32 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		String name = displayName(groupId);
 		GroupResolution explanation = resolution.resolution(groupId);
 		String metrics = VersionedText.translatable("automodpack.selection.metrics", group.files().size(), UiFormat.formatSize(groupBytes(group))).getString();
-		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel("[#] ", name, metrics, VersionedText.translatable("automodpack.selection.status.required").getString()), ChatFormatting.GRAY);
+		// The leading glyph carries the state; the words live in the hover tooltip instead of the row.
+		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel("[#] ", name, metrics), ChatFormatting.GRAY);
 		if (explanation != null && explanation.reasons().contains(GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE))
-			return rowLabel(formatRowLabel("[-] ", name, metrics, VersionedText.translatable("automodpack.selection.status.requestedUnavailable").getString()), ChatFormatting.RED);
+			return rowLabel(formatRowLabel("[-] ", name, metrics), ChatFormatting.RED);
 		if (explanation != null && explanation.status() == GroupResolution.Status.UNAVAILABLE)
-			return rowLabel(formatRowLabel("[-] ", name, metrics, VersionedText.translatable("automodpack.selection.status.unavailable").getString()), ChatFormatting.RED);
+			return rowLabel(formatRowLabel("[-] ", name, metrics), ChatFormatting.RED);
 		if (explanation != null && explanation.status() == GroupResolution.Status.BLOCKED)
-			return rowLabel(formatRowLabel("[-] ", name, metrics, VersionedText.translatable("automodpack.selection.status.dependencyUnavailable").getString()), ChatFormatting.RED);
+			return rowLabel(formatRowLabel("[-] ", name, metrics), ChatFormatting.RED);
 		if (explanation != null && explanation.status() == GroupResolution.Status.CONFLICT)
-			return rowLabel(formatRowLabel("[!] ", name, metrics, VersionedText.translatable("automodpack.selection.status.conflict").getString()), ChatFormatting.RED);
-		if (excluded.contains(groupId)) return rowLabel(formatRowLabel("[-] ", name, metrics, VersionedText.translatable("automodpack.selection.status.excluded").getString()), ChatFormatting.YELLOW);
+			return rowLabel(formatRowLabel("[!] ", name, metrics), ChatFormatting.RED);
+		if (excluded.contains(groupId)) return rowLabel(formatRowLabel("[-] ", name, metrics), ChatFormatting.YELLOW);
 		if (resolution.selectedGroups().contains(groupId)) {
-			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics, null), ChatFormatting.GREEN);
+			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics), ChatFormatting.GREEN);
 			if (resolution.dependencyGroups().contains(groupId))
-				return rowLabel(formatRowLabel("[+] ", name, metrics, VersionedText.translatable("automodpack.selection.status.requiredBySelection", names(explanation.relatedGroups())).getString()), ChatFormatting.AQUA);
-			return rowLabel(formatRowLabel("[+] ", name, metrics, null), ChatFormatting.AQUA);
+				return rowLabel(formatRowLabel("[+] ", name, metrics), ChatFormatting.AQUA);
+			return rowLabel(formatRowLabel("[+] ", name, metrics), ChatFormatting.AQUA);
 		}
-		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel("[>] ", name, metrics, VersionedText.translatable("automodpack.selection.status.forced").getString()), ChatFormatting.AQUA);
+		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel("[>] ", name, metrics), ChatFormatting.AQUA);
 		return group.defaultSelected()
-				? rowLabel(formatRowLabel("[ ] ", name, metrics, VersionedText.translatable("automodpack.selection.status.includedByDefault").getString()), ChatFormatting.YELLOW)
-				: rowLabel(formatRowLabel("[ ] ", name, metrics, null), ChatFormatting.GRAY);
+				? rowLabel(formatRowLabel("[ ] ", name, metrics), ChatFormatting.YELLOW)
+				: rowLabel(formatRowLabel("[ ] ", name, metrics), ChatFormatting.GRAY);
 	}
 
-	/** Keeps a row's state explanation visible when the optional file metrics do not fit. */
-	private String formatRowLabel(String marker, String name, String metrics, String status) {
+	private String formatRowLabel(String marker, String name, String metrics) {
 		int maxWidth = groupLabelWidth();
-		String full = marker + name + " " + metrics + (status == null ? "" : " " + status);
-		if (status == null || this.font.width(full) <= maxWidth) return truncateToWidth(this.font, full, maxWidth);
-
-		String stateOnly = marker + name + " " + status;
-		if (this.font.width(stateOnly) <= maxWidth) return stateOnly;
-
-		int nameWidth = maxWidth - this.font.width(marker) - this.font.width(" ") - this.font.width(status);
-		if (nameWidth <= 0) return truncateToWidth(this.font, marker + status, maxWidth);
-		return marker + truncateToWidth(this.font, name, nameWidth) + " " + status;
+		return truncateToWidth(this.font, marker + name + " " + metrics, maxWidth);
 	}
 
 	private MutableComponent rowLabel(String text, ChatFormatting color) {

@@ -70,7 +70,7 @@ flow:
     select: { text: "Next >" }
   - do: wait_for
     name: name the group that requires Visuals
-    until: { element: { text: "[+] Visuals (required by Extra Five)" } }
+    until: { element: { text: "[+] Visuals" } }
   - do: screenshot
     name: capture the named dependency selection
     file: ui-navigation-named-dependency
