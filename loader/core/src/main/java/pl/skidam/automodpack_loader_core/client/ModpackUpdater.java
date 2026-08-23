@@ -48,6 +48,7 @@ import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateReviewPolicy;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
+import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.JarUtils;
@@ -91,7 +92,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private final Set<String> reservedObjectHashes = new TreeSet<>();
 	public record SourceAvailability(int totalFiles, int resolvedFiles, boolean complete, boolean cancelled) {}
 
-	public String getModpackName() {
+	private String getModpackName() {
 		return serverModpackContent.modpackName;
 	}
 
@@ -132,7 +133,8 @@ public class ModpackUpdater implements AutoCloseable {
 	public UpdatePreview previewInstalledSwitch() throws Exception {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Installed modpack target is unavailable");
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
-		if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)
+		boolean projectionPresent = active != null && Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS);
+		if (projectionPresent && selectedTarget.manifest().modpackId().equals(active.modpackId)
 				&& Objects.equals(selectedTarget.expectedPriorIntent(), selectedTarget.selection().intent()))
 			throw new IllegalArgumentException("Installed modpack target and group selection are already active");
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
@@ -140,7 +142,11 @@ public class ModpackUpdater implements AutoCloseable {
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 			planBuilder.preparePlanObjects(prepared.plan(), selectedTarget.flatTarget());
 			installedSwitchPlan = ReviewedClientPlan.pending(prepared, prepared.plan());
-			String installedGenerationId = active != null && selectedTarget.manifest().modpackId().equals(active.modpackId) ? active.generationId : "";
+			String installedGenerationId;
+			if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)) installedGenerationId = active.generationId;
+			else
+				installedGenerationId = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId())
+						.map(record -> record.metadata().generationId()).orElse("");
 			GenerationUpdateRange updateRange = updateRange(selectedTarget, installedGenerationId);
 			return UpdatePreview.create(prepared.plan(), selectedTarget.selection(), UpdatePreview.Mode.UPDATE,
 					featuredNotes(updateRange), updateRange.generations()).withFeatureManifest(selectedTarget.manifest());
@@ -282,14 +288,17 @@ public class ModpackUpdater implements AutoCloseable {
 
 			if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
-			// Handle new modpack
-			if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) {
+			// Handle a modpack installed for the first time: the local-mod consent and group defaults only apply here
+			if (new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).isEmpty()) {
 				firstConnection = true;
 				fullDownload = true;
 				firstInstallLocalModFiles = storedTarget() == null ? scanFirstInstallLocalMods() : Map.of();
 				startSourceFetch();
 				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
 				ScreenManager.welcome(this);
+			} else if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) {
+				// Handle an installed modpack without an active projection: reactivate it through the reviewed switch plan
+				startInstalledSwitch();
 			} else {
 				// Handle existing modpack
 				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, storage);
@@ -586,7 +595,7 @@ public class ModpackUpdater implements AutoCloseable {
 		return ModpackPathPolicy.MODS_ROOT + "/" + UpdatePlanner.normalize(activeModsDirectory.relativize(normalized).toString());
 	}
 
-	public void startUpdate() {
+	private void startUpdate() {
 		try {
 			requireLiveConnection();
 			ScreenManager.waiting();
@@ -604,6 +613,29 @@ public class ModpackUpdater implements AutoCloseable {
 			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			close();
 			return;
+		}
+	}
+
+	/** Presents the switch plan for an installed modpack that has no active projection, instead of replaying the first-install flow. */
+	private void startInstalledSwitch() {
+		try {
+			requireLiveConnection();
+			ScreenManager.waiting();
+			UpdatePreview preview = previewInstalledSwitch();
+			Runnable continueAction = () -> {
+				try {
+					applyInstalledSwitch();
+				} catch (Exception e) {
+					ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+				}
+			};
+			if (!ScreenManager.preview(preview, getModpackName(), (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), this::close, false)) {
+				LOGGER.warn("Installed modpack switch preview could not be shown; leaving the client without an active modpack");
+				close();
+			}
+		} catch (Exception e) {
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			close();
 		}
 	}
 
@@ -658,7 +690,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return true;
 		}
 
-		LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
+		LOGGER.info("In queue left {} files to download ({})", wholeQueue, ByteFormat.formatSize(totalBytesToDownload));
 
 		if (downloadClient == null) return false;
 		if (fetchManager != null) {

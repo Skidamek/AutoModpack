@@ -11,6 +11,7 @@ import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.network.chat.Component;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
@@ -34,7 +35,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 	// Unchecked by default: existing mods are preserved in the vault, then removed unless the player checks this.
 	// Checked = keep the existing mods in place; nothing is removed.
 	private boolean keepExistingMods;
-	private Button cleanupButton;
+	private Component cleanupMessage;
 	private boolean finished;
 
 	public FirstConnectScreen(ModpackUpdater updater) {
@@ -55,9 +56,10 @@ public final class FirstConnectScreen extends VersionedScreen {
 		if (GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes()))
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (updater.firstInstallLocalModCount() > 0) {
-			String cleanupKey = keepExistingMods ? "automodpack.firstConnect.archiveExistingOn" : "automodpack.firstConnect.archiveExistingOff";
+			cleanupMessage = VersionedText.translatable(keepExistingMods ? "automodpack.firstConnect.archiveExistingOn" : "automodpack.firstConnect.archiveExistingOff",
+					updater.firstInstallLocalModCount());
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-					optionalAction(VersionedText.translatable(cleanupKey, updater.firstInstallLocalModCount()), button -> toggleExistingMods())));
+					optionalAction(cleanupMessage, button -> toggleExistingMods())));
 		}
 		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
@@ -87,10 +89,11 @@ public final class FirstConnectScreen extends VersionedScreen {
 
 	/** Hover help for the cleanup toggle: what each state does plus the exact files the choice applies to. */
 	private void refreshCleanupTooltip() {
-		if (updater.firstInstallLocalModCount() <= 0) return;
+		if (cleanupMessage == null) return;
 		for (var child : this.children()) {
 			if (!(child instanceof Button button)) continue;
-			if (!button.getMessage().getString().contains("Keep " + updater.firstInstallLocalModCount() + " existing mod files")) continue;
+			// Compare components, not rendered text, so every locale keeps its tooltip.
+			if (!button.getMessage().equals(cleanupMessage)) continue;
 			String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", updater.firstInstallLocalModPaths()), 240, 8));
 			setTooltip(button, VersionedText.translatable("automodpack.firstConnect.cleanupTooltip", joined));
 			return;
