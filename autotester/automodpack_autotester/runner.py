@@ -437,6 +437,7 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
             "AM_AUTOTEST_PREPARE_ONLY": str(prepare_only).lower(),
             "AM_AUTOTEST_DISPLAY_START_SECONDS": str(ctx.settings.get("timeouts", {}).get("displayStartSeconds", 5)),
             "AM_AUTOTEST_RENDER_CLIENT": str(bool(ctx.scenario.get("renderClient", False)) and not prepare_only).lower(),
+            "JAVA_TOOL_OPTIONS": "-Xmx2G",
         },
         mounts=[
             (ctx.game_dir, "/work/game", False),

@@ -6,6 +6,7 @@ import os
 import secrets
 import signal
 import shutil
+import subprocess
 import sys
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -40,6 +41,16 @@ def _resolve_settings_path(s: dict, key: str, default: str) -> Path:
     raw = s.get("paths", {}).get(key, default)
     p = Path(str(raw))
     return (REPO_ROOT / p).resolve() if not p.is_absolute() else p.resolve()
+
+
+def _stop_gradle_daemons() -> None:
+    gradlew = REPO_ROOT / "gradlew"
+    if not os.access(gradlew, os.X_OK):
+        return
+    try:
+        subprocess.run([str(gradlew), "--stop"], cwd=REPO_ROOT, check=False, capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def _cleanup_run_resources(resource_scope: str) -> None:
@@ -263,6 +274,8 @@ def main(argv: list[str] | None = None) -> int:
             else args.out_dir.resolve()
         )
         shutil.rmtree(out_dir, ignore_errors=True)
+        _stop_gradle_daemons()
+        reap_orphaned_scopes()
         return 0
 
     # --- run ---
@@ -321,6 +334,7 @@ def main(argv: list[str] | None = None) -> int:
         s.get("images", {}).get("client", "automodpack-autotest-client:local")
     )
     out_dir.mkdir(parents=True, exist_ok=True)
+    _stop_gradle_daemons()
     reap_orphaned_scopes()
     asset_cache = deduplicate_asset_objects(out_dir.parent / ".hmc-cache")
     if asset_cache.linked_files or asset_cache.invalid_objects or asset_cache.link_failures:

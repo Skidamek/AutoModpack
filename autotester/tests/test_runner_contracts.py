@@ -498,6 +498,32 @@ def test_client_launcher_does_not_kill_a_healthy_scenario_at_the_startup_deadlin
     assert "Xvfb -displayfd 3" in source
     assert 'prepared_profile="${AM_AUTOTEST_HMC_PREPARED:-false}"' in source
     assert 'prepare_only="${AM_AUTOTEST_PREPARE_ONLY:-false}"' in source
+    assert 'jvmargs="-Xmx2G ' in source
+
+
+def test_client_container_caps_java_heap(make_ctx, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(runner, "_client_profile_is_prepared", lambda *_args: True)
+    monkeypatch.setattr(runner, "_run_container", lambda **kwargs: seen.update(kwargs))
+    ctx = make_ctx()
+    ctx.out_dir.mkdir(parents=True, exist_ok=True)
+
+    runner._start_client_container(ctx, "cli")
+
+    assert seen["env"]["JAVA_TOOL_OPTIONS"] == "-Xmx2G"
+
+
+def test_run_stops_gradle_daemons(monkeypatch, tmp_path):
+    wrapper = tmp_path / "gradlew"
+    wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
+    wrapper.chmod(0o755)
+    seen = []
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli.subprocess, "run", lambda cmd, **_kwargs: seen.append(cmd) or types.SimpleNamespace(returncode=0))
+
+    cli._stop_gradle_daemons()
+
+    assert seen == [[str(wrapper), "--stop"]]
 
 
 def test_client_launcher_uses_canonical_targets_when_the_profile_is_prepared():
