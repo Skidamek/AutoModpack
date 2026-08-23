@@ -100,16 +100,18 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		}
 		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
-				optionalAction(VersionedText.literal(""), button -> toggleDetails()),
-				optionalAction(VersionedText.translatable("automodpack.changelog.noPage"), button -> openSelectedPage())));
+				optionalAction(VersionedText.translatable("automodpack.browser.details"), button -> toggleDetails()),
+				optionalAction(VersionedText.translatable("automodpack.changelog.openPage"), button -> openSelectedPage())));
 		List<Button> actionButtons = this.addActionArea(PANEL_WIDTH, this.height - 28, actionRows.toArray(ActionRow[]::new));
 		int footerOffset = auxiliaryAction == null ? 0 : 1;
 		this.detailsButton = actionButtons.get(footerOffset + 1);
 		this.openPageButton = actionButtons.get(footerOffset + 2);
 		if (auxiliaryAction != null) actionButtons.get(0).active = auxiliaryAction.active();
+		this.detailsButton.active = true;
+		setTooltip(this.detailsButton, VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsStateTechnical" : "automodpack.browser.detailsStateSimple"));
+		this.openPageButton.visible = firstReference() != null;
 		this.browserBottom = actionAreaTop(PANEL_WIDTH, this.height - 28, actionRows.toArray(ActionRow[]::new)) - 8;
 		rebuildBrowser();
-		updateDetailsLabel();
 	}
 
 	private void rebuildBrowser() {
@@ -136,7 +138,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	private void toggleDetails() {
 		technicalDetails = !technicalDetails;
-		updateDetailsLabel();
+		setTooltip(detailsButton, VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsStateTechnical" : "automodpack.browser.detailsStateSimple"));
 		rebuildBrowser();
 	}
 
@@ -185,7 +187,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	}
 
 	private void updateDetailsLabel() {
-		if (detailsButton != null) detailsButton.setMessage(VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsHide" : "automodpack.browser.detailsShow"));
+		if (detailsButton != null) detailsButton.setMessage(VersionedText.translatable("automodpack.browser.details"));
 	}
 
 	private void openSelectedPage() {
@@ -220,9 +222,8 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY), panelLeft(PANEL_WIDTH), this.height - 43, TextColors.WHITE);
 		if (projection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
-		String reference = firstReference();
-		this.openPageButton.active = reference != null;
-		this.openPageButton.setMessage(VersionedText.translatable(reference == null ? "automodpack.changelog.noPage" : "automodpack.changelog.openPage"));
+		// The project-page button only exists when a link is available; there is no fake disabled button.
+		this.openPageButton.visible = firstReference() != null;
 	}
 
 	@Override

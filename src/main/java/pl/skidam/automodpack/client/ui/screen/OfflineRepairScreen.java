@@ -10,6 +10,7 @@ import java.util.concurrent.Future;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -39,7 +40,9 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	private final Set<String> selectedEditablePaths = new TreeSet<>();
 	private OfflineRepair.Prepared prepared;
 	private OfflineRepair.Receipt receipt;
-	private boolean archiveUnownedMods;
+	// Checkbox convention: [x] checked keeps the files in place; unchecked is the removal consent
+	// (copies are preserved in the vault, then removed). Same meaning on every screen.
+	private boolean keepUnownedMods;
 	private boolean busy;
 	private boolean presentingFailure;
 	private boolean closed;
@@ -64,9 +67,10 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		int x = panelLeft(PANEL_WIDTH);
 		int listTop = prepared.requiresUpdate() ? 94 : 82;
 		if (!prepared.unownedModPaths().isEmpty()) {
-			Button archive = buttonWidget(x, listTop, width, 20, VersionedText.translatable(archiveUnownedMods ? "automodpack.repair.archiveUnownedOn" : "automodpack.repair.archiveUnownedOff",
+			Button archive = buttonWidget(x, listTop, width, 20, VersionedText.translatable(keepUnownedMods ? "automodpack.repair.keepUnownedChecked" : "automodpack.repair.keepUnowned",
 					prepared.unownedModPaths().size()), press -> toggleUnowned());
 			archive.active = !busy;
+			setTooltip(archive, unownedTooltip());
 			this.addRenderableWidget(archive);
 			listTop += 28;
 		}
@@ -79,7 +83,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		if (showKeepAll) actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(VersionedText.translatable("automodpack.repair.keepAllEditable"), press -> keepAllEditable())));
 		List<ActionDefinition> primaryActions = new ArrayList<>();
-		primaryActions.add(primaryAction(VersionedText.translatable(needsUpdate ? "automodpack.repair.available" : "automodpack.repair.apply"), press -> apply()));
+		primaryActions.add(primaryAction(VersionedText.translatable("automodpack.repair.apply"), press -> apply()));
 		if (canUpdate) primaryActions.add(optionalAction(VersionedText.translatable("automodpack.repair.updateAndFinish"), press -> updateAndFinish()));
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryActions.toArray(ActionDefinition[]::new)));
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.cancel"), press -> back())));
@@ -99,11 +103,13 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		int start = page * pageSize;
 		for (int index = start; index < Math.min(candidates.size(), start + pageSize); index++) {
 			OfflineRepair.EditableResetCandidate candidate = candidates.get(index);
-			boolean selected = selectedEditablePaths.contains(candidate.logicalPath());
-			String label = VersionedText.translatable(selected ? "automodpack.repair.editableReset" : "automodpack.repair.editableKeep", candidate.logicalPath()).getString();
+			// Membership in selectedEditablePaths is the reset consent, so the row renders unchecked
+			// while it consents and checked once the player's changes are kept.
+			boolean resetConsent = selectedEditablePaths.contains(candidate.logicalPath());
 			Button choice = buttonWidget(x, listTop + (index - start) * ROW_HEIGHT, width, 20,
-					VersionedText.literal(truncateToWidth(this.font, label, width - 12)), press -> toggleEditable(candidate.logicalPath()));
+					VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable(resetConsent ? "automodpack.repair.editableKeep" : "automodpack.repair.editableKeepChecked", candidate.logicalPath()).getString(), width - 12)), press -> toggleEditable(candidate.logicalPath()));
 			choice.active = !busy;
+			setTooltip(choice, editableTooltip(resetConsent, candidate.logicalPath()));
 			this.addRenderableWidget(choice);
 		}
 		List<Button> actionButtons = addActionArea(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new));
@@ -119,7 +125,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	}
 
 	private boolean hasRepairWork() {
-		return prepared.findings().stream().anyMatch(OfflineRepair.Finding::locallyRepairable) || !selectedEditablePaths.isEmpty() || archiveUnownedMods && !prepared.unownedModPaths().isEmpty();
+		return prepared.findings().stream().anyMatch(OfflineRepair.Finding::locallyRepairable) || !selectedEditablePaths.isEmpty() || !keepUnownedMods && !prepared.unownedModPaths().isEmpty();
 	}
 
 	private int rowsPerPage(int listTop, int actionTop) {
@@ -148,8 +154,19 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	}
 
 	private void toggleUnowned() {
-		archiveUnownedMods = !archiveUnownedMods;
+		keepUnownedMods = !keepUnownedMods;
 		rebuild();
+	}
+
+	/** Names the exact files the unowned-mods choice applies to, plus what each state does with them. */
+	private Component unownedTooltip() {
+		String files = String.join("\n", wrapToWidth(this.font, String.join(", ", prepared.unownedModPaths()), 240, 8));
+		return VersionedText.translatable(keepUnownedMods ? "automodpack.repair.unownedTooltipKeep" : "automodpack.repair.unownedTooltipRemove", files);
+	}
+
+	/** Same help for an editable row: unchecked consents to reset, checked keeps the player's changes. */
+	private Component editableTooltip(boolean resetConsent, String path) {
+		return VersionedText.translatable(resetConsent ? "automodpack.repair.editableTooltipReset" : "automodpack.repair.editableTooltipKeep", path);
 	}
 
 	private void changePage(int amount) {
@@ -166,7 +183,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		busy = true;
 		rebuild();
 		Set<String> editable = Set.copyOf(selectedEditablePaths);
-		Set<String> unowned = archiveUnownedMods ? Set.copyOf(prepared.unownedModPaths()) : Set.of();
+		Set<String> unowned = keepUnownedMods ? Set.of() : Set.copyOf(prepared.unownedModPaths());
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
 				OfflineRepair.Receipt result = repair.apply(prepared, editable, unowned);
@@ -190,7 +207,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		Set<String> remaining = new HashSet<>();
 		prepared.editableResetCandidates().forEach(candidate -> remaining.add(candidate.logicalPath()));
 		selectedEditablePaths.retainAll(remaining);
-		archiveUnownedMods = false;
+		keepUnownedMods = false;
 		busy = false;
 		page = 0;
 		rebuild();
@@ -263,8 +280,13 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, this.width - 20)).withStyle(prepared.findings().isEmpty() ? ChatFormatting.GREEN : ChatFormatting.YELLOW), this.width / 2, 30, TextColors.WHITE);
 		String hashed = VersionedText.translatable("automodpack.repair.hashed", prepared.directlyHashedFileCount(), UiFormat.formatSize(prepared.directlyHashedBytes())).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, hashed, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 42, TextColors.WHITE);
-		String choices = VersionedText.translatable("automodpack.repair.choices", selectedEditablePaths.size(), prepared.editableResetCandidates().size(), prepared.unownedModPaths().size()).getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, choices, this.width - 20)).withStyle(ChatFormatting.AQUA), this.width / 2, 54, TextColors.WHITE);
+		if (!prepared.unownedModPaths().isEmpty()) {
+			String unownedState = VersionedText.translatable(keepUnownedMods ? "automodpack.repair.unownedKept" : "automodpack.repair.unownedArchived", prepared.unownedModPaths().size()).getString();
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, unownedState, this.width - 20)).withStyle(keepUnownedMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY), this.width / 2, 54, TextColors.WHITE);
+		} else {
+			String choices = VersionedText.translatable("automodpack.repair.choices", selectedEditablePaths.size(), prepared.editableResetCandidates().size()).getString();
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, choices, this.width - 20)).withStyle(ChatFormatting.AQUA), this.width / 2, 54, TextColors.WHITE);
+		}
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.repair.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 66, TextColors.WHITE);
 		else if (receipt != null) {
 			String result = VersionedText.translatable("automodpack.repair.receipt", receipt.repairedCasObjects(), receipt.repairedMaterializedFiles(), receipt.resetEditableFiles(), receipt.archivedUnownedMods()).getString();

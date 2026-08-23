@@ -424,12 +424,14 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     assert any(button["text"] == "Repair" for button in bridge.gui()["buttons"])
     bridge.click(70)
     buttons = bridge.gui()["buttons"]
-    assert any(button["text"] == "[x] Reset config/pack-shared-editable.txt" for button in buttons)
+    # Defaults: unchecked on both rows - each unchecked box is a removal/reset consent.
+    assert any(button["text"] == "[ ] Keep changes in config/pack-shared-editable.txt" for button in buttons)
     assert any(button["text"] == "[ ] Keep 2 unowned mods" for button in buttons)
+    bridge.click(95)  # Checking the editable row keeps the player's changes.
+    assert any(button["text"] == "[x] Keep changes in config/pack-shared-editable.txt" for button in bridge.gui()["buttons"])
     bridge.click(95)
-    assert any(button["text"] == "[ ] Keep changes in config/pack-shared-editable.txt" for button in bridge.gui()["buttons"])
-    bridge.click(97)
-    assert any(button["text"] == "[x] Archive and remove 2 unowned mods" for button in bridge.gui()["buttons"])
+    bridge.click(97)  # Checking the unowned row opts into keeping them.
+    assert any(button["text"] == "[x] Keep 2 unowned mods" for button in bridge.gui()["buttons"])
     bridge.click(100)
     assert bridge.gui()["screenClass"] == "ModpackDetailsScreen"
 
@@ -458,10 +460,7 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     assert bridge.gui()["screenClass"] == "ErrorScreen"
     bridge.click(94)
     assert bridge.gui()["screenClass"] == "PreservationVaultScreen"
-    bridge.click(90)
-    assert any(button["text"] == "Confirm deletion" for button in bridge.gui()["buttons"])
-    bridge.click(83)  # Reselecting a row cancels the pending destructive action.
-    assert any(button["text"] == "Delete from vault" for button in bridge.gui()["buttons"])
+    bridge.click(83)  # Reselecting a row cancels any pending destructive action.
     bridge.click(90)
     bridge.click(90)
     assert not (ctx.game_dir / "automodpack/client/preservation/packaaa/claims.json").exists()

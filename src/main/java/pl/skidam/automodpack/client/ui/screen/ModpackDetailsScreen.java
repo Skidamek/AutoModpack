@@ -26,6 +26,8 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	private final List<Button> actionButtons = new ArrayList<>();
 	private boolean busy;
 	private boolean upToDate;
+	// True when the pack is current: the first slot renders as a green status line, not a fake disabled button.
+	private boolean primaryIsStatus;
 
 	public ModpackDetailsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
 		super(VersionedText.translatable("automodpack.packDetails.title"));
@@ -39,7 +41,11 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		super.init();
 		actionButtons.clear();
 		List<Action> actions = new ArrayList<>();
-		actions.add(new Action(pack.active() && upToDate ? "automodpack.management.upToDate" : pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
+		if (pack.active() && upToDate) primaryIsStatus = true;
+		else {
+			primaryIsStatus = false;
+			actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
+		}
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
 		actions.add(new Action("automodpack.selection.button", this::openFeatures));
 		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
@@ -134,6 +140,10 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		for (int index = 0; index < actionButtons.size(); index++) actionButtons.get(index).active = !busy && (index != 0 || !pack.active() || pack.connectionAvailable() && !upToDate);
 	}
 
+	private boolean showUpToDateStatus() {
+		return primaryIsStatus;
+	}
+
 	private void rebuild() {
 		/*? if >=1.19.2 {*/
 		this.rebuildWidgets();
@@ -147,18 +157,27 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		int width = panelWidth(PANEL_WIDTH);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(pack.name()).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
+		int y = 28;
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		y += 16;
+		if (showUpToDateStatus()) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.management.upToDate").withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
+			y += 13;
+		}
 		String state = pack.active() ? VersionedText.translatable("automodpack.packManager.active", pack.name()).getString() : VersionedText.translatable("automodpack.packManager.noActive").getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, 44,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
+		y += 14;
 		String connection = VersionedText.translatable(pack.connectionAvailable() ? "automodpack.packDetails.connected" : "automodpack.packDetails.disconnected").getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, connection, width)).withStyle(pack.connectionAvailable() ? ChatFormatting.AQUA : ChatFormatting.YELLOW),
-				this.width / 2, 58,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, connection, width)).withStyle(pack.connectionAvailable() ? ChatFormatting.AQUA : ChatFormatting.GRAY),
+				this.width / 2, y,
 				TextColors.WHITE);
+		y += 14;
 		String version = VersionedText.translatable("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion()).getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, version, width)).withStyle(ChatFormatting.GRAY), this.width / 2, 70, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, version, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		y += 12;
 		String contents = VersionedText.translatable("automodpack.packDetails.contents", pack.groupCount(), pack.fileCount(), UiFormat.formatSize(pack.fileBytes())).getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contents, width)).withStyle(ChatFormatting.GRAY), this.width / 2, 82, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contents, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
 	}
 

@@ -69,22 +69,12 @@ public class SkipVerificationScreen extends VersionedScreen {
 		this.backButton = buttons.get(0);
 		this.confirmButton = buttons.get(1);
 		this.confirmButton.active = false;
-		updateButtonText();
 
 		this.wikiButton = iconButtonWidget(fieldLeft + panelWidth(340) - 20, this.height / 2 + 15, 20, 16,
 				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
 				"link", VersionedText.translatable("automodpack.learnmore"));
 
 		setTooltip(wikiButton, VersionedText.translatable("automodpack.learnmore"));
-	}
-
-	private void updateButtonText() {
-		if (ticksRemaining > 0) {
-			int seconds = getRemainingSeconds();
-			this.confirmButton.setMessage(VersionedText.translatable("automodpack.skip").append(VersionedText.literal(" (" + seconds + "s)")));
-		} else {
-			this.confirmButton.setMessage(VersionedText.translatable("automodpack.skip"));
-		}
 	}
 
 	private void confirmSkip() {
@@ -111,10 +101,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 		super.tick();
 		if (ticksRemaining > 0) {
 			ticksRemaining--;
-			updateButtonText();
-			if (ticksRemaining == 0) {
-				confirmButton.active = true;
-			}
+			if (ticksRemaining == 0) confirmButton.active = true;
 		}
 	}
 
@@ -145,6 +132,12 @@ public class SkipVerificationScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font,
 				VersionedText.translatable("automodpack.validation.skip.instruction"),
 				this.width / 2, this.height / 2 - 35, TextColors.WHITE);
+
+		// Countdown while the Skip button is still locked; gone once it unlocks.
+		if (ticksRemaining > 0)
+			drawCenteredTextWithShadow(matrices, this.font,
+					VersionedText.translatable("automodpack.validation.skip.countdown", getRemainingSeconds()).withStyle(ChatFormatting.GRAY),
+					this.width / 2, this.height / 2 - 23, TextColors.WHITE);
 
 		// Confirmation prompt
 		drawCenteredTextWithShadow(matrices, this.font,

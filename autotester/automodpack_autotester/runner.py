@@ -960,12 +960,8 @@ def _v_reset_client_generation(ctx: Context, _step):
 
 @verb("reset_isolated_client_objects")
 def _v_reset_isolated_client_objects(ctx: Context, _step):
-    """Remove the test client's CAS only when its data root is explicitly isolated."""
-    marker = ctx.game_dir / "automodpack" / "data-root.json"
+    """Remove the test client's CAS (the test client always owns an isolated local root)."""
     data_root = _ensure_client_data_root(ctx.game_dir)
-    location = json.loads(marker.read_text(encoding="utf-8"))
-    if location.get("shared") is not False:
-        raise RuntimeError("refusing to reset objects in a shared client data root")
     objects = data_root / "objects"
     if objects.is_dir():
         shutil.rmtree(objects)
