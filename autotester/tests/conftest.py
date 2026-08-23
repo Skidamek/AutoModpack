@@ -99,7 +99,7 @@ class FakeBridge:
         self.storage_verified = False
         self.repair_mutations: set[tuple[str, str]] = set()
         self.repair_editable_reset = True
-        self.repair_archive_unowned = False
+        self.repair_keep_unowned = False
         self.repair_applied = False
         self.error_parent = "details"
         self.selected_claim_path: str | None = None
@@ -226,7 +226,7 @@ class FakeBridge:
                 "buttons": [{"id": 83, "text": "config/amp-autotest-gamma.cfg", "enabled": True, "visible": any(claim.get("originalPath") == "config/amp-autotest-gamma.cfg" for claim in self._claims("packaaa")[1])},
                             {"id": 84, "text": "Restore", "enabled": self.vault_claim_selected, "visible": True},
                             {"id": 85, "text": "Save copy", "enabled": self.vault_claim_selected, "visible": True},
-                            {"id": 90, "text": "Confirm deletion" if self.vault_claim_selected == "delete-pending" else "Delete from vault", "enabled": bool(self.vault_claim_selected), "visible": True},
+                            {"id": 90, "text": "Delete", "enabled": bool(self.vault_claim_selected), "visible": True},
                             {"id": 103, "text": "Next >", "enabled": True, "visible": True},
                             {"id": 86, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
@@ -285,7 +285,7 @@ class FakeBridge:
                 "buttons": [{"id": 49, "text": "mods/amp-autotest-conflict.jar", "enabled": True, "visible": True},
                             {"id": 44, "text": "Restore", "enabled": self.vault_claim_selected, "visible": True},
                             {"id": 45, "text": "Save copy", "enabled": self.vault_claim_selected, "visible": True},
-                            {"id": 92, "text": "Confirm deletion" if self.vault_claim_selected == "delete-pending" else "Delete from vault", "enabled": bool(self.vault_claim_selected), "visible": True},
+                            {"id": 92, "text": "Delete", "enabled": bool(self.vault_claim_selected), "visible": True},
                             {"id": 48, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -372,7 +372,7 @@ class FakeBridge:
             self.screen = "preview"
         elif element_id == 70:
             self.repair_editable_reset = True
-            self.repair_archive_unowned = False
+            self.repair_keep_unowned = False
             self.repair_applied = False
             self.update_available = self._repair_requires_update()
             self.screen = "offline_repair"
@@ -381,7 +381,7 @@ class FakeBridge:
         elif element_id == 96:
             self.repair_editable_reset = False
         elif element_id == 97:
-            self.repair_archive_unowned = not self.repair_archive_unowned
+            self.repair_keep_unowned = not self.repair_keep_unowned
         elif element_id == 98:
             self._apply_offline_repair()
         elif element_id == 99:
@@ -579,12 +579,12 @@ class FakeBridge:
     def _repair_buttons(self) -> list[dict]:
         buttons: list[dict] = []
         if not self.repair_applied:
-            buttons.append({"id": 97, "text": (f"[x] Archive and remove {len(self._repair_unowned_mods())} unowned mods" if self.repair_archive_unowned else f"[ ] Keep {len(self._repair_unowned_mods())} unowned mods"), "enabled": True, "visible": bool(self._repair_unowned_mods())})
-            buttons.append({"id": 95, "text": "[x] Reset config/pack-shared-editable.txt" if self.repair_editable_reset else "[ ] Keep changes in config/pack-shared-editable.txt", "enabled": True, "visible": True})
+            buttons.append({"id": 97, "text": (f"[x] Keep {len(self._repair_unowned_mods())} unowned mods" if self.repair_keep_unowned else f"[ ] Keep {len(self._repair_unowned_mods())} unowned mods"), "enabled": True, "visible": bool(self._repair_unowned_mods())})
+            buttons.append({"id": 95, "text": "[ ] Keep changes in config/pack-shared-editable.txt" if self.repair_editable_reset else "[x] Keep changes in config/pack-shared-editable.txt", "enabled": True, "visible": True})
             if self.repair_editable_reset:
                 buttons.append({"id": 96, "text": "Keep all editable changes", "enabled": True, "visible": True})
-        repair_work = not self.repair_applied and (self.repair_editable_reset or self.repair_archive_unowned or bool(self.repair_mutations))
-        buttons.append({"id": 98, "text": "Repair available files" if self.update_available else "Repair files", "enabled": repair_work, "visible": True})
+        repair_work = not self.repair_applied and (self.repair_editable_reset or self.repair_keep_unowned or bool(self.repair_mutations))
+        buttons.append({"id": 98, "text": "Repair", "enabled": repair_work, "visible": True})
         if self.update_available:
             buttons.append({"id": 99, "text": "Update and finish repair", "enabled": True, "visible": True})
         buttons.append({"id": 100, "text": "Cancel", "enabled": True, "visible": True})
@@ -626,14 +626,14 @@ class FakeBridge:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
         self._repair_preservation_objects()
-        if self.repair_archive_unowned:
+        if not self.repair_keep_unowned:
             for source in self._repair_unowned_mods():
                 self._vault_claim(self._pack_id(self.selected_pack), f"mods/{source.name}", source.read_bytes(), "STRICT_REPAIR")
                 source.unlink()
         self.repair_mutations.clear()
         self.repair_applied = True
         self.repair_editable_reset = False
-        self.repair_archive_unowned = False
+        self.repair_keep_unowned = False
 
     def _repair_preservation_objects(self) -> None:
         objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"

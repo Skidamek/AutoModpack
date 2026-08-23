@@ -54,13 +54,13 @@ public class ErrorScreen extends VersionedScreen {
 							primaryAction(VersionedText.translatable("automodpack.error.retry"), button -> retry()),
 							optionalAction(VersionedText.translatable("automodpack.error.openLogs"), button -> openLogs())),
 					actionRow(ActionAreaLayout.RowKind.FOOTER,
-							optionalAction(VersionedText.translatable(copied ? "automodpack.error.copied" : "automodpack.error.copyDetails"), button -> copyDetails()),
+							optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails()),
 							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		} else {
 			rows = List.of(
 					actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 							optionalAction(VersionedText.translatable("automodpack.error.openLogs"), button -> openLogs()),
-							optionalAction(VersionedText.translatable(copied ? "automodpack.error.copied" : "automodpack.error.copyDetails"), button -> copyDetails())),
+							optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails())),
 					actionRow(ActionAreaLayout.RowKind.FOOTER,
 							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		}
@@ -117,6 +117,8 @@ public class ErrorScreen extends VersionedScreen {
 				this.width / 2, 36, TextColors.WHITE);
 
 		int y = 62;
+		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
+		y += copied ? 16 : 0;
 		int contentBottom = this.height - 58;
 		String summary = VersionedText.translatable(request.messageKey(), request.translationArguments()).getString();
 		for (String line : wrapToWidth(this.font, summary, Math.max(1, this.width - 30), Math.max(1, (contentBottom - y) / 12))) {

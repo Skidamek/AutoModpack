@@ -85,7 +85,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		rebuild();
 	}
 
-	/** Hover help for the cleanup toggle: names the exact files the choice applies to. */
+	/** Hover help for the cleanup toggle: what each state does plus the exact files the choice applies to. */
 	private void refreshCleanupTooltip() {
 		if (updater.firstInstallLocalModCount() <= 0) return;
 		for (var child : this.children()) {

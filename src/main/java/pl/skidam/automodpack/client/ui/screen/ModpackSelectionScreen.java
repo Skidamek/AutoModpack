@@ -212,7 +212,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		// a relaunch, so there is nothing left to toggle here.
 		if (saved) {
 			this.addActionAreaAt(310, this.height / 2 + 20, actionRow(ActionAreaLayout.RowKind.FOOTER,
-					secondaryAction(VersionedText.translatable("automodpack.selection.later"), press -> ScreenImpl.setScreen(parent)),
+					secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
 					primaryAction(VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop())));
 			return;
 		}
@@ -300,7 +300,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		String saveLabel = selectionAction != null ? "automodpack.selection.preview" : managerEntry && !activeModpack ? "automodpack.packManager.reviewSwitch" : "automodpack.selection.save";
 		SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
 		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.selection.cancel"), press -> back()),
+				secondaryAction(VersionedText.translatable("automodpack.back"), press -> back()),
 				optionalAction(VersionedText.translatable("automodpack.selection.reset"), press -> {
 					chosen.clear();
 					chosen.addAll(defaults.requestedGroups());
@@ -660,7 +660,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return rowLabel(formatRowLabel("[!] ", name, metrics, VersionedText.translatable("automodpack.selection.status.conflict").getString()), ChatFormatting.RED);
 		if (excluded.contains(groupId)) return rowLabel(formatRowLabel("[-] ", name, metrics, VersionedText.translatable("automodpack.selection.status.excluded").getString()), ChatFormatting.YELLOW);
 		if (resolution.selectedGroups().contains(groupId)) {
-			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics, VersionedText.translatable("automodpack.selection.status.selected").getString()), ChatFormatting.GREEN);
+			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics, null), ChatFormatting.GREEN);
 			if (resolution.dependencyGroups().contains(groupId))
 				return rowLabel(formatRowLabel("[+] ", name, metrics, VersionedText.translatable("automodpack.selection.status.requiredBySelection", names(explanation.relatedGroups())).getString()), ChatFormatting.AQUA);
 			return rowLabel(formatRowLabel("[+] ", name, metrics, null), ChatFormatting.AQUA);

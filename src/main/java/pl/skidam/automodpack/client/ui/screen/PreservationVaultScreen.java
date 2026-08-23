@@ -10,6 +10,7 @@ import java.util.concurrent.Future;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -65,12 +66,14 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		if (!loading && snapshot == null) load();
 		List<PreservationVault.Claim> claims = claims();
 		PreservationVault.Claim selected = selected();
-		String deleteKey = selected != null && selected.claimId().equals(pendingDeleteClaimId) ? "automodpack.vault.confirmDelete" : "automodpack.vault.delete";
+		boolean deleteArmed = selected != null && selected.claimId().equals(pendingDeleteClaimId);
+		MutableComponent deleteLabel = VersionedText.translatable("automodpack.vault.delete");
+		if (deleteArmed) deleteLabel.withStyle(ChatFormatting.RED);
 		List<ActionRow> actions = new ArrayList<>();
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				primaryAction(VersionedText.translatable("automodpack.vault.restore"), press -> restore()),
 				optionalAction(VersionedText.translatable("automodpack.vault.saveCopy"), press -> saveCopy()),
-				optionalAction(VersionedText.translatable(deleteKey), press -> delete())));
+				optionalAction(deleteLabel, press -> delete())));
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
 		pageSize = rowsPerPage(actionAreaTop(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)));
 		int pageCount = Math.max(1, (claims.size() + pageSize - 1) / pageSize);
@@ -91,6 +94,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			String label = prefix + claim.originalPath() + "  " + UiFormat.formatSize(claim.size());
 			Button select = buttonWidget(x, y, width, 20, VersionedText.literal(truncateToWidth(this.font, label, width - 12)), press -> select(claim));
 			select.active = !busy && !loading;
+			setTooltip(select, VersionedText.translatable("automodpack.vault.rowTooltip", claim.originalPath()));
 			this.addRenderableWidget(select);
 		}
 
@@ -263,6 +267,10 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), this.width / 2, 28 + index * 12, TextColors.WHITE);
 		if (restoreFailed) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.restoreUnavailable").withStyle(ChatFormatting.AQUA), this.width / 2, 52, TextColors.WHITE);
 		else if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
+		else {
+			PreservationVault.Claim armed = selected();
+			if (armed != null && armed.claimId().equals(pendingDeleteClaimId)) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.deleteArmed", armed.originalPath()).withStyle(ChatFormatting.RED), this.width / 2, 52, TextColors.WHITE);
+		}
 		List<PreservationVault.Claim> claims = claims();
 		int start = page * pageSize;
 		for (int index = start; index < Math.min(claims.size(), start + pageSize); index++) {

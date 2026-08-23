@@ -281,7 +281,7 @@ flow:
       all:
         - element: { text: Pack A }
         - element: { text: Pack B }
-        - element: { text: active }
+        - element: { text: connected }
   - do: click
     name: open Pack B for review only
     select: { text: Pack B }
@@ -429,16 +429,10 @@ flow:
     select: { text: mods/amp-autotest-conflict.jar }
   - do: click
     name: arm preservation deletion without deleting yet
-    select: { text: Delete from vault }
-  - do: wait_for
-    name: require a second explicit delete click
-    until: { element: { text: Confirm deletion, enabled: true } }
+    select: { text: Delete }
   - do: click
     name: cancel pending deletion by selecting the claim again
     select: { text: mods/amp-autotest-conflict.jar }
-  - do: wait_for
-    name: restore the non-destructive vault action state
-    until: { element: { text: Delete from vault, enabled: true } }
   - do: click
     name: leave the preservation vault
     select: { text: Back }
@@ -937,31 +931,41 @@ flow:
     until:
       all:
         - screen: OfflineRepairScreen
-        - element: { text: "[x] Reset config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
         - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
-        - element: { text: Repair available files, enabled: true }
+        - element: { text: Repair, enabled: true }
         - element: { text: Update and finish repair, enabled: true }
   - do: screenshot
     name: capture offline repair findings and defaults
     file: all-offline-repair-findings
-  - do: click
-    name: keep all editable changes during the first review pass
-    select: { text: Keep all editable changes }
   - do: wait_for
-    name: show editable files as explicitly kept
+    name: show the editable row checked as reset consent by default
+    until:
+      all:
+        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
+        - element: { text: Keep all editable changes, enabled: true }
+  - do: click
+    name: opt into keeping the edited file
+    select: { text: "[ ] Keep changes in config/pack-shared-editable.txt" }
+  - do: wait_for
+    name: show the keep choice checked on the editable row
+    until: { element: { text: "[x] Keep changes in config/pack-shared-editable.txt", enabled: true } }
+  - do: click
+    name: return the editable row to removal consent before leaving
+    select: { text: "[x] Keep changes in config/pack-shared-editable.txt" }
+  - do: wait_for
+    name: restore the unchecked reset consent on the editable row
     until: { element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true } }
   - do: click
-    name: select the editable file for reset again
-    select: { text: "[ ] Keep changes in config/pack-shared-editable.txt" }
-  - do: click
-    name: opt in to preserve and remove unowned mods
+    name: opt into keeping the unowned mods
     select: { text: "[ ] Keep 2 unowned mods" }
   - do: wait_for
-    name: show explicit repair cleanup consent
-    until: { element: { text: "[x] Archive and remove 2 unowned mods", enabled: true } }
+    name: show the keep choice checked on the unowned row
+    until: { element: { text: "[x] Keep 2 unowned mods", enabled: true } }
   - do: click
-    name: revoke repair cleanup consent before leaving
-    select: { text: "[x] Archive and remove 2 unowned mods" }
+    name: return to removal consent before leaving
+    select: { text: "[x] Keep 2 unowned mods" }
   - do: click
     name: cancel repair after exercising every choice
     select: { text: Cancel }
@@ -975,18 +979,22 @@ flow:
     name: reopen repair to verify choices did not leak
     select: { text: Repair }
   - do: wait_for
-    name: restore reset-all and keep-unowned defaults on reopen
+    name: restore reset-consent and keep-unowned defaults on reopen
     timeout: 120s
     until:
       all:
-        - element: { text: "[x] Reset config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
         - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
-  - do: click
-    name: consent to preserve and remove unowned mods for this repair
-    select: { text: "[ ] Keep 2 unowned mods" }
+  - do: wait_for
+    name: hold both rows at removal consent while keeping is one click away
+    until:
+      all:
+        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
+        - element: { text: Repair, enabled: true }
   - do: click
     name: repair every locally available byte before updating
-    select: { text: Repair available files }
+    select: { text: Repair }
   - do: wait_for
     name: retain only unavailable findings after local repair
     timeout: 120s
@@ -994,7 +1002,7 @@ flow:
       all:
         - screen: OfflineRepairScreen
         - element: { text: Update and finish repair, enabled: true }
-        - element: { text: Repair available files, enabled: false }
+        - element: { text: Repair, enabled: false }
   - do: assert_client_object
     name: verify repair rebuilt the corrupt active CAS object
     path: config/amp-autotest-alpha.txt
@@ -1097,22 +1105,16 @@ flow:
     select: { text: config/amp-autotest-gamma.cfg }
   - do: click
     name: arm removed-file claim deletion
-    select: { text: Delete from vault }
-  - do: wait_for
-    name: require delete confirmation for the repaired claim
-    until: { element: { text: Confirm deletion, enabled: true } }
+    select: { text: Delete }
   - do: click
     name: cancel the first deletion attempt by reselecting
     select: { text: config/amp-autotest-gamma.cfg }
-  - do: wait_for
-    name: return to the safe delete state
-    until: { element: { text: Delete from vault, enabled: true } }
   - do: click
     name: arm removed-file claim deletion again
-    select: { text: Delete from vault }
+    select: { text: Delete }
   - do: click
-    name: confirm removed-file claim deletion
-    select: { text: Confirm deletion }
+    name: complete removed-file claim deletion on the second click
+    select: { text: Delete }
   - do: wait_for
     name: wait for explicit vault deletion to finish
     until:
