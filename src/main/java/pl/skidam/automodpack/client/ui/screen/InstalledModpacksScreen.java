@@ -5,7 +5,7 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
@@ -130,7 +130,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	@Override
 	public void tick() {
 		super.tick();
-		if (this.minecraft == null || this.minecraft.screen != this || pendingPack == null || Util.getMillis() - pendingAt < DOUBLE_CLICK_MILLIS) return;
+		if (pendingPack == null || Util.getMillis() - pendingAt < DOUBLE_CLICK_MILLIS) return;
 		InstalledModpackController.Pack entry = pendingPack;
 		pendingPack = null;
 		open(entry);
