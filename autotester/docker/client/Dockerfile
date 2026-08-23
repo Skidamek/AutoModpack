@@ -66,7 +66,7 @@ RUN mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache \
 # Install the HeadlessMC launcher built above as the `hmc` command.
 COPY --from=hmc /headlessmc-launcher-wrapper.jar \
      /opt/headlessmc/headlessmc-launcher-wrapper.jar
-RUN printf '#!/usr/bin/env bash\nexec java -jar /opt/headlessmc/headlessmc-launcher-wrapper.jar "$@"\n' \
+RUN printf '#!/usr/bin/env bash\nexec java -Xmx2G -jar /opt/headlessmc/headlessmc-launcher-wrapper.jar "$@"\n' \
         > /usr/local/bin/hmc \
     && chmod +x /usr/local/bin/hmc
 
