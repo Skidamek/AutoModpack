@@ -1,5 +1,4 @@
 {
-  "automodpack.storage.sharedObjectsKept": "Shared data objects were kept because other game instances still use them.",
   "automodpack.restart.full": "The modpack download is complete.",
   "automodpack.restart.update": "The modpack update is ready.",
   "automodpack.restart.select": "The modpack required by the server is selected.",
@@ -183,7 +182,6 @@
   "automodpack.history.empty": "No content history is available.",
   "automodpack.history.detailsTitle": "Changes from %s",
   "automodpack.history.detailsDescription": "Changes from the previous generation.",
-  "automodpack.history.details.empty": "No catalogue changes.",
   "automodpack.files.title": "%s owned files",
   "automodpack.files.description": "Complete installed modpack file catalogue.",
   "automodpack.firstConnect.selectedSummary": "Selected groups: %s  Files: %s  Content size: %s",
@@ -210,11 +208,7 @@
   "automodpack.selection.files": "Files: %s (%s)",
   "automodpack.selection.unavailableOn": "Not available on %s",
   "automodpack.selection.metrics": "(%s files, %s)",
-  "automodpack.selection.status.required": "(required)",
-  "automodpack.selection.status.requestedUnavailable": "(requested unavailable)",
-  "automodpack.selection.status.unavailable": "(unavailable)",
   "automodpack.selection.status.dependencyUnavailable": "(dependency unavailable)",
-  "automodpack.selection.status.conflict": "(conflict)",
   "automodpack.selection.status.available": "Available",
   "automodpack.selection.status.stale": "Saved choice is no longer available",
   "automodpack.selection.blockedBy": "Unavailable because this feature requires %s",
@@ -228,9 +222,6 @@
   "automodpack.selection.cannotSelect": "%s cannot be selected with this modpack configuration.",
   "automodpack.selection.status.excluded": "(excluded)",
   "automodpack.selection.status.selected": "(selected)",
-  "automodpack.selection.status.requiredBySelection": "(required by %s)",
-  "automodpack.selection.status.forced": "(forced)",
-  "automodpack.selection.status.includedByDefault": "(included by default)",
   "automodpack.selection.sourcesCancelled": "Third-party sources: lookup canceled. Server download remains available",
   "automodpack.selection.sourcesResolving": "Third-party sources: resolving (%s / %s files matched)",
   "automodpack.selection.sourcesResolved": "Third-party sources: %s / %s files matched. Unmatched files use the server",
@@ -324,6 +315,5 @@
   "automodpack.browser.detailsStateTechnical": "Showing technical details now. Click for simple details.",
   "automodpack.browser.detailsStateSimple": "Showing simple details now. Click for technical details.",
   "automodpack.validation.skip.countdown": "The Skip button unlocks in %s seconds.",
-  "automodpack.selection.status.included": "(included by the pack)",
   "automodpack.repair.keepUnownedChecked": "[x] Keep %s unowned mods"
 }
