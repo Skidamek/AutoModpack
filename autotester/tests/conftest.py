@@ -134,7 +134,7 @@ class FakeBridge:
 							{"id": 29, "text": ("[+] Visuals" if self.dependency else "Visuals"), "enabled": True, "visible": True},
 							{"id": 39, "text": "< Prev", "enabled": False, "visible": True},
                             {"id": 30, "text": "Next >", "enabled": True, "visible": True},
-                            {"id": 31, "text": "Preview target", "enabled": True, "visible": True},
+                            {"id": 31, "text": "Continue", "enabled": True, "visible": True},
                             {"id": 102, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -147,7 +147,7 @@ class FakeBridge:
                             {"id": 39, "text": "< Prev", "enabled": True, "visible": True},
                             {"id": 36, "text": "Next >", "enabled": True, "visible": True},
                             {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
-                            {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
+                            {"id": 31, "text": "Continue", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "group2": {
@@ -157,7 +157,7 @@ class FakeBridge:
                             {"id": 38, "text": "[-] Windows-only (1 file, 11 B)", "enabled": False, "visible": True},
                             {"id": 39, "text": "< Prev", "enabled": True, "visible": True},
                             {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
-                            {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
+                            {"id": 31, "text": "Continue", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "feature_conflict": {
@@ -169,7 +169,8 @@ class FakeBridge:
             "preview": {
                 "screenClass": "UpdatePreviewScreen",
                 "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True},
-                            {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True}],
+                            {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True},
+                            {"id": 104, "text": "Cancel", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "removal_preview": {
@@ -401,6 +402,8 @@ class FakeBridge:
         elif element_id == 17:
             self.history_parent = "preview"
             self.screen = "patch_history"
+        elif element_id == 104:
+            self.screen = self.settings_parent if self.screen == "preview" and self.settings_parent == "details" else "group1"
         elif element_id == 15:
             self.history_parent = "changelog"
             self.screen = "patch_history"
@@ -899,7 +902,7 @@ class FakeBridge:
             a_state = "active" if self.selected_pack == "A" else "switch"
             b_state = "active" if self.selected_pack == "B" else "switch"
             rows = [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
-                    {"id": 11, "text": f"Pack B  [{b_state}]  local record", "enabled": True, "visible": True}]
+                    {"id": 11, "text": f"Pack B  [{b_state}]  local only", "enabled": True, "visible": True}]
         return rows + [{"id": 47, "text": "Back", "enabled": True, "visible": True},
                        {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
 

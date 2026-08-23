@@ -97,8 +97,9 @@ flow:
         - element: { text: "Category: Visuals" }
         - element: { text: Windows-only }
   - do: click
-    name: select the visual category
-    select: { text: "Category: Visuals" }
+    name: select the visual category unless its defaults already carry it
+    select: { text: "[ ] Category: Visuals" }
+    when: { element: { text: "[ ] Category: Visuals" } }
   - do: click
     name: return to the optional feature page
     select: { text: "< Prev" }
@@ -148,7 +149,7 @@ flow:
     select: { text: Defaults }
   - do: click
     name: preview the default target
-    select: { text: preview target }
+    select: { text: continue }
   - do: wait_for
     name: show the first update preview
     timeout: 90s

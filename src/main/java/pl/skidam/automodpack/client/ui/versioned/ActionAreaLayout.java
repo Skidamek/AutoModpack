@@ -7,11 +7,10 @@ import java.util.Objects;
 /** Pure geometry for the action areas shared by the custom screens. */
 public final class ActionAreaLayout {
 	public static final int BUTTON_HEIGHT = 20;
+	/** The vanilla seam between paired buttons inside one rail (pause menu 98+98 in 200px). */
+	public static final int SEAM = 4;
 	public static final int GAP = 8;
 	public static final int MIN_BUTTON_WIDTH = 88;
-	public static final int SINGLE_BUTTON_WIDTH = 200;
-	public static final int MULTI_BUTTON_WIDTH = 150;
-	public static final int COMPACT_BUTTON_WIDTH = 120;
 
 	private ActionAreaLayout() {}
 
@@ -28,13 +27,11 @@ public final class ActionAreaLayout {
 		NAVIGATION
 	}
 
-	public record Action(String id, int preferredWidth, int minimumWidth, Role role) {
+	public record Action(String id, Role role) {
 		public Action {
 			Objects.requireNonNull(id, "action id");
 			Objects.requireNonNull(role, "action role");
 			if (id.isBlank()) throw new IllegalArgumentException("action id must not be blank");
-			if (preferredWidth < 1) throw new IllegalArgumentException("preferred width must be positive");
-			if (minimumWidth < 1) throw new IllegalArgumentException("minimum width must be positive");
 		}
 	}
 
@@ -53,15 +50,11 @@ public final class ActionAreaLayout {
 		}
 	}
 
-	public static int preferredWidth(int actionCount) {
-		return switch (actionCount) {
-			case 0, 1 -> SINGLE_BUTTON_WIDTH;
-			case 2, 3 -> MULTI_BUTTON_WIDTH;
-			default -> COMPACT_BUTTON_WIDTH;
-		};
-	}
-
-	/** Lays rows out from top to bottom and stacks a row when its labels cannot fit safely. */
+	/**
+	 * Lays rows out from top to bottom. Every row fills the whole rail: buttons split the rail
+	 * evenly through a 4px seam and the outer edges repeat on every row, like the vanilla pause
+	 * menu. A lone button spans the full rail instead of floating centered.
+	 */
 	public static Layout fromTop(int left, int top, int width, int rowGap, List<Row> rows) {
 		int safeWidth = Math.max(1, width);
 		int safeGap = Math.max(0, rowGap);
@@ -72,9 +65,8 @@ public final class ActionAreaLayout {
 			if (row.actions().isEmpty()) continue;
 			if (!firstRow) cursor += safeGap;
 			firstRow = false;
-			RowLayout rowLayout = layoutRow(left, cursor, safeWidth, safeGap, row);
-			placements.addAll(rowLayout.placements());
-			cursor += rowLayout.height();
+			placements.addAll(layoutRow(left, cursor, safeWidth, row));
+			cursor += BUTTON_HEIGHT;
 		}
 		return new Layout(placements, top, cursor);
 	}
@@ -90,78 +82,22 @@ public final class ActionAreaLayout {
 		return new Layout(placements, unanchored.top() + shift, bottom);
 	}
 
-	private static RowLayout layoutRow(int left, int top, int width, int rowGap, Row row) {
+	/**
+	 * Splits one rail evenly among the row's buttons with a 4px seam between neighbors. Widths stay
+	 * equal — vanilla pairs are 98+98, never label-grown — so every row of a screen shares exact
+	 * left/right rails no matter how long its labels are.
+	 */
+	private static List<Placement> layoutRow(int left, int top, int width, Row row) {
 		List<Action> actions = row.actions();
-		int count = actions.size();
-		int available = Math.max(1, width - rowGap * (count - 1));
-		int[] widths = actions.stream().mapToInt(action -> Math.max(action.preferredWidth(), Math.min(width, action.minimumWidth()))).toArray();
-		if (fits(widths, available)) {
-			int groupWidth = 0;
-			for (int buttonWidth : widths) groupWidth += buttonWidth;
-			groupWidth += rowGap * (count - 1);
-			int x = left + (width - groupWidth) / 2;
-			List<Placement> placements = new ArrayList<>(count);
-			for (int index = 0; index < count; index++) {
-				Action action = actions.get(index);
-				int buttonWidth = widths[index];
-				placements.add(new Placement(action.id(), x, top, buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
-				x += buttonWidth + rowGap;
-			}
-			return new RowLayout(placements, BUTTON_HEIGHT);
+		int count = Math.max(1, actions.size());
+		int totalSeams = SEAM * (count - 1);
+		int buttonWidth = Math.max(MIN_BUTTON_WIDTH, (width - totalSeams) / count);
+		List<Placement> placements = new ArrayList<>(actions.size());
+		int x = left;
+		for (Action action : actions) {
+			placements.add(new Placement(action.id(), x, top, buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
+			x += buttonWidth + SEAM;
 		}
-
-		// Grown widths overflow the row: shrink back toward each button's minimum so the row
-		// stays on one line whenever possible; stack only when even minimums cannot fit.
-		shrink(widths, actions, available);
-		if (fits(widths, available)) {
-			int groupWidth = 0;
-			for (int buttonWidth : widths) groupWidth += buttonWidth;
-			groupWidth += rowGap * (count - 1);
-			int x = left + (width - groupWidth) / 2;
-			List<Placement> placements = new ArrayList<>(count);
-			for (int index = 0; index < count; index++) {
-				Action action = actions.get(index);
-				int buttonWidth = widths[index];
-				placements.add(new Placement(action.id(), x, top, buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
-				x += buttonWidth + rowGap;
-			}
-			return new RowLayout(placements, BUTTON_HEIGHT);
-		}
-
-		List<Placement> placements = new ArrayList<>(count);
-		for (int index = 0; index < count; index++) {
-			Action action = actions.get(index);
-			int buttonWidth = Math.min(width, Math.max(action.minimumWidth(), action.preferredWidth()));
-			int x = left + (width - buttonWidth) / 2;
-			placements.add(new Placement(action.id(), x, top + index * (BUTTON_HEIGHT + rowGap), buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
-		}
-		return new RowLayout(placements, count * BUTTON_HEIGHT + (count - 1) * rowGap);
+		return placements;
 	}
-
-	private static boolean fits(int[] widths, int available) {
-		int total = 0;
-		for (int width : widths) total += width;
-		return total <= available;
-	}
-
-	/** Reduces grown widths toward each button's minimum until the row fits on one line. */
-	private static void shrink(int[] widths, List<Action> actions, int available) {
-		int budget = available;
-		for (int width : widths) budget -= width;
-		if (budget >= 0) return;
-		while (budget < 0) {
-			boolean reduced = false;
-			for (int index = 0; index < widths.length && budget < 0; index++) {
-				int minimum = actions.get(index).minimumWidth();
-				if (widths[index] > minimum) {
-					widths[index]--;
-					budget++;
-					reduced = true;
-				}
-			}
-			if (!reduced) break;
-		}
-	}
-
-	private record RowLayout(List<Placement> placements, int height) {}
 }

@@ -41,8 +41,8 @@ public final class ScreenManager {
 		instance.welcome(modpackUpdater);
 	}
 
-	public static boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
-		return instance.preview(preview, modpackName, continueAction, cancelAction, returnToSelection);
+	public static boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
+		return instance.preview(preview, modpackName, continueAction, cancelAction);
 	}
 
 	public static void history(HistoryViewRequest request) {

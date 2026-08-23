@@ -39,19 +39,28 @@ flow:
     name: select only the child group
     select: { text: "[ ] Visuals" }
   - do: wait_for
-    name: keep the single-child category explicitly unselected
+    name: show the category header reflecting its selected child
     until:
       all:
         - element: { text: "[x] Visuals" }
-        - element: { text: "[ ] Category: Visuals" }
+        - element: { text: "[x] Category: Visuals" }
   - do: screenshot
     name: capture explicit child selection and pagination bounds
     file: ui-navigation-explicit-child
   - do: click
+    name: turn the whole category off through its header
+    select: { text: "[x] Category: Visuals" }
+  - do: wait_for
+    name: show the header exclusion reaching the child
+    until:
+      all:
+        - element: { text: "[ ] Category: Visuals" }
+        - element: { text: "[-] Visuals" }
+  - do: click
     name: select the category explicitly
     select: { text: "[ ] Category: Visuals" }
   - do: wait_for
-    name: show the explicit category and its selected child
+    name: show the category carrying its child again
     until:
       all:
         - element: { text: "[x] Category: Visuals" }
@@ -76,23 +85,23 @@ flow:
     file: ui-navigation-named-dependency
   - do: click
     name: preview the customized selection
-    select: { text: preview target }
+    select: { text: continue }
   - do: wait_for
     name: wait for the first update preview
     timeout: 90s
     until: { screen: UpdatePreviewScreen }
   - do: click
     name: return to group customization
-    select: { text: back }
+    select: { text: cancel }
   - do: wait_for
     name: verify group customization is reusable
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: preview target, enabled: true }
+        - element: { text: continue, enabled: true }
   - do: click
     name: preview the selection again
-    select: { text: preview target }
+    select: { text: continue }
   - do: wait_for
     name: verify the second update preview opens
     timeout: 90s
@@ -102,7 +111,7 @@ flow:
         - element: { text: update, enabled: true }
   - do: click
     name: return from the second preview
-    select: { text: back }
+    select: { text: cancel }
   - do: wait_for
     name: return from customization to first connection
     until: { screen: ModpackSelectionScreen }

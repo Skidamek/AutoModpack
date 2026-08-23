@@ -9,6 +9,7 @@ import java.util.List;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
@@ -51,8 +52,8 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
 		actions.add(new Action("automodpack.management.files", this::openFiles));
 		actions.add(new Action("automodpack.packDetails.storage", this::openStorage));
-		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate));
-		actions.add(new Action("automodpack.management.remove", this::remove));
+		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.translatable("automodpack.management.deactivateTooltip")));
+		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.translatable("automodpack.management.removeTooltip")));
 		int columns = actions.size() > 3 ? 2 : 1;
 		List<ActionRow> rows = new ArrayList<>();
 		for (int index = 0; index < actions.size(); index += columns) {
@@ -67,12 +68,21 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, rowActions.toArray(ActionDefinition[]::new)));
 		}
 		for (Button button : addActionAreaAt(PANEL_WIDTH, 100, rows.toArray(ActionRow[]::new))) actionButtons.add(button);
+		// Destructive verbs say what they do before the player commits: Deactivate keeps files, Remove deletes them.
+		for (int index = 0; index < actions.size() && index < actionButtons.size(); index++) {
+			Component tooltip = actions.get(index).tooltip();
+			if (tooltip != null) setTooltip(actionButtons.get(index), tooltip);
+		}
 		this.addActionArea(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
 		updateActions();
 	}
 
-	private record Action(String labelKey, Runnable action) {}
+	private record Action(String labelKey, Runnable action, Component tooltip) {
+		Action(String labelKey, Runnable action) {
+			this(labelKey, action, null);
+		}
+	}
 
 	private void primaryAction() {
 		if (busy) return;

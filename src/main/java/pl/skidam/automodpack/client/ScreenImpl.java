@@ -57,8 +57,8 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
-		executeOnClient(() -> Screens.preview(preview, modpackName, continueAction, cancelAction, returnToSelection));
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
+		executeOnClient(() -> Screens.preview(preview, modpackName, continueAction, cancelAction));
 		return true;
 	}
 
@@ -161,12 +161,12 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new FirstConnectScreen(modpackUpdater));
 		}
 
-		public static void preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
+		public static void preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
 			Screen parent = Screens.getScreen();
 			if (isTransient(parent)) parent = interactiveParent;
 			parent = previewParent(parent);
 			interactiveParent = null;
-			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, returnToSelection, continueAction, cancelAction));
+			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, continueAction, cancelAction));
 		}
 
 		private static Screen previewParent(Screen parent) {

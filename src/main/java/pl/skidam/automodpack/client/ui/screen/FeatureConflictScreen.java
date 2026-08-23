@@ -45,7 +45,7 @@ public final class FeatureConflictScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.conflictTitle").withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 44, TextColors.WHITE);
-		String description = VersionedText.translatable("automodpack.selection.conflictDescription", preferredName, conflictingNames).getString();
+		String description = VersionedText.translatable("automodpack.selection.conflictDescription", preferredName, conflictingNames, preferredName, preferredName).getString();
 		int y = this.height / 2 - 22;
 		for (String line : wrapToWidth(this.font, description, panelWidth(PANEL_WIDTH), 3)) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);

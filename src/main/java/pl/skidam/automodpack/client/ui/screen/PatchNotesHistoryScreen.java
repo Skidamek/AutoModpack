@@ -134,11 +134,14 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 		int pageSize = pageSize();
 		int start = page * pageSize;
 		int end = Math.min(lines.size(), start + pageSize);
+		// Sparse pages center between the header and the footer instead of leaving a broken-looking void.
+		int contentTop = 50 + Math.max(0, (pageSize * LINE_HEIGHT - (end - start) * LINE_HEIGHT) / 2);
 		for (int index = start; index < end; index++) {
 			String line = lines.get(index);
 			String generationPrefix = VersionedText.translatable("automodpack.patchNotes.entry", "").getString().stripTrailing();
-			ChatFormatting color = line.startsWith(generationPrefix) ? ChatFormatting.YELLOW : ChatFormatting.WHITE;
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(color), left, 50 + (index - start) * LINE_HEIGHT, TextColors.WHITE);
+			// Entry dates are neutral metadata, not warnings: gray headers, white notes.
+			ChatFormatting color = line.startsWith(generationPrefix) ? ChatFormatting.GRAY : ChatFormatting.WHITE;
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(color), left, contentTop + (index - start) * LINE_HEIGHT, TextColors.WHITE);
 		}
 	}
 

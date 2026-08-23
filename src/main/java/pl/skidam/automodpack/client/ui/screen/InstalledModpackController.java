@@ -98,7 +98,7 @@ final class InstalledModpackController {
 	}
 
 	void switchSelection(GenerationRecord record, SelectionIntent expected, SelectionIntent target, String modpackName, Runnable released) {
-		InstalledModpackSwitch.start(storage, record, expected, target, modpackName, true, released);
+		InstalledModpackSwitch.start(storage, record, expected, target, modpackName, released);
 	}
 
 	List<Pack> installed() {
@@ -227,7 +227,7 @@ final class InstalledModpackController {
 		try {
 			SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
 			SelectionIntent targetSelection = savedSelection == null ? GroupSelectionResolver.defaultIntent(pack.record().manifest()) : savedSelection;
-			InstalledModpackSwitch.start(storage, pack.record(), savedSelection, targetSelection, pack.name(), false, released);
+			InstalledModpackSwitch.start(storage, pack.record(), savedSelection, targetSelection, pack.name(), released);
 		} catch (RuntimeException e) {
 			released.run();
 			failure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
@@ -248,7 +248,7 @@ final class InstalledModpackController {
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(pack.record().manifest());
 			boolean shown = ScreenManager.preview(preview, pack.name(),
 					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> forget(pack, released, removed)),
-					released, false);
+					released);
 			if (!shown) released.run();
 		} catch (Exception e) {
 			released.run();
@@ -301,7 +301,7 @@ final class InstalledModpackController {
 				UpdatePreview preview = deactivation ? removalUpdater.previewDeactivation() : removalUpdater.previewRemoval();
 				boolean shown = ScreenManager.preview(preview, pack.name(),
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeActiveRemoval(removalUpdater, deactivation, released, removed)),
-						released, false);
+						released);
 				if (!shown) {
 					removalUpdater.close();
 					releaseOnClient(released);

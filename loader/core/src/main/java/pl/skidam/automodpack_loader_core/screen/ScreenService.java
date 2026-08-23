@@ -20,7 +20,7 @@ public interface ScreenService {
 
 	void welcome(ModpackUpdater modpackUpdater);
 
-	boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection);
+	boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction);
 
 	void history(HistoryViewRequest request);
 

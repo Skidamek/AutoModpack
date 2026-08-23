@@ -126,7 +126,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	}
 
 	private MutableComponent orphanedLabel(PreservationVault.Snapshot snapshot, int width) {
-		String label = snapshot.modpackId() + "  " + VersionedText.translatable("automodpack.management.preservedFiles").getString();
+		// The raw modpack id is internal; the row names what the player will find inside instead.
+		String label = VersionedText.translatable("automodpack.management.preservedFilesCount", snapshot.claims().size()).getString();
 		return VersionedText.literal(truncateToWidth(this.font, label, width - 12)).withStyle(ChatFormatting.YELLOW);
 	}
 

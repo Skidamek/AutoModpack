@@ -27,7 +27,7 @@ public class PreloadScreenImpl implements ScreenService {
 	public void welcome(ModpackUpdater modpackUpdater) {}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
 		return false;
 	}
 
