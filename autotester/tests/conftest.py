@@ -154,7 +154,7 @@ class FakeBridge:
                 "screenClass": "ModpackSelectionScreen",
                 "buttons": [{"id": 48, "text": ("[+] Visuals" if self.dependency else "Visuals"), "enabled": True, "visible": True},
                             {"id": 49, "text": "Category: Visuals", "enabled": True, "visible": True},
-                            {"id": 38, "text": "[-] Windows-only (1 files, 11 B)", "enabled": False, "visible": True},
+                            {"id": 38, "text": "[-] Windows-only (1 file, 11 B)", "enabled": False, "visible": True},
                             {"id": 39, "text": "< Prev", "enabled": True, "visible": True},
                             {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
                             {"id": 31, "text": "Preview target", "enabled": True, "visible": True}],
@@ -721,7 +721,7 @@ class FakeBridge:
         # The checkbox is "Keep existing mod files": checked = keep, unchecked = removal consent.
         if not self.first_install_archive_existing:
             for source in self._first_install_local_mods():
-                self._vault_claim("packaaa", f"mods/{source.name}", source.read_bytes(), "STRICT_INSTALL")
+                self._vault_claim("packaaa", f"mods/{source.name}", source.read_bytes(), "PLAYER_CONSENT")
                 source.unlink()
         root = self.ctx.game_dir / "automodpack" / "client" / "active"
         if root.exists():

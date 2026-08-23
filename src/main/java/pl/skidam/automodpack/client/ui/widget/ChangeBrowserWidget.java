@@ -187,7 +187,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 
 		private static String folderDetail(ChangeBrowserProjection.Aggregate aggregate) {
 			List<String> parts = new ArrayList<>();
-			parts.add(VersionedText.translatable("automodpack.browser.folderSummary", aggregate.fileCount(), UiFormat.formatSize(aggregate.byteCount())).getString());
+			parts.add(UiFormat.plural(aggregate.fileCount(), "automodpack.browser.folderSummary", UiFormat.formatSize(aggregate.byteCount())).getString());
 			long added = aggregate.forKind(ChangeSet.Kind.ADDED).fileCount();
 			long modified = aggregate.forKind(ChangeSet.Kind.MODIFIED).fileCount() + aggregate.forKind(ChangeSet.Kind.METADATA_ONLY).fileCount();
 			long removed = aggregate.forKind(ChangeSet.Kind.REMOVED).fileCount();

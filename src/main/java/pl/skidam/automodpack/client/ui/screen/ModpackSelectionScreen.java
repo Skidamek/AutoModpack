@@ -161,7 +161,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	 * Builds the screen for whichever modpack the client currently has selected. Returns the parent
 	 * untouched when there is nothing to choose, so callers can hand the result straight to setScreen.
 	 */
-	public static Screen forSelectedModpack(Screen parent) {
+	private static Screen forSelectedModpack(Screen parent) {
 		return forModpackId(parent, clientConfig == null ? null : clientConfig.selectedModpackId);
 	}
 
@@ -648,7 +648,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 		String name = displayName(groupId);
 		GroupResolution explanation = resolution.resolution(groupId);
-		String metrics = VersionedText.translatable("automodpack.selection.metrics", group.files().size(), UiFormat.formatSize(groupBytes(group))).getString();
+		String metrics = UiFormat.plural(group.files().size(), "automodpack.selection.metrics", UiFormat.formatSize(groupBytes(group))).getString();
 		// The leading glyph carries the state; the words live in the hover tooltip instead of the row.
 		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel("[#] ", name, metrics), ChatFormatting.GRAY);
 		if (explanation != null && explanation.reasons().contains(GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE))
@@ -744,7 +744,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				? VersionedText.translatable("automodpack.selection.title")
 				: VersionedText.literal(modpackName + " – ").append(VersionedText.translatable("automodpack.selection.title"));
 		if (managerEntry && !isActiveModpack()) header = VersionedText.literal(modpackName + " – ").append(VersionedText.translatable("automodpack.packManager.reviewSwitch"));
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header.getString(), this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 18,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header.getString(), this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 11,
 				TextColors.WHITE);
 		if (saved) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.saved").withStyle(ChatFormatting.GREEN), this.width / 2, this.height / 2 - 30,
@@ -763,9 +763,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					? VersionedText.translatable("automodpack.packManager.switchDescription")
 					: VersionedText.translatable("automodpack.selection.description");
 			drawCenteredTextWithShadow(matrices, this.font, description.withStyle(ChatFormatting.GRAY),
-					this.width / 2, 32, TextColors.WHITE);
+					this.width / 2, 22, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", ClientPlatform.current().id(), resolution.selectedGroups().size())
-					.withStyle(ChatFormatting.GRAY), this.width / 2, 43, TextColors.WHITE);
+					.withStyle(ChatFormatting.GRAY), this.width / 2, 33, TextColors.WHITE);
 			if (resolutionError.isEmpty() && (pendingUpdater == null || pendingUpdater.getSourceAvailability().totalFiles() == 0) && !rows.isEmpty()) drawCenteredTextWithShadow(matrices, this.font,
 					VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.selection.categoryExplanation").getString(), panelWidth(ROW_WIDTH) - 20)).withStyle(ChatFormatting.DARK_GRAY), this.width / 2, 55, TextColors.WHITE);
 			if (!resolutionError.isEmpty()) {
@@ -779,8 +779,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 						: !availability.complete()
 								? "automodpack.selection.sourcesResolving"
 								: "automodpack.selection.sourcesResolved", availability.resolvedFiles(), availability.totalFiles()).getString();
-				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, sourceStatus, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 54,
-						TextColors.WHITE);
+				// Status lines wrap instead of truncating mid-sentence; two lines fit between the header stack and the first row.
+				int statusY = 44;
+				for (String line : wrapToWidth(this.font, sourceStatus, this.width - 20, 2)) {
+					drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.GRAY), this.width / 2, statusY, TextColors.WHITE);
+					statusY += 11;
+				}
 			}
 		}
 	}

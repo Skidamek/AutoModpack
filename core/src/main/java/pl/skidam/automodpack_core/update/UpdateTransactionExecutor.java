@@ -573,7 +573,7 @@ public final class UpdateTransactionExecutor {
 						&& preservation.expectedHash().equalsIgnoreCase(installation.expectedExistingHash());
 				if (!deleteProof && !replaceProof) throw new IOException("Player-consent preservation has no matching hash-pinned operation");
 				if (activeState != null && !(activeState.modpackId.equals(transaction.modpackId) && activeState.generationId.equals(transaction.targetGenerationId)
-						&& hasStrictInstallClaim(transaction, preservation, relative)))
+						&& hasPlayerConsentClaim(transaction, preservation, relative)))
 					throw new IOException("Player-consent preservation is only valid on a first install");
 				ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
 				if (projected == null || (deleteProof && projected.present()) || (replaceProof && !projected.present()))
@@ -596,10 +596,10 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	private boolean hasStrictInstallClaim(UpdateTransaction transaction, Preservation preservation, String relative) throws IOException {
+	private boolean hasPlayerConsentClaim(UpdateTransaction transaction, Preservation preservation, String relative) throws IOException {
 		return PreservationVault.read(context.storage(), transaction.modpackId).claims().stream().anyMatch(claim -> claim.sourceRoot() == Root.GAME_DIR
 				&& claim.originalPath().equals(relative) && claim.objectHash().equalsIgnoreCase(preservation.expectedHash()) && claim.size() == preservation.expectedSize()
-				&& claim.reason() == PreservationVault.Reason.STRICT_INSTALL && claim.generationId().equals(transaction.targetGenerationId));
+				&& claim.reason() == PreservationVault.Reason.PLAYER_CONSENT && claim.generationId().equals(transaction.targetGenerationId));
 	}
 
 	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
@@ -882,7 +882,7 @@ public final class UpdateTransactionExecutor {
 			return new PreservationOrigin(active.modpackId, HashUtils.normalizeSha1(active.generationId), reason);
 		}
 		if (preservation.proof() == PreservationProof.PLAYER_CONSENT)
-			return new PreservationOrigin(transaction.modpackId, transaction.targetGenerationId, PreservationVault.Reason.STRICT_INSTALL);
+			return new PreservationOrigin(transaction.modpackId, transaction.targetGenerationId, PreservationVault.Reason.PLAYER_CONSENT);
 		return new PreservationOrigin(transaction.modpackId, transaction.targetGenerationId, PreservationVault.Reason.SERVER_REMOVAL);
 	}
 

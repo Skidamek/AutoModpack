@@ -1265,7 +1265,7 @@ flow:
   - do: assert_preservation_claim
     name: verify first-install cleanup preserved both removed mods
     packId: "${bootstrap_modpack_id}"
-    reason: STRICT_INSTALL
+    reason: PLAYER_CONSENT
     count: 2
   - do: disconnect
     name: return from the server to the vanilla title screen before removal
@@ -1333,7 +1333,7 @@ flow:
   - do: assert_preservation_claim
     name: verify Pack A removal retained explicit first-install preservation claims
     packId: "${bootstrap_modpack_id}"
-    reason: STRICT_INSTALL
+    reason: PLAYER_CONSENT
     count: 2
   # Rollback must precede compaction so the runner can select and verify a
   # durable ancestor. Both server-maintenance steps run after client assertions.

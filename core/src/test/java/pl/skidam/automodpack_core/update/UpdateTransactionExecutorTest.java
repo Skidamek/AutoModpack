@@ -356,7 +356,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(FileIntegrity.matches(local, serverBytes.length, serverHash));
 		PreservationVault.Claim claim = PreservationVault.read(storage, target.manifest().modpackId()).claims().get(0);
-		assertEquals(PreservationVault.Reason.STRICT_INSTALL, claim.reason());
+		assertEquals(PreservationVault.Reason.PLAYER_CONSENT, claim.reason());
 		assertEquals(localHash, claim.objectHash());
 		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(localHash), localBytes.length, localHash));
 	}
