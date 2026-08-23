@@ -42,7 +42,7 @@ flow:
     name: keep the single-child category explicitly unselected
     until:
       all:
-        - element: { text: "[+] Visuals" }
+        - element: { text: "[x] Visuals" }
         - element: { text: "[ ] Category: Visuals" }
   - do: screenshot
     name: capture explicit child selection and pagination bounds
