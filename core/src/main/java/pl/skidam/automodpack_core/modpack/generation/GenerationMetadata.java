@@ -37,7 +37,7 @@ public record GenerationMetadata(
 		rollbackTargetGenerationId = requireOptionalDigest(rollbackTargetGenerationId, "rollback target generation ID");
 	}
 
-	public static String normalizeNotes(String notes) {
+	private static String normalizeNotes(String notes) {
 		if (notes == null || notes.isEmpty()) return "";
 		return notes.replace("\r\n", "\n").replace('\r', '\n');
 	}

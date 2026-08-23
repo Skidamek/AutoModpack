@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -63,10 +62,6 @@ public final class UpdatePreview {
 		return groupConsequences;
 	}
 
-	public String patchNotes() {
-		return patchNotes;
-	}
-
 	public List<GenerationPatchNoteHistory.Entry> patchNotesHistory() {
 		return patchNotesHistory;
 	}
@@ -116,17 +111,6 @@ public final class UpdatePreview {
 		return bytesOf(ChangeSet.Kind.MODIFIED);
 	}
 
-	public long removedBytes() {
-		return bytesOf(ChangeSet.Kind.REMOVED);
-	}
-
-	public long preservedBytes() {
-		return changeSet.changes().stream().filter(change -> switch (change.kind()) {
-			case PRESERVED, PRESERVED_CHANGED, PRESERVED_UNAVAILABLE, PRESERVED_OUTSIDE -> true;
-			default -> false;
-		}).mapToLong(UpdatePreview::largestOccurrence).sum();
-	}
-
 	public long uncachedAcquisitionBytes() {
 		return decision.operations().stream()
 				.filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT && operation.root() == Root.PROJECTION && operation.expectedExistingHash() == null)
@@ -140,15 +124,6 @@ public final class UpdatePreview {
 
 	public String latestPatchNotes() {
 		return patchNotes;
-	}
-
-	public Optional<GenerationPatchNoteHistory.Entry> featuredPatchNotes() {
-		if (patchNotes.isBlank()) return Optional.empty();
-		for (int index = patchNotesHistory.size() - 1; index >= 0; index--) {
-			GenerationPatchNoteHistory.Entry entry = patchNotesHistory.get(index);
-			if (entry.patchNotes().equals(patchNotes)) return Optional.of(entry);
-		}
-		return Optional.empty();
 	}
 
 	public Set<RestartReason> restartReasons() {

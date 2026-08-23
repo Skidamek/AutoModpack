@@ -78,10 +78,6 @@ public class NettyServer {
 		this.paths = hosting.asMap();
 	}
 
-	public Map<String, Path> getPathsSnapshot() {
-		return paths;
-	}
-
 	public Optional<Path> getPath(String requestKey) {
 		if (requestKey == null) return Optional.empty();
 		if (requestKey.isEmpty()) return regularPath(paths.get(""));

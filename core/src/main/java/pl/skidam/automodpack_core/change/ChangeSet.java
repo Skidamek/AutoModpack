@@ -256,10 +256,6 @@ public final class ChangeSet {
 		public Occurrence withReferences(List<String> newReferences) {
 			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, featureIds, newReferences);
 		}
-
-		public Occurrence withFeatureIds(Collection<String> newFeatureIds) {
-			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, newFeatureIds == null ? List.of() : List.copyOf(newFeatureIds), references);
-		}
 	}
 
 	public record Effect(String category, String value) {
@@ -268,10 +264,6 @@ public final class ChangeSet {
 			if (value == null || value.isBlank()) throw new IllegalArgumentException("Change effect value is missing");
 			category = category.trim();
 			value = value.trim();
-		}
-
-		public static Effect named(String value) {
-			return new Effect("general", value);
 		}
 	}
 

@@ -362,7 +362,7 @@ public class FileInspection {
 		return obj.has(key) ? obj.get(key).getAsString() : null;
 	}
 
-	public static Path getMetadataPath(FileSystem fs) {
+	private static Path getMetadataPath(FileSystem fs) {
 		String loader = getLoader();
 		String preferredEntry = loader == null ? null : switch (loader) {
 			case "neoforge" -> "META-INF/neoforge.mods.toml";
@@ -393,7 +393,7 @@ public class FileInspection {
 	 * service mod apart from a plain mod. Recognition is loader-agnostic (the running loader isn't
 	 * known yet in all callers), so this checks the full cross-loader union.
 	 */
-	public static boolean hasSpecificServices(FileSystem fs) {
+	private static boolean hasSpecificServices(FileSystem fs) {
 		Set<String> known = LoaderServicePaths.ALL_SERVICES;
 		// Short-circuit on the first root match (the common case for service mods) before paying
 		// for the nested jarjar scan - isMod/isModCompatible call this over every mod.
@@ -459,25 +459,5 @@ public class FileInspection {
 		} catch (IOException e) {
 			LOGGER.error("Error reading nested JAR {}: {}", nestedJarPath, e.getMessage());
 		}
-	}
-
-	private static final String forbiddenChars = "\\/:*\"<>|!?&%$;=+";
-
-	public static boolean isInValidFileName(String fileName) {
-		for (char c : forbiddenChars.toCharArray()) {
-			if (fileName.indexOf(c) != -1) return true;
-		}
-
-		for (char c : fileName.toCharArray()) {
-			if (c < 32 || c == 127) return true;
-		}
-		return fileName.trim().isEmpty();
-	}
-
-	public static String fixFileName(String fileName) {
-		for (char c : fileName.toCharArray()) {
-			if (c < 32 || c == 127 || forbiddenChars.indexOf(c) != -1) fileName = fileName.replace(c, '-');
-		}
-		return fileName.trim();
 	}
 }

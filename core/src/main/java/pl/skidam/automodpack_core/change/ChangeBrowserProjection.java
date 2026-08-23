@@ -126,18 +126,6 @@ public final class ChangeBrowserProjection {
 			return new Filter("", Set.of(), Set.of());
 		}
 
-		public Filter withSearch(String value) {
-			return new Filter(value, contentKinds, featureIds);
-		}
-
-		public Filter withContentKinds(Collection<String> values) {
-			return new Filter(search, normalizedKinds(values), featureIds);
-		}
-
-		public Filter withFeatures(Collection<String> values) {
-			return new Filter(search, contentKinds, normalizedFeatures(values));
-		}
-
 		private List<ChangeSet.Occurrence> visibleOccurrences(ChangeSet.Change change) {
 			List<ChangeSet.Occurrence> filtered = change.occurrences().stream().filter(this::matchesOccurrence).toList();
 			if (filtered.isEmpty()) return List.of();

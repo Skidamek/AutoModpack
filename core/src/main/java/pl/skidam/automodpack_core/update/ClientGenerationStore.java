@@ -258,7 +258,7 @@ public final class ClientGenerationStore {
 		return readFields(generationId).map(GenerationPatchNoteHistory::fromFields).orElse(List.of());
 	}
 
-	public List<String> generationIds() throws IOException {
+	private List<String> generationIds() throws IOException {
 		if (!Files.exists(storage.recordsDirectory(), LinkOption.NOFOLLOW_LINKS)) return List.of();
 		try (Stream<Path> paths = Files.list(storage.recordsDirectory())) {
 			return paths.filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)).map(path -> path.getFileName().toString()).sorted().toList();
@@ -405,11 +405,6 @@ public final class ClientGenerationStore {
 		FileTrees.delete(storage.baselineFile(normalizedModpackId).getParent());
 		FileTrees.delete(storage.connectionDirectory(normalizedModpackId));
 		ClientObjectStore.collectUnreachableObjects(storage, Set.copyOf(generationIds()), Set.of());
-	}
-
-	/** Returns the committed lineage ending at the generation selected by active-state.json. */
-	public List<GenerationRecord> lineage(String modpackId, String generationId) throws IOException {
-		return readLineage(modpackId, generationId, false);
 	}
 
 	/** Returns the downloaded part of the committed lineage; skipped server generations are not client records. */

@@ -38,9 +38,6 @@ public class PreloadScreenImpl implements ScreenService {
 	public void failure(FailureRequest request) {}
 
 	@Override
-	public void title() {}
-
-	@Override
 	public void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {}
 
 	@Override

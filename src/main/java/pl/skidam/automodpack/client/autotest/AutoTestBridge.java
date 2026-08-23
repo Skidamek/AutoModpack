@@ -80,7 +80,7 @@ public final class AutoTestBridge {
 		onClientReady();
 	}
 
-	public static boolean hasReloadFinished() {
+	private static boolean hasReloadFinished() {
 		return RELOAD_FINISHED.get();
 	}
 

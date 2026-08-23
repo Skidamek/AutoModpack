@@ -31,8 +31,4 @@ public class CompressionEncoder extends MessageToByteEncoder<ByteBuf> {
 		}
 		return codec;
 	}
-
-	public CompressionCodec getCodec() {
-		return codec;
-	}
 }

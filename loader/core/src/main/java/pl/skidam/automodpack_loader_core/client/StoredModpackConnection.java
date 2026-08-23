@@ -69,14 +69,6 @@ public final class StoredModpackConnection implements AutoCloseable {
 		}
 	}
 
-	public GenerationRecord advertisedRecord() {
-		return advertisedRecord;
-	}
-
-	public GenerationHistoryIndex advertisedHistoryIndex() {
-		return advertisedHistoryIndex;
-	}
-
 	/** Returns the complete current-format advertisement validated when this session was opened. */
 	public ModpackJsons.CompleteModpackContentFields advertisedFields() {
 		ModpackJsons.CompleteModpackContentFields fields = advertisedRecord.toFields();

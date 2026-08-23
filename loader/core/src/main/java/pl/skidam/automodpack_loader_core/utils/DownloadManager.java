@@ -482,10 +482,6 @@ public class DownloadManager {
 		return cancelled;
 	}
 
-	public void setCancelled(boolean cancelled) {
-		this.cancelled = cancelled;
-	}
-
 	// --- Inner Classes ---
 
 	public static class QueuedDownload {

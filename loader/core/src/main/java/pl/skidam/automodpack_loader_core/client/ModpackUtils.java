@@ -342,7 +342,7 @@ public class ModpackUtils {
 		});
 	}
 
-	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(ConnectionJsons.ConnectionInfo connectionInfo,
+	private static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(ConnectionJsons.ConnectionInfo connectionInfo,
 			boolean allowAskingUser) {
 		String originHost = connectionInfo.origin.getHostString();
 		return certificate -> {

@@ -88,16 +88,6 @@ public class VersionedScreen extends Screen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
 
 
-	/*? if <=1.16.5 {*//*
-	public <T extends Element> void addDrawableChild(T child) {
-		if (child instanceof ClickableWidget) {
-			super.addButton((ClickableWidget) child);
-			return;
-		}
-		super.addChild(child);
-	}
-	*//*?}*/
-
 	/*? if >=1.20 {*/
 	public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
 		/*? if >=26.1 {*/

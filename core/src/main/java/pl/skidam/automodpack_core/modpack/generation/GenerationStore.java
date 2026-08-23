@@ -71,11 +71,6 @@ public final class GenerationStore {
 		public OptionalDouble uniqueObjectReferenceRatio() {
 			return objectReferenceCount == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) referencedObjectCount / objectReferenceCount);
 		}
-
-		/** The ratio of unique referenced object hashes to measured immutable object files. */
-		public OptionalDouble referencedObjectRatio() {
-			return immutableObjectCount == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) referencedObjectCount / immutableObjectCount);
-		}
 	}
 
 	/** The result of one explicitly requested object collection pass. */

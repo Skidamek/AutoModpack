@@ -1,73 +1,15 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.net.IDN;
-import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.util.Enumeration;
 import java.util.Locale;
 import java.util.Objects;
 
 public class AddressHelpers {
 	private static final int MINECRAFT_DEFAULT_PORT = 25565;
-
-	public static String getLocalIp() {
-		return getNetworkIp(Inet4Address.class);
-	}
-
-	public static String getLocalIpv6() {
-		return getNetworkIp(Inet6Address.class);
-	}
-
-	private static String getNetworkIp(Class<? extends InetAddress> ipClass) {
-		try {
-			Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-			while (interfaces.hasMoreElements()) {
-				NetworkInterface networkInterface = interfaces.nextElement();
-				if (!networkInterface.isUp() || networkInterface.isLoopback()) continue;
-
-				Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
-				while (addresses.hasMoreElements()) {
-					InetAddress addr = addresses.nextElement();
-					if (ipClass.isInstance(addr) && !addr.isLinkLocalAddress()) return addr.getHostAddress().split("%")[0];
-				}
-			}
-		} catch (SocketException e) {
-			e.printStackTrace();
-		}
-		return null;
-	}
-
-	public static boolean areIpsEqual(String ip1, String ip2) {
-		if (ip1 == null || ip2 == null) return false;
-		try {
-			var a1 = InetAddress.getByName(ip1);
-			var a2 = InetAddress.getByName(ip2);
-			return a1.equals(a2);
-		} catch (UnknownHostException ignored) {
-		}
-		return false;
-	}
-
-	public static String normalizeIp(String ip) {
-		if (ip == null) return null;
-
-		ip = ip.trim();
-		if (ip.startsWith("/")) ip = ip.substring(1);
-
-		if (ip.contains(":")) {
-			int portIndex = ip.lastIndexOf(":");
-			ip = ip.substring(0, portIndex);
-		}
-
-		if (ip.startsWith("[") && ip.endsWith("]")) ip = ip.substring(1, ip.length() - 1);
-
-		return ip;
-	}
 
 	public static InetSocketAddress format(String host, int port) {
 		if (port < 0 || port > 65535) throw new IllegalArgumentException("Port must be in 0..65535");
@@ -223,16 +165,5 @@ public class AddressHelpers {
 			result.append(Integer.toHexString(groups[i]));
 		}
 		return result.toString();
-	}
-
-	public static boolean isLocal(String address) {
-		if (address == null) return true;
-
-		address = normalizeIp(address);
-		if (address.startsWith("192.168.") || address.startsWith("127.") || address.startsWith("::1") || address.startsWith("0:0:0:0:")) return true;
-
-		String localIp = getLocalIp();
-		String localIpv6 = getLocalIpv6();
-		return areIpsEqual(address, localIp) || areIpsEqual(address, localIpv6);
 	}
 }

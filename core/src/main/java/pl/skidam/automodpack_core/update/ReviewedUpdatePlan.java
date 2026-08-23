@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.update;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -15,6 +14,7 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Owns the finite lifecycle and execution fingerprint of one player-reviewed update plan. */
 public final class ReviewedUpdatePlan {
@@ -30,10 +30,6 @@ public final class ReviewedUpdatePlan {
 
 	public static ReviewedUpdatePlan pending(UpdatePlan plan) {
 		return new ReviewedUpdatePlan(plan, State.PENDING_REVIEW);
-	}
-
-	public static ReviewedUpdatePlan approved(UpdatePlan plan) {
-		return new ReviewedUpdatePlan(plan, State.APPROVED);
 	}
 
 	public UpdatePlan plan() {
@@ -287,11 +283,7 @@ public final class ReviewedUpdatePlan {
 	}
 
 	private static MessageDigest newDigest() {
-		try {
-			return MessageDigest.getInstance("SHA-1");
-		} catch (NoSuchAlgorithmException e) {
-			throw new AssertionError("SHA-1 is required by the client protocol", e);
-		}
+		return HashUtils.newSha1Digest();
 	}
 
 	@FunctionalInterface

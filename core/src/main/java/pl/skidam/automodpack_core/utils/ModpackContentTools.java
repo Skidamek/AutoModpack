@@ -9,7 +9,6 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
-import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 
 public class ModpackContentTools {
 	public static ModpackJsons.ModpackContentFields read(Path path) {
@@ -48,14 +47,4 @@ public class ModpackContentTools {
 			return false;
 		}
 	}
-
-	public static String getFileType(String file, ModpackJsons.ModpackContentFields list) {
-		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : list.list) {
-			if (item.file.contains(file)) { // compare file absolute path if it contains item.file
-				return item.type;
-			}
-		}
-		return ModpackContentType.OTHER;
-	}
-
 }
