@@ -79,6 +79,8 @@ public class VersionedScreen extends Screen {
 		// Render the rest of our screen
 		versionedRender(matrices, mouseX, mouseY, delta);
 
+		for (PlainTextSlot slot : plainTextSlots) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(slot.text()), this.width / 2, slot.y() + 6, TextColors.WHITE);
+
 		/*? if <1.20.6 {*/
 		/*super.render(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?}*/
@@ -190,8 +192,7 @@ public class VersionedScreen extends Screen {
 			for (int actionIndex = 0; actionIndex < row.actions().size(); actionIndex++) {
 				String id = rowIndex + ":" + actionIndex;
 				ActionDefinition definition = row.actions().get(actionIndex);
-				int minimumWidth = Math.max(ActionAreaLayout.MIN_BUTTON_WIDTH, this.font.width(definition.message().getString()) + 16);
-				geometryActions.add(new ActionAreaLayout.Action(id, ActionAreaLayout.preferredWidth(row.actions().size()), minimumWidth, definition.role()));
+				geometryActions.add(new ActionAreaLayout.Action(id, definition.role()));
 				definitions.put(id, definition);
 			}
 			geometryRows.add(new ActionAreaLayout.Row(row.kind(), geometryActions));
@@ -208,22 +209,6 @@ public class VersionedScreen extends Screen {
 	protected final boolean handleBackOnEscape(Runnable backAction) {
 		backAction.run();
 		return false;
-	}
-
-	protected final int actionButtonWidth(int preferredPanelWidth, int buttonCount) {
-		int count = Math.max(1, buttonCount);
-		return Math.max(1, (panelWidth(preferredPanelWidth) - actionRowGap() * (count - 1)) / count);
-	}
-
-	protected final int actionButtonX(int preferredPanelWidth, int buttonCount, int index) {
-		return panelLeft(preferredPanelWidth) + index * (actionButtonWidth(preferredPanelWidth, buttonCount) + actionRowGap());
-	}
-
-	protected final int centeredActionButtonX(int preferredPanelWidth, int slotCount, int visibleButtonCount, int index) {
-		int buttonWidth = actionButtonWidth(preferredPanelWidth, slotCount);
-		int visibleCount = Math.max(1, Math.min(slotCount, visibleButtonCount));
-		int groupWidth = visibleCount * buttonWidth + actionRowGap() * (visibleCount - 1);
-		return (this.width - groupWidth) / 2 + index * (buttonWidth + actionRowGap());
 	}
 
 	/*? if <1.19.3 {*/
@@ -287,6 +272,29 @@ public class VersionedScreen extends Screen {
 
 	protected final boolean isEnterKey(int keyCode) {
 		return keyCode == 257 || keyCode == 335;
+	}
+
+	private record PlainTextSlot(String text, int y) {}
+
+	private final List<PlainTextSlot> plainTextSlots = new ArrayList<>();
+
+	/**
+	 * Draws the slot's label as plain centered text instead of a disabled button, so page counters
+	 * and non-togglable section headers never read as dead clickable widgets. The slots this is
+	 * used for sit centered on the screen, matching how vanilla centers button text.
+	 */
+	protected final void renderAsPlainText(Button button) {
+		button.visible = false;
+		/*? if >=1.19.4 {*/
+		plainTextSlots.add(new PlainTextSlot(button.getMessage().getString(), button.getY()));
+		/*?} else {*/
+		/*plainTextSlots.add(new PlainTextSlot(button.getMessage().getString(), button.y));
+		*//*?}*/
+	}
+
+	@Override
+	protected void init() {
+		plainTextSlots.clear();
 	}
 
 	/*? if >= 1.20.2 {*/

@@ -250,6 +250,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					if (row.categoryId() != null) toggleCategory(row.categoryId());
 				});
 				section.active = row.categoryId() != null && hasOptionalCategoryGroups(row.categoryId());
+				// A header that cannot toggle is a label, not a dead button.
+				if (!section.active) renderAsPlainText(section);
 				this.addRenderableWidget(section);
 				continue;
 			}
@@ -266,7 +268,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			this.addRenderableWidget(button);
 			Button inspect = buttonWidget(x + rowWidth - infoWidth, y, infoWidth, 20, VersionedText.translatable("automodpack.ui.info"), press -> inspect(groupId));
 			inspect.active = group != null;
-			if (tooltip != null) setTooltip(inspect, tooltip);
+			if (tooltip != null) setTooltip(inspect, tooltip.append("\n").append(VersionedText.translatable("automodpack.ui.glyphLegend").withStyle(ChatFormatting.DARK_GRAY)));
 			this.addRenderableWidget(inspect);
 		}
 
@@ -313,7 +315,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int actionIndex = 0;
 		if (showPagination) {
 			actionButtons.get(actionIndex++).active = page > 0;
-			actionIndex++;
+			renderAsPlainText(actionButtons.get(actionIndex++));
 			actionButtons.get(actionIndex++).active = page < pageCount - 1;
 		}
 		vaultButton = null;
@@ -327,6 +329,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 		this.saveButton = actionButtons.get(actionIndex + 2);
 		this.saveButton.active = canSave();
+		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.translatable("automodpack.selection.noChanges"));
 		updateManagementButtons();
 	}
 
@@ -358,9 +361,17 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	/** Toggling a category requests or removes its optional groups through the persisted group intent. */
 	private void toggleCategory(String category) {
 		SelectionIntent previous = currentIntent();
-		SelectionIntent next = GroupSelectionResolver.preferCategory(manifest, previous, category, ClientPlatform.current());
+		// Direction mirrors the header glyph: when every optional group is already in, the click excludes them all.
+		SelectionIntent next = categoryFullySelected(category)
+				? GroupSelectionResolver.excludeCategory(manifest, previous, category, ClientPlatform.current())
+				: GroupSelectionResolver.preferCategory(manifest, previous, category, ClientPlatform.current());
 		Set<String> preferred = next.requestedCategories().contains(category) ? categoryGroups(category) : Set.of();
 		applySelectionChange(next, preferred, categoryLabel(category));
+	}
+
+	private boolean categoryFullySelected(String category) {
+		long optional = optionalGroupCount(category);
+		return optional > 0 && selectedOptionalGroupCount(category) == optional;
 	}
 
 	/**
@@ -588,9 +599,22 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private MutableComponent sectionLabel(Row row) {
 		if (row.categoryId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
 		String title = VersionedText.translatable("automodpack.selection.category", categoryLabel(row.categoryId())).getString();
-		boolean selected = categorySelected(row.categoryId());
-		return VersionedText.literal(truncateToWidth(this.font, (selected ? "[x] " : "[ ] ") + title, panelWidth(ROW_WIDTH) - 12))
-				.withStyle(ChatFormatting.BOLD, selected ? ChatFormatting.GREEN : ChatFormatting.GRAY);
+		// The glyph mirrors the category's optional groups, so it never contradicts the child rows or the selected count.
+		long optional = optionalGroupCount(row.categoryId());
+		long selected = selectedOptionalGroupCount(row.categoryId());
+		boolean allSelected = optional > 0 && selected == optional;
+		String label = (allSelected ? "[x] " : "[ ] ") + title;
+		if (selected > 0 && !allSelected) label += "  " + VersionedText.translatable("automodpack.selection.categoryPart", selected, optional).getString();
+		return VersionedText.literal(truncateToWidth(this.font, label, panelWidth(ROW_WIDTH) - 12))
+				.withStyle(ChatFormatting.BOLD, allSelected ? ChatFormatting.GREEN : ChatFormatting.GRAY);
+	}
+
+	private long optionalGroupCount(String category) {
+		return groups.values().stream().filter(group -> category.equals(group.category()) && !group.required()).count();
+	}
+
+	private long selectedOptionalGroupCount(String category) {
+		return groups.entrySet().stream().filter(entry -> category.equals(entry.getValue().category()) && !entry.getValue().required() && resolution.selectedGroups().contains(entry.getKey())).count();
 	}
 
 	/** The group's metadata and the resolver explanation, shown on hover. */
@@ -661,9 +685,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return rowLabel(formatRowLabel("[!] ", name, metrics), ChatFormatting.RED);
 		if (excluded.contains(groupId)) return rowLabel(formatRowLabel("[-] ", name, metrics), ChatFormatting.YELLOW);
 		if (resolution.selectedGroups().contains(groupId)) {
+			// A dependency lock is the load-bearing fact: the row cannot be unchecked while its dependent needs it.
+			if (resolution.dependencyGroups().contains(groupId)) return rowLabel(formatRowLabel("[+] ", name, metrics), ChatFormatting.AQUA);
 			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics), ChatFormatting.GREEN);
-			if (resolution.dependencyGroups().contains(groupId))
-				return rowLabel(formatRowLabel("[+] ", name, metrics), ChatFormatting.AQUA);
 			return rowLabel(formatRowLabel("[+] ", name, metrics), ChatFormatting.AQUA);
 		}
 		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel("[>] ", name, metrics), ChatFormatting.AQUA);
@@ -714,10 +738,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return groups.values().stream().anyMatch(group -> category.equals(group.category()) && !group.required());
 	}
 
-	private boolean categorySelected(String category) {
-		return chosenCategories.contains(category);
-	}
-
 	private SelectionIntent currentIntent() {
 		return new SelectionIntent(chosen, chosenCategories, excluded);
 	}
@@ -766,26 +786,30 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					this.width / 2, 22, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", ClientPlatform.current().id(), resolution.selectedGroups().size())
 					.withStyle(ChatFormatting.GRAY), this.width / 2, 33, TextColors.WHITE);
-			if (resolutionError.isEmpty() && (pendingUpdater == null || pendingUpdater.getSourceAvailability().totalFiles() == 0) && !rows.isEmpty()) drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.selection.categoryExplanation").getString(), panelWidth(ROW_WIDTH) - 20)).withStyle(ChatFormatting.DARK_GRAY), this.width / 2, 55, TextColors.WHITE);
+			// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
 			if (!resolutionError.isEmpty()) {
-				drawCenteredTextWithShadow(matrices, this.font,
-						VersionedText.literal(truncateToWidth(this.font, resolutionError, this.width - 20)).withStyle(ChatFormatting.RED),
-						this.width / 2, 54, TextColors.WHITE);
-			} else if (pendingUpdater != null && pendingUpdater.getSourceAvailability().totalFiles() > 0) {
+				drawWrappedStatus(matrices, VersionedText.literal(resolutionError).withStyle(ChatFormatting.RED));
+			} else if (pendingUpdater == null || pendingUpdater.getSourceAvailability().totalFiles() == 0) {
+				if (!rows.isEmpty()) drawWrappedStatus(matrices, VersionedText.translatable("automodpack.selection.categoryExplanation").withStyle(ChatFormatting.DARK_GRAY));
+			} else {
 				ModpackUpdater.SourceAvailability availability = pendingUpdater.getSourceAvailability();
 				String sourceStatus = VersionedText.translatable(availability.cancelled()
 						? "automodpack.selection.sourcesCancelled"
 						: !availability.complete()
 								? "automodpack.selection.sourcesResolving"
 								: "automodpack.selection.sourcesResolved", availability.resolvedFiles(), availability.totalFiles()).getString();
-				// Status lines wrap instead of truncating mid-sentence; two lines fit between the header stack and the first row.
-				int statusY = 44;
-				for (String line : wrapToWidth(this.font, sourceStatus, this.width - 20, 2)) {
-					drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.GRAY), this.width / 2, statusY, TextColors.WHITE);
-					statusY += 11;
-				}
+				drawWrappedStatus(matrices, VersionedText.literal(sourceStatus).withStyle(ChatFormatting.GRAY));
 			}
+		}
+	}
+
+	/** Draws one status line centered below the summary; two wrapped lines fit between the header stack and the first row. */
+	private void drawWrappedStatus(VersionedMatrices matrices, MutableComponent text) {
+		List<String> lines = wrapToWidth(this.font, text.getString(), panelWidth(ROW_WIDTH), 2);
+		int firstY = lines.size() > 1 ? 44 : 49;
+		for (String line : lines) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(text.getStyle()), this.width / 2, firstY, TextColors.WHITE);
+			firstY += 11;
 		}
 	}
 

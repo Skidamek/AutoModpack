@@ -19,6 +19,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.ChangeSummary;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -300,14 +301,18 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			String note = entry.patchNotes().isBlank() ? VersionedText.translatable("automodpack.history.noPatchNotes").getString() : firstLine(entry.patchNotes());
 			GenerationDiff.Summary diff = entry.diffSummary();
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, status, rowWidth - 12)).withStyle(isCurrent(entry) ? ChatFormatting.GREEN : ChatFormatting.GRAY), left + 6, y + 4, TextColors.WHITE);
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", note).getString(), rowWidth - 12)).withStyle(ChatFormatting.YELLOW), left + 6, y + 31,
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", note).getString(), rowWidth - 12)).withStyle(ChatFormatting.WHITE), left + 6, y + 31,
 					TextColors.WHITE);
-			String metadata = VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
-			String diffText = "+" + diff.addedFiles() + "  ~" + diff.modifiedFiles() + "  -" + diff.removedFiles() + "  " + metadata + ": " + (diff.metadataOnlyFiles() + diff.metadataChanges());
+			String diffText = ChangeSummary.diffLine(diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles(), 0, 0) + "  |  " + metadataCount(diff.metadataOnlyFiles() + diff.metadataChanges());
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, rowWidth - 12)).withStyle(ChatFormatting.GRAY), left + 6, y + 42, TextColors.WHITE);
 		}
 		if (entries.isEmpty()) drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.empty").withStyle(ChatFormatting.GRAY), left, ENTRY_TOP, TextColors.WHITE);
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.history.loading").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
+	}
+
+	private String metadataCount(int count) {
+		if (count == 0) return "";
+		return count + " " + VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
 	}
 
 	private String status(HistoryEntry entry) {

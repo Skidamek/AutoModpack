@@ -24,7 +24,7 @@ final class InstalledModpackSwitch {
 	private InstalledModpackSwitch() {}
 
 	static void start(ClientStorage storage, GenerationRecord record, SelectionIntent expectedSelection, SelectionIntent targetSelection,
-			String modpackName, boolean returnToSelection, Runnable release) {
+			String modpackName, Runnable release) {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			ModpackUpdater updater = null;
 			try {
@@ -39,7 +39,7 @@ final class InstalledModpackSwitch {
 						(Runnable) () -> {
 							finalUpdater.close();
 							release.run();
-						}, returnToSelection);
+						});
 				if (!shown) {
 					finalUpdater.close();
 					Minecraft.getInstance().execute(release);

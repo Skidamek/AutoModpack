@@ -629,7 +629,7 @@ public class ModpackUpdater implements AutoCloseable {
 					ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 				}
 			};
-			if (!ScreenManager.preview(preview, getModpackName(), (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), this::close, false)) {
+			if (!ScreenManager.preview(preview, getModpackName(), (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), this::close)) {
 				LOGGER.warn("Installed modpack switch preview could not be shown; leaving the client without an active modpack");
 				close();
 			}
@@ -836,7 +836,7 @@ public class ModpackUpdater implements AutoCloseable {
 					reviewed.cancel();
 					close();
 				};
-		return requestPreparedPlanPreview(prepared, continueAction, cancelAction, firstConnection)
+		return requestPreparedPlanPreview(prepared, continueAction, cancelAction)
 				? PreviewRequestResult.PREVIEW_SHOWN
 				: PreviewRequestResult.PREVIEW_NOT_SHOWN;
 	}
@@ -860,12 +860,12 @@ public class ModpackUpdater implements AutoCloseable {
 				|| !plan.restartReasons().isEmpty() || !Objects.equals(plan.plannedClientConfig(), ClientProjectionView.open(storage).logicalConfig(clientConfig));
 	}
 
-	private boolean requestPreparedPlanPreview(ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) throws IOException {
+	private boolean requestPreparedPlanPreview(ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
 		GenerationUpdateRange updateRange = updateRange(selectedTarget, installedGenerationId(selectedTarget.manifest().modpackId()));
 		UpdatePreview preview = UpdatePreview.create(prepared.plan(), selectedTarget.selection(), UpdatePreview.Mode.UPDATE,
 				featuredNotes(updateRange), updateRange.generations()).withFeatureManifest(selectedTarget.manifest()).withReferences(resolveMainPageReferences(prepared));
 		return ScreenManager.preview(preview, getModpackName(),
-				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction, returnToSelection);
+				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction);
 	}
 
 	private String installedGenerationId(String modpackId) throws IOException {

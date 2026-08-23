@@ -99,13 +99,27 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		}
 
 		List<Button> actionButtons = addActionArea(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new));
-		actionButtons.get(0).active = !busy && selected != null && activePack && selected.sourceRoot() == UpdatePlan.Root.GAME_DIR;
-		actionButtons.get(1).active = !busy && selected != null;
-		actionButtons.get(2).active = !busy && selected != null;
+		Button restore = actionButtons.get(0);
+		Button saveCopy = actionButtons.get(1);
+		Button delete = actionButtons.get(2);
+		restore.active = !busy && selected != null && activePack && selected.sourceRoot() == UpdatePlan.Root.GAME_DIR;
+		setTooltip(restore, restoreTooltip(selected));
+		saveCopy.active = !busy && selected != null;
+		setTooltip(saveCopy, VersionedText.translatable("automodpack.vault.saveCopyTooltip"));
+		delete.active = !busy && selected != null;
 		if (pageCount > 1) {
 			actionButtons.get(3).active = !busy && page > 0;
+			renderAsPlainText(actionButtons.get(4));
 			actionButtons.get(5).active = !busy && page + 1 < pageCount;
 		}
+	}
+
+	/** The gate names itself: why Restore is unavailable for this row, or what it will do. */
+	private MutableComponent restoreTooltip(PreservationVault.Claim selected) {
+		if (selected == null) return VersionedText.translatable("automodpack.vault.restorePickFirst");
+		if (!activePack) return VersionedText.translatable("automodpack.vault.restoreInactivePack");
+		if (selected.sourceRoot() != UpdatePlan.Root.GAME_DIR) return VersionedText.translatable("automodpack.vault.restoreManagedFiles");
+		return VersionedText.translatable("automodpack.vault.restoreApplies", selected.originalPath());
 	}
 
 	private void load() {
@@ -293,6 +307,12 @@ public final class PreservationVaultScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
+		// Esc is the safe default: while Delete is armed it disarms first instead of leaving the screen.
+		if (pendingDeleteClaimId != null) {
+			pendingDeleteClaimId = null;
+			rebuild();
+			return false;
+		}
 		back();
 		return false;
 	}
