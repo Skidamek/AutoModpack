@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
 import pl.skidam.automodpack_core.update.UpdatePlan;
+import pl.skidam.automodpack_core.utils.ByteFormat;
 
 public final class UiFormat {
 	private static final DateTimeFormatter HISTORY_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'", Locale.ROOT).withZone(ZoneOffset.UTC);
@@ -13,10 +14,7 @@ public final class UiFormat {
 	private UiFormat() {}
 
 	public static String formatSize(long bytes) {
-		if (bytes < 1024) return bytes + " B";
-		if (bytes < 1024L * 1024L) return (bytes / 1024) + " KiB";
-		if (bytes < 1024L * 1024L * 1024L) return (bytes / (1024L * 1024L)) + " MiB";
-		return (bytes / (1024L * 1024L * 1024L)) + " GiB";
+		return ByteFormat.formatSize(bytes);
 	}
 
 	public static String formatInstant(Instant instant) {

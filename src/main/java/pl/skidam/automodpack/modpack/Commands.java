@@ -703,6 +703,9 @@ public class Commands {
 		var summary = state.summary();
 		send(context, String.format(Locale.ROOT, "Candidate: %d groups, %d files, %d objects, %d exclusions, %d shadows", summary.groups(), summary.files(), summary.objects(),
 				summary.exclusions(), summary.shadows()), ChatFormatting.WHITE, broadcast);
+		for (var exclusion : summary.excluded())
+			send(context, String.format(Locale.ROOT, "Excluded: %s/%s - %s (%s)", exclusion.source().groupId(), exclusion.source().logicalPath(),
+					exclusion.reason().name().toLowerCase(Locale.ROOT), exclusion.message()), ChatFormatting.GRAY, broadcast);
 		state.patchNotesSource().ifPresent(source -> send(context, "Patch notes: " + source.name().toLowerCase(Locale.ROOT), ChatFormatting.WHITE, broadcast));
 		if (current != null)
 			send(context, "Current generation", ChatFormatting.WHITE, copyable(current.metadata().generationId()), ChatFormatting.YELLOW, broadcast);
