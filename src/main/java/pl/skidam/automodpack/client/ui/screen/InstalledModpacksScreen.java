@@ -5,6 +5,7 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
@@ -24,6 +25,8 @@ import pl.skidam.automodpack_core.update.PreservationVault;
 public final class InstalledModpacksScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 320;
 	private static final int ROW_HEIGHT = 34;
+	// Vanilla Select World (WorldListEntry) double-click window.
+	private static final long DOUBLE_CLICK_MILLIS = 250L;
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
@@ -31,6 +34,9 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private List<PreservationVault.Snapshot> orphanedPreservations;
 	private int page;
 	private boolean discoveryFailureShown;
+	private boolean busy;
+	private InstalledModpackController.Pack pendingPack;
+	private long pendingAt;
 
 	public InstalledModpacksScreen(Screen parent) {
 		super(VersionedText.translatable("automodpack.packManager.title"));
@@ -71,7 +77,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			Button row;
 			if (index < entries.size()) {
 				InstalledModpackController.Pack entry = entries.get(index);
-				row = buttonWidget(x, y, rowWidth, 28, rowLabel(entry, rowWidth), press -> open(entry));
+				row = buttonWidget(x, y, rowWidth, 28, rowLabel(entry, rowWidth), press -> clickPack(entry));
 			} else {
 				PreservationVault.Snapshot snapshot = orphanedPreservations.get(index - entries.size());
 				row = buttonWidget(x, y, rowWidth, 28, orphanedLabel(snapshot, rowWidth), press -> open(snapshot));
@@ -108,11 +114,47 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 				optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller)))));
 	}
 
+	private void clickPack(InstalledModpackController.Pack entry) {
+		if (busy) return;
+		long now = Util.getMillis();
+		if (pendingPack != null && pendingPack.modpackId().equals(entry.modpackId()) && now - pendingAt < DOUBLE_CLICK_MILLIS) {
+			pendingPack = null;
+			if (entry.active()) open(entry);
+			else activate(entry);
+			return;
+		}
+		pendingPack = entry;
+		pendingAt = now;
+	}
+
+	@Override
+	public void tick() {
+		super.tick();
+		if (this.minecraft == null || this.minecraft.screen != this || pendingPack == null || Util.getMillis() - pendingAt < DOUBLE_CLICK_MILLIS) return;
+		InstalledModpackController.Pack entry = pendingPack;
+		pendingPack = null;
+		open(entry);
+	}
+
+	private void activate(InstalledModpackController.Pack entry) {
+		if (busy || entry.active()) return;
+		busy = true;
+		controller.activate(entry, this::released);
+	}
+
+	private void released() {
+		busy = false;
+		refreshEntries();
+		rebuild();
+	}
+
 	private void open(InstalledModpackController.Pack entry) {
+		pendingPack = null;
 		ScreenImpl.setScreen(new ModpackDetailsScreen(this, controller, entry));
 	}
 
 	private void open(PreservationVault.Snapshot snapshot) {
+		pendingPack = null;
 		ScreenImpl.setScreen(new PreservationVaultScreen(this, controller, snapshot.modpackId(), snapshot.modpackId(), false, () -> {
 			refreshEntries();
 			rebuild();
@@ -132,6 +174,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	}
 
 	private void rebuild() {
+		pendingPack = null;
 		/*? if >=1.19.2 {*/
 		this.rebuildWidgets();
 		/*?} else {*/
