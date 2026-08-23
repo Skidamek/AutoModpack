@@ -3,11 +3,13 @@
 A selector is a mapping; all given fields must match (AND):
 
   role     button | textfield | any      (default: any)
+  key      exact translation key from the widget's Component (copy-stable)
+  key_any  list of keys, any may match
   text     exact (case-insensitive, trimmed) preferred, else substring
   text_any list of texts, any may match
   class    substring of the element's class name
   enabled  true/false
-  visible  true/false
+  visible  true/false (default true: hidden/plain-text placeholders never match)
   index    pick the Nth match (default 0; negative counts from the end)
 """
 from __future__ import annotations
@@ -42,17 +44,28 @@ def _matches_text(element: dict, needles: list[str]) -> bool:
     return any(n.strip().lower() in text for n in needles)
 
 
+def _keys(selector: dict) -> list[str] | None:
+    if selector.get("key") is not None:
+        return [str(selector["key"])]
+    if selector.get("key_any") is not None:
+        return [str(key) for key in selector["key_any"]]
+    return None
+
+
 def find_all(gui: dict, selector: dict) -> list:
     role = str(selector.get("role", "any"))
     needles = _needles(selector)
     klass = selector.get("class")
     enabled = selector.get("enabled")
-    visible = selector.get("visible")
+    visible = selector.get("visible", True)
+    keys = _keys(selector)
     out = []
     for e in _elements(gui, role):
         if enabled is not None and bool(e.get("enabled", False)) != bool(enabled):
             continue
-        if visible is not None and bool(e.get("visible", False)) != bool(visible):
+        if visible is not None and bool(e.get("visible", True)) != bool(visible):
+            continue
+        if keys is not None and str(e.get("key") or "") not in keys:
             continue
         if klass is not None and str(klass).lower() not in str(e.get("class", "")).lower():
             continue

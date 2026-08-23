@@ -11,6 +11,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.ConnectScreen;
 /*? if >=1.21.6 {*/
@@ -28,29 +29,22 @@ import net.minecraft.client.input.MouseButtonInfo;
 /*? if >= 1.20.5 {*/
 import net.minecraft.client.multiplayer.TransferState;
 /*?}*/
-/*? if >= 1.19.2 {*/
 import net.minecraft.network.chat.Component;
+/*? if >= 1.20 {*/
+import net.minecraft.network.chat.contents.TranslatableContents;
 /*?} else {*/
 /*import net.minecraft.network.chat.TranslatableComponent;
 *//*?}*/
 
 import java.io.IOException;
 import java.awt.image.BufferedImage;
-import java.lang.reflect.Array;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -447,11 +441,11 @@ public final class AutoTestBridge {
 	private static GuiElements elements(Screen screen) {
 		if (screen == null) return new GuiElements(List.of());
 
+		// children() (and nested ContainerEventHandler children) is what rebuildWidgets replaces.
+		// Field scraping used to also pick up Screen.focused, which keeps the pre-rebuild widget with
+		// stale text and visible=true — a ghost that could satisfy wait_for/no_element.
 		LinkedHashSet<AbstractWidget> widgets = new LinkedHashSet<>();
-		for (GuiEventListener child : screen.children()) {
-			if (child instanceof AbstractWidget widget) widgets.add(widget);
-		}
-		findWidgets(screen, widgets, newSeenSet());
+		for (GuiEventListener child : screen.children()) collectAttachedWidgets(child, widgets);
 
 		List<GuiElement> result = new ArrayList<>();
 		int id = 0;
@@ -461,43 +455,10 @@ public final class AutoTestBridge {
 		return new GuiElements(result);
 	}
 
-	private static void findWidgets(Object object, Set<AbstractWidget> widgets, Set<Object> seen) {
-		if (object == null || seen.contains(object)) return;
-		seen.add(object);
-
-		Class<?> type = object.getClass();
-		while (type != null && type != Object.class) {
-			for (Field field : type.getDeclaredFields()) {
-				if (Modifier.isStatic(field.getModifiers())) continue;
-				try {
-					field.setAccessible(true);
-					collectWidgetValue(field.get(object), widgets, seen);
-				} catch (ReflectiveOperationException | RuntimeException ignored) {
-					// Best effort only. Screen#children is the primary source.
-				}
-			}
-			type = type.getSuperclass();
-		}
-	}
-
-	private static void collectWidgetValue(Object value, Set<AbstractWidget> widgets, Set<Object> seen) {
-		if (value == null) return;
-		if (value instanceof AbstractWidget widget) {
-			widgets.add(widget);
-			return;
-		}
-		if (value instanceof Collection<?> collection) {
-			for (Object item : collection) collectWidgetValue(item, widgets, seen);
-			return;
-		}
-		if (value instanceof Map<?, ?> map) {
-			for (Object item : map.values()) collectWidgetValue(item, widgets, seen);
-			return;
-		}
-		if (value.getClass().isArray()) {
-			int length = Array.getLength(value);
-			for (int i = 0; i < length; i++) collectWidgetValue(Array.get(value, i), widgets, seen);
-		}
+	private static void collectAttachedWidgets(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets) {
+		if (listener instanceof AbstractWidget widget) widgets.add(widget);
+		if (listener instanceof Screen || !(listener instanceof ContainerEventHandler container)) return;
+		for (GuiEventListener child : container.children()) collectAttachedWidgets(child, widgets);
 	}
 
 	private static JsonArray elementsJson(List<GuiElement> elements) {
@@ -506,6 +467,8 @@ public final class AutoTestBridge {
 			JsonObject o = new JsonObject();
 			o.addProperty("id", e.id());
 			o.addProperty("text", e.text());
+			String key = e.translationKey();
+			if (!key.isEmpty()) o.addProperty("key", key);
 			o.addProperty("x", e.x());
 			o.addProperty("y", e.y());
 			o.addProperty("width", e.width());
@@ -519,8 +482,18 @@ public final class AutoTestBridge {
 		return a;
 	}
 
-	private static Set<Object> newSeenSet() {
-		return Collections.newSetFromMap(new IdentityHashMap<>());
+	private static String translationKey(Component component) {
+		if (component == null) return "";
+		/*? if >= 1.20 {*/
+		if (component.getContents() instanceof TranslatableContents translatable) return translatable.getKey();
+		/*?} else {*/
+		/*if (component instanceof TranslatableComponent translatable) return translatable.getKey();
+		*//*?}*/
+		for (Component sibling : component.getSiblings()) {
+			String key = translationKey(sibling);
+			if (!key.isEmpty()) return key;
+		}
+		return "";
 	}
 
 	private static <T> String onMain(ThrowingSupplier<T> supplier) throws Exception {
@@ -631,6 +604,10 @@ public final class AutoTestBridge {
 	private record GuiElement(int id, AbstractWidget widget) {
 		String text() {
 			return widget instanceof EditBox editBox ? editBox.getValue() : widget.getMessage().getString();
+		}
+
+		String translationKey() {
+			return AutoTestBridge.translationKey(widget.getMessage());
 		}
 
 		int x() {

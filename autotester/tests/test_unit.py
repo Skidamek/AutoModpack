@@ -128,7 +128,7 @@ def test_wait_for_server_log_does_not_require_client(make_ctx):
 GUI = {
     "screenClass": "S",
     "buttons": [
-        {"id": 1, "text": "Cancel", "enabled": True, "class": "net.Btn"},
+        {"id": 1, "text": "Cancel", "key": "automodpack.cancel", "enabled": True, "class": "net.Btn"},
         {"id": 2, "text": "Download file", "enabled": False, "class": "net.Btn"},
         {"id": 3, "text": "Download", "enabled": True, "class": "net.Btn"},
     ],
@@ -159,6 +159,31 @@ def test_selector_index_negative():
 
 def test_selector_no_match():
     assert selectors.find_one(GUI, {"text": "nope"}) is None
+
+
+def test_selector_matches_translation_key():
+    gui = {
+        "buttons": [
+            {"id": 1, "text": "Go on", "key": "automodpack.firstConnect.continue", "enabled": True, "visible": True},
+            {"id": 2, "text": "Continue", "key": "automodpack.selection.preview", "enabled": True, "visible": True},
+        ],
+        "textFields": [],
+    }
+    assert selectors.find_one(gui, {"key": "automodpack.selection.preview"})["id"] == 2
+    assert selectors.find_one(gui, {"key_any": ["automodpack.cancel", "automodpack.selection.preview"]})["id"] == 2
+    assert selectors.find_one(gui, {"text": "continue"})["id"] == 2
+
+
+def test_selector_ignores_hidden_widgets_by_default():
+    gui = {
+        "buttons": [
+            {"id": 9, "text": "Continue", "enabled": True, "visible": False},
+            {"id": 3, "text": "Continue", "enabled": True, "visible": True},
+        ],
+        "textFields": [],
+    }
+    assert selectors.find_one(gui, {"text": "Continue"})["id"] == 3
+    assert selectors.find_one(gui, {"text": "Continue", "visible": False})["id"] == 9
 
 
 def test_click_timeout_reports_disabled_gui_state(make_ctx, monkeypatch):

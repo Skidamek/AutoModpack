@@ -390,8 +390,8 @@ def test_fake_restart_screen_matches_production_button_order(make_ctx):
     bridge.screen = "restart"
 
     assert bridge.gui()["buttons"] == [
-        {"id": 6, "text": "No, back to the game", "enabled": True, "visible": True},
-        {"id": 4, "text": "Yes, close the game", "enabled": True, "visible": True},
+        {"id": 6, "text": "No, back to the game", "enabled": True, "visible": True, "key": "automodpack.restart.cancel"},
+        {"id": 4, "text": "Yes, close the game", "enabled": True, "visible": True, "key": "automodpack.restart.confirm"},
         {"id": 40, "text": "View changelogs", "enabled": True, "visible": True},
     ]
 
