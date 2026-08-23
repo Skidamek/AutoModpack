@@ -16,8 +16,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
-import pl.skidam.automodpack_loader_core.utils.SpeedFormatter;
 
 public class DownloadScreen extends VersionedScreen {
 	private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/green_background.png");
@@ -88,8 +88,8 @@ public class DownloadScreen extends VersionedScreen {
 
 			cachedStage = downloadManager.getStage();
 			cachedPercentage = downloadManager.getPrecisePercentage();
-			cachedSpeed = SpeedFormatter.formatSpeed(downloadManager.getDownloadSpeed());
-			cachedETA = SpeedFormatter.formatETA(downloadManager.getETA());
+			cachedSpeed = ByteFormat.formatSpeed(downloadManager.getDownloadSpeed());
+			cachedETA = ByteFormat.formatETA(downloadManager.getETA());
 		}
 	}
 

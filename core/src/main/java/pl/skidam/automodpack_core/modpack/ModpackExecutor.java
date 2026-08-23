@@ -11,6 +11,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
+import pl.skidam.automodpack_core.modpack.candidate.ExcludedCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
@@ -108,10 +109,6 @@ public class ModpackExecutor {
 		if (!HashUtils.isCanonicalSha1(expectedStateDigest))
 			return new PublishInvalidGuard("Guard digest must be a canonical 40-character lowercase SHA-1");
 		return publishInternal(expectedStateDigest, inlineNotes);
-	}
-
-	public RevertResult revert(String targetGenerationId) {
-		return revert(targetGenerationId, null);
 	}
 
 	public RevertResult revert(String targetGenerationId, String inlineNotes) {
@@ -273,7 +270,11 @@ public class ModpackExecutor {
 					LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
 					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
 					generationStore.objectRoot(), fileMetadataCache, modFileCache);
-			return candidateScan.scan(request);
+			ModpackCandidate candidate = candidateScan.scan(request);
+			for (ExcludedCandidate exclusion : candidate.exclusions())
+				LOGGER.info("Excluded from the modpack: {}/{} - {} ({})", exclusion.source().groupId(), exclusion.source().logicalPath(),
+						exclusion.reason().name().toLowerCase(Locale.ROOT), exclusion.message());
+			return candidate;
 		}
 	}
 
@@ -349,19 +350,25 @@ public class ModpackExecutor {
 		creationExecutor.shutdown();
 	}
 
-	public record CandidateSummary(int groups, int files, int objects, int exclusions, int shadows, GenerationDiff.Summary diff) {
+	public record CandidateSummary(int groups, int files, int objects, List<ExcludedCandidate> excluded, int shadows, GenerationDiff.Summary diff) {
 		public CandidateSummary {
-			if (groups < 0 || files < 0 || objects < 0 || exclusions < 0 || shadows < 0) throw new IllegalArgumentException("Negative generation summary count");
+			if (groups < 0 || files < 0 || objects < 0 || shadows < 0) throw new IllegalArgumentException("Negative generation summary count");
+			Objects.requireNonNull(excluded, "excluded");
+			excluded = List.copyOf(excluded);
 			Objects.requireNonNull(diff, "diff");
+		}
+
+		public int exclusions() {
+			return excluded.size();
 		}
 
 		static CandidateSummary from(ModpackCandidate candidate, GenerationDiff diff) {
 			int files = candidate.manifest().groups().values().stream().mapToInt(group -> group.files().size()).sum();
-			return new CandidateSummary(candidate.manifest().groups().size(), files, candidate.objects().size(), candidate.exclusions().size(), candidate.shadows().size(), diff.summary());
+			return new CandidateSummary(candidate.manifest().groups().size(), files, candidate.objects().size(), candidate.exclusions(), candidate.shadows().size(), diff.summary());
 		}
 
 		static CandidateSummary empty() {
-			return new CandidateSummary(0, 0, 0, 0, 0, new GenerationDiff.Summary(0, 0, 0, 0, 0));
+			return new CandidateSummary(0, 0, 0, List.of(), 0, new GenerationDiff.Summary(0, 0, 0, 0, 0));
 		}
 	}
 
