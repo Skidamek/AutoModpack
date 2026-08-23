@@ -8,8 +8,6 @@ import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import com.google.gson.*;
@@ -41,37 +39,6 @@ public class Json {
 		}
 
 		if (element != null && element.isJsonArray()) return element.getAsJsonArray();
-		return null;
-	}
-
-	public static JsonObject fromFile(Path path) throws IOException {
-		if (!Files.exists(path) || !Files.isRegularFile(path)) return null;
-
-		return new JsonParser().parse(Files.readString(path, StandardCharsets.UTF_8)).getAsJsonObject();
-	}
-
-	public static JsonObject fromUrl(String url) throws IOException {
-		HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-		connection.setRequestProperty("User-Agent", NetUtils.USER_AGENT);
-		connection.setConnectTimeout(5000);
-		connection.setReadTimeout(5000);
-		connection.connect();
-
-		JsonElement element = null;
-
-		int code = connection.getResponseCode();
-		if (code == 200) {
-			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8)) {
-				element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
-			}
-		} else {
-			LOGGER.warn("{} responded {} code", url, code);
-		}
-
-		connection.disconnect();
-
-		if (element != null && !element.isJsonArray()) return element.getAsJsonObject();
-
 		return null;
 	}
 

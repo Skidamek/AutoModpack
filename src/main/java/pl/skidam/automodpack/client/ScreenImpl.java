@@ -73,11 +73,6 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void title() {
-		executeOnClient(Screens::title);
-	}
-
-	@Override
 	public void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {
 		executeOnClient(() -> Screens.validation((Screen) parent, fingerprint, validated, canceled));
 	}
@@ -203,10 +198,6 @@ public class ScreenImpl implements ScreenService {
 		private static Screen resumableFailureParent(Screen parent) {
 			if (parent == null || parent instanceof FirstConnectScreen || parent instanceof UpdatePreviewScreen) return multiplayerScreen();
 			return parent;
-		}
-
-		public static void title() {
-			Screens.setScreen(new TitleScreen());
 		}
 
 		public static void multiplayer() {

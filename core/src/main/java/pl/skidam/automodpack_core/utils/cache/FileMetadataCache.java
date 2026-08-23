@@ -268,22 +268,6 @@ public class FileMetadataCache implements AutoCloseable {
 		}
 	}
 
-	public String getHashOrNullWithAttributes(Path path, BasicFileAttributes attrs) {
-		try {
-			return getOrComputeHashWithAttributes(path, attrs);
-		} catch (Exception e) {
-			LOGGER.error("Failed to compute hash for path: {}", path, e);
-			return null;
-		}
-	}
-
-	public boolean fastHashCompare(Path file1, Path file2) throws IOException {
-		if (!Files.exists(file1) || !Files.exists(file2)) return false;
-		String hash1 = getOrComputeHash(file1);
-		String hash2 = getOrComputeHash(file2);
-		return hash1 != null && hash1.equals(hash2);
-	}
-
 	// Use only if you are SURE of the file state!
 	public void overwriteCache(Path file, String hash) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();

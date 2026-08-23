@@ -53,7 +53,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 		this.setInitialFocus(this.textField);
 	}
 
-	public void initWidgets() {
+	private void initWidgets() {
 		assert this.minecraft != null;
 
 		int fieldLeft = panelLeft(340);

@@ -143,7 +143,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		}
 	}
 
-	public Optional<Path> resolvePath(final String sha1) {
+	private Optional<Path> resolvePath(final String sha1) {
 		return server.getPath(sha1);
 	}
 

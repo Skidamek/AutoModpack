@@ -26,8 +26,6 @@ public interface ScreenService {
 
 	void failure(FailureRequest request);
 
-	void title();
-
 	void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled);
 
 	void waiting();

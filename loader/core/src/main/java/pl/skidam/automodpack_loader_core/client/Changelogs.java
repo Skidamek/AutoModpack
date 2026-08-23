@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
@@ -61,15 +60,6 @@ public class Changelogs {
 
 	public String latestPatchNotes() {
 		return latestPatchNotes;
-	}
-
-	public Optional<GenerationPatchNoteHistory.Entry> featuredPatchNotes() {
-		if (latestPatchNotes.isBlank()) return Optional.empty();
-		for (int index = patchNotesHistory.size() - 1; index >= 0; index--) {
-			GenerationPatchNoteHistory.Entry entry = patchNotesHistory.get(index);
-			if (entry.patchNotes().equals(latestPatchNotes)) return Optional.of(entry);
-		}
-		return Optional.empty();
 	}
 
 	public List<GenerationPatchNoteHistory.Entry> patchNotesHistory() {

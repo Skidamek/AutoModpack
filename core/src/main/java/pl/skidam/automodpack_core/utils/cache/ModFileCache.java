@@ -7,12 +7,10 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -79,26 +77,6 @@ public class ModFileCache implements AutoCloseable {
 		} catch (IOException e) {
 			LOGGER.error("Failed to compute mod metadata for path: {}", path, e);
 			return null;
-		}
-	}
-
-	public void retainOnly(Iterable<String> retainedHashes) {
-		Set<String> retained = new HashSet<>();
-		for (String hash : retainedHashes) if (hash != null) retained.add(hash.toLowerCase(Locale.ROOT));
-		hotRecords.keySet().removeIf(hash -> !retained.contains(hash));
-		if (!Files.isDirectory(recordsDirectory, LinkOption.NOFOLLOW_LINKS)) return;
-		try (Stream<Path> paths = Files.walk(recordsDirectory)) {
-			for (Path path : paths.filter(candidate -> candidate.getFileName().toString().endsWith(RECORD_SUFFIX))
-					.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
-				String name = path.getFileName().toString();
-				String hash = name.substring(0, name.length() - RECORD_SUFFIX.length()).toLowerCase(Locale.ROOT);
-				if (!retained.contains(hash)) {
-					Files.deleteIfExists(path);
-					hotRecords.remove(hash);
-				}
-			}
-		} catch (IOException e) {
-			LOGGER.debug("Could not clean mod metadata cache: {}", recordsDirectory, e);
 		}
 	}
 

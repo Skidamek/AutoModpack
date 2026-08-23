@@ -153,10 +153,6 @@ public record GenerationDiff(
 		public boolean isEmpty() {
 			return added.isEmpty() && modified.isEmpty() && removed.isEmpty();
 		}
-
-		public int changedCount() {
-			return added.size() + modified.size() + removed.size();
-		}
 	}
 
 	public record Summary(int addedFiles, int modifiedFiles, int removedFiles, int metadataOnlyFiles, int metadataChanges) {}

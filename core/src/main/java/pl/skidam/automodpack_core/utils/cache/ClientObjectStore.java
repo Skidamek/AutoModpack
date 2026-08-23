@@ -76,10 +76,6 @@ public final class ClientObjectStore {
 		public OptionalDouble referencedObjectCoverageRatio() {
 			return referencedObjectCount == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) validReferencedObjectCount / referencedObjectCount);
 		}
-
-		public OptionalDouble referencedObjectSpaceRatio() {
-			return objectBytes == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) validReferencedObjectBytes / objectBytes);
-		}
 	}
 
 	/** The receipt returned by one explicitly requested collection pass. */

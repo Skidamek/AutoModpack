@@ -61,7 +61,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		this.setInitialFocus(this.textField);
 	}
 
-	public void initWidgets() {
+	private void initWidgets() {
 		assert this.minecraft != null;
 
 		int fieldLeft = panelLeft(340);
@@ -89,7 +89,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		setTooltip(wikiButton, VersionedText.translatable("automodpack.learnmore"));
 	}
 
-	public void forceValidate() {
+	private void forceValidate() {
 		verifyButton.active = false;
 		this.validated = true;
 		this.inputText = "";
@@ -97,14 +97,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		validatedCallback.run();
 	}
 
-	public void setInputText(String text) {
-		this.inputText = text;
-		if (this.textField != null) {
-			this.textField.setValue(text);
-		}
-	}
-
-	public void verifyFingerprint() {
+	private void verifyFingerprint() {
 		String input = textField.getValue().strip();
 		inputText = input;
 		if (input.equals(serverFingerprint)) {

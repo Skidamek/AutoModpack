@@ -36,7 +36,7 @@ public class ServerConfigJsons {
 	}
 
 	// Default group for a fresh config.
-	public static GroupDeclaration mainGroupDeclaration() {
+	private static GroupDeclaration mainGroupDeclaration() {
 		GroupDeclaration declaration = new GroupDeclaration();
 		declaration.displayName = "Main";
 		declaration.description = "Core modpack files";

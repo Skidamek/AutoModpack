@@ -35,7 +35,7 @@ public class TrafficShaper {
 		return this.trafficShapingHandler;
 	}
 
-	public ScheduledExecutorService getExecutor() {
+	private ScheduledExecutorService getExecutor() {
 		return this.executor;
 	}
 

@@ -16,10 +16,6 @@ public class ConfigurationChunkSizeMessage extends ConfigurationMessage {
 		this.chunkSize = chunkSize;
 	}
 
-	public int getChunkSize() {
-		return chunkSize;
-	}
-
 	public ByteBuf toByteBuf() {
 		ByteBuf buf = Unpooled.buffer(6);
 		super.toByteBuf(buf);

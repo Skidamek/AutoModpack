@@ -88,7 +88,7 @@ public class ConfigUtils {
 		return normalizedFiles;
 	}
 
-	public static String prefixSlash(String path) {
+	private static String prefixSlash(String path) {
 		if (path == null) return null;
 		if (path.isEmpty()) return path;
 		if (path.startsWith("/!/")) return path.substring(1);

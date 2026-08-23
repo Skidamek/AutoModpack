@@ -34,8 +34,4 @@ public class CompressionDecoder extends ByteToMessageDecoder {
 		}
 		return codec;
 	}
-
-	public CompressionCodec getCodec() {
-		return codec;
-	}
 }

@@ -56,10 +56,6 @@ public final class ScreenManager {
 		instance.failure(request);
 	}
 
-	public static void title() {
-		instance.title();
-	}
-
 	public static void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {
 		instance.validation(parent, fingerprint, validated, canceled);
 	}
