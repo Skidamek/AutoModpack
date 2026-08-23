@@ -326,7 +326,7 @@
   "automodpack.summary.kind.unsafe": "efasnu",
   "automodpack.summary.kind.kept": "%stpek ",
   "automodpack.summary.noChanges": ".segnahc tnetnoc oN",
-  "automodpack.ui.glyphLegend": "tcilfnoc ]![   revres eht yb decrof ]>[   ycnedneped a sa dedda ]+[   elbaliavanu ro dedulcxe ]-[   deriuqer ]#[   elbaliava ] [   detceles ]x[",
+  "automodpack.ui.glyphLegend": "tcilfnoc [!]   revres eht yb decrof [>]   ycnedneped a sa dedda [+]   elbaliavanu ro dedulcxe [-]   deriuqer [#]   elbaliava [ ]   detceles [x]",
   "automodpack.selection.noChanges": "segnahc oN",
   "automodpack.management.preservedFilesCount": "sǝןᴉɟ pǝʌɹǝsǝɹԀ: %s",
   "automodpack.selection.categoryPart": "%s ɟu %spǝʇɔǝןǝs ",
