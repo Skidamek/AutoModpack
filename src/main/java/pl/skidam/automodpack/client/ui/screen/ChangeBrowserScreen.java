@@ -217,7 +217,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				TextColors.WHITE);
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, mode,
 				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature)));
-		String summary = VersionedText.translatable("automodpack.browser.summary", projection.total().fileCount(), UiFormat.formatSize(projection.total().byteCount())).getString();
+		String summary = UiFormat.plural(projection.total().fileCount(), "automodpack.browser.summary", UiFormat.formatSize(projection.total().byteCount())).getString();
 		if (!projection.effects().isEmpty()) summary += " | " + projection.effects().size() + " " + VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY), panelLeft(PANEL_WIDTH), this.height - 43, TextColors.WHITE);
 		if (projection.rows().isEmpty())
