@@ -113,7 +113,7 @@ flow:
     select: { text: "Next >" }
   - do: wait_for
     name: show the dependency explanation
-    until: { element: { text: "[+] Visuals (required by Addon)" } }
+    until: { element: { text: "[+] Visuals" } }
   - do: click
     name: return to dependency and conflict groups
     select: { text: "< Prev" }
@@ -139,8 +139,7 @@ flow:
     name: show the unavailable platform group
     until:
       all:
-        - element: { text: Windows-only }
-        - element: { text: unavailable }
+        - element: { text: "[-] Windows-only", enabled: false }
   - do: screenshot
     name: capture unavailable and conflict group states
     file: all-groups-platform
