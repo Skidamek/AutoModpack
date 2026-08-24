@@ -9,7 +9,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.function.IntConsumer;
 import java.util.zip.GZIPInputStream;
@@ -93,7 +92,7 @@ public class HttpFileDownloader {
 	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, HttpClient client, Path target)
 			throws IOException, InterruptedException {
 		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", NetUtils.USER_AGENT)
-				.header("Accept-Encoding", "gzip").timeout(Duration.ofSeconds(10)).GET();
+				.header("Accept-Encoding", "gzip").timeout(NetUtils.NETWORK_TIMEOUT).GET();
 		if (authenticate) request.header("x-api-key", summonKey());
 
 		try {
@@ -109,7 +108,7 @@ public class HttpFileDownloader {
 	}
 
 	private static HttpClient createClient(HttpClient.Redirect redirects) {
-		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(redirects).connectTimeout(Duration.ofSeconds(10))
+		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(redirects).connectTimeout(NetUtils.NETWORK_TIMEOUT)
 				.executor(Executors.newCachedThreadPool()).build();
 	}
 

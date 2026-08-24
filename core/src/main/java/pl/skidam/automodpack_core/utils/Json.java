@@ -16,17 +16,14 @@ import pl.skidam.automodpack_core.protocol.NetUtils;
 
 @SuppressWarnings("deprecation")
 public class Json {
-	private static final int PLATFORM_CONNECT_TIMEOUT_MS = 3000;
-	private static final int PLATFORM_READ_TIMEOUT_MS = 3000;
-
 	public static JsonArray fromUrlAsArray(String url) {
 		JsonElement element = null;
 
 		try {
 			HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
 			connection.setRequestProperty("User-Agent", NetUtils.USER_AGENT);
-			connection.setConnectTimeout(5000);
-			connection.setReadTimeout(5000);
+			connection.setConnectTimeout(NetUtils.HTTP_TIMEOUT_MILLIS);
+			connection.setReadTimeout(NetUtils.HTTP_TIMEOUT_MILLIS);
 			connection.setDoOutput(true);
 			connection.connect();
 			if (connection.getResponseCode() == 200) {
@@ -59,8 +56,8 @@ public class Json {
 		connection = (HttpURLConnection) url.openConnection();
 		connection.addRequestProperty("Content-Type", "application/json");
 		connection.addRequestProperty("Accept", "application/json");
-		connection.setConnectTimeout(PLATFORM_CONNECT_TIMEOUT_MS);
-		connection.setReadTimeout(PLATFORM_READ_TIMEOUT_MS);
+		connection.setConnectTimeout(NetUtils.HTTP_TIMEOUT_MILLIS);
+		connection.setReadTimeout(NetUtils.HTTP_TIMEOUT_MILLIS);
 		connection.setRequestMethod("POST");
 		connection.setDoOutput(true);
 		connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));

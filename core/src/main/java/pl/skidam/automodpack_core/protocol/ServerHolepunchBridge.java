@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
-import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,7 +57,7 @@ public final class ServerHolepunchBridge {
 					MinecraftProtocol.forMinecraftVersion(MC_VERSION).loginPacketLayout(),
 					bridgeExecutor,
 					maxPendingWriteBytes(),
-					Duration.ofSeconds(10),
+					NETWORK_TIMEOUT,
 					(username, address, marker) -> new HolepunchHandler() {
 						private volatile HolepunchSocket socket;
 

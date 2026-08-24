@@ -15,6 +15,7 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
@@ -31,6 +32,10 @@ import org.bouncycastle.operator.ContentSigner;
 
 public class NetUtils {
 	public static final String USER_AGENT = "github/skidamek/automodpack/" + AM_VERSION;
+	public static final Duration NETWORK_TIMEOUT = Duration.ofSeconds(15);
+	public static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
+	public static final int NETWORK_TIMEOUT_MILLIS = Math.toIntExact(NETWORK_TIMEOUT.toMillis());
+	public static final int HTTP_TIMEOUT_MILLIS = Math.toIntExact(HTTP_TIMEOUT.toMillis());
 
 	// Magic numbers
 	public static final int MAGIC_AMMH = 0x414D4D48;
