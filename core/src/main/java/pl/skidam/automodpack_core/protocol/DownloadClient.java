@@ -294,7 +294,9 @@ public class DownloadClient implements AutoCloseable {
 		return decision.handle((trusted, error) -> {
 			if (error != null) {
 				closeQuietly(candidate.socket());
-				throw new CompletionException(new IOException("Certificate trust decision failed", unwrap(error)));
+				Throwable cause = unwrap(error);
+				if (cause instanceof CertificateTrustCancelledException cancelled) throw new CompletionException(cancelled);
+				throw new CompletionException(new IOException("Certificate trust decision failed", cause));
 			}
 			if (!trusted) {
 				closeQuietly(candidate.socket());

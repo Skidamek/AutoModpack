@@ -23,6 +23,7 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -378,7 +379,7 @@ public class ModpackUtils {
 			CertificateTrustStore.save(connectionInfo.origin, fingerprint, CertificateTrustStore.Reason.TOFU);
 			result.complete(true);
 		};
-		Runnable cancelAction = () -> result.complete(false);
+		Runnable cancelAction = () -> result.completeExceptionally(new CertificateTrustCancelledException());
 		ScreenManager.validation(parent, fingerprint, trustAction, cancelAction);
 		return result;
 	}
