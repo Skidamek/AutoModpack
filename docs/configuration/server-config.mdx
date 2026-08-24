@@ -63,7 +63,7 @@ These settings control how the file server is exposed to the internet.
 | `bandwidthLimit`         | `0`                                                        | Upload speed limit in Mbps (0 = unlimited).                                                                                                    |
 | `disableInternalTLS`     | `false`                                                    | Disables only AutoModpack's server-side TLS termination. Clients always use TLS; an expert-provided terminator must forward decrypted traffic. |
 | `connectionMode`         | `HOLEPUNCH`                                              | Selects the exact method advertised to clients and used by built-in handling. Modes do not fall back to one another.                           |
-| `validateSecrets`        | `true`                                                     | Protects downloads using unique, temporary secrets per user.                                                                                   |
+| `validateSecrets`        | `true`                                                     | Protects downloads using unique, temporary secrets per user. The bootstrap provisioning secret is a separate grant stored in `credentials/provisioning-secret`. |
 | `secretLifetime`         | `336`                                                      | How long (in hours) a download secret remains valid.                                                                                           |
 
 ### Connection modes and ports

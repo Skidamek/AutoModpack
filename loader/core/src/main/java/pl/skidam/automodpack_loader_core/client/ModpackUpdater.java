@@ -263,6 +263,43 @@ public class ModpackUpdater implements AutoCloseable {
 		this.downloadClient = downloadClient;
 	}
 
+	/** Trusted bootstrap install: apply the selected pack on this launch without review, keeping unowned mods. */
+	public void applyTrustedInstall() {
+		try {
+			if (selectedTarget == null || serverModpackContent == null) {
+				LOGGER.info("Skipping trusted bootstrap apply because no resolved target is available");
+				return;
+			}
+			requireLiveConnection();
+			firstConnection = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).isEmpty();
+			consentedLocalModFiles = Map.of();
+			ClientUpdatePlanBuilder.PreparedPlan prepared = preparePlanForReview();
+			ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = ReviewedClientPlan.pending(prepared, prepared.plan());
+			reviewed.approve();
+			recordChangelogs(prepared, selectedTarget);
+			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
+			LOGGER.info("Trusted bootstrap apply completed; restart required: {}", applyResult.requiresRestart());
+			if (preload) {
+				if (applyResult.requiresRestart()) new ReLauncher(firstConnection ? UpdateType.FULL : UpdateType.SELECT, changelogs).restart(true);
+			} else {
+				restartAfterApply(applyResult);
+			}
+		} catch (UpdateDeferredException e) {
+			LOGGER.warn("Trusted bootstrap apply transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
+		} catch (Exception e) {
+			LOGGER.error("Failed to apply the trusted bootstrap modpack; no projection changes were made outside the existing transaction guarantees", e);
+			if (!preload) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+		} finally {
+			try {
+				if (preload) loadSelectedActiveProjection();
+			} catch (Exception e) {
+				LOGGER.error("Failed to load the active modpack projection after trusted bootstrap apply", e);
+			}
+			close();
+		}
+	}
+
 	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result) {
 		if (preload) {
 			try {

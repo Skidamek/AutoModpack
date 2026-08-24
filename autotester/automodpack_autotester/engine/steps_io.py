@@ -322,7 +322,7 @@ def assert_bootstrap_import(ctx, _step):
     }
     if not all(expected.values()):
         raise AssertionError("bootstrap expectations were not captured by seed_bootstrap")
-    bootstrap_path = ctx.game_dir / "automodpack" / "bootstrap.json"
+    bootstrap_path = ctx.game_dir / "automodpack" / "automodpack-bootstrap.json"
     if bootstrap_path.exists():
         raise AssertionError(f"Preload did not delete imported bootstrap file: {bootstrap_path}")
     try:

@@ -994,7 +994,7 @@ def _v_seed_bootstrap(ctx: Context, step):
         "endpoint": endpoint,
         "connectionMode": connection_mode,
     }
-    bootstrap_path = ctx.game_dir / "automodpack" / "bootstrap.json"
+    bootstrap_path = ctx.game_dir / "automodpack" / "automodpack-bootstrap.json"
     bootstrap_path.parent.mkdir(parents=True, exist_ok=True)
     bootstrap_path.write_text(json.dumps(fields, indent=2) + "\n", encoding="utf-8")
     ctx.vars.update({
@@ -1003,7 +1003,7 @@ def _v_seed_bootstrap(ctx: Context, step):
         "bootstrap_fingerprint": fingerprint,
         "bootstrap_modpack_id": modpack_id,
         "bootstrap_connection_mode": connection_mode,
-        "bootstrap_path": "automodpack/bootstrap.json",
+        "bootstrap_path": "automodpack/automodpack-bootstrap.json",
     })
 
 

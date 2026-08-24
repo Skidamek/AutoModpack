@@ -62,5 +62,7 @@ public class ConnectionJsons {
 		public String modpackId;
 		public String endpoint;
 		public ModpackConnectionMode connectionMode;
+		public String secret;
+		public String serverName;
 	}
 }
