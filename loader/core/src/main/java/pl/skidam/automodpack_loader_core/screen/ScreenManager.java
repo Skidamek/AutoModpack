@@ -52,7 +52,8 @@ public final class ScreenManager {
 	/** Logs and presents an operational failure exactly once through the installed screen adapter. */
 	public static void failure(FailureRequest request) {
 		Objects.requireNonNull(request, "request");
-		LOGGER.error("AutoModpack client failure [{}] while displaying {}", request.category().key(), request.messageKey(), request.cause());
+		String previousScreen = getScreen().map(screen -> screen.getClass().getSimpleName()).orElse("none");
+		LOGGER.error("AutoModpack client failure [{}] ({}) on {}", request.category().key(), request.messageKey(), previousScreen, request.cause());
 		instance.failure(request);
 	}
 
