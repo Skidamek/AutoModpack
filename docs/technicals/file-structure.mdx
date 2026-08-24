@@ -1,27 +1,73 @@
-All the AutoModpack files are kept inside `~/automodpack/` folder.
+All AutoModpack files live under `~/automodpack/`.
 
-## Server
-Modpack is generated from files inside `~/automodpack/host-modpack/main/` and/or `syncedFiles` (read [config](../configuration/server-config)) which both translate to `~/.minecraft/` (root minecraft instance) folder on client.
+Files you edit sit at the top of that folder. Runtime state lives in `client/`, `server/`, and the content store.
 
-Modpack generation means creation of `~/automodpack/host-modpack/automodpack-content.json` which contains metadata of every single file of the modapck. You **should NOT** touch this file manually, edit config instead.
+## You edit these
 
-## Client
-Client generation records, overlays, baselines, transaction workspaces, recovery archives, and the fixed active projection are kept inside `~/automodpack/client/`.
+| Path | Role |
+|---|---|
+| `server-config.json` | Server settings |
+| `client-config.json` | Client settings |
+| `host-modpack/<group>/` | Extra pack files that are not already on the server. `main` is the default group |
+| `patch-notes.md` | Notes for the next published generation. AutoModpack consumes the file when it publishes |
+| `credentials/certificate.crt` | TLS certificate chain |
+| `credentials/private-key.pem` | TLS private key, PKCS#8 PEM |
+| `bootstrap.json` | One-shot client drop-in for a known-host pin and optional pack selection. Imported on launch, then deleted |
 
-The client pins its content-addressed data root in `~/automodpack/data-root.json`. A normal installation may use the shared platform data directory; when that is not available, it falls back to `~/automodpack/data/`. The pinned data root contains `objects/` and the derived client caches. The autotester pins this root to `~/automodpack/client/data/` so a scenario is self-contained.
+`recovered/` holds copies saved from the preservation vault. Do not put pack source files there.
 
-The active projection mirrors the selected generation's game-relative paths, including `mods/`. Immutable files are linked from the client CAS when the platform supports it. Editable files use the client overlay only after the player changes them.
+The server cannot claim `player-local/`, `saves/`, `screenshots/`, `logs/`, or `automodpack/` itself. Put private client files under those roots if you need a folder the pack will not touch.
 
-The game directory receives live copies for files that the loader or game must read there. Standard `mods/` receives only the AutoModpack loader, loader-required copies, and retained user-owned files. There is no per-modpack client directory.
+## AutoModpack manages these
+
+Do not edit these by hand.
+
+### Server runtime — `~/automodpack/server/`
+
+Published generation history: `current.json`, `current-projection.json`, `checkpoint.json`, `catalogues/`, `commits/`, `deltas/`, `staging/`, and `secrets.json`.
+
+### Client runtime — `~/automodpack/client/`
+
+| Path | Role |
+|---|---|
+| `active/` | The one live projection the loader reads |
+| `records/<generationId>/` | Immutable downloaded generation records |
+| `overlays/<modpackId>/` | Player edits that survive generation switches |
+| `baselines/`, `generated-copies/`, `incoming/`, `backup/`, `preservation/`, `helper/` | Update, repair, and loader-copy working state |
+| `active-state.json`, `selections.json`, `restart-state.json`, `update-transaction.json` | Pointers and in-flight work |
+
+### Content store
+
+Downloaded and hosted bytes live in a content-addressed store, shared across Minecraft instances on the same user when possible:
+
+- Linux: `~/.local/share/automodpack/data` (or `$XDG_DATA_HOME/automodpack/data`)
+- macOS: `~/Library/Application Support/automodpack/data`
+- Windows: `%LOCALAPPDATA%\automodpack\data`
+
+If that directory is not writable, AutoModpack falls back to `~/automodpack/data/`. Tests and isolated runs can set `AUTOMODPACK_DATA_ROOT`.
+
+The store contains Git-style objects (`objects/<aa>/<rest-of-sha1>`), file and mod metadata caches, per-pack `packs/<modpack-id>/connection.json`, and `known-hosts.json`.
+
+## Server generation
+
+The pack is built from `~/automodpack/host-modpack/<group>/` plus `syncedFiles` in [server config](../configuration/server-config). Both map to `~/.minecraft/` on the client.
+
+Publishing writes generation history under `~/automodpack/server/`. Do not edit those files. Change config or `host-modpack/` and generate again.
+
+## Client projection
+
+The selected generation is materialized into the fixed path `~/automodpack/client/active/`. Immutable files are hard-linked from the content store when the filesystem allows it. Editable files use the overlay only after the player changes them.
+
+The game directory receives live copies only for files the loader or game must read there. Standard `mods/` receives the AutoModpack loader, loader-required copies, and retained user-owned files. There is no per-modpack client directory.
+
 <Callout>
 AutoModpack removes a live file only when its ownership ledger and content hash prove that the file is still managed by AutoModpack. User-owned or edited files are preserved.
 </Callout>
 
 ### Why an active projection?
 
-The selected generation is materialized into one fixed active projection for three reasons:
-1. This way if you (as a modpack/server admin) accidentally make a bad update which would normally make game crash on launch and require manual intervention, you can fix it remotely because modpack is updated before it's loaded, that's not possible to do when all mods are loaded immediately by loader in the default mods folder.
-2. We can update modpack without requiring restart all the time, if there's a pending update while you were not in game, on launch early, automodpack can update modpack and load it afterward thanks to that you don't need to reboot the game to apply updates.
-3. The active projection is independent of generation identity, so switching or recovering a generation changes one well-defined tree instead of maintaining one physical tree per modpack.
+1. A bad update can be fixed remotely before the loader sees the mods, instead of crashing on launch in the standard `mods/` folder.
+2. If an update is pending while you are not in-game, AutoModpack can apply it on the next launch before loading the pack, so you often do not need a second restart.
+3. The projection path does not change with generation identity, so switching or recovering a generation rewires one tree instead of keeping one physical tree per pack.
 
 Some loader services cannot be discovered from the projection. AutoModpack copies those files to standard `mods/` only when the loader-specific placement rule requires it.

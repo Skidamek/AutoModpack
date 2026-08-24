@@ -20,10 +20,9 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PreservationVault;
@@ -54,11 +53,11 @@ class ClientObjectStoreTest {
 		assertEquals(Set.of(referenced), ClientObjectStore.referencedHashes(storage));
 		assertEquals(1, report.referencedObjectCount());
 		assertEquals(1, report.validReferencedObjectCount());
-		assertEquals(Files.size(storage.objectsDirectory().resolve(referenced)) + Files.size(storage.objectsDirectory().resolve(orphan)), report.objectBytes());
+		assertEquals(Files.size(storage.objectFile(referenced)) + Files.size(storage.objectFile(orphan)), report.objectBytes());
 		assertTrue(report.metadataBytes() > 0);
 		assertTrue(report.overlayBytes() > 0);
 		assertTrue(report.referencedObjectCoverageRatio().orElseThrow() == 1.0);
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(orphan)));
+		assertTrue(Files.exists(storage.objectFile(orphan)));
 		assertEquals(metadataFilesBefore, regularFileCount(storage.fileMetadataDirectory()));
 	}
 
@@ -76,8 +75,8 @@ class ClientObjectStoreTest {
 
 		assertEquals(1, result.deletedObjectCount());
 		assertEquals(bytes.length == 0 ? 0 : "orphan".getBytes(StandardCharsets.UTF_8).length, result.deletedObjectBytes());
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(referenced)));
-		assertFalse(Files.exists(storage.objectsDirectory().resolve(orphan)));
+		assertTrue(Files.exists(storage.objectFile(referenced)));
+		assertFalse(Files.exists(storage.objectFile(orphan)));
 		assertEquals(1, result.after().validReferencedObjectCount());
 		assertTrue(result.after().objectBytes() < result.before().objectBytes());
 		assertEquals(ClientObjectStore.CollectionStatus.COLLECTED, result.status());
@@ -99,20 +98,15 @@ class ClientObjectStoreTest {
 
 		assertEquals(ClientObjectStore.CollectionStatus.COLLECTED, result.status());
 		assertEquals(1, result.deletedObjectCount());
-		assertTrue(Files.exists(first.objectsDirectory().resolve(hash)));
-		assertFalse(Files.exists(first.objectsDirectory().resolve(orphan)));
+		assertTrue(Files.exists(first.objectFile(hash)));
+		assertFalse(Files.exists(first.objectFile(orphan)));
 	}
 
 	@Test
-	void copiedDataRootMarkerGetsANewOwnerIdentity() throws Exception {
+	void copiedInstallationsGetANewOwnerIdentity() throws Exception {
 		Path sharedData = temporaryDirectory.resolve("shared-data");
 		ClientStorage original = storage("original-game", sharedData);
-		Path cloneRoot = temporaryDirectory.resolve("cloned-game");
-		Files.createDirectories(cloneRoot.resolve("automodpack"));
-		Files.copy(original.gameDirectory().resolve("automodpack/data-root.json"), cloneRoot.resolve("automodpack/data-root.json"));
-
-		ClientStorage clone = ClientStorage.open(cloneRoot);
-
+		ClientStorage clone = storage("cloned-game", sharedData);
 		assertNotEquals(original.dataLocation().ownerId(), clone.dataLocation().ownerId());
 	}
 
@@ -128,7 +122,7 @@ class ClientObjectStoreTest {
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
 
 		assertEquals(0, result.deletedObjectCount());
-		assertTrue(Files.exists(first.objectsDirectory().resolve(hash)));
+		assertTrue(Files.exists(first.objectFile(hash)));
 	}
 
 	@Test
@@ -147,16 +141,16 @@ class ClientObjectStoreTest {
 		storage.writeActiveState(MODPACK_ID, active.metadata().generationId());
 
 		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(active.metadata().generationId()), Set.of()));
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(historicalHash)));
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(orphanHash)));
+		assertTrue(Files.exists(storage.objectFile(historicalHash)));
+		assertTrue(Files.exists(storage.objectFile(orphanHash)));
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage,
 				Set.of(active.metadata().generationId(), historical.metadata().generationId()), Set.of());
 
 		assertEquals(1, result.deletedObjectCount());
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(activeHash)));
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(historicalHash)));
-		assertFalse(Files.exists(storage.objectsDirectory().resolve(orphanHash)));
+		assertTrue(Files.exists(storage.objectFile(activeHash)));
+		assertTrue(Files.exists(storage.objectFile(historicalHash)));
+		assertFalse(Files.exists(storage.objectFile(orphanHash)));
 	}
 
 	@Test
@@ -168,7 +162,7 @@ class ClientObjectStoreTest {
 		Files.writeString(storage.generationManifest(malformed), "{}", StandardCharsets.UTF_8);
 
 		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of()));
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(orphan)));
+		assertTrue(Files.exists(storage.objectFile(orphan)));
 	}
 
 	@Test
@@ -202,11 +196,11 @@ class ClientObjectStoreTest {
 				"config/removed.txt", hash, Files.size(source));
 
 		ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of());
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(hash)));
+		assertTrue(Files.exists(storage.objectFile(hash)));
 
 		PreservationVault.delete(storage, MODPACK_ID, claim.claimId());
 		ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of());
-		assertFalse(Files.exists(storage.objectsDirectory().resolve(hash)));
+		assertFalse(Files.exists(storage.objectFile(hash)));
 	}
 
 	private ClientStorage storage() throws Exception {
@@ -220,13 +214,7 @@ class ClientObjectStoreTest {
 	}
 
 	private ClientStorage storage(String gameName, Path dataDirectory) throws Exception {
-		Path game = temporaryDirectory.resolve(gameName);
-		Files.createDirectories(game.resolve("automodpack"));
-		StorageJsons.DataRootFields dataRoot = new StorageJsons.DataRootFields();
-		dataRoot.root = dataDirectory.toString();
-		ConfigTools.writeAtomic(game.resolve("automodpack/data-root.json"), dataRoot);
-		ClientStorage storage = ClientStorage.open(game);
-		return storage;
+		return TestDataRoot.open(temporaryDirectory.resolve(gameName), dataDirectory);
 	}
 
 	private static String store(ClientStorage storage, String text) throws Exception {
@@ -237,7 +225,9 @@ class ClientObjectStoreTest {
 		Path temporary = Files.createTempFile(storage.incomingDirectory(), "object-", ".tmp");
 		Files.write(temporary, bytes);
 		String hash = HashUtils.getHash(temporary);
-		Files.move(temporary, storage.objectsDirectory().resolve(hash), StandardCopyOption.REPLACE_EXISTING);
+		Path destination = storage.objectFile(hash);
+		Files.createDirectories(destination.getParent());
+		Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
 		return hash;
 	}
 

@@ -3,25 +3,18 @@ package pl.skidam.automodpack_core.storage;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
-import java.util.UUID;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /** Resolves the one shared-or-local AutoModpack data root for an instance. */
 public final class DataRootResolver {
-	private static final Object RESOLUTION_LOCK = new Object();
 	public record Layout(Path root) {
 		public Layout {
 			root = Objects.requireNonNull(root, "data root").toAbsolutePath().normalize();
@@ -29,6 +22,10 @@ public final class DataRootResolver {
 
 		public Path objectsDirectory() {
 			return root.resolve("objects").normalize();
+		}
+
+		public Path objectFile(String sha1) {
+			return DataRootResolver.objectFile(objectsDirectory(), sha1);
 		}
 
 		public Path fileMetadataDirectory() {
@@ -63,7 +60,7 @@ public final class DataRootResolver {
 	public record Location(Path root, String ownerId, Path ownerPath) {
 		public Location {
 			root = Objects.requireNonNull(root, "root").toAbsolutePath().normalize();
-			ownerId = UUID.fromString(Objects.requireNonNull(ownerId, "owner ID")).toString();
+			ownerId = HashUtils.normalizeSha1(Objects.requireNonNull(ownerId, "owner ID"));
 			ownerPath = Objects.requireNonNull(ownerPath, "owner path").toAbsolutePath().normalize();
 		}
 
@@ -79,28 +76,42 @@ public final class DataRootResolver {
 		try {
 			Path gameRoot = canonicalGameRoot(requestedRoot);
 			Path automodpackDirectory = gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).normalize();
-			Path marker = gameRoot.resolve(StoragePaths.DATA_ROOT_MARKER_FILE).normalize();
-			Path lockPath = gameRoot.resolve(StoragePaths.DATA_ROOT_LOCK_FILE).normalize();
-			synchronized (RESOLUTION_LOCK) {
-				try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS); FileLock ignored = channel.lock()) {
-					createLocalDataDirectory(gameRoot, automodpackDirectory);
-					validateLocalDataDirectory(gameRoot, automodpackDirectory);
-					if (Files.exists(marker, LinkOption.NOFOLLOW_LINKS)) {
-						// The pin is a hint about a past decision, not an authority: if the pinned root
-						// became unavailable (moved home dir, Docker, cleanup), heal by re-resolving.
-						StringBuilder failure = new StringBuilder();
-						Location pinned = loadPinned(marker, gameRoot, failure);
-						if (pinned != null) return pinned;
-						LOGGER.warn("Previously used AutoModpack data root is unavailable ({}); selecting a new one (cached downloads will re-sync)", failure);
-					}
-					Location location = selectRoot(gameRoot);
-					writePinned(marker, location, gameRoot);
-					return location;
-				}
-			}
+			createLocalDataDirectory(gameRoot, automodpackDirectory);
+			Path root = selectRoot(gameRoot);
+			String localFailure = probe(root);
+			if (localFailure != null) throw new IOException("AutoModpack data storage is not writable: " + localFailure);
+			return new Location(root, computeOwnerIdentity(gameRoot), gameRoot);
 		} catch (IOException e) {
 			throw new IllegalStateException("Cannot resolve AutoModpack data storage for " + requestedRoot, e);
 		}
+	}
+
+	/** Git-style content-addressed path {@code objects/<aa>/<rest-of-sha1>}. */
+	public static Path objectFile(Path objectsDirectory, String sha1) {
+		String hash = HashUtils.normalizeSha1(sha1);
+		Path root = Objects.requireNonNull(objectsDirectory, "objects directory").toAbsolutePath().normalize();
+		Path file = root.resolve(hash.substring(0, 2)).resolve(hash.substring(2)).normalize();
+		if (!file.startsWith(root) || !root.equals(file.getParent().getParent())) throw new IllegalArgumentException("Object path escaped the object store: " + sha1);
+		return file;
+	}
+
+	public static boolean isObjectFile(Path objectsDirectory, Path file) {
+		return objectHash(objectsDirectory, file) != null;
+	}
+
+	/** Reconstructs the SHA-1 from a Git-style object path, or {@code null} if the path is not an object file. */
+	public static String objectHash(Path objectsDirectory, Path file) {
+		if (file == null) return null;
+		Path root = Objects.requireNonNull(objectsDirectory, "objects directory").toAbsolutePath().normalize();
+		Path normalized = file.toAbsolutePath().normalize();
+		Path shard = normalized.getParent();
+		if (shard == null || !root.equals(shard.getParent())) return null;
+		String prefix = shard.getFileName().toString();
+		String rest = normalized.getFileName().toString();
+		if (prefix.length() != 2 || rest.length() != HashUtils.SHA1_HEX_LENGTH - 2) return null;
+		String hash = prefix + rest;
+		if (!HashUtils.isCanonicalSha1(hash)) return null;
+		return objectFile(root, hash).equals(normalized) ? hash : null;
 	}
 
 	private static Path canonicalGameRoot(Path requestedRoot) throws IOException {
@@ -111,66 +122,37 @@ public final class DataRootResolver {
 	}
 
 	private static void createLocalDataDirectory(Path gameRoot, Path directory) throws IOException {
-		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) Files.createDirectory(directory);
-		validateLocalDataDirectory(gameRoot, directory);
-	}
-
-	private static void validateLocalDataDirectory(Path gameRoot, Path directory) throws IOException {
+		Files.createDirectories(directory);
 		if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("AutoModpack data directory is not a regular directory: " + directory);
 		Path realDirectory = directory.toRealPath();
 		if (!gameRoot.equals(realDirectory.getParent())) throw new IOException("AutoModpack data directory resolves outside the game directory: " + directory);
 	}
 
-	private static Location loadPinned(Path marker, Path gameRoot, StringBuilder failure) throws IOException {
-		if (Files.isSymbolicLink(marker) || !Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS)) {
-			failure.append("marker is not a regular file: ").append(marker);
-			return null;
+	private static Path selectRoot(Path gameRoot) throws IOException {
+		Path configured = configuredRoot(gameRoot);
+		if (configured != null) {
+			String failure = probe(configured);
+			if (failure != null) throw new IOException("Configured AutoModpack data root is unusable: " + failure);
+			return configured;
 		}
-		StorageJsons.DataRootFields fields = ConfigTools.read(marker, StorageJsons.DataRootFields.class).orElse(null);
-		if (fields == null) {
-			failure.append("marker is empty");
-			return null;
-		}
-		if (fields.root == null || fields.root.isBlank()) {
-			failure.append("marker has no root");
-			return null;
-		}
-		Path root = Path.of(fields.root).toAbsolutePath().normalize();
-		String reason = probe(root);
-		if (reason != null) {
-			failure.append(root).append(" is unusable: ").append(reason);
-			return null;
-		}
-		String ownerIdentity = computeOwnerIdentity(gameRoot);
-		if (fields.ownerId == null || fields.ownerId.isBlank() || !ownerIdentity.equals(fields.ownerPathHash)) {
-			fields.ownerId = UUID.randomUUID().toString();
-			fields.ownerPathHash = ownerIdentity;
-			fields.ownerPath = gameRoot.toString();
-			ConfigTools.writeAtomic(marker, fields);
-		} else if (!gameRoot.toString().equals(fields.ownerPath)) {
-			fields.ownerPath = gameRoot.toString();
-			ConfigTools.writeAtomic(marker, fields);
-		}
-		return new Location(root, fields.ownerId, gameRoot);
-	}
-
-	private static Location selectRoot(Path gameRoot) throws IOException {
 		Path sharedRoot = platformDataRoot();
 		String sharedFailure = probe(sharedRoot);
-		if (sharedFailure != null) LOGGER.warn("Shared AutoModpack data root {} is unusable ({}); falling back to instance-local storage", sharedRoot, sharedFailure);
-		Path root = sharedFailure == null ? sharedRoot : gameRoot.resolve(StoragePaths.AUTOMODPACK_DIR).resolve("data").normalize();
-		String localFailure = probe(root);
-		if (localFailure != null) throw new IOException("Neither shared nor local AutoModpack data storage is writable: " + sharedFailure + "; " + localFailure);
-		return new Location(root, UUID.randomUUID().toString(), gameRoot);
+		if (sharedFailure == null) return sharedRoot;
+		LOGGER.warn("Shared AutoModpack data root {} is unusable ({}); falling back to instance-local storage", sharedRoot, sharedFailure);
+		return gameRoot.resolve(StoragePaths.LOCAL_DATA_DIR).normalize();
 	}
 
-	private static void writePinned(Path marker, Location location, Path gameRoot) throws IOException {
-		StorageJsons.DataRootFields fields = new StorageJsons.DataRootFields();
-		fields.root = location.root().toString();
-		fields.ownerId = location.ownerId();
-		fields.ownerPathHash = computeOwnerIdentity(gameRoot);
-		fields.ownerPath = gameRoot.toString();
-		ConfigTools.writeAtomic(marker, fields);
+	private static Path configuredRoot(Path gameRoot) {
+		String value = firstNonBlank(System.getProperty(StoragePaths.DATA_ROOT_PROPERTY), System.getenv(StoragePaths.DATA_ROOT_ENV));
+		if (value == null) return null;
+		Path configured = Path.of(value);
+		return (configured.isAbsolute() ? configured : gameRoot.resolve(configured)).toAbsolutePath().normalize();
+	}
+
+	private static String firstNonBlank(String property, String env) {
+		if (property != null && !property.isBlank()) return property;
+		if (env != null && !env.isBlank()) return env;
+		return null;
 	}
 
 	/** Identifies a game installation across symlink aliases without trusting a user-controlled path string. */
@@ -191,14 +173,12 @@ public final class DataRootResolver {
 			Files.writeString(probe, "AutoModpack\n", StandardCharsets.UTF_8);
 			Files.deleteIfExists(probe);
 			return null;
-		} catch (IOException e) {
-			return e.toString();
-		} catch (RuntimeException e) {
+		} catch (IOException | RuntimeException e) {
 			return e.toString();
 		}
 	}
 
 	private static Path platformDataRoot() {
-		return PlatformUtils.userDataDirectory().resolve("AutoModpack").resolve("data").toAbsolutePath().normalize();
+		return PlatformUtils.userDataDirectory().resolve("automodpack").resolve("data").toAbsolutePath().normalize();
 	}
 }

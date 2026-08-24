@@ -380,7 +380,7 @@ public final class PreservationVault {
 
 	private static Path object(ClientStorage storage, String hash) throws IOException {
 		Path root = storage.objectsDirectory().toAbsolutePath().normalize();
-		Path object = root.resolve(requireHash(hash, "preservation object hash")).normalize();
+		Path object = storage.objectFile(requireHash(hash, "preservation object hash"));
 		validateNoSymbolicLinkDescendants(root, object, "preservation object");
 		return object;
 	}

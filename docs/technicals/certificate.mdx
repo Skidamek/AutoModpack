@@ -22,7 +22,7 @@ The trust order is deliberate:
 
 A publicly trusted certificate provides the simplest player experience and is the recommended default for public servers. AutoModpack uses the standard Java trust store, checks the certificate validity period, and verifies it against the Minecraft hostname players entered.
 
-You can obtain a certificate with tools such as [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html). Replace `cert.crt` with the full certificate chain and `key.pem` with the private key in `~/automodpack/.private/`. The private key must use [PKCS#8 PEM format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html).
+You can obtain a certificate with tools such as [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html). Replace `certificate.crt` with the full certificate chain and `private-key.pem` with the private key in `~/automodpack/credentials/`. The private key must use [PKCS#8 PEM format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html).
 
 The certificate must be valid for the original Minecraft hostname. A different modpack endpoint hostname is only a TCP route and does not need to appear in the certificate.
 
@@ -36,7 +36,7 @@ The certificate must be valid for the original Minecraft hostname. A different m
 Never copy-paste random commands from the internet. Always read the documentation of the tool you are using.
 </Callout>
 
-Use `fullchain.pem` as `cert.crt` and `privkey.pem` as `key.pem`. Protect the private key carefully: access to it permits server impersonation.
+Use `fullchain.pem` as `certificate.crt` and `privkey.pem` as `private-key.pem`. Protect the private key carefully: access to it permits server impersonation.
 
 ### DNSSEC AMP1 for self-signed certificates
 

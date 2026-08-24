@@ -172,19 +172,18 @@ def _bridge_state(ctx: Context) -> Path:
 
 
 _CLIENT_DATA_ROOT = Path("automodpack/client/data")
-_CLIENT_DATA_ROOT_IN_CONTAINER = "/work/game/automodpack/client/data"
+_SERVER_DATA_ROOT = Path("automodpack/data")
+
+
+def cas_object(objects_dir: Path, sha1: str) -> Path:
+    digest = str(sha1).lower()
+    return objects_dir / digest[:2] / digest[2:]
 
 
 def _ensure_client_data_root(game_dir: Path) -> Path:
     """Create the one local data root used by every client lifecycle step."""
-    automodpack_dir = game_dir / "automodpack"
-    marker = automodpack_dir / "data-root.json"
     data_root = game_dir / _CLIENT_DATA_ROOT
-    if not marker.exists():
-        data_root.mkdir(parents=True, exist_ok=True)
-        marker.write_text(json.dumps({"root": _CLIENT_DATA_ROOT_IN_CONTAINER, "shared": False}, indent=2) + "\n", encoding="utf-8")
-    else:
-        data_root.mkdir(parents=True, exist_ok=True)
+    data_root.mkdir(parents=True, exist_ok=True)
     return data_root
 
 
@@ -238,10 +237,7 @@ def _prepare_server(ctx: Context):
     cfg["acceptedLoaders"] = [ctx.target.loader]
     (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
     (srv_dir / "automodpack" / "server-config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-    (srv_dir / "automodpack" / "data-root.json").write_text(
-        json.dumps({"root": "/data/automodpack/data", "shared": False}, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    (srv_dir / _SERVER_DATA_ROOT).mkdir(parents=True, exist_ok=True)
     _write_server_generation(ctx, 0)
 
 
@@ -294,7 +290,7 @@ def _write_server_generation(ctx: Context, index: int) -> None:
         else:
             f.write_text(str(item.get("content", "")), encoding="utf-8")
     patch_notes = generation.get("patchNotes", "")
-    patch_path = srv_dir / "automodpack" / "server" / "patch-notes.md"
+    patch_path = srv_dir / "automodpack" / "patch-notes.md"
     patch_path.parent.mkdir(parents=True, exist_ok=True)
     patch_path.write_text(str(patch_notes), encoding="utf-8")
 
@@ -332,6 +328,7 @@ def _launch_server(ctx: Context):
     # (e.g. the GitHub runner's 1001): AccessDenied writing /data/mods/*.download.
     env.setdefault("UID", str(_uid()))
     env.setdefault("GID", str(_gid()))
+    env["AUTOMODPACK_DATA_ROOT"] = str(_SERVER_DATA_ROOT)
     mr = topo.get("modrinth", {})
     if mr:
         projs = list(
@@ -437,6 +434,7 @@ def _start_client_container(ctx: Context, name: str, *, prepare_only: bool = Fal
             "AM_AUTOTEST_PREPARE_ONLY": str(prepare_only).lower(),
             "AM_AUTOTEST_DISPLAY_START_SECONDS": str(ctx.settings.get("timeouts", {}).get("displayStartSeconds", 5)),
             "AM_AUTOTEST_RENDER_CLIENT": str(bool(ctx.scenario.get("renderClient", False)) and not prepare_only).lower(),
+            "AUTOMODPACK_DATA_ROOT": str(_CLIENT_DATA_ROOT),
             "JAVA_TOOL_OPTIONS": "-Xmx2G",
         },
         mounts=[
@@ -630,16 +628,7 @@ def _read_server_json(ctx: Context, relative: str, description: str) -> dict:
 
 
 def _server_data_root_container(ctx: Context) -> Path:
-    marker_path = ctx.server_dir / "automodpack" / "data-root.json"
-    try:
-        marker = json.loads(marker_path.read_text(encoding="utf-8"))
-        root = Path(str(marker["root"]))
-    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
-        raise AssertionError(f"server data-root marker is not readable: {marker_path}: {error}") from error
-    data_root = Path("/data")
-    if not root.is_absolute() or not root.is_relative_to(data_root) or root == data_root or ".." in root.parts:
-        raise AssertionError(f"server data-root marker escaped the mounted /data root: {root}")
-    return root
+    return Path("/data") / _SERVER_DATA_ROOT
 
 
 def _exec_output(result) -> str:
@@ -653,7 +642,7 @@ def _server_object_measurement(ctx: Context, object_root: Path) -> tuple[int, in
     result = _container(ctx.srv_name).exec_run([
         "sh",
         "-c",
-        'set -eu; count=0; bytes=0; for path in "$1"/*; do [ -f "$path" ] || continue; count=$((count + 1)); size=$(wc -c < "$path"); bytes=$((bytes + size)); done; printf "%s %s\\n" "$count" "$bytes"',
+        'set -eu; count=0; bytes=0; for shard in "$1"/*; do [ -d "$shard" ] || continue; for path in "$shard"/*; do [ -f "$path" ] || continue; count=$((count + 1)); size=$(wc -c < "$path"); bytes=$((bytes + size)); done; done; printf "%s %s\\n" "$count" "$bytes"',
         "autotester",
         str(object_root),
     ])
@@ -672,7 +661,7 @@ def _write_server_orphan_object(ctx: Context, object_root: Path) -> str:
     result = _container(ctx.srv_name).exec_run([
         "sh",
         "-c",
-        'set -eu; mkdir -p "$1"; if [ -e "$1/$3" ]; then test -f "$1/$3"; else printf "%s" "$2" > "$1/$3"; fi; test "$(sha1sum "$1/$3" | cut -d " " -f 1)" = "$3"',
+        'set -eu; shard="$1/$(printf %s "$3" | cut -c1-2)"; rest=$(printf %s "$3" | cut -c3-); mkdir -p "$shard"; dest="$shard/$rest"; if [ -e "$dest" ]; then test -f "$dest"; else printf "%s" "$2" > "$dest"; fi; test "$(sha1sum "$dest" | cut -d " " -f 1)" = "$3"',
         "autotester",
         str(object_root),
         payload.decode("utf-8"),
@@ -814,7 +803,7 @@ def _v_collect_server_objects(ctx: Context, step):
 
     def completed_state():
         after_count, after_bytes = _server_object_measurement(ctx, object_root)
-        orphan_exists = _container(ctx.srv_name).exec_run(["test", "-e", str(object_root / orphan_hash)]).exit_code == 0
+        orphan_exists = _container(ctx.srv_name).exec_run(["test", "-e", str(cas_object(object_root, orphan_hash))]).exit_code == 0
         if orphan_exists or (after_count, after_bytes) != (receipt["afterCount"], receipt["afterBytes"]):
             return None
         return after_count, after_bytes
@@ -1005,7 +994,8 @@ def _v_seed_bootstrap(ctx: Context, step):
         "endpoint": endpoint,
         "connectionMode": connection_mode,
     }
-    bootstrap_path = ctx.game_dir / "automodpack-bootstrap.json"
+    bootstrap_path = ctx.game_dir / "automodpack" / "bootstrap.json"
+    bootstrap_path.parent.mkdir(parents=True, exist_ok=True)
     bootstrap_path.write_text(json.dumps(fields, indent=2) + "\n", encoding="utf-8")
     ctx.vars.update({
         "bootstrap_origin": origin,
@@ -1013,7 +1003,7 @@ def _v_seed_bootstrap(ctx: Context, step):
         "bootstrap_fingerprint": fingerprint,
         "bootstrap_modpack_id": modpack_id,
         "bootstrap_connection_mode": connection_mode,
-        "bootstrap_path": "automodpack-bootstrap.json",
+        "bootstrap_path": "automodpack/bootstrap.json",
     })
 
 
@@ -1043,7 +1033,7 @@ def _v_assert_preload_rejected(ctx: Context, _step):
     if not expected:
         raise AssertionError("published projection contains no object hashes")
     objects = _ensure_client_data_root(ctx.game_dir) / "objects"
-    present = [sha1 for sha1 in expected if (objects / sha1).is_file()]
+    present = [sha1 for sha1 in expected if cas_object(objects, sha1).is_file()]
     if present:
         raise AssertionError(f"anonymous bootstrap preload acquired catalogue objects: count={len(present)}")
     connection_path = ctx.game_dir / "automodpack" / "client" / "data" / "packs" / str(ctx.vars["bootstrap_modpack_id"]) / "connection.json"
@@ -1066,7 +1056,7 @@ def _v_assert_preload_acquired(ctx: Context, _step):
     missing = []
     invalid = []
     for sha1, size in expected.items():
-        object_path = objects / sha1
+        object_path = cas_object(objects, sha1)
         try:
             if not object_path.is_file() or object_path.stat().st_size != size:
                 missing.append(sha1)
@@ -1409,8 +1399,9 @@ def _write_staged_generation(
     objects = data_root / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     for entry in files:
-        object_path = objects / entry["sha1"]
+        object_path = cas_object(objects, entry["sha1"])
         if not object_path.is_file():
+            object_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / entry["logicalPath"], object_path)
     return {"generationId": generation_id, "stateDigest": state_digest, "ledgerDigest": provisional_ledger_digest}
 
@@ -1602,7 +1593,9 @@ def _v_seed_cas(ctx: Context, _step):
     payloads = [json.dumps({"marker": ctx.modpack_name}).encode("utf-8") + b"\n"]
     payloads.extend(content.encode("utf-8") for _, content in ctx.scenario_files)
     for payload in payloads:
-        (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
+        object_path = cas_object(objects, hashlib.sha1(payload).hexdigest())
+        object_path.parent.mkdir(parents=True, exist_ok=True)
+        object_path.write_bytes(payload)
 
 
 # ── case orchestration ────────────────────────────────────────────────────

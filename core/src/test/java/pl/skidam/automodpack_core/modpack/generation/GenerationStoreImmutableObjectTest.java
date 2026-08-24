@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class GenerationStoreImmutableObjectTest {
@@ -35,7 +36,7 @@ class GenerationStoreImmutableObjectTest {
 			GenerationStore.Publication publication = store.publish(candidate, Optional.empty(), "");
 			server.replacePaths(publication.hostingPaths());
 
-			Path published = tempDir.resolve("host-generations/objects").resolve(staged.sha1());
+			Path published = DataRootResolver.objectFile(tempDir.resolve("host-generations/objects"), staged.sha1());
 			assertEquals("before publication", Files.readString(published, StandardCharsets.UTF_8));
 			assertEquals(published, server.getPath(staged.sha1()).orElseThrow());
 			Files.writeString(source, "changed after publication", StandardCharsets.UTF_8);
@@ -49,7 +50,7 @@ class GenerationStoreImmutableObjectTest {
 		GenerationStore store = new GenerationStore(root);
 		try (ModpackCandidate candidate = scan()) {
 			StagedObject staged = onlyObject(candidate);
-			Path existing = root.resolve("objects").resolve(staged.sha1());
+			Path existing = DataRootResolver.objectFile(root.resolve("objects"), staged.sha1());
 			Files.createDirectories(existing.getParent());
 			Files.copy(staged.stagedPath(), existing);
 
@@ -67,7 +68,7 @@ class GenerationStoreImmutableObjectTest {
 		GenerationStore store = new GenerationStore(root);
 		ModpackCandidate candidate = scan();
 		StagedObject staged = onlyObject(candidate);
-		Path existing = root.resolve("objects").resolve(staged.sha1());
+		Path existing = DataRootResolver.objectFile(root.resolve("objects"), staged.sha1());
 		Files.createDirectories(existing.getParent());
 		Files.writeString(existing, "corrupt", StandardCharsets.UTF_8);
 
@@ -90,7 +91,7 @@ class GenerationStoreImmutableObjectTest {
 			assertThrows(IOException.class, () -> store.publish(candidate, Optional.empty(), ""));
 
 			assertFalse(Files.exists(root.resolve("current.json"), LinkOption.NOFOLLOW_LINKS));
-			Path promoted = root.resolve("objects").resolve(staged.sha1());
+			Path promoted = DataRootResolver.objectFile(root.resolve("objects"), staged.sha1());
 			assertTrue(Files.isRegularFile(promoted, LinkOption.NOFOLLOW_LINKS));
 			assertEquals(staged.sha1(), HashUtils.getHash(promoted));
 			try (var commits = Files.list(root.resolve("commits"))) {

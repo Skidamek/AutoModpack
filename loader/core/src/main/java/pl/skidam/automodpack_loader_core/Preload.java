@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_loader_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.CREDENTIALS_DIR;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_DIR;
 
@@ -313,6 +314,7 @@ public class Preload {
 
 		try {
 			Files.createDirectories(SERVER_DIR);
+			Files.createDirectories(CREDENTIALS_DIR);
 		} catch (IOException e) {
 			LOGGER.error("Failed to create AutoModpack state roots", e);
 		}

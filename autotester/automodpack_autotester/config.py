@@ -39,7 +39,8 @@ CLIENT_GENERATION_STATE_PATHS = (
     "preservation",
     "selections.json",
     "restart-state.json",
-    "incoming-content.json.temp",
+    "incoming-manifest.json.temp",
+    "helper",
 )
 
 

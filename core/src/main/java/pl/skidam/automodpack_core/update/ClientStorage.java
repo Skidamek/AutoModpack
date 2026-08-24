@@ -77,25 +77,25 @@ public final class ClientStorage {
 		this.dataDirectory = dataLocation.root();
 		DataRootResolver.Layout dataLayout = dataLocation.layout();
 		this.objectsDirectory = dataLayout.objectsDirectory();
-		this.recordsDirectory = this.clientDirectory.resolve(CLIENT_RECORDS_DIR.getFileName()).normalize();
-		this.overlaysDirectory = this.clientDirectory.resolve(CLIENT_OVERLAYS_DIR.getFileName()).normalize();
-		this.baselinesDirectory = this.clientDirectory.resolve(CLIENT_BASELINES_DIR.getFileName()).normalize();
-		this.generatedCopiesDirectory = this.clientDirectory.resolve(CLIENT_GENERATED_COPIES_DIR.getFileName()).normalize();
-		this.activeDirectory = this.clientDirectory.resolve(CLIENT_ACTIVE_DIR.getFileName()).normalize();
-		this.incomingDirectory = this.clientDirectory.resolve(CLIENT_INCOMING_DIR.getFileName()).normalize();
-		this.backupDirectory = this.clientDirectory.resolve(CLIENT_BACKUP_DIR.getFileName()).normalize();
-		this.stateFile = this.clientDirectory.resolve(CLIENT_ACTIVE_STATE_FILE.getFileName()).normalize();
-		this.transactionFile = this.clientDirectory.resolve(CLIENT_TRANSACTION_FILE.getFileName()).normalize();
-		this.repairJournalFile = this.clientDirectory.resolve("repair.json").normalize();
-		this.compactionJournalFile = this.clientDirectory.resolve("compaction.json").normalize();
-		this.mutationLockFile = this.clientDirectory.resolve("mutation.lock").normalize();
-		this.selectionFile = this.clientDirectory.resolve(CLIENT_SELECTION_FILE.getFileName()).normalize();
-		this.restartLoopStateFile = this.clientDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE.getFileName()).normalize();
+		this.recordsDirectory = this.gameDirectory.resolve(CLIENT_RECORDS_DIR).normalize();
+		this.overlaysDirectory = this.gameDirectory.resolve(CLIENT_OVERLAYS_DIR).normalize();
+		this.baselinesDirectory = this.gameDirectory.resolve(CLIENT_BASELINES_DIR).normalize();
+		this.generatedCopiesDirectory = this.gameDirectory.resolve(CLIENT_GENERATED_COPIES_DIR).normalize();
+		this.activeDirectory = this.gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
+		this.incomingDirectory = this.gameDirectory.resolve(CLIENT_INCOMING_DIR).normalize();
+		this.backupDirectory = this.gameDirectory.resolve(CLIENT_BACKUP_DIR).normalize();
+		this.stateFile = this.gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize();
+		this.transactionFile = this.gameDirectory.resolve(CLIENT_TRANSACTION_FILE).normalize();
+		this.repairJournalFile = this.gameDirectory.resolve(CLIENT_REPAIR_FILE).normalize();
+		this.compactionJournalFile = this.gameDirectory.resolve(CLIENT_COMPACTION_FILE).normalize();
+		this.mutationLockFile = this.gameDirectory.resolve(CLIENT_MUTATION_LOCK_FILE).normalize();
+		this.selectionFile = this.gameDirectory.resolve(CLIENT_SELECTION_FILE).normalize();
+		this.restartLoopStateFile = this.gameDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
-		this.modpackContentTempFile = this.clientDirectory.resolve(CLIENT_CONTENT_TEMP_FILE.getFileName()).normalize();
-		this.helperDirectory = this.clientDirectory.resolve(CLIENT_HELPER_DIR.getFileName()).normalize();
-		this.helperLeaseFile = this.clientDirectory.resolve(CLIENT_HELPER_DIR.getFileName()).resolve(CLIENT_HELPER_LEASE_FILE.getFileName()).normalize();
-		this.preservationDirectory = this.clientDirectory.resolve(CLIENT_PRESERVATION_DIR.getFileName()).normalize();
+		this.modpackContentTempFile = this.gameDirectory.resolve(CLIENT_CONTENT_TEMP_FILE).normalize();
+		this.helperDirectory = this.gameDirectory.resolve(CLIENT_HELPER_DIR).normalize();
+		this.helperLeaseFile = this.gameDirectory.resolve(CLIENT_HELPER_LEASE_FILE).normalize();
+		this.preservationDirectory = this.gameDirectory.resolve(CLIENT_PRESERVATION_DIR).normalize();
 		this.bootstrapFile = this.gameDirectory.resolve(BOOTSTRAP_FILE).normalize();
 		this.fileMetadataDirectory = dataLayout.fileMetadataDirectory();
 		this.modMetadataDirectory = dataLayout.modMetadataDirectory();
@@ -150,6 +150,10 @@ public final class ClientStorage {
 
 	public Path objectsDirectory() {
 		return objectsDirectory;
+	}
+
+	public Path objectFile(String sha1) {
+		return DataRootResolver.objectFile(objectsDirectory, sha1);
 	}
 
 	public Path recordsDirectory() {
@@ -280,7 +284,7 @@ public final class ClientStorage {
 
 	public Path restoredClaimDirectory(String modpackId, String generationId, String claimId) {
 		String generation = generationId == null || generationId.isEmpty() ? "unversioned" : requireDigest(generationId, "generation ID");
-		Path root = automodpackDirectory.resolve("restored").resolve(ModpackId.requireValid(modpackId)).resolve(generation).normalize();
+		Path root = gameDirectory.resolve(RECOVERED_DIR).resolve(ModpackId.requireValid(modpackId)).resolve(generation).normalize();
 		Path claim = root.resolve(requireDigest(claimId, "preservation claim ID")).normalize();
 		if (!claim.startsWith(root)) throw new IllegalArgumentException("Restored copy path escaped its modpack root");
 		return claim;
@@ -374,11 +378,11 @@ public final class ClientStorage {
 	}
 
 	public Path incomingProjectionDirectory() {
-		return incomingDirectory.resolve("projection").normalize();
+		return gameDirectory.resolve(CLIENT_INCOMING_PROJECTION_DIR).normalize();
 	}
 
 	public Path backupProjectionDirectory() {
-		return backupDirectory.resolve("projection").normalize();
+		return gameDirectory.resolve(CLIENT_BACKUP_PROJECTION_DIR).normalize();
 	}
 
 	public String overlayDigest(String modpackId) throws IOException {
@@ -431,10 +435,10 @@ public final class ClientStorage {
 
 	private void validateLayout() {
 		validateWithin(gameDirectory, automodpackDirectory);
-		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile);
-		validateWithin(gameDirectory, bootstrapFile);
+		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
-				stateFile, transactionFile, repairJournalFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory, helperLeaseFile);
+				stateFile, transactionFile, repairJournalFile, compactionJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory, helperLeaseFile,
+				incomingProjectionDirectory(), backupProjectionDirectory());
 		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}
 

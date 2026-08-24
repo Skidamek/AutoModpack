@@ -242,7 +242,7 @@ public final class ClientProjectionView {
 			if (pending != null) candidates.add(resolve(storage.incomingProjectionDirectory(), relative));
 			candidates.add(storage.activePath(relative));
 			UpdatePlan.FileState expected = files.get(relative);
-			if (expected != null) candidates.add(storage.objectsDirectory().resolve(HashUtils.normalizeSha1(expected.sha1())));
+			if (expected != null) candidates.add(storage.objectFile(expected.sha1()));
 			return List.copyOf(candidates);
 		}
 

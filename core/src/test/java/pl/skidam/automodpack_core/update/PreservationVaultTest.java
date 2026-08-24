@@ -21,6 +21,7 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.PreservationVault.Reason;
 import pl.skidam.automodpack_core.update.PreservationVault.Status;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
@@ -49,7 +50,7 @@ class PreservationVaultTest {
 		assertEquals(first, repeated);
 		assertEquals(Reason.LOCAL_CONFLICT, first.reason());
 		assertFalse(Files.exists(source));
-		assertEquals(hash, HashUtils.getHash(storage.objectsDirectory().resolve(hash)));
+		assertEquals(hash, HashUtils.getHash(storage.objectFile(hash)));
 		assertEquals(1, PreservationVault.read(storage, MODPACK_ID).claims().size());
 	}
 
@@ -69,7 +70,7 @@ class PreservationVaultTest {
 		assertEquals("local-mod", Files.readString(restored, StandardCharsets.UTF_8));
 		PreservationVault.Claim retained = PreservationVault.read(storage, MODPACK_ID).claims().get(0);
 		assertEquals(Status.RESTORED, retained.status());
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(hash)));
+		assertTrue(Files.exists(storage.objectFile(hash)));
 	}
 
 	@Test
@@ -116,7 +117,7 @@ class PreservationVaultTest {
 		PreservationVault.delete(storage, MODPACK_ID, claim.claimId());
 
 		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().isEmpty());
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(hash)));
+		assertTrue(Files.exists(storage.objectFile(hash)));
 	}
 
 	@Test
@@ -139,8 +140,8 @@ class PreservationVaultTest {
 		assertEquals(claim.claimId(), PreservationVault.read(storage, MODPACK_ID).claims().get(0).claimId());
 	}
 
-	private ClientStorage storage() throws IOException {
-		ClientStorage storage = ClientStorage.open(temporaryDirectory.resolve("game"));
+	private ClientStorage storage() throws Exception {
+		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
 		Files.createDirectories(storage.gamePath("config"));
 		return storage;

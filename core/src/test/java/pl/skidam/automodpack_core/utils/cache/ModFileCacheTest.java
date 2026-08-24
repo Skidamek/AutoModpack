@@ -65,7 +65,7 @@ class ModFileCacheTest {
 		writeMod(source);
 		String hash = HashUtils.getHash(source);
 		Path records = temporaryDirectory.resolve("mod-metadata");
-		Path record = records.resolve(hash.substring(0, 2)).resolve(hash + ".json");
+		Path record = records.resolve(hash.substring(0, 2)).resolve(hash.substring(2) + ".json");
 		Files.createDirectories(record.getParent());
 		Files.writeString(record, "{\"IDs\":[\"wrong\"],\"hash\":\"" + hash + "\",\"version\":\"9.9.9\",\"deps\":[],\"nestedMods\":[]}", StandardCharsets.UTF_8);
 

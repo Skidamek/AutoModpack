@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
@@ -56,7 +57,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(execution.success());
 		assertTrue(FileIntegrity.matches(projectionFile, bytes.length, hash));
-		assertVerifiedObjectProjection(storage.objectsDirectory().resolve(hash), projectionFile, bytes.length, hash);
+		assertVerifiedObjectProjection(storage.objectFile(hash), projectionFile, bytes.length, hash);
 		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
 		assertEquals(target.generationRecord(), new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).orElseThrow());
 		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
@@ -120,7 +121,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(execution.success());
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
-		assertFalse(Files.exists(storage.objectsDirectory().resolve(hash)));
+		assertFalse(Files.exists(storage.objectFile(hash)));
 		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
 	}
 
@@ -240,7 +241,7 @@ class UpdateTransactionExecutorTest {
 			ClientProjectionView.Snapshot view = ClientProjectionView.open(storage).snapshot(cache);
 			assertEquals(deferredTarget.flatTarget().targetGenerationId, view.target().targetGenerationId);
 			assertEquals(new UpdatePlan.FileState(deferredHash, deferredBytes.length, true), view.files().get("mods/mailbox-deferred.jar"));
-			assertTrue(view.sourceCandidates("mods/mailbox-deferred.jar").contains(storage.objectsDirectory().resolve(deferredHash)));
+			assertTrue(view.sourceCandidates("mods/mailbox-deferred.jar").contains(storage.objectFile(deferredHash)));
 		}
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-old.jar"), oldBytes.length, oldHash));
 
@@ -334,7 +335,7 @@ class UpdateTransactionExecutorTest {
 		PreservationVault.Snapshot preservation = PreservationVault.read(storage, target.manifest().modpackId());
 		assertEquals(1, preservation.claims().size());
 		assertEquals(PreservationVault.Reason.LOCAL_CONFLICT, preservation.claims().get(0).reason());
-		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(localHash), localBytes.length, localHash));
+		assertTrue(FileIntegrity.matches(storage.objectFile(localHash), localBytes.length, localHash));
 	}
 
 	@Test
@@ -358,7 +359,7 @@ class UpdateTransactionExecutorTest {
 		PreservationVault.Claim claim = PreservationVault.read(storage, target.manifest().modpackId()).claims().get(0);
 		assertEquals(PreservationVault.Reason.PLAYER_CONSENT, claim.reason());
 		assertEquals(localHash, claim.objectHash());
-		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(localHash), localBytes.length, localHash));
+		assertTrue(FileIntegrity.matches(storage.objectFile(localHash), localBytes.length, localHash));
 	}
 
 	@Test
@@ -457,7 +458,7 @@ class UpdateTransactionExecutorTest {
 		Path live = storage.gameDirectory().resolve("config/settings.json");
 		assertTrue(execution.success());
 		assertTrue(FileIntegrity.matches(overlay, editedBytes.length, editedHash));
-		assertFalse(Files.isSameFile(storage.objectsDirectory().resolve(editedHash), live));
+		assertFalse(Files.isSameFile(storage.objectFile(editedHash), live));
 		assertArrayEquals(editedBytes, Files.readAllBytes(live));
 		assertTrue(FileIntegrity.matches(storage.activePath("config/settings.json"), baseBytes.length, baseHash));
 	}
@@ -480,7 +481,7 @@ class UpdateTransactionExecutorTest {
 						new ProjectedFile(Root.GAME_DIR, restoredPath, true, serverHash, serverBytes.length)));
 		UpdateTransactionExecutor executor = executor(storage);
 		assertTrue(executor.commit(installedPlan, installed).success());
-		Files.delete(storage.objectsDirectory().resolve(serverHash));
+		Files.delete(storage.objectFile(serverHash));
 
 		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = installed.manifest().modpackId();
@@ -506,7 +507,7 @@ class UpdateTransactionExecutorTest {
 				&& file.present() && baselineHash.equals(file.expectedHash())));
 		assertTrue(executor.commit(switchPlan, target).success());
 		assertArrayEquals(baselineBytes, Files.readAllBytes(storage.gameDirectory().resolve(restoredPath)));
-		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(serverHash), serverBytes.length, serverHash));
+		assertTrue(FileIntegrity.matches(storage.objectFile(serverHash), serverBytes.length, serverHash));
 		PreservationVault.Claim preserved = PreservationVault.read(storage, installed.manifest().modpackId()).claims().get(0);
 		assertEquals(installed.generationTarget().targetGenerationId(), preserved.generationId());
 		assertEquals(PreservationVault.Reason.MODPACK_DEACTIVATION, preserved.reason());
@@ -553,13 +554,13 @@ class UpdateTransactionExecutorTest {
 				&& operation.operation() == OperationType.DELETE && generatedHash.equals(operation.expectedExistingHash())));
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(removal, ClientPlatform.LINUX, expected, storage.overlayDigest(target.manifest().modpackId()),
 				clientConfig(target.manifest().modpackId()));
-		Files.delete(storage.objectsDirectory().resolve(hash));
+		Files.delete(storage.objectFile(hash));
 
 		assertTrue(executor.commit(transaction).success());
 		assertFalse(Files.exists(live));
 		assertFalse(Files.exists(generatedLive));
 		assertFalse(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.generationTarget().targetGenerationId(), UpdateTransaction.digest(expected))));
-		assertTrue(FileIntegrity.matches(storage.objectsDirectory().resolve(hash), bytes.length, hash));
+		assertTrue(FileIntegrity.matches(storage.objectFile(hash), bytes.length, hash));
 		assertEquals(PreservationVault.Reason.MODPACK_REMOVAL, PreservationVault.read(storage, target.manifest().modpackId()).claims().get(0).reason());
 		assertTrue(Files.isDirectory(storage.activeDirectory()));
 		try (var paths = Files.list(storage.activeDirectory())) {
@@ -649,7 +650,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private ClientStorage storage() throws Exception {
-		ClientStorage storage = ClientStorage.open(temporaryDirectory.resolve("game"));
+		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
 		return storage;
 	}
@@ -662,7 +663,8 @@ class UpdateTransactionExecutorTest {
 		Path temporary = Files.createTempFile(storage.objectsDirectory(), ".object-", ".tmp");
 		Files.write(temporary, bytes);
 		String hash = HashUtils.getHash(temporary);
-		Path destination = storage.objectsDirectory().resolve(hash);
+		Path destination = storage.objectFile(hash);
+		Files.createDirectories(destination.getParent());
 		if (Files.exists(destination)) {
 			assertTrue(FileIntegrity.matches(destination, bytes.length, hash));
 			Files.delete(temporary);

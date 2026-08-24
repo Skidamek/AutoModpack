@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
@@ -194,7 +195,7 @@ class GenerationStoreTest {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
 		String hash = publication.record().manifest().groups().get("main").files().values().iterator().next().sha1();
-		Files.delete(tempDir.resolve("objects").resolve(hash));
+		Files.delete(DataRootResolver.objectFile(tempDir.resolve("objects"), hash));
 		assertThrows(IOException.class, store::loadCurrent);
 	}
 
@@ -205,7 +206,7 @@ class GenerationStoreTest {
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
 		store.publish(candidate("second"), Optional.of(current), "");
 		String historicalHash = first.record().manifest().groups().get("main").files().values().iterator().next().sha1();
-		Files.delete(tempDir.resolve("objects").resolve(historicalHash));
+		Files.delete(DataRootResolver.objectFile(tempDir.resolve("objects"), historicalHash));
 
 		assertDoesNotThrow(() -> store.loadCurrent().orElseThrow());
 		assertDoesNotThrow(() -> store.loadCurrentDeep().orElseThrow());

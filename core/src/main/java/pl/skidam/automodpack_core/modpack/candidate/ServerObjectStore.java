@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.ImmutableFilePublisher;
@@ -48,9 +49,11 @@ public final class ServerObjectStore {
 	}
 
 	private Path destination(String sha1) throws IOException {
-		Path destination = objectsDirectory.resolve(sha1).normalize();
-		if (!destination.startsWith(objectsDirectory)) throw new IOException("Object path escapes immutable store: " + sha1);
-		return destination;
+		try {
+			return DataRootResolver.objectFile(objectsDirectory, sha1);
+		} catch (IllegalArgumentException e) {
+			throw new IOException("Object path escapes immutable store: " + sha1, e);
+		}
 	}
 
 	private void validateStaged(StagedObject object) throws IOException {

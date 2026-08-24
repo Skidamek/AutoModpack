@@ -178,7 +178,7 @@ final class ClientUpdatePlanBuilder {
 				.collect(Collectors.toMap(item -> item.sha1.toLowerCase(Locale.ROOT), item -> item, (first, second) -> first));
 		for (UpdatePlan.Operation operation : plan.operations()) {
 			if (operation.operation() != UpdatePlan.OperationType.INSTALL_OBJECT) continue;
-			Path storeFile = storage.objectsDirectory().resolve(operation.expectedObjectHash());
+			Path storeFile = storage.objectFile(operation.expectedObjectHash());
 			if (FileIntegrity.matches(storeFile, operation.expectedSize(), operation.expectedObjectHash())) continue;
 			if (operation.root() == UpdatePlan.Root.OVERLAY) {
 				Path overlay = storage.overlayFile(targetManifest.modpackId, operation.relativePath());
@@ -223,7 +223,7 @@ final class ClientUpdatePlanBuilder {
 		if (baseline.entries != null) for (var entry : baseline.entries) {
 			if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
 			String hash = entry.objectHash.toLowerCase(Locale.ROOT);
-			if (FileIntegrity.matches(storage.objectsDirectory().resolve(hash), entry.size, hash)) availableObjects.add(hash);
+			if (FileIntegrity.matches(storage.objectFile(hash), entry.size, hash)) availableObjects.add(hash);
 		}
 		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
 	}
@@ -250,7 +250,7 @@ final class ClientUpdatePlanBuilder {
 				deletedPaths.remove(UpdatePlanner.normalize(item.file));
 				continue;
 			}
-			Path object = storage.objectsDirectory().resolve(hash);
+			Path object = storage.objectFile(hash);
 			if (!FileIntegrity.matches(object, size, hash)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash);
 			VerifiedFileTransfer.copyAtomic(object, overlay, size, hash);
 			deletedPaths.remove(UpdatePlanner.normalize(item.file));
@@ -266,7 +266,7 @@ final class ClientUpdatePlanBuilder {
 			Function<ModpackJsons.ModpackContentFields.ModpackContentItem, List<Path>> sourceResolver) throws IOException {
 		if (target.list == null) return;
 		for (var item : target.list) {
-			Path object = storage.objectsDirectory().resolve(item.sha1);
+			Path object = storage.objectFile(item.sha1);
 			long size = Long.parseLong(item.size);
 			if (FileIntegrity.matches(object, size, item.sha1)) continue;
 			for (Path source : sourceResolver.apply(item)) if (populateStoreObject(source, object, size, item.sha1, cache)) break;
@@ -346,7 +346,7 @@ final class ClientUpdatePlanBuilder {
 		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type))
 				.sorted(Comparator.comparing(value -> value.file)).toList()) {
 			long size = Long.parseLong(item.size);
-			Path source = storage.objectsDirectory().resolve(item.sha1);
+			Path source = storage.objectFile(item.sha1);
 			if (!FileIntegrity.matches(source, size, item.sha1))
 				source = projection.sourceCandidates(item.file).stream()
 						.filter(candidate -> FileIntegrity.matches(candidate, size, item.sha1)).findFirst().orElse(null);
@@ -376,7 +376,7 @@ final class ClientUpdatePlanBuilder {
 		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
 			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type)).toList()) {
-				Path source = storage.objectsDirectory().resolve(item.sha1);
+				Path source = storage.objectFile(item.sha1);
 				if (!FileIntegrity.matches(source, Long.parseLong(item.size), item.sha1))
 					source = projection.sourceCandidates(item.file).stream()
 							.filter(candidate -> FileIntegrity.matches(candidate, Long.parseLong(item.size), item.sha1)).findFirst().orElse(null);
@@ -393,7 +393,7 @@ final class ClientUpdatePlanBuilder {
 			for (FileInspection.Mod mod : modpackLoader.getModpackNestedConflicts(inspectionDirectory, cache)) {
 				if (mod.path() == null || mod.hash() == null || !Files.isRegularFile(mod.path())) continue;
 				long size = Files.size(mod.path());
-				Path storeFile = storage.objectsDirectory().resolve(mod.hash());
+				Path storeFile = storage.objectFile(mod.hash());
 				if (!FileIntegrity.matches(storeFile, size, mod.hash())) VerifiedFileTransfer.copyAtomicImmutable(mod.path(), storeFile, size, mod.hash());
 				Path targetPath = storage.modsDirectory().resolve(mod.path().getFileName()).normalize();
 				if (!targetPath.startsWith(storage.gameDirectory())) throw new IOException("Nested mod target escaped the game directory: " + targetPath);
@@ -415,7 +415,7 @@ final class ClientUpdatePlanBuilder {
 		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
 			if (!ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(item.file), item.type)) continue;
 			long size = Long.parseLong(item.size);
-			Path modPath = storage.objectsDirectory().resolve(item.sha1);
+			Path modPath = storage.objectFile(item.sha1);
 			if (!FileIntegrity.matches(modPath, size, item.sha1))
 				modPath = projection.sourceCandidates(item.file).stream().filter(candidate -> FileIntegrity.matches(candidate, size, item.sha1)).findFirst().orElse(null);
 			if (modPath == null || !FileIntegrity.matches(modPath, size, item.sha1)) continue;

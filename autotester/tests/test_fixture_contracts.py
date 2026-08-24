@@ -213,7 +213,9 @@ def test_preservation_claim_filters_do_not_rely_on_corrupt_object_bytes(make_ctx
     object_hash = hashlib.sha1(payload).hexdigest()
     objects = ctx.game_dir / "automodpack/client/data/objects"
     objects.mkdir(parents=True)
-    (objects / object_hash).write_bytes(payload)
+    object_path = runner.cas_object(objects, object_hash)
+    object_path.parent.mkdir(parents=True, exist_ok=True)
+    object_path.write_bytes(payload)
     claims = ctx.game_dir / f"automodpack/client/preservation/{pack_id}/claims.json"
     claims.parent.mkdir(parents=True)
     claims.write_text(json.dumps({"claims": [{"originalPath": "mods/local.jar", "objectHash": object_hash, "size": len(payload), "reason": "STRICT_REPAIR", "status": "AVAILABLE"}]}), encoding="utf-8")
@@ -475,7 +477,7 @@ def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     assert len(records) == 1
     manifest = json.loads(records[0].read_text(encoding="utf-8"))
     metadata = manifest["groups"]["main"]["files"]["mods/amp-autotest-conflict.jar"]
-    object_path = ctx.game_dir / "automodpack/client/data/objects" / metadata["sha1"]
+    object_path = runner.cas_object(ctx.game_dir / "automodpack/client/data/objects", metadata["sha1"])
     assert_valid_mod_fixture(object_path.read_bytes(), server, ctx.target.minecraft)
 
 
@@ -549,7 +551,7 @@ def test_seed_bootstrap_writes_live_fields(make_ctx):
     runner._v_seed_bootstrap(ctx, {})
 
     assert json.loads(
-        (ctx.game_dir / "automodpack-bootstrap.json").read_text(encoding="utf-8")
+        (ctx.game_dir / "automodpack" / "bootstrap.json").read_text(encoding="utf-8")
     ) == {
         "origin": "amp-server:25565",
         "fingerprint": "01:23:45",

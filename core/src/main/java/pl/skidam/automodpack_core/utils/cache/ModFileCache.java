@@ -108,7 +108,7 @@ public class ModFileCache implements AutoCloseable {
 	}
 
 	private Path recordPath(String hash) {
-		return recordsDirectory.resolve(hash.substring(0, 2)).resolve(hash + RECORD_SUFFIX);
+		return recordsDirectory.resolve(hash.substring(0, 2)).resolve(hash.substring(2) + RECORD_SUFFIX);
 	}
 
 	@Override

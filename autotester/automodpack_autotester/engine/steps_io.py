@@ -108,7 +108,8 @@ def _active_file(ctx, logical_path):
 
 
 def _object_path(ctx, object_hash):
-    return ctx.game_dir / "automodpack" / "client" / "data" / "objects" / object_hash
+    digest = str(object_hash).lower()
+    return ctx.game_dir / "automodpack" / "client" / "data" / "objects" / digest[:2] / digest[2:]
 
 
 def _claim_fields(ctx, step):
@@ -321,7 +322,7 @@ def assert_bootstrap_import(ctx, _step):
     }
     if not all(expected.values()):
         raise AssertionError("bootstrap expectations were not captured by seed_bootstrap")
-    bootstrap_path = ctx.game_dir / "automodpack-bootstrap.json"
+    bootstrap_path = ctx.game_dir / "automodpack" / "bootstrap.json"
     if bootstrap_path.exists():
         raise AssertionError(f"Preload did not delete imported bootstrap file: {bootstrap_path}")
     try:

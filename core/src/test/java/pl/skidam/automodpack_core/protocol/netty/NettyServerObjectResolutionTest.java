@@ -23,6 +23,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class NettyServerObjectResolutionTest {
@@ -38,7 +39,7 @@ class NettyServerObjectResolutionTest {
 		Path projection = store.objectRoot().getParent().resolve("current-projection.json");
 
 		assertEquals(projection, server.getPath("").orElseThrow());
-		assertEquals(store.objectRoot().resolve(firstHash), server.getPath(firstHash.toUpperCase(Locale.ROOT)).orElseThrow());
+		assertEquals(DataRootResolver.objectFile(store.objectRoot(), firstHash), server.getPath(firstHash.toUpperCase(Locale.ROOT)).orElseThrow());
 		assertEquals(tempDir.resolve("host-generations/catalogues").resolve(first.record().metadata().stateDigest() + ".json").toAbsolutePath().normalize(),
 				server.getPath(GenerationHistoryIndex.catalogueRequestKey(first.record().metadata().stateDigest())).orElseThrow());
 
@@ -48,7 +49,7 @@ class NettyServerObjectResolutionTest {
 
 		assertEquals(projection, server.getPath("").orElseThrow());
 		assertTrue(server.getPath(firstHash).isEmpty());
-		assertEquals(store.objectRoot().resolve(hash(second)), server.getPath(hash(second)).orElseThrow());
+		assertEquals(DataRootResolver.objectFile(store.objectRoot(), hash(second)), server.getPath(hash(second)).orElseThrow());
 	}
 
 	@Test
