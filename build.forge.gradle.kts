@@ -46,7 +46,8 @@ dependencies {
 	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 
 	compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:$mixinExtrasVersion")!!)
-	implementation(jarJar("io.github.llamalad7:mixinextras-forge:$mixinExtrasVersion")!!)
+	implementation("io.github.llamalad7:mixinextras-forge:$mixinExtrasVersion")
+	jarJar(dependencyFactory.create("io.github.llamalad7", "mixinextras-forge", mixinExtrasVersion, "slim", "jar"))
 
 	annotationProcessor("org.spongepowered:mixin:$mixinVersion:processor") // Required to generate refmaps
 }
