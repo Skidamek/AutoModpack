@@ -181,7 +181,7 @@ public class SelfUpdater {
 			downloadManager.joinAll();
 			downloadManager.cancelAllAndShutdown();
 
-			Path storeObject = storage.objectsDirectory().resolve(automodpack.SHA1Hash());
+			Path storeObject = storage.objectFile(automodpack.SHA1Hash());
 			if (!FileIntegrity.matches(storeObject, automodpack.fileSize(), automodpack.SHA1Hash()))
 				throw new IllegalStateException("Downloaded official AutoModpack JAR failed verification");
 			String currentHash = HashUtils.getHash(currentJar);

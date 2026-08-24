@@ -11,6 +11,7 @@ import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -84,8 +85,8 @@ public final class StableSourceSnapshotter {
 			FileMetadataCache fileMetadataCache, ModFileCache modFileCache, Path objectStoreDirectory) throws IOException, CandidateBuildException {
 		if (fileMetadataCache == null || objectStoreDirectory == null) return null;
 		String sha1 = fileMetadataCache.getOrComputeHashWithAttributes(source.sourcePath(), before);
-		Path object = objectStoreDirectory.resolve(sha1).normalize();
-		if (!object.startsWith(objectStoreDirectory.toAbsolutePath().normalize()) || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)
+		Path object = DataRootResolver.objectFile(objectStoreDirectory, sha1);
+		if (!Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)
 				|| Files.size(object) != before.size() || !sha1.equalsIgnoreCase(fileMetadataCache.getOrComputeHash(object)))
 			return null;
 		ImmutableFiles.protect(object);

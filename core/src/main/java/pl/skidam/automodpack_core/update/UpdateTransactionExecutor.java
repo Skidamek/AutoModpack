@@ -673,7 +673,7 @@ public final class UpdateTransactionExecutor {
 		if (operation.expectedSize() < 0 || (projected != null && (!projected.present() || operation.expectedSize() != projected.expectedSize()
 				|| !operation.expectedObjectHash().equalsIgnoreCase(projected.expectedHash()))))
 			throw new IOException("Install operation does not match projected final state");
-		Path source = context.storage().objectsDirectory().resolve(operation.expectedObjectHash()).normalize();
+		Path source = context.storage().objectFile(operation.expectedObjectHash()).normalize();
 		if (!source.startsWith(context.storage().objectsDirectory()) || !FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash()))
 			throw new IOException("Required CAS object is missing or corrupt: " + operation.expectedObjectHash());
 	}
@@ -823,7 +823,7 @@ public final class UpdateTransactionExecutor {
 			Path target = resolve(operation, transaction);
 			if (FileIntegrity.matches(target, operation.expectedSize(), operation.expectedObjectHash())) continue;
 			verifyExpectedExisting(operation, target);
-			Path source = context.storage().objectsDirectory().resolve(operation.expectedObjectHash());
+			Path source = context.storage().objectFile(operation.expectedObjectHash());
 			VerifiedFileTransfer.copyAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash());
 		}
 		for (Operation operation : transaction.operations) {
@@ -927,7 +927,7 @@ public final class UpdateTransactionExecutor {
 		Files.createDirectories(incoming);
 		for (ProjectedFile projected : transaction.projectedFinalState) {
 			if (projected.root() != Root.PROJECTION || !projected.present()) continue;
-			Path source = context.storage().objectsDirectory().resolve(projected.expectedHash());
+			Path source = context.storage().objectFile(projected.expectedHash());
 			Path target = incoming.resolve(normalizeOperationPath(projected.relativePath())).normalize();
 			if (!target.startsWith(incoming)) throw new IOException("Projection path escapes incoming directory");
 			VerifiedFileTransfer.linkAtomic(source, target, projected.expectedSize(), projected.expectedHash());
@@ -1006,7 +1006,7 @@ public final class UpdateTransactionExecutor {
 				entry.size = -1;
 			} else {
 				if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash())) throw new IOException("Baseline source changed: " + source);
-				Path object = context.storage().objectsDirectory().resolve(capture.expectedHash());
+				Path object = context.storage().objectFile(capture.expectedHash());
 				VerifiedFileTransfer.copyAtomicImmutable(source, object, capture.expectedSize(), capture.expectedHash());
 				entry.objectHash = capture.expectedHash().toLowerCase(Locale.ROOT);
 				entry.size = capture.expectedSize();

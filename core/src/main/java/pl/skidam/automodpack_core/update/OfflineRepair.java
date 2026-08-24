@@ -209,7 +209,7 @@ public final class OfflineRepair {
 		for (Expected expected : withRepairedCas.expected().values().stream().filter(value -> value.place() != Place.CAS).sorted(Expected.ORDER).toList()) {
 			Observation observation = withRepairedCas.observations().get(expected.path());
 			if (matches(observation, expected.content()) || observation != null && observation.unsupported()) continue;
-			Path object = storage.objectsDirectory().resolve(expected.content().hash()).normalize();
+			Path object = storage.objectFile(expected.content().hash()).normalize();
 			Observation objectObservation = withRepairedCas.observations().get(object);
 			if (!matches(objectObservation, expected.content())) continue;
 			assertPinned(request);
@@ -285,7 +285,7 @@ public final class OfflineRepair {
 		long reset = 0;
 		for (var fields : journal.editableResets) {
 			Path live = storage.gamePath(fields.logicalPath);
-			Path object = storage.objectsDirectory().resolve(fields.defaultHash).normalize();
+			Path object = storage.objectFile(fields.defaultHash).normalize();
 			if (!FileIntegrity.matches(object, fields.defaultSize, fields.defaultHash)) throw new IOException("Editable default is unavailable locally: " + fields.logicalPath);
 			boolean alreadyReset = FileIntegrity.matches(live, fields.defaultSize, fields.defaultHash);
 			if (!alreadyReset) {
@@ -358,7 +358,7 @@ public final class OfflineRepair {
 		for (var item : request.activeTarget().flatTarget().list.stream().sorted(Comparator.comparing(value -> UpdatePlanner.normalize(value.file))).toList()) {
 			String logicalPath = UpdatePlanner.normalize(item.file);
 			Content content = new Content(item.sha1, parseSize(item.size));
-			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
+			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
 			addExpected(expected, new Expected(Place.PROJECTION, logicalPath, storage.activeDirectory(), storage.activePath(logicalPath), content));
 
 			Path livePath = storage.gamePath(logicalPath);
@@ -369,7 +369,7 @@ public final class OfflineRepair {
 				Observation overlay = overlays.get(logicalPath);
 				if (overlay != null && !overlay.unsupported())
 					addExpected(expected,
-							new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectsDirectory().resolve(overlay.hash()).normalize(), new Content(overlay.hash(), overlay.size())));
+							new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectFile(overlay.hash()).normalize(), new Content(overlay.hash(), overlay.size())));
 			} else if (!ModpackPathPolicy.isActiveMod(logicalPath, item.type) || request.forceCopyPaths().contains(logicalPath)) {
 				addExpected(expected, new Expected(Place.LIVE, logicalPath, storage.gameDirectory(), livePath, content));
 			}
@@ -379,14 +379,14 @@ public final class OfflineRepair {
 		GeneratedCopyState generated = GeneratedCopyState.read(storage, modpackId, generationId, selectionDigest);
 		for (GeneratedCopyState.Entry entry : generated.entries()) {
 			Content content = new Content(entry.sha1(), entry.size());
-			addExpected(expected, new Expected(Place.CAS, entry.logicalPath(), storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
+			addExpected(expected, new Expected(Place.CAS, entry.logicalPath(), storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
 			Path live = storage.gamePath(entry.logicalPath());
 			addExpected(expected, new Expected(Place.GENERATED_COPY, entry.logicalPath(), storage.gameDirectory(), live, content));
 		}
 		addBaselineObjects(expected, modpackId);
 		for (PreservationVault.Claim claim : PreservationVault.read(storage, modpackId).claims()) {
 			Content content = new Content(claim.objectHash(), claim.size());
-			addExpected(expected, new Expected(Place.CAS, claim.originalPath(), storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
+			addExpected(expected, new Expected(Place.CAS, claim.originalPath(), storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
 			Path sourceRoot = switch (claim.sourceRoot()) {
 				case GAME_DIR -> storage.gameDirectory();
 				case OVERLAY -> storage.overlayDirectory(modpackId);
@@ -462,7 +462,7 @@ public final class OfflineRepair {
 				continue;
 			}
 			Content content = new Content(entry.objectHash, entry.size);
-			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectsDirectory().resolve(content.hash()).normalize(), content));
+			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
 		}
 	}
 

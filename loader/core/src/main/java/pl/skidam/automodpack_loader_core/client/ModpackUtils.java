@@ -203,7 +203,7 @@ public class ModpackUtils {
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
 	public static void populateStoreFromCWD(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache, ClientStorage storage) {
 		for (var entry : filesToUpdate) {
-			Path storeFile = storage.objectsDirectory().resolve(entry.sha1);
+			Path storeFile = storage.objectFile(entry.sha1);
 			long expectedSize = Long.parseLong(entry.size);
 
 			if (isValidFile(storeFile, expectedSize, entry.sha1, cache)) {
@@ -237,7 +237,7 @@ public class ModpackUtils {
 			FileMetadataCache cache, ClientStorage storage) {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
-			Path storeFile = storage.objectsDirectory().resolve(entry.sha1);
+			Path storeFile = storage.objectFile(entry.sha1);
 			if (isValidFile(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
 			if (Files.exists(storeFile)) {
 				try {

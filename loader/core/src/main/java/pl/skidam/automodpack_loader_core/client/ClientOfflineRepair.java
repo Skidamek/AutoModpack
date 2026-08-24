@@ -82,7 +82,7 @@ public final class ClientOfflineRepair {
 	}
 
 	private Path verifiedSource(String logicalPath, long size, String hash) {
-		for (Path candidate : List.of(storage.activePath(logicalPath), storage.gamePath(logicalPath), storage.objectsDirectory().resolve(hash)))
+		for (Path candidate : List.of(storage.activePath(logicalPath), storage.gamePath(logicalPath), storage.objectFile(hash)))
 			if (FileIntegrity.matches(candidate, size, hash)) return candidate;
 		return null;
 	}

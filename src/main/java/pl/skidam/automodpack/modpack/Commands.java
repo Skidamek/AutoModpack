@@ -293,7 +293,7 @@ public class Commands {
 
 		String absolutePath = bootstrapPath.toAbsolutePath().normalize().toString();
 		send(context, "Bootstrap file exported", ChatFormatting.GREEN, copyable(absolutePath), ChatFormatting.YELLOW, false);
-		send(context, "Package it on clients at", ChatFormatting.WHITE, copyable("automodpack-bootstrap.json"), ChatFormatting.YELLOW, false);
+		send(context, "Package it on clients at", ChatFormatting.WHITE, copyable("automodpack/bootstrap.json"), ChatFormatting.YELLOW, false);
 		if (install && serverConfig.validateSecrets) {
 			send(context,
 					"WARNING: validateSecrets=true. Fresh clients without an existing secret for this origin will fail preload download; disable validation or provision a normal login first.",

@@ -17,12 +17,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
-import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
+import pl.skidam.automodpack_core.storage.StoragePaths;
 
 class ModpackExecutorTest {
 	@TempDir
@@ -36,7 +35,8 @@ class ModpackExecutorTest {
 		Path source = groups.resolve("main/config/example.txt");
 		Files.createDirectories(source.getParent());
 		Files.writeString(source, "one", StandardCharsets.UTF_8);
-		Path notes = generationRoot.resolve("patch-notes.md");
+		Path notes = server.resolve("automodpack/patch-notes.md");
+		Files.createDirectories(notes.getParent());
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
@@ -44,6 +44,7 @@ class ModpackExecutorTest {
 		Constants.LOADER = "test";
 		Constants.LOADER_VERSION = "test";
 		Constants.MC_VERSION = "test";
+		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
 		try {
 			assertInstanceOf(ModpackExecutor.PublishGuardUnsupported.class, executor.publishIfState("0".repeat(40)));
@@ -84,6 +85,8 @@ class ModpackExecutorTest {
 		} finally {
 			executor.stop();
 			snapshot.restore();
+			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
+			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
 		}
 	}
 
@@ -135,14 +138,8 @@ class ModpackExecutorTest {
 		Path groups = tempDir.resolve("host-modpack");
 		Path generationRoot = tempDir.resolve("host-generations");
 		Path dataRoot = tempDir.resolve("selected-data");
-		Path invalidPinnedRoot = tempDir.resolve("invalid-pinned-root");
 		Files.createDirectories(groups.resolve("main/config"));
 		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
-		Files.writeString(invalidPinnedRoot, "not a directory", StandardCharsets.UTF_8);
-		Files.createDirectories(server.resolve("automodpack"));
-		StorageJsons.DataRootFields marker = new StorageJsons.DataRootFields();
-		marker.root = invalidPinnedRoot.toString();
-		ConfigTools.writeAtomic(server.resolve("automodpack/data-root.json"), marker);
 
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();

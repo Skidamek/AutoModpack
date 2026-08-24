@@ -26,6 +26,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class GenerationStoreStorageTest {
@@ -45,9 +46,9 @@ class GenerationStoreStorageTest {
 		long catalogueBytes = directoryBytes(tempDir.resolve("catalogues"));
 		long commitBytes = directoryBytes(tempDir.resolve("commits"));
 		long deltaBytes = directoryBytes(tempDir.resolve("deltas"));
-		long objectBytes = Files.size(store.objectRoot().resolve(first.record().manifest().groups().get("main").files().get("config/example.txt").sha1()))
-				+ Files.size(store.objectRoot().resolve(second.record().manifest().groups().get("main").files().get("config/example.txt").sha1()));
-		long currentObjectBytes = Files.size(store.objectRoot().resolve(second.record().manifest().groups().get("main").files().get("config/example.txt").sha1()));
+		long objectBytes = Files.size(DataRootResolver.objectFile(store.objectRoot(), first.record().manifest().groups().get("main").files().get("config/example.txt").sha1()))
+				+ Files.size(DataRootResolver.objectFile(store.objectRoot(), second.record().manifest().groups().get("main").files().get("config/example.txt").sha1()));
+		long currentObjectBytes = Files.size(DataRootResolver.objectFile(store.objectRoot(), second.record().manifest().groups().get("main").files().get("config/example.txt").sha1()));
 
 		assertEquals(2, report.catalogueCount());
 		assertEquals(catalogueBytes, report.catalogueBytes());
@@ -77,7 +78,7 @@ class GenerationStoreStorageTest {
 		assertEquals(1, result.afterObjectCount());
 		assertEquals(0, result.deletedObjectCount());
 		assertEquals(0, result.deletedObjectBytes());
-		assertTrue(Files.exists(store.objectRoot().resolve(hash)));
+		assertTrue(Files.exists(DataRootResolver.objectFile(store.objectRoot(), hash)));
 	}
 
 	@Test
@@ -85,7 +86,7 @@ class GenerationStoreStorageTest {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication publication = store.publish(candidate("current"), Optional.empty(), "");
 		String orphanHash = createObject("orphan");
-		long orphanBytes = Files.size(store.objectRoot().resolve(orphanHash));
+		long orphanBytes = Files.size(DataRootResolver.objectFile(store.objectRoot(), orphanHash));
 
 		GenerationStore.CollectionResult result = store.collectUnreachableObjects(Set.of(), Set.of());
 
@@ -94,8 +95,8 @@ class GenerationStoreStorageTest {
 		assertEquals(1, result.deletedObjectCount());
 		assertEquals(orphanBytes, result.deletedObjectBytes());
 		assertEquals(result.beforeObjectBytes() - orphanBytes, result.afterObjectBytes());
-		assertTrue(Files.exists(store.objectRoot().resolve(publication.record().manifest().groups().get("main").files().get("config/example.txt").sha1())));
-		assertFalse(Files.exists(store.objectRoot().resolve(orphanHash)));
+		assertTrue(Files.exists(DataRootResolver.objectFile(store.objectRoot(), publication.record().manifest().groups().get("main").files().get("config/example.txt").sha1())));
+		assertFalse(Files.exists(DataRootResolver.objectFile(store.objectRoot(), orphanHash)));
 	}
 
 	@Test
@@ -110,12 +111,12 @@ class GenerationStoreStorageTest {
 		assertEquals(3, pinned.beforeObjectCount());
 		assertEquals(3, pinned.afterObjectCount());
 		assertEquals(0, pinned.deletedObjectCount());
-		assertTrue(Files.exists(store.objectRoot().resolve(pinnedHash)));
+		assertTrue(Files.exists(DataRootResolver.objectFile(store.objectRoot(), pinnedHash)));
 
 		GenerationStore.CollectionResult unpinnedGeneration = store.collectUnreachableObjects(Set.of(), Set.of(pinnedHash));
 		assertEquals(1, unpinnedGeneration.deletedObjectCount());
-		assertTrue(Files.exists(store.objectRoot().resolve(pinnedHash)));
-		assertFalse(Files.exists(store.objectRoot().resolve(first.record().manifest().groups().get("main").files().get("config/example.txt").sha1())));
+		assertTrue(Files.exists(DataRootResolver.objectFile(store.objectRoot(), pinnedHash)));
+		assertFalse(Files.exists(DataRootResolver.objectFile(store.objectRoot(), first.record().manifest().groups().get("main").files().get("config/example.txt").sha1())));
 	}
 
 	@Test
@@ -131,8 +132,8 @@ class GenerationStoreStorageTest {
 		GenerationStore.CollectionResult result = store.collectUnreachableObjects(Set.of(), Set.of());
 
 		assertEquals(2, result.deletedObjectCount());
-		assertFalse(Files.exists(store.objectRoot().resolve(orphanHash)));
-		assertFalse(Files.exists(store.objectRoot().resolve(historicalHash)));
+		assertFalse(Files.exists(DataRootResolver.objectFile(store.objectRoot(), orphanHash)));
+		assertFalse(Files.exists(DataRootResolver.objectFile(store.objectRoot(), historicalHash)));
 		assertDoesNotThrow(() -> store.loadCurrentDeep().orElseThrow());
 		assertTrue(store.loadCurrentDeep().orElseThrow().record().ownershipLedger().entries().get("config/example.txt").historicalHashes().stream()
 				.anyMatch(content -> content.sha1().equals(historicalHash)));
@@ -167,7 +168,9 @@ class GenerationStoreStorageTest {
 		Path source = Files.createTempFile(tempDir, "object-", ".source");
 		Files.write(source, bytes);
 		String hash = HashUtils.getHash(source);
-		Files.copy(source, tempDir.resolve("objects").resolve(hash));
+		Path destination = DataRootResolver.objectFile(tempDir.resolve("objects"), hash);
+		Files.createDirectories(destination.getParent());
+		Files.copy(source, destination);
 		Files.delete(source);
 		return hash;
 	}

@@ -199,7 +199,7 @@ public final class GenerationStore {
 		this.currentPath = this.root.resolve(StoragePaths.SERVER_CURRENT_FILE.getFileName().toString());
 		this.currentProjectionPath = this.root.resolve(StoragePaths.SERVER_CURRENT_PROJECTION_FILE.getFileName().toString());
 		this.checkpointPath = this.root.resolve(StoragePaths.SERVER_GENERATION_CHECKPOINT_FILE.getFileName().toString());
-		this.publicationLockPath = this.root.resolve(".publication.lock");
+		this.publicationLockPath = this.root.resolve(StoragePaths.SERVER_PUBLICATION_LOCK_FILE.getFileName().toString());
 		this.cataloguesDirectory = this.root.resolve(StoragePaths.SERVER_CATALOGUES_DIR.getFileName().toString());
 		this.commitsDirectory = this.root.resolve(StoragePaths.SERVER_COMMITS_DIR.getFileName().toString());
 		this.deltasDirectory = this.root.resolve(StoragePaths.SERVER_DELTAS_DIR.getFileName().toString());
@@ -475,7 +475,7 @@ public final class GenerationStore {
 	private void addExistingManifestHashes(GroupManifest manifest, Set<String> hashes) {
 		for (var group : manifest.groups().values()) for (var file : group.files().values()) {
 			String hash = file.sha1().toLowerCase(Locale.ROOT);
-			if (Files.isRegularFile(objectsDirectory.resolve(hash), LinkOption.NOFOLLOW_LINKS)) hashes.add(hash);
+			if (Files.isRegularFile(objectPathUnchecked(hash), LinkOption.NOFOLLOW_LINKS)) hashes.add(hash);
 		}
 	}
 
@@ -658,7 +658,7 @@ public final class GenerationStore {
 		FileTotals catalogueFiles = fileTotals(regularFiles(cataloguesDirectory, "generation catalogues"));
 		FileTotals commitFiles = fileTotals(regularFiles(commitsDirectory, "generation commits"));
 		FileTotals deltaFiles = fileTotals(regularFiles(deltasDirectory, "generation deltas"));
-		FileTotals objectFiles = fileTotals(regularFiles(objectsDirectory, "immutable objects"));
+		FileTotals objectFiles = fileTotals(objectFiles());
 		FileTotals stagingFiles = fileTotals(regularFiles(stagingDirectory, "generation staging"));
 		return new StorageReport(catalogueFiles.count(), catalogueFiles.bytes(), commitFiles.count(), commitFiles.bytes(),
 				deltaFiles.count(), deltaFiles.bytes(), objectFiles.count(), objectFiles.bytes(), stagingFiles.count(), stagingFiles.bytes(), expectedSizes.size(),
@@ -707,13 +707,13 @@ public final class GenerationStore {
 	}
 
 	private CollectionResult deleteUnreachableObjects(Set<String> reachable) throws IOException {
-		List<Path> beforeFiles = regularFiles(objectsDirectory, "immutable objects");
+		List<Path> beforeFiles = objectFiles();
 		FileTotals before = fileTotals(beforeFiles);
 		long deletedCount = 0;
 		long deletedBytes = 0;
 		for (Path object : beforeFiles) {
-			String name = object.getFileName().toString();
-			if (!isDigest(name) || reachable.contains(name) || !FileIntegrity.matchesCanonicalSha1(object, name)) continue;
+			String hash = DataRootResolver.objectHash(objectsDirectory, object);
+			if (hash == null || reachable.contains(hash) || !FileIntegrity.matchesCanonicalSha1(object, hash)) continue;
 			long size = Files.size(object);
 			if (ImmutableFiles.deleteIfExists(object)) {
 				deletedCount = addExact(deletedCount, 1, "deleted object count");
@@ -721,7 +721,7 @@ public final class GenerationStore {
 			}
 		}
 		if (deletedCount > 0) FileTrees.forceDirectory(objectsDirectory);
-		FileTotals after = fileTotals(regularFiles(objectsDirectory, "immutable objects"));
+		FileTotals after = fileTotals(objectFiles());
 		return new CollectionResult(before.bytes(), after.bytes(), before.count(), after.count(), deletedCount, deletedBytes);
 	}
 
@@ -1061,10 +1061,36 @@ public final class GenerationStore {
 
 	private Path objectPath(String sha1) throws IOException {
 		if (!isDigest(sha1)) throw new IOException("Invalid immutable object SHA-1: " + sha1);
-		Path object = objectsDirectory.resolve(sha1).normalize();
-		if (!object.startsWith(objectsDirectory) || !objectsDirectory.equals(object.getParent()))
-			throw new IOException("Object path escapes immutable object store: " + sha1);
-		return object;
+		try {
+			return DataRootResolver.objectFile(objectsDirectory, sha1);
+		} catch (IllegalArgumentException e) {
+			throw new IOException("Object path escapes immutable object store: " + sha1, e);
+		}
+	}
+
+	private Path objectPathUnchecked(String sha1) {
+		return DataRootResolver.objectFile(objectsDirectory, sha1);
+	}
+
+	private List<Path> objectFiles() throws IOException {
+		if (!Files.exists(objectsDirectory, LinkOption.NOFOLLOW_LINKS)) return List.of();
+		FileTrees.requireDirectory(objectsDirectory, "immutable objects");
+		try (var shards = Files.list(objectsDirectory)) {
+			List<Path> result = new ArrayList<>();
+			for (Path shard : shards.sorted(Comparator.comparing(path -> path.getFileName().toString())).toList()) {
+				if (Files.isSymbolicLink(shard)) throw new IOException("Immutable object store contains a symbolic link: " + shard);
+				if (Files.isRegularFile(shard, LinkOption.NOFOLLOW_LINKS)) continue;
+				if (!Files.isDirectory(shard, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Immutable object store contains an unsupported entry: " + shard);
+				try (var files = Files.list(shard)) {
+					for (Path file : files.sorted(Comparator.comparing(path -> path.getFileName().toString())).toList()) {
+						if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
+							throw new IOException("Immutable object store contains an unsupported entry: " + file);
+						if (DataRootResolver.isObjectFile(objectsDirectory, file)) result.add(file);
+					}
+				}
+			}
+			return List.copyOf(result);
+		}
 	}
 
 	private Path deltaPath(String generationId) throws IOException {

@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -128,9 +129,9 @@ public final class ClientObjectStore {
 			long deletedCount = 0;
 			long deletedBytes = 0;
 			for (Path object : objects) {
-				String name = object.getFileName().toString();
-				if (!object.getParent().equals(storage.objectsDirectory()) || !HashUtils.isCanonicalSha1(name) || globallyReferenced.contains(name)) continue;
-				if (!FileIntegrity.matchesCanonicalSha1(object, name)) continue;
+				String hash = DataRootResolver.objectHash(storage.objectsDirectory(), object);
+				if (hash == null || globallyReferenced.contains(hash)) continue;
+				if (!FileIntegrity.matchesCanonicalSha1(object, hash)) continue;
 				long size = Files.size(object);
 				if (ImmutableFiles.deleteIfExists(object)) {
 					deletedCount = addExact(deletedCount, 1, "deleted object count");
@@ -168,8 +169,8 @@ public final class ClientObjectStore {
 		ReferenceSet references = collectReferences(storage, null);
 		TreeSet<String> existing = new TreeSet<>();
 		for (var entry : references.sizes().entrySet()) {
-			Path object = storage.objectsDirectory().resolve(entry.getKey()).normalize();
-			if (!object.getParent().equals(storage.objectsDirectory()) || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) continue;
+			Path object = storage.objectFile(entry.getKey());
+			if (!Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) continue;
 			if (entry.getValue() >= 0 && Files.size(object) != entry.getValue()) continue;
 			if (entry.getKey().equals(HashUtils.getHash(object))) existing.add(entry.getKey());
 		}
@@ -383,8 +384,8 @@ public final class ClientObjectStore {
 			String hash = entry.getKey();
 			long expectedSize = entry.getValue();
 			if (expectedSize >= 0) expectedBytes = addExact(expectedBytes, expectedSize, "referenced object bytes");
-			Path object = storage.objectsDirectory().resolve(hash).normalize();
-			if (!object.getParent().equals(storage.objectsDirectory()) || Files.isSymbolicLink(object) || !Files.exists(object, LinkOption.NOFOLLOW_LINKS)) {
+			Path object = storage.objectFile(hash);
+			if (Files.isSymbolicLink(object) || !Files.exists(object, LinkOption.NOFOLLOW_LINKS)) {
 				if (requireRequiredReferences && references.required().contains(hash)) throw new IOException("Required client object is missing: " + hash);
 				missingCount = addExact(missingCount, 1, "missing referenced object count");
 				continue;

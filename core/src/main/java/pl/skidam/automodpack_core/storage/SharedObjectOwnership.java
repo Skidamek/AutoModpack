@@ -11,7 +11,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
@@ -86,11 +85,8 @@ public final class SharedObjectOwnership {
 	}
 
 	private static String requireOwnerId(String ownerId) throws IOException {
-		try {
-			return UUID.fromString(ownerId).toString();
-		} catch (RuntimeException e) {
-			throw new IOException("Invalid shared object ownership owner ID", e);
-		}
+		if (!HashUtils.isCanonicalSha1(ownerId)) throw new IOException("Invalid shared object ownership owner ID: " + ownerId);
+		return ownerId;
 	}
 
 	private static Set<String> canonical(Set<String> hashes) throws IOException {

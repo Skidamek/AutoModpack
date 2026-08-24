@@ -15,6 +15,7 @@ import pytest
 
 from automodpack_autotester.engine import Context
 from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
+from automodpack_autotester.runner import cas_object
 
 
 @pytest.fixture
@@ -598,7 +599,7 @@ class FakeBridge:
         objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
         for logical_path, payload in self.repair_expected.items():
             digest = hashlib.sha1(payload).hexdigest()
-            candidates = (active / logical_path, objects / digest, self.ctx.path(logical_path))
+            candidates = (active / logical_path, cas_object(objects, digest), self.ctx.path(logical_path))
             if not any(candidate.is_file() and candidate.read_bytes() == payload for candidate in candidates):
                 return True
         return False
@@ -609,7 +610,7 @@ class FakeBridge:
         for logical_path, payload in self.repair_expected.items():
             projected = active / logical_path
             digest = hashlib.sha1(payload).hexdigest()
-            object_path = objects / digest
+            object_path = cas_object(objects, digest)
             live = self.ctx.path(logical_path)
             if not any(candidate.is_file() and candidate.read_bytes() == payload for candidate in (projected, object_path, live)):
                 continue
@@ -640,12 +641,12 @@ class FakeBridge:
 
     def _repair_preservation_objects(self) -> None:
         objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
-        restored = self.ctx.game_dir / "automodpack" / "client" / "restored"
+        restored = self.ctx.game_dir / "automodpack" / "recovered"
         for pack_id in ("packaaa", "packbbb"):
             _manifest, claims = self._claims(pack_id)
             for claim in claims:
                 expected_hash = claim["objectHash"]
-                object_path = objects / expected_hash
+                object_path = cas_object(objects, expected_hash)
                 if object_path.is_file() and hashlib.sha1(object_path.read_bytes()).hexdigest() == expected_hash:
                     continue
                 saved_copy = restored / pack_id / claim["generationId"] / claim["claimId"] / claim["originalPath"]
@@ -668,7 +669,7 @@ class FakeBridge:
         for pack_id in ("packaaa", "packbbb"):
             _manifest, claims = self._claims(pack_id)
             for claim in claims:
-                object_path = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / claim["objectHash"]
+                object_path = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
                 if not object_path.is_file() or hashlib.sha1(object_path.read_bytes()).hexdigest() != claim["objectHash"]:
                     return True
         return False
@@ -834,7 +835,9 @@ class FakeBridge:
         digest = hashlib.sha1(payload).hexdigest()
         objects = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects"
         objects.mkdir(parents=True, exist_ok=True)
-        (objects / digest).write_bytes(payload)
+        object_path = cas_object(objects, digest)
+        object_path.parent.mkdir(parents=True, exist_ok=True)
+        object_path.write_bytes(payload)
         root = self.ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id
         root.mkdir(parents=True, exist_ok=True)
         manifest = root / "claims.json"
@@ -846,7 +849,7 @@ class FakeBridge:
         claims = [claim for claim in claims if claim.get("claimId") != claim_id]
         claims.append({"claimId": claim_id, "originalPath": original_path, "sourceRoot": "GAME_DIR", "objectHash": digest, "size": len(payload), "modpackId": pack_id, "generationId": generation_id, "reason": reason, "preservedAt": "2026-01-01T00:00:00Z", "status": "AVAILABLE"})
         manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": sorted(claims, key=lambda claim: claim["claimId"])}), encoding="utf-8")
-        return objects / digest
+        return cas_object(objects, digest)
 
     def _vault_conflict_available(self) -> bool:
         return self.selected_pack == "B" and self._conflict_claim_path().is_file()
@@ -859,7 +862,7 @@ class FakeBridge:
         if conflict_path is None or not self._conflict_claim_path().is_file():
             raise AssertionError("fake preservation restore requested without an available claim")
         claim = json.loads(self._conflict_claim_path().read_text(encoding="utf-8"))["claims"][0]
-        payload = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / claim["objectHash"]
+        payload = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
         target = self.ctx.path(conflict_path)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(payload, target)
@@ -870,7 +873,7 @@ class FakeBridge:
         if not manifest.is_file():
             raise AssertionError("fake preservation restore requested without an available Pack A claim")
         claim = json.loads(manifest.read_text(encoding="utf-8"))["claims"][0]
-        source = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / claim["objectHash"]
+        source = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
         destination = self.ctx.path(claim["originalPath"])
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
@@ -883,10 +886,10 @@ class FakeBridge:
                 continue
             claims = json.loads(manifest.read_text(encoding="utf-8")).get("claims", [])
             for claim in claims:
-                root = self.ctx.game_dir / "automodpack" / "client" / "restored" / pack_id / claim["generationId"] / claim["claimId"]
+                root = self.ctx.game_dir / "automodpack" / "recovered" / pack_id / claim["generationId"] / claim["claimId"]
                 destination = root / claim["originalPath"]
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                source = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / claim["objectHash"]
+                source = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
                 shutil.copy2(source, destination)
                 claim["status"] = "SAVED_COPY"
             manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": claims}), encoding="utf-8")
@@ -943,7 +946,7 @@ class FakeBridge:
                 digest = hashlib.sha1(payload).hexdigest()
                 active_files[logical_path] = {"sha1": digest, "size": str(len(payload))}
                 self.repair_expected[logical_path] = payload
-                object_path = self.ctx.game_dir / "automodpack" / "client" / "data" / "objects" / digest
+                object_path = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", digest)
                 object_path.parent.mkdir(parents=True, exist_ok=True)
                 object_path.write_bytes(payload)
         manifest_groups.setdefault("main", {"required": True, "defaultSelected": True})["files"] = active_files

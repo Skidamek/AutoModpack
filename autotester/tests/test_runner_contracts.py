@@ -269,9 +269,6 @@ def test_rollback_server_generation_uses_retained_history_and_durable_receipt(ma
 
 def test_collect_server_objects_requires_real_transition_receipt(make_ctx, monkeypatch):
     ctx = make_ctx()
-    marker = ctx.server_dir / "automodpack" / "data-root.json"
-    marker.parent.mkdir(parents=True)
-    marker.write_text(json.dumps({"root": "/data/.local/share/AutoModpack/data", "shared": False}), encoding="utf-8")
 
     class Container:
         def __init__(self):
@@ -296,7 +293,7 @@ def test_collect_server_objects_requires_real_transition_receipt(make_ctx, monke
 
     runner._v_collect_server_objects(ctx, {})
 
-    assert container.commands[-1] == ["test", "-e", "/data/.local/share/AutoModpack/data/objects/d8e1759b948add3eb7d6cc6e6532a31f71292ecc"]
+    assert container.commands[-1] == ["test", "-e", "/data/automodpack/data/objects/d8/e1759b948add3eb7d6cc6e6532a31f71292ecc"]
     assert ctx.vars["server_object_collection"]["deletedCount"] == 1
 
 
@@ -466,8 +463,8 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
     monkeypatch.setattr(runner, "_jitter_sleep", lambda *_args, **_kwargs: None)
 
     runner._launch_client(ctx)
-    marker = ctx.game_dir / "automodpack/data-root.json"
-    before = json.loads(marker.read_text(encoding="utf-8"))
+    data_root = ctx.game_dir / "automodpack/client/data"
+    assert data_root.is_dir()
 
     runner._v_stage_modpack(
         ctx,
@@ -479,8 +476,7 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
         },
     )
 
-    assert before == {"root": "/work/game/automodpack/client/data", "shared": False}
-    assert json.loads(marker.read_text(encoding="utf-8")) == before
+    assert data_root.is_dir()
 
 
 def test_client_start_timeout_is_not_a_process_lifetime(make_ctx):
@@ -646,7 +642,9 @@ def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     objects = runner._ensure_client_data_root(ctx.game_dir) / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     for payload in payloads.values():
-        (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
+        object_path = runner.cas_object(objects, hashlib.sha1(payload).hexdigest())
+        object_path.parent.mkdir(parents=True, exist_ok=True)
+        object_path.write_bytes(payload)
     ctx.logs_provider = lambda _which, _tail=None: ""
     client_log = ctx.game_dir / "logs" / "latest.log"
     client_log.parent.mkdir(parents=True, exist_ok=True)

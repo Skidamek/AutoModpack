@@ -262,7 +262,7 @@ public class DownloadManager {
 	}
 
 	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task) {
-		Path storeFile = storage.objectsDirectory().resolve(hashPathPair.hash());
+		Path storeFile = storage.objectFile(hashPathPair.hash());
 		boolean success = false;
 		boolean interrupted = false;
 

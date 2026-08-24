@@ -23,6 +23,7 @@ from automodpack_autotester.config import (
 )
 from automodpack_autotester.engine import run_flow, steps_io, steps_ui
 from automodpack_autotester.engine.registry import VERBS
+from automodpack_autotester import runner
 from automodpack_autotester.mod_fixtures import (
     assert_valid_mod_fixture,
     valid_mod_jar_bytes,
@@ -58,7 +59,9 @@ def _launch_client(ctx, step):
         objects = ctx.game_dir / "automodpack" / "client" / "data" / "objects"
         objects.mkdir(parents=True, exist_ok=True)
         for payload in (b"bootstrap-a\n", b"bootstrap-b\n"):
-            (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
+            object_path = runner.cas_object(objects, hashlib.sha1(payload).hexdigest())
+            object_path.parent.mkdir(parents=True, exist_ok=True)
+            object_path.write_bytes(payload)
         ctx.vars["fake_preload_logged"] = True
         ctx.vars["fake_preload_review_logged"] = True
         latest_log = ctx.game_dir / "logs" / "latest.log"

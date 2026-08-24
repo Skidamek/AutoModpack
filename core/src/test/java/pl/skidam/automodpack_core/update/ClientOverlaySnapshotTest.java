@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 class ClientOverlaySnapshotTest {
@@ -59,8 +60,7 @@ class ClientOverlaySnapshotTest {
 	}
 
 	private ClientStorage storage() throws Exception {
-		ClientStorage storage = ClientStorage.open(temporaryDirectory.resolve("game"));
-		return storage;
+		return TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 	}
 
 	private static Map<Path, BasicFileAttributes> metadataRecords(Path root) throws Exception {
