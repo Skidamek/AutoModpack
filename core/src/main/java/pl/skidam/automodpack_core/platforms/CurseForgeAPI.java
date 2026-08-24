@@ -28,8 +28,6 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 	public static final String API_HOST = "api.curseforge.com";
 	public static final String CDN_HOST = "edge.forgecdn.net";
 	public static final String BASE_URL = "https://" + API_HOST + "/v1";
-	private static final int CONNECT_TIMEOUT_MS = 3000;
-	private static final int READ_TIMEOUT_MS = 3000;
 
 	// key - sha1, value - murmur
 	// https://docs.curseforge.com/?java#get-fingerprints-matches
@@ -157,8 +155,8 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		connection.setRequestProperty("Content-Type", "application/json");
 		connection.setRequestProperty("Accept", "application/json");
 		connection.setRequestProperty("x-api-key", summonKey());
-		connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-		connection.setReadTimeout(READ_TIMEOUT_MS);
+		connection.setConnectTimeout(NetUtils.HTTP_TIMEOUT_MILLIS);
+		connection.setReadTimeout(NetUtils.HTTP_TIMEOUT_MILLIS);
 		connection.setRequestMethod("POST");
 		connection.setDoOutput(true);
 		connection.getOutputStream().write(requestBody.toString().getBytes(StandardCharsets.UTF_8));

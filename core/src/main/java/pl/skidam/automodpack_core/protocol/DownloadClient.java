@@ -149,7 +149,7 @@ public class DownloadClient implements AutoCloseable {
 		Socket plainSocket = connectTransport();
 
 		try {
-			plainSocket.setSoTimeout(10000);
+			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
 			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) performMagicHandshake(plainSocket);
 			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket, tlsSocket);
@@ -162,9 +162,9 @@ public class DownloadClient implements AutoCloseable {
 
 	private void awaitTransportUpgrade(HolepunchSocket socket, SSLSocket tlsSocket) throws IOException {
 		try {
-			socket.prepareTransportUpgrade().toCompletableFuture().get(15, TimeUnit.SECONDS);
+			socket.prepareTransportUpgrade().toCompletableFuture().get(NETWORK_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 			socket.enableTlsTrafficCamouflage(tlsSocket.getSession(), true);
-			socket.commitTransportUpgrade().toCompletableFuture().get(15, TimeUnit.SECONDS);
+			socket.commitTransportUpgrade().toCompletableFuture().get(NETWORK_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new IOException("Holepunch transport upgrade interrupted", e);
@@ -177,7 +177,7 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	private static HolepunchOptions holepunchOptions() {
-		HolepunchOptions.Builder builder = HolepunchOptions.builder();
+		HolepunchOptions.Builder builder = HolepunchOptions.builder().connectTimeout(NETWORK_TIMEOUT).negotiationTimeout(NETWORK_TIMEOUT);
 		LoaderManagerService.ModPlatform platform = LOADER_MANAGER.getPlatformType();
 		if (platform == LoaderManagerService.ModPlatform.FORGE || platform == LoaderManagerService.ModPlatform.NEOFORGE) {
 			builder.handshakeHostSuffix(HolepunchOptions.FORGE_FML3_HANDSHAKE_HOST_SUFFIX);
@@ -188,7 +188,7 @@ public class DownloadClient implements AutoCloseable {
 	private Socket connectTransport() throws IOException {
 		if (connectionInfo.connectionMode != ModpackConnectionMode.HOLEPUNCH) {
 			Socket socket = new Socket();
-			socket.connect(route.directAddress(), 15000);
+			socket.connect(route.directAddress(), NETWORK_TIMEOUT_MILLIS);
 			return socket;
 		}
 
@@ -202,7 +202,7 @@ public class DownloadClient implements AutoCloseable {
 		try {
 			HolepunchSocket socket = new HolepunchSocket();
 			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), minecraftProtocol, socket.handler(), holepunchOptions())
-					.toCompletableFuture().get(15, TimeUnit.SECONDS);
+					.toCompletableFuture().get(NETWORK_TIMEOUT.plus(NETWORK_TIMEOUT).toSeconds(), TimeUnit.SECONDS);
 			socket.setConnection(connection);
 			return socket;
 		} catch (InterruptedException e) {
