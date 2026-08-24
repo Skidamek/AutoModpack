@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.mixin.core;
 
-import java.lang.reflect.Method;
-import java.util.Optional;
 import java.util.UUID;
 
 /*? if <= 1.19.1 {*/
@@ -79,22 +77,12 @@ public abstract class HolepunchServerLoginMixin {
 
 	@Unique
 	private static UUID profileId(ServerboundHelloPacket packet) {
-		for (Method method : packet.getClass().getMethods()) {
-			Class<?> returnType = method.getReturnType();
-			if (method.getParameterCount() != 0 || returnType != UUID.class && returnType != Optional.class) continue;
-			try {
-				UUID value = unwrap(method.invoke(packet));
-				if (value != null) return value;
-			} catch (ReflectiveOperationException ignored) {
-				// Try the next mapped accessor.
-			}
-		}
-		return null;
-	}
-
-	@Unique
-	private static UUID unwrap(Object value) {
-		if (value instanceof Optional<?> optional) value = optional.orElse(null);
-		return value instanceof UUID uuid ? uuid : null;
+		/*? if <= 1.19.1 {*/
+		/*return null;
+		*//*?} else if <= 1.20.1 {*/
+		/*return packet.profileId().orElse(null);
+		*//*?} else {*/
+		return packet.profileId();
+		/*?}*/
 	}
 }
