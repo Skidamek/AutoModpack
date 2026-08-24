@@ -30,14 +30,20 @@ class ConfigUtilsTest {
 	}
 
 	@Test
-	void holepunchIsNotDowngradedForAnyTarget() {
+	void holepunchRequiresLoginStartProfileUuid() {
 		String previousVersion = Constants.MC_VERSION;
 		String previousLoader = Constants.LOADER;
 		try {
 			ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 			config.bindPort = 24444;
 
-			for (String[] target : new String[][]{{"1.18.2", "forge"}, {"1.20.1", "forge"}, {"26.2", "neoforge"}}) {
+			Constants.MC_VERSION = "1.18.2";
+			Constants.LOADER = "forge";
+			config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
+			ConfigUtils.normalizeServerConfig(config);
+			assertEquals(ModpackConnectionMode.MAGIC_PACKET, config.connectionMode);
+
+			for (String[] target : new String[][]{{"1.19.2", "fabric"}, {"1.20.1", "forge"}, {"26.2", "neoforge"}}) {
 				Constants.MC_VERSION = target[0];
 				Constants.LOADER = target[1];
 				config.connectionMode = ModpackConnectionMode.HOLEPUNCH;

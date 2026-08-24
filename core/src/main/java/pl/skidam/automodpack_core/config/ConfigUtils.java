@@ -24,6 +24,10 @@ public class ConfigUtils {
 
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.defaultFor();
+		if (config.connectionMode == ModpackConnectionMode.HOLEPUNCH && MC_VERSION != null && !MC_VERSION.isBlank() && !ModpackConnectionMode.isHolepunchAvailable(MC_VERSION)) {
+			config.connectionMode = ModpackConnectionMode.MAGIC_PACKET;
+			LOGGER.warn("HOLEPUNCH is unavailable on Minecraft {}; Login Start has no profile UUID. Falling back to MAGIC_PACKET", MC_VERSION);
+		}
 
 		String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";
 		Pattern pattern = Pattern.compile(prefixPattern);
