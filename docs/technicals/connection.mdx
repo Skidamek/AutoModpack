@@ -20,6 +20,8 @@ DIRECT        TLS → AutoModpack protocol
 
 `HOLEPUNCH` takes over a marked Minecraft Login Start profile UUID. That field exists from Minecraft 1.19.2. Minecraft 1.18.2 has no profile UUID in Login Start, so AutoModpack does not enable `HOLEPUNCH` there and uses `MAGIC_PACKET` instead.
 
+On Forge and NeoForge the holepunch Handshake hostname includes the same `\0FML3\0` extra as a normal modded client. Forge classifies VANILLA vs MODDED from that extra during Handshake, before Login Start. A packed Forge server rejects vanilla connections at that point with a Login Disconnect, so a holepunch connection without the extra never reaches the UUID marker.
+
 The advertised mode is strict and clients do not retry another mode after failure. On a shared Minecraft listener, non-AMMH traffic is returned to Minecraft unchanged. On a dedicated `MAGIC_PACKET` listener, non-AMMH traffic is rejected. A `DIRECT` listener never responds with AMOK.
 
 Optional PROXY protocol metadata may precede dedicated `MAGIC_PACKET` and `DIRECT` connections. It is not consumed by the shared Minecraft-port handler.
