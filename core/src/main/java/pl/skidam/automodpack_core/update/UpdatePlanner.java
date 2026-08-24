@@ -227,6 +227,11 @@ public final class UpdatePlanner {
 				restartReasons.add(RestartReason.REMOVED_NON_MODPACK_FILES);
 			}
 		}
+		for (FileKey key : List.copyOf(projected.keySet())) {
+			if (key.root() != Root.PROJECTION || targetItems.containsKey(key.relativePath()) || operations.containsKey(key)) continue;
+			FileState extra = projected.get(key);
+			delete(operations, projected, key, extra == null ? null : extra.sha1());
+		}
 
 		if (installedLedger != null)
 			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), input.selection(), !input.installedManifest().modpackId.equals(target.modpackId), projected, operations,

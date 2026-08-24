@@ -25,13 +25,16 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /**
- * Resolves the logical client projection used for planning.
+ * Resolves the client projection used for planning and update checks.
  *
  * <p>
- * The view hides whether that projection is the committed active tree or the
- * latest durable transaction. Callers never need to inspect transaction phases
- * or staging paths. The game directory is deliberately not part of this view;
- * it remains an independent observation made by the planner.
+ * The committed {@code active/} tree is the projection the game loads. A pending
+ * transaction is only treated as that projection after publication has started
+ * (incoming/backup exists, or the phase is already swapping). An unpublished
+ * deferred request keeps live observation so extras and missing files stay
+ * visible. Game-directory mutations remain an independent observation, with
+ * pending live paths attached so a replan can skip work the transaction already
+ * owns.
  * </p>
  */
 public final class ClientProjectionView {
@@ -45,14 +48,14 @@ public final class ClientProjectionView {
 		return new ClientProjectionView(storage);
 	}
 
-	/** Returns the target represented by the committed or latest staged projection. */
+	/** Returns the target represented by the published projection. */
 	public ModpackJsons.ModpackContentFields target() throws IOException {
 		UpdateTransaction pending = readPending();
-		if (pending != null) {
+		if (publicationStarted(storage, pending)) {
 			ModpackJsons.ModpackContentFields staged = stagedTarget(pending);
 			if (staged != null) return staged;
 		}
-		return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).map(SelectedModpackTarget::flatTarget).orElse(null);
+		return committedTarget();
 	}
 
 	/**
@@ -91,43 +94,49 @@ public final class ClientProjectionView {
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 	}
 
-	/** Captures the logical projection and immutable source candidates for one planning pass. */
+	/** Captures the projection observation for one planning pass. */
 	public Snapshot snapshot(FileMetadataCache cache) throws IOException {
 		Objects.requireNonNull(cache, "cache");
 		UpdateTransaction pending = readPending();
-		if (pending != null && isProjectionTransaction(pending)) return stagedSnapshot(pending);
-		return activeSnapshot(cache);
+		if (publicationStarted(storage, pending)) return stagedSnapshot(pending);
+		return liveSnapshot(cache, isProjectionTransaction(pending) ? pending : null);
+	}
+
+	/** Returns the committed {@code active/} tree the game loads, independent of any unpublished request. */
+	public Map<String, UpdatePlan.FileState> liveFiles(FileMetadataCache cache) throws IOException {
+		Objects.requireNonNull(cache, "cache");
+		return readLiveFiles(cache);
+	}
+
+	static boolean publicationStarted(ClientStorage storage, UpdateTransaction transaction) {
+		if (!isProjectionTransaction(transaction)) return false;
+		if (transaction.phase == UpdateTransaction.Phase.PROJECTED || transaction.phase == UpdateTransaction.Phase.SWAPPING
+				|| transaction.phase == UpdateTransaction.Phase.COMMITTED)
+			return true;
+		try {
+			return Files.exists(storage.incomingProjectionDirectory(), LinkOption.NOFOLLOW_LINKS)
+					|| Files.exists(storage.backupProjectionDirectory(), LinkOption.NOFOLLOW_LINKS);
+		} catch (RuntimeException e) {
+			return false;
+		}
 	}
 
 	private Snapshot stagedSnapshot(UpdateTransaction pending) throws IOException {
 		if (pending.targetGenerationId == null) throw new IOException("Pending projection target generation is missing");
 		Map<String, UpdatePlan.FileState> files = new LinkedHashMap<>();
-		Map<String, List<UpdatePlan.FileState>> pendingGameStates = new LinkedHashMap<>();
 		for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
 			if (projected == null || projected.root() != UpdatePlan.Root.PROJECTION || !projected.present()) continue;
 			if (!HashUtils.isSha1(projected.expectedHash()) || projected.expectedSize() < 0) throw new IOException("Pending projection file metadata is invalid");
 			files.put(UpdatePlanner.normalize(projected.relativePath()), new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true));
 		}
-		for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
-			if (projected == null || projected.root() != UpdatePlan.Root.GAME_DIR) continue;
-			String relative = UpdatePlanner.normalize(projected.relativePath());
-			UpdatePlan.FileState state = projected.present()
-					? new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true)
-					: new UpdatePlan.FileState(null, -1, false);
-			pendingGameStates.computeIfAbsent(relative, ignored -> new ArrayList<>()).add(state);
-		}
-		for (UpdatePlan.BaselineCapture capture : pending.plannedBaselineCaptures) {
-			if (capture == null || capture.root() != UpdatePlan.Root.GAME_DIR) continue;
-			String relative = UpdatePlanner.normalize(capture.relativePath());
-			UpdatePlan.FileState state = capture.absent()
-					? new UpdatePlan.FileState(null, -1, false)
-					: new UpdatePlan.FileState(capture.expectedHash(), capture.expectedSize(), true);
-			pendingGameStates.computeIfAbsent(relative, ignored -> new ArrayList<>()).add(state);
-		}
-		return new Snapshot(stagedTarget(pending), files, pendingGameStates, pending);
+		return new Snapshot(stagedTarget(pending), files, pendingGameStates(pending), pending);
 	}
 
-	private Snapshot activeSnapshot(FileMetadataCache cache) throws IOException {
+	private Snapshot liveSnapshot(FileMetadataCache cache, UpdateTransaction pending) throws IOException {
+		return new Snapshot(committedTarget(), readLiveFiles(cache), pendingGameStates(pending), pending);
+	}
+
+	private Map<String, UpdatePlan.FileState> readLiveFiles(FileMetadataCache cache) throws IOException {
 		Map<String, UpdatePlan.FileState> files = new LinkedHashMap<>();
 		Path active = storage.activeDirectory();
 		if (Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) {
@@ -138,7 +147,39 @@ public final class ClientProjectionView {
 				}
 			}
 		}
-		return new Snapshot(target(), files, Map.of(), null);
+		return files;
+	}
+
+	private static Map<String, List<UpdatePlan.FileState>> pendingGameStates(UpdateTransaction pending) throws IOException {
+		if (pending == null || pending.projectedFinalState == null) return Map.of();
+		Map<String, List<UpdatePlan.FileState>> pendingGameStates = new LinkedHashMap<>();
+		try {
+			for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
+				if (projected == null || projected.root() != UpdatePlan.Root.GAME_DIR) continue;
+				String relative = UpdatePlanner.normalize(projected.relativePath());
+				UpdatePlan.FileState state = projected.present()
+						? new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true)
+						: new UpdatePlan.FileState(null, -1, false);
+				pendingGameStates.computeIfAbsent(relative, ignored -> new ArrayList<>()).add(state);
+			}
+			if (pending.plannedBaselineCaptures != null) {
+				for (UpdatePlan.BaselineCapture capture : pending.plannedBaselineCaptures) {
+					if (capture == null || capture.root() != UpdatePlan.Root.GAME_DIR) continue;
+					String relative = UpdatePlanner.normalize(capture.relativePath());
+					UpdatePlan.FileState state = capture.absent()
+							? new UpdatePlan.FileState(null, -1, false)
+							: new UpdatePlan.FileState(capture.expectedHash(), capture.expectedSize(), true);
+					pendingGameStates.computeIfAbsent(relative, ignored -> new ArrayList<>()).add(state);
+				}
+			}
+		} catch (RuntimeException e) {
+			throw new IOException("Pending managed live paths are invalid", e);
+		}
+		return pendingGameStates;
+	}
+
+	private ModpackJsons.ModpackContentFields committedTarget() throws IOException {
+		return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).map(SelectedModpackTarget::flatTarget).orElse(null);
 	}
 
 	private ModpackJsons.ModpackContentFields stagedTarget(UpdateTransaction pending) throws IOException {
@@ -242,7 +283,14 @@ public final class ClientProjectionView {
 			if (pending != null) candidates.add(resolve(storage.incomingProjectionDirectory(), relative));
 			candidates.add(storage.activePath(relative));
 			UpdatePlan.FileState expected = files.get(relative);
-			if (expected != null) candidates.add(storage.objectFile(expected.sha1()));
+			if (expected != null && expected.sha1() != null) candidates.add(storage.objectFile(expected.sha1()));
+			if (pending != null && pending.projectedFinalState != null) {
+				for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
+					if (projected == null || projected.root() != UpdatePlan.Root.PROJECTION || !projected.present()) continue;
+					if (!relative.equals(UpdatePlanner.normalize(projected.relativePath())) || !HashUtils.isSha1(projected.expectedHash())) continue;
+					candidates.add(storage.objectFile(projected.expectedHash()));
+				}
+			}
 			return List.copyOf(candidates);
 		}
 

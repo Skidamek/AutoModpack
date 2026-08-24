@@ -185,16 +185,7 @@ public final class UpdateTransactionExecutor {
 
 	/** Reports whether the live state has already reached the point where only projection publication remains. */
 	public boolean projectionPublicationStarted(UpdateTransaction transaction) {
-		if (!isModpackTransaction(transaction) || transaction.projectedFinalState == null) return false;
-		if (transaction.phase == UpdateTransaction.Phase.PROJECTED || transaction.phase == UpdateTransaction.Phase.SWAPPING
-				|| transaction.phase == UpdateTransaction.Phase.COMMITTED)
-			return true;
-		try {
-			return Files.exists(context.storage().incomingProjectionDirectory(), LinkOption.NOFOLLOW_LINKS)
-					|| Files.exists(context.storage().backupProjectionDirectory(), LinkOption.NOFOLLOW_LINKS);
-		} catch (RuntimeException e) {
-			return false;
-		}
+		return ClientProjectionView.publicationStarted(context.storage(), transaction);
 	}
 
 	private Execution recoverPersisted(String expectedTransactionId) throws IOException {
@@ -728,7 +719,12 @@ public final class UpdateTransactionExecutor {
 						throw new UpdateReplanRequiredException(null, "Client configuration changed while applying the update");
 				}
 				if (transaction.operations.isEmpty()) {
-					verifyProjection(context.storage().activeDirectory(), transaction.projectedFinalState);
+					if (!verifyProjectionQuietly(context.storage().activeDirectory(), transaction.projectedFinalState)) {
+						buildIncomingProjection(transaction);
+						setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
+						setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
+						swapProjection(transaction);
+					}
 				} else {
 					buildIncomingProjection(transaction);
 					setPhase(transaction, UpdateTransaction.Phase.PROJECTED);

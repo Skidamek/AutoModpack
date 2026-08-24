@@ -126,6 +126,29 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void emptyOperationsRebuildsProjectionWhenAnUnlistedFileIsPresent() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "metadata-only-projection".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		Files.createDirectories(storage.activePath("mods"));
+		Files.write(storage.activePath("mods/existing.jar"), bytes);
+		Files.createDirectories(storage.activePath("shaderpacks"));
+		Path stray = storage.activePath("shaderpacks/ComplementaryReimagined_r5.8.1.zip.txt");
+		Files.writeString(stray, "#Mon Aug 24 12:06:20 PDT 2026\nFXAA_STRENGTH=100\n", StandardCharsets.UTF_8);
+		SelectedModpackTarget target = target("mods/existing.jar", "mod", false, hash, bytes.length);
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), List.of(),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
+				ChangeSet.empty());
+
+		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
+
+		assertTrue(execution.success());
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
+		assertFalse(Files.exists(stray));
+		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
+	}
+
+	@Test
 	void recoveryRebuildsAPartialProjectionSwapFromCas() throws Exception {
 		ClientStorage storage = storage();
 		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
@@ -234,16 +257,21 @@ class UpdateTransactionExecutorTest {
 		deferred.resultStatus = UpdateTransaction.Status.DEFERRED_LOCKED;
 		new ClientGenerationStore(storage).write(deferredTarget.generationRecord());
 		ConfigTools.writeAtomic(storage.transactionFile(), deferred);
-		Files.createDirectories(storage.incomingProjectionDirectory());
-		Files.writeString(storage.incomingProjectionDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.activePath("shaderpacks"));
+		Files.writeString(storage.activePath("shaderpacks/ComplementaryReimagined_r5.8.1.zip.txt"), "#Mon leftover\n", StandardCharsets.UTF_8);
 
 		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			ClientProjectionView.Snapshot view = ClientProjectionView.open(storage).snapshot(cache);
-			assertEquals(deferredTarget.flatTarget().targetGenerationId, view.target().targetGenerationId);
-			assertEquals(new UpdatePlan.FileState(deferredHash, deferredBytes.length, true), view.files().get("mods/mailbox-deferred.jar"));
+			assertFalse(ClientProjectionView.publicationStarted(storage, deferred));
+			assertEquals(installed.flatTarget().targetGenerationId, view.target().targetGenerationId);
+			assertEquals(new UpdatePlan.FileState(oldHash, oldBytes.length, true), view.files().get("mods/mailbox-old.jar"));
+			assertNull(view.files().get("mods/mailbox-deferred.jar"));
+			assertNotNull(view.files().get("shaderpacks/ComplementaryReimagined_r5.8.1.zip.txt"));
 			assertTrue(view.sourceCandidates("mods/mailbox-deferred.jar").contains(storage.objectFile(deferredHash)));
 		}
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-old.jar"), oldBytes.length, oldHash));
+		Files.createDirectories(storage.incomingProjectionDirectory());
+		Files.writeString(storage.incomingProjectionDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
 
 		byte[] latestBytes = "mailbox-latest".getBytes(StandardCharsets.UTF_8);
 		String latestHash = store(storage, latestBytes);
