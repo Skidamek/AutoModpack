@@ -18,7 +18,6 @@ import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
-import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -102,7 +101,7 @@ public class SelfUpdater {
 			}
 
 			// Exact Hash Match (Fastest check)
-			if (automodpack.SHA1Hash().equals(HashUtils.getHash(THIS_MOD_JAR))) {
+			if (automodpack.SHA1Hash().equals(FileIntegrity.identityHash(THIS_MOD_JAR, null))) {
 				LOGGER.info("Already on the target version (Hash match): {}", AM_VERSION);
 				return false;
 			}
@@ -184,7 +183,7 @@ public class SelfUpdater {
 			Path storeObject = storage.objectFile(automodpack.SHA1Hash());
 			if (!FileIntegrity.matches(storeObject, automodpack.fileSize(), automodpack.SHA1Hash()))
 				throw new IllegalStateException("Downloaded official AutoModpack JAR failed verification");
-			String currentHash = HashUtils.getHash(currentJar);
+			String currentHash = FileIntegrity.identityHash(currentJar, null);
 			if (currentHash == null || !Files.isRegularFile(currentJar)) throw new IllegalStateException("Loaded AutoModpack JAR cannot be verified");
 
 			String currentPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(currentJar).toString());

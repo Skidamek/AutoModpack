@@ -16,7 +16,7 @@ import com.google.gson.Gson;
 
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
@@ -34,7 +34,7 @@ public final class DetachedUpdateHelper {
 		Files.createDirectories(absoluteHelperDirectory);
 
 		long size = Files.size(sourceJar);
-		String hash = HashUtils.getHash(sourceJar);
+		String hash = FileIntegrity.identityHash(sourceJar, null);
 		if (hash == null) throw new IOException("Cannot hash the runnable AutoModpack JAR");
 		Path helperJar = absoluteHelperDirectory.resolve("automodpack-update-helper-" + UUID.randomUUID() + ".jar");
 		VerifiedFileTransfer.copyAtomic(sourceJar, helperJar, size, hash);

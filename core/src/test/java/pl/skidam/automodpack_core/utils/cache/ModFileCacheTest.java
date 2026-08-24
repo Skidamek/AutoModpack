@@ -67,7 +67,7 @@ class ModFileCacheTest {
 		Path records = temporaryDirectory.resolve("mod-metadata");
 		Path record = records.resolve(hash.substring(0, 2)).resolve(hash.substring(2) + ".json");
 		Files.createDirectories(record.getParent());
-		Files.writeString(record, "{\"IDs\":[\"wrong\"],\"hash\":\"" + hash + "\",\"version\":\"9.9.9\",\"deps\":[],\"nestedMods\":[]}", StandardCharsets.UTF_8);
+		Files.writeString(record, "{\"IDs\":[\"wrong\"],\"hash\":\"" + hash + "\",\"version\":\"9.9.9\",\"deps\":[],\"nestedMods\":[],\"id\":\"wrong\",\"services\":[]}", StandardCharsets.UTF_8);
 
 		try (FileMetadataCache hashCache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata")); ModFileCache modCache = ModFileCache.open(records)) {
 			assertEquals(Set.of("wrong"), modCache.getOrComputeMod(source, hashCache).IDs());

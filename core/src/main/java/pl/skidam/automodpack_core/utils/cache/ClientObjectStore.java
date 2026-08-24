@@ -171,8 +171,11 @@ public final class ClientObjectStore {
 		for (var entry : references.sizes().entrySet()) {
 			Path object = storage.objectFile(entry.getKey());
 			if (!Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) continue;
-			if (entry.getValue() >= 0 && Files.size(object) != entry.getValue()) continue;
-			if (entry.getKey().equals(HashUtils.getHash(object))) existing.add(entry.getKey());
+			if (entry.getValue() >= 0) {
+				if (FileIntegrity.matches(object, entry.getValue(), entry.getKey())) existing.add(entry.getKey());
+				continue;
+			}
+			if (entry.getKey().equals(FileIntegrity.identityHash(object, null))) existing.add(entry.getKey());
 		}
 		return Set.copyOf(existing);
 	}
@@ -390,10 +393,8 @@ public final class ClientObjectStore {
 				missingCount = addExact(missingCount, 1, "missing referenced object count");
 				continue;
 			}
-			boolean valid = Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS);
-			long actualSize = valid ? Files.size(object) : -1;
-			String actualHash = valid ? HashUtils.getHash(object) : null;
-			if (!valid || expectedSize >= 0 && actualSize != expectedSize || !hash.equals(actualHash)) {
+			boolean valid = expectedSize >= 0 ? FileIntegrity.matches(object, expectedSize, hash) : Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && hash.equals(FileIntegrity.identityHash(object, null));
+			if (!valid) {
 				if (requireRequiredReferences && references.required().contains(hash)) throw new IOException("Required client object is corrupt: " + hash);
 				invalidCount = addExact(invalidCount, 1, "invalid referenced object count");
 				continue;

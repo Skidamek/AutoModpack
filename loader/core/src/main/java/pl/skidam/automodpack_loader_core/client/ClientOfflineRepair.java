@@ -3,9 +3,8 @@ package pl.skidam.automodpack_loader_core.client;
 import static pl.skidam.automodpack_core.Constants.THIS_MOD_JAR;
 
 import java.io.IOException;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -22,6 +21,8 @@ import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 /** Loader-aware entry point for the strictly offline active-pack repair workflow. */
 public final class ClientOfflineRepair {
@@ -70,20 +71,21 @@ public final class ClientOfflineRepair {
 		Set<String> services = loader.forceCopyServices();
 		if (services.isEmpty()) return Set.of();
 		TreeSet<String> paths = new TreeSet<>();
-		for (var item : target.flatTarget().list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type)).toList()) {
-			long size = parseSize(item.size);
-			Path source = verifiedSource(item.file, size, item.sha1);
-			if (source == null) continue;
-			try (FileSystem fileSystem = FileSystems.newFileSystem(source)) {
-				if (!FileInspection.getServices(fileSystem, services).isEmpty()) paths.add(UpdatePlanner.normalize(item.file));
+		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+			for (var item : target.flatTarget().list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type)).toList()) {
+				long size = parseSize(item.size);
+				Path source = verifiedSource(item.file, size, item.sha1, cache);
+				if (source == null) continue;
+				FileInspection.Mod mod = modCache.getModOrNull(source, cache);
+				if (mod != null && !Collections.disjoint(mod.services(), services)) paths.add(UpdatePlanner.normalize(item.file));
 			}
 		}
 		return Set.copyOf(paths);
 	}
 
-	private Path verifiedSource(String logicalPath, long size, String hash) {
+	private Path verifiedSource(String logicalPath, long size, String hash, FileMetadataCache cache) {
 		for (Path candidate : List.of(storage.activePath(logicalPath), storage.gamePath(logicalPath), storage.objectFile(hash)))
-			if (FileIntegrity.matches(candidate, size, hash)) return candidate;
+			if (FileIntegrity.matches(candidate, size, hash, cache)) return candidate;
 		return null;
 	}
 

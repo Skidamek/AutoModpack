@@ -365,13 +365,13 @@ public class ModpackUpdater implements AutoCloseable {
 		Path loadedMod = THIS_MOD_JAR == null ? null : THIS_MOD_JAR.toAbsolutePath().normalize();
 		Map<String, UpdatePlan.FileState> observed = new TreeMap<>();
 		Set<String> listedPins = PinnedMods.index(clientConfig == null ? List.of() : clientConfig.pinnedModIds);
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
 			for (Path path : stream.toList()) {
 				if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				Path normalized = path.toAbsolutePath().normalize();
 				if (loadedMod != null && normalized.equals(loadedMod)) continue;
 				if (!listedPins.isEmpty()) {
-					FileInspection.Mod inspected = FileInspection.getMod(normalized, cache);
+					FileInspection.Mod inspected = modCache.getModOrNull(normalized, cache);
 					if (inspected != null && PinnedMods.matches(listedPins, inspected.IDs())) continue;
 				}
 				String relative = UpdatePlanner.normalize(storage.gameDirectory().relativize(normalized).toString());
@@ -557,8 +557,8 @@ public class ModpackUpdater implements AutoCloseable {
 	public void loadModpack() throws Exception {
 
 		if (!Files.exists(storage.activeDirectory())) return;
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			loadModpackMods(cache);
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+			loadModpackMods(cache, modCache);
 		}
 	}
 
@@ -596,7 +596,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	// Load the modpack mods that aren't already present in the standard mods
 	// directory, without requiring a restart.
-	private void loadModpackMods(FileMetadataCache cache) throws Exception {
+	private void loadModpackMods(FileMetadataCache cache, ModFileCache modCache) throws Exception {
 		if (!preload) {
 			LOGGER.info("Modpack is already loaded");
 			return;
@@ -608,7 +608,7 @@ public class ModpackUpdater implements AutoCloseable {
 			for (Path path : standardModsStream.filter(JarUtils::isRegularJar).toList()) {
 				String hash = cache.getHashOrNull(path);
 				if (hash != null) liveHashes.add(hash);
-				FileInspection.Mod inspected = FileInspection.getMod(path, cache);
+				FileInspection.Mod inspected = modCache.getModOrNull(path, cache);
 				if (inspected != null) liveJarIds.add(inspected.IDs());
 			}
 		} catch (IOException e) {
@@ -627,7 +627,7 @@ public class ModpackUpdater implements AutoCloseable {
 					if (relative == null || !activeModPaths.contains(relative)) continue;
 					Path jar = storage.activePath(relative);
 					String hash = cache.getHashOrNull(jar);
-					FileInspection.Mod inspected = FileInspection.getMod(jar, cache);
+					FileInspection.Mod inspected = modCache.getModOrNull(jar, cache);
 					projectionJars.add(new ModpackLoadSelection.Jar(jar, hash, inspected == null ? Set.of() : inspected.IDs()));
 				}
 			} catch (IOException e) {

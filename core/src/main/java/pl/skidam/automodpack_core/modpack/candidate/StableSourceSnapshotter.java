@@ -13,6 +13,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
@@ -54,7 +55,7 @@ public final class StableSourceSnapshotter {
 
 			exclusion = expectedContentExclusion(staged, autoExcludeServerMods);
 			String type = exclusion == null ? fileType(staged, source.logicalPath()) : null;
-			String sha1 = exclusion == null ? HashUtils.getHash(staged) : null;
+			String sha1 = exclusion == null ? FileIntegrity.identityHash(staged, fileMetadataCache) : null;
 			if (exclusion == null && sha1 == null) throw new IOException("SHA-1 calculation returned null");
 			String murmur = null;
 			if (exclusion == null && ModpackContentType.isSourceFetchable(type)) murmur = HashUtils.getCurseforgeMurmurHash(staged);
@@ -152,7 +153,7 @@ public final class StableSourceSnapshotter {
 		if (cachedMod == null && !FileInspection.isMod(staged)) return null;
 		if (autoExcludeServerMods && LoaderManagerService.EnvironmentType.SERVER.equals(FileInspection.getModEnvironment(staged)))
 			return new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod");
-		String modId = FileInspection.getModID(staged);
+		String modId = cachedMod != null && cachedMod.id() != null ? cachedMod.id() : FileInspection.getModID(staged);
 		if (MOD_ID.equals(modId) || (MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId)
 				|| (MOD_ID + "_mod").equals(modId))
 			return new Exclusion(ExcludedCandidate.Reason.AUTOMODPACK_FILE, "AutoModpack cannot publish itself");

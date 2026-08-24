@@ -9,11 +9,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.Locale;
-import java.util.Set;
-import java.util.stream.Stream;
 
 /** Low-level digest primitives; path-keyed callers add caching through {@code FileMetadataCache}. */
 public final class HashUtils {
@@ -66,21 +63,7 @@ public final class HashUtils {
 		return value.toLowerCase(Locale.ROOT);
 	}
 
-	/** The {@link #getHash} of every {@code .jar} file directly in {@code dir}; empty if it isn't a directory. */
-	public static Set<String> getJarHashes(Path dir) {
-		Set<String> hashes = new HashSet<>();
-		if (dir == null || !Files.isDirectory(dir)) return hashes;
-		try (Stream<Path> stream = Files.list(dir)) {
-			stream.filter(JarUtils::isRegularJar).forEach(jar -> {
-				String hash = getHash(jar);
-				if (hash != null) hashes.add(hash);
-			});
-		} catch (Exception e) {
-			LOGGER.debug("Failed to list directory for jar hashes: {}", dir, e);
-		}
-		return hashes;
-	}
-
+	/** Full SHA-1 of current bytes. Path-keyed identity goes through {@code FileIntegrity} / {@code FileMetadataCache}. */
 	public static String getHash(Path path) {
 		try {
 			MessageDigest digest = newSha1Digest();

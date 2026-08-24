@@ -7,22 +7,28 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+
 /** Durable file installation operations that verify size and SHA-1 before publication. */
 public final class VerifiedFileTransfer {
 	private VerifiedFileTransfer() {}
 
 	public static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
-		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, false);
+		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, false, null);
 	}
 
-	private static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, boolean immutable) throws IOException {
-		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1)) {
+	public static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, false, cache);
+	}
+
+	private static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, boolean immutable, FileMetadataCache cache) throws IOException {
+		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1, cache)) {
 			if (immutable) ImmutableFiles.protect(targetFile);
 			return false;
 		}
-		requireValidSource(sourceFile, expectedSize, expectedSha1);
+		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 
-		Path temporary = copyToVerifiedTemporary(sourceFile, targetFile, expectedSize, expectedSha1);
+		Path temporary = copyToVerifiedTemporary(sourceFile, targetFile, expectedSize, expectedSha1, cache);
 		try {
 			if (immutable) ImmutableFiles.protect(temporary);
 			moveAtomicReplace(temporary, targetFile);
@@ -35,25 +41,37 @@ public final class VerifiedFileTransfer {
 
 	/** Replaces an immutable object and enforces its read-only policy before returning. */
 	public static boolean copyAtomicImmutable(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
-		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, true);
+		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, true, null);
+	}
+
+	public static boolean copyAtomicImmutable(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, true, cache);
 	}
 
 	/** Copies a verified file without replacing a destination created by another operation. */
 	public static boolean copyCreateOnly(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
-		requireValidSource(sourceFile, expectedSize, expectedSha1);
+		return copyCreateOnly(sourceFile, targetFile, expectedSize, expectedSha1, null);
+	}
+
+	public static boolean copyCreateOnly(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 		return ImmutableFilePublisher.publishCreateOnlyCopy(sourceFile, targetFile, path -> {
-			if (!FileIntegrity.matches(path, expectedSize, expectedSha1)) throw new IOException("Immutable copy has different bytes: " + path);
+			if (!FileIntegrity.matches(path, expectedSize, expectedSha1, cache)) throw new IOException("Immutable copy has different bytes: " + path);
 		});
 	}
 
 	/** Installs an immutable object as a hard link, with verified-copy fallback when linking is unavailable. */
 	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
-		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1)) {
+		return linkAtomic(sourceFile, targetFile, expectedSize, expectedSha1, null);
+	}
+
+	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1, cache)) {
 			ImmutableFiles.protect(targetFile);
 			return false;
 		}
 		ImmutableFiles.protect(sourceFile);
-		requireValidSource(sourceFile, expectedSize, expectedSha1);
+		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 		Path parent = requireTargetParent(targetFile);
 		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
 		Files.deleteIfExists(temporary);
@@ -66,7 +84,7 @@ public final class VerifiedFileTransfer {
 				ImmutableFiles.allowOwnerWrite(temporary);
 				FileTrees.forceFile(temporary);
 			}
-			if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1))
+			if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1, cache))
 				throw new IOException("Linked file failed size/SHA-1 verification: " + temporary);
 			ImmutableFiles.protect(temporary);
 			moveAtomicReplace(temporary, targetFile);
@@ -110,12 +128,12 @@ public final class VerifiedFileTransfer {
 		}
 	}
 
-	private static void requireValidSource(Path sourceFile, long expectedSize, String expectedSha1) throws IOException {
-		if (!FileIntegrity.matches(sourceFile, expectedSize, expectedSha1))
+	private static void requireValidSource(Path sourceFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+		if (!FileIntegrity.matches(sourceFile, expectedSize, expectedSha1, cache))
 			throw new IOException("Source file failed size/SHA-1 verification: " + sourceFile);
 	}
 
-	private static Path copyToVerifiedTemporary(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
+	private static Path copyToVerifiedTemporary(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
 		Path parent = requireTargetParent(targetFile);
 		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
 		boolean valid = false;
@@ -123,7 +141,7 @@ public final class VerifiedFileTransfer {
 			Files.copy(sourceFile, temporary, StandardCopyOption.REPLACE_EXISTING);
 			ImmutableFiles.allowOwnerWrite(temporary);
 			FileTrees.forceFile(temporary);
-			valid = FileIntegrity.matches(temporary, expectedSize, expectedSha1);
+			valid = FileIntegrity.matches(temporary, expectedSize, expectedSha1, cache);
 			if (!valid) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
 			return temporary;
 		} finally {

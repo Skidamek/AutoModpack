@@ -34,9 +34,19 @@ public class FileInspection {
 
 	public record HashPathPair(String hash, Path path) {}
 
-	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) implements Serializable {
+	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, Set<String> services)
+			implements
+				Serializable {
+		public Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) {
+			this(IDs, hash, version, path, deps, nestedMods, null, Set.of());
+		}
+
+		public Mod {
+			services = services == null ? Set.of() : Set.copyOf(services);
+		}
+
 		public Mod at(Path newPath) {
-			return new Mod(IDs, hash, version, newPath, deps, nestedMods);
+			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, services);
 		}
 
 		// Magic to de/serialize Path properly
@@ -46,17 +56,17 @@ public class FileInspection {
 			return new SerializationProxy(this);
 		}
 
-		private record SerializationProxy(Set<String> IDs, String hash, String version, String pathString, Set<String> deps,
-				Set<Mod> nestedMods) implements Serializable {
+		private record SerializationProxy(Set<String> IDs, String hash, String version, String pathString, Set<String> deps, Set<Mod> nestedMods, String id,
+				Set<String> services) implements Serializable {
 
 			public SerializationProxy(Mod mod) {
 				this(mod.IDs(), mod.hash(), mod.version(), mod.path() == null ? null : mod.path().toAbsolutePath().normalize().toString(), mod.deps(),
-						mod.nestedMods());
+						mod.nestedMods(), mod.id(), mod.services());
 			}
 
 			@Serial
 			private Object readResolve() {
-				return new Mod(IDs, hash, version, pathString == null ? null : Path.of(pathString), deps, nestedMods);
+				return new Mod(IDs, hash, version, pathString == null ? null : Path.of(pathString), deps, nestedMods, id, services);
 			}
 		}
 	}
@@ -66,7 +76,7 @@ public class FileInspection {
 	public static Mod getMod(Path file, FileMetadataCache cache) {
 		if (isJarInvalid(file)) return null;
 
-		String hash = cache != null ? cache.getHashOrNull(file) : HashUtils.getHash(file);
+		String hash = FileIntegrity.identityHash(file, cache);
 		if (hash == null) {
 			LOGGER.error("Failed to get hash for file: {}", file);
 			return null;
@@ -80,8 +90,9 @@ public class FileInspection {
 				ids.add(meta.modId());
 
 				Set<Mod> nestedMods = scanForNestedMods(fs);
+				Set<String> services = Set.copyOf(getServices(fs, LoaderServicePaths.ALL_SERVICES));
 
-				if (meta.version() != null) return new Mod(ids, hash, meta.version(), file, meta.deps(), nestedMods);
+				if (meta.version() != null) return new Mod(ids, hash, meta.version(), file, meta.deps(), nestedMods, meta.modId(), services);
 				LOGGER.error("Incomplete mod info for file: {} (ID: {}, Ver: {})", file, meta.modId(), meta.version());
 			}
 		} catch (IOException e) {
@@ -241,7 +252,7 @@ public class FileInspection {
 			Set<String> ids = new HashSet<>(metadata.provides());
 			ids.add(metadata.modId());
 			// Investigate if we need hash or not
-			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedChildren);
+			return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedChildren, metadata.modId(), Set.of());
 		}
 		return null;
 	}

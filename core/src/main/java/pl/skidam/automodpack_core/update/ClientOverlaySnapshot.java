@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
@@ -38,7 +39,7 @@ public record ClientOverlaySnapshot(Map<String, UpdatePlan.FileState> files, Str
 					if (Files.isSymbolicLink(path)) throw new IOException("Client overlay contains a symbolic link: " + path);
 					if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 					String relative = LogicalPath.normalize(root.relativize(path).toString());
-					String hash = cache == null ? HashUtils.getHash(path) : cache.getOrComputeHash(path);
+					String hash = FileIntegrity.identityHash(path, cache);
 					if (hash == null) throw new IOException("Cannot hash client overlay file: " + path);
 					long size = Files.size(path);
 					files.put(relative, new UpdatePlan.FileState(hash, size, true));
