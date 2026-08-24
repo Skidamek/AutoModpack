@@ -20,6 +20,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
+import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -91,13 +92,17 @@ final class ClientLoginUpdateFlow {
 			return continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, false);
 		}, DownloadClient.NET_EXECUTOR).exceptionally(e -> {
 			disconnectImmediately(handler);
-			presentFailure(DownloadClient.unwrap(e), "automodpack.error.connection", FailureCategory.CONNECTION);
+			Throwable failure = DownloadClient.unwrap(e);
+			if (DownloadClient.findCause(failure, CertificateTrustCancelledException.class) == null) {
+				presentFailure(failure, "automodpack.error.connection", FailureCategory.CONNECTION);
+			}
 			return LoginUpdateResponse.HOST_ERROR;
 		});
 	}
 
 	private static void presentManifestFailure(ModpackUtils.ManifestFetchResult result) {
 		Throwable failure = result.failure() == null ? new IOException("Modpack manifest fetch returned no failure cause") : result.failure();
+		if (DownloadClient.findCause(failure, CertificateTrustCancelledException.class) != null) return;
 		CertificatePinMismatchException mismatch = DownloadClient.findCause(failure, CertificatePinMismatchException.class);
 		if (mismatch != null) {
 			FailureRequest request = FailureRequest.of(failure, "automodpack.pin.mismatch", FailureCategory.SECURITY, FailureDestination.MULTIPLAYER, null)
