@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.preload;
 
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.fml.loading.VersionInfo;
 import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -25,10 +26,12 @@ public class LoaderManager implements LoaderManagerService {
 	@Override
 	public String getLoaderVersion() {
 		// versionInfo() is still null when Preload runs from onLoad() (see
-		// AutoModpackTransformationService) - fall back to the value it captured from the JVM's
-		// own process arguments for that window; once preload is false, versionInfo() is populated.
+		// AutoModpackTransformationService) - use the launch args captured there for that window;
+		// once preload is false, versionInfo() is populated.
 		if (preload && AutoModpackTransformationService.EARLY_FORGE_VERSION != null) return AutoModpackTransformationService.EARLY_FORGE_VERSION;
-		return FMLLoader.versionInfo().forgeVersion();
+		VersionInfo versionInfo = FMLLoader.versionInfo();
+		if (versionInfo != null) return versionInfo.forgeVersion();
+		throw new IllegalStateException("Forge version is not available yet");
 	}
 
 	@Override
@@ -52,7 +55,9 @@ public class LoaderManager implements LoaderManagerService {
 		if (preload) {
 			if (modId.equals("minecraft")) {
 				if (AutoModpackTransformationService.EARLY_MC_VERSION != null) return AutoModpackTransformationService.EARLY_MC_VERSION;
-				return FMLLoader.versionInfo().mcVersion();
+				VersionInfo versionInfo = FMLLoader.versionInfo();
+				if (versionInfo != null) return versionInfo.mcVersion();
+				throw new IllegalStateException("Minecraft version is not available yet");
 			}
 
 			return null;
