@@ -13,6 +13,7 @@ import net.minecraft.server.permissions.PermissionLevel;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
+import pl.skidam.automodpack_core.auth.ProvisioningSecretStore;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
@@ -244,7 +245,7 @@ public class Commands {
 			InetSocketAddress endpoint = AddressHelpers.parseEndpoint(
 					AddressHelpers.formatAddress(AddressHelpers.format(serverConfig.advertisedEndpointHost, serverConfig.advertisedEndpointPort)));
 			return writeBootstrap(context,
-					BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, serverConfig.connectionMode), true);
+					BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, serverConfig.connectionMode, requireProvisioningSecret()), true);
 		} catch (IllegalArgumentException e) {
 			send(context, e.getMessage(), ChatFormatting.RED, false);
 			return 0;
@@ -258,7 +259,7 @@ public class Commands {
 			ModpackConnectionMode connectionMode = ModpackConnectionMode.valueOf(
 					StringArgumentType.getString(context, "connection-mode").toUpperCase(Locale.ROOT));
 			return writeBootstrap(context,
-					BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, connectionMode), true);
+					BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, connectionMode, requireProvisioningSecret()), true);
 		} catch (IllegalArgumentException e) {
 			send(context, e.getMessage(), ChatFormatting.RED, false);
 			return 0;
@@ -272,6 +273,10 @@ public class Commands {
 		return fingerprint;
 	}
 
+	private static String requireProvisioningSecret() {
+		return ProvisioningSecretStore.ensure();
+	}
+
 	private static String requirePublishedModpackId() {
 		try {
 			var current = modpackExecutor.currentRecord().orElseThrow(() -> new IllegalArgumentException("No current generation is available; generate the modpack first"));
@@ -282,7 +287,7 @@ public class Commands {
 	}
 
 	private static int writeBootstrap(CommandContext<CommandSourceStack> context, ConnectionJsons.KnownHostsBootstrapFields fields, boolean install) {
-		Path bootstrapPath = GameDirectory.current().resolve(StoragePaths.BOOTSTRAP_FILE).normalize();
+		Path bootstrapPath = GameDirectory.current().resolve(StoragePaths.BOOTSTRAP_EXPORT_FILE).normalize();
 		try {
 			ConfigTools.writeAtomic(bootstrapPath, fields);
 		} catch (IOException e) {
@@ -293,12 +298,9 @@ public class Commands {
 
 		String absolutePath = bootstrapPath.toAbsolutePath().normalize().toString();
 		send(context, "Bootstrap file exported", ChatFormatting.GREEN, copyable(absolutePath), ChatFormatting.YELLOW, false);
-		send(context, "Package it on clients at", ChatFormatting.WHITE, copyable("automodpack/bootstrap.json"), ChatFormatting.YELLOW, false);
-		if (install && serverConfig.validateSecrets) {
-			send(context,
-					"WARNING: validateSecrets=true. Fresh clients without an existing secret for this origin will fail preload download; disable validation or provision a normal login first.",
-					ChatFormatting.RED, false);
-		}
+		send(context, "Copy it to clients as", ChatFormatting.WHITE, copyable("automodpack/automodpack-bootstrap.json"), ChatFormatting.YELLOW, false);
+		send(context, "The exported file is not imported on this instance. Clients must already have AutoModpack installed.", ChatFormatting.GRAY, false);
+		if (install) send(context, "The file includes a provisioning secret. Treat it as a credential.", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
 	}
 

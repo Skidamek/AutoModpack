@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.auth;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.net.SocketAddress;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 
@@ -52,6 +53,36 @@ public class Secrets {
 		return new Secret(secret, timestamp);
 	}
 
+	public static String normalizeProvisioningSecret(String secret) {
+		if (secret == null || secret.isBlank()) return null;
+		byte[] bytes;
+		try {
+			bytes = Base64.getUrlDecoder().decode(secret);
+		} catch (IllegalArgumentException e) {
+			throw new IllegalArgumentException("Bootstrap secret is not valid Base64URL", e);
+		}
+		if (bytes.length != BYTE_LENGTH) throw new IllegalArgumentException("Bootstrap secret must be " + BYTE_LENGTH + " bytes");
+		if (isZeroed(bytes)) throw new IllegalArgumentException("Bootstrap secret cannot be the anonymous secret");
+		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+	}
+
+	private static boolean isZeroed(byte[] bytes) {
+		for (byte value : bytes) if (value != 0) return false;
+		return true;
+	}
+
+	private static boolean isProvisioningSecret(String secretStr) {
+		String expected = ProvisioningSecretStore.get();
+		if (expected == null || expected.isBlank() || secretStr == null || secretStr.isBlank()) return false;
+		try {
+			byte[] presented = Base64.getUrlDecoder().decode(secretStr);
+			byte[] configured = Base64.getUrlDecoder().decode(expected);
+			return presented.length == BYTE_LENGTH && configured.length == BYTE_LENGTH && MessageDigest.isEqual(presented, configured);
+		} catch (IllegalArgumentException e) {
+			return false;
+		}
+	}
+
 	// Cache of recently validated secrets to avoid repeated lookups for performance
 	private static final TimedSet<String> cachedValidSecrets = new TimedSet<>(3500);
 
@@ -59,6 +90,11 @@ public class Secrets {
 		if (!serverConfig.validateSecrets) return true;
 
 		if (cachedValidSecrets.contains(secretStr)) return true;
+
+		if (isProvisioningSecret(secretStr)) {
+			cachedValidSecrets.add(secretStr);
+			return true;
+		}
 
 		var playerSecretPair = SecretsStore.getHostSecret(secretStr);
 		if (playerSecretPair == null) return false;

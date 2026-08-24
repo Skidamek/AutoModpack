@@ -551,7 +551,7 @@ def test_seed_bootstrap_writes_live_fields(make_ctx):
     runner._v_seed_bootstrap(ctx, {})
 
     assert json.loads(
-        (ctx.game_dir / "automodpack" / "bootstrap.json").read_text(encoding="utf-8")
+        (ctx.game_dir / "automodpack" / "automodpack-bootstrap.json").read_text(encoding="utf-8")
     ) == {
         "origin": "amp-server:25565",
         "fingerprint": "01:23:45",

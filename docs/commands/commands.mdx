@@ -20,6 +20,9 @@
 - `/automodpack host fingerprint` - Get the [certificate fingerprint](../technicals/certificate) of the modpack host.
 - `/automodpack host fingerprint dns <minecraft-hostname>` - Generate a DNSSEC record that lets clients authenticate the host's self-signed certificate automatically.
 - `/automodpack host fingerprint share <minecraft-address>` - Generate plain and pinned copyable addresses without storing the fingerprint in Minecraft's server list.
+- `/automodpack host bootstrap pin <origin>` - Write `automodpack/automodpack-bootstrap.exported.json` with a TLS pin. Copy it to clients as `automodpack/automodpack-bootstrap.json`.
+- `/automodpack host bootstrap install <origin>` - Write an install export with the published pack, provisioning secret, and configured advertised endpoint.
+- `/automodpack host bootstrap install <origin> <endpoint> <connection-mode>` - Same as install, with an explicit endpoint and connection mode.
 - `/automodpack config reload` - Reload config files.
 
 History compaction keeps the thin timeline and patch-note state. It removes only detailed rollback data before the retained boundary.

@@ -12,7 +12,7 @@ import java.util.*;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.config.BootstrapConfig;
+import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -26,7 +26,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -46,6 +45,7 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class Preload {
 	private ClientStorage storage;
+	private boolean trustedBootstrapApply;
 
 	public Preload() {
 		try {
@@ -189,7 +189,8 @@ public class Preload {
 		// When update-on-launch is disabled, just load the already-installed
 		// modpack: don't contact the server and don't reconcile local files,
 		// so the user can freely add/remove mods (e.g. a binary search).
-		if (!clientConfig.updateSelectedModpackOnLaunch) {
+		// A trusted bootstrap file is an explicit install request and still applies.
+		if (!clientConfig.updateSelectedModpackOnLaunch && !trustedBootstrapApply) {
 			if (hasActiveProjection()) {
 				loadLocalModpack(connectionInfo, secret);
 			} else {
@@ -228,7 +229,9 @@ public class Preload {
 			return;
 		}
 
-		new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient).processModpackUpdate(null);
+		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient);
+		if (trustedBootstrapApply) updater.applyTrustedInstall();
+		else updater.processModpackUpdate(null);
 	}
 
 	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
@@ -325,55 +328,9 @@ public class Preload {
 	}
 
 	private void importBootstrap() {
-		if (!Files.isRegularFile(storage.bootstrapFile())) return;
-
-		ConnectionJsons.KnownHostsBootstrapFields fields = ConfigTools.read(storage.bootstrapFile(), ConnectionJsons.KnownHostsBootstrapFields.class)
-				.orElseThrow(() -> new ConfigTools.ConfigException("Bootstrap file is not a regular file"));
-		final BootstrapConfig.Validated bootstrap;
-		try {
-			bootstrap = BootstrapConfig.validate(fields);
-		} catch (IllegalArgumentException e) {
-			throw new ConfigTools.ConfigException("Invalid bootstrap file " + storage.bootstrapFile().toAbsolutePath().normalize(), e);
-		}
-
-		String originKey = AddressHelpers.formatAddress(bootstrap.origin());
-		String previousSelectedModpackId = clientConfig.selectedModpackId;
-		ClientConfigJsons.ClientConfigFieldsV3 updatedClientConfig = clientConfig;
-		String targetModpackId = bootstrap.installsModpack() ? bootstrap.modpackId() : ModpackId.isValid(clientConfig.selectedModpackId) ? clientConfig.selectedModpackId : null;
-		ConnectionJsons.ConnectionInfo previousConnection = null;
-		ConnectionJsons.CertificateTrustEntry previousTrust;
-		try {
-			previousTrust = CertificateTrustStore.get(bootstrap.origin());
-			CertificateTrustStore.save(bootstrap.origin(), bootstrap.fingerprint(), CertificateTrustStore.Reason.SEED);
-			if (targetModpackId != null) {
-				previousConnection = ConnectionStore.getConnection(storage, targetModpackId);
-				if (bootstrap.installsModpack()) {
-					ConnectionStore.saveConnection(storage, targetModpackId,
-							new ConnectionJsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
-					updatedClientConfig = clientConfig.withSelectedModpackId(targetModpackId);
-					writeConfig(storage.clientConfigFile(), updatedClientConfig);
-					clientConfig = updatedClientConfig;
-				}
-			}
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to import bootstrap connection state", e);
-		}
-		if (previousTrust == null) {
-			LOGGER.info("Imported seeded certificate pin for origin {} ({})", originKey, NetUtils.shortenFingerprint(bootstrap.fingerprint()));
-		} else {
-			LOGGER.info("Replaced seeded certificate pin for origin {}: {} -> {}", originKey, NetUtils.shortenFingerprint(previousTrust.fingerprint),
-					NetUtils.shortenFingerprint(bootstrap.fingerprint()));
-		}
-		if (bootstrap.installsModpack()) {
-			String oldOrigin = previousConnection == null || previousConnection.origin == null ? "none" : AddressHelpers.formatAddress(previousConnection.origin);
-			String oldEndpoint = previousConnection == null || previousConnection.endpoint == null ? "none" : AddressHelpers.formatAddress(previousConnection.endpoint);
-			LOGGER.info("Seed selection {} -> {}; connection origin {} -> {}; endpoint {} -> {}", previousSelectedModpackId, targetModpackId, oldOrigin,
-					AddressHelpers.formatAddress(bootstrap.origin()), oldEndpoint, AddressHelpers.formatAddress(bootstrap.endpoint()));
-		}
-		try {
-			Files.delete(storage.bootstrapFile());
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Bootstrap state was saved but the bootstrap file could not be deleted", e);
-		}
+		BootstrapInstaller.importIfPresent(storage, clientConfig).ifPresent(receipt -> {
+			clientConfig = receipt.clientConfig();
+			trustedBootstrapApply = receipt.installsModpack() && receipt.hasSecret();
+		});
 	}
 }

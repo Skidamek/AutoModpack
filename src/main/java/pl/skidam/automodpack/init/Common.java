@@ -4,6 +4,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
+import pl.skidam.automodpack_core.auth.ProvisioningSecretStore;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -25,6 +26,8 @@ public class Common {
 
 	private static void prepareServerRuntime() {
 		if (serverRuntimePrepared) return;
+
+		ProvisioningSecretStore.ensure();
 
 		hostServer = new NettyServer();
 		modpackExecutor = new ModpackExecutor();

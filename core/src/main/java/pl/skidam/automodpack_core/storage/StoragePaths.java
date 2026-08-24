@@ -50,13 +50,15 @@ public final class StoragePaths {
 	public static final Path CREDENTIALS_DIR = AUTOMODPACK_DIR.resolve("credentials");
 	public static final Path SERVER_CERT_FILE = CREDENTIALS_DIR.resolve("certificate.crt");
 	public static final Path SERVER_PRIVATE_KEY_FILE = CREDENTIALS_DIR.resolve("private-key.pem");
+	public static final Path PROVISIONING_SECRET_FILE = CREDENTIALS_DIR.resolve("provisioning-secret");
 	public static final Path SERVER_SECRETS_FILE = SERVER_DIR.resolve("secrets.json");
 
 	public static final Path HOST_MODPACK_DIR = AUTOMODPACK_DIR.resolve("host-modpack");
 	public static final Path HOST_CONTENT_MODPACK_DIR = HOST_MODPACK_DIR.resolve("main");
 	public static final Path MODPACK_CONTENT_FILE = Path.of("automodpack-content.json");
 	public static final Path SERVER_CONFIG_FILE = AUTOMODPACK_DIR.resolve("server-config.json");
-	public static final Path BOOTSTRAP_FILE = AUTOMODPACK_DIR.resolve("bootstrap.json");
+	public static final Path BOOTSTRAP_FILE = AUTOMODPACK_DIR.resolve("automodpack-bootstrap.json");
+	public static final Path BOOTSTRAP_EXPORT_FILE = AUTOMODPACK_DIR.resolve("automodpack-bootstrap.exported.json");
 	public static final Path CLIENT_CONFIG_FILE = AUTOMODPACK_DIR.resolve("client-config.json");
 
 	public static final String DATA_ROOT_PROPERTY = "automodpack.data.root";

@@ -1,6 +1,10 @@
 All AutoModpack files live under `~/automodpack/`.
 
-Files you edit sit at the top of that folder. Runtime state lives in `client/`, `server/`, and the content store.
+The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. It lives inside `automodpack/` so a pack cannot ship or overwrite it. Put a copy there, launch, and AutoModpack imports then deletes it. AutoModpack must already be installed. If the file includes `serverName`, import writes that entry into vanilla `servers.dat`. An `automodpack-bootstrap.json` in the instance root is ignored.
+
+`/automodpack host bootstrap` writes `~/automodpack/automodpack-bootstrap.exported.json`. That file is not imported, so running the command on a logical server does not reroute the same instance. Copy it to a client as `automodpack-bootstrap.json`.
+
+Files you edit sit at the top of the `automodpack/` folder. Runtime state lives in `client/`, `server/`, and the content store.
 
 ## You edit these
 
@@ -8,11 +12,13 @@ Files you edit sit at the top of that folder. Runtime state lives in `client/`, 
 |---|---|
 | `server-config.json` | Server settings |
 | `client-config.json` | Client settings |
+| `automodpack-bootstrap.exported.json` | Written by `/automodpack host bootstrap`. Copy to clients; this instance does not import it |
+| `automodpack-bootstrap.json` | Client drop-in. Imported on launch, then deleted |
 | `host-modpack/<group>/` | Extra pack files that are not already on the server. `main` is the default group |
 | `patch-notes.md` | Notes for the next published generation. AutoModpack consumes the file when it publishes |
 | `credentials/certificate.crt` | TLS certificate chain |
 | `credentials/private-key.pem` | TLS private key, PKCS#8 PEM |
-| `bootstrap.json` | One-shot client drop-in for a known-host pin and optional pack selection. Imported on launch, then deleted |
+| `credentials/provisioning-secret` | Shared bootstrap download secret. Keep this folder off support dumps |
 
 `recovered/` holds copies saved from the preservation vault. Do not put pack source files there.
 

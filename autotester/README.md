@@ -52,7 +52,7 @@ uv --project autotester run autotester clean
 The default `all` scenario performs one release-confidence flow:
 
 1. Start a server and client container and trust the certificate.
-2. Import and delete a bootstrap file, seed TLS trust, and prove that secure mode rejects anonymous pre-login catalogue access.
+2. Import and delete `automodpack/automodpack-bootstrap.json`, seed TLS trust, and prove that secure mode rejects anonymous pre-login catalogue access.
 3. Complete authenticated login, verify the issued secret is persisted by both client and server, then download and restart the pack.
 4. Relaunch with the saved secret and verify the complete catalogue preloads before reconnecting.
 5. Review advanced groups, including categories, dependencies, conflicts, defaults, and platform filtering.

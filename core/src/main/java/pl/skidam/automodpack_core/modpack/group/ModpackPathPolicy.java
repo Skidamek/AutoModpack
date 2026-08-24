@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.modpack.group;
 
+import static pl.skidam.automodpack_core.storage.StoragePaths.BOOTSTRAP_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.MODPACK_CONTENT_FILE;
 
 import java.util.Locale;
@@ -43,6 +44,7 @@ public final class ModpackPathPolicy {
 		}
 		if (isPlayerLocal(normalized)) return false;
 		if (normalized.equalsIgnoreCase(MODPACK_CONTENT_FILE.toString())) return false;
+		if (normalized.equalsIgnoreCase(BOOTSTRAP_FILE.getFileName().toString())) return false;
 		if (isInvalidLiveRoot(normalized)) return false;
 		// A mod-shaped file keeps its mod metadata regardless of where the operator stores it.
 		// Its logical path independently controls whether the client activates or only places it.
