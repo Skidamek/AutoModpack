@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.Locale;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
@@ -118,6 +119,11 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void setScreen(Screen screen) {
+			if (getScreen() instanceof ConnectScreen) {
+				LOADING_TRANSITION.cancel();
+				setScreenNow(screen);
+				return;
+			}
 			if (isTransient(screen)) {
 				beginTransient(screen);
 				return;

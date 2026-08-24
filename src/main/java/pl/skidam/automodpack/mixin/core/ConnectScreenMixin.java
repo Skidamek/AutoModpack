@@ -5,7 +5,11 @@ import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
+import net.minecraft.network.Connection;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -25,6 +29,11 @@ import net.minecraft.client.multiplayer.TransferState;
 
 @Mixin(ConnectScreen.class)
 public abstract class ConnectScreenMixin {
+	@Shadow
+	@Nullable
+	private Connection connection;
+	@Unique
+	private boolean automodpack$handledDisconnect;
 	/*? if >= 1.20.5 {*/
 	@WrapMethod(method = "startConnecting")
 	private static void onStartConnecting(Screen parent, Minecraft client, ServerAddress address, ServerData info, boolean quickPlay, TransferState transferState,
@@ -60,5 +69,16 @@ public abstract class ConnectScreenMixin {
 	/*?} else {*/
 		/*original.call(parent, client, address, info);*/
 	/*?}*/
+	}
+
+	@WrapMethod(method = "tick")
+	private void automodpack$stopTickingDisconnectedLogin(Operation<Void> original) {
+		if (this.connection != null && !this.connection.isConnected()) {
+			if (this.automodpack$handledDisconnect) return;
+			this.automodpack$handledDisconnect = true;
+		} else {
+			this.automodpack$handledDisconnect = false;
+		}
+		original.call();
 	}
 }
