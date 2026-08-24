@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 
 public class FetchManager {
 
@@ -56,8 +57,8 @@ public class FetchManager {
 				moHashes.add(data.fetchData.sha1);
 			}
 
-			CompletableFuture<Void> cfFuture = CompletableFuture.runAsync(() -> fetchByMurmur(cfHashes));
-			CompletableFuture<Void> moFuture = CompletableFuture.runAsync(() -> fetchBySha1(moHashes));
+			CompletableFuture<Void> cfFuture = CompletableFuture.runAsync(() -> fetchByMurmur(cfHashes), DownloadClient.NET_EXECUTOR);
+			CompletableFuture<Void> moFuture = CompletableFuture.runAsync(() -> fetchBySha1(moHashes), DownloadClient.NET_EXECUTOR);
 			completableFuture = CompletableFuture.allOf(cfFuture, moFuture).whenComplete((ignored, failure) -> {
 				if (failure == null && !cancelled) randomizeFinalOrder();
 				complete = true;
