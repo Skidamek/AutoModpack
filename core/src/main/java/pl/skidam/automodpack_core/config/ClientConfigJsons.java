@@ -1,6 +1,10 @@
 package pl.skidam.automodpack_core.config;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+
+import pl.skidam.automodpack_core.loader.PinnedMods;
 
 public class ClientConfigJsons {
 
@@ -12,6 +16,7 @@ public class ClientConfigJsons {
 		public boolean syncAutoModpackVersion = true;
 		public boolean syncLoaderVersion = true;
 		public boolean playMusic = true;
+		public List<String> pinnedModIds = new ArrayList<>();
 
 		public ClientConfigFieldsV3() {}
 
@@ -22,6 +27,7 @@ public class ClientConfigJsons {
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
 			this.syncLoaderVersion = source.syncLoaderVersion;
 			this.playMusic = source.playMusic;
+			this.pinnedModIds = new ArrayList<>(PinnedMods.normalize(source.pinnedModIds));
 		}
 
 		public ClientConfigFieldsV3 withSelectedModpackId(String selectedModpackId) {
@@ -33,6 +39,12 @@ public class ClientConfigJsons {
 		public ClientConfigFieldsV3 withPlayMusic(boolean playMusic) {
 			ClientConfigFieldsV3 copy = new ClientConfigFieldsV3(this);
 			copy.playMusic = playMusic;
+			return copy;
+		}
+
+		public ClientConfigFieldsV3 withPinnedModIds(List<String> pinnedModIds) {
+			ClientConfigFieldsV3 copy = new ClientConfigFieldsV3(this);
+			copy.pinnedModIds = new ArrayList<>(PinnedMods.normalize(pinnedModIds));
 			return copy;
 		}
 
@@ -48,6 +60,8 @@ public class ClientConfigJsons {
 			if (syncAutoModpackVersion == expected.syncAutoModpackVersion) rebased.syncAutoModpackVersion = planned.syncAutoModpackVersion;
 			if (syncLoaderVersion == expected.syncLoaderVersion) rebased.syncLoaderVersion = planned.syncLoaderVersion;
 			if (playMusic == expected.playMusic) rebased.playMusic = planned.playMusic;
+			if (Objects.equals(PinnedMods.normalize(pinnedModIds), PinnedMods.normalize(expected.pinnedModIds)))
+				rebased.pinnedModIds = new ArrayList<>(PinnedMods.normalize(planned.pinnedModIds));
 			return rebased;
 		}
 
@@ -57,12 +71,12 @@ public class ClientConfigJsons {
 			if (!(object instanceof ClientConfigFieldsV3 other)) return false;
 			return updateSelectedModpackOnLaunch == other.updateSelectedModpackOnLaunch && selfUpdater == other.selfUpdater
 					&& syncAutoModpackVersion == other.syncAutoModpackVersion && syncLoaderVersion == other.syncLoaderVersion && playMusic == other.playMusic
-					&& Objects.equals(selectedModpackId, other.selectedModpackId);
+					&& Objects.equals(selectedModpackId, other.selectedModpackId) && Objects.equals(PinnedMods.normalize(pinnedModIds), PinnedMods.normalize(other.pinnedModIds));
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(selectedModpackId, updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncLoaderVersion, playMusic);
+			return Objects.hash(selectedModpackId, updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncLoaderVersion, playMusic, PinnedMods.normalize(pinnedModIds));
 		}
 	}
 }

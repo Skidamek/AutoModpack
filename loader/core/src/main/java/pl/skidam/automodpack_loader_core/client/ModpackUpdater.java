@@ -25,6 +25,8 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
+import pl.skidam.automodpack_core.loader.ModpackLoadSelection;
+import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
@@ -51,6 +53,7 @@ import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
+import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
@@ -359,11 +362,14 @@ public class ModpackUpdater implements AutoCloseable {
 			throw new IOException("Loader-visible mods directory is not a real directory: " + modsDirectory);
 		Path loadedMod = THIS_MOD_JAR == null ? null : THIS_MOD_JAR.toAbsolutePath().normalize();
 		Map<String, UpdatePlan.FileState> observed = new TreeMap<>();
+		Set<String> listedPins = PinnedMods.index(clientConfig == null ? List.of() : clientConfig.pinnedModIds);
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
 			for (Path path : stream.sorted().toList()) {
 				if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				Path normalized = path.toAbsolutePath().normalize();
 				if (loadedMod != null && normalized.equals(loadedMod)) continue;
+				FileInspection.Mod inspected = FileInspection.getMod(normalized, cache);
+				if (inspected != null && PinnedMods.matches(listedPins, inspected.IDs())) continue;
 				String relative = UpdatePlanner.normalize(storage.gameDirectory().relativize(normalized).toString());
 				String hash = cache.rehash(normalized);
 				observed.put(relative, new UpdatePlan.FileState(hash, Files.size(normalized), true));
@@ -591,36 +597,45 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 
-		Set<String> standardModsHashes;
-		Set<String> activeModPaths = Optional.ofNullable(storedTarget()).map(target -> target.list.stream()
-				.filter(item -> ModpackPathPolicy.isActiveMod(item.file, item.type)).map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet())).orElseGet(Set::of);
-
-		// 1. Collect hashes of existing standard mods into a Set for fast lookup
+		Set<String> liveHashes = new HashSet<>();
+		List<Set<String>> liveJarIds = new ArrayList<>();
 		try (Stream<Path> standardModsStream = Files.list(storage.modsDirectory())) {
-			standardModsHashes = standardModsStream.filter(JarUtils::isRegularJar) // Check extension/type before
-					.map(cache::getHashOrNull) // Safe wrapper for IOException
-					.filter(Objects::nonNull).collect(Collectors.toSet()); // Use Set for O(1) performance
+			for (Path path : standardModsStream.filter(JarUtils::isRegularJar).toList()) {
+				String hash = cache.getHashOrNull(path);
+				if (hash != null) liveHashes.add(hash);
+				FileInspection.Mod inspected = FileInspection.getMod(path, cache);
+				if (inspected != null) liveJarIds.add(inspected.IDs());
+			}
 		} catch (IOException e) {
 			LOGGER.error("Failed to list standard mods directory", e);
-			standardModsHashes = Collections.emptySet();
 		}
 
-		// 2. Filter modpack mods excluding those already present in standard mods
+		Set<String> activeModPaths = Optional.ofNullable(storedTarget()).map(target -> target.list.stream()
+				.filter(item -> ModpackPathPolicy.isActiveMod(item.file, item.type)).map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet())).orElseGet(Set::of);
+		List<String> pinnedModIds = clientConfig == null || clientConfig.pinnedModIds == null ? List.of() : clientConfig.pinnedModIds;
 		Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT).toAbsolutePath().normalize();
-		List<Path> modpackMods = List.of();
+		List<ModpackLoadSelection.Jar> projectionJars = new ArrayList<>();
 		if (Files.isDirectory(activeModsDirectory, LinkOption.NOFOLLOW_LINKS)) {
 			try (Stream<Path> activeMods = Files.walk(activeModsDirectory)) {
-				final Set<String> finalStandardModsHashes = standardModsHashes;
-				modpackMods = activeMods.filter(JarUtils::isRegularJar)
-						.map(path -> activeModLogicalPath(activeModsDirectory, path)).filter(Objects::nonNull).filter(activeModPaths::contains)
-						.map(storage::activePath).filter(mod -> {
-							String modHash = cache.getHashOrNull(mod);
-							// Only load if hash is valid AND not found in standard set
-							return modHash != null && !finalStandardModsHashes.contains(modHash);
-						}).toList();
+				for (Path path : activeMods.filter(JarUtils::isRegularJar).toList()) {
+					String relative = activeModLogicalPath(activeModsDirectory, path);
+					if (relative == null || !activeModPaths.contains(relative)) continue;
+					Path jar = storage.activePath(relative);
+					String hash = cache.getHashOrNull(jar);
+					FileInspection.Mod inspected = FileInspection.getMod(jar, cache);
+					projectionJars.add(new ModpackLoadSelection.Jar(jar, hash, inspected == null ? Set.of() : inspected.IDs()));
+				}
 			} catch (IOException e) {
 				LOGGER.error("Failed to list modpack mods directory", e);
 			}
+		}
+
+		List<Path> modpackMods = ModpackLoadSelection.select(projectionJars, liveHashes, liveJarIds, pinnedModIds);
+		Set<String> protectedIds = PinnedMods.protectedIds(pinnedModIds, liveJarIds);
+		for (ModpackLoadSelection.Jar jar : projectionJars) {
+			if (modpackMods.contains(jar.path())) continue;
+			if (PinnedMods.protects(protectedIds, jar.ids()))
+				LOGGER.warn("Skipping load of projection mod {} because pinned client mod ids {} are present in the default mods folder", jar.path().getFileName(), jar.ids());
 		}
 
 		MODPACK_LOADER.loadModpack(new ModpackLoadRequest(activeModsDirectory, modpackMods));

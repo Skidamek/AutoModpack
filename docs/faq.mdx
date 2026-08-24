@@ -16,6 +16,8 @@ Likely no, most of these type of mods forward only minecraft packets. These mods
 ### Can I use non modpack mods on client?
 Yes, you can add any mod you want to use alongside downloaded modpack by just placing the mod into the standard mods' folder.
 
+If a pack also ships the same mod id, add it to `pinnedModIds` in the [client config](configuration/client-config) or in **Pinned mods**. AutoModpack still downloads the pack copy but does not load it. Restart after changing the list. If that breaks the pack, that is on you.
+
 ### How can I delete files from modpack?
 Just delete file from server, or exclude it from sync, read about `syncedFiles` in [config](configuration/server-config). AutoModpack removes the previously managed client file during the next update when its path, SHA-1 hash, and size match the cumulative ownership ledger.
 

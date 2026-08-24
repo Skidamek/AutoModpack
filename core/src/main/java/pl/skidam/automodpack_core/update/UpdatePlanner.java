@@ -24,6 +24,7 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -236,6 +237,8 @@ public final class UpdatePlanner {
 			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
 		if (input.installedManifest() == null || isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
 		Set<String> forceCopyPaths = new HashSet<>(input.forceCopyServicePaths());
+		Set<String> listedPins = listedPins(input);
+		Set<String> protectedIds = PinnedMods.protectedIds(listedPins, input.standardMods().stream().map(ModInfo::ids).toList());
 
 		for (var item : targetItems.values()) {
 			String relative = normalize(item.file);
@@ -252,7 +255,7 @@ public final class UpdatePlanner {
 			if (!matches(existing, item.sha1, parseSize(item.size)))
 				install(operations, projected, modpackKey, item.sha1, parseSize(item.size));
 
-			boolean copyToLive = !activeMod || forceCopyPaths.contains(relative) || overlay != null;
+			boolean copyToLive = !PinnedMods.protects(protectedIds, idsForPath(input.targetMods(), relative)) && (!activeMod || forceCopyPaths.contains(relative) || overlay != null);
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {
 				FileState live = projected.get(liveKey);
@@ -272,7 +275,7 @@ public final class UpdatePlanner {
 
 		List<NestedCopy> generatedCopies = ownedNestedCopies(input.nestedCopies());
 		planNestedCopies(input.previousNestedCopies(), generatedCopies, projected, operations, restartReasons);
-		conflicts.addAll(planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), forceCopyPaths, installedLedger, projected, operations, restartReasons));
+		conflicts.addAll(planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), forceCopyPaths, installedLedger, projected, operations, restartReasons, listedPins));
 
 		planBaselineCaptures(input.files(), operations, baselineCaptures);
 		List<Operation> ordered = operations.values().stream().sorted(OPERATION_ORDER).toList();
@@ -297,6 +300,7 @@ public final class UpdatePlanner {
 			return;
 		}
 		if (input.consentedLocalModFiles().isEmpty()) return;
+		Set<String> listedPins = listedPins(input);
 		for (var entry : input.consentedLocalModFiles().entrySet()) {
 			String relative = normalize(entry.getKey());
 			Path path = Path.of(relative);
@@ -305,6 +309,7 @@ public final class UpdatePlanner {
 			FileState observed = entry.getValue();
 			if (observed == null || !observed.regularFile() || !HashUtils.isSha1(observed.sha1()) || observed.size() < 0)
 				throw new IllegalArgumentException("First-install consent file metadata is invalid: " + relative);
+			if (PinnedMods.matches(listedPins, idsForPath(input.standardMods(), relative))) continue;
 			FileKey key = new FileKey(Root.GAME_DIR, relative);
 			FileState current = projected.get(key);
 			if (!matches(current, observed.sha1(), observed.size())) throw new IllegalArgumentException("First-install consent file changed after scanning: " + relative);
@@ -527,7 +532,7 @@ public final class UpdatePlanner {
 	}
 
 	private static List<Conflict> planDuplicates(String modpackId, List<ModInfo> targetMods, List<ModInfo> standardMods, Set<String> forceCopyPaths,
-			OwnershipLedger installedLedger, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, EnumSet<RestartReason> restartReasons) {
+			OwnershipLedger installedLedger, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, EnumSet<RestartReason> restartReasons, Set<String> listedPins) {
 		List<ModInfo> sortedTarget = targetMods.stream().filter(mod -> projected.containsKey(new FileKey(Root.PROJECTION, normalize(mod.relativePath()))))
 				.sorted(Comparator.comparing(ModInfo::relativePath)).toList();
 		List<ModInfo> sortedStandard = standardMods.stream().filter(mod -> projected.containsKey(new FileKey(Root.GAME_DIR, normalize(mod.relativePath()))))
@@ -545,6 +550,7 @@ public final class UpdatePlanner {
 		for (var duplicate : duplicates.entrySet()) {
 			ModInfo target = duplicate.getKey();
 			ModInfo standard = duplicate.getValue();
+			if (PinnedMods.matches(listedPins, standard.ids())) continue;
 			FileKey oldKey = new FileKey(Root.GAME_DIR, normalize(standard.relativePath()));
 			boolean owned = isOwned(standard, installedLedger);
 			boolean keepStandard = target.ids().stream().anyMatch(idsToKeep::contains);
@@ -651,6 +657,15 @@ public final class UpdatePlanner {
 
 	private static boolean intersects(Set<String> first, Set<String> second) {
 		return first.stream().anyMatch(second::contains);
+	}
+
+	private static Set<String> listedPins(Input input) {
+		return input.plannedClientConfig() == null ? Set.of() : PinnedMods.index(input.plannedClientConfig().pinnedModIds);
+	}
+
+	private static Set<String> idsForPath(List<ModInfo> mods, String relative) {
+		for (ModInfo mod : mods) if (normalize(mod.relativePath()).equals(relative)) return mod.ids();
+		return Set.of();
 	}
 
 	private static long parseSize(String size) {

@@ -101,6 +101,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 									rebuild();
 								}
 							})),
+						actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+								optionalAction(VersionedText.translatable("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this)))),
 						actionRow(ActionAreaLayout.RowKind.FOOTER,
 								secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
 								optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller)))));
@@ -109,9 +111,12 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			actionButtons.get(2).active = page < pageCount - 1;
 			return;
 		}
-		this.addActionArea(PANEL_WIDTH, actionY, actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
-				optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller)))));
+		this.addActionArea(PANEL_WIDTH, actionY,
+				actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+						optionalAction(VersionedText.translatable("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this)))),
+				actionRow(ActionAreaLayout.RowKind.FOOTER,
+						secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
+						optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller)))));
 	}
 
 	private void clickPack(InstalledModpackController.Pack entry) {
