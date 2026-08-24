@@ -53,6 +53,11 @@ public class ModpackLoader16 implements ModpackLoaderService {
 	}
 
 	@Override
+	public boolean discoversNestedConflicts() {
+		return true;
+	}
+
+	@Override
 	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
 		Path activeModsDirectory = activeProjectionDirectory.resolve(ModpackPathPolicy.MODS_ROOT);
 

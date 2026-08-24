@@ -778,7 +778,7 @@ public final class GenerationStore {
 	private void verifyPinnedObject(String sha1) throws IOException {
 		Path object = objectPath(sha1);
 		FileTrees.requireRegularFile(object, "pinned immutable object " + sha1);
-		if (!sha1.equals(HashUtils.getHash(object))) throw new IOException("Pinned immutable object failed SHA-1 verification: " + object);
+		if (!FileIntegrity.matchesCanonicalSha1(object, sha1)) throw new IOException("Pinned immutable object failed SHA-1 verification: " + object);
 	}
 
 	private static NavigableSet<String> canonicalPins(Set<String> pins, String description) throws IOException {
@@ -1055,8 +1055,7 @@ public final class GenerationStore {
 			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
 		if (!verified.add(sha1)) return;
 		FileTrees.requireRegularFile(object, "immutable object " + sha1);
-		if (Files.size(object) != expectedSize || !sha1.equals(HashUtils.getHash(object)))
-			throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
+		if (!FileIntegrity.matches(object, expectedSize, sha1)) throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
 	}
 
 	private Path objectPath(String sha1) throws IOException {

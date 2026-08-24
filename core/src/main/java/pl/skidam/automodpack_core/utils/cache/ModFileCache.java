@@ -42,12 +42,12 @@ public class ModFileCache implements AutoCloseable {
 
 		synchronized (locks[lockIndex]) {
 			ModRecord cached = readRecord(hash);
-			if (cached != null) return cached.at(absPath);
+			if (isComplete(cached)) return cached.at(absPath);
 
 			hash = cache.getOrComputeHash(absPath);
 			if (hash == null) return null;
 			cached = readRecord(hash);
-			if (cached != null) return cached.at(absPath);
+			if (isComplete(cached)) return cached.at(absPath);
 
 			FileInspection.Mod modFile = FileInspection.getMod(absPath, cache);
 			if (modFile != null) writeRecord(hash, new ModRecord(modFile));
@@ -78,6 +78,10 @@ public class ModFileCache implements AutoCloseable {
 			LOGGER.error("Failed to compute mod metadata for path: {}", path, e);
 			return null;
 		}
+	}
+
+	private static boolean isComplete(ModRecord cached) {
+		return cached != null && cached.id != null && cached.services != null;
 	}
 
 	private ModRecord readRecord(String hash) {
@@ -122,6 +126,8 @@ public class ModFileCache implements AutoCloseable {
 		private String version;
 		private Set<String> deps;
 		private Set<ModRecord> nestedMods;
+		private String id;
+		private Set<String> services;
 
 		private ModRecord() {}
 
@@ -131,11 +137,13 @@ public class ModFileCache implements AutoCloseable {
 			version = mod.version();
 			deps = mod.deps();
 			nestedMods = mod.nestedMods().stream().map(ModRecord::new).collect(Collectors.toSet());
+			id = mod.id();
+			services = mod.services();
 		}
 
 		private FileInspection.Mod at(Path path) {
 			Set<FileInspection.Mod> nested = nestedMods == null ? Set.of() : nestedMods.stream().map(record -> record.at(null)).collect(Collectors.toSet());
-			return new FileInspection.Mod(IDs == null ? Set.of() : IDs, hash, version, path, deps == null ? Set.of() : deps, nested);
+			return new FileInspection.Mod(IDs == null ? Set.of() : IDs, hash, version, path, deps == null ? Set.of() : deps, nested, id, services == null ? Set.of() : services);
 		}
 	}
 }

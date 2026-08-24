@@ -20,4 +20,9 @@ public interface ModpackLoaderService {
 	default Set<String> forceCopyServices() {
 		return Set.of();
 	}
+
+	/** Whether this loader discovers nested jars that conflict with {@code mods/} and must be copied out. */
+	default boolean discoversNestedConflicts() {
+		return false;
+	}
 }

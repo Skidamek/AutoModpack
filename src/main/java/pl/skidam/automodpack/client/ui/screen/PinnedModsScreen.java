@@ -32,6 +32,7 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 /** Instance-wide list of live mods/ ids that stay loaded instead of the pack copy. */
 public final class PinnedModsScreen extends VersionedScreen {
@@ -197,14 +198,12 @@ public final class PinnedModsScreen extends VersionedScreen {
 			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			Path modsDirectory = storage.modsDirectory();
 			if (!Files.isDirectory(modsDirectory, LinkOption.NOFOLLOW_LINKS)) return List.of();
-			try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
+			try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
 				for (Path path : stream.sorted().toList()) {
 					if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
-					FileInspection.Mod mod = FileInspection.getMod(path, cache);
-					if (mod == null || mod.IDs() == null || mod.IDs().isEmpty()) continue;
-					String modId = FileInspection.getModID(path);
-					if (modId == null || modId.isBlank()) continue;
-					String canonical = modId.strip().toLowerCase(Locale.ROOT);
+					FileInspection.Mod mod = modCache.getModOrNull(path, cache);
+					if (mod == null || mod.IDs() == null || mod.IDs().isEmpty() || mod.id() == null || mod.id().isBlank()) continue;
+					String canonical = mod.id().strip().toLowerCase(Locale.ROOT);
 					if (MOD_ID.equals(canonical) || "automodpack_mod".equals(canonical)) continue;
 					mods.add(new LiveMod(canonical, PinnedMods.ids(mod.IDs()), path.getFileName().toString()));
 				}

@@ -1,8 +1,7 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import java.io.IOException;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -102,7 +101,7 @@ final class ClientUpdatePlanBuilder {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(input.target(), installed, selection, projection,
 				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), cache, overlaySnapshots);
 		if (input.prepareObjects()) populateStoreFromProjection(input.target(), projection, cache);
-		Set<String> forceCopyServices = getForceCopyMods(input.target(), projection).stream().map(UpdatePlanner::normalize).collect(Collectors.toSet());
+		Set<String> forceCopyServices = getForceCopyMods(input.target(), cache, modCache, projection).stream().map(UpdatePlanner::normalize).collect(Collectors.toSet());
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(input.target(), cache, modCache, projection);
 		List<UpdatePlan.ModInfo> standardMods = inspectStandardMods(cache, modCache);
 		List<UpdatePlan.NestedCopy> nestedCopies = input.prepareObjects()
@@ -128,8 +127,6 @@ final class ClientUpdatePlanBuilder {
 		if (activeState == null || installed == null) throw new IOException("Active modpack generation state is missing");
 		ModpackJsons.CompleteModpackContentFields completeFields = new ClientGenerationStore(storage).read(installed.targetGenerationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing")).toFields();
-		AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId);
-		ClientStorageJsons.ClientBaselineFields baseline = availableBaseline.fields();
 		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = projectionView.logicalConfig(expectedClientConfig, expectedClientConfig);
@@ -138,6 +135,8 @@ final class ClientUpdatePlanBuilder {
 		SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId, cache);
+			ClientStorageJsons.ClientBaselineFields baseline = availableBaseline.fields();
 			ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 			captureActiveEditableOverlays(cache, projection);
 			GeneratedCopyState generatedCopies = projection.generatedCopies();
@@ -169,21 +168,21 @@ final class ClientUpdatePlanBuilder {
 	void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest) throws IOException {
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			ClientProjectionView.Snapshot projection = ClientProjectionView.open(storage).snapshot(cache);
-			preparePlanObjects(plan, targetManifest, projection);
+			preparePlanObjects(plan, targetManifest, projection, cache);
 		}
 	}
 
-	private void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest, ClientProjectionView.Snapshot projection) throws IOException {
+	private void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest, ClientProjectionView.Snapshot projection, FileMetadataCache cache) throws IOException {
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> itemsByHash = targetManifest.list.stream()
 				.collect(Collectors.toMap(item -> item.sha1.toLowerCase(Locale.ROOT), item -> item, (first, second) -> first));
 		for (UpdatePlan.Operation operation : plan.operations()) {
 			if (operation.operation() != UpdatePlan.OperationType.INSTALL_OBJECT) continue;
 			Path storeFile = storage.objectFile(operation.expectedObjectHash());
-			if (FileIntegrity.matches(storeFile, operation.expectedSize(), operation.expectedObjectHash())) continue;
+			if (FileIntegrity.matches(storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache)) continue;
 			if (operation.root() == UpdatePlan.Root.OVERLAY) {
 				Path overlay = storage.overlayFile(targetManifest.modpackId, operation.relativePath());
-				if (FileIntegrity.matches(overlay, operation.expectedSize(), operation.expectedObjectHash())) {
-					VerifiedFileTransfer.copyAtomicImmutable(overlay, storeFile, operation.expectedSize(), operation.expectedObjectHash());
+				if (FileIntegrity.matches(overlay, operation.expectedSize(), operation.expectedObjectHash(), cache)) {
+					VerifiedFileTransfer.copyAtomicImmutable(overlay, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache);
 					continue;
 				}
 				throw new IOException("Required editable overlay object is unavailable: " + operation.expectedObjectHash());
@@ -191,11 +190,11 @@ final class ClientUpdatePlanBuilder {
 			var item = itemsByHash.get(operation.expectedObjectHash().toLowerCase(Locale.ROOT));
 			if (item == null) throw new IOException("Planned CAS object is unavailable: " + operation.expectedObjectHash());
 			List<Path> candidates = projection.sourceCandidates(item.file);
-			Path source = candidates.stream().filter(candidate -> FileIntegrity.matches(candidate, operation.expectedSize(), operation.expectedObjectHash())).findFirst().orElse(null);
+			Path source = candidates.stream().filter(candidate -> FileIntegrity.matches(candidate, operation.expectedSize(), operation.expectedObjectHash(), cache)).findFirst().orElse(null);
 			if (source == null) source = livePath(item);
-			if (!FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash()))
+			if (!FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash(), cache))
 				throw new IOException("Required object is absent from CAS and verified live locations: " + operation.expectedObjectHash());
-			VerifiedFileTransfer.copyAtomicImmutable(source, storeFile, operation.expectedSize(), operation.expectedObjectHash());
+			VerifiedFileTransfer.copyAtomicImmutable(source, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache);
 		}
 	}
 
@@ -209,11 +208,11 @@ final class ClientUpdatePlanBuilder {
 			snapshot = storage.overlaySnapshot(previousId, cache);
 			overlaySnapshots.put(previousId, snapshot);
 		}
-		AvailableBaseline baseline = readAvailableBaseline(previousId);
+		AvailableBaseline baseline = readAvailableBaseline(previousId, cache);
 		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), baseline.fields(), baseline.objectHashes());
 	}
 
-	private AvailableBaseline readAvailableBaseline(String modpackId) throws IOException {
+	private AvailableBaseline readAvailableBaseline(String modpackId, FileMetadataCache cache) throws IOException {
 		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(modpackId), ClientStorageJsons.ClientBaselineFields.class).orElseGet(() -> {
 			ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
 			empty.modpackId = modpackId;
@@ -223,7 +222,7 @@ final class ClientUpdatePlanBuilder {
 		if (baseline.entries != null) for (var entry : baseline.entries) {
 			if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
 			String hash = entry.objectHash.toLowerCase(Locale.ROOT);
-			if (FileIntegrity.matches(storage.objectFile(hash), entry.size, hash)) availableObjects.add(hash);
+			if (FileIntegrity.matches(storage.objectFile(hash), entry.size, hash, cache)) availableObjects.add(hash);
 		}
 		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
 	}
@@ -251,8 +250,8 @@ final class ClientUpdatePlanBuilder {
 				continue;
 			}
 			Path object = storage.objectFile(hash);
-			if (!FileIntegrity.matches(object, size, hash)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash);
-			VerifiedFileTransfer.copyAtomic(object, overlay, size, hash);
+			if (!FileIntegrity.matches(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash, cache);
+			VerifiedFileTransfer.copyAtomic(object, overlay, size, hash, cache);
 			deletedPaths.remove(UpdatePlanner.normalize(item.file));
 		}
 		storage.writeOverlayState(activeTarget.modpackId, deletedPaths);
@@ -268,14 +267,14 @@ final class ClientUpdatePlanBuilder {
 		for (var item : target.list) {
 			Path object = storage.objectFile(item.sha1);
 			long size = Long.parseLong(item.size);
-			if (FileIntegrity.matches(object, size, item.sha1)) continue;
+			if (FileIntegrity.matches(object, size, item.sha1, cache)) continue;
 			for (Path source : sourceResolver.apply(item)) if (populateStoreObject(source, object, size, item.sha1, cache)) break;
 		}
 	}
 
 	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileMetadataCache cache) throws IOException {
-		if (!FileIntegrity.matches(source, size, sha1)) return false;
-		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, sha1);
+		if (!FileIntegrity.matches(source, size, sha1, cache)) return false;
+		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, sha1, cache);
 		cache.overwriteCache(object, sha1);
 		return true;
 	}
@@ -341,18 +340,24 @@ final class ClientUpdatePlanBuilder {
 		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true));
 	}
 
+	private Path resolvedObject(ModpackJsons.ModpackContentFields.ModpackContentItem item, ClientProjectionView.Snapshot projection, FileMetadataCache cache) {
+		long size = Long.parseLong(item.size);
+		Path source = storage.objectFile(item.sha1);
+		if (FileIntegrity.matches(source, size, item.sha1, cache)) return source;
+		for (Path candidate : projection.sourceCandidates(item.file)) {
+			if (FileIntegrity.matches(candidate, size, item.sha1, cache)) return candidate;
+		}
+		return null;
+	}
+
 	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
 		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type))
 				.sorted(Comparator.comparing(value -> value.file)).toList()) {
-			long size = Long.parseLong(item.size);
-			Path source = storage.objectFile(item.sha1);
-			if (!FileIntegrity.matches(source, size, item.sha1))
-				source = projection.sourceCandidates(item.file).stream()
-						.filter(candidate -> FileIntegrity.matches(candidate, size, item.sha1)).findFirst().orElse(null);
-			if (source == null || !FileIntegrity.matches(source, size, item.sha1)) continue;
+			Path source = resolvedObject(item, projection, cache);
+			if (source == null) continue;
 			FileInspection.Mod mod = modCache.getModOrNull(source, cache);
-			if (mod != null) mods.add(new UpdatePlan.ModInfo(UpdatePlanner.normalize(item.file), item.sha1, size, mod.IDs(), mod.deps()));
+			if (mod != null) mods.add(new UpdatePlan.ModInfo(UpdatePlanner.normalize(item.file), item.sha1, Long.parseLong(item.size), mod.IDs(), mod.deps()));
 		}
 		return mods;
 	}
@@ -373,19 +378,16 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private List<UpdatePlan.NestedCopy> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ClientProjectionView.Snapshot projection) throws IOException {
+		if (!modpackLoader.discoversNestedConflicts()) return List.of();
 		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
 			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type)).toList()) {
-				Path source = storage.objectFile(item.sha1);
-				if (!FileIntegrity.matches(source, Long.parseLong(item.size), item.sha1))
-					source = projection.sourceCandidates(item.file).stream()
-							.filter(candidate -> FileIntegrity.matches(candidate, Long.parseLong(item.size), item.sha1)).findFirst().orElse(null);
-				if (source == null || !FileIntegrity.matches(source, Long.parseLong(item.size), item.sha1)) continue;
+				Path source = resolvedObject(item, projection, cache);
+				if (source == null) continue;
 				String logicalPath = UpdatePlanner.normalize(item.file);
 				Path inspectionPath = inspectionDirectory.resolve(logicalPath).normalize();
 				if (!inspectionPath.startsWith(inspectionDirectory)) throw new IOException("Mod inspection path escaped its temporary directory: " + item.file);
-				Files.createDirectories(inspectionPath.getParent());
-				VerifiedFileTransfer.copyAtomic(source, inspectionPath, Long.parseLong(item.size), item.sha1);
+				materializeInspectionCopy(source, inspectionPath, Long.parseLong(item.size), item.sha1, cache);
 			}
 
 			List<UpdatePlan.NestedCopy> copies = new ArrayList<>();
@@ -394,7 +396,7 @@ final class ClientUpdatePlanBuilder {
 				if (mod.path() == null || mod.hash() == null || !Files.isRegularFile(mod.path())) continue;
 				long size = Files.size(mod.path());
 				Path storeFile = storage.objectFile(mod.hash());
-				if (!FileIntegrity.matches(storeFile, size, mod.hash())) VerifiedFileTransfer.copyAtomicImmutable(mod.path(), storeFile, size, mod.hash());
+				if (!FileIntegrity.matches(storeFile, size, mod.hash(), cache)) VerifiedFileTransfer.copyAtomicImmutable(mod.path(), storeFile, size, mod.hash(), cache);
 				Path targetPath = storage.modsDirectory().resolve(mod.path().getFileName()).normalize();
 				if (!targetPath.startsWith(storage.gameDirectory())) throw new IOException("Nested mod target escaped the game directory: " + targetPath);
 				String relativePath = UpdatePlanner.normalize(storage.gameDirectory().relativize(targetPath).toString());
@@ -407,21 +409,26 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private Set<String> getForceCopyMods(ModpackJsons.ModpackContentFields modpackContentFields, ClientProjectionView.Snapshot projection) throws IOException {
-		Set<String> forceCopyServices = modpackLoader.forceCopyServices();
-		Set<String> forceCopyMods = new HashSet<>();
-		if (forceCopyServices.isEmpty()) return forceCopyMods;
+	private static void materializeInspectionCopy(Path source, Path inspectionPath, long size, String sha1, FileMetadataCache cache) throws IOException {
+		Files.createDirectories(inspectionPath.getParent());
+		try {
+			Files.createLink(inspectionPath, source);
+			return;
+		} catch (UnsupportedOperationException | FileSystemException ignored) {
+		}
+		VerifiedFileTransfer.copyAtomic(source, inspectionPath, size, sha1, cache);
+	}
 
+	private Set<String> getForceCopyMods(ModpackJsons.ModpackContentFields modpackContentFields, FileMetadataCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
+		Set<String> forceCopyServices = modpackLoader.forceCopyServices();
+		if (forceCopyServices.isEmpty()) return Set.of();
+		Set<String> forceCopyMods = new HashSet<>();
 		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
 			if (!ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(item.file), item.type)) continue;
-			long size = Long.parseLong(item.size);
-			Path modPath = storage.objectFile(item.sha1);
-			if (!FileIntegrity.matches(modPath, size, item.sha1))
-				modPath = projection.sourceCandidates(item.file).stream().filter(candidate -> FileIntegrity.matches(candidate, size, item.sha1)).findFirst().orElse(null);
-			if (modPath == null || !FileIntegrity.matches(modPath, size, item.sha1)) continue;
-			try (FileSystem fs = FileSystems.newFileSystem(modPath)) {
-				if (!FileInspection.getServices(fs, forceCopyServices).isEmpty()) forceCopyMods.add(item.file);
-			}
+			Path modPath = resolvedObject(item, projection, cache);
+			if (modPath == null) continue;
+			FileInspection.Mod mod = modCache.getModOrNull(modPath, cache);
+			if (mod != null && !Collections.disjoint(mod.services(), forceCopyServices)) forceCopyMods.add(item.file);
 		}
 		return forceCopyMods;
 	}

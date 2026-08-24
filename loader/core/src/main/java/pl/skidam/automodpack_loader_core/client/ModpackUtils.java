@@ -28,7 +28,7 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
-import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
@@ -69,7 +69,7 @@ public class ModpackUtils {
 		var start = System.currentTimeMillis();
 
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
-		Set<String> changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, activeDirectory);
+		Set<String> changedOverwriteEditableFiles;
 
 		// Group & Sort Server Files (Optimizes Disk Seek Pattern)
 		// Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
@@ -78,6 +78,7 @@ public class ModpackUtils {
 				.collect(Collectors.groupingBy(item -> storage.activePath(item.file).getParent(), TreeMap::new, Collectors.toList()));
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, activeDirectory, cache);
 
 			// Process Directory by Directory
 			for (Map.Entry<Path, List<ModpackJsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
@@ -183,8 +184,7 @@ public class ModpackUtils {
 		return new UpdateCheckResult(false, Set.of(), Set.of());
 	}
 
-	static Set<String> findChangedOverwriteEditableFiles(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> serverItems, Path projection) {
-
+	static Set<String> findChangedOverwriteEditableFiles(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> serverItems, Path projection, FileMetadataCache cache) {
 		Set<String> overwriteEditablePaths = new HashSet<>();
 		for (var item : serverItems) {
 			if (item.editable && item.overwriteEditable) overwriteEditablePaths.add(item.file);
@@ -195,8 +195,14 @@ public class ModpackUtils {
 		for (var item : serverItems) {
 			if (!item.editable || !item.overwriteEditable) continue;
 			Path path = LogicalPath.resolve(projection, item.file);
-			String installedHash = HashUtils.getHash(path);
-			if (!item.sha1.equalsIgnoreCase(installedHash)) changedPaths.add(item.file);
+			long size;
+			try {
+				size = Long.parseLong(item.size);
+			} catch (NumberFormatException e) {
+				changedPaths.add(item.file);
+				continue;
+			}
+			if (!FileIntegrity.matches(path, size, item.sha1, cache)) changedPaths.add(item.file);
 		}
 		return changedPaths;
 	}
@@ -207,7 +213,7 @@ public class ModpackUtils {
 			Path storeFile = storage.objectFile(entry.sha1);
 			long expectedSize = Long.parseLong(entry.size);
 
-			if (isValidFile(storeFile, expectedSize, entry.sha1, cache)) {
+			if (FileIntegrity.matches(storeFile, expectedSize, entry.sha1, cache)) {
 				LOGGER.debug("Verified file already exists in store: {}", entry.file);
 				continue;
 			}
@@ -222,10 +228,10 @@ public class ModpackUtils {
 			}
 
 			Path fileInCWD = storage.gamePath(entry.file);
-			if (isValidFile(fileInCWD, expectedSize, entry.sha1, cache)) {
+			if (FileIntegrity.matches(fileInCWD, expectedSize, entry.sha1, cache)) {
 				LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
 				try {
-					VerifiedFileTransfer.copyAtomicImmutable(fileInCWD, storeFile, expectedSize, entry.sha1);
+					VerifiedFileTransfer.copyAtomicImmutable(fileInCWD, storeFile, expectedSize, entry.sha1, cache);
 				} catch (IOException e) {
 					LOGGER.error("Failed to copy file from CWD to store: {}", entry.file, e);
 				}
@@ -239,7 +245,7 @@ public class ModpackUtils {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
 			Path storeFile = storage.objectFile(entry.sha1);
-			if (isValidFile(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
+			if (FileIntegrity.matches(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
 			if (Files.exists(storeFile)) {
 				try {
 					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
@@ -251,15 +257,6 @@ public class ModpackUtils {
 			uncachedFiles.add(entry);
 		}
 		return uncachedFiles;
-	}
-
-	private static boolean isValidFile(Path file, long expectedSize, String expectedSha1, FileMetadataCache cache) {
-		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
-		try {
-			return Files.size(file) == expectedSize && expectedSha1.equalsIgnoreCase(cache.getOrComputeHash(file));
-		} catch (IOException e) {
-			return false;
-		}
 	}
 
 	public static ClientConfigJsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, ConnectionJsons.ConnectionInfo connectionInfo,

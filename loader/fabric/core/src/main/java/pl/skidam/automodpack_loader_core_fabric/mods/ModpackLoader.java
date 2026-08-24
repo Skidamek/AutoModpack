@@ -30,4 +30,9 @@ public class ModpackLoader implements ModpackLoaderService {
 	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
 		return INSTANCE.getModpackNestedConflicts(activeProjectionDirectory, cache);
 	}
+
+	@Override
+	public boolean discoversNestedConflicts() {
+		return true;
+	}
 }
