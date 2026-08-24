@@ -15,7 +15,7 @@ from pathlib import Path
 CLDR_SUFFIXES = ("zero", "one", "two", "few", "many", "other")
 QUOTED_KEY = re.compile(r'"(automodpack\.[A-Za-z0-9_.]+)"')
 PLURAL_CALL = re.compile(r'UiFormat\.plural\s*\((?:[^;]|\n)*?,\s*"(automodpack\.[A-Za-z0-9_.]+)"')
-IGNORE_QUOTED_PREFIXES = ("automodpack.autotest",)
+IGNORE_QUOTED_PREFIXES = ("automodpack.autotest", "automodpack.data.root")
 
 
 def _repo() -> Path:
