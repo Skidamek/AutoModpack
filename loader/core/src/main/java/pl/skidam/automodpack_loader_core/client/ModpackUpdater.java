@@ -746,10 +746,8 @@ public class ModpackUpdater implements AutoCloseable {
 
 		if (downloadClient == null) return false;
 		if (fetchManager != null) {
-			long fetchStart = System.currentTimeMillis();
-			fetchManager.fetch();
-			LOGGER.info("Finished resolving third-party sources in {}ms ({} of {} files matched)", System.currentTimeMillis() - fetchStart,
-					fetchManager.resolvedFiles(), fetchManager.totalFiles());
+			if (fetchManager.isComplete()) LOGGER.info("Third-party sources ready ({} of {} files matched)", fetchManager.resolvedFiles(), fetchManager.totalFiles());
+			else LOGGER.info("Downloading from the AutoModpack host without waiting for CurseForge/Modrinth lookup");
 		}
 
 		downloadManager = new DownloadManager(totalBytesToDownload, storage);
@@ -824,7 +822,6 @@ public class ModpackUpdater implements AutoCloseable {
 	private ChangeSet.ReferenceProvider resolveMainPageReferences(ClientUpdatePlanBuilder.PreparedPlan prepared) {
 		FetchManager manager = sourceFetchManager;
 		if (manager == null) return (location, path) -> List.of();
-		manager.fetch();
 		Map<UpdatePlan.FileKey, String> hashes = new LinkedHashMap<>();
 		for (UpdatePlan.Operation operation : prepared.plan().operations()) {
 			UpdatePlan.FileKey file = new UpdatePlan.FileKey(operation.root(), operation.relativePath());
