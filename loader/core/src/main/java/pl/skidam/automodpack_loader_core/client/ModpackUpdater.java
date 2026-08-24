@@ -325,6 +325,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 		try {
 			requireLiveConnection();
+			ScreenManager.waiting();
 
 			if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
@@ -332,8 +333,9 @@ public class ModpackUpdater implements AutoCloseable {
 			if (new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).isEmpty()) {
 				firstConnection = true;
 				fullDownload = true;
-				firstInstallLocalModFiles = storedTarget() == null ? scanFirstInstallLocalMods() : Map.of();
+				LOGGER.info("First-time install; scanning existing mods before the review screen");
 				startSourceFetch();
+				firstInstallLocalModFiles = storedTarget() == null ? scanFirstInstallLocalMods() : Map.of();
 				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
 				ScreenManager.welcome(this);
 			} else if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) {
@@ -364,14 +366,17 @@ public class ModpackUpdater implements AutoCloseable {
 		Map<String, UpdatePlan.FileState> observed = new TreeMap<>();
 		Set<String> listedPins = PinnedMods.index(clientConfig == null ? List.of() : clientConfig.pinnedModIds);
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
-			for (Path path : stream.sorted().toList()) {
+			for (Path path : stream.toList()) {
 				if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				Path normalized = path.toAbsolutePath().normalize();
 				if (loadedMod != null && normalized.equals(loadedMod)) continue;
-				FileInspection.Mod inspected = FileInspection.getMod(normalized, cache);
-				if (inspected != null && PinnedMods.matches(listedPins, inspected.IDs())) continue;
+				if (!listedPins.isEmpty()) {
+					FileInspection.Mod inspected = FileInspection.getMod(normalized, cache);
+					if (inspected != null && PinnedMods.matches(listedPins, inspected.IDs())) continue;
+				}
 				String relative = UpdatePlanner.normalize(storage.gameDirectory().relativize(normalized).toString());
-				String hash = cache.rehash(normalized);
+				String hash = cache.getOrComputeHash(normalized);
+				if (hash == null) throw new IOException("Cannot hash local mod file: " + normalized);
 				observed.put(relative, new UpdatePlan.FileState(hash, Files.size(normalized), true));
 			}
 		}

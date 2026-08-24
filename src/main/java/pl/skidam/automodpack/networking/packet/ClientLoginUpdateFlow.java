@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.networking.packet;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
@@ -151,7 +153,11 @@ final class ClientLoginUpdateFlow {
 				if (alreadyDisconnected) ScreenImpl.multiplayer();
 				return alreadyDisconnected ? LoginUpdateResponse.UPDATE_REQUIRED : LoginUpdateResponse.CONTINUE;
 			}
-			if (!alreadyDisconnected) disconnectImmediately(handler);
+			if (!alreadyDisconnected) {
+				LOGGER.info("Modpack update required; leaving the connecting screen");
+				ScreenManager.waiting();
+				disconnectImmediately(handler);
+			}
 			updater.processModpackUpdate(updateCheckResult);
 			return LoginUpdateResponse.UPDATE_REQUIRED;
 		} catch (Exception e) {

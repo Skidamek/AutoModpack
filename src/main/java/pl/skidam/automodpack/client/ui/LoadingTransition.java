@@ -61,6 +61,15 @@ public final class LoadingTransition {
 		if (displayImmediately) clientExecutor.accept(displayNext);
 	}
 
+	public void cancel() {
+		synchronized (this) {
+			++generation;
+			cancelScheduled();
+			active = false;
+			visibleAtNanos = 0;
+		}
+	}
+
 	private void show(long token, Runnable displayLoading) {
 		synchronized (this) {
 			if (!active || generation != token) return;
