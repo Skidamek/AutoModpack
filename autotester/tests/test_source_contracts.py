@@ -248,7 +248,7 @@ def test_error_screen_dispatch_requires_a_logged_throwable():
     )
 
     assert "public static void failure(FailureRequest request)" in screen_manager
-    assert 'LOGGER.error("AutoModpack client failure [{}] while displaying {}", request.category().key(), request.messageKey(), request.cause());' in screen_manager
+    assert 'LOGGER.error("AutoModpack client failure [{}] ({}) on {}", request.category().key(), request.messageKey(), previousScreen, request.cause());' in screen_manager
     assert screen_manager.count("LOGGER.error(") == 1
     assert "ScreenManager.error(\"" not in dispatch_sources
     assert "ScreenManager.report(\"" not in dispatch_sources
