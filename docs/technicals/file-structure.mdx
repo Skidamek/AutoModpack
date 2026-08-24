@@ -64,7 +64,7 @@ Publishing writes generation history under `~/automodpack/server/`. Do not edit 
 
 The selected generation is materialized into the fixed path `~/automodpack/client/active/`. Immutable files are hard-linked from the content store when the filesystem allows it. Editable files use the overlay only after the player changes them.
 
-The game directory receives live copies only for files the loader or game must read there. Standard `mods/` receives the AutoModpack loader, loader-required copies, and retained user-owned files. There is no per-modpack client directory.
+The game directory receives live copies only for files the loader or game must read there. Standard `mods/` receives the AutoModpack loader, loader-required copies, and retained user-owned files. Instance-wide `pinnedModIds` keep matching live jars in that folder; AutoModpack still syncs the pack copies into the projection and skips loading them. There is no per-modpack client directory.
 
 <Callout>
 AutoModpack removes a live file only when its ownership ledger and content hash prove that the file is still managed by AutoModpack. User-owned or edited files are preserved.

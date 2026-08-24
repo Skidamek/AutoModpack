@@ -83,6 +83,40 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void pinnedLiveJarIsNotDeletedOnSameIdDuplicate() {
+		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
+		config.pinnedModIds = List.of("sodium");
+		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
+				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(),
+				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
+				List.of(new ModInfo("mods/local.jar", OLD_HASH, 8, Set.of("sodium"), Set.of())), List.of(), List.of(), null, config));
+
+		assertTrue(plan.conflicts().isEmpty());
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/local.jar")));
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/server.jar")));
+	}
+
+	@Test
+	void firstInstallConsentSkipsAPinnedLiveMod() {
+		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
+		config.pinnedModIds = List.of("controlify");
+		String path = "mods/local.jar";
+		FileState local = new FileState(OLD_HASH, 8, true);
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, path), local);
+		UpdatePlanner.Input input = new UpdatePlanner.Input(null, manifest(Map.of(), ledger()), files, Map.of(), Set.of(), List.of(),
+				List.of(new ModInfo(path, OLD_HASH, 8, Set.of("controlify"), Set.of())), List.of(), List.of(), null, config, Map.of(path, local));
+
+		UpdatePlan plan = UpdatePlanner.plan(input);
+
+		assertTrue(plan.preservations().isEmpty());
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)));
+	}
+
+	@Test
 	void firstInstallPreservesAnUnownedSameIdMod() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));

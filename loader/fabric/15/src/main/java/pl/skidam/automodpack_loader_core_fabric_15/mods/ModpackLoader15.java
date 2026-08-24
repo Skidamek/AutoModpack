@@ -40,6 +40,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 
 			List<ModCandidate> candidates;
 			candidates = (List<ModCandidate>) discoverMods(activeModsDirectory);
+			candidates = filterRequested(candidates, request);
 			candidates = (List<ModCandidate>) resolveMods(candidates);
 
 			METHOD_DUMP_MOD_LIST.invoke(FabricLoaderImpl.INSTANCE, candidates);
@@ -203,6 +204,25 @@ public class ModpackLoader15 implements ModpackLoaderService {
 		}
 
 		return latestMods;
+	}
+
+	private static List<ModCandidate> filterRequested(List<ModCandidate> candidates, ModpackLoadRequest request) {
+		Set<ModCandidate> keptRoots = new HashSet<>();
+		for (ModCandidate candidate : candidates) {
+			if (!candidate.isRoot()) continue;
+			List<Path> paths = candidate.getPaths();
+			if (paths == null || paths.isEmpty()) {
+				keptRoots.add(candidate);
+				continue;
+			}
+			if (request.allowsProjectionJar(paths.get(0))) keptRoots.add(candidate);
+		}
+		List<ModCandidate> kept = new ArrayList<>();
+		for (ModCandidate candidate : candidates) {
+			if (keptRoots.contains(candidate)) kept.add(candidate);
+			else if (!candidate.isRoot() && candidate.getParentMods().stream().anyMatch(keptRoots::contains)) kept.add(candidate);
+		}
+		return kept;
 	}
 
 	private Collection<ModCandidate> discoverMods(Path modsDirectory) throws ModResolutionException, IllegalAccessException {

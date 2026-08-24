@@ -501,6 +501,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (hasHistory()) actions.add(new ManagementAction(ManagementKind.HISTORY, VersionedText.translatable("automodpack.management.history"), this::requestHistory));
 		if (localRecord != null || activeGeneration(modpackId) != null) actions.add(new ManagementAction(ManagementKind.FILES, VersionedText.translatable("automodpack.management.files"), this::requestFiles));
 		if (hasInstalledPacks()) actions.add(new ManagementAction(ManagementKind.MANAGER, VersionedText.translatable("automodpack.packManager.switch"), this::requestPackManager));
+		if (showManagement) actions.add(new ManagementAction(ManagementKind.PINNED, VersionedText.translatable("automodpack.pinnedMods.button"), this::requestPinnedMods));
 		return List.copyOf(actions);
 	}
 
@@ -528,6 +529,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private void requestPackManager() {
 		ScreenImpl.setScreen(openedFromManager ? parent : new InstalledModpacksScreen(this));
+	}
+
+	private void requestPinnedMods() {
+		ScreenImpl.setScreen(new PinnedModsScreen(this));
 	}
 
 	private void save() {
@@ -826,5 +831,5 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return Math.max(64, this.font.width(VersionedText.translatable("automodpack.ui.info").getString()) + 16);
 	}
 
-	private enum ManagementKind { VAULT, HISTORY, FILES, MANAGER }
+	private enum ManagementKind { VAULT, HISTORY, FILES, MANAGER, PINNED }
 }
