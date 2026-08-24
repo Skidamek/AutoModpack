@@ -191,6 +191,22 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void deletesUnlistedProjectionFilesThatWereNeverInTheInstalledManifest() {
+		String kept = "mods/existing.jar";
+		String stray = "shaderpacks/ComplementaryReimagined_r5.8.1.zip.txt";
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(kept, item(kept, TARGET_HASH, 9, "mod")), ledger(entry(kept, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of(kept, item(kept, TARGET_HASH, 9, "mod")), ledger(entry(kept, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = new LinkedHashMap<>();
+		files.put(new FileKey(Root.PROJECTION, kept), new FileState(TARGET_HASH, 9, true));
+		files.put(new FileKey(Root.PROJECTION, stray), new FileState(OLD_HASH, 8, true));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.PROJECTION && operation.relativePath().equals(stray) && operation.operation() == OperationType.DELETE));
+		assertFalse(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.PROJECTION && file.relativePath().equals(stray) && file.present()));
+	}
+
+	@Test
 	void cleanupUsesHistoricalHashAndSizeForManagedFiles() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(
 				"mods/new.jar", item("mods/new.jar", TARGET_HASH, 9, "mod"),

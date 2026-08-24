@@ -5,16 +5,12 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.*;
 import java.net.*;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import org.jetbrains.annotations.NotNull;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -22,11 +18,12 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
@@ -70,90 +67,48 @@ public class ModpackUtils {
 
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
 		Set<String> changedOverwriteEditableFiles;
-
-		// Group & Sort Server Files (Optimizes Disk Seek Pattern)
-		// Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
-		// TreeMap ensures alphabetical order of directories (HDD friendly).
-		Map<Path, List<ModpackJsons.ModpackContentFields.ModpackContentItem>> itemsByDir = serverModpackContent.list.stream()
-				.collect(Collectors.groupingBy(item -> storage.activePath(item.file).getParent(), TreeMap::new, Collectors.toList()));
-
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, activeDirectory, cache);
-
-			// Process Directory by Directory
-			for (Map.Entry<Path, List<ModpackJsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
-				Path parentDir = entry.getKey();
-				List<ModpackJsons.ModpackContentFields.ModpackContentItem> itemsInDir = entry.getValue();
-
-				// If directory is missing, all items in it are missing.
-				if (!Files.exists(parentDir)) {
-					filesToUpdate.addAll(itemsInDir);
+			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
+			changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, live);
+			for (var serverItem : serverModpackContent.list) {
+				String relative = UpdatePlanner.normalize(serverItem.file);
+				UpdatePlan.FileState observed = live.get(relative);
+				if (observed == null || !observed.regularFile()) {
+					filesToUpdate.add(serverItem);
 					continue;
 				}
-
-				// Read all file attributes in this folder in ONE pass.
-				// This map will hold "FileName" -> "Attributes"
-				Map<String, BasicFileAttributes> diskFiles = new HashMap<>();
-
-				try {
-					// walkFileTree with depth 1 is efficient on Windows (gets attributes for free within a single syscall)
-					Files.walkFileTree(parentDir, EnumSet.noneOf(FileVisitOption.class), 1, new SimpleFileVisitor<>() {
-						@NotNull
-						@Override
-						public FileVisitResult visitFile(@NotNull Path file, @NotNull BasicFileAttributes attrs) {
-							diskFiles.put(file.getFileName().toString(), attrs);
-							return FileVisitResult.CONTINUE;
-						}
-
-						@NotNull
-						@Override
-						public FileVisitResult visitFileFailed(@NotNull Path file, @NotNull IOException exc) {
-							return FileVisitResult.CONTINUE; // Handle locked files or permission errors gracefully
-						}
-					});
-				} catch (IOException e) {
-					LOGGER.warn("Failed to inspect directory: {}", parentDir, e);
-					filesToUpdate.addAll(itemsInDir);
-					continue;
-				}
-
-				// Check Individual Files in a given directory (Pure RAM logic, 0 IO)
-				for (var serverItem : itemsInDir) {
-					String fileName = Paths.get(serverItem.file).getFileName().toString();
-					BasicFileAttributes diskAttrs = diskFiles.get(fileName);
-
-					if (diskAttrs == null) {
-						// File does not exist in the directory map
+				if (serverItem.editable) {
+					if (changedOverwriteEditableFiles.contains(serverItem.file)) {
+						LOGGER.info("Server changed overwrite-editable file: {}", serverItem.file);
 						filesToUpdate.add(serverItem);
 					} else {
-						if (serverItem.editable) {
-							if (changedOverwriteEditableFiles.contains(serverItem.file)) {
-								LOGGER.info("Server changed overwrite-editable file: {}", serverItem.file);
-								filesToUpdate.add(serverItem);
-							} else {
-								LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
-							}
-							continue;
-						}
+						LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
+					}
+					continue;
+				}
+				long size;
+				try {
+					size = Long.parseLong(serverItem.size);
+				} catch (NumberFormatException e) {
+					filesToUpdate.add(serverItem);
+					continue;
+				}
+				if (observed.size() != size || serverItem.sha1 == null || !serverItem.sha1.equalsIgnoreCase(observed.sha1())) filesToUpdate.add(serverItem);
+				else ImmutableFiles.protect(storage.activePath(relative));
+			}
 
-						// Check Size first from already read attributes
-						if (diskAttrs.size() != Long.parseLong(serverItem.size)) {
-							filesToUpdate.add(serverItem);
-							continue;
-						}
-
-						// Finally, check Hash
-						// We pass 'diskAttrs' to the cache so it doesn't need to re-stat the file.
-						String hash = cache.getOrComputeHashWithAttributes(parentDir.resolve(fileName), diskAttrs);
-
-						if (!serverItem.sha1.equalsIgnoreCase(hash)) filesToUpdate.add(serverItem);
-						else ImmutableFiles.protect(parentDir.resolve(fileName));
+			if (filesToUpdate.isEmpty()) {
+				LOGGER.info("Checking for deleted files...");
+				Set<String> serverFileSet = serverModpackContent.list.stream().map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet());
+				for (String relative : live.keySet()) {
+					if (!serverFileSet.contains(relative)) {
+						LOGGER.info("Found projected file marked for deletion: {}", relative);
+						return new UpdateCheckResult(true, Set.of(), Set.of());
 					}
 				}
 			}
 		} catch (Exception e) {
 			LOGGER.error("Error during update check", e);
-			// Fail-safe: assume update needed if process crashes
 			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 		}
 
@@ -162,39 +117,14 @@ public class ModpackUtils {
 			return new UpdateCheckResult(true, filesToUpdate, changedOverwriteEditableFiles);
 		}
 
-		LOGGER.info("Checking for deleted files...");
-
-		Set<String> serverFileSet = serverModpackContent.list.stream().map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet());
-		try {
-			try (Stream<Path> projectedFiles = Files.walk(activeDirectory)) {
-				for (Path path : projectedFiles.filter(file -> Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)).toList()) {
-					String relative = UpdatePlanner.normalize(activeDirectory.relativize(path).toString());
-					if (!serverFileSet.contains(relative)) {
-						LOGGER.info("Found projected file marked for deletion: {}", relative);
-						return new UpdateCheckResult(true, Set.of(), Set.of());
-					}
-				}
-			}
-		} catch (IOException e) {
-			LOGGER.warn("Failed to inspect the active projection for deleted files", e);
-			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
-		}
-
 		LOGGER.info("Active projection is up to date! Took {} ms", System.currentTimeMillis() - start);
 		return new UpdateCheckResult(false, Set.of(), Set.of());
 	}
 
-	static Set<String> findChangedOverwriteEditableFiles(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> serverItems, Path projection, FileMetadataCache cache) {
-		Set<String> overwriteEditablePaths = new HashSet<>();
-		for (var item : serverItems) {
-			if (item.editable && item.overwriteEditable) overwriteEditablePaths.add(item.file);
-		}
-		if (overwriteEditablePaths.isEmpty()) return Set.of();
-
+	static Set<String> findChangedOverwriteEditableFiles(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> serverItems, Map<String, UpdatePlan.FileState> live) {
 		Set<String> changedPaths = new HashSet<>();
 		for (var item : serverItems) {
 			if (!item.editable || !item.overwriteEditable) continue;
-			Path path = LogicalPath.resolve(projection, item.file);
 			long size;
 			try {
 				size = Long.parseLong(item.size);
@@ -202,7 +132,9 @@ public class ModpackUtils {
 				changedPaths.add(item.file);
 				continue;
 			}
-			if (!FileIntegrity.matches(path, size, item.sha1, cache)) changedPaths.add(item.file);
+			UpdatePlan.FileState observed = live.get(UpdatePlanner.normalize(item.file));
+			if (observed == null || !observed.regularFile() || observed.size() != size || item.sha1 == null || !item.sha1.equalsIgnoreCase(observed.sha1()))
+				changedPaths.add(item.file);
 		}
 		return changedPaths;
 	}
