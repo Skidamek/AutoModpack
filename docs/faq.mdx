@@ -25,7 +25,7 @@ Just delete file from server, or exclude it from sync, read about `syncedFiles` 
 No. AutoModpack does not support arbitrary client-file deletion. Changed files and player-local paths are preserved.
 
 ### Do I have to open any port on my router?
-Usually not. The default `HOLEPUNCH` mode uses the Minecraft Login protocol connection. The explicit `MAGIC_PACKET` mode can share the Minecraft port when `bindPort` is `-1`.
+Usually not. The default `HOLEPUNCH` mode uses the Minecraft Login protocol connection (Minecraft 1.19.2 and later). On 1.18.2 AutoModpack uses `MAGIC_PACKET` instead, which can share the Minecraft port when `bindPort` is `-1`.
 
 An explicit `bindPort` starts a dedicated listener for `MAGIC_PACKET` or `DIRECT`. Configure `advertisedEndpointHost` and `advertisedEndpointPort` for the public route clients should use. See the complete matrix in [config](configuration/server-config).
 

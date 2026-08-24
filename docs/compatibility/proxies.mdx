@@ -23,7 +23,7 @@ Gate Lite forwards the packets out of the box. Your issue here is routing.
 
 The endpoint sent to clients is controlled by `advertisedEndpointHost` and `advertisedEndpointPort`. Set them to the public route that accepts the selected `connectionMode`; they do not need to match the process's `bindAddress` or `bindPort` when a proxy or separate host is involved.
 
-- `HOLEPUNCH` must route the marked Minecraft Login connection to a server with holepunch handling enabled.
+- `HOLEPUNCH` must route the marked Minecraft Login connection to a server with holepunch handling enabled. Holepunch handling is not used on Minecraft 1.18.2.
 - `MAGIC_PACKET` must preserve AMMH/AMOK before the TLS session. With `bindPort: -1`, route it to the backend Minecraft port; with an explicit port, route it to the dedicated magic-only listener.
 - `DIRECT` must route TLS directly to an explicit dedicated listener or another endpoint that handles it. `DIRECT` with `bindPort: -1` starts no built-in listener.
 

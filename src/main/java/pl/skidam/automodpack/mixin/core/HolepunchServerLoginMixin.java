@@ -43,7 +43,7 @@ public abstract class HolepunchServerLoginMixin {
 	private void automodpack$handleHello(ServerboundHelloPacket packet, Operation<Void> original) {
 		String username = username(packet);
 		UUID profileId = profileId(packet);
-		HolepunchMarker marker = HolepunchMarker.decode(profileId).orElseGet(() -> HolepunchMarker.decodeUsername(username).orElse(null));
+		HolepunchMarker marker = HolepunchMarker.decode(profileId).orElse(null);
 		if (marker == null) {
 			original.call(packet);
 			return;
