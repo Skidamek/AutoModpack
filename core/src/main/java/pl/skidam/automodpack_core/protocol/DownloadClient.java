@@ -41,6 +41,7 @@ import javax.net.ssl.TrustManager;
 
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
@@ -175,6 +176,15 @@ public class DownloadClient implements AutoCloseable {
 		}
 	}
 
+	private static HolepunchOptions holepunchOptions() {
+		HolepunchOptions.Builder builder = HolepunchOptions.builder();
+		LoaderManagerService.ModPlatform platform = LOADER_MANAGER.getPlatformType();
+		if (platform == LoaderManagerService.ModPlatform.FORGE || platform == LoaderManagerService.ModPlatform.NEOFORGE) {
+			builder.handshakeHostSuffix(HolepunchOptions.FORGE_FML3_HANDSHAKE_HOST_SUFFIX);
+		}
+		return builder.build();
+	}
+
 	private Socket connectTransport() throws IOException {
 		if (connectionInfo.connectionMode != ModpackConnectionMode.HOLEPUNCH) {
 			Socket socket = new Socket();
@@ -191,7 +201,7 @@ public class DownloadClient implements AutoCloseable {
 
 		try {
 			HolepunchSocket socket = new HolepunchSocket();
-			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), minecraftProtocol, socket.handler(), HolepunchOptions.builder().build())
+			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), minecraftProtocol, socket.handler(), holepunchOptions())
 					.toCompletableFuture().get(15, TimeUnit.SECONDS);
 			socket.setConnection(connection);
 			return socket;
