@@ -128,6 +128,26 @@ public final class ModuleClassLoaderAccess {
 		return Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
 	}
 
+	/**
+	 * Program arguments ModLauncher stored in {@code ArgumentHandler} during {@code Launcher.run},
+	 * before transformation services {@code onLoad}. This is the {@code String[]} BootstrapLauncher
+	 * actually received - including when Prism/ForgeWrapper invoked it by reflection, which leaves
+	 * {@code sun.java.command} and {@code ProcessHandle} arguments pointing at the wrapper main
+	 * class instead of {@code --fml.mcVersion}/{@code --fml.forgeVersion}/{@code --launchTarget}.
+	 */
+	public static String[] launchArguments() {
+		try {
+			Object launcher = launcherInstance();
+			if (launcher == null) return null;
+			Object handler = readField(launcher, "argumentHandler");
+			if (handler == null) return null;
+			Object args = readField(handler, "args");
+			return args instanceof String[] strings ? strings : null;
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
 	static Object readField(Object owner, String name) throws Exception {
 		Field f = findField(owner.getClass(), name);
 		f.setAccessible(true);

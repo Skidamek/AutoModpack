@@ -10,6 +10,7 @@ import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 
 import pl.skidam.automodpack_loader_core.Preload;
+import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
 /**
  * A real, {@code META-INF/services}-shipped {@link ITransformationService} that forwards every
@@ -33,8 +34,9 @@ public class AutoModpackTransformationService implements ITransformationService 
 
 	static final String NAME = "automodpack_early_services";
 
-	// sun.java.command (not ProcessHandle, which is unreliable on some JVMs) carries the launch
-	// args; FMLLoader.versionInfo()/getDist() are both still null/unreliable at onLoad() time.
+	// FMLLoader.versionInfo()/getDist() are still null at onLoad() (processArguments/initialize
+	// have not run yet). ModLauncher already has the real launch args in ArgumentHandler; the
+	// JVM's sun.java.command does not when Prism launches through ForgeWrapper by reflection.
 	public static volatile String EARLY_MC_VERSION;
 	public static volatile String EARLY_FORGE_VERSION;
 	public static volatile Boolean EARLY_IS_CLIENT;
@@ -46,10 +48,11 @@ public class AutoModpackTransformationService implements ITransformationService 
 
 	@Override
 	public void onLoad(IEnvironment env, Set<String> otherServices) {
+		String[] launchArgs = ModuleClassLoaderAccess.launchArguments();
 		String[] processArgs = System.getProperty("sun.java.command", "").split("\\s+");
-		EARLY_MC_VERSION = argValue(processArgs, "--fml.mcVersion");
-		EARLY_FORGE_VERSION = argValue(processArgs, "--fml.forgeVersion");
-		String launchTarget = argValue(processArgs, "--launchTarget");
+		EARLY_MC_VERSION = firstNonNull(argValue(launchArgs, "--fml.mcVersion"), argValue(processArgs, "--fml.mcVersion"));
+		EARLY_FORGE_VERSION = firstNonNull(argValue(launchArgs, "--fml.forgeVersion"), argValue(processArgs, "--fml.forgeVersion"));
+		String launchTarget = firstNonNull(argValue(launchArgs, "--launchTarget"), argValue(processArgs, "--launchTarget"));
 		if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
 
 		new Preload();
@@ -57,7 +60,12 @@ public class AutoModpackTransformationService implements ITransformationService 
 		EarlyServiceLayer.forwardOnLoad(env, otherServices);
 	}
 
+	private static String firstNonNull(String preferred, String fallback) {
+		return preferred != null ? preferred : fallback;
+	}
+
 	private static String argValue(String[] arguments, String name) {
+		if (arguments == null) return null;
 		String prefix = name + "=";
 		for (int i = 0; i < arguments.length; i++) {
 			if (name.equals(arguments[i]) && i + 1 < arguments.length) return arguments[i + 1];
