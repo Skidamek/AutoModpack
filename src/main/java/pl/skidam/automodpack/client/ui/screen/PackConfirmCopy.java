@@ -76,6 +76,10 @@ final class PackConfirmCopy {
 		return names;
 	}
 
+	static boolean canCustomize(GroupManifest manifest) {
+		return manifest.groups().values().stream().anyMatch(group -> !group.required());
+	}
+
 	static Component leftoverLabel(boolean keep, int count) {
 		return VersionedText.translatable(keep ? "automodpack.firstConnect.leftoverKeep" : "automodpack.firstConnect.leftoverArchive", count);
 	}

@@ -87,7 +87,7 @@
   "automodpack.packDetails.connected": "Server connection is available",
   "automodpack.packDetails.disconnected": "No saved server connection",
   "automodpack.packDetails.identity": "%s %s  |  Minecraft %s",
-  "automodpack.packDetails.contents": "%s groups  |  %s files  |  %s",
+  "automodpack.packDetails.contents": "%s  |  %s  |  %s",
   "automodpack.packDetails.storage": "Local storage",
   "automodpack.packDetails.storageDescription": "Remove unused modpack data from this instance.",
   "automodpack.packDetails.localStorage": "Clean local storage",
