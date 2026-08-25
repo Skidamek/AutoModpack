@@ -14,7 +14,7 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** Confirms the deterministic replacement of selected features after a direct conflict. */
 public final class FeatureConflictScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 360;
+	private static final int PANEL_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 
 	private final Screen parent;
 	private final String preferredName;
@@ -32,7 +32,7 @@ public final class FeatureConflictScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		this.addActionArea(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.selection.keepCurrent"), button -> ScreenImpl.setScreen(parent)),
 				primaryAction(VersionedText.translatable("automodpack.selection.useFeature", preferredName).withStyle(ChatFormatting.BOLD), button -> confirm())));
 	}

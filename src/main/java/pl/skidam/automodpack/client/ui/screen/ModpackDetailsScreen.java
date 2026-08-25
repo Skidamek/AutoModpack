@@ -19,7 +19,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 /** A single, calm entry point for all actions on one installed modpack. */
 public final class ModpackDetailsScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 320;
+	private static final int PANEL_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 
 	private final Screen parent;
 	private final InstalledModpackController controller;

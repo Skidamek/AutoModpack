@@ -102,7 +102,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		if (hasPatchNotesHistory()) footerActions.add(optionalAction(VersionedText.translatable("automodpack.patchNotes.button"), button -> openPatchNotes()));
 		if (hasLocalFiles()) footerActions.add(primaryAction(VersionedText.translatable("automodpack.management.files"), button -> openFiles()));
 		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, footerActions.toArray(ActionDefinition[]::new)));
-		List<Button> actionButtons = this.addActionArea(PANEL_WIDTH, bottomY, actionRows.toArray(ActionRow[]::new));
+		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, bottomY, actionRows.toArray(ActionRow[]::new));
 		if (hasPagination) {
 			this.previousButton = actionButtons.get(0);
 			this.nextButton = actionButtons.get(2);

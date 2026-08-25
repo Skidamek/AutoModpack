@@ -39,9 +39,10 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowserWidget.Entry> {
 	private static final int ROW_HEIGHT = 30;
 	private final Consumer<String> folderToggle;
+	private final Consumer<ChangeBrowserProjection.FileRow> selectionChanged;
 
 	public ChangeBrowserWidget(ChangeBrowserProjection.Projection projection, Set<String> collapsedFolders, Map<String, String> featureNames,
-			boolean technicalDetails, Consumer<String> folderToggle, Minecraft client, int width, int height, int top, int bottom) {
+			boolean technicalDetails, Consumer<String> folderToggle, Consumer<ChangeBrowserProjection.FileRow> selectionChanged, Minecraft client, int width, int height, int top, int bottom) {
 		/*? if <1.20.3 {*/
 		/*super(client, width, height, top, bottom, ROW_HEIGHT);
 		*//*?} else {*/
@@ -49,6 +50,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		/*?}*/
 		this.centerListVertically = false;
 		this.folderToggle = Objects.requireNonNull(folderToggle, "folder toggle");
+		this.selectionChanged = selectionChanged;
 		Set<String> collapsed = Set.copyOf(collapsedFolders == null ? Set.of() : collapsedFolders);
 		Map<String, String> names = Map.copyOf(featureNames == null ? Map.of() : featureNames);
 		for (ChangeBrowserProjection.Row row : projection.rows()) this.addEntry(new Entry(row, collapsed.contains(row.path()), names, technicalDetails));
@@ -59,9 +61,31 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		return selected == null || !(selected.row instanceof ChangeBrowserProjection.FileRow file) ? null : file;
 	}
 
+	public void selectPath(String path) {
+		if (path == null || path.isBlank()) {
+			this.setSelected(null);
+			return;
+		}
+		for (Entry entry : this.children()) {
+			if (entry.row instanceof ChangeBrowserProjection.FileRow file && file.path().equals(path)) {
+				this.setSelected(entry);
+				/*? if >=1.21.9 {*/
+				this.scrollToEntry(entry);
+				/*?} else {*/
+				/*this.ensureVisible(entry);
+				*//*?}*/
+				return;
+			}
+		}
+	}
+
 	private void activate(Entry entry) {
 		this.setSelected(entry);
-		if (entry.row instanceof ChangeBrowserProjection.FolderRow folder) folderToggle.accept(folder.path());
+		if (entry.row instanceof ChangeBrowserProjection.FolderRow folder) {
+			folderToggle.accept(folder.path());
+			return;
+		}
+		if (selectionChanged != null) selectionChanged.accept(entry.row instanceof ChangeBrowserProjection.FileRow file ? file : null);
 	}
 
 	protected int getScrollbarPosition() {

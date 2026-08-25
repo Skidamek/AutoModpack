@@ -3,8 +3,12 @@ package pl.skidam.automodpack.client.ui.screen;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -42,6 +46,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private String search = "";
 	private String selectedContent = "";
 	private String selectedFeature = "";
+	private String selectedPath = "";
 	private boolean technicalDetails;
 	private ChangeBrowserWidget browser;
 	private EditBox searchField;
@@ -49,7 +54,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private Button featureButton;
 	private Button modeButton;
 	private Button detailsButton;
-	private Button openPageButton;
 	private int browserTop;
 	private int browserBottom;
 
@@ -94,24 +98,39 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.addRenderableWidget(this.featureButton);
 		this.addRenderableWidget(this.modeButton);
 		updateControlLabels();
+		List<ActionRow> actionRows = buildActionRows();
+		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
+		int buttonIndex = platformLinks().size();
+		if (auxiliaryAction != null) {
+			actionButtons.get(buttonIndex).active = auxiliaryAction.active();
+			buttonIndex++;
+		}
+		this.detailsButton = actionButtons.get(buttonIndex + 1);
+		this.detailsButton.active = true;
+		updateDetailsLabel();
+		setTooltip(this.detailsButton, VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsStateTechnical" : "automodpack.browser.detailsStateSimple"));
+		this.browserBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new)) - 8;
+		rebuildBrowser();
+	}
+
+	private List<ActionRow> buildActionRows() {
 		List<ActionRow> actionRows = new ArrayList<>();
+		List<PlatformLink> platforms = platformLinks();
+		if (!platforms.isEmpty()) {
+			ActionDefinition[] platformActions = new ActionDefinition[platforms.size()];
+			for (int index = 0; index < platforms.size(); index++) {
+				PlatformLink platform = platforms.get(index);
+				platformActions[index] = optionalAction(platform.label(), button -> Util.getPlatform().openUri(platform.url()));
+			}
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, platformActions));
+		}
 		if (auxiliaryAction != null) {
 			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this))));
 		}
 		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
-				optionalAction(VersionedText.translatable("automodpack.browser.details"), button -> toggleDetails()),
-				optionalAction(VersionedText.translatable("automodpack.changelog.openPage"), button -> openSelectedPage())));
-		List<Button> actionButtons = this.addActionArea(PANEL_WIDTH, this.height - 28, actionRows.toArray(ActionRow[]::new));
-		int footerOffset = auxiliaryAction == null ? 0 : 1;
-		this.detailsButton = actionButtons.get(footerOffset + 1);
-		this.openPageButton = actionButtons.get(footerOffset + 2);
-		if (auxiliaryAction != null) actionButtons.get(0).active = auxiliaryAction.active();
-		this.detailsButton.active = true;
-		setTooltip(this.detailsButton, VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsStateTechnical" : "automodpack.browser.detailsStateSimple"));
-		this.openPageButton.visible = firstReference() != null;
-		this.browserBottom = actionAreaTop(PANEL_WIDTH, this.height - 28, actionRows.toArray(ActionRow[]::new)) - 8;
-		rebuildBrowser();
+				optionalAction(VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsTechnical" : "automodpack.browser.detailsSimple"), button -> toggleDetails())));
+		return actionRows;
 	}
 
 	private void rebuildBrowser() {
@@ -120,9 +139,24 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		ChangeBrowserProjection.Filter filter = new ChangeBrowserProjection.Filter(search,
 				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature));
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, mode, filter).collapse(collapsedFolders);
-		this.browser = new ChangeBrowserWidget(projection, collapsedFolders, featureNames, technicalDetails, this::toggleFolder,
+		this.browser = new ChangeBrowserWidget(projection, collapsedFolders, featureNames, technicalDetails, this::toggleFolder, this::onFileSelected,
 				this.minecraft, this.width, this.height, browserTop, browserBottom);
 		this.addRenderableWidget(this.browser);
+		this.browser.selectPath(selectedPath);
+	}
+
+	private void onFileSelected(ChangeBrowserProjection.FileRow file) {
+		selectedPath = file == null ? "" : file.path();
+		rebuild();
+	}
+
+	private void rebuild() {
+		/*? if >=1.19.2 {*/
+		this.rebuildWidgets();
+		/*?} else {*/
+		/*
+		this.init(this.minecraft, this.width, this.height);
+		*//*?}*/
 	}
 
 	private void toggleFolder(String path) {
@@ -139,6 +173,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private void toggleDetails() {
 		technicalDetails = !technicalDetails;
 		setTooltip(detailsButton, VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsStateTechnical" : "automodpack.browser.detailsStateSimple"));
+		updateDetailsLabel();
 		rebuildBrowser();
 	}
 
@@ -187,19 +222,36 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	}
 
 	private void updateDetailsLabel() {
-		if (detailsButton != null) detailsButton.setMessage(VersionedText.translatable("automodpack.browser.details"));
+		if (detailsButton != null) detailsButton.setMessage(VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsTechnical" : "automodpack.browser.detailsSimple"));
 	}
 
-	private void openSelectedPage() {
-		String reference = firstReference();
-		if (reference != null) Util.getPlatform().openUri(reference);
+	private List<PlatformLink> platformLinks() {
+		if (selectedPath == null || selectedPath.isBlank()) return List.of();
+		LinkedHashMap<String, PlatformLink> distinct = new LinkedHashMap<>();
+		for (ChangeSet.Change change : changes.changes()) {
+			if (!change.logicalPath().equals(selectedPath)) continue;
+			for (ChangeSet.Occurrence occurrence : change.occurrences()) {
+				for (String reference : occurrence.references()) {
+					PlatformLink link = toPlatformLink(reference);
+					distinct.putIfAbsent(link.key(), link);
+				}
+			}
+		}
+		return List.copyOf(distinct.values());
 	}
 
-	private String firstReference() {
-		ChangeBrowserProjection.FileRow selected = browser == null ? null : browser.selectedFile();
-		if (selected == null) return null;
-		for (ChangeSet.Occurrence occurrence : selected.occurrences()) if (!occurrence.references().isEmpty()) return occurrence.references().get(0);
-		return null;
+	private static PlatformLink toPlatformLink(String url) {
+		try {
+			URI uri = new URI(url);
+			String host = uri.getHost();
+			if (host == null || host.isBlank()) return new PlatformLink("open", VersionedText.translatable("automodpack.changelog.openPage"), url);
+			String lower = host.toLowerCase(Locale.ROOT);
+			if (lower.equals("modrinth.com") || lower.endsWith(".modrinth.com")) return new PlatformLink("modrinth", VersionedText.translatable("automodpack.browser.modrinth"), url);
+			if (lower.equals("curseforge.com") || lower.endsWith(".curseforge.com") || lower.equals("curseforge.net") || lower.endsWith(".curseforge.net")) return new PlatformLink("curseforge", VersionedText.translatable("automodpack.browser.curseforge"), url);
+			return new PlatformLink(lower, VersionedText.literal(host), url);
+		} catch (URISyntaxException | IllegalArgumentException ignored) {
+			return new PlatformLink("open", VersionedText.translatable("automodpack.changelog.openPage"), url);
+		}
 	}
 
 	private void back() {
@@ -211,24 +263,31 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		/*? if <26.1 {*/
 		/*this.browser.render(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?}*/
-		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, heading.getString(), panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), panelLeft(PANEL_WIDTH), 8,
-				TextColors.WHITE);
-		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, description.getString(), panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.GRAY), panelLeft(PANEL_WIDTH), 21,
-				TextColors.WHITE);
+		int contentWidth = panelWidth(PANEL_WIDTH);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, heading.getString(), contentWidth)).withStyle(ChatFormatting.BOLD), this.width / 2, 8, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, description.getString(), contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, 21, TextColors.WHITE);
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, mode,
 				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature)));
 		String summary = UiFormat.plural(projection.total().fileCount(), "automodpack.browser.summary", UiFormat.formatSize(projection.total().byteCount())).getString();
 		if (!projection.effects().isEmpty()) summary += " | " + projection.effects().size() + " " + VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
-		drawTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY), panelLeft(PANEL_WIDTH), this.height - 43, TextColors.WHITE);
+		List<ActionRow> actionRows = buildActionRows();
+		int summaryY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new)) - this.font.lineHeight;
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, summaryY, TextColors.WHITE);
 		if (projection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
-		// The project-page button only exists when a link is available; there is no fake disabled button.
-		this.openPageButton.visible = firstReference() != null;
 	}
 
 	@Override
 	public boolean shouldCloseOnEsc() {
 		return handleBackOnEscape(this::back);
+	}
+
+	private record PlatformLink(String key, Component label, String url) {
+		private PlatformLink {
+			key = Objects.requireNonNull(key, "platform key");
+			label = Objects.requireNonNull(label, "platform label");
+			url = Objects.requireNonNull(url, "platform url");
+		}
 	}
 
 	public record BrowserAction(Component label, Consumer<Screen> action, boolean active) {

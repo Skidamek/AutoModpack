@@ -37,7 +37,7 @@ import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 /** Instance-wide list of live mods/ ids that stay loaded instead of the pack copy. */
 public final class PinnedModsScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 500;
-	private static final int FOOTER_WIDTH = 310;
+	private static final int FOOTER_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 	private static final int ROW_HEIGHT = 22;
 
 	private final Screen parent;

@@ -65,7 +65,7 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 					navigationAction(VersionedText.translatable("automodpack.ui.next"), button -> changePage(1))));
 		}
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
-		List<Button> buttons = addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
+		List<Button> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
 		if (hasPagination) {
 			this.previousButton = buttons.get(0);
 			this.nextButton = buttons.get(2);

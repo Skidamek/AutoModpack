@@ -21,7 +21,7 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** Player-facing feature details. File projection is delegated to the shared tree/list browser. */
 public final class GroupInspectorScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 420;
+	private static final int PANEL_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 
 	private final Screen parent;
 	private final String groupId;
@@ -40,7 +40,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		this.addActionArea(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)),
 				primaryAction(VersionedText.translatable("automodpack.groupInspector.browseFiles"), button -> browseFiles())));
 	}

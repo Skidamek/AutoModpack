@@ -29,7 +29,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Reviews one cache-bypassing offline integrity inspection before any files are changed. */
 public final class OfflineRepairScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 420;
+	private static final int PANEL_WIDTH = 500;
 	private static final int ROW_HEIGHT = 22;
 
 	private final Screen parent;
@@ -87,12 +87,12 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		if (canUpdate) primaryActions.add(optionalAction(VersionedText.translatable("automodpack.repair.updateAndFinish"), press -> updateAndFinish()));
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryActions.toArray(ActionDefinition[]::new)));
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.cancel"), press -> back())));
-		int pageSize = rowsPerPage(listTop, actionAreaTop(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)));
+		int pageSize = rowsPerPage(listTop, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
 		int pageCount = pageCount(candidates.size(), pageSize);
 		if (pageCount > 1) {
 			int navigationIndex = showKeepAll ? 1 : 0;
 			actions.add(navigationIndex, navigationRow(pageCount));
-			pageSize = rowsPerPage(listTop, actionAreaTop(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)));
+			pageSize = rowsPerPage(listTop, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
 			pageCount = pageCount(candidates.size(), pageSize);
 		}
 		page = Math.max(0, Math.min(pageCount - 1, page));
@@ -112,7 +112,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 			setTooltip(choice, editableTooltip(resetConsent, candidate.logicalPath()));
 			this.addRenderableWidget(choice);
 		}
-		List<Button> actionButtons = addActionArea(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new));
+		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new));
 		int actionIndex = 0;
 		if (showKeepAll) actionButtons.get(actionIndex++).active = !busy;
 		if (pageCount > 1) {

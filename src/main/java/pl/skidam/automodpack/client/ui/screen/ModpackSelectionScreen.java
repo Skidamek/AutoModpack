@@ -211,7 +211,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		// Once saved, the screen becomes a restart prompt: the new selection only takes effect after
 		// a relaunch, so there is nothing left to toggle here.
 		if (saved) {
-			this.addActionAreaAt(310, this.height / 2 + 20, actionRow(ActionAreaLayout.RowKind.FOOTER,
+			this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, this.height / 2 + 20, actionRow(ActionAreaLayout.RowKind.FOOTER,
 					secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
 					primaryAction(VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop())));
 			return;
@@ -311,7 +311,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					reresolveDefault();
 				}),
 				primaryAction(VersionedText.translatable(saveLabel).withStyle(ChatFormatting.BOLD), press -> save())));
-		List<Button> actionButtons = this.addActionArea(ROW_WIDTH, actionY, actionRows.toArray(ActionRow[]::new));
+		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, actionRows.toArray(ActionRow[]::new));
 		int actionIndex = 0;
 		if (showPagination) {
 			actionButtons.get(actionIndex++).active = page > 0;
