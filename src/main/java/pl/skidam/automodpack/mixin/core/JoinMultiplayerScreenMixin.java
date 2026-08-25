@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.mixin.core;
 
+import static pl.skidam.automodpack_core.Constants.clientConfig;
+
 import org.spongepowered.asm.mixin.Mixin;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
@@ -26,7 +28,7 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 	@WrapMethod(method = "init")
 	private void automodpack$addGroupsButton(Operation<Void> original) {
 		original.call();
-		if (!ModpackSelectionScreen.hasModpackManagement()) return;
+		if (clientConfig != null && !clientConfig.showModpackSettingsButton) return;
 
 		int titleLeft = (width - this.font.width(this.title)) / 2;
 		int titleRight = titleLeft + this.font.width(this.title);
@@ -41,9 +43,8 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 		boolean useRight = rightWidth >= leftWidth;
 		int buttonX = useRight ? width - buttonWidth - 4 : 4;
 		int buttonY = 8;
-		boolean activeModpack = ModpackSelectionScreen.hasActiveModpackManagement();
 		Button groupsButton = VersionedScreen.buttonWidget(buttonX, buttonY, buttonWidth, 20,
-				VersionedText.translatable(activeModpack ? buttonWidth < 100 ? "automodpack.selection.shortButton" : "automodpack.selection.button" : "automodpack.packManager.switch"),
+				VersionedText.translatable(buttonWidth < 100 ? "automodpack.selection.shortButton" : "automodpack.selection.button"),
 				press -> ScreenImpl.setScreen(ModpackSelectionScreen.managementScreen(this)));
 		addRenderableWidget(groupsButton);
 	}

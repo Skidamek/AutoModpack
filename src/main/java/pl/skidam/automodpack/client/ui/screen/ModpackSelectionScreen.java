@@ -157,42 +157,17 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		rebuildRows();
 	}
 
-	/**
-	 * Builds the screen for whichever modpack the client currently has selected. Returns the parent
-	 * untouched when there is nothing to choose, so callers can hand the result straight to setScreen.
-	 */
-	private static Screen forSelectedModpack(Screen parent) {
-		return forModpackId(parent, clientConfig == null ? null : clientConfig.selectedModpackId);
-	}
-
-	private static Screen forModpackId(Screen parent, String modpackId) {
-		if (modpackId == null || modpackId.isBlank()) {
-			return parent;
-		}
-
-		GenerationRecord record = activeGeneration(modpackId);
-		GroupManifest manifest = record == null ? null : record.manifest();
-		if (manifest == null) {
-			return parent;
-		}
-
-		return new ModpackSelectionScreen(parent, manifest, null, null, null, () -> {}, null, false, false, record);
-	}
-
-	public static boolean hasModpackManagement() {
-		return hasActiveModpackManagement() || hasInstalledModpacks();
-	}
-
 	public static boolean hasActiveModpackManagement() {
 		return modpackHasGeneration(clientConfig == null ? null : clientConfig.selectedModpackId);
 	}
 
 	public static Screen managementScreen(Screen parent) {
-		return hasActiveModpackManagement() ? forSelectedModpack(parent) : new InstalledModpacksScreen(parent);
-	}
-
-	private static boolean hasInstalledModpacks() {
-		return new InstalledModpackController().hasInstalledPacks();
+		if (hasActiveModpackManagement()) {
+			InstalledModpackController controller = new InstalledModpackController();
+			GenerationRecord activeRecord = controller.activeRecord(clientConfig.selectedModpackId);
+			if (activeRecord != null) return new ModpackDetailsScreen(parent, controller, controller.pack(activeRecord));
+		}
+		return new InstalledModpacksScreen(parent);
 	}
 
 	private static boolean modpackHasGeneration(String modpackId) {

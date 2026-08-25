@@ -16,6 +16,7 @@ public class ClientConfigJsons {
 		public boolean syncAutoModpackVersion = true;
 		public boolean syncLoaderVersion = true;
 		public boolean playMusic = true;
+		public boolean showModpackSettingsButton = true;
 		public List<String> pinnedModIds = new ArrayList<>();
 
 		public ClientConfigFieldsV3() {}
@@ -27,6 +28,7 @@ public class ClientConfigJsons {
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
 			this.syncLoaderVersion = source.syncLoaderVersion;
 			this.playMusic = source.playMusic;
+			this.showModpackSettingsButton = source.showModpackSettingsButton;
 			this.pinnedModIds = new ArrayList<>(PinnedMods.normalize(source.pinnedModIds));
 		}
 
@@ -60,6 +62,7 @@ public class ClientConfigJsons {
 			if (syncAutoModpackVersion == expected.syncAutoModpackVersion) rebased.syncAutoModpackVersion = planned.syncAutoModpackVersion;
 			if (syncLoaderVersion == expected.syncLoaderVersion) rebased.syncLoaderVersion = planned.syncLoaderVersion;
 			if (playMusic == expected.playMusic) rebased.playMusic = planned.playMusic;
+			if (showModpackSettingsButton == expected.showModpackSettingsButton) rebased.showModpackSettingsButton = planned.showModpackSettingsButton;
 			if (Objects.equals(PinnedMods.normalize(pinnedModIds), PinnedMods.normalize(expected.pinnedModIds)))
 				rebased.pinnedModIds = new ArrayList<>(PinnedMods.normalize(planned.pinnedModIds));
 			return rebased;
@@ -71,12 +74,13 @@ public class ClientConfigJsons {
 			if (!(object instanceof ClientConfigFieldsV3 other)) return false;
 			return updateSelectedModpackOnLaunch == other.updateSelectedModpackOnLaunch && selfUpdater == other.selfUpdater
 					&& syncAutoModpackVersion == other.syncAutoModpackVersion && syncLoaderVersion == other.syncLoaderVersion && playMusic == other.playMusic
-					&& Objects.equals(selectedModpackId, other.selectedModpackId) && Objects.equals(PinnedMods.normalize(pinnedModIds), PinnedMods.normalize(other.pinnedModIds));
+					&& showModpackSettingsButton == other.showModpackSettingsButton && Objects.equals(selectedModpackId, other.selectedModpackId)
+					&& Objects.equals(PinnedMods.normalize(pinnedModIds), PinnedMods.normalize(other.pinnedModIds));
 		}
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(selectedModpackId, updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncLoaderVersion, playMusic, PinnedMods.normalize(pinnedModIds));
+			return Objects.hash(selectedModpackId, updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncLoaderVersion, playMusic, showModpackSettingsButton, PinnedMods.normalize(pinnedModIds));
 		}
 	}
 }
