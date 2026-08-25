@@ -130,9 +130,8 @@ public class DownloadClient implements AutoCloseable {
 			}
 		}, NET_EXECUTOR).thenCompose(this::validateCandidate).thenApplyAsync(candidate -> {
 			try {
-				return new Connection(candidate.socket(), secretBytes);
+				return openConfiguredConnection(candidate);
 			} catch (IOException e) {
-				closeQuietly(candidate.socket());
 				throw new CompletionException(e);
 			}
 		}, NET_EXECUTOR);
@@ -153,6 +152,7 @@ public class DownloadClient implements AutoCloseable {
 			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) performMagicHandshake(plainSocket);
 			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket, tlsSocket);
+			tlsSocket.setSoTimeout(0);
 			return new TlsCandidate(tlsSocket, trustManager);
 		} catch (IOException e) {
 			closeQuietly(plainSocket);
@@ -320,6 +320,26 @@ public class DownloadClient implements AutoCloseable {
 				throw new CompletionException(e);
 			}
 		});
+	}
+
+	private Connection openConfiguredConnection(TlsCandidate candidate) throws IOException {
+		try {
+			candidate.socket().setSoTimeout(NETWORK_TIMEOUT_MILLIS);
+			return new Connection(candidate.socket(), secretBytes);
+		} catch (IOException first) {
+			closeQuietly(candidate.socket());
+			if (!sessionTrust.hasAccepted()) throw first;
+			LOGGER.warn("Modpack connection closed while waiting for certificate trust; reconnecting", first);
+			TlsCandidate retry = openTlsCandidate();
+			try {
+				retry.socket().setSoTimeout(NETWORK_TIMEOUT_MILLIS);
+				return new Connection(retry.socket(), secretBytes);
+			} catch (IOException second) {
+				closeQuietly(retry.socket());
+				second.addSuppressed(first);
+				throw second;
+			}
+		}
 	}
 
 	private static <T> CompletableFuture<T> rejectCandidate(TlsCandidate candidate, Throwable error) {

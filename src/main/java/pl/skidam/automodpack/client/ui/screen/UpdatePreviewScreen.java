@@ -67,22 +67,13 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		List<ActionRow> rows = new ArrayList<>();
 		if (GenerationPatchNoteHistory.containsNotes(preview.patchNotesHistory()))
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
-		if (canCustomize())
+		if (updater != null && mode == UpdatePreview.Mode.UPDATE)
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> cancel()),
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
 				primaryAction(VersionedText.translatable(actionKey(mode)), button -> continueUpdate())));
 		return rows;
-	}
-
-	private boolean canCustomize() {
-		if (mode != UpdatePreview.Mode.UPDATE || updater == null) return false;
-		try {
-			return PackConfirmCopy.hasOptionalGroups(updater.getSelectedTarget().manifest());
-		} catch (RuntimeException ignored) {
-			return false;
-		}
 	}
 
 	private List<String> buildBodyLines() {
