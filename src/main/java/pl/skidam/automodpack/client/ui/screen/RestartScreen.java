@@ -62,6 +62,10 @@ public class RestartScreen extends VersionedScreen {
 				this.height / 2 - 28, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.filesRemoved", removed).withStyle(ChatFormatting.GRAY), this.width / 2,
 				this.height / 2 - 16, TextColors.WHITE);
+		int preserved = changelogs == null ? 0 : changelogs.changeSet().summary().preservedFiles();
+		if (preserved > 0)
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.restart.preservedFiles", preserved).withStyle(ChatFormatting.GRAY), this.width / 2,
+					this.height / 2 + 34, TextColors.WHITE);
 		String reason = changelogs == null || changelogs.restartReasons().isEmpty()
 				? VersionedText.translatable("automodpack.summary.restartRequired").getString()
 				: VersionedText.translatable("automodpack.summary.restartReason", String.join(", ", changelogs.restartReasons())).getString();
