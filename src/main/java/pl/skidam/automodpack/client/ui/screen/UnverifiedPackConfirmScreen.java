@@ -10,12 +10,14 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack.client.ui.widget.UnverifiedJarList;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -29,8 +31,8 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Confirm before writing unverified jars on first install or a later update. */
 public final class UnverifiedPackConfirmScreen extends VersionedScreen {
-	private static final int PANEL = ActionAreaLayout.FOOTER_RAIL;
-	private static final int LINE = 11;
+	private static final int BODY = 320;
+	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 	private static final int TIMER_TICKS = 10 * 20;
 	private final ModpackUpdater updater;
 	private final boolean firstInstall;
@@ -47,6 +49,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 	private Button primaryButton;
 	private AbstractWidget ackCheckbox;
 	private String originFull = "";
+	private String originDisplay = "";
 	private String previousUnverifiedKey = "";
 
 	public UnverifiedPackConfirmScreen(ModpackUpdater updater) {
@@ -77,6 +80,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		originFull = updater.joinOrigin();
+		originDisplay = truncateToWidth(this.font, PackConfirmCopy.displayOrigin(originFull), panelWidth(BODY) - 8);
 		List<String> currentPaths = updater.unverifiedSelectedJarPaths();
 		String currentKey = String.join("\n", currentPaths);
 		if (!currentKey.equals(previousUnverifiedKey)) {
@@ -91,13 +95,12 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 		boolean customize = PackConfirmCopy.hasOptionalGroups(updater.getSelectedTarget().manifest());
 		boolean notes = firstInstall ? GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes())
 				: laterPreview != null && GenerationPatchNoteHistory.containsNotes(laterPreview.patchNotesHistory());
-		boolean showAck = ticksRemaining <= 0;
 
 		List<ActionRow> rows = new ArrayList<>();
 		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (leftover) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
-		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize())));
-		if (showAck) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
+		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
+		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
 		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.cancel");
 		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : "automodpack.update.apply");
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
@@ -105,7 +108,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
 				primaryAction(primaryLabel, button -> confirm())));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
-		List<Button> buttons = this.addActionArea(PANEL, this.height - 28, rowArray);
+		List<Button> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		int buttonIndex = 0;
 		if (notes) buttonIndex++;
 		if (leftover) {
@@ -113,46 +116,32 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 			buttonIndex++;
 		}
 		if (customize) buttonIndex++;
-		if (showAck) {
-			replacePlaceholderWithAck(buttons.get(buttonIndex));
-			buttonIndex++;
-		}
+		replacePlaceholderWithAck(buttons.get(buttonIndex));
+		buttonIndex++;
 		cancelButton = buttons.get(buttonIndex);
 		primaryButton = buttons.get(buttonIndex + 2);
-		primaryButton.active = showAck && acknowledged;
+		primaryButton.active = ticksRemaining <= 0 && acknowledged;
 		this.setInitialFocus(cancelButton);
-		addOriginHitbox();
 
-		int bottomY = actionAreaTop(PANEL, this.height - 28, rowArray) - 4;
+		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray) - 4;
 		layoutBody(bottomY);
 	}
 
-	private void addOriginHitbox() {
-		String label = truncateToWidth(this.font, originFull, panelWidth(PANEL));
-		int width = Math.max(1, this.font.width(label));
-		if (label.equals(originFull)) return;
-		Button hit = buttonWidget(this.width / 2 - width / 2, 27, width, 12, VersionedText.literal(""), button -> {});
-		this.addRenderableWidget(hit);
-		setTooltip(hit, VersionedText.literal(originFull));
-	}
-
 	private void layoutBody(int bottomY) {
-		int wrapWidth = Math.max(1, panelWidth(PANEL) - 20);
-		List<String> topLines = new ArrayList<>();
+		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
+		List<MutableComponent> topLines = new ArrayList<>();
 		if (firstInstall) {
-			topLines.addAll(wrapToWidth(this.font, PackConfirmCopy.intro(originFull), wrapWidth));
-			topLines.add("");
+			topLines.addAll(wrapWithHighlight(this.font, PackConfirmCopy.intro(originDisplay), originDisplay, wrapWidth, ChatFormatting.YELLOW, ChatFormatting.BOLD));
+			topLines.add(blankLine());
 		}
-		topLines.add(PackConfirmCopy.selectedSummary(updater.getSelectedTarget()));
-		topLines.add("");
 		int jars = PackConfirmCopy.selectedJarCount(updater.getSelectedTarget());
-		topLines.add(PackConfirmCopy.unverifiedCount(unverifiedPaths.size(), jars));
-		List<String> bottomLines = new ArrayList<>();
-		bottomLines.addAll(wrapToWidth(this.font, PackConfirmCopy.unverifiedExplain(), wrapWidth));
-		bottomLines.add("");
-		bottomLines.addAll(wrapToWidth(this.font, PackConfirmCopy.computerRisk(), wrapWidth));
-		bottomLines.add("");
-		bottomLines.addAll(wrapToWidth(this.font, PackConfirmCopy.sharedCommands(), wrapWidth));
+		topLines.addAll(wrapParagraph(this.font, PackConfirmCopy.unverifiedCount(unverifiedPaths.size(), jars), wrapWidth, ChatFormatting.RED));
+		List<MutableComponent> bottomLines = new ArrayList<>();
+		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.unverifiedExplain(), wrapWidth, ChatFormatting.RED));
+		bottomLines.add(blankLine());
+		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.computerRisk(), wrapWidth, ChatFormatting.RED));
+		bottomLines.add(blankLine());
+		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
 
 		int topHeight = topLines.size() * LINE;
 		int bottomHeight = bottomLines.size() * LINE;
@@ -162,12 +151,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 		int needed = topHeight + 4 + listHeight + 4 + bottomHeight;
 
 		if (needed <= available) {
-			int y = 42;
-			this.addScrollBody(PANEL, y, y + topHeight + 2, topLines);
-			y += topHeight + 4;
-			this.addRenderableWidget(new UnverifiedJarList(this.minecraft, this.width, this.height, panelWidth(PANEL), y, y + listHeight, unverifiedPaths));
-			y += listHeight + 4;
-			this.addScrollBody(PANEL, y, bottomY, bottomLines);
+			placeUnverifiedBody(42, bottomY, topLines, bottomLines, topHeight, listHeight);
 			return;
 		}
 
@@ -175,20 +159,23 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 		listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
 		needed = topHeight + 4 + listHeight + 4 + bottomHeight;
 		if (needed <= available) {
-			int y = 42;
-			this.addScrollBody(PANEL, y, y + topHeight + 2, topLines);
-			y += topHeight + 4;
-			this.addRenderableWidget(new UnverifiedJarList(this.minecraft, this.width, this.height, panelWidth(PANEL), y, y + listHeight, unverifiedPaths));
-			y += listHeight + 4;
-			this.addScrollBody(PANEL, y, bottomY, bottomLines);
+			placeUnverifiedBody(42, bottomY, topLines, bottomLines, topHeight, listHeight);
 			return;
 		}
 
-		List<String> all = new ArrayList<>(topLines);
-		all.addAll(unverifiedPaths);
-		all.add("");
+		List<MutableComponent> all = new ArrayList<>(topLines);
+		all.add(blankLine());
+		for (String path : unverifiedPaths) all.addAll(wrapParagraph(this.font, path, wrapWidth, ChatFormatting.GRAY));
+		all.add(blankLine());
 		all.addAll(bottomLines);
-		this.addScrollBody(PANEL, 42, bottomY, all);
+		this.addCenteredScrollBody(BODY, 42, bottomY, all);
+	}
+
+	private void placeUnverifiedBody(int topY, int bottomY, List<MutableComponent> topLines, List<MutableComponent> bottomLines, int topHeight, int listHeight) {
+		this.addCenteredScrollBody(BODY, topY, topY + topHeight + 2, topLines);
+		int listTop = topY + topHeight + 4;
+		this.addRenderableWidget(new UnverifiedJarList(this.minecraft, this.width, this.height, panelWidth(BODY), listTop, listTop + listHeight, unverifiedPaths));
+		this.addCenteredScrollBody(BODY, listTop + listHeight + 4, bottomY, bottomLines);
 	}
 
 	private int preferredListRows(int freeHeight) {
@@ -228,11 +215,25 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 		/*int x = placeholder.x;
 		int y = placeholder.y;
 		*//*?}*/
-		ackCheckbox = checkboxWidget(this.font, x, y, placeholder.getWidth(), ActionAreaLayout.BUTTON_HEIGHT, PackConfirmCopy.ackLabel(), acknowledged, value -> {
+		ackCheckbox = checkboxWidget(this.font, x, y, placeholder.getWidth(), ActionAreaLayout.BUTTON_HEIGHT, ackMessage(), acknowledged, value -> {
+			if (ticksRemaining > 0) {
+				acknowledged = false;
+				ackCheckbox.setMessage(ackMessage());
+				if (primaryButton != null) primaryButton.active = false;
+				return;
+			}
 			acknowledged = value;
-			if (primaryButton != null) primaryButton.active = acknowledged && ticksRemaining <= 0;
+			if (primaryButton != null) primaryButton.active = acknowledged;
 		});
+		ackCheckbox.active = ticksRemaining <= 0;
 		this.addRenderableWidget(ackCheckbox);
+	}
+
+	private MutableComponent ackMessage() {
+		MutableComponent label = PackConfirmCopy.ackLabel();
+		int seconds = (ticksRemaining + 19) / 20;
+		if (seconds > 0) label = label.append(" (" + seconds + "s)");
+		return label;
 	}
 
 	private void confirm() {
@@ -308,7 +309,11 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 		super.tick();
 		if (ticksRemaining > 0) {
 			ticksRemaining--;
-			if (ticksRemaining == 0) rebuild();
+			if (ackCheckbox != null) {
+				ackCheckbox.setMessage(ackMessage());
+				ackCheckbox.active = ticksRemaining <= 0;
+			}
+			if (primaryButton != null) primaryButton.active = ticksRemaining <= 0 && acknowledged;
 		}
 		if (firstInstall) {
 			if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING) {
@@ -326,9 +331,8 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = updater.getSelectedTarget().manifest().modpackName().isBlank() ? "AutoModpack" : updater.getSelectedTarget().manifest().modpackName();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(PANEL))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
-		String originLabel = truncateToWidth(this.font, originFull, panelWidth(PANEL));
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(originLabel).withStyle(ChatFormatting.GRAY, ChatFormatting.BOLD), this.width / 2, 29, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, PackConfirmCopy.packSummary(updater.getSelectedTarget()), panelWidth(BODY))).withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
 	}
 
 	@Override

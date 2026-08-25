@@ -12,16 +12,21 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class FingerprintVerificationScreen extends VersionedScreen {
+	private static final int BODY = 320;
+	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
+	private static final int HELP_SIZE = 20;
 	private final Screen parent;
 	private final String serverFingerprint;
 	private final String originFull;
@@ -34,6 +39,9 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 			VersionedText.translatable("automodpack.retry"));
 	private EditBox textField;
 	private Button verifyButton;
+	private String originDisplay = "";
+	private int fieldY;
+	private List<String> hintLines = List.of();
 
 	public FingerprintVerificationScreen(Screen parent, String serverFingerprint, String origin, Runnable validatedCallback, Runnable canceledCallback) {
 		super(VersionedText.translatable("automodpack.validation.title"));
@@ -55,33 +63,47 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 
 	private void initWidgets() {
 		assert this.minecraft != null;
-		int fieldLeft = panelLeft(ActionAreaLayout.FOOTER_RAIL);
-		int fieldWidth = Math.max(1, panelWidth(ActionAreaLayout.FOOTER_RAIL) - 24);
-		int fieldY = this.height / 2 + 20;
-		this.textField = new EditBox(this.font, fieldLeft, fieldY, fieldWidth, 20, VersionedText.literal(""));
-		this.textField.setMaxLength(64);
+		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
+		originDisplay = truncateToWidth(this.font, PackConfirmCopy.displayOrigin(originFull), wrapWidth);
+		List<MutableComponent> before = new ArrayList<>();
+		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.identity.purpose").getString(), wrapWidth));
+		before.add(blankLine());
+		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.identity.paste").getString(), wrapWidth));
+		before.add(blankLine());
+		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.identity.notPack").getString(), wrapWidth));
+		before.add(blankLine());
+		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.fingerprint.label").getString(), wrapWidth, ChatFormatting.GRAY));
+		before.add(VersionedText.literal(getConcatenatedFingerprint()).withStyle(ChatFormatting.GRAY));
+		before.add(blankLine());
+		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.confirm.text").getString(), wrapWidth, ChatFormatting.GRAY));
+		hintLines = wrapToWidth(this.font, VersionedText.translatable("automodpack.validation.identity.methodHint").getString(), wrapWidth);
 
-		List<Button> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> {
 					ScreenImpl.setScreen(parent);
 					if (!this.validated) this.canceledCallback.run();
 				}),
 				optionalAction(VersionedText.translatable("automodpack.skip"), button -> ScreenImpl.setScreen(new SkipVerificationScreen(this, this.validatedCallback))),
-				primaryAction(VersionedText.translatable("automodpack.validation.verify"), button -> verifyFingerprint())));
+				primaryAction(VersionedText.translatable("automodpack.validation.verify"), button -> verifyFingerprint()));
+		List<Button> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
 		this.verifyButton = buttons.get(2);
+		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
+		int hintHeight = Math.max(LINE, hintLines.size() * LINE);
+		int pinned = ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + hintHeight;
+		int bodyTop = 42;
+		int listBottom = Math.min(bodyTop + before.size() * LINE, footerTop - 4 - pinned - ActionAreaLayout.GAP);
+		this.addCenteredScrollBody(BODY, bodyTop, Math.max(bodyTop + LINE, listBottom), before);
+		fieldY = Math.max(bodyTop + LINE, listBottom) + ActionAreaLayout.SEAM;
 
-		Button wikiButton = iconButtonWidget(fieldLeft + fieldWidth + 4, fieldY, 20, 16,
-				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
-				"link", VersionedText.translatable("automodpack.learnmore"));
-		this.addRenderableWidget(wikiButton);
-		setTooltip(wikiButton, VersionedText.translatable("automodpack.learnmore"));
+		int fieldLeft = panelLeft(BODY);
+		int fieldWidth = Math.max(1, panelWidth(BODY) - ActionAreaLayout.SEAM - HELP_SIZE);
+		this.textField = new EditBox(this.font, fieldLeft, fieldY, fieldWidth, ActionAreaLayout.BUTTON_HEIGHT, VersionedText.literal(""));
+		this.textField.setMaxLength(64);
 
-		String originLabel = truncateToWidth(this.font, originFull, Math.max(1, panelWidth(ActionAreaLayout.FOOTER_RAIL) - 8));
-		int originWidth = Math.max(1, this.font.width(originLabel));
-		if (originLabel.equals(originFull) || originFull.isBlank()) return;
-		Button originHit = buttonWidget(this.width / 2 - originWidth / 2, this.height / 2 - 82, originWidth, 12, VersionedText.literal(""), button -> {});
-		this.addRenderableWidget(originHit);
-		setTooltip(originHit, VersionedText.literal(originFull));
+		Button help = buttonWidget(fieldLeft + fieldWidth + ActionAreaLayout.SEAM, fieldY, HELP_SIZE, HELP_SIZE, VersionedText.literal("?"),
+				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"));
+		this.addRenderableWidget(help);
+		setTooltip(help, VersionedText.translatable("automodpack.learnmore"));
 	}
 
 	private void forceValidate() {
@@ -115,32 +137,12 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		int lineHeight = 12;
-		int wrapWidth = Math.max(1, panelWidth(ActionAreaLayout.FOOTER_RAIL) - 8);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.title").withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 95, TextColors.WHITE);
-
-		String originLabel = truncateToWidth(this.font, originFull, wrapWidth);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(originLabel).withStyle(ChatFormatting.GRAY, ChatFormatting.BOLD), this.width / 2, this.height / 2 - 80, TextColors.WHITE);
-
-		List<String> body = new ArrayList<>();
-		body.addAll(wrapToWidth(this.font, VersionedText.translatable("automodpack.validation.identity.purpose").getString(), wrapWidth, 2));
-		body.addAll(wrapToWidth(this.font, VersionedText.translatable("automodpack.validation.identity.paste").getString(), wrapWidth, 3));
-		body.addAll(wrapToWidth(this.font, VersionedText.translatable("automodpack.validation.identity.notPack").getString(), wrapWidth, 2));
-		int y = this.height / 2 - 65;
-		for (String line : body) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line), this.width / 2, y, TextColors.WHITE);
-			y += lineHeight;
-		}
-
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.fingerprint.label"), this.width / 2, this.height / 2 - 5, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(getConcatenatedFingerprint()), this.width / 2, this.height / 2 - 5 + lineHeight, TextColors.LIGHT_GRAY);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.confirm.text"), this.width / 2, this.height / 2 + 8, TextColors.WHITE);
-
-		List<String> underField = wrapToWidth(this.font, VersionedText.translatable("automodpack.validation.identity.methodHint").getString(), wrapWidth, 2);
-		int underY = this.height / 2 + 42;
-		for (String line : underField) {
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(originDisplay).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD), this.width / 2, 28, TextColors.WHITE);
+		int underY = fieldY + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM;
+		for (String line : hintLines) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.GRAY), this.width / 2, underY, TextColors.WHITE);
-			underY += lineHeight;
+			underY += LINE;
 		}
 	}
 

@@ -71,7 +71,7 @@ flow:
         - no_element: { text: verify }
   - do: click
     name: open advanced group selection
-    select: { text: customize groups }
+    select: { text: Customize }
   - do: wait_for
     name: show the group-selection list without pagination
     until:

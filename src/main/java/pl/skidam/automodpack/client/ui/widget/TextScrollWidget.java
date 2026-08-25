@@ -6,6 +6,7 @@ import java.util.Objects;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import org.jetbrains.annotations.NotNull;
 
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -27,21 +28,33 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /** One ObjectSelectionList of already-wrapped text lines for a pinned-title / pinned-footer dialog body. */
 public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget.Entry> {
-	private static final int ROW_HEIGHT = 11;
+	public static final int ROW_HEIGHT = 12;
 	private final int contentWidth;
+	private final boolean center;
 
-	public TextScrollWidget(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<String> lines) {
+	public TextScrollWidget(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<? extends Component> lines, boolean center) {
 		/*? if <1.20.3 {*/
 		/*super(client, width, height, top, bottom, ROW_HEIGHT);
 		*//*?} else {*/
 		super(client, width, Math.max(ROW_HEIGHT, bottom - top), top, ROW_HEIGHT);
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
+		this.center = center;
 		this.centerListVertically = false;
+		/*? if <1.21.1 {*/
+		/*this.setRenderBackground(false);
+		this.setRenderTopAndBottom(false);
+		*//*?}*/
 		/*? if <1.20.4 {*/
 		/*this.setRenderSelection(false);
 		*//*?}*/
-		for (String line : Objects.requireNonNull(lines, "lines")) this.addEntry(new Entry(line == null ? "" : line));
+		for (Component line : Objects.requireNonNull(lines, "lines")) this.addEntry(new Entry(mutableLine(line)));
+	}
+
+	private static MutableComponent mutableLine(Component line) {
+		if (line == null) return VersionedText.literal("");
+		if (line instanceof MutableComponent mutable) return mutable;
+		return VersionedText.literal(line.getString());
 	}
 
 	protected int getScrollbarPosition() {
@@ -53,16 +66,52 @@ public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget
 		return this.contentWidth;
 	}
 
-	public final class Entry extends ObjectSelectionList.Entry<Entry> {
-		private final String line;
+	/*? if >=26.1 {*/
+	@Override
+	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
 
-		private Entry(String line) {
+	@Override
+	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	/*?} elif >=1.21.10 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	*//*?} elif >=1.21.1 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
+	*//*?} elif >=1.20.4 {*/
+	/*@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
+	*//*?}*/
+
+	public final class Entry extends ObjectSelectionList.Entry<Entry> {
+		private final MutableComponent line;
+
+		private Entry(MutableComponent line) {
 			this.line = line;
 		}
 
 		@Override
 		public @NotNull Component getNarration() {
-			return VersionedText.literal(line);
+			return line;
 		}
 
 		/*? if >= 26.1 {*/
@@ -89,7 +138,14 @@ public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget
 		*//*?}*/
 
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth) {
-			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, line, Math.max(1, entryWidth - 4))), x + 2, y + 1, TextColors.WHITE);
+			if (center) {
+				VersionedScreen.drawCenteredTextWithShadow(matrices, minecraft.font, line, TextScrollWidget.this.width / 2, y + 1, TextColors.WHITE);
+				return;
+			}
+			int maxWidth = Math.max(1, entryWidth - 4);
+			MutableComponent drawn = line;
+			if (minecraft.font.width(line) > maxWidth) drawn = VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, line.getString(), maxWidth));
+			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + 2, y + 1, TextColors.WHITE);
 		}
 
 		/*? if >= 1.21.9 {*/

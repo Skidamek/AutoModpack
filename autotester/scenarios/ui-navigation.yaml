@@ -13,7 +13,7 @@ flow:
     until: { screen: UnverifiedPackConfirmScreen }
   - do: click
     name: open group customization
-    select: { text: customize groups }
+    select: { text: Customize }
   - do: wait_for
     name: wait for group customization
     until:
