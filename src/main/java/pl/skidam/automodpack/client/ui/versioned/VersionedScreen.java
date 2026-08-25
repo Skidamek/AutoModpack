@@ -4,9 +4,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+/*? if >=1.20.4 {*/
+import net.minecraft.client.gui.components.Checkbox;
+/*?}*/
 /*? if >= 1.20.2 {*/
 import net.minecraft.client.gui.components.SpriteIconButton;
 /*?} else {*/
@@ -16,6 +21,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+
+import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 
 /*? if >= 1.21.9 {*/
 import net.minecraft.client.input.KeyEvent;
@@ -222,6 +229,39 @@ public class VersionedScreen extends Screen {
 	}
 	/*?}*/
 
+	/*? if >=1.20.4 {*/
+	public static AbstractWidget checkboxWidget(Font font, int x, int y, int width, int height, Component message, boolean selected, Consumer<Boolean> onValueChange) {
+		Checkbox.Builder builder = Checkbox.builder(message, font).pos(x, y).selected(selected).onValueChange((box, value) -> onValueChange.accept(value));
+		/*? if >=1.21.1 {*/
+		builder.maxWidth(Math.max(1, width));
+		/*?}*/
+		Checkbox checkbox = builder.build();
+		/*? if <1.21.1 {*/
+		/*checkbox.setWidth(Math.max(1, width));
+		*//*?}*/
+		return checkbox;
+	}
+	/*?} else {*/
+	/*public static AbstractWidget checkboxWidget(Font font, int x, int y, int width, int height, Component message, boolean selected, Consumer<Boolean> onValueChange) {
+		boolean[] checked = { selected };
+		return buttonWidget(x, y, width, height, checkboxButtonMessage(message, checked[0]), button -> {
+			checked[0] = !checked[0];
+			button.setMessage(checkboxButtonMessage(message, checked[0]));
+			onValueChange.accept(checked[0]);
+		});
+	}
+
+	private static Component checkboxButtonMessage(Component message, boolean selected) {
+		return VersionedText.literal((selected ? "[x] " : "[ ] ") + message.getString());
+	}
+	*//*?}*/
+
+	protected final TextScrollWidget addScrollBody(int contentWidth, int topY, int bottomY, List<String> lines) {
+		TextScrollWidget body = new TextScrollWidget(this.minecraft, this.width, this.height, panelWidth(contentWidth), topY, bottomY, lines);
+		this.addRenderableWidget(body);
+		return body;
+	}
+
 	public static String truncateToWidth(Font font, String text, int maxWidth) {
 		if (text == null || text.isEmpty() || maxWidth <= 0) return "";
 		if (font.width(text) <= maxWidth) return text;
@@ -230,21 +270,16 @@ public class VersionedScreen extends Screen {
 		return fitPrefix(font, text, maxWidth - font.width(ellipsis)).stripTrailing() + ellipsis;
 	}
 
-	protected static List<String> wrapToWidth(Font font, String text, int maxWidth, int maxLines) {
+	protected static List<String> wrapToWidth(Font font, String text, int maxWidth) {
 		List<String> lines = new ArrayList<>();
-		if (text == null || text.isBlank() || maxWidth <= 0 || maxLines <= 0) return lines;
-		boolean truncated = false;
+		if (text == null || text.isBlank() || maxWidth <= 0) return lines;
 		for (String rawLine : text.split("\\R", -1)) {
 			String remaining = rawLine.strip();
 			if (remaining.isEmpty()) {
-				if (lines.size() < maxLines) lines.add("");
+				lines.add("");
 				continue;
 			}
 			while (!remaining.isEmpty()) {
-				if (lines.size() == maxLines) {
-					truncated = true;
-					break;
-				}
 				String fitting = fitPrefix(font, remaining, maxWidth);
 				int end = fitting.length();
 				if (end < remaining.length()) {
@@ -255,14 +290,19 @@ public class VersionedScreen extends Screen {
 				lines.add(remaining.substring(0, end).strip());
 				remaining = remaining.substring(Math.min(end, remaining.length())).strip();
 			}
-			if (truncated) break;
 		}
 		if (lines.isEmpty()) lines.add("");
-		if (truncated) {
-			int last = lines.size() - 1;
-			lines.set(last, truncateToWidth(font, lines.get(last) + "…", maxWidth));
-		}
 		return lines;
+	}
+
+	protected static List<String> wrapToWidth(Font font, String text, int maxWidth, int maxLines) {
+		List<String> lines = wrapToWidth(font, text, maxWidth);
+		if (maxLines <= 0) return new ArrayList<>();
+		if (lines.size() <= maxLines) return lines;
+		List<String> truncated = new ArrayList<>(lines.subList(0, maxLines));
+		int last = truncated.size() - 1;
+		truncated.set(last, truncateToWidth(font, truncated.get(last) + "…", maxWidth));
+		return truncated;
 	}
 
 	private static String fitPrefix(Font font, String text, int maxWidth) {
