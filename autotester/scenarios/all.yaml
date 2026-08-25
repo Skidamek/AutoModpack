@@ -143,7 +143,7 @@ flow:
     name: unlock update after acknowledgement
     timeout: 20s
     until:
-      element: { text: Update, enabled: true }
+      element: { text: Download, enabled: true }
   - do: screenshot
     name: capture first review with latest patch notes
     file: all-first-review
@@ -161,7 +161,7 @@ flow:
     select: { text: Back }
   - do: click
     name: accept the complete bootstrap
-    select: { text: Update }
+    select: { text: Download }
   - do: wait_file
     name: wait for the projected modpack marker
     path: "${active_dir}/${marker}"

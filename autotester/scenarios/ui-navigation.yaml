@@ -69,10 +69,13 @@ flow:
   - do: wait_for
     name: wait for the first unverified write confirm
     timeout: 90s
-    until: { screen: UnverifiedPackConfirmScreen }
+    until:
+      all:
+        - screen: UnverifiedPackConfirmScreen
+        - element: { text: do not download, enabled: true }
   - do: click
     name: return to group customization
-    select: { text: cancel }
+    select: { text: Customize }
   - do: wait_for
     name: verify group customization is reusable
     until:
@@ -88,10 +91,10 @@ flow:
     until:
       all:
         - screen: UnverifiedPackConfirmScreen
-        - element: { text: update, enabled: false }
+        - element: { text: download, enabled: false }
   - do: click
     name: return from the second confirm
-    select: { text: cancel }
+    select: { text: Customize }
   - do: wait_for
     name: return from customization to first connection
     until: { screen: ModpackSelectionScreen }

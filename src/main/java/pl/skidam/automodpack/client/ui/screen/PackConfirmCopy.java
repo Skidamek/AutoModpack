@@ -12,6 +12,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 
 /** Shared copy and catalogue helpers for matched / unverified confirm screens. */
 final class PackConfirmCopy {
@@ -44,7 +45,8 @@ final class PackConfirmCopy {
 
 	static String packSummary(SelectedModpackTarget target) {
 		long bytes = target.flatTarget().list.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		return VersionedText.translatable("automodpack.confirm.packSummary", target.selection().selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(bytes)).getString();
+		return VersionedText.translatable("automodpack.confirm.packSummary", UiFormat.plural(target.selection().selectedGroups().size(), "automodpack.confirm.groupCount").getString(),
+				UiFormat.plural(target.flatTarget().list.size(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(bytes)).getString();
 	}
 
 	static MutableComponent customizeLabel() {
@@ -64,8 +66,8 @@ final class PackConfirmCopy {
 		return count;
 	}
 
-	static ChangeSet catalogue(SelectedModpackTarget target) {
-		return ChangeSet.catalogue(target.manifest());
+	static ChangeSet catalogue(ModpackUpdater updater) {
+		return updater.reviewCatalogue();
 	}
 
 	static Map<String, String> featureNames(GroupManifest manifest) {
