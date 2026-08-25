@@ -28,7 +28,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** First-install confirm when every selected jar matched Modrinth or CurseForge. */
 public final class MatchedPackConfirmScreen extends VersionedScreen {
-	private static final int BODY = 320;
+	private static final int BODY = 420;
 	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 	private final ModpackUpdater updater;
 	private boolean keepExistingMods;
@@ -136,7 +136,7 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 
 	private void openFiles() {
 		var target = updater.getSelectedTarget();
-		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"), PackConfirmCopy.catalogue(target), PackConfirmCopy.featureNames(target.manifest())));
+		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"), PackConfirmCopy.catalogue(updater), PackConfirmCopy.featureNames(target.manifest())));
 	}
 
 	private void openPatchNotes() {

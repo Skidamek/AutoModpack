@@ -24,7 +24,7 @@ import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class FingerprintVerificationScreen extends VersionedScreen {
-	private static final int BODY = 320;
+	private static final int BODY = 420;
 	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 	private static final int HELP_SIZE = 20;
 	private final Screen parent;
@@ -41,7 +41,9 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	private Button verifyButton;
 	private String originDisplay = "";
 	private int fieldY;
+	private int bodyTop = 42;
 	private List<String> hintLines = List.of();
+	private List<MutableComponent> bodyLines = List.of();
 
 	public FingerprintVerificationScreen(Screen parent, String serverFingerprint, String origin, Runnable validatedCallback, Runnable canceledCallback) {
 		super(VersionedText.translatable("automodpack.validation.title"));
@@ -90,10 +92,17 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
 		int hintHeight = Math.max(LINE, hintLines.size() * LINE);
 		int pinned = ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + hintHeight;
-		int bodyTop = 42;
-		int listBottom = Math.min(bodyTop + before.size() * LINE, footerTop - 4 - pinned - ActionAreaLayout.GAP);
-		this.addCenteredScrollBody(BODY, bodyTop, Math.max(bodyTop + LINE, listBottom), before);
-		fieldY = Math.max(bodyTop + LINE, listBottom) + ActionAreaLayout.SEAM;
+		bodyTop = 42;
+		int neededText = Math.max(LINE, before.size() * LINE);
+		int availableText = Math.max(LINE, footerTop - 4 - pinned - ActionAreaLayout.GAP - bodyTop);
+		if (neededText <= availableText) {
+			bodyLines = List.copyOf(before);
+			fieldY = bodyTop + neededText + ActionAreaLayout.SEAM;
+		} else {
+			bodyLines = List.of();
+			this.addCenteredScrollBody(BODY, bodyTop, footerTop - 4 - pinned - ActionAreaLayout.GAP, before);
+			fieldY = footerTop - 4 - pinned;
+		}
 
 		int fieldLeft = panelLeft(BODY);
 		int fieldWidth = Math.max(1, panelWidth(BODY) - ActionAreaLayout.SEAM - HELP_SIZE);
@@ -139,6 +148,11 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(originDisplay).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD), this.width / 2, 28, TextColors.WHITE);
+		int y = bodyTop;
+		for (MutableComponent line : bodyLines) {
+			drawCenteredTextWithShadow(matrices, this.font, line, this.width / 2, y, TextColors.WHITE);
+			y += LINE;
+		}
 		int underY = fieldY + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM;
 		for (String line : hintLines) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.GRAY), this.width / 2, underY, TextColors.WHITE);

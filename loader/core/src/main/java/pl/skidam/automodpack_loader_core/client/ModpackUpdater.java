@@ -224,12 +224,33 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
 		if (firstConnection && confirmationState.get() == ConfirmationState.WAITING) {
-			ScreenManager.waiting();
-			startConfirmedUpdate();
+			ScreenManager.welcome(this);
 			return;
 		}
 		ScreenManager.waiting();
 		DownloadClient.NET_EXECUTOR.execute(this::startUpdate);
+	}
+
+	/** First-install review catalogue with Modrinth/CurseForge pages from the completed lookup. */
+	public ChangeSet reviewCatalogue() {
+		if (selectedTarget == null) return ChangeSet.empty();
+		return ChangeSet.catalogue(selectedTarget.manifest(), ChangeSet.Kind.ADDED, selectedTarget.selection().selectedGroups()).withReferences(this::mainPageUrlsForCatalogue);
+	}
+
+	private List<String> mainPageUrlsForCatalogue(String location, String path) {
+		FetchManager manager = sourceFetchManager;
+		if (manager == null || selectedTarget == null || path == null || path.isBlank()) return List.of();
+		String sha1 = null;
+		var items = selectedTarget.completeTarget().list;
+		if (items != null) for (var item : items) if (path.equals(item.file)) {
+			sha1 = item.sha1;
+			break;
+		}
+		if (sha1 == null || sha1.isBlank()) return List.of();
+		FetchManager.Datas data = manager.getFetchDatas().get(sha1);
+		if (data == null) data = manager.getFetchDatas().get(sha1.toLowerCase(Locale.ROOT));
+		if (data == null || data.fetchedData().mainPageUrls().isEmpty()) return List.of();
+		return List.copyOf(data.fetchedData().mainPageUrls());
 	}
 
 	private void startSourceFetch() throws IOException {
@@ -942,6 +963,15 @@ public class ModpackUpdater implements AutoCloseable {
 		ClientUpdatePlanBuilder.PreparedPlan prepared = preparePlanForReview();
 		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = ReviewedClientPlan.pending(prepared, prepared.plan());
 		reviewedUpdatePlan = reviewed;
+		if (firstConnection && confirmationState.get() == ConfirmationState.PREVIEWING) {
+			reviewed.approve();
+			if (!confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
+			return switch (applyApprovedPlan(reviewed, System.currentTimeMillis())) {
+				case APPLIED -> PreviewRequestResult.APPLIED;
+				case DEFERRED -> PreviewRequestResult.DEFERRED;
+				case FAILED -> PreviewRequestResult.FAILED;
+			};
+		}
 		if (!requiresPlayerReview(prepared, firstConnection)) {
 			reviewed.approve();
 			return switch (applyApprovedPlan(reviewed, System.currentTimeMillis())) {

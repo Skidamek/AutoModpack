@@ -31,7 +31,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Confirm before writing unverified jars on first install or a later update. */
 public final class UnverifiedPackConfirmScreen extends VersionedScreen {
-	private static final int BODY = 320;
+	private static final int BODY = 420;
 	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 	private static final int TIMER_TICKS = 10 * 20;
 	private final ModpackUpdater updater;
@@ -271,7 +271,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 	private void openFiles() {
 		if (firstInstall) {
 			var target = updater.getSelectedTarget();
-			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"), PackConfirmCopy.catalogue(target), PackConfirmCopy.featureNames(target.manifest())));
+			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"), PackConfirmCopy.catalogue(updater), PackConfirmCopy.featureNames(target.manifest())));
 			return;
 		}
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.update.reviewUpdate"), laterPreview.changeSet(), laterPreview.featureNames()));
