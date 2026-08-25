@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -309,7 +310,7 @@ public class ModpackUtils {
 			result.complete(true);
 		};
 		Runnable cancelAction = () -> result.completeExceptionally(new CertificateTrustCancelledException());
-		ScreenManager.validation(parent, fingerprint, trustAction, cancelAction);
+		ScreenManager.validation(parent, fingerprint, AddressHelpers.formatAddress(connectionInfo.origin), trustAction, cancelAction);
 		return result;
 	}
 }

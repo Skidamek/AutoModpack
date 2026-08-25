@@ -58,8 +58,8 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
-		executeOnClient(() -> Screens.preview(preview, modpackName, continueAction, cancelAction));
+	public boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
+		executeOnClient(() -> Screens.preview(preview, modpackName, updater, continueAction, cancelAction));
 		return true;
 	}
 
@@ -74,8 +74,8 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {
-		executeOnClient(() -> Screens.validation((Screen) parent, fingerprint, validated, canceled));
+	public void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled) {
+		executeOnClient(() -> Screens.validation((Screen) parent, fingerprint, origin, validated, canceled));
 	}
 
 	@Override
@@ -164,19 +164,24 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void welcome(ModpackUpdater modpackUpdater) {
-			Screens.setScreen(new FirstConnectScreen(modpackUpdater));
+			if (modpackUpdater.unverifiedSelectedJarPaths().isEmpty()) Screens.setScreen(new MatchedPackConfirmScreen(modpackUpdater));
+			else Screens.setScreen(new UnverifiedPackConfirmScreen(modpackUpdater));
 		}
 
-		public static void preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
+		public static void preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
 			Screen parent = Screens.getScreen();
 			if (isTransient(parent)) parent = interactiveParent;
 			parent = previewParent(parent);
 			interactiveParent = null;
-			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, continueAction, cancelAction));
+			if (updater != null && preview.mode() == UpdatePreview.Mode.UPDATE && updater.planWritesUnverifiedJar(preview.plan())) {
+				Screens.setScreen(new UnverifiedPackConfirmScreen(parent, updater, preview, continueAction, cancelAction));
+				return;
+			}
+			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, updater, continueAction, cancelAction));
 		}
 
 		private static Screen previewParent(Screen parent) {
-			if (parent instanceof FirstConnectScreen) return parent;
+			if (parent instanceof MatchedPackConfirmScreen || parent instanceof UnverifiedPackConfirmScreen) return parent;
 			if (parent instanceof ModpackSelectionScreen selection && (!selection.isUpdateFlow() || selection.isConfirmationFlow())) return parent;
 			return multiplayerScreen();
 		}
@@ -202,7 +207,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		private static Screen resumableFailureParent(Screen parent) {
-			if (parent == null || parent instanceof FirstConnectScreen || parent instanceof UpdatePreviewScreen) return multiplayerScreen();
+			if (parent == null || parent instanceof MatchedPackConfirmScreen || parent instanceof UnverifiedPackConfirmScreen || parent instanceof UpdatePreviewScreen) return multiplayerScreen();
 			return parent;
 		}
 
@@ -219,8 +224,8 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(ModpackSelectionScreen.repair(multiplayerScreen(), manifest, savedSelection, selectionAction, cancelAction));
 		}
 
-		public static void validation(Screen parent, String fingerprint, Runnable validated, Runnable canceled) {
-			Screens.setScreen(new FingerprintVerificationScreen(parent, fingerprint, validated, canceled));
+		public static void validation(Screen parent, String fingerprint, String origin, Runnable validated, Runnable canceled) {
+			Screens.setScreen(new FingerprintVerificationScreen(parent, fingerprint, origin, validated, canceled));
 		}
 
 		public static void waiting() {

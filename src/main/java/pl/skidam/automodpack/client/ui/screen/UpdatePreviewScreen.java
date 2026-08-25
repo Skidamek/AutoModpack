@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client.ui.screen;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
@@ -15,8 +16,14 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** A concise confirmation screen. Detailed file changes open in the shared browser. */
 public final class UpdatePreviewScreen extends VersionedScreen {
@@ -25,18 +32,20 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final UpdatePreview preview;
 	private final String modpackName;
 	private final UpdatePreview.Mode mode;
+	private final ModpackUpdater updater;
 	private final Runnable continueAction;
 	private final Runnable cancelAction;
 	private final ChangeSet changes;
 	private boolean finished;
 
-	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, Runnable continueAction,
+	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction,
 			Runnable cancelAction) {
 		super(VersionedText.translatable(titleKey(preview.mode())));
 		this.parent = parent;
 		this.preview = preview;
 		this.modpackName = modpackName == null ? "" : modpackName;
 		this.mode = preview.mode();
+		this.updater = updater;
 		this.continueAction = continueAction;
 		this.cancelAction = cancelAction;
 		this.changes = preview.changeSet();
@@ -57,11 +66,22 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		List<ActionRow> rows = new ArrayList<>();
 		if (!preview.patchNotesHistory().isEmpty())
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
+		if (canCustomize())
+			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> cancel()),
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
 				primaryAction(VersionedText.translatable(actionKey(mode)), button -> continueUpdate())));
 		return rows;
+	}
+
+	private boolean canCustomize() {
+		if (mode != UpdatePreview.Mode.UPDATE || updater == null) return false;
+		try {
+			return PackConfirmCopy.hasOptionalGroups(updater.getSelectedTarget().manifest());
+		} catch (RuntimeException ignored) {
+			return false;
+		}
 	}
 
 	private List<String> buildBodyLines() {
@@ -104,6 +124,18 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		finished = true;
 		ScreenImpl.setScreen(parent);
 		cancelAction.run();
+	}
+
+	private void customize() {
+		if (finished || updater == null) return;
+		Consumer<SelectionIntent> action = intent -> {
+			try {
+				updater.reselectAndPreview(intent);
+			} catch (RuntimeException e) {
+				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.MULTIPLAYER, null));
+			}
+		};
+		ScreenImpl.setScreen(new ModpackSelectionScreen(this, updater, action));
 	}
 
 	private void openFiles() {

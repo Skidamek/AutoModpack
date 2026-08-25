@@ -21,7 +21,9 @@ def _elements(gui: dict, role: str) -> list:
         return list(gui.get("buttons", []))
     if role in ("textfield", "textfields", "field"):
         return list(gui.get("textFields", []))
-    return list(gui.get("buttons", [])) + list(gui.get("textFields", []))
+    if role in ("other",):
+        return list(gui.get("other", []))
+    return list(gui.get("buttons", [])) + list(gui.get("textFields", [])) + list(gui.get("other", []))
 
 
 def _needles(selector: dict) -> list[str] | None:

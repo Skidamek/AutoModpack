@@ -27,7 +27,7 @@ public class PreloadScreenImpl implements ScreenService {
 	public void welcome(ModpackUpdater modpackUpdater) {}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
+	public boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
 		return false;
 	}
 
@@ -38,7 +38,7 @@ public class PreloadScreenImpl implements ScreenService {
 	public void failure(FailureRequest request) {}
 
 	@Override
-	public void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {}
+	public void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled) {}
 
 	@Override
 	public void waiting() {}

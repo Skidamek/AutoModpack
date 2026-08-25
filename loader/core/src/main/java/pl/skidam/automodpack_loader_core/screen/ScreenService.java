@@ -20,13 +20,13 @@ public interface ScreenService {
 
 	void welcome(ModpackUpdater modpackUpdater);
 
-	boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction);
+	boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction);
 
 	void history(HistoryViewRequest request);
 
 	void failure(FailureRequest request);
 
-	void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled);
+	void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled);
 
 	void waiting();
 

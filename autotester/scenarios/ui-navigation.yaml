@@ -10,7 +10,7 @@ flow:
   - do: wait_for
     name: wait for the first-connection prompt
     timeout: 90s
-    until: { screen: FirstConnectScreen }
+    until: { screen: UnverifiedPackConfirmScreen }
   - do: click
     name: open group customization
     select: { text: customize groups }
@@ -19,22 +19,8 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: "< Prev", enabled: false }
-        - element: { text: "Next >", enabled: true }
-  - do: click
-    name: open the next group page
-    select: { text: "Next >" }
-  - do: click
-    name: open the final category page
-    select: { text: "Next >" }
-  - do: wait_for
-    name: disable next at the last page and show the category separately from its group
-    until:
-      all:
-        - element: { text: "< Prev", enabled: true }
-        - element: { text: "Next >", enabled: false }
-        - element: { text: "[ ] Category: Visuals" }
         - element: { text: "[ ] Visuals" }
+        - element: { text: "[ ] Category: Visuals" }
   - do: click
     name: select only the child group
     select: { text: "[ ] Visuals" }
@@ -45,7 +31,7 @@ flow:
         - element: { text: "[x] Visuals" }
         - element: { text: "[x] Category: Visuals" }
   - do: screenshot
-    name: capture explicit child selection and pagination bounds
+    name: capture explicit child selection without pagination
     file: ui-navigation-explicit-child
   - do: click
     name: turn the whole category off through its header
@@ -69,14 +55,8 @@ flow:
     name: restore defaults before checking a named dependency
     select: { text: Defaults }
   - do: click
-    name: return to the dependency group page
-    select: { text: "< Prev" }
-  - do: click
     name: select a group that requires Visuals
     select: { text: Extra Five }
-  - do: click
-    name: open the dependency explanation page
-    select: { text: "Next >" }
   - do: wait_for
     name: name the group that requires Visuals
     until: { element: { text: "[+] Visuals" } }
@@ -87,9 +67,9 @@ flow:
     name: preview the customized selection
     select: { text: continue }
   - do: wait_for
-    name: wait for the first update preview
+    name: wait for the first unverified write confirm
     timeout: 90s
-    until: { screen: UpdatePreviewScreen }
+    until: { screen: UnverifiedPackConfirmScreen }
   - do: click
     name: return to group customization
     select: { text: cancel }
@@ -103,14 +83,14 @@ flow:
     name: preview the selection again
     select: { text: continue }
   - do: wait_for
-    name: verify the second update preview opens
+    name: verify the second unverified write confirm opens
     timeout: 90s
     until:
       all:
-        - screen: UpdatePreviewScreen
-        - element: { text: update, enabled: true }
+        - screen: UnverifiedPackConfirmScreen
+        - element: { text: update, enabled: false }
   - do: click
-    name: return from the second preview
+    name: return from the second confirm
     select: { text: cancel }
   - do: wait_for
     name: return from customization to first connection
@@ -122,7 +102,7 @@ flow:
     name: verify first connection is still usable
     until:
       all:
-        - screen: FirstConnectScreen
+        - screen: UnverifiedPackConfirmScreen
         - element: { text: do not download, enabled: true }
   - do: click
     name: cancel first connection
