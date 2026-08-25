@@ -648,7 +648,7 @@ def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     ctx.logs_provider = lambda _which, _tail=None: ""
     client_log = ctx.game_dir / "logs" / "latest.log"
     client_log.parent.mkdir(parents=True, exist_ok=True)
-    client_log.write_text("Preloaded 2 complete modpack objects in 1ms", encoding="utf-8")
+    client_log.write_text("Launch apply acquired 2 complete modpack objects in 1ms", encoding="utf-8")
 
     runner._v_assert_preload_acquired(ctx, {})
 

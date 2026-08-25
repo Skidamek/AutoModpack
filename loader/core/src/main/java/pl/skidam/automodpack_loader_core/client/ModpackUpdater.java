@@ -266,60 +266,14 @@ public class ModpackUpdater implements AutoCloseable {
 		this.downloadClient = downloadClient;
 	}
 
-	/** Trusted bootstrap install: apply the selected pack on this launch without review, keeping unowned mods. */
+	/** Trusted bootstrap install: apply the selected pack on this launch without a review screen. */
 	public void applyTrustedInstall() {
-		try {
-			if (selectedTarget == null || serverModpackContent == null) {
-				LOGGER.info("Skipping trusted bootstrap apply because no resolved target is available");
-				return;
-			}
-			requireLiveConnection();
-			firstConnection = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).isEmpty();
-			consentedLocalModFiles = Map.of();
-			ClientUpdatePlanBuilder.PreparedPlan prepared = preparePlanForReview();
-			ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = ReviewedClientPlan.pending(prepared, prepared.plan());
-			reviewed.approve();
-			recordChangelogs(prepared, selectedTarget);
-			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
-			LOGGER.info("Trusted bootstrap apply completed; restart required: {}", applyResult.requiresRestart());
-			if (preload) {
-				if (applyResult.requiresRestart()) new ReLauncher(firstConnection ? UpdateType.FULL : UpdateType.SELECT, changelogs).restart(true);
-			} else {
-				restartAfterApply(applyResult);
-			}
-		} catch (UpdateDeferredException e) {
-			LOGGER.warn("Trusted bootstrap apply transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
-		} catch (Exception e) {
-			LOGGER.error("Failed to apply the trusted bootstrap modpack; no projection changes were made outside the existing transaction guarantees", e);
-			if (!preload) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
-		} finally {
-			try {
-				if (preload) loadSelectedActiveProjection();
-			} catch (Exception e) {
-				LOGGER.error("Failed to load the active modpack projection after trusted bootstrap apply", e);
-			}
-			close();
-		}
+		applySelectedTargetWithoutReview(true);
 	}
 
 	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result) {
 		if (preload) {
-			try {
-				preloadAcquireTarget();
-			} catch (UpdateDeferredException e) {
-				LOGGER.warn("Preload transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-				new ReLauncher(UpdateType.UPDATE, changelogs).restart(true);
-			} catch (Exception e) {
-				LOGGER.error("Failed to preload or apply the selected modpack target; no projection changes were made outside the existing transaction guarantees", e);
-			} finally {
-				try {
-					loadSelectedActiveProjection();
-				} catch (Exception e) {
-					LOGGER.error("Failed to load the active modpack projection after preload", e);
-				}
-				close();
-			}
+			applySelectedTargetWithoutReview(false);
 			return;
 		}
 
@@ -388,21 +342,65 @@ public class ModpackUpdater implements AutoCloseable {
 		return new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, prepareObjects, consent);
 	}
 
-	private void preloadAcquireTarget() throws Exception {
-		if (selectedTarget == null || serverModpackContent == null) {
-			LOGGER.info("Skipping modpack preload because no resolved target is available");
+	/**
+	 * Applies the selected pack during launch. Preload has no review screen. The plan's restart reasons are the
+	 * authority: copies or deletes in the standard mods folder, a loader-version swap, and the other restart reasons
+	 * stop this process so the next launch sees the real {@code mods/} tree. Projection-only work loads in this process.
+	 * A deferred transaction restarts for the detached helper. First install waits for in-game review unless
+	 * {@code applyFirstInstall} is set (trusted bootstrap).
+	 */
+	private void applySelectedTargetWithoutReview(boolean applyFirstInstall) {
+		try {
+			if (selectedTarget == null || serverModpackContent == null) {
+				LOGGER.info("Skipping launch apply because no resolved target is available");
+				return;
+			}
+			requireLiveConnection();
+			firstConnection = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).isEmpty();
+			consentedLocalModFiles = Map.of();
+			if (firstConnection && !applyFirstInstall) {
+				try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+					acquireTargetObjects(selectedTarget.flatTarget(), cache, false);
+				}
+				LOGGER.info("Launch apply is waiting for first-install review");
+				return;
+			}
+			long start = System.currentTimeMillis();
+			ClientUpdatePlanBuilder.PreparedPlan prepared = prepareSelectedPlan(false);
+			if (!firstConnection && !requiresReconciliation(prepared, storedTarget())) {
+				LOGGER.info("Launch apply reused the active projection");
+				return;
+			}
+			ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = ReviewedClientPlan.pending(prepared, prepared.plan());
+			reviewed.approve();
+			recordChangelogs(prepared, selectedTarget);
+			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
+			LOGGER.info("Launch apply completed; restart required: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
+			finishLaunchApply(applyResult);
+		} catch (UpdateDeferredException e) {
+			LOGGER.warn("Launch apply transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+			new ReLauncher(UpdateType.UPDATE, changelogs).restart(true);
+		} catch (Exception e) {
+			LOGGER.error("Failed to apply the selected modpack; no projection changes were made outside the existing transaction guarantees", e);
+			if (!preload) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+		} finally {
+			try {
+				if (preload) loadSelectedActiveProjection();
+			} catch (Exception e) {
+				LOGGER.error("Failed to load the active modpack projection after launch apply", e);
+			}
+			close();
+		}
+	}
+
+	private void finishLaunchApply(ApplyResult applyResult) {
+		if (!preload) {
+			restartAfterApply(applyResult);
 			return;
 		}
-		requireLiveConnection();
-		ModpackJsons.ModpackContentFields preloadTarget = selectedTarget.completeTarget();
-		long start = System.currentTimeMillis();
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			int downloaded = acquireTargetObjects(preloadTarget, cache, false);
-			int targetCount = uniqueObjects(preloadTarget.list == null ? List.of() : preloadTarget.list).size();
-			if (downloaded == 0) LOGGER.info("Preload reused all {} verified complete modpack objects", targetCount);
-			else LOGGER.info("Preloaded {} complete modpack objects in {}ms", targetCount, System.currentTimeMillis() - start);
-		}
-		LOGGER.info("Preload acquired the complete selected target; active projection remains unchanged until player review");
+		if (!applyResult.requiresRestart()) return;
+		UpdateType updateType = firstConnection ? UpdateType.FULL : applyResult.restartReasons().contains(UpdatePlan.RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : UpdateType.UPDATE;
+		new ReLauncher(updateType, changelogs).restart(true);
 	}
 
 	private static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uniqueObjects(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
@@ -424,13 +422,17 @@ public class ModpackUpdater implements AutoCloseable {
 		ModpackUtils.populateStoreFromCWD(targetObjects, cache, storage);
 		planBuilder.populateStoreFromCachedLocations(target, cache);
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
-		if (missing.isEmpty()) return 0;
+		if (missing.isEmpty()) {
+			if (!playerFacing) LOGGER.info("Launch apply reused all {} verified complete modpack objects", targetObjects.size());
+			return 0;
+		}
 
 		requireLiveConnection();
+		long start = System.currentTimeMillis();
 		totalBytesToDownload = missing.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
 		FetchManager fetchManager = sourceFetch(missing);
 		try {
-			if (!downloadModpack(missing, System.currentTimeMillis(), fetchManager, playerFacing))
+			if (!downloadModpack(missing, start, fetchManager, playerFacing))
 				throw new IOException("One or more selected modpack objects could not be acquired");
 		} catch (Exception e) {
 			if (downloadManager != null) downloadManager.cancelAllAndShutdown();
@@ -440,6 +442,7 @@ public class ModpackUpdater implements AutoCloseable {
 		planBuilder.populateStoreFromLogicalProjection(target, cache);
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> stillMissing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
 		if (!stillMissing.isEmpty()) throw new IOException("Verified selected-target objects are still missing after acquisition: " + stillMissing.size());
+		if (!playerFacing) LOGGER.info("Launch apply acquired {} complete modpack objects in {}ms", targetObjects.size(), System.currentTimeMillis() - start);
 		return missing.size();
 	}
 
@@ -855,10 +858,14 @@ public class ModpackUpdater implements AutoCloseable {
 
 	/** Acquires all mutable target inputs before creating the plan that the player reviews. */
 	private ClientUpdatePlanBuilder.PreparedPlan preparePlanForReview() throws Exception {
+		return prepareSelectedPlan(true);
+	}
+
+	private ClientUpdatePlanBuilder.PreparedPlan prepareSelectedPlan(boolean playerFacing) throws Exception {
 		startSourceFetch();
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			requireLiveConnection();
-			acquireTargetObjects(selectedTarget.flatTarget(), cache, true);
+			acquireTargetObjects(selectedTarget.flatTarget(), cache, playerFacing);
 			return planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 		}
 	}

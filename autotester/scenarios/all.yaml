@@ -1178,11 +1178,11 @@ flow:
   - do: assert_preload_acquired
     name: verify the fresh client reacquired current objects into empty CAS
   - do: wait_for
-    name: verify preload left direct mod cleanup for the review path
+    name: verify first install waits for in-game review
     until:
       log:
         file: logs/latest.log
-        matches: 'Preload acquired the complete selected target; active projection remains unchanged until player review'
+        matches: 'Launch apply is waiting for first-install review'
   - do: assert_mod_fixture
     name: verify preload left the direct mod untouched before review
     path: mods/amp-autotest-removed.jar

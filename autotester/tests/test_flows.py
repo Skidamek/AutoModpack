@@ -66,7 +66,7 @@ def _launch_client(ctx, step):
         ctx.vars["fake_preload_review_logged"] = True
         latest_log = ctx.game_dir / "logs" / "latest.log"
         latest_log.parent.mkdir(parents=True, exist_ok=True)
-        latest_log.write_text("Preloaded 2 complete modpack objects in 1ms\nPreload acquired the complete selected target; active projection remains unchanged until player review\n", encoding="utf-8")
+        latest_log.write_text("Launch apply acquired 2 complete modpack objects in 1ms\nLaunch apply is waiting for first-install review\n", encoding="utf-8")
 
 
 def _wait_bridge(ctx, step):
@@ -345,10 +345,10 @@ def _ctx_for(make_ctx, scenario: dict):
                     "Imported seeded certificate pin for origin amp-server:25565"
                     if ctx.vars.get("fake_bootstrap_imported")
                     else "",
-                    "Preloaded 2 complete modpack objects in 1ms"
+                    "Launch apply acquired 2 complete modpack objects in 1ms"
                     if ctx.vars.get("fake_preload_logged")
                     else "",
-                    "Preload acquired the complete selected target; active projection remains unchanged until player review"
+                    "Launch apply is waiting for first-install review"
                     if ctx.vars.get("fake_preload_review_logged")
                     else "",
                 ],

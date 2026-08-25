@@ -1048,7 +1048,7 @@ def _v_assert_preload_rejected(ctx: Context, _step):
 
 @verb("assert_preload_acquired")
 def _v_assert_preload_acquired(ctx: Context, _step):
-    """Assert that Preload acquired every object in the published catalogue into CAS."""
+    """Assert that launch apply put every object in the published catalogue into CAS."""
     expected = _published_objects(ctx)
     if not expected:
         raise AssertionError("published projection contains no object hashes")
@@ -1070,9 +1070,10 @@ def _v_assert_preload_acquired(ctx: Context, _step):
     client_log = ctx.game_dir / "logs" / "latest.log"
     if client_log.is_file():
         log += "\n" + client_log.read_text(encoding="utf-8", errors="replace")
-    marker = f"Preloaded {len(expected)} complete modpack objects"
-    if marker not in log:
-        raise AssertionError(f"client log did not prove fresh complete preload: {marker!r}")
+    acquired = f"Launch apply acquired {len(expected)} complete modpack objects"
+    reused = f"Launch apply reused all {len(expected)} verified complete modpack objects"
+    if acquired not in log and reused not in log:
+        raise AssertionError(f"client log did not prove launch object acquisition: {acquired!r} or {reused!r}")
     ctx.vars["preloaded_object_count"] = len(expected)
 
 
