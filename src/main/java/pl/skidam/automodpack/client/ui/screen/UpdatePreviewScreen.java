@@ -45,6 +45,15 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
+		List<ActionRow> rows = buildRows();
+		List<Button> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
+		setTooltip(buttons.get(buttons.size() - 2), ChangeSummary.diffLegend());
+		int topY = 42;
+		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new)) - 4;
+		this.addScrollBody(PANEL_WIDTH, topY, bottomY, buildBodyLines());
+	}
+
+	private List<ActionRow> buildRows() {
 		List<ActionRow> rows = new ArrayList<>();
 		if (!preview.patchNotesHistory().isEmpty())
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
@@ -52,8 +61,35 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> cancel()),
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
 				primaryAction(VersionedText.translatable(actionKey(mode)), button -> continueUpdate())));
-		List<Button> buttons = this.addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
-		setTooltip(buttons.get(buttons.size() - 2), ChangeSummary.diffLegend());
+		return rows;
+	}
+
+	private List<String> buildBodyLines() {
+		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 20);
+		List<String> lines = new ArrayList<>();
+		lines.add(VersionedText.translatable("automodpack.patchNotes.latest").getString());
+		String patchNotes = preview.latestPatchNotes();
+		if (patchNotes.isBlank()) lines.add(VersionedText.translatable("automodpack.patchNotes.none").getString());
+		else lines.addAll(wrapToWidth(this.font, patchNotes, wrapWidth));
+		lines.add("");
+		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
+		boolean staleSelection = !groups.staleGroups().isEmpty();
+		lines.add(staleSelection
+				? VersionedText.translatable("automodpack.update.staleSelection").getString()
+				: UiFormat.plural(groups.resolvedGroups().size(), "automodpack.update.groupsSelected").getString());
+		if (!preview.conflicts().isEmpty())
+			lines.add(UiFormat.plural(preview.conflicts().size(), "automodpack.browser.conflicts").getString());
+		ChangeSet.Summary summary = changes.summary();
+		lines.add(ChangeSummary.diffLine(summary.addedFiles(), summary.modifiedFiles(), summary.removedFiles(), summary.preservedFiles(), summary.unsafeFiles()));
+		if (mode == UpdatePreview.Mode.UPDATE)
+			lines.add(VersionedText.translatable("automodpack.browser.downloadSummary", UiFormat.formatSize(preview.uncachedAcquisitionBytes()), UiFormat.formatSize(preview.addedBytes() + preview.changedBytes()))
+					.getString());
+		long otherEffects = changes.effects().stream().filter(effect -> !"restart".equals(effect.category())).count();
+		if (otherEffects > 0) lines.add(VersionedText.translatable("automodpack.summary.otherEffects", otherEffects).getString());
+		lines.add(preview.restartReasons().isEmpty()
+				? VersionedText.translatable("automodpack.summary.noRestart").getString()
+				: VersionedText.translatable("automodpack.summary.restartRequired").getString());
+		return lines;
 	}
 
 	private void continueUpdate() {
@@ -85,51 +121,6 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, 14,
 				TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(reviewKey(mode)).withStyle(ChatFormatting.GRAY), this.width / 2, 29, TextColors.WHITE);
-
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.patchNotes.latest").withStyle(ChatFormatting.GRAY), this.width / 2, 47, TextColors.WHITE);
-		String patchNotes = preview.latestPatchNotes();
-		List<String> noteLines = patchNotes.isBlank()
-				? List.of(VersionedText.translatable("automodpack.patchNotes.none").getString())
-				: wrapToWidth(this.font, patchNotes, Math.max(1, panelWidth(PANEL_WIDTH) - 20), this.height < 260 ? 1 : 2);
-		for (int index = 0; index < noteLines.size(); index++)
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(noteLines.get(index)).withStyle(ChatFormatting.WHITE), this.width / 2, 59 + index * 12, TextColors.WHITE);
-
-		int y = 88;
-		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
-		boolean staleSelection = !groups.staleGroups().isEmpty();
-		String selection = staleSelection
-				? VersionedText.translatable("automodpack.update.staleSelection").getString()
-				: UiFormat.plural(groups.resolvedGroups().size(), "automodpack.update.groupsSelected").getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selection, panelWidth(PANEL_WIDTH))).withStyle(staleSelection ? ChatFormatting.RED : ChatFormatting.GRAY),
-				this.width / 2, y, TextColors.WHITE);
-		y += 15;
-		if (!preview.conflicts().isEmpty()) {
-			String conflict = UiFormat.plural(preview.conflicts().size(), "automodpack.browser.conflicts").getString();
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(conflict).withStyle(ChatFormatting.YELLOW), this.width / 2, y, TextColors.WHITE);
-			y += 15;
-		}
-
-		// One stats block: canonical order, canonical colors, zero segments omitted, legend on hover.
-		ChangeSet.Summary summary = changes.summary();
-		String fileSummary = ChangeSummary.diffLine(summary.addedFiles(), summary.modifiedFiles(), summary.removedFiles(), summary.preservedFiles(), summary.unsafeFiles());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(fileSummary).withStyle(ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
-		y += 15;
-		// Removal speaks in consequences, not download language; nothing is downloaded while removing.
-		if (mode == UpdatePreview.Mode.UPDATE) {
-			String bytes = VersionedText.translatable("automodpack.browser.downloadSummary", UiFormat.formatSize(preview.uncachedAcquisitionBytes()), UiFormat.formatSize(preview.addedBytes() + preview.changedBytes()))
-					.getString();
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(bytes).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-			y += 15;
-		}
-		long otherEffects = changes.effects().stream().filter(effect -> !"restart".equals(effect.category())).count();
-		if (otherEffects > 0) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.summary.otherEffects", otherEffects).withStyle(ChatFormatting.YELLOW), this.width / 2, y, TextColors.WHITE);
-			y += 15;
-		}
-		String restart = preview.restartReasons().isEmpty()
-				? VersionedText.translatable("automodpack.summary.noRestart").getString()
-				: VersionedText.translatable("automodpack.summary.restartRequired").getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(restart).withStyle(preview.restartReasons().isEmpty() ? ChatFormatting.GRAY : ChatFormatting.YELLOW), this.width / 2, y, TextColors.WHITE);
 	}
 
 	private static String titleKey(UpdatePreview.Mode mode) {
