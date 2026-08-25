@@ -13,7 +13,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
-/** Routes pack-specific preserved files and the explicit global storage cleanup. */
+/** Pack-local storage cleanup. Preserved files open from pack details. */
 public final class ModpackStorageScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 
@@ -32,18 +32,10 @@ public final class ModpackStorageScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		List<ActionRow> actions = new ArrayList<>();
-		if (controller.hasPreservedFiles(pack)) {
-			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-					optionalAction(VersionedText.translatable("automodpack.management.preservedFiles"), button -> openPreservedFiles())));
-		}
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryAction(VersionedText.translatable("automodpack.packDetails.localStorage"), button -> openLocalStorage())));
 		this.addActionAreaAt(PANEL_WIDTH, 76, actions.toArray(ActionRow[]::new));
 		this.addActionArea(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
-	}
-
-	private void openPreservedFiles() {
-		controller.openPreservedFiles(this, pack, () -> {});
 	}
 
 	private void openLocalStorage() {

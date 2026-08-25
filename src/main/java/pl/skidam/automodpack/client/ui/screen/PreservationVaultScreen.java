@@ -90,9 +90,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		for (int index = start; index < Math.min(claims.size(), start + pageSize); index++) {
 			PreservationVault.Claim claim = claims.get(index);
 			int y = 66 + (index - start) * ROW_HEIGHT;
-			String prefix = claim.claimId().equals(selectedClaimId) ? "[x] " : "[ ] ";
-			String label = prefix + claim.originalPath() + "  " + UiFormat.formatSize(claim.size());
-			Button select = buttonWidget(x, y, width, 20, VersionedText.literal(truncateToWidth(this.font, label, width - 12)), press -> select(claim));
+			String filename = fileName(claim.originalPath()) + "  " + UiFormat.formatSize(claim.size());
+			Button select = buttonWidget(x, y, width, 20, VersionedText.literal(truncateToWidth(this.font, filename, width - 12)).withStyle(claim.claimId().equals(selectedClaimId) ? ChatFormatting.GREEN : ChatFormatting.WHITE), press -> select(claim));
 			select.active = !busy && !loading;
 			setTooltip(select, VersionedText.translatable("automodpack.vault.rowTooltip", claim.originalPath()));
 			this.addRenderableWidget(select);
@@ -290,11 +289,18 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		for (int index = start; index < Math.min(claims.size(), start + pageSize); index++) {
 			PreservationVault.Claim claim = claims.get(index);
 			int y = 88 + (index - start) * ROW_HEIGHT;
-			String metadata = reason(claim.reason()) + "  |  " + status(claim.status());
+			String metadata = claim.originalPath() + "  |  " + reason(claim.reason());
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, metadata, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(UiFormat.formatInstant(claim.preservedAt())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 12, TextColors.WHITE);
 		}
 		if (!loading && claims.isEmpty()) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
+	}
+
+	private static String fileName(String originalPath) {
+		if (originalPath == null || originalPath.isBlank()) return "";
+		Path path = Path.of(originalPath.replace('\\', '/'));
+		Path name = path.getFileName();
+		return name == null ? originalPath : name.toString();
 	}
 
 	private static String reason(PreservationVault.Reason reason) {

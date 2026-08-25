@@ -129,11 +129,12 @@ final class InstalledModpackController {
 		return discoveryFailure;
 	}
 
-	boolean hasPreservedFiles(Pack pack) {
+	int preservedClaimCount(Pack pack) {
 		try {
-			return !PreservationVault.read(storage, pack.modpackId()).claims().isEmpty();
+			return PreservationVault.read(storage, pack.modpackId()).claims().size();
 		} catch (IOException | RuntimeException e) {
-			return false;
+			discoveryFailure = e;
+			return 0;
 		}
 	}
 

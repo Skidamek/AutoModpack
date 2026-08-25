@@ -50,7 +50,7 @@ flow:
       all:
         - screen: ModpackSelectionScreen
         - element: { text: Pack manager, enabled: true }
-        - element: { text: Files, enabled: true }
+        - element: { text: Pack files, enabled: true }
         - element: { text: Save, enabled: false }
         - no_element: { text: Deactivate }
         - no_element: { text: Remove }
@@ -67,7 +67,7 @@ flow:
         - screen: ContentHistoryScreen
         - element: { text: Updated, enabled: true }
         - element: { text: Patch notes, enabled: true }
-        - element: { text: Files, enabled: true }
+        - element: { text: Pack files, enabled: true }
   - do: screenshot
     name: capture clickable generation history
     file: note-only-clickable-history
@@ -88,7 +88,7 @@ flow:
     select: { text: Back }
   - do: click
     name: open the complete modpack-owned file catalogue
-    select: { text: Files }
+    select: { text: Pack files }
   - do: wait_for
     name: show all installed modpack-owned files
     until:
@@ -136,7 +136,7 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: Files, enabled: true }
+        - element: { text: Pack files, enabled: true }
         - element: { text: Save, enabled: false }
         - element: { text: Back, enabled: true }
         - no_element: { text: Pack manager }

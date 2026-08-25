@@ -50,7 +50,10 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
 		actions.add(new Action("automodpack.selection.button", this::openFeatures));
 		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
-		actions.add(new Action("automodpack.management.files", this::openFiles));
+		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
+		int preservedCount = controller.preservedClaimCount(pack);
+		Component preservedLabel = preservedCount > 0 ? VersionedText.translatable("automodpack.management.preservedFilesCount", preservedCount) : VersionedText.translatable("automodpack.management.preservedFiles");
+		actions.add(new Action("automodpack.management.preservedFiles", this::openPreservedFiles, preservedCount == 0 ? VersionedText.translatable("automodpack.vault.empty") : null, preservedLabel));
 		actions.add(new Action("automodpack.packDetails.storage", this::openStorage));
 		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.translatable("automodpack.management.deactivateTooltip")));
 		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.translatable("automodpack.management.removeTooltip")));
@@ -61,9 +64,8 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 			List<ActionDefinition> rowActions = new ArrayList<>(end - index);
 			for (int rowIndex = index; rowIndex < end; rowIndex++) {
 				Action action = actions.get(rowIndex);
-				rowActions.add(rowIndex == 0
-						? primaryAction(VersionedText.translatable(action.labelKey()), button -> action.action().run())
-						: optionalAction(VersionedText.translatable(action.labelKey()), button -> action.action().run()));
+				Component message = action.label() != null ? action.label() : VersionedText.translatable(action.labelKey());
+				rowActions.add(rowIndex == 0 ? primaryAction(message, button -> action.action().run()) : optionalAction(message, button -> action.action().run()));
 			}
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, rowActions.toArray(ActionDefinition[]::new)));
 		}
@@ -78,9 +80,13 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		updateActions();
 	}
 
-	private record Action(String labelKey, Runnable action, Component tooltip) {
+	private record Action(String labelKey, Runnable action, Component tooltip, Component label) {
 		Action(String labelKey, Runnable action) {
-			this(labelKey, action, null);
+			this(labelKey, action, null, null);
+		}
+
+		Action(String labelKey, Runnable action, Component tooltip) {
+			this(labelKey, action, tooltip, null);
 		}
 	}
 
@@ -120,6 +126,11 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	private void openFiles() {
 		if (busy) return;
 		controller.openFiles(this, pack);
+	}
+
+	private void openPreservedFiles() {
+		if (busy) return;
+		controller.openPreservedFiles(this, pack, () -> {});
 	}
 
 	private void openStorage() {
