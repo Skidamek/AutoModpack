@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.client.ui.versioned;
+package pl.skidam.automodpack_core.utils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -6,6 +6,8 @@ import java.util.Objects;
 
 /** Pure geometry for the action areas shared by the custom screens. */
 public final class ActionAreaLayout {
+	public static final int FOOTER_RAIL = 310;
+	public static final int LONE_BUTTON = 200;
 	public static final int BUTTON_HEIGHT = 20;
 	/** The vanilla seam between paired buttons inside one rail (pause menu 98+98 in 200px). */
 	public static final int SEAM = 4;
@@ -51,9 +53,9 @@ public final class ActionAreaLayout {
 	}
 
 	/**
-	 * Lays rows out from top to bottom. Every row fills the whole rail: buttons split the rail
-	 * evenly through a 4px seam and the outer edges repeat on every row, like the vanilla pause
-	 * menu. A lone button spans the full rail instead of floating centered.
+	 * Lays rows out from top to bottom. Multi-button rows and lone AUXILIARY/NAVIGATION rows fill the
+	 * whole rail with an even split through a 4px seam; leftover pixels go to the last button so the
+	 * row's right edge equals left + width. A lone FOOTER action is LONE_BUTTON wide and centered.
 	 */
 	public static Layout fromTop(int left, int top, int width, int rowGap, List<Row> rows) {
 		int safeWidth = Math.max(1, width);
@@ -83,18 +85,28 @@ public final class ActionAreaLayout {
 	}
 
 	/**
-	 * Splits one rail evenly among the row's buttons with a 4px seam between neighbors. Widths stay
-	 * equal — vanilla pairs are 98+98, never label-grown — so every row of a screen shares exact
-	 * left/right rails no matter how long its labels are.
+	 * Splits one rail among the row's buttons with a 4px seam between neighbors. Widths stay equal
+	 * except the last button absorbs the remainder so the right edge of the rail is exact. A lone
+	 * FOOTER action is centered at LONE_BUTTON; other lone rows still fill the rail.
 	 */
 	private static List<Placement> layoutRow(int left, int top, int width, Row row) {
 		List<Action> actions = row.actions();
-		int count = Math.max(1, actions.size());
+		int count = actions.size();
+		if (count == 1 && row.kind() == RowKind.FOOTER) {
+			int buttonWidth = LONE_BUTTON;
+			int x = left + (width - buttonWidth) / 2;
+			Action action = actions.get(0);
+			return List.of(new Placement(action.id(), x, top, buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
+		}
+
 		int totalSeams = SEAM * (count - 1);
-		int buttonWidth = Math.max(MIN_BUTTON_WIDTH, (width - totalSeams) / count);
-		List<Placement> placements = new ArrayList<>(actions.size());
+		int base = (width - totalSeams) / count;
+		int extra = (width - totalSeams) % count;
+		List<Placement> placements = new ArrayList<>(count);
 		int x = left;
-		for (Action action : actions) {
+		for (int i = 0; i < count; i++) {
+			Action action = actions.get(i);
+			int buttonWidth = i == count - 1 ? base + extra : base;
 			placements.add(new Placement(action.id(), x, top, buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
 			x += buttonWidth + SEAM;
 		}

@@ -22,7 +22,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.widget.ChangeBrowserWidget;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;

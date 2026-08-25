@@ -12,7 +12,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import pl.skidam.automodpack.client.ScreenImpl;
-import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;

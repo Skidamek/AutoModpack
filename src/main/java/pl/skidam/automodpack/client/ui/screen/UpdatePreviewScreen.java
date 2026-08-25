@@ -11,12 +11,12 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.ChangeSummary;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
-import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** A concise confirmation screen. Detailed file changes open in the shared browser. */
 public final class UpdatePreviewScreen extends VersionedScreen {
