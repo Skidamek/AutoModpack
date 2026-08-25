@@ -42,8 +42,10 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		super.init();
 		actionButtons.clear();
 		List<Action> actions = new ArrayList<>();
-		if (pack.active() && upToDate) primaryIsStatus = true;
-		else {
+		if (pack.active() && upToDate) {
+			primaryIsStatus = true;
+			actions.add(new Action("automodpack.management.upToDate", () -> {}, null, VersionedText.translatable("automodpack.management.upToDate")));
+		} else {
 			primaryIsStatus = false;
 			actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
 		}
@@ -70,6 +72,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, rowActions.toArray(ActionDefinition[]::new)));
 		}
 		for (Button button : addActionAreaAt(PANEL_WIDTH, 100, rows.toArray(ActionRow[]::new))) actionButtons.add(button);
+		if (primaryIsStatus && !actionButtons.isEmpty()) actionButtons.get(0).visible = false;
 		// Destructive verbs say what they do before the player commits: Deactivate keeps files, Remove deletes them.
 		for (int index = 0; index < actions.size() && index < actionButtons.size(); index++) {
 			Component tooltip = actions.get(index).tooltip();
@@ -181,9 +184,13 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		int y = 28;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += 16;
-		if (showUpToDateStatus()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.management.upToDate").withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
-			y += 13;
+		if (showUpToDateStatus() && !actionButtons.isEmpty()) {
+			/*? if >=1.19.4 {*/
+			int statusY = actionButtons.get(0).getY() + 6;
+			/*?} else {*/
+			/*int statusY = actionButtons.get(0).y + 6;
+			*//*?}*/
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.management.upToDate").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
 		}
 		String state = pack.active() ? VersionedText.translatable("automodpack.packManager.active", pack.name()).getString() : VersionedText.translatable("automodpack.packManager.noActive").getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,

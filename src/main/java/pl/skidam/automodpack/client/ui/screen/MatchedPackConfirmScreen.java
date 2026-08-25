@@ -35,6 +35,8 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 	private boolean finished;
 	private String originFull = "";
 	private String originDisplay = "";
+	private int bodyTop = 42;
+	private List<MutableComponent> bodyLines = List.of();
 
 	public MatchedPackConfirmScreen(ModpackUpdater updater) {
 		super(VersionedText.translatable("automodpack.firstConnect.title"));
@@ -47,12 +49,11 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 		originFull = updater.joinOrigin();
 		originDisplay = truncateToWidth(this.font, PackConfirmCopy.displayOrigin(originFull), panelWidth(BODY) - 8);
 		boolean leftover = updater.firstInstallLocalModCount() > 0;
-		boolean customize = PackConfirmCopy.hasOptionalGroups(updater.getSelectedTarget().manifest());
 		boolean notes = GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes());
 		List<ActionRow> rows = new ArrayList<>();
 		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (leftover) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
-		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
+		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()),
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
@@ -61,12 +62,17 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 		List<Button> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		if (leftover) replaceLeftoverPlaceholder(buttons, notes);
 		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray) - 4;
-		int topY = 42;
 		List<MutableComponent> lines = buildBodyLines();
 		int contentHeight = Math.max(LINE, lines.size() * LINE);
-		int available = Math.max(LINE, bottomY - topY);
-		if (contentHeight < available) topY += (available - contentHeight) / 2;
-		this.addCenteredScrollBody(BODY, topY, bottomY, lines);
+		int available = Math.max(LINE, bottomY - 42);
+		if (contentHeight <= available) {
+			bodyTop = 42 + (available - contentHeight) / 2;
+			bodyLines = lines;
+		} else {
+			bodyTop = 42;
+			bodyLines = List.of();
+			this.addCenteredScrollBody(BODY, 42, bottomY, lines);
+		}
 	}
 
 	private void replaceLeftoverPlaceholder(List<Button> buttons, boolean notes) {
@@ -177,6 +183,11 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 		String name = updater.getSelectedTarget().manifest().modpackName().isBlank() ? "AutoModpack" : updater.getSelectedTarget().manifest().modpackName();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, PackConfirmCopy.packSummary(updater.getSelectedTarget()), panelWidth(BODY))).withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
+		int y = bodyTop;
+		for (MutableComponent line : bodyLines) {
+			drawCenteredTextWithShadow(matrices, this.font, line, this.width / 2, y, TextColors.WHITE);
+			y += LINE;
+		}
 	}
 
 	@Override

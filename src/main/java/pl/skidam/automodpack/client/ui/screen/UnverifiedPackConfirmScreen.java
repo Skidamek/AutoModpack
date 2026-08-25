@@ -92,14 +92,13 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 		unverifiedPaths.addAll(currentPaths);
 
 		boolean leftover = firstInstall && updater.firstInstallLocalModCount() > 0;
-		boolean customize = PackConfirmCopy.hasOptionalGroups(updater.getSelectedTarget().manifest());
 		boolean notes = firstInstall ? GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes())
 				: laterPreview != null && GenerationPatchNoteHistory.containsNotes(laterPreview.patchNotesHistory());
 
 		List<ActionRow> rows = new ArrayList<>();
 		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (leftover) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
-		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
+		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
 		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.cancel");
 		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : "automodpack.update.apply");
@@ -115,7 +114,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 			replacePlaceholderWithLeftover(buttons.get(buttonIndex));
 			buttonIndex++;
 		}
-		if (customize) buttonIndex++;
+		buttonIndex++;
 		replacePlaceholderWithAck(buttons.get(buttonIndex));
 		buttonIndex++;
 		cancelButton = buttons.get(buttonIndex);
