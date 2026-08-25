@@ -11,9 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Consumer;
 
@@ -26,6 +24,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.GroupSelectionList;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -34,27 +33,18 @@ import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
-import pl.skidam.automodpack_core.utils.PageLayout;
-
 /**
- * Lets the player pick which optional groups of a modpack they want. Deliberately built out of
- * plain buttons rather than a scrolling list widget: buttons are the one widget whose API is
- * stable across every Minecraft version this mod targets.
- *
- * Changes only take effect on the next launch, because mods are loaded during preload.
+ * Lets the player pick which optional groups of a modpack they want. Changes only take effect on the next launch, because mods are loaded during preload.
  */
 public class ModpackSelectionScreen extends VersionedScreen {
 
-	private static final int ROW_HEIGHT = 24;
 	private static final int ROW_WIDTH = 500;
-	private static final int BOTTOM_CONTROLS_GAP = 8;
 
 	private final Screen parent;
 	private final GroupManifest manifest;
@@ -82,14 +72,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private String resolutionError = "";
 	private final List<Row> rows = new ArrayList<>();
 
-	private int page = 0;
 	private boolean saved = false;
 	private boolean closed;
-	private boolean managementInFlight;
 	private boolean switchInFlight;
-	private Button vaultButton;
-	private Button historyButton;
-	private Button filesButton;
 	private Button saveButton;
 
 	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
@@ -192,91 +177,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return;
 		}
 
-		int listTop = 64;
-		List<ManagementAction> managementActions = selectionAction == null && showManagement ? managementActions() : List.of();
-		int managementRows = managementRowCount(managementActions.size());
-		int reservedManagementRows = Math.max(1, managementRows);
-		// Keep page breaks and list-to-control spacing stable when a flow hides the management row.
 		int actionY = this.height - 28;
-		int rowsWithoutPaginationActions = reservedManagementRows + 1;
-		int controlsHeightWithoutPagination = rowsWithoutPaginationActions * ActionAreaLayout.BUTTON_HEIGHT + (rowsWithoutPaginationActions - 1) * actionRowGap();
-		int listBottomWithoutPagination = actionY - (controlsHeightWithoutPagination - ActionAreaLayout.BUTTON_HEIGHT) - BOTTOM_CONTROLS_GAP;
-		int rowsWithoutPagination = Math.max(1, (listBottomWithoutPagination - listTop) / ROW_HEIGHT);
-		boolean showPagination = rows.size() > rowsWithoutPagination;
-		int controlsRows = managementRows + 1 + (showPagination ? 1 : 0);
-		int controlsHeight = controlsRows * ActionAreaLayout.BUTTON_HEIGHT + (controlsRows - 1) * actionRowGap();
-		int listBottom = actionY - (controlsHeight - ActionAreaLayout.BUTTON_HEIGHT) - BOTTOM_CONTROLS_GAP;
-		int rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
-		List<PageLayout.Range> pages = PageLayout.paginate(rows.size(), rowsPerPage, categoryRanges());
-
-		int pageCount = pages.size();
-		if (page >= pageCount) page = pageCount - 1;
-
-		int rowWidth = panelWidth(ROW_WIDTH);
-		int x = panelLeft(ROW_WIDTH);
-		PageLayout.Range visibleRows = pages.get(page);
-		int start = visibleRows.start();
-
-		for (int i = start; i < visibleRows.endExclusive(); i++) {
-			Row row = rows.get(i);
-			int y = listTop + (i - start) * ROW_HEIGHT;
-			if (row.groupId() == null) {
-				Button section = buttonWidget(x, y, rowWidth, 20, sectionLabel(row), press -> {
-					if (row.categoryId() != null) toggleCategory(row.categoryId());
-				});
-				section.active = row.categoryId() != null && hasOptionalCategoryGroups(row.categoryId());
-				// A header that cannot toggle is a label, not a dead button.
-				if (!section.active) renderAsPlainText(section);
-				this.addRenderableWidget(section);
-				continue;
-			}
-
-			String groupId = row.groupId();
-			var group = groups.get(groupId);
-			int infoWidth = infoButtonWidth();
-			Button button = buttonWidget(x, y, rowWidth - infoWidth - 4, 20, rowLabel(groupId, group), press -> toggle(groupId));
-			// Required groups, forced groups, dependencies and unavailable groups are shown so the player
-			// can understand the target, but only optional compatible choices are togglable.
-			button.active = group != null && canToggle(groupId, group);
-			MutableComponent tooltip = rowTooltip(groupId, group);
-			if (tooltip != null) setTooltip(button, tooltip);
-			this.addRenderableWidget(button);
-			Button inspect = buttonWidget(x + rowWidth - infoWidth, y, infoWidth, 20, VersionedText.translatable("automodpack.ui.info"), press -> inspect(groupId));
-			inspect.active = group != null;
-			if (tooltip != null) setTooltip(inspect, tooltip.append("\n").append(VersionedText.translatable("automodpack.ui.glyphLegend").withStyle(ChatFormatting.DARK_GRAY)));
-			this.addRenderableWidget(inspect);
-		}
-
-		List<ActionRow> actionRows = new ArrayList<>();
-		if (showPagination) {
-			actionRows.add(actionRow(ActionAreaLayout.RowKind.NAVIGATION,
-					navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
-						if (page > 0) {
-							page--;
-							rebuild();
-						}
-					}),
-					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
-					navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
-						if (page < pageCount - 1) {
-							page++;
-							rebuild();
-						}
-					})));
-		}
-		for (int index = 0; index < managementActions.size(); index += 3) {
-			int end = Math.min(managementActions.size(), index + 3);
-			List<ActionDefinition> definitions = new ArrayList<>(end - index);
-			for (int actionIndex = index; actionIndex < end; actionIndex++) {
-				ManagementAction action = managementActions.get(actionIndex);
-				definitions.add(optionalAction(action.label(), press -> action.action().run()));
-			}
-			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, definitions.toArray(ActionDefinition[]::new)));
-		}
-
 		String saveLabel = selectionAction != null ? "automodpack.selection.preview" : managerEntry && !activeModpack ? "automodpack.packManager.reviewSwitch" : "automodpack.selection.save";
 		SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
-		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), press -> back()),
 				optionalAction(VersionedText.translatable("automodpack.selection.reset"), press -> {
 					chosen.clear();
@@ -285,27 +189,37 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					excluded.clear();
 					reresolveDefault();
 				}),
-				primaryAction(VersionedText.translatable(saveLabel).withStyle(ChatFormatting.BOLD), press -> save())));
-		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, actionRows.toArray(ActionRow[]::new));
-		int actionIndex = 0;
-		if (showPagination) {
-			actionButtons.get(actionIndex++).active = page > 0;
-			renderAsPlainText(actionButtons.get(actionIndex++));
-			actionButtons.get(actionIndex++).active = page < pageCount - 1;
-		}
-		vaultButton = null;
-		historyButton = null;
-		filesButton = null;
-		for (ManagementAction action : managementActions) {
-			Button button = actionButtons.get(actionIndex++);
-			if (action.kind() == ManagementKind.VAULT) vaultButton = button;
-			if (action.kind() == ManagementKind.HISTORY) historyButton = button;
-			if (action.kind() == ManagementKind.FILES) filesButton = button;
-		}
-		this.saveButton = actionButtons.get(actionIndex + 2);
+				primaryAction(VersionedText.translatable(saveLabel), press -> save()));
+		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, footer);
+		this.saveButton = actionButtons.get(2);
 		this.saveButton.active = canSave();
 		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.translatable("automodpack.selection.noChanges"));
-		updateManagementButtons();
+		int listTop = 64;
+		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - 8;
+		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(ROW_WIDTH), listTop, listBottom, listItems(), this::onListToggle));
+	}
+
+	private List<GroupSelectionList.Item> listItems() {
+		List<GroupSelectionList.Item> items = new ArrayList<>();
+		for (Row row : rows) {
+			if (row.groupId() == null) {
+				boolean canToggle = row.categoryId() != null && hasOptionalCategoryGroups(row.categoryId());
+				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, row.categoryId() == null ? "" : row.categoryId(), sectionLabel(row), null, false, canToggle));
+				continue;
+			}
+			GroupManifest.Group group = groups.get(row.groupId());
+			boolean togglable = group != null && canToggle(row.groupId(), group);
+			items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.GROUP, row.groupId(), rowLabel(row.groupId(), group), rowTooltip(row.groupId(), group), resolution.selectedGroups().contains(row.groupId()), togglable));
+		}
+		return List.copyOf(items);
+	}
+
+	private void onListToggle(GroupSelectionList.Item item) {
+		if (item.kind() == GroupSelectionList.Kind.HEADER) {
+			if (!item.id().isBlank()) toggleCategory(item.id());
+			return;
+		}
+		toggle(item.id());
 	}
 
 	public boolean isUpdateFlow() {
@@ -402,12 +316,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		excluded.addAll(intent.excludedGroups());
 	}
 
-	private void reresolve() {
-		resolution = GroupSelectionResolver.resolve(manifest, currentIntent(), ClientPlatform.current());
-		resolutionError = "";
-		rebuild();
-	}
-
 	private void reresolveDefault() {
 		resolution = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.current());
 		resolutionError = "";
@@ -423,91 +331,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		*//*?}*/
 	}
 
-	private void inspect(String groupId) {
-		ScreenImpl.setScreen(new GroupInspectorScreen(this, manifest, groupId));
-	}
-
-	private void requestHistory() {
-		if (!beginManagement()) return;
-		InstalledModpackController.Pack pack = managedPack();
-		if (pack == null) {
-			endManagement();
-			return;
-		}
-		controller.openHistory(pack, this::endManagement);
-	}
-
-	private void requestVault() {
-		if (!beginManagement()) return;
-		InstalledModpackController.Pack pack = managedPack();
-		if (pack == null) {
-			endManagement();
-			return;
-		}
-		controller.openPreservedFiles(this, pack, this::endManagement);
-	}
-
-	private void requestFiles() {
-		InstalledModpackController.Pack pack = managedPack();
-		if (pack != null) controller.openFiles(this, pack);
-	}
-
-	private boolean beginManagement() {
-		if (managementInFlight) return false;
-		managementInFlight = true;
-		updateManagementButtons();
-		return true;
-	}
-
-	private void endManagement() {
-		managementInFlight = false;
-		updateManagementButtons();
-	}
-
-	private void updateManagementButtons() {
-		if (vaultButton != null) vaultButton.active = !managementInFlight;
-		if (historyButton != null) historyButton.active = !managementInFlight;
-		if (filesButton != null) filesButton.active = !managementInFlight;
-	}
-
-	private List<ManagementAction> managementActions() {
-		List<ManagementAction> actions = new ArrayList<>();
-		if (hasPreservedFiles()) actions.add(new ManagementAction(ManagementKind.VAULT, VersionedText.translatable("automodpack.management.preservedFiles"), this::requestVault));
-		if (hasHistory()) actions.add(new ManagementAction(ManagementKind.HISTORY, VersionedText.translatable("automodpack.management.history"), this::requestHistory));
-		if (localRecord != null || activeGeneration(modpackId) != null) actions.add(new ManagementAction(ManagementKind.FILES, VersionedText.translatable("automodpack.management.files"), this::requestFiles));
-		if (hasInstalledPacks()) actions.add(new ManagementAction(ManagementKind.MANAGER, VersionedText.translatable("automodpack.packManager.switch"), this::requestPackManager));
-		if (showManagement) actions.add(new ManagementAction(ManagementKind.PINNED, VersionedText.translatable("automodpack.pinnedMods.button"), this::requestPinnedMods));
-		return List.copyOf(actions);
-	}
-
-	private boolean hasPreservedFiles() {
-		InstalledModpackController.Pack pack = managedPack();
-		return pack != null && controller.hasPreservedFiles(pack);
-	}
-
-	private static int managementRowCount(int actionCount) {
-		return actionCount == 0 ? 0 : (actionCount + 2) / 3;
-	}
-
-	private boolean hasHistory() {
-		InstalledModpackController.Pack pack = managedPack();
-		return pack != null && controller.hasHistory(pack);
-	}
-
-	private boolean hasInstalledPacks() {
-		return controller.hasInstalledPacks();
-	}
-
 	private boolean isActiveModpack() {
 		return activeModpack;
-	}
-
-	private void requestPackManager() {
-		ScreenImpl.setScreen(openedFromManager ? parent : new InstalledModpacksScreen(this));
-	}
-
-	private void requestPinnedMods() {
-		ScreenImpl.setScreen(new PinnedModsScreen(this));
 	}
 
 	private void save() {
@@ -540,11 +365,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		controller.switchSelection(localRecord, expectedSelection, targetIntent, modpackName, () -> switchInFlight = false);
 	}
 
-	private InstalledModpackController.Pack managedPack() {
-		GenerationRecord record = localRecord == null ? controller.activeRecord(modpackId) : localRecord;
-		return record == null ? null : controller.pack(record);
-	}
-
 	private void back() {
 		if (closed) return;
 		closed = true;
@@ -562,18 +382,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			rows.add(new Row(categoryLabel(category), null, category));
 			for (var entry : groups.entrySet()) if (category.equals(entry.getValue().category())) rows.add(new Row("", entry.getKey(), category));
 		}
-	}
-
-	private List<PageLayout.Range> categoryRanges() {
-		List<PageLayout.Range> ranges = new ArrayList<>();
-		for (int start = 0; start < rows.size(); start++) {
-			Row row = rows.get(start);
-			if (row.groupId() != null || row.categoryId() == null) continue;
-			int end = start + 1;
-			while (end < rows.size() && rows.get(end).groupId() != null && row.categoryId().equals(rows.get(end).categoryId())) end++;
-			ranges.add(new PageLayout.Range(start, end));
-		}
-		return List.copyOf(ranges);
 	}
 
 	private MutableComponent sectionLabel(Row row) {
@@ -686,7 +494,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private int groupLabelWidth() {
-		return Math.max(1, panelWidth(ROW_WIDTH) - infoButtonWidth() - 12);
+		return Math.max(1, panelWidth(ROW_WIDTH) - 28);
 	}
 
 	private static boolean isMandatory(GroupManifest manifest, GroupManifest.Group group) {
@@ -799,12 +607,4 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private record Row(String section, String groupId, String categoryId) {}
-
-	private record ManagementAction(ManagementKind kind, MutableComponent label, Runnable action) {}
-
-	private int infoButtonWidth() {
-		return Math.max(64, this.font.width(VersionedText.translatable("automodpack.ui.info").getString()) + 16);
-	}
-
-	private enum ManagementKind { VAULT, HISTORY, FILES, MANAGER, PINNED }
 }
