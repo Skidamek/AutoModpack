@@ -64,14 +64,14 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	private void initWidgets() {
 		assert this.minecraft != null;
 
-		int fieldLeft = panelLeft(340);
-		int fieldWidth = Math.max(1, panelWidth(340) - 24);
+		int fieldLeft = panelLeft(ActionAreaLayout.FOOTER_RAIL);
+		int fieldWidth = Math.max(1, panelWidth(ActionAreaLayout.FOOTER_RAIL) - 24);
 		this.textField = new EditBox(this.font, fieldLeft, this.height / 2 + 27, fieldWidth, 20,
 				VersionedText.literal("")
 		);
 		this.textField.setMaxLength(64);
 
-		List<Button> buttons = addActionArea(340, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		List<Button> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> {
 					ScreenImpl.setScreen(parent);
 					if (!this.validated) this.canceledCallback.run();

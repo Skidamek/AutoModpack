@@ -15,7 +15,7 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** Routes pack-specific preserved files and the explicit global storage cleanup. */
 public final class ModpackStorageScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 320;
+	private static final int PANEL_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 
 	private final Screen parent;
 	private final InstalledModpackController controller;

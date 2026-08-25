@@ -29,7 +29,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** One browser for every file AutoModpack preserved before a destructive change. */
 public final class PreservationVaultScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 430;
+	private static final int PANEL_WIDTH = 500;
 	private static final int ROW_HEIGHT = 52;
 
 	private final Screen parent;
@@ -75,11 +75,11 @@ public final class PreservationVaultScreen extends VersionedScreen {
 				optionalAction(VersionedText.translatable("automodpack.vault.saveCopy"), press -> saveCopy()),
 				optionalAction(deleteLabel, press -> delete())));
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
-		pageSize = rowsPerPage(actionAreaTop(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)));
+		pageSize = rowsPerPage(actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
 		int pageCount = Math.max(1, (claims.size() + pageSize - 1) / pageSize);
 		if (pageCount > 1) {
 			actions.add(1, navigationRow(pageCount));
-			pageSize = rowsPerPage(actionAreaTop(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)));
+			pageSize = rowsPerPage(actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
 			pageCount = Math.max(1, (claims.size() + pageSize - 1) / pageSize);
 		}
 		page = Math.max(0, Math.min(pageCount - 1, page));
@@ -98,7 +98,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			this.addRenderableWidget(select);
 		}
 
-		List<Button> actionButtons = addActionArea(PANEL_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new));
+		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new));
 		Button restore = actionButtons.get(0);
 		Button saveCopy = actionButtons.get(1);
 		Button delete = actionButtons.get(2);

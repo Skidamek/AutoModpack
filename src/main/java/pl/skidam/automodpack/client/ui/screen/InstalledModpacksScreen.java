@@ -23,7 +23,7 @@ import pl.skidam.automodpack_core.update.PreservationVault;
 
 /** Lists locally installed packs; lifecycle actions live behind the details screen. */
 public final class InstalledModpacksScreen extends VersionedScreen {
-	private static final int PANEL_WIDTH = 320;
+	private static final int PANEL_WIDTH = 500;
 	private static final int ROW_HEIGHT = 34;
 	// Vanilla Select World (WorldListEntry) double-click window.
 	private static final long DOUBLE_CLICK_MILLIS = 250L;
@@ -106,12 +106,12 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 						actionRow(ActionAreaLayout.RowKind.FOOTER,
 								secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
 								optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller)))));
-			List<Button> actionButtons = addActionArea(PANEL_WIDTH, actionY, rows.toArray(ActionRow[]::new));
+			List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new));
 			actionButtons.get(0).active = page > 0;
 			actionButtons.get(2).active = page < pageCount - 1;
 			return;
 		}
-		this.addActionArea(PANEL_WIDTH, actionY,
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY,
 				actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 						optionalAction(VersionedText.translatable("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this)))),
 				actionRow(ActionAreaLayout.RowKind.FOOTER,

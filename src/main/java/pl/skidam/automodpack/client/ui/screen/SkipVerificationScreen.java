@@ -56,21 +56,21 @@ public class SkipVerificationScreen extends VersionedScreen {
 	private void initWidgets() {
 		assert this.minecraft != null;
 
-		int fieldLeft = panelLeft(340);
-		int fieldWidth = Math.max(1, panelWidth(340) - 24);
+		int fieldLeft = panelLeft(ActionAreaLayout.FOOTER_RAIL);
+		int fieldWidth = Math.max(1, panelWidth(ActionAreaLayout.FOOTER_RAIL) - 24);
 		this.textField = new EditBox(this.font, fieldLeft, this.height / 2 + 15, fieldWidth, 20,
 				VersionedText.literal("")
 		);
 		this.textField.setMaxLength(128);
 
-		List<Button> buttons = addActionArea(340, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		List<Button> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(verificationScreen)),
 				primaryAction(VersionedText.translatable("automodpack.skip"), button -> confirmSkip())));
 		this.backButton = buttons.get(0);
 		this.confirmButton = buttons.get(1);
 		this.confirmButton.active = false;
 
-		this.wikiButton = iconButtonWidget(fieldLeft + panelWidth(340) - 20, this.height / 2 + 15, 20, 16,
+		this.wikiButton = iconButtonWidget(fieldLeft + panelWidth(ActionAreaLayout.FOOTER_RAIL) - 20, this.height / 2 + 15, 20, 16,
 				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
 				"link", VersionedText.translatable("automodpack.learnmore"));
 
