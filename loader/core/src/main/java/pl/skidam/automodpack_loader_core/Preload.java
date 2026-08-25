@@ -186,10 +186,9 @@ public class Preload {
 			LOGGER.info("No saved secret for seeded/selected origin {}; using an anonymous preload secret", AddressHelpers.formatAddress(storedConnectionInfo.origin));
 		}
 
-		// When update-on-launch is disabled, just load the already-installed
-		// modpack: don't contact the server and don't reconcile local files,
-		// so the user can freely add/remove mods (e.g. a binary search).
-		// A trusted bootstrap file is an explicit install request and still applies.
+		// updateSelectedModpackOnLaunch=false loads the current projection and does not contact the
+		// server, so extra jars in mods/ stay put (binary search, pinning experiments). A trusted
+		// bootstrap file is an explicit install request and still applies.
 		if (!clientConfig.updateSelectedModpackOnLaunch && !trustedBootstrapApply) {
 			if (hasActiveProjection()) {
 				loadLocalModpack(connectionInfo, secret);

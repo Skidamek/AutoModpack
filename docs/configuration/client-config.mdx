@@ -8,7 +8,7 @@ The selected generation is exposed through `/automodpack/client/active/`, and it
 |----------------------------------|------------------|------------------------------------------------------------------------------------------------------------------------------------|
 | `DO_NOT_CHANGE_IT`               | `<file version>` | File version number used for auto conversion old config versions to new ones with automodpack update.                              |
 | `selectedModpackId`              |                  | The stable seven-character ID of the selected modpack. AutoModpack manages this value.                                            |
-| `updateSelectedModpackOnLaunch`  | `true`           | Turn on/off automatic modpack updates when launching the game.                                                                     |
+| `updateSelectedModpackOnLaunch`  | `true`           | When true, AutoModpack fetches and applies the selected pack during preload, before the loader reads it. When false, launch loads the current projection and does not contact the server. |
 | `selfUpdater`                    | `false`          | Turn on/off automodpack self-updates. This does not affect the mod's activity in installing modpacks.                              |
 | `syncAutoModpackVersion`         | `true`           | Turn on/off automatic syncing of AutoModpack version with the server.                                                              |
 | `syncLoaderVersion`              | `false`          | Turn on/off automatic syncing of the modloader version with the server. (EXPERIMENTAL - it works only on prism launcher and forks) |
