@@ -10,7 +10,6 @@ import net.minecraft.client.gui.screens.Screen;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
-import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -18,6 +17,7 @@ import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** Player-facing feature details. File projection is delegated to the shared tree/list browser. */
 public final class GroupInspectorScreen extends VersionedScreen {

@@ -44,6 +44,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 public class VersionedScreen extends Screen {
 
@@ -158,20 +159,20 @@ public class VersionedScreen extends Screen {
 		return new ActionRow(kind, List.of(actions));
 	}
 
-	protected final List<Button> addActionArea(int preferredPanelWidth, int bottomY, ActionRow... rows) {
-		return addActionArea(preferredPanelWidth, bottomY, false, rows);
+	protected final List<Button> addActionArea(int footerWidth, int bottomY, ActionRow... rows) {
+		return addActionArea(footerWidth, bottomY, false, rows);
 	}
 
-	protected final List<Button> addActionAreaAt(int preferredPanelWidth, int topY, ActionRow... rows) {
-		return addActionArea(preferredPanelWidth, topY, true, rows);
+	protected final List<Button> addActionAreaAt(int footerWidth, int topY, ActionRow... rows) {
+		return addActionArea(footerWidth, topY, true, rows);
 	}
 
-	protected final int actionAreaTop(int preferredPanelWidth, int bottomY, ActionRow... rows) {
-		return buildActionArea(preferredPanelWidth, bottomY, false, rows).layout().top();
+	protected final int actionAreaTop(int footerWidth, int bottomY, ActionRow... rows) {
+		return buildActionArea(footerWidth, bottomY, false, rows).layout().top();
 	}
 
-	private List<Button> addActionArea(int preferredPanelWidth, int anchorY, boolean fromTop, ActionRow... rows) {
-		ActionArea area = buildActionArea(preferredPanelWidth, anchorY, fromTop, rows);
+	private List<Button> addActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
+		ActionArea area = buildActionArea(footerWidth, anchorY, fromTop, rows);
 		List<Button> buttons = new ArrayList<>(area.layout().placements().size());
 		for (ActionAreaLayout.Placement placement : area.layout().placements()) {
 			ActionDefinition definition = area.definitions().get(placement.id());
@@ -183,7 +184,7 @@ public class VersionedScreen extends Screen {
 		return buttons;
 	}
 
-	private ActionArea buildActionArea(int preferredPanelWidth, int anchorY, boolean fromTop, ActionRow... rows) {
+	private ActionArea buildActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
 		List<ActionAreaLayout.Row> geometryRows = new ArrayList<>();
 		Map<String, ActionDefinition> definitions = new HashMap<>();
 		for (int rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -198,8 +199,8 @@ public class VersionedScreen extends Screen {
 			geometryRows.add(new ActionAreaLayout.Row(row.kind(), geometryActions));
 		}
 
-		int left = panelLeft(preferredPanelWidth);
-		int width = panelWidth(preferredPanelWidth);
+		int left = panelLeft(footerWidth);
+		int width = panelWidth(footerWidth);
 		ActionAreaLayout.Layout layout = fromTop
 				? ActionAreaLayout.fromTop(left, anchorY, width, actionRowGap(), geometryRows)
 				: ActionAreaLayout.fromBottom(left, anchorY + ActionAreaLayout.BUTTON_HEIGHT, width, actionRowGap(), geometryRows);

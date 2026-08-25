@@ -11,7 +11,7 @@ import net.minecraft.resources.Identifier;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.TextColors;
-import pl.skidam.automodpack.client.ui.versioned.ActionAreaLayout;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -56,15 +56,20 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private void initWidgets() {
-		cancelButton = addActionArea(310, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		cancelButton = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> {
 					cancelButton.active = false;
 					cancelDownload();
 					AudioManager.stopMusic();
 				}))).get(0);
 
-		int x = panelLeft(310) + panelWidth(310) - 20;
-		int y = this.height - 28;
+		/*? if >= 1.19.4 {*/
+		int x = cancelButton.getX() + cancelButton.getWidth() + ActionAreaLayout.GAP;
+		int y = cancelButton.getY();
+		/*?} else {*/
+		/*int x = cancelButton.x + cancelButton.getWidth() + ActionAreaLayout.GAP;
+		int y = cancelButton.y;
+		*//*?}*/
 
 		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
 			AudioManager.stopMusic();
