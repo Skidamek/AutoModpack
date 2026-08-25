@@ -27,8 +27,6 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	private final List<Button> actionButtons = new ArrayList<>();
 	private boolean busy;
 	private boolean upToDate;
-	// True when the pack is current: the first slot renders as a green status line, not a fake disabled button.
-	private boolean primaryIsStatus;
 
 	public ModpackDetailsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
 		super(VersionedText.translatable("automodpack.packDetails.title"));
@@ -42,13 +40,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		super.init();
 		actionButtons.clear();
 		List<Action> actions = new ArrayList<>();
-		if (pack.active() && upToDate) {
-			primaryIsStatus = true;
-			actions.add(new Action("automodpack.management.upToDate", () -> {}, null, VersionedText.translatable("automodpack.management.upToDate")));
-		} else {
-			primaryIsStatus = false;
-			actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
-		}
+		actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
 		actions.add(new Action("automodpack.selection.button", this::openFeatures));
 		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
@@ -71,8 +63,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 			}
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, rowActions.toArray(ActionDefinition[]::new)));
 		}
-		for (Button button : addActionAreaAt(PANEL_WIDTH, 100, rows.toArray(ActionRow[]::new))) actionButtons.add(button);
-		if (primaryIsStatus && !actionButtons.isEmpty()) actionButtons.get(0).visible = false;
+		for (Button button : addActionAreaAt(PANEL_WIDTH, actionGridTop(), rows.toArray(ActionRow[]::new))) actionButtons.add(button);
 		// Destructive verbs say what they do before the player commits: Deactivate keeps files, Remove deletes them.
 		for (int index = 0; index < actions.size() && index < actionButtons.size(); index++) {
 			Component tooltip = actions.get(index).tooltip();
@@ -161,11 +152,22 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	}
 
 	private void updateActions() {
-		for (int index = 0; index < actionButtons.size(); index++) actionButtons.get(index).active = !busy && (index != 0 || !pack.active() || pack.connectionAvailable() && !upToDate);
+		for (int index = 0; index < actionButtons.size(); index++) {
+			boolean primary = index == 0;
+			actionButtons.get(index).active = !busy && (!primary || !pack.active() || pack.connectionAvailable() && !upToDate);
+		}
+		if (actionButtons.isEmpty() || !pack.active()) return;
+		actionButtons.get(0).setMessage(VersionedText.translatable(upToDate ? "automodpack.management.upToDate" : "automodpack.management.update"));
 	}
 
-	private boolean showUpToDateStatus() {
-		return primaryIsStatus;
+	private int actionGridTop() {
+		int y = 28;
+		y += 16;
+		y += 14;
+		y += 14;
+		y += 12;
+		y += 12;
+		return y + ActionAreaLayout.GAP;
 	}
 
 	private void rebuild() {
@@ -184,14 +186,6 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		int y = 28;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += 16;
-		if (showUpToDateStatus() && !actionButtons.isEmpty()) {
-			/*? if >=1.19.4 {*/
-			int statusY = actionButtons.get(0).getY() + 6;
-			/*?} else {*/
-			/*int statusY = actionButtons.get(0).y + 6;
-			*//*?}*/
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.management.upToDate").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
-		}
 		String state = pack.active() ? VersionedText.translatable("automodpack.packManager.active", pack.name()).getString() : VersionedText.translatable("automodpack.packManager.noActive").getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
@@ -204,7 +198,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		String version = VersionedText.translatable("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion()).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, version, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += 12;
-		String contents = VersionedText.translatable("automodpack.packDetails.contents", pack.groupCount(), pack.fileCount(), UiFormat.formatSize(pack.fileBytes())).getString();
+		String contents = VersionedText.translatable("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(), UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes())).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contents, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
 	}

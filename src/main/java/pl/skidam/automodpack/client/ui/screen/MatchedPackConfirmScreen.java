@@ -50,10 +50,11 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 		originDisplay = truncateToWidth(this.font, PackConfirmCopy.displayOrigin(originFull), panelWidth(BODY) - 8);
 		boolean leftover = updater.firstInstallLocalModCount() > 0;
 		boolean notes = GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes());
+		boolean customize = PackConfirmCopy.canCustomize(updater.getSelectedTarget().manifest());
 		List<ActionRow> rows = new ArrayList<>();
 		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (leftover) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
-		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
+		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()),
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
