@@ -27,7 +27,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /** Nested list of unverified jar paths for the unverified confirm screen. */
 public final class UnverifiedJarList extends ObjectSelectionList<UnverifiedJarList.Entry> {
-	public static final int ROW_HEIGHT = 11;
+	public static final int ROW_HEIGHT = 12;
 	private final int contentWidth;
 
 	public UnverifiedJarList(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<String> paths) {
@@ -38,10 +38,8 @@ public final class UnverifiedJarList extends ObjectSelectionList<UnverifiedJarLi
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.centerListVertically = false;
-		/*? if <1.20.4 {*/
-		/*this.setRenderSelection(false);
-		*//*?}*/
 		for (String path : Objects.requireNonNull(paths, "paths")) this.addEntry(new Entry(path == null ? "" : path));
+		if (!this.children().isEmpty()) this.setSelected(this.children().get(0));
 	}
 
 	protected int getScrollbarPosition() {
@@ -89,18 +87,19 @@ public final class UnverifiedJarList extends ObjectSelectionList<UnverifiedJarLi
 		*//*?}*/
 
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth) {
-			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, path, Math.max(1, entryWidth - 4))), x + 2, y + 1, TextColors.LIGHT_RED);
+			boolean selected = UnverifiedJarList.this.getSelected() == this;
+			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, path, Math.max(1, entryWidth - 4))), x + 2, y + 1, selected ? TextColors.LIGHT_YELLOW : TextColors.LIGHT_GRAY);
 		}
 
 		/*? if >= 1.21.9 {*/
 		@Override
 		public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean bl) {
-			return false;
+			return true;
 		}
 		/*?} else {*/
 		/*@Override
 		public boolean mouseClicked(double mouseX, double mouseY, int button) {
-			return false;
+			return true;
 		}
 		*//*?}*/
 	}

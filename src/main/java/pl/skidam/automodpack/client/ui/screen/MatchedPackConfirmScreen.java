@@ -9,12 +9,14 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -26,12 +28,13 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** First-install confirm when every selected jar matched Modrinth or CurseForge. */
 public final class MatchedPackConfirmScreen extends VersionedScreen {
-	private static final int PANEL = ActionAreaLayout.FOOTER_RAIL;
-	private static final int LINE = 11;
+	private static final int BODY = 320;
+	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 	private final ModpackUpdater updater;
 	private boolean keepExistingMods;
 	private boolean finished;
 	private String originFull = "";
+	private String originDisplay = "";
 
 	public MatchedPackConfirmScreen(ModpackUpdater updater) {
 		super(VersionedText.translatable("automodpack.firstConnect.title"));
@@ -42,37 +45,28 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		originFull = updater.joinOrigin();
+		originDisplay = truncateToWidth(this.font, PackConfirmCopy.displayOrigin(originFull), panelWidth(BODY) - 8);
 		boolean leftover = updater.firstInstallLocalModCount() > 0;
 		boolean customize = PackConfirmCopy.hasOptionalGroups(updater.getSelectedTarget().manifest());
 		boolean notes = GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes());
 		List<ActionRow> rows = new ArrayList<>();
 		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (leftover) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
-		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.firstConnect.customize"), button -> customize())));
+		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.firstConnect.cancel"), button -> cancel()),
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
 				primaryAction(VersionedText.translatable("automodpack.firstConnect.download"), button -> download())));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
-		List<Button> buttons = this.addActionArea(PANEL, this.height - 28, rowArray);
+		List<Button> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		if (leftover) replaceLeftoverPlaceholder(buttons, notes);
-		addOriginHitbox();
-		int bottomY = actionAreaTop(PANEL, this.height - 28, rowArray) - 4;
+		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray) - 4;
 		int topY = 42;
-		List<String> lines = buildBodyLines();
+		List<MutableComponent> lines = buildBodyLines();
 		int contentHeight = Math.max(LINE, lines.size() * LINE);
 		int available = Math.max(LINE, bottomY - topY);
 		if (contentHeight < available) topY += (available - contentHeight) / 2;
-		this.addScrollBody(PANEL, topY, bottomY, lines);
-	}
-
-	private void addOriginHitbox() {
-		String label = truncateToWidth(this.font, originFull, panelWidth(PANEL));
-		int width = Math.max(1, this.font.width(label));
-		if (label.equals(originFull)) return;
-		Button hit = buttonWidget(this.width / 2 - width / 2, 27, width, 12, VersionedText.literal(""), button -> {});
-		this.addRenderableWidget(hit);
-		setTooltip(hit, VersionedText.literal(originFull));
+		this.addCenteredScrollBody(BODY, topY, bottomY, lines);
 	}
 
 	private void replaceLeftoverPlaceholder(List<Button> buttons, boolean notes) {
@@ -100,18 +94,16 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 		/*?}*/
 	}
 
-	private List<String> buildBodyLines() {
-		int wrapWidth = Math.max(1, panelWidth(PANEL) - 20);
-		List<String> lines = new ArrayList<>();
-		lines.addAll(wrapToWidth(this.font, PackConfirmCopy.intro(originFull), wrapWidth));
-		lines.add("");
-		lines.addAll(wrapToWidth(this.font, PackConfirmCopy.matchedHonesty(), wrapWidth));
-		lines.add("");
-		lines.addAll(wrapToWidth(this.font, PackConfirmCopy.computerRisk(), wrapWidth));
-		lines.add("");
-		lines.addAll(wrapToWidth(this.font, PackConfirmCopy.sharedCommands(), wrapWidth));
-		lines.add("");
-		lines.add(PackConfirmCopy.selectedSummary(updater.getSelectedTarget()));
+	private List<MutableComponent> buildBodyLines() {
+		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
+		List<MutableComponent> lines = new ArrayList<>();
+		lines.addAll(wrapWithHighlight(this.font, PackConfirmCopy.intro(originDisplay), originDisplay, wrapWidth, ChatFormatting.YELLOW, ChatFormatting.BOLD));
+		lines.add(blankLine());
+		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.matchedHonesty(), wrapWidth));
+		lines.add(blankLine());
+		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.computerRisk(), wrapWidth));
+		lines.add(blankLine());
+		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
 		return lines;
 	}
 
@@ -183,9 +175,8 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = updater.getSelectedTarget().manifest().modpackName().isBlank() ? "AutoModpack" : updater.getSelectedTarget().manifest().modpackName();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(PANEL))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
-		String originLabel = truncateToWidth(this.font, originFull, panelWidth(PANEL));
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(originLabel).withStyle(ChatFormatting.GRAY, ChatFormatting.BOLD), this.width / 2, 29, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, PackConfirmCopy.packSummary(updater.getSelectedTarget()), panelWidth(BODY))).withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
 	}
 
 	@Override

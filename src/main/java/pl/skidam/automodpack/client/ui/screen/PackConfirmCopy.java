@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -36,9 +37,18 @@ final class PackConfirmCopy {
 		return VersionedText.translatable("automodpack.confirm.intro", origin).getString();
 	}
 
-	static String selectedSummary(SelectedModpackTarget target) {
+	static String displayOrigin(String originFull) {
+		if (originFull == null || originFull.isBlank()) return "";
+		return originFull.endsWith(":25565") ? originFull.substring(0, originFull.length() - 6) : originFull;
+	}
+
+	static String packSummary(SelectedModpackTarget target) {
 		long bytes = target.flatTarget().list.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		return VersionedText.translatable("automodpack.firstConnect.selectedSummary", target.selection().selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(bytes)).getString();
+		return VersionedText.translatable("automodpack.confirm.packSummary", target.selection().selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(bytes)).getString();
+	}
+
+	static MutableComponent customizeLabel() {
+		return VersionedText.translatable("automodpack.confirm.customize");
 	}
 
 	static String unverifiedCount(int unverified, int jars) {
@@ -72,7 +82,7 @@ final class PackConfirmCopy {
 		return VersionedText.translatable(keep ? "automodpack.firstConnect.leftoverKeep" : "automodpack.firstConnect.leftoverArchive", count);
 	}
 
-	static Component ackLabel() {
+	static MutableComponent ackLabel() {
 		return VersionedText.translatable("automodpack.confirm.ack");
 	}
 }

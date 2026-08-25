@@ -17,6 +17,7 @@ import net.minecraft.client.gui.components.SpriteIconButton;
 /*?} else {*/
 /*import net.minecraft.client.gui.components.ImageButton;
 *//*?}*/
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -257,9 +258,52 @@ public class VersionedScreen extends Screen {
 	*//*?}*/
 
 	protected final TextScrollWidget addScrollBody(int contentWidth, int topY, int bottomY, List<String> lines) {
-		TextScrollWidget body = new TextScrollWidget(this.minecraft, this.width, this.height, panelWidth(contentWidth), topY, bottomY, lines);
+		List<MutableComponent> components = new ArrayList<>();
+		for (String line : lines) components.add(VersionedText.literal(line == null ? "" : line));
+		return addScrollBody(contentWidth, topY, bottomY, components, false);
+	}
+
+	protected final TextScrollWidget addCenteredScrollBody(int contentWidth, int topY, int bottomY, List<? extends Component> lines) {
+		return addScrollBody(contentWidth, topY, bottomY, lines, true);
+	}
+
+	protected final TextScrollWidget addScrollBody(int contentWidth, int topY, int bottomY, List<? extends Component> lines, boolean center) {
+		TextScrollWidget body = new TextScrollWidget(this.minecraft, this.width, this.height, panelWidth(contentWidth), topY, bottomY, lines, center);
 		this.addRenderableWidget(body);
 		return body;
+	}
+
+	protected static MutableComponent blankLine() {
+		return VersionedText.literal("");
+	}
+
+	protected static List<MutableComponent> wrapParagraph(Font font, String text, int maxWidth, ChatFormatting... styles) {
+		List<MutableComponent> lines = new ArrayList<>();
+		for (String line : wrapToWidth(font, text, maxWidth)) {
+			MutableComponent component = VersionedText.literal(line);
+			if (styles.length > 0) component = component.withStyle(styles);
+			lines.add(component);
+		}
+		return lines;
+	}
+
+	protected static List<MutableComponent> wrapWithHighlight(Font font, String text, String highlight, int maxWidth, ChatFormatting... highlightStyles) {
+		String token = highlight == null ? "" : highlight;
+		List<MutableComponent> lines = new ArrayList<>();
+		for (String line : wrapToWidth(font, text, maxWidth)) {
+			int index = token.isEmpty() ? -1 : line.indexOf(token);
+			if (index < 0) {
+				lines.add(VersionedText.literal(line));
+				continue;
+			}
+			MutableComponent component = VersionedText.literal(line.substring(0, index));
+			MutableComponent marked = VersionedText.literal(token);
+			if (highlightStyles.length > 0) marked = marked.withStyle(highlightStyles);
+			component.append(marked);
+			component.append(VersionedText.literal(line.substring(index + token.length())));
+			lines.add(component);
+		}
+		return lines;
 	}
 
 	public static String truncateToWidth(Font font, String text, int maxWidth) {
