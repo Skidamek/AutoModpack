@@ -211,16 +211,57 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void startSourceFetch() throws IOException {
-		if (sourceFetchManager != null) return;
+		if (sourceFetchManager != null) {
+			sourceFetchManager.fetch();
+			return;
+		}
 		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
-		if (selectedTarget != null && selectedTarget.flatTarget().list != null)
-			for (var item : selectedTarget.flatTarget().list)
-				addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
-		ModpackJsons.ModpackContentFields installed = storedTarget();
-		if (installed != null && installed.list != null)
-			for (var item : installed.list)
-				addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
+		if (selectedTarget != null) {
+			ModpackJsons.ModpackContentFields catalogue = selectedTarget.completeTarget();
+			if (catalogue.list != null)
+				for (var item : catalogue.list)
+					addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
+		}
 		sourceFetchManager = newSourceFetchManager(new ArrayList<>(unique.values()));
+		if (sourceFetchManager != null) sourceFetchManager.fetch();
+	}
+
+	static boolean gatedJar(String path) {
+		return path != null && path.toLowerCase(Locale.ROOT).endsWith(".jar");
+	}
+
+	boolean firstPartyHit(String sha1) {
+		FetchManager manager = sourceFetchManager;
+		if (manager == null || sha1 == null || sha1.isBlank()) return false;
+		FetchManager.Datas data = manager.getFetchDatas().get(sha1);
+		if (data == null) data = manager.getFetchDatas().get(sha1.toLowerCase(Locale.ROOT));
+		if (data == null) return false;
+		List<DownloadSource> sources = data.fetchedData().sources();
+		synchronized (sources) {
+			return !sources.isEmpty();
+		}
+	}
+
+	/** Selected flat-target jar paths without a Modrinth/CurseForge hash hit. */
+	public List<String> unverifiedSelectedJarPaths() {
+		if (selectedTarget == null || selectedTarget.flatTarget().list == null) return List.of();
+		List<String> unverified = new ArrayList<>();
+		for (var item : selectedTarget.flatTarget().list) {
+			if (!gatedJar(item.file)) continue;
+			if (!firstPartyHit(item.sha1)) unverified.add(item.file);
+		}
+		return List.copyOf(unverified);
+	}
+
+	/** True when the plan would write a gated jar that has no first-party hit. */
+	public boolean planWritesUnverifiedJar(UpdatePlan plan) {
+		if (plan == null) return false;
+		for (UpdatePlan.Operation operation : plan.operations()) {
+			if (operation.operation() != UpdatePlan.OperationType.INSTALL_OBJECT) continue;
+			if (!gatedJar(operation.relativePath())) continue;
+			if (!firstPartyHit(operation.expectedObjectHash())) return true;
+		}
+		return false;
 	}
 
 	private FetchManager sourceFetch(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
@@ -367,6 +408,10 @@ public class ModpackUpdater implements AutoCloseable {
 			}
 			long start = System.currentTimeMillis();
 			ClientUpdatePlanBuilder.PreparedPlan prepared = prepareSelectedPlan(false);
+			if (planWritesUnverifiedJar(prepared.plan())) {
+				LOGGER.warn("Launch apply aborted: unverified jars will not be written during preload; leaving the live pack unchanged");
+				return;
+			}
 			if (!firstConnection && !requiresReconciliation(prepared, storedTarget())) {
 				LOGGER.info("Launch apply reused the active projection");
 				return;
