@@ -34,7 +34,7 @@ final class InstalledModpackSwitch {
 				updater = updater(storage, target);
 				UpdatePreview preview = updater.previewInstalledSwitch();
 				ModpackUpdater finalUpdater = updater;
-				boolean shown = ScreenManager.preview(preview, modpackName,
+				boolean shown = ScreenManager.preview(preview, modpackName, finalUpdater,
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> apply(finalUpdater, release)),
 						(Runnable) () -> {
 							finalUpdater.close();

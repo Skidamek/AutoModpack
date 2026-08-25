@@ -41,8 +41,8 @@ public final class ScreenManager {
 		instance.welcome(modpackUpdater);
 	}
 
-	public static boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
-		return instance.preview(preview, modpackName, continueAction, cancelAction);
+	public static boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
+		return instance.preview(preview, modpackName, updater, continueAction, cancelAction);
 	}
 
 	public static void history(HistoryViewRequest request) {
@@ -57,8 +57,8 @@ public final class ScreenManager {
 		instance.failure(request);
 	}
 
-	public static void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {
-		instance.validation(parent, fingerprint, validated, canceled);
+	public static void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled) {
+		instance.validation(parent, fingerprint, origin, validated, canceled);
 	}
 
 	public static void waiting() {

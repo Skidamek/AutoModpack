@@ -58,6 +58,11 @@ public final class UpdatePreview {
 		return changeSet;
 	}
 
+	/** The immutable reconciliation decision this preview projects. */
+	public UpdatePlan plan() {
+		return decision;
+	}
+
 	public GroupConsequences groupConsequences() {
 		return groupConsequences;
 	}

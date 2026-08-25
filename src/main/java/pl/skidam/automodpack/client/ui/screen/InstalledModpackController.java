@@ -246,7 +246,7 @@ final class InstalledModpackController {
 		try {
 			UpdatePlan plan = new UpdatePlan(pack.modpackId(), GenerationTarget.from(pack.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(pack.record().manifest());
-			boolean shown = ScreenManager.preview(preview, pack.name(),
+			boolean shown = ScreenManager.preview(preview, pack.name(), null,
 					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> forget(pack, released, removed)),
 					released);
 			if (!shown) released.run();
@@ -299,7 +299,7 @@ final class InstalledModpackController {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
 				UpdatePreview preview = deactivation ? removalUpdater.previewDeactivation() : removalUpdater.previewRemoval();
-				boolean shown = ScreenManager.preview(preview, pack.name(),
+				boolean shown = ScreenManager.preview(preview, pack.name(), removalUpdater,
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeActiveRemoval(removalUpdater, deactivation, released, removed)),
 						released);
 				if (!shown) {
