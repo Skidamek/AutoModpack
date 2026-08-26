@@ -39,6 +39,9 @@ public abstract class HolepunchServerLoginMixin {
 	@Final
 	private Connection connection;
 
+	@Unique
+	private boolean automodpack$holepunchTakenOver;
+
 	@WrapMethod(method = "handleHello")
 	private void automodpack$handleHello(ServerboundHelloPacket packet, Operation<Void> original) {
 		String username = username(packet);
@@ -50,7 +53,7 @@ public abstract class HolepunchServerLoginMixin {
 		}
 
 		if (DebugLog.enabled()) {
-			System.err.printf("[mcholepunch-debug][%s][LOGIN] marker accepted name=%s profileId=%s remote=%s%n", Thread.currentThread().getName(), username, profileId, connection.getRemoteAddress());
+			DebugLog.log("login takeover", 0, "marker accepted", "name", username, "profileId", profileId, "remote", connection.getRemoteAddress());
 		}
 		HolepunchServerRegistry.Registration registration = HolepunchServerRegistry.current();
 		if (registration == null) {
@@ -61,8 +64,25 @@ public abstract class HolepunchServerLoginMixin {
 			*//*?}*/
 			return;
 		}
+		// From here on this listener is owned by the takeover: vanilla must neither drive its login
+		// state machine (the ~30s timeout would write a disconnect packet into the raw pipeline)
+		// nor tear it down. If negotiation fails, NettyLoginNegotiator closes the channel, so a
+		// frozen listener cannot outlive the holepunch connection it belongs to.
+		automodpack$holepunchTakenOver = true;
 		Channel channel = ((HolepunchConnectionAccessor) connection).automodpack$getChannel();
 		new NettyLoginNegotiator(channel, server.getKeyPair(), username, channel.remoteAddress(), marker, registration, NettyTakeoverSpec.minecraftLogin()).start();
+	}
+
+	@WrapMethod(method = "tick")
+	private void automodpack$skipHolepunchTick(Operation<Void> original) {
+		if (automodpack$holepunchTakenOver) return;
+		original.call();
+	}
+
+	@WrapMethod(method = "disconnect")
+	private void automodpack$skipHolepunchDisconnect(/*? if >=1.19.2 {*/Component/*?} else {*//*TextComponent*//*?}*/ reason, Operation<Void> original) {
+		if (automodpack$holepunchTakenOver) return;
+		original.call(reason);
 	}
 
 	@Unique
