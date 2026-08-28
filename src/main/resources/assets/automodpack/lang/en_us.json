@@ -157,6 +157,7 @@
   "automodpack.validation.description1": "Verification protects you from man-in-the-middle attacks.",
   "automodpack.validation.description2": "You must do this once. Get the fingerprint from the server operator.",
   "automodpack.validation.fingerprint.label": "Server fingerprint (shortened):",
+  "automodpack.validation.fingerprint.field": "Full fingerprint",
   "automodpack.validation.confirm.text": "Paste the full fingerprint:",
   "automodpack.validation.verify": "Verify",
   "automodpack.validation.failed": "The fingerprints do not match. An attacker can be using a false server identity.",

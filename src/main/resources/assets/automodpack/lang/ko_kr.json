@@ -154,6 +154,7 @@
   "automodpack.validation.description1": "확인하면 중간자 공격을 막을 수 있습니다.",
   "automodpack.validation.description2": "한 번만 하면 됩니다. 지문은 서버 운영자에게 받으세요.",
   "automodpack.validation.fingerprint.label": "서버 지문 (축약):",
+  "automodpack.validation.fingerprint.field": "전체 지문",
   "automodpack.validation.confirm.text": "확인할 전체 지문을 붙여넣으세요:",
   "automodpack.validation.verify": "확인",
   "automodpack.validation.failed": "지문이 일치하지 않습니다. 가짜 서버일 수 있습니다.",

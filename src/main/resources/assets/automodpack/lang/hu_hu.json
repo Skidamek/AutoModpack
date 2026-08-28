@@ -157,6 +157,7 @@
   "automodpack.validation.description1": "Az ellenőrzés véd a közbeékelődéses támadások ellen.",
   "automodpack.validation.description2": "Ezt csak egyszer kell megcsinálnod. Kérd el az ujjlenyomatot a szerver üzemeltetőjétől.",
   "automodpack.validation.fingerprint.label": "Szerver ujjlenyomata (rövidített):",
+  "automodpack.validation.fingerprint.field": "Teljes ujjlenyomat",
   "automodpack.validation.confirm.text": "Illeszd be a teljes ujjlenyomatot az ellenőrzéshez:",
   "automodpack.validation.verify": "Ellenőrzés",
   "automodpack.validation.failed": "Az ujjlenyomatok nem egyeznek. Támadó hamis szerverazonosságot használhat.",

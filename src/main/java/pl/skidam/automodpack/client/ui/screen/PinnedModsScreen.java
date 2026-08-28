@@ -59,13 +59,10 @@ public final class PinnedModsScreen extends VersionedScreen {
 		int x = panelLeft(PANEL_WIDTH);
 		int fieldY = 64;
 		int addWidth = Math.max(64, this.font.width(VersionedText.translatable("automodpack.pinnedMods.add").getString()) + 16);
-		int fieldWidth = Math.max(1, width - addWidth - 4);
-		this.idField = new EditBox(this.font, x, fieldY, fieldWidth, 20, VersionedText.translatable("automodpack.pinnedMods.field"));
-		this.idField.setMaxLength(128);
+		this.idField = fieldWidget(x, fieldY, width - addWidth - ActionAreaLayout.SEAM, VersionedText.translatable("automodpack.pinnedMods.field"), null, 128);
 		this.idField.setValue(typedId);
 		this.idField.setResponder(value -> typedId = value);
-		this.addRenderableWidget(this.idField);
-		this.addRenderableWidget(buttonWidget(x + fieldWidth + 4, fieldY, addWidth, 20, VersionedText.translatable("automodpack.pinnedMods.add"), press -> addTypedId()));
+		this.addRenderableWidget(buttonWidget(x + width - addWidth, fieldY, addWidth, 20, VersionedText.translatable("automodpack.pinnedMods.add"), press -> addTypedId()));
 
 		List<Row> rows = rows();
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));

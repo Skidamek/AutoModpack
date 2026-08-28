@@ -154,6 +154,7 @@
   "automodpack.validation.description1": "驗證可以防止中間人攻擊。",
   "automodpack.validation.description2": "只需做一次。向伺服器營運者索取指紋。",
   "automodpack.validation.fingerprint.label": "伺服器指紋（縮短）：",
+  "automodpack.validation.fingerprint.field": "完整指紋",
   "automodpack.validation.confirm.text": "貼上完整指紋以驗證：",
   "automodpack.validation.verify": "驗證",
   "automodpack.validation.failed": "指紋不相符。可能有人正在冒充伺服器。",

@@ -157,6 +157,7 @@
   "automodpack.validation.description1": "La verificación te protege de ataques de intermediario.",
   "automodpack.validation.description2": "Solo tienes que hacerlo una vez. Pide la huella digital al operador del servidor.",
   "automodpack.validation.fingerprint.label": "Huella digital del servidor (abreviada):",
+  "automodpack.validation.fingerprint.field": "Huella completa",
   "automodpack.validation.confirm.text": "Pega la huella digital completa para verificarla:",
   "automodpack.validation.verify": "Verificar",
   "automodpack.validation.failed": "Las huellas digitales no coinciden. Un atacante podría estar usando una identidad falsa del servidor.",

@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 /*? if >=1.20.4 {*/
 import net.minecraft.client.gui.components.Checkbox;
 /*?}*/
@@ -18,6 +19,7 @@ import net.minecraft.client.gui.components.SpriteIconButton;
 /*import net.minecraft.client.gui.components.ImageButton;
 *//*?}*/
 import net.minecraft.ChatFormatting;
+import net.minecraft.util.Util;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -229,6 +231,24 @@ public class VersionedScreen extends Screen {
 		return Button.builder(message, onPress).pos(x, y).size(width, height).build();
 	}
 	/*?}*/
+
+	/** One input row shared by every screen: the field on the rail, an optional square help button at its right. */
+	protected static final int HELP_BUTTON_SIZE = 20;
+
+	protected final EditBox fieldWidget(int x, int y, int railWidth, Component label, Component helpHint, int maxLength) {
+		int helpSize = helpHint == null ? 0 : HELP_BUTTON_SIZE + ActionAreaLayout.SEAM;
+		int fieldWidth = Math.max(1, railWidth - helpSize);
+		EditBox field = new EditBox(this.font, x, y, fieldWidth, ActionAreaLayout.BUTTON_HEIGHT, label);
+		field.setMaxLength(maxLength);
+		this.addRenderableWidget(field);
+		if (helpHint != null) {
+			Button help = buttonWidget(x + fieldWidth + ActionAreaLayout.SEAM, y, HELP_BUTTON_SIZE, HELP_BUTTON_SIZE, VersionedText.literal("?"),
+					button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"));
+			setTooltip(help, helpHint);
+			this.addRenderableWidget(help);
+		}
+		return field;
+	}
 
 	/*? if >=1.20.4 {*/
 	public static AbstractWidget checkboxWidget(Font font, int x, int y, int width, int height, Component message, boolean selected, Consumer<Boolean> onValueChange) {

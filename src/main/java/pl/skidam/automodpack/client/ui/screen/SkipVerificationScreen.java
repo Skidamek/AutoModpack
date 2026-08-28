@@ -5,7 +5,6 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -30,7 +29,6 @@ public class SkipVerificationScreen extends VersionedScreen {
 	private EditBox textField;
 	private Button backButton;
 	private Button confirmButton;
-	private Button wikiButton;
 	private int ticksRemaining;
 
 	public SkipVerificationScreen(Screen verificationScreen, Runnable validatedCallback) {
@@ -49,7 +47,6 @@ public class SkipVerificationScreen extends VersionedScreen {
 		this.addRenderableWidget(this.textField);
 		this.addRenderableWidget(this.backButton);
 		this.addRenderableWidget(this.confirmButton);
-		this.addRenderableWidget(this.wikiButton);
 		this.setInitialFocus(this.textField);
 	}
 
@@ -57,11 +54,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 		assert this.minecraft != null;
 
 		int fieldLeft = panelLeft(ActionAreaLayout.FOOTER_RAIL);
-		int fieldWidth = Math.max(1, panelWidth(ActionAreaLayout.FOOTER_RAIL) - 24);
-		this.textField = new EditBox(this.font, fieldLeft, this.height / 2 + 15, fieldWidth, 20,
-				VersionedText.literal("")
-		);
-		this.textField.setMaxLength(128);
+		this.textField = fieldWidget(fieldLeft, this.height / 2 + 15, panelWidth(ActionAreaLayout.FOOTER_RAIL), VersionedText.translatable("automodpack.validation.skip.confirm.text"), VersionedText.translatable("automodpack.learnmore"), 128);
 
 		List<Button> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(verificationScreen)),
@@ -69,12 +62,6 @@ public class SkipVerificationScreen extends VersionedScreen {
 		this.backButton = buttons.get(0);
 		this.confirmButton = buttons.get(1);
 		this.confirmButton.active = false;
-
-		this.wikiButton = iconButtonWidget(fieldLeft + panelWidth(ActionAreaLayout.FOOTER_RAIL) - 20, this.height / 2 + 15, 20, 16,
-				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
-				"link", VersionedText.translatable("automodpack.learnmore"));
-
-		setTooltip(wikiButton, VersionedText.translatable("automodpack.learnmore"));
 	}
 
 	private void confirmSkip() {

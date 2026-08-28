@@ -154,6 +154,7 @@
   "automodpack.validation.description1": "验证可以防止中间人攻击。",
   "automodpack.validation.description2": "只需做一次。向服务器管理员索取指纹。",
   "automodpack.validation.fingerprint.label": "服务器指纹（缩短）：",
+  "automodpack.validation.fingerprint.field": "完整指纹",
   "automodpack.validation.confirm.text": "粘贴完整指纹以验证：",
   "automodpack.validation.verify": "验证",
   "automodpack.validation.failed": "指纹不匹配。可能有人在冒充服务器。",

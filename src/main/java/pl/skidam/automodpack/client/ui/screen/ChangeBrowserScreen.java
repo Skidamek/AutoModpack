@@ -82,15 +82,13 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int controlsLeft = narrow ? panelLeft : panelLeft + searchWidth + GAP;
 		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * 2 : searchWidth + GAP * 3)) / 3);
 		this.browserTop = narrow ? 83 : 59;
-		this.searchField = new EditBox(this.font, panelLeft, 35, searchWidth, 20, VersionedText.translatable("automodpack.browser.search"));
-		this.searchField.setMaxLength(Integer.MAX_VALUE);
+		this.searchField = fieldWidget(panelLeft, 35, searchWidth, VersionedText.translatable("automodpack.browser.search"), null, Integer.MAX_VALUE);
 		this.searchField.setValue(search);
 		this.searchField.setSuggestion(VersionedText.translatable("automodpack.browser.search").getString());
 		this.searchField.setResponder(value -> {
 			search = value;
 			rebuildBrowser();
 		});
-		this.addRenderableWidget(this.searchField);
 		this.contentButton = buttonWidget(controlsLeft, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleContent());
 		this.featureButton = buttonWidget(controlsLeft + GAP + controlWidth, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleFeature());
 		this.modeButton = buttonWidget(controlsLeft + GAP * 2 + controlWidth * 2, controlsY, controlWidth, 20, VersionedText.literal(""), button -> toggleMode());

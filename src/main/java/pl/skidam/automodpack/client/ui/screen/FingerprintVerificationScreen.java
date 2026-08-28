@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -26,7 +25,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public class FingerprintVerificationScreen extends VersionedScreen {
 	private static final int BODY = 420;
 	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
-	private static final int HELP_SIZE = 20;
 	private final Screen parent;
 	private final String serverFingerprint;
 	private final String originFull;
@@ -105,14 +103,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		}
 
 		int fieldLeft = panelLeft(BODY);
-		int fieldWidth = Math.max(1, panelWidth(BODY) - ActionAreaLayout.SEAM - HELP_SIZE);
-		this.textField = new EditBox(this.font, fieldLeft, fieldY, fieldWidth, ActionAreaLayout.BUTTON_HEIGHT, VersionedText.literal(""));
-		this.textField.setMaxLength(64);
-
-		Button help = buttonWidget(fieldLeft + fieldWidth + ActionAreaLayout.SEAM, fieldY, HELP_SIZE, HELP_SIZE, VersionedText.literal("?"),
-				button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"));
-		this.addRenderableWidget(help);
-		setTooltip(help, VersionedText.translatable("automodpack.learnmore"));
+		this.textField = fieldWidget(fieldLeft, fieldY, panelWidth(BODY), VersionedText.translatable("automodpack.validation.fingerprint.field"), VersionedText.translatable("automodpack.learnmore"), 64);
 	}
 
 	private void forceValidate() {

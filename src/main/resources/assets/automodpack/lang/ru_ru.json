@@ -163,6 +163,7 @@
   "automodpack.validation.description1": "Проверка защищает от атак «человек посередине».",
   "automodpack.validation.description2": "Это нужно сделать один раз. Отпечаток выдаёт оператор сервера.",
   "automodpack.validation.fingerprint.label": "Отпечаток сервера (сокращённый):",
+  "automodpack.validation.fingerprint.field": "Полный отпечаток",
   "automodpack.validation.confirm.text": "Вставьте полный отпечаток для проверки:",
   "automodpack.validation.verify": "Проверить",
   "automodpack.validation.failed": "Отпечатки не совпадают. Возможно, кто-то выдаёт себя за сервер.",

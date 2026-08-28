@@ -157,6 +157,7 @@
   "automodpack.validation.description1": "Die Prüfung schützt dich vor Man-in-the-Middle-Angriffen.",
   "automodpack.validation.description2": "Das musst du einmal machen. Den Fingerabdruck bekommst du vom Serverbetreiber.",
   "automodpack.validation.fingerprint.label": "Server-Fingerabdruck (gekürzt):",
+  "automodpack.validation.fingerprint.field": "Vollständiger Fingerabdruck",
   "automodpack.validation.confirm.text": "Vollständigen Fingerabdruck zum Prüfen einfügen:",
   "automodpack.validation.verify": "Prüfen",
   "automodpack.validation.failed": "Die Fingerabdrücke stimmen nicht überein. Ein Angreifer kann eine falsche Serveridentität nutzen.",
