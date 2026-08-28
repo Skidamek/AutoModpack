@@ -283,6 +283,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		else {
 			PreservationVault.Claim armed = selected();
 			if (armed != null && armed.claimId().equals(pendingDeleteClaimId)) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.deleteArmed", armed.originalPath()).withStyle(ChatFormatting.RED), this.width / 2, 52, TextColors.WHITE);
+			// One state line: yellow names the selected file the actions below apply to.
+			else if (armed != null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.vault.selected", armed.originalPath()).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		}
 		List<PreservationVault.Claim> claims = claims();
 		int start = page * pageSize;

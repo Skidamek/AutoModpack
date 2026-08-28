@@ -333,6 +333,9 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 		String name = updater.getSelectedTarget().manifest().modpackName().isBlank() ? "AutoModpack" : updater.getSelectedTarget().manifest().modpackName();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, PackConfirmCopy.packSummary(updater.getSelectedTarget()), panelWidth(BODY))).withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
+		// The disabled primary needs its reason on screen: the gate is the risk checkbox (the label carries the countdown).
+		if (!finished && primaryButton != null && !primaryButton.active && !unverifiedPaths.isEmpty())
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.confirm.ackUnlock").withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 40, TextColors.WHITE);
 	}
 
 	@Override
