@@ -378,6 +378,7 @@
   "automodpack.management.preservedFilesCount": "%s zachowanych plikōw",
   "automodpack.restart.preservedFiles": "%s plikōw je we Zachowane pliki",
   "automodpack.selection.categoryPart": "Wybrano %s ze %s",
+  "automodpack.selection.categoryTooltip": "Kliknij, żeby włōnczyć wszyjske ôpcjonalne grupy w tyj kategoryji. Kliknij roz, żeby je wszyjske wykluczyć.",
   "automodpack.vault.restorePickFirst": "Napiyrsz wybōrz zachowany plik.",
   "automodpack.vault.restoreInactivePack": "Napiyrsz przełōncz sie na tyn modpak. Prziwrōcanie dŏ pliki nazŏd do aktywnyj gry.",
   "automodpack.vault.restoreManagedFiles": "Prziwrōcanie dŏ pliki gry nazŏd. Pliki modpaka wrōcōm ze nastympnōm aktualizacyjōm.",

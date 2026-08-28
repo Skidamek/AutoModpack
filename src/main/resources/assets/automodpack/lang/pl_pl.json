@@ -378,6 +378,7 @@
   "automodpack.management.preservedFilesCount": "%s zachowanych plików",
   "automodpack.restart.preservedFiles": "%s plików jest w Zachowane pliki",
   "automodpack.selection.categoryPart": "Wybrano %s z %s",
+  "automodpack.selection.categoryTooltip": "Kliknij, aby włączyć wszystkie opcjonalne grupy w tej kategorii. Kliknij ponownie, aby wykluczyć je wszystkie.",
   "automodpack.vault.restorePickFirst": "Najpierw wybierz zachowany plik.",
   "automodpack.vault.restoreInactivePack": "Najpierw przełącz się na ten modpack. Przywracanie odkłada pliki z powrotem do aktywnej gry.",
   "automodpack.vault.restoreManagedFiles": "Przywracanie odkłada pliki gry. Pliki modpacka wrócą z następną aktualizacją.",

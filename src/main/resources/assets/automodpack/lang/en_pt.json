@@ -368,6 +368,7 @@
   "automodpack.management.preservedFilesCount": "%s stashed files",
   "automodpack.restart.preservedFiles": "%s files be in Stashed files",
   "automodpack.selection.categoryPart": "%s of %s selected",
+  "automodpack.selection.categoryTooltip": "Click to include every optional group in this category. Click again to cast them all off.",
   "automodpack.vault.restorePickFirst": "Pick a stashed file first.",
   "automodpack.vault.restoreInactivePack": "Switch to this modpack first. Restorin' puts files back in the live game.",
   "automodpack.vault.restoreManagedFiles": "Restore puts game files back. Modpack files return with the next update.",
