@@ -88,8 +88,14 @@ class FakeBridge:
         self.update_available = False
         self.bootstrap = False
         self.history_parent = "restart"
+        self.groups_parent = "first_connection"  # screen that opened group customization
         self.dependency = False
         self.conflict = False
+        self.visuals_selected = True  # default-selected group in the pack manifest
+        self.visuals_excluded = False  # explicit category exclusion reached the child
+        self.alternative_selected = False
+        self.chosen_visuals = False  # Visuals was explicitly picked, not default-selected
+        self.acknowledged = False  # unverified-risk ack checkbox state on the confirm screens
         self.preservation_restored = False
         self.preservation_copy_saved = False
         self.vault_claim_selected = False
@@ -122,39 +128,26 @@ class FakeBridge:
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "first_connection": {
                 "screenClass": "UnverifiedPackConfirmScreen",
-                "buttons": [{"id": 3, "text": "Download", "enabled": True, "visible": True, "key": "automodpack.firstConnect.download"},
+                "buttons": [{"id": 3, "text": "Download", "enabled": self.acknowledged, "visible": True, "key": "automodpack.firstConnect.download"},
+                            {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True},
                             {"id": 18, "text": "Customize groups", "enabled": True, "visible": True},
                             *([{"id": 89, "text": (f"Keep {len(self._first_install_local_mods())} existing mod files in mods" if self.first_install_archive_existing else f"Archive {len(self._first_install_local_mods())} existing mod files"), "enabled": True, "visible": True, "key": ("automodpack.firstConnect.leftoverKeep" if self.first_install_archive_existing else "automodpack.firstConnect.leftoverArchive")}] if self._first_install_local_mods() else []),
                             {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
                 "textFields": [],
                 "other": [{"id": 90, "text": "I understand the risk and trust this server.", "enabled": True, "visible": True, "key": "automodpack.confirm.ack"}],
             },
-            "group0": {
-                "screenClass": "ModpackSelectionScreen",
-                "buttons": [{"id": 27, "text": "Core", "enabled": False, "visible": True},
-                            {"id": 28, "text": "Client", "enabled": True, "visible": True},
-							{"id": 29, "text": ("[+] Visuals" if self.dependency else "Visuals"), "enabled": True, "visible": True},
-                            {"id": 31, "text": "Continue", "enabled": True, "visible": True},
-                            {"id": 102, "text": "Back", "enabled": True, "visible": True}],
+            # The strict fresh-install reconciliation: Download approved the cleanup,
+            # but the jar-level review still requires its own acknowledgement.
+            "strict_confirm": {
+                "screenClass": "UnverifiedPackConfirmScreen",
+                "buttons": [{"id": 5, "text": "Update", "enabled": self.acknowledged, "visible": True, "key": "automodpack.update.apply"},
+                            {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
                 "textFields": [],
+                "other": [{"id": 90, "text": "I understand the risk and trust this server.", "enabled": True, "visible": True, "key": "automodpack.confirm.ack"}],
             },
-            "group1": {
+            "groups": {
                 "screenClass": "ModpackSelectionScreen",
-                "buttons": [{"id": 32, "text": "Extras", "enabled": True, "visible": True},
-                            {"id": 33, "text": "Addon", "enabled": True, "visible": True},
-                            {"id": 34, "text": ("Alternative (conflict)" if self.conflict else "Alternative"), "enabled": True, "visible": True},
-                            {"id": 35, "text": "Platform", "enabled": True, "visible": True},
-                            {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
-                            {"id": 31, "text": "Continue", "enabled": True, "visible": True}],
-                "textFields": [],
-            },
-            "group2": {
-                "screenClass": "ModpackSelectionScreen",
-                "buttons": [{"id": 48, "text": ("[+] Visuals" if self.dependency else "Visuals"), "enabled": True, "visible": True},
-                            {"id": 49, "text": "Category: Visuals", "enabled": True, "visible": True},
-                            {"id": 38, "text": "[-] Windows-only (1 file, 11 B)", "enabled": False, "visible": True},
-                            {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
-                            {"id": 31, "text": "Continue", "enabled": True, "visible": True}],
+                "buttons": self._group_list_buttons(),
                 "textFields": [],
             },
             "feature_conflict": {
@@ -295,6 +288,38 @@ class FakeBridge:
         return snapshot
 
     # --- actions ----------------------------------------------------------
+    def _group_list_buttons(self) -> list[dict]:
+        """Rows of the checkbox group list, mirroring ModpackSelectionScreen.listItems().
+
+        Glyphs follow the real screen: [#] mandatory, [x] chosen, [+] selected through
+        default or dependency, [-] excluded or unsupported, [ ] unselected. Category
+        headers mirror their optional child groups.
+        """
+        dependency_visuals = self.dependency and self.visuals_selected
+        if self.visuals_excluded:
+            visuals_row = "[-] Visuals (1 file, 15 B)"
+        elif dependency_visuals:
+            visuals_row = "[+] Visuals (1 file, 15 B)"
+        elif self.visuals_selected:
+            visuals_row = "[x] Visuals (1 file, 15 B)" if self.chosen_visuals else "[+] Visuals (1 file, 15 B)"
+        else:
+            visuals_row = "[ ] Visuals (1 file, 15 B)"
+        category_state = "[x]" if self.visuals_selected and not self.visuals_excluded else "[ ]"
+        alternative_row = ("[x] Alternative (1 file, 15 B)" if self.alternative_selected else "[ ] Alternative (1 file, 15 B)")
+        return [
+            {"id": 27, "text": "Core (5 files, 90 B)", "enabled": False, "visible": True},
+            {"id": 49, "text": f"{category_state} Category: Visuals", "enabled": True, "visible": True},
+            {"id": 29, "text": visuals_row, "enabled": True, "visible": True},
+            {"id": 36, "text": "[ ] Category: Extras", "enabled": True, "visible": True},
+            {"id": 33, "text": "[ ] Addon (1 file, 11 B)", "enabled": True, "visible": True},
+            {"id": 34, "text": alternative_row, "enabled": True, "visible": True},
+            {"id": 35, "text": "Category: Platform", "enabled": True, "visible": True},
+            {"id": 38, "text": "[-] Windows-only (1 file, 11 B)", "enabled": False, "visible": True},
+            {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
+            {"id": 31, "text": "Continue", "enabled": True, "visible": True},
+            {"id": 102, "text": "Back", "enabled": True, "visible": True},
+        ]
+
     def text(self, element_id: int, value: str, timeout: float = 30, **payload) -> dict:
         self.typed[element_id] = value
         if element_id == 1:
@@ -306,37 +331,78 @@ class FakeBridge:
         if element_id == 2 and self.fingerprint:
             self.screen = "preparing"
         elif element_id == 3:
-            self.screen = "preview"
+            # Download on the honesty confirm approves the plan and applies it directly.
+            # The strict fresh-install reconciliation still opens the later write confirm
+            # because its plan was re-derived after the reset.
+            if self.screen == "first_connection":
+                if self.ctx.vars.get("client_generation_reset"):
+                    self.acknowledged = False
+                    self.screen = "strict_confirm"
+                else:
+                    self._confirm_download()
+            else:
+                self.screen = "preview"
+        elif element_id == 5 and self.screen == "strict_confirm":
+            self._confirm_download()
+        elif element_id == 90 and self.screen in ("first_connection", "strict_confirm"):
+            self.acknowledged = not self.acknowledged
         elif element_id == 89:
             self.first_install_archive_existing = not self.first_install_archive_existing
         elif element_id == 18:
-            self.screen = "group0"
+            self.groups_parent = "first_connection"
+            self.screen = "groups"
         elif element_id == 19 or element_id == 28:
-            self.screen = "group0"
+            self.screen = "groups"
         elif element_id == 102:
             self.screen = "first_connection"
         elif element_id == 20 or element_id == 30 or element_id == 36:
-            self.screen = "group1" if self.screen == "group0" else "group2"
+            self.screen = "groups"
         elif element_id == 21 or element_id == 31:
-            self.screen = "preview"
-        elif element_id == 22:
-            self.screen = "group1"
-        elif element_id == 23:
-            self.screen = "group1"
-        elif element_id == 24 or element_id == 32:
-            self.screen = "group1"
+            # Continue returns to the confirm screen that opened customization; the
+            # manager/settings entry keeps its own preview destination.
+            self.screen = "first_connection" if self.groups_parent == "first_connection" else "preview"
+        elif element_id == 22 or element_id == 23 or element_id == 24 or element_id == 32:
+            self.screen = "groups"
         elif element_id == 33:
             self.dependency = True
-            self.screen = "group1"
+            self.visuals_selected = True  # Addon requires Visuals: the resolver pulls it in
+            self.visuals_excluded = False
+            self.screen = "groups"
         elif element_id == 34:
             self.conflict = True
             self.screen = "feature_conflict"
         elif element_id == 50:
-            self.screen = "group1"
+            # Keep Alternative: the conflict replacement swaps Visuals out.
+            self.alternative_selected = True
+            self.visuals_selected = False
+            self.visuals_excluded = False
+            self.screen = "groups"
         elif element_id == 25 or element_id == 35:
-            self.screen = "group1" if self.screen == "group2" else self.screen
+            self.screen = "groups"
         elif element_id == 39:
-            self.screen = "group0" if self.screen == "group1" else "group1" if self.screen == "group2" else self.screen
+            self.screen = "groups" if self.screen == "groups" else self.screen
+        elif element_id == 49 and self.screen == "groups":
+            # Category header toggle: all-or-none of its optional groups.
+            if self.visuals_excluded or not self.visuals_selected:
+                self.visuals_selected = True
+                self.visuals_excluded = False
+            else:
+                self.visuals_selected = False
+                self.visuals_excluded = True
+        elif (element_id == 29 or element_id == 48) and self.screen == "groups":
+            # Direct child-group toggle: Visuals flips between excluded and selected.
+            if self.visuals_selected and not self.visuals_excluded:
+                self.visuals_selected = False
+                self.visuals_excluded = True
+            else:
+                self.visuals_selected = True
+                self.visuals_excluded = False
+        elif element_id == 37:
+            self.dependency = False
+            self.conflict = False
+            self.visuals_selected = True
+            self.visuals_excluded = False
+            self.alternative_selected = False
         elif element_id == 5:
             if self.screen == "preview":
                 if self.pending_pack is not None:
@@ -397,10 +463,10 @@ class FakeBridge:
         elif element_id == 14:
             self.screen = self.history_parent
         elif element_id == 17:
-            self.history_parent = "preview"
+            self.history_parent = self.screen  # patch notes return to whichever screen opened them
             self.screen = "patch_history"
         elif element_id == 104:
-            self.screen = self.settings_parent if self.screen == "preview" and self.settings_parent == "details" else "group1"
+            self.screen = self.settings_parent if self.screen == "preview" and self.settings_parent == "details" else "groups"
         elif element_id == 15:
             self.history_parent = "changelog"
             self.screen = "patch_history"
@@ -498,6 +564,8 @@ class FakeBridge:
     def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
         # Already-synced clients drop straight in-game; first contact hits the cert prompt.
         self.screen = "preview" if self.update_available else ("ingame" if self.synced else "first_connection" if self.bootstrap else "cert")
+        if self.screen in ("first_connection", "preview"):
+            self.acknowledged = False  # each confirm starts with the risk checkbox unchecked
         return {"ok": True}
 
     def screenshot(self, name: str, timeout: float = 30) -> dict:
@@ -540,6 +608,16 @@ class FakeBridge:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(overlay, target)
 
+    def _confirm_download(self) -> None:
+        """Download on the first-install confirm applies the pack and restarts."""
+        if self.pending_pack is not None:
+            self._capture_editable_overlay(self.selected_pack)
+            self.selected_pack = self.pending_pack
+            self.pending_pack = None
+        self._write_modpack()
+        self._restore_editable_overlay(self.selected_pack)
+        self.screen = "restart"
+
     def _remove_active_pack(self) -> None:
         self.pack_removed = True
         active = self.ctx.game_dir / "automodpack" / "client" / "active"
@@ -579,7 +657,7 @@ class FakeBridge:
     def _repair_buttons(self) -> list[dict]:
         buttons: list[dict] = []
         if not self.repair_applied:
-            buttons.append({"id": 97, "text": (f"[x] Keep {len(self._repair_unowned_mods())} unowned mods" if self.repair_keep_unowned else f"[ ] Keep {len(self._repair_unowned_mods())} unowned mods"), "enabled": True, "visible": bool(self._repair_unowned_mods())})
+            buttons.append({"id": 97, "text": (f"[x] Keep {len(self._repair_unowned_mods())} extra mod files" if self.repair_keep_unowned else f"[ ] Keep {len(self._repair_unowned_mods())} extra mod files"), "enabled": True, "visible": bool(self._repair_unowned_mods()), "key": ("automodpack.repair.keepUnownedChecked" if self.repair_keep_unowned else "automodpack.repair.keepUnowned")})
             buttons.append({"id": 95, "text": "[ ] Keep changes in config/pack-shared-editable.txt" if self.repair_editable_reset else "[x] Keep changes in config/pack-shared-editable.txt", "enabled": True, "visible": True})
             if self.repair_editable_reset:
                 buttons.append({"id": 96, "text": "Keep all editable changes", "enabled": True, "visible": True})
@@ -698,6 +776,14 @@ class FakeBridge:
         self.vault_claim_selected = False
         self.first_install_archive_existing = False
         self.storage_verified = False
+        self.groups_parent = "first_connection"
+        self.acknowledged = False
+        self.dependency = False
+        self.conflict = False
+        self.visuals_selected = True
+        self.visuals_excluded = False
+        self.alternative_selected = False
+        self.chosen_visuals = False
         self.repair_mutations.clear()
         self.repair_applied = False
         self.repair_expected.clear()

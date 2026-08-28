@@ -358,7 +358,7 @@ flow:
     until:
       all:
         - screen: OfflineRepairScreen
-        - element: { text: "[ ] Keep 1 unowned mods", enabled: true }
+        - element: { text: "[ ] Keep 1 extra mod files", enabled: true }
   - do: click
     name: cancel the healthy repair review
     select: { text: Cancel }
@@ -918,7 +918,7 @@ flow:
       all:
         - screen: OfflineRepairScreen
         - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
+        - element: { text: "[ ] Keep 2 extra mod files", enabled: true }
         - element: { text: Repair, enabled: true }
         - element: { text: Update and finish repair, enabled: true }
   - do: screenshot
@@ -929,7 +929,7 @@ flow:
     until:
       all:
         - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
+        - element: { text: "[ ] Keep 2 extra mod files", enabled: true }
         - element: { text: Keep all editable changes, enabled: true }
   - do: click
     name: opt into keeping the edited file
@@ -945,13 +945,13 @@ flow:
     until: { element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true } }
   - do: click
     name: opt into keeping the unowned mods
-    select: { text: "[ ] Keep 2 unowned mods" }
+    select: { text: "[ ] Keep 2 extra mod files" }
   - do: wait_for
     name: show the keep choice checked on the unowned row
-    until: { element: { text: "[x] Keep 2 unowned mods", enabled: true } }
+    until: { element: { text: "[x] Keep 2 extra mod files", enabled: true } }
   - do: click
     name: return to removal consent before leaving
-    select: { text: "[x] Keep 2 unowned mods" }
+    select: { text: "[x] Keep 2 extra mod files" }
   - do: click
     name: cancel repair after exercising every choice
     select: { text: Cancel }
@@ -970,13 +970,13 @@ flow:
     until:
       all:
         - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
+        - element: { text: "[ ] Keep 2 extra mod files", enabled: true }
   - do: wait_for
     name: hold both rows at removal consent while keeping is one click away
     until:
       all:
         - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
+        - element: { text: "[ ] Keep 2 extra mod files", enabled: true }
         - element: { text: Repair, enabled: true }
   - do: click
     name: repair every locally available byte before updating
