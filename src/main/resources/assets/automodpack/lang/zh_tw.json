@@ -363,6 +363,7 @@
   "automodpack.management.preservedFilesCount": "%s 個保留的檔案",
   "automodpack.restart.preservedFiles": "%s 個檔案在「保留的檔案」裡",
   "automodpack.selection.categoryPart": "已選取 %s / %s",
+  "automodpack.selection.categoryTooltip": "點擊包含此類別中的所有可選分組。再次點擊全部排除。",
   "automodpack.vault.restorePickFirst": "請先選擇一個保留的檔案。",
   "automodpack.vault.restoreInactivePack": "請先切換到此模組包。還原會將檔案放回執行中的遊戲。",
   "automodpack.vault.restoreManagedFiles": "還原會放回遊戲檔案。模組包檔案會隨下次更新一起回來。",

@@ -4,18 +4,16 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.network.chat.Component;
 
-import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
-import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 /*? if > 1.19.2 {*/
 import net.minecraft.client.gui.components.Tooltip;
@@ -33,7 +31,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 /*import com.mojang.blaze3d.vertex.PoseStack;
 *//*?}*/
 
-/** Scrolling group rows: category headers as text, optional groups as vanilla checkboxes. */
+/** Scrolling group rows: every row is a widget, so the bridge and screen readers see the whole list. */
 public final class GroupSelectionList extends ContainerObjectSelectionList<GroupSelectionList.Entry> {
 	private static final int ROW_HEIGHT = 24;
 	private final int contentWidth;
@@ -78,26 +76,40 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	public final class Entry extends ContainerObjectSelectionList.Entry<Entry> {
 		private final Item item;
 		private final Consumer<Item> onToggle;
-		private final AbstractWidget checkbox;
+		private final AbstractWidget row;
 		private final List<AbstractWidget> children;
 
 		private Entry(Item item, Consumer<Item> onToggle) {
 			this.item = item;
 			this.onToggle = onToggle;
+			// Optional groups stay vanilla checkboxes; headers and locked rows become real
+			// buttons so they are visible to narration, the autotest bridge, and tooltips.
 			if (item.kind() == Kind.GROUP && item.canToggle()) {
-				this.checkbox = VersionedScreen.checkboxWidget(minecraft.font, 0, 0, GroupSelectionList.this.getRowWidth(), 20, item.label(), item.selected(), value -> {
+				AbstractWidget checkbox = VersionedScreen.checkboxWidget(minecraft.font, 0, 0, GroupSelectionList.this.getRowWidth(), 20, item.label(), item.selected(), value -> {
 					if (value != item.selected()) onToggle.accept(item);
 				});
 				if (item.tooltip() != null) {
 					/*? if > 1.19.2 {*/
-					this.checkbox.setTooltip(Tooltip.create(item.tooltip()));
+					checkbox.setTooltip(Tooltip.create(item.tooltip()));
 					/*?}*/
 				}
-				this.children = List.of(this.checkbox);
+				this.row = checkbox;
+			} else if (item.canToggle()) {
+				Button header = VersionedScreen.buttonWidget(0, 0, GroupSelectionList.this.getRowWidth(), 20, item.label(), button -> onToggle.accept(item));
+				if (item.tooltip() != null) VersionedScreen.setTooltip(header, item.tooltip());
+				this.row = header;
 			} else {
-				this.checkbox = null;
-				this.children = List.of();
+				Button locked = VersionedScreen.buttonWidget(0, 0, GroupSelectionList.this.getRowWidth(), 20, item.label(), button -> {});
+				locked.active = false;
+				if (item.tooltip() != null) VersionedScreen.setTooltip(locked, item.tooltip());
+				else VersionedScreen.setTooltip(locked, item.label());
+				this.row = locked;
 			}
+			this.children = List.of(this.row);
+		}
+
+		public Item item() {
+			return item;
 		}
 
 		@Override
@@ -125,60 +137,44 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		/^? if <1.20 {^/
 		/^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			VersionedMatrices versionedMatrices = new VersionedMatrices();
-		^//^?} else {^/
+			^//^?} else {^/
 		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
-		/^?}^/
+			/^?}^/
 			versionedRender(versionedMatrices, x, y, entryWidth, mouseX, mouseY, tickDelta);
 		}
 		*//*?}*/
 
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth, int mouseX, int mouseY, float tickDelta) {
-			if (checkbox != null) {
-				/*? if >=1.19.4 {*/
-				checkbox.setX(x);
-				checkbox.setY(y);
-				/*?} else {*/
-				/*checkbox.x = x;
-				checkbox.y = y;
-				*//*?}*/
-				/*? if >=26.1 {*/
-				checkbox.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
-				/*?} elif >=1.20 {*/
-				/*checkbox.render(matrices.getContext(), mouseX, mouseY, tickDelta);
-				*//*?} else {*/
-				/*checkbox.render(matrices.getContext(), mouseX, mouseY, tickDelta);
-				*//*?}*/
-				return;
-			}
-			ChatFormatting color = item.kind() == Kind.HEADER ? ChatFormatting.BOLD : ChatFormatting.GRAY;
-			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, item.label().getString(), Math.max(1, entryWidth - 8))).withStyle(color), x + 4, y + 6, TextColors.WHITE);
+			if (row == null) return;
+			/*? if >=1.19.4 {*/
+			row.setX(x);
+			row.setY(y);
+			/*?} else {*/
+			/*row.x = x;
+			row.y = y;
+			*//*?}*/
+			/*? if >=26.1 {*/
+			row.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
+			/*?} elif >=1.20 {*/
+			/*row.render(matrices.getContext(), mouseX, mouseY, tickDelta);
+			*//*?} else {*/
+			/*row.render(matrices.getContext(), mouseX, mouseY, tickDelta);
+			*//*?}*/
 		}
 
 		/*? if >= 1.21.9 {*/
 		@Override
 		public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean bl) {
-			if (checkbox != null) return super.mouseClicked(mouseButtonEvent, bl);
-			if (item.canToggle()) {
-				itemToggle();
-				return true;
-			}
+			if (row != null) return super.mouseClicked(mouseButtonEvent, bl);
 			return false;
 		}
 		/*?} else {*/
 		/*@Override
 		public boolean mouseClicked(double mouseX, double mouseY, int button) {
-			if (checkbox != null) return super.mouseClicked(mouseX, mouseY, button);
-			if (item.canToggle()) {
-				itemToggle();
-				return true;
-			}
+			if (row != null) return super.mouseClicked(mouseX, mouseY, button);
 			return false;
 		}
 		*//*?}*/
-
-		private void itemToggle() {
-			onToggle.accept(item);
-		}
 	}
 }

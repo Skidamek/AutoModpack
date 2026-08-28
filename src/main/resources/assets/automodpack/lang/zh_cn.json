@@ -363,6 +363,7 @@
   "automodpack.management.preservedFilesCount": "%s 个保留的文件",
   "automodpack.restart.preservedFiles": "%s 个文件在“保留的文件”里",
   "automodpack.selection.categoryPart": "已选 %s / %s",
+  "automodpack.selection.categoryTooltip": "点击包含此类别中的所有可选分组。再次点击全部排除。",
   "automodpack.vault.restorePickFirst": "请先选择一个保留的文件。",
   "automodpack.vault.restoreInactivePack": "请先切换到此整合包。恢复会把文件放回正在运行的游戏。",
   "automodpack.vault.restoreManagedFiles": "恢复会放回游戏文件。整合包文件会随下次更新一起回来。",

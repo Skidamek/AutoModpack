@@ -368,6 +368,7 @@
   "automodpack.management.preservedFilesCount": "%s megőrzött fájl",
   "automodpack.restart.preservedFiles": "%s fájl van a Megőrzött fájlokban",
   "automodpack.selection.categoryPart": "%s / %s kiválasztva",
+  "automodpack.selection.categoryTooltip": "Kattints a kategória összes opcionális csoportjának bekapcsolásához. Kattints újra az összes kikapcsolásához.",
   "automodpack.vault.restorePickFirst": "Először válassz egy megőrzött fájlt.",
   "automodpack.vault.restoreInactivePack": "Először válts erre a modpackre. A visszaállítás a fájlokat az élő játékba teszi vissza.",
   "automodpack.vault.restoreManagedFiles": "A visszaállítás játékfájlokat tesz vissza. A modpack fájljai a következő frissítéssel térnek vissza.",

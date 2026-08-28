@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
@@ -204,7 +205,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		for (Row row : rows) {
 			if (row.groupId() == null) {
 				boolean canToggle = row.categoryId() != null && hasOptionalCategoryGroups(row.categoryId());
-				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, row.categoryId() == null ? "" : row.categoryId(), sectionLabel(row), null, false, canToggle));
+				Component tooltip = canToggle ? VersionedText.translatable("automodpack.selection.categoryTooltip").withStyle(ChatFormatting.GRAY) : null;
+				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, row.categoryId() == null ? "" : row.categoryId(), sectionLabel(row), tooltip, false, canToggle));
 				continue;
 			}
 			GroupManifest.Group group = groups.get(row.groupId());
@@ -387,14 +389,16 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private MutableComponent sectionLabel(Row row) {
 		if (row.categoryId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
 		String title = VersionedText.translatable("automodpack.selection.category", categoryLabel(row.categoryId())).getString();
-		// The glyph mirrors the category's optional groups, so it never contradicts the child rows or the selected count.
+		// The glyph names what the next click does: full = exclude all, empty = include all, partial = include the rest.
 		long optional = optionalGroupCount(row.categoryId());
 		long selected = selectedOptionalGroupCount(row.categoryId());
 		boolean allSelected = optional > 0 && selected == optional;
-		String label = (allSelected ? "[x] " : "[ ] ") + title;
+		boolean noneSelected = selected == 0;
+		String glyph = allSelected ? "[x]" : noneSelected ? "[ ]" : "[-]";
+		String label = glyph + " " + title;
 		if (selected > 0 && !allSelected) label += "  " + VersionedText.translatable("automodpack.selection.categoryPart", selected, optional).getString();
 		return VersionedText.literal(truncateToWidth(this.font, label, panelWidth(ROW_WIDTH) - 12))
-				.withStyle(ChatFormatting.BOLD, allSelected ? ChatFormatting.GREEN : ChatFormatting.GRAY);
+			.withStyle(ChatFormatting.BOLD, allSelected ? ChatFormatting.GREEN : noneSelected ? ChatFormatting.GRAY : ChatFormatting.YELLOW);
 	}
 
 	private long optionalGroupCount(String category) {

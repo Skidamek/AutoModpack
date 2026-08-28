@@ -368,6 +368,7 @@
   "automodpack.management.preservedFilesCount": "%s gesicherte Dateien",
   "automodpack.restart.preservedFiles": "%s Dateien sind in Gesicherte Dateien",
   "automodpack.selection.categoryPart": "%s von %s ausgewählt",
+  "automodpack.selection.categoryTooltip": "Klicke, um jede optionale Gruppe dieser Kategorie einzuschließen. Klicke erneut, um alle auszuschließen.",
   "automodpack.vault.restorePickFirst": "Wähle zuerst eine gesicherte Datei.",
   "automodpack.vault.restoreInactivePack": "Wechsle zuerst zu diesem Modpack. Wiederherstellen legt Dateien ins laufende Spiel zurück.",
   "automodpack.vault.restoreManagedFiles": "Wiederherstellen legt Spieldateien zurück. Modpack-Dateien kommen mit dem nächsten Update.",

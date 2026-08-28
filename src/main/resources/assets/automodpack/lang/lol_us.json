@@ -368,6 +368,7 @@
   "automodpack.management.preservedFilesCount": "%s stashd filez",
   "automodpack.restart.preservedFiles": "%s filez r in stashd filez",
   "automodpack.selection.categoryPart": "%s of %s pickd",
+  "automodpack.selection.categoryTooltip": "clik 2 includ all da optional groupz in dis category. clik agen 2 dump em all.",
   "automodpack.vault.restorePickFirst": "pick a stashd file fus. any file. plz.",
   "automodpack.vault.restoreInactivePack": "switch 2 dis modpak fus. restorin putz filez bak in da live game.",
   "automodpack.vault.restoreManagedFiles": "restorin putz game filez bak. modpak filez come bak wif nex updayt.",

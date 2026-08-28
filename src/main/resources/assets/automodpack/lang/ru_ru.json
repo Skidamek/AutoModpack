@@ -378,6 +378,7 @@
   "automodpack.management.preservedFilesCount": "Сохранённых файлов: %s",
   "automodpack.restart.preservedFiles": "%s файлов лежат в «Сохранённых файлах»",
   "automodpack.selection.categoryPart": "Выбрано %s из %s",
+  "automodpack.selection.categoryTooltip": "Нажмите, чтобы включить все необязательные группы этой категории. Нажмите ещё раз, чтобы исключить их все.",
   "automodpack.vault.restorePickFirst": "Сначала выберите сохранённый файл.",
   "automodpack.vault.restoreInactivePack": "Сначала включите этот модпак. Возврат кладёт файлы обратно в игру.",
   "automodpack.vault.restoreManagedFiles": "Возврат кладёт игровые файлы на место. Файлы модпака вернутся со следующим обновлением.",
