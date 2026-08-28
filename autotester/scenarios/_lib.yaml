@@ -87,8 +87,9 @@ accept_certificate:
     until:
       no_element: { key: automodpack.validation.verify }
 
-# Accept the first-connection prompt, approve the update preview, and wait for
-# the modpack to land on disk.
+# Accept the first-connection prompt and wait for the modpack to land on disk.
+# Download on the honesty confirm approves the plan and applies it directly;
+# a second first-install review was removed, so the next screen is the restart.
 download_modpack:
   - do: wait_for
     name: wait for the first-connection prompt
@@ -116,38 +117,6 @@ download_modpack:
   - do: click
     name: accept first connection
     select: { key: automodpack.firstConnect.download }
-  - do: wait_for
-    name: wait for the later write confirm or matched preview
-    timeout: 90s
-    until:
-      screen: [UnverifiedPackConfirmScreen, UpdatePreviewScreen]
-  - do: wait_for
-    name: wait for the later unverified ack checkbox after the lock
-    timeout: 20s
-    until:
-      element: { key: automodpack.confirm.ack, enabled: true }
-    when:
-      all:
-        - screen: UnverifiedPackConfirmScreen
-        - element: { key: automodpack.update.apply }
-  - do: click
-    name: acknowledge later unverified risk
-    select: { key: automodpack.confirm.ack }
-    when:
-      all:
-        - screen: UnverifiedPackConfirmScreen
-        - element: { key: automodpack.update.apply }
-  - do: wait_for
-    name: wait for the update action
-    timeout: 90s
-    until:
-      element: { key_any: [automodpack.update.apply, automodpack.firstConnect.download], enabled: true }
-  - do: screenshot
-    name: capture the update preview
-    file: update-preview
-  - do: click
-    name: approve update
-    select: { key_any: [automodpack.update.apply, automodpack.firstConnect.download] }
   - do: wait_file
     name: wait for the modpack marker file
     path: "${active_dir}/${marker}"
