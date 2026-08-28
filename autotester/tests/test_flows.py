@@ -427,12 +427,12 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     buttons = bridge.gui()["buttons"]
     # Defaults: unchecked on both rows - each unchecked box is a removal/reset consent.
     assert any(button["text"] == "[ ] Keep changes in config/pack-shared-editable.txt" for button in buttons)
-    assert any(button["text"] == "[ ] Keep 2 unowned mods" for button in buttons)
+    assert any(button["text"] == "[ ] Keep 2 extra mod files" for button in buttons)
     bridge.click(95)  # Checking the editable row keeps the player's changes.
     assert any(button["text"] == "[x] Keep changes in config/pack-shared-editable.txt" for button in bridge.gui()["buttons"])
     bridge.click(95)
     bridge.click(97)  # Checking the unowned row opts into keeping them.
-    assert any(button["text"] == "[x] Keep 2 unowned mods" for button in bridge.gui()["buttons"])
+    assert any(button["text"] == "[x] Keep 2 extra mod files" for button in bridge.gui()["buttons"])
     bridge.click(100)
     assert bridge.gui()["screenClass"] == "ModpackDetailsScreen"
 
