@@ -163,6 +163,7 @@
   "automodpack.validation.description1": "Перевірка захищає від атак на кшталт «людина посередині».",
   "automodpack.validation.description2": "Це треба зробити один раз. Відбиток видає оператор сервера.",
   "automodpack.validation.fingerprint.label": "Відбиток сервера (скорочений):",
+  "automodpack.validation.fingerprint.field": "Повний відбиток",
   "automodpack.validation.confirm.text": "Вставте повний відбиток для перевірки:",
   "automodpack.validation.verify": "Перевірити",
   "automodpack.validation.failed": "Відбитки не збігаються. Можливо, хтось видає себе за сервер.",

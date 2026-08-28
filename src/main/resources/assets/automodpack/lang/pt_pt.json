@@ -157,6 +157,7 @@
   "automodpack.validation.description1": "A verificação protege-te de ataques de intermediário.",
   "automodpack.validation.description2": "Só tens de o fazer uma vez. Pede a impressão digital ao operador do servidor.",
   "automodpack.validation.fingerprint.label": "Impressão digital do servidor (abreviada):",
+  "automodpack.validation.fingerprint.field": "Impressão completa",
   "automodpack.validation.confirm.text": "Cola a impressão digital completa para verificar:",
   "automodpack.validation.verify": "Verificar",
   "automodpack.validation.failed": "As impressões digitais não coincidem. Um atacante pode estar a usar uma identidade falsa do servidor.",

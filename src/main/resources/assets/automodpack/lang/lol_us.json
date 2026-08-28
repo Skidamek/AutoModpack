@@ -157,6 +157,7 @@
   "automodpack.validation.description1": "dis check stops sneaky middle-cat attacks.",
   "automodpack.validation.description2": "do it 1 time. get teh fingerprint from teh servr hoomin.",
   "automodpack.validation.fingerprint.label": "servr fingerprint (tiny):",
+  "automodpack.validation.fingerprint.field": "full fingerprint",
   "automodpack.validation.confirm.text": "paste teh full fingerprint 2 check:",
   "automodpack.validation.verify": "check it",
   "automodpack.validation.failed": "fingerprints do not match. fake servr? srsly?",

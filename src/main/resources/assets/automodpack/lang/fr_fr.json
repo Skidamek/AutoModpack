@@ -157,6 +157,7 @@
   "automodpack.validation.description1": "La vérification vous protège contre les attaques de l'homme du milieu.",
   "automodpack.validation.description2": "Vous devez le faire une seule fois. Demandez l'empreinte à l'opérateur du serveur.",
   "automodpack.validation.fingerprint.label": "Empreinte du serveur (raccourcie) :",
+  "automodpack.validation.fingerprint.field": "Empreinte complète",
   "automodpack.validation.confirm.text": "Collez l'empreinte complète pour vérifier :",
   "automodpack.validation.verify": "Vérifier",
   "automodpack.validation.failed": "Les empreintes ne correspondent pas. Un attaquant peut utiliser une fausse identité de serveur.",

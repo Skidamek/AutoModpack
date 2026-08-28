@@ -163,6 +163,7 @@
   "automodpack.validation.description1": "Sprawdzanie chrōni cie przed atakami typu man-in-the-middle.",
   "automodpack.validation.description2": "Trza to zrobić ino rŏz. Weź odcisk cyfrowy ôd operatora serwera.",
   "automodpack.validation.fingerprint.label": "Odcisk cyfrowy serwera (skrōcōny):",
+  "automodpack.validation.fingerprint.field": "Pełny ôdcisk cyfrowy",
   "automodpack.validation.confirm.text": "Wklej cołki odcisk cyfrowy, coby go sprawdzić:",
   "automodpack.validation.verify": "Sprawdź",
   "automodpack.validation.failed": "Odciski cyfrowe sie niy zgadzajōm. Napastnik może udŏwać serwer.",
