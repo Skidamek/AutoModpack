@@ -10,6 +10,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -20,12 +21,16 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 /** A single, calm entry point for all actions on one installed modpack. */
 public final class ModpackDetailsScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = ActionAreaLayout.FOOTER_RAIL;
+	// Busy stays invisible for this long first, so a fast check never flashes the disabled state.
+	private static final long BUSY_VISIBLE_MILLIS = 500L;
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
 	private final InstalledModpackController.Pack pack;
 	private final List<Button> actionButtons = new ArrayList<>();
 	private boolean busy;
+	private boolean busyVisible;
+	private long busyAt;
 	private boolean upToDate;
 
 	public ModpackDetailsScreen(Screen parent, InstalledModpackController controller, InstalledModpackController.Pack pack) {
@@ -74,6 +79,14 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		updateActions();
 	}
 
+	@Override
+	public void tick() {
+		super.tick();
+		if (!busy || busyVisible || Util.getMillis() - busyAt < BUSY_VISIBLE_MILLIS) return;
+		busyVisible = true;
+		updateActions();
+	}
+
 	private record Action(String labelKey, Runnable action, Component tooltip, Component label) {
 		Action(String labelKey, Runnable action) {
 			this(labelKey, action, null, null);
@@ -84,10 +97,14 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		}
 	}
 
+	private void markBusy() {
+		busy = true;
+		busyAt = Util.getMillis();
+	}
+
 	private void primaryAction() {
 		if (busy) return;
-		busy = true;
-		updateActions();
+		markBusy();
 		if (pack.active()) controller.update(pack, this::updateCompleted);
 		else controller.activate(pack, this::released);
 	}
@@ -100,8 +117,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 
 	private void repair() {
 		if (busy || !pack.active()) return;
-		busy = true;
-		updateActions();
+		markBusy();
 		controller.repair(this, pack, this::updateCompleted);
 	}
 
@@ -112,8 +128,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 
 	private void openHistory() {
 		if (busy) return;
-		busy = true;
-		updateActions();
+		markBusy();
 		controller.openHistory(pack, this::released);
 	}
 
@@ -134,27 +149,26 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 
 	private void remove() {
 		if (busy) return;
-		busy = true;
-		updateActions();
+		markBusy();
 		controller.remove(pack, this::released, () -> ScreenImpl.setScreen(new InstalledModpacksScreen(parent)));
 	}
 
 	private void deactivate() {
 		if (busy) return;
-		busy = true;
-		updateActions();
+		markBusy();
 		controller.deactivate(pack, this::released);
 	}
 
 	private void released() {
 		busy = false;
+		busyVisible = false;
 		updateActions();
 	}
 
 	private void updateActions() {
 		for (int index = 0; index < actionButtons.size(); index++) {
 			boolean primary = index == 0;
-			actionButtons.get(index).active = !busy && (!primary || !pack.active() || pack.connectionAvailable() && !upToDate);
+			actionButtons.get(index).active = !busyVisible && (!primary || !pack.active() || pack.connectionAvailable() && !upToDate);
 		}
 		if (actionButtons.isEmpty() || !pack.active()) return;
 		actionButtons.get(0).setMessage(VersionedText.translatable(upToDate ? "automodpack.management.upToDate" : "automodpack.management.update"));
@@ -200,7 +214,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		y += 12;
 		String contents = VersionedText.translatable("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(), UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes())).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contents, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
+		if (busyVisible) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
 	}
 
 	@Override
