@@ -34,7 +34,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private List<PreservationVault.Snapshot> orphanedPreservations;
 	private int page;
 	private boolean discoveryFailureShown;
-	private boolean busy;
 	private InstalledModpackController.Pack pendingPack;
 	private long pendingAt;
 
@@ -120,12 +119,10 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	}
 
 	private void clickPack(InstalledModpackController.Pack entry) {
-		if (busy) return;
 		long now = Util.getMillis();
 		if (pendingPack != null && pendingPack.modpackId().equals(entry.modpackId()) && now - pendingAt < DOUBLE_CLICK_MILLIS) {
 			pendingPack = null;
-			if (entry.active()) open(entry);
-			else activate(entry);
+			open(entry);
 			return;
 		}
 		pendingPack = entry;
@@ -139,18 +136,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		InstalledModpackController.Pack entry = pendingPack;
 		pendingPack = null;
 		open(entry);
-	}
-
-	private void activate(InstalledModpackController.Pack entry) {
-		if (busy || entry.active()) return;
-		busy = true;
-		controller.activate(entry, this::released);
-	}
-
-	private void released() {
-		busy = false;
-		refreshEntries();
-		rebuild();
 	}
 
 	private void open(InstalledModpackController.Pack entry) {
