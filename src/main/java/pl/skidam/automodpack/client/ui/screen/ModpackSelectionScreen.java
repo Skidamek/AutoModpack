@@ -180,7 +180,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.translatable("automodpack.selection.noChanges"));
 		int listTop = 64;
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - 8;
-		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(ROW_WIDTH), listTop, listBottom, listItems(), this::onListToggle));
+		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(ROW_WIDTH), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
 		Button platformButton = buttonWidget(panelLeft(ROW_WIDTH) + panelWidth(ROW_WIDTH) - PLATFORM_BUTTON_WIDTH, 24, PLATFORM_BUTTON_WIDTH, 20,
 				VersionedText.literal(platformLabel(effectivePlatform())), press -> cyclePlatform());
 		setTooltip(platformButton, VersionedText.translatable("automodpack.selection.platformTooltip"));
@@ -209,6 +209,15 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			return;
 		}
 		toggle(item.id());
+	}
+
+	private void onListInspect(GroupSelectionList.Item item) {
+		if (item.kind() == GroupSelectionList.Kind.GROUP) inspect(item.id());
+	}
+
+	private void inspect(String groupId) {
+		if (!groups.containsKey(groupId)) return;
+		ScreenImpl.setScreen(new GroupInspectorScreen(this, manifest, groupId));
 	}
 
 	public boolean isUpdateFlow() {
@@ -453,40 +462,57 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		String name = displayName(groupId);
 		GroupResolution explanation = resolution.resolution(groupId);
 		String metrics = UiFormat.plural(group.files().size(), "automodpack.selection.metrics", UiFormat.formatSize(groupBytes(group))).getString();
-		// The leading glyph carries the state; the words live in the hover tooltip instead of the row.
-		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel("[#] ", name, metrics), ChatFormatting.GRAY);
+		String status = statusWord(explanation);
+		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel("[#] ", name, metrics, status), ChatFormatting.GRAY, status);
 		if (explanation != null && explanation.reasons().contains(GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE))
-			return rowLabel(formatRowLabel("[-] ", name, metrics), ChatFormatting.RED);
+			return rowLabel(formatRowLabel("[-] ", name, metrics, status), ChatFormatting.RED, status);
 		if (explanation != null && explanation.status() == GroupResolution.Status.UNAVAILABLE)
-			return rowLabel(formatRowLabel("[-] ", name, metrics), ChatFormatting.RED);
+			return rowLabel(formatRowLabel("[-] ", name, metrics, status), ChatFormatting.RED, status);
 		if (explanation != null && explanation.status() == GroupResolution.Status.BLOCKED)
-			return rowLabel(formatRowLabel("[-] ", name, metrics), ChatFormatting.RED);
+			return rowLabel(formatRowLabel("[-] ", name, metrics, status), ChatFormatting.RED, status);
 		if (explanation != null && explanation.status() == GroupResolution.Status.CONFLICT)
-			return rowLabel(formatRowLabel("[!] ", name, metrics), ChatFormatting.RED);
-		if (excluded.contains(groupId)) return rowLabel(formatRowLabel("[-] ", name, metrics), ChatFormatting.YELLOW);
+			return rowLabel(formatRowLabel("[!] ", name, metrics, status), ChatFormatting.RED, status);
+		if (excluded.contains(groupId)) return rowLabel(formatRowLabel("[-] ", name, metrics, status), ChatFormatting.YELLOW, status);
 		if (resolution.selectedGroups().contains(groupId)) {
 			// A dependency lock is the load-bearing fact: the row cannot be unchecked while its dependent needs it.
-			if (resolution.dependencyGroups().contains(groupId)) return rowLabel(formatRowLabel("[+] ", name, metrics), ChatFormatting.AQUA);
-			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics), ChatFormatting.GREEN);
-			return rowLabel(formatRowLabel("[+] ", name, metrics), ChatFormatting.AQUA);
+			if (resolution.dependencyGroups().contains(groupId)) return rowLabel(formatRowLabel("[+] ", name, metrics, status), ChatFormatting.AQUA, status);
+			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics, status), ChatFormatting.GREEN, status);
+			return rowLabel(formatRowLabel("[+] ", name, metrics, status), ChatFormatting.AQUA, status);
 		}
-		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel("[>] ", name, metrics), ChatFormatting.AQUA);
+		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel("[>] ", name, metrics, status), ChatFormatting.AQUA, status);
 		return group.defaultSelected()
-				? rowLabel(formatRowLabel("[ ] ", name, metrics), ChatFormatting.YELLOW)
-				: rowLabel(formatRowLabel("[ ] ", name, metrics), ChatFormatting.GRAY);
+				? rowLabel(formatRowLabel("[ ] ", name, metrics, status), ChatFormatting.YELLOW, status)
+				: rowLabel(formatRowLabel("[ ] ", name, metrics, status), ChatFormatting.GRAY, status);
 	}
 
-	private String formatRowLabel(String marker, String name, String metrics) {
+	/** The row's state word in the surviving status keys; statuses whose explanation is a full sentence stay hover-only. */
+	private String statusWord(GroupResolution explanation) {
+		if (explanation == null) return "";
+		return switch (explanation.status()) {
+			case SELECTED -> explanation.reasons().contains(GroupResolution.Reason.REQUIRED) || explanation.reasons().contains(GroupResolution.Reason.FORCED)
+					|| explanation.reasons().contains(GroupResolution.Reason.DEPENDENCY) || explanation.reasons().contains(GroupResolution.Reason.DEFAULT_SELECTED) ? ""
+					: VersionedText.translatable("automodpack.selection.status.selected").getString();
+			case AVAILABLE -> VersionedText.translatable("automodpack.selection.status.available").getString();
+			case BLOCKED -> explanation.relatedGroups().isEmpty() ? VersionedText.translatable("automodpack.selection.status.dependencyUnavailable").getString() : "";
+			case EXCLUDED -> VersionedText.translatable("automodpack.selection.status.excluded").getString();
+			case STALE -> VersionedText.translatable("automodpack.selection.status.stale").getString();
+			default -> "";
+		};
+	}
+
+	private String formatRowLabel(String marker, String name, String metrics, String status) {
 		int maxWidth = groupLabelWidth();
-		return truncateToWidth(this.font, marker + name + " " + metrics, maxWidth);
+		return truncateToWidth(this.font, marker + name + " " + metrics, status.isEmpty() ? maxWidth : Math.max(1, maxWidth - this.font.width(" " + status)));
 	}
 
-	private MutableComponent rowLabel(String text, ChatFormatting color) {
-		return VersionedText.literal(truncateToWidth(this.font, text, groupLabelWidth())).withStyle(color);
+	private MutableComponent rowLabel(String text, ChatFormatting color, String status) {
+		MutableComponent label = VersionedText.literal(truncateToWidth(this.font, text, groupLabelWidth())).withStyle(color);
+		if (!status.isEmpty()) label.append(VersionedText.literal(" " + status).withStyle(ChatFormatting.GRAY));
+		return label;
 	}
 
 	private int groupLabelWidth() {
-		return Math.max(1, panelWidth(ROW_WIDTH) - 28);
+		return Math.max(1, panelWidth(ROW_WIDTH) - 28 - GroupSelectionList.INFO_BUTTON_WIDTH - 4);
 	}
 
 	private static boolean isMandatory(GroupManifest manifest, GroupManifest.Group group) {

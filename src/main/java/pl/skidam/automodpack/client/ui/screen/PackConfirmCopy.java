@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui.screen;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
@@ -43,10 +45,43 @@ final class PackConfirmCopy {
 		return originFull.endsWith(":25565") ? originFull.substring(0, originFull.length() - 6) : originFull;
 	}
 
-	static String packSummary(SelectedModpackTarget target) {
+	static String selectedSummary(SelectedModpackTarget target) {
 		long bytes = target.flatTarget().list.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		return VersionedText.translatable("automodpack.confirm.packSummary", UiFormat.plural(target.selection().selectedGroups().size(), "automodpack.confirm.groupCount").getString(),
-				UiFormat.plural(target.flatTarget().list.size(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(bytes)).getString();
+		return VersionedText.translatable("automodpack.firstConnect.selectedSummary", target.selection().selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(bytes)).getString();
+	}
+
+	static String requestedGroups(SelectedModpackTarget target) {
+		if (target.selection().intent().requestedGroups().isEmpty()) return "";
+		return VersionedText.translatable("automodpack.firstConnect.requestedGroups", groupNames(target.manifest(), target.selection().intent().requestedGroups())).getString();
+	}
+
+	static String includedGroups(SelectedModpackTarget target) {
+		if (target.selection().selectedGroups().isEmpty()) return "";
+		return VersionedText.translatable("automodpack.firstConnect.includedGroups", groupNames(target.manifest(), target.selection().selectedGroups())).getString();
+	}
+
+	static String requestedUnavailableGroups(SelectedModpackTarget target) {
+		if (target.selection().requestedUnavailableGroups().isEmpty()) return "";
+		return VersionedText.translatable("automodpack.firstConnect.requestedUnavailable", groupNames(target.manifest(), target.selection().requestedUnavailableGroups())).getString();
+	}
+
+	static String staleRequestedGroups(SelectedModpackTarget target) {
+		if (target.selection().staleRequestedGroups().isEmpty()) return "";
+		return VersionedText.translatable("automodpack.firstConnect.unavailableOldChoices", groupNames(target.manifest(), target.selection().staleRequestedGroups())).getString();
+	}
+
+	static String existingMods(boolean keep, int count) {
+		if (count <= 0) return "";
+		return VersionedText.translatable(keep ? "automodpack.firstConnect.existingModsKeep" : "automodpack.firstConnect.existingModsArchive", count).getString();
+	}
+
+	private static String groupNames(GroupManifest manifest, Iterable<String> ids) {
+		List<String> names = new ArrayList<>();
+		for (String id : ids) {
+			GroupManifest.Group group = manifest.groups().get(id);
+			names.add(group == null || group.displayName().isBlank() ? id : group.displayName());
+		}
+		return String.join(", ", names);
 	}
 
 	static MutableComponent customizeLabel() {
