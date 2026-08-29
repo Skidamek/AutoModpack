@@ -14,6 +14,10 @@ Most of the launchers will work without any issues, but some modified custom cli
 | Lunar Client              | ❌             | Unsupported - breaks modpack loading                                                                |
 | PCL2                      | ⚠️            | Unclear, may work                                                                                   |
 
-### Prism/MultiMC loader version sync
+### Loader version sync
 
-Prism (and MultiMC forks) must be able to download component metadata for the loader version the server publishes; otherwise the instance can stall or fail to launch with errors like "Could not download metadata for NeoForge 21.1.249". AutoModpack checks the Prism meta server before requesting a loader version change and skips the sync when the version is not available there, keeping the loader version already installed in the launcher. Server owners can also disable loader version syncing entirely with `syncLoaderVersion: false` in the server config.
+Before AutoModpack changes the loader version, it checks the Prism meta server. This check runs for all launchers.
+
+If the meta server does not have the loader version, AutoModpack does not change the loader version. The game keeps the loader version that the launcher installed. This prevents launch failures like `Could not download metadata for NeoForge 21.1.249` on Prism and MultiMC forks.
+
+Server owners can turn loader version syncing off with `syncLoaderVersion: false` in the server config. Then the server does not provide a loader version at all.

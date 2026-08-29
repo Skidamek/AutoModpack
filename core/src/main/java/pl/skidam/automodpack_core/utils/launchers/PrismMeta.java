@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.utils.launchers;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.protocol.NetUtils.HTTP_TIMEOUT_MILLIS;
 import static pl.skidam.automodpack_core.protocol.NetUtils.USER_AGENT;
 
 import java.io.IOException;
@@ -11,7 +12,6 @@ import java.net.URI;
 public class PrismMeta {
 
 	private static final String META_URL = "https://meta.prismlauncher.org/v1/";
-	private static final int TIMEOUT_MILLIS = 5000;
 
 	public static boolean isVersionResolvable(String loaderType, String loaderVersion) {
 		String uid = MultiMCMeta.componentUid(loaderType);
@@ -20,8 +20,8 @@ public class PrismMeta {
 		try {
 			HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
 			connection.setRequestProperty("User-Agent", USER_AGENT);
-			connection.setConnectTimeout(TIMEOUT_MILLIS);
-			connection.setReadTimeout(TIMEOUT_MILLIS);
+			connection.setConnectTimeout(HTTP_TIMEOUT_MILLIS);
+			connection.setReadTimeout(HTTP_TIMEOUT_MILLIS);
 			int code = connection.getResponseCode();
 			connection.disconnect();
 			return code == 200;
