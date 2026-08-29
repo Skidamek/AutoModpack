@@ -36,6 +36,10 @@ public final class DataRootResolver {
 			return root.resolve("mod-metadata").normalize();
 		}
 
+		public Path platformMetadataDirectory() {
+			return root.resolve("platform-metadata").normalize();
+		}
+
 		public Path packsDirectory() {
 			return root.resolve("packs").normalize();
 		}

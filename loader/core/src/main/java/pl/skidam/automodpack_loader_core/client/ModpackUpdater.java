@@ -59,6 +59,7 @@ import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
 import pl.skidam.automodpack_loader_core.DetachedUpdateHelper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.UpdateTransactionSupport;
@@ -86,6 +87,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private final AtomicReference<ConfirmationState> confirmationState = new AtomicReference<>(ConfirmationState.INACTIVE);
 	private final UpdateLoopDetector updateLoopDetector;
 	private final ClientStorage storage;
+	private final PlatformMetadataCache platformMetadataCache;
 	private final ClientUpdatePlanBuilder planBuilder;
 	private volatile FetchManager sourceFetchManager;
 	private ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> installedSwitchPlan;
@@ -332,7 +334,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private FetchManager newSourceFetchManager(List<FetchManager.FetchData> fetchData) {
 		if (fetchData.isEmpty()) return null;
-		FetchManager manager = new FetchManager(fetchData);
+		FetchManager manager = new FetchManager(fetchData, platformMetadataCache);
 		manager.fetchAsync();
 		return manager;
 	}
@@ -356,9 +358,18 @@ public class ModpackUpdater implements AutoCloseable {
 		this.serverModpackContent = selectedTarget == null ? null : selectedTarget.flatTarget();
 		this.connectionInfo = connectionInfo;
 		this.storage = Objects.requireNonNull(storage, "storage");
+		this.platformMetadataCache = openPlatformMetadataCache(storage);
 		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, MODPACK_LOADER, LOADER);
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
 		this.downloadClient = downloadClient;
+	}
+
+	private static PlatformMetadataCache openPlatformMetadataCache(ClientStorage storage) {
+		try {
+			return PlatformMetadataCache.open(storage.platformMetadataDirectory());
+		} catch (IOException e) {
+			throw new IllegalStateException("Cannot open platform metadata cache for " + storage.gameDirectory(), e);
+		}
 	}
 
 	/** Trusted bootstrap install: apply the selected pack on this launch without a review screen. */
@@ -872,7 +883,7 @@ public class ModpackUpdater implements AutoCloseable {
 			else LOGGER.info("Downloading from the AutoModpack host without waiting for CurseForge/Modrinth lookup");
 		}
 
-		downloadManager = new DownloadManager(totalBytesToDownload, storage);
+		downloadManager = new DownloadManager(totalBytesToDownload, storage, platformMetadataCache);
 		if (playerFacing) ScreenManager.download(downloadManager, getModpackName());
 		downloadManager.attachDownloadClient(downloadClient);
 
@@ -894,7 +905,7 @@ public class ModpackUpdater implements AutoCloseable {
 				failedDownloadCategories.put(serverItem, category);
 			};
 
-			downloadManager.download(downloadFile, serverFileHash, sources, serverFileSize, () -> {}, failureCallback);
+			downloadManager.download(downloadFile, serverFileHash, serverItem.murmur, serverItem.type, sources, serverFileSize, () -> {}, failureCallback);
 		}
 
 		downloadManager.joinAll();
@@ -1148,7 +1159,10 @@ public class ModpackUpdater implements AutoCloseable {
 				LOGGER.warn("Could not release in-flight CAS ownership; the next startup will refresh it", e);
 			}
 		}
-		if (closed.compareAndSet(false, true) && downloadClient != null) downloadClient.close();
+		if (closed.compareAndSet(false, true)) {
+			if (downloadClient != null) downloadClient.close();
+			platformMetadataCache.close();
+		}
 	}
 
 	public enum ConfirmationState {

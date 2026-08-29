@@ -65,6 +65,7 @@ public final class ClientStorage {
 	private final Path bootstrapFile;
 	private final Path fileMetadataDirectory;
 	private final Path modMetadataDirectory;
+	private final Path platformMetadataDirectory;
 	private final Path packsDirectory;
 	private final Path knownHostsFile;
 	private final Path knownHostsLockFile;
@@ -99,6 +100,7 @@ public final class ClientStorage {
 		this.bootstrapFile = this.gameDirectory.resolve(BOOTSTRAP_FILE).normalize();
 		this.fileMetadataDirectory = dataLayout.fileMetadataDirectory();
 		this.modMetadataDirectory = dataLayout.modMetadataDirectory();
+		this.platformMetadataDirectory = dataLayout.platformMetadataDirectory();
 		this.packsDirectory = dataLayout.packsDirectory();
 		this.knownHostsFile = dataLayout.knownHostsFile();
 		this.knownHostsLockFile = dataLayout.knownHostsLockFile();
@@ -244,6 +246,10 @@ public final class ClientStorage {
 
 	public Path modMetadataDirectory() {
 		return modMetadataDirectory;
+	}
+
+	public Path platformMetadataDirectory() {
+		return platformMetadataDirectory;
 	}
 
 	public Path packsDirectory() {
@@ -399,6 +405,7 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(objectsDirectory, "client object store");
 		FileTrees.createManagedDirectory(fileMetadataDirectory, "file metadata cache");
 		FileTrees.createManagedDirectory(modMetadataDirectory, "mod metadata cache");
+		FileTrees.createManagedDirectory(platformMetadataDirectory, "platform metadata cache");
 		FileTrees.createManagedDirectory(packsDirectory, "shared pack state");
 		FileTrees.createManagedDirectory(recordsDirectory, "client generation records");
 		FileTrees.createManagedDirectory(overlaysDirectory, "client overlays");
@@ -439,7 +446,7 @@ public final class ClientStorage {
 		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
 				stateFile, transactionFile, repairJournalFile, compactionJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory, helperLeaseFile,
 				incomingProjectionDirectory(), backupProjectionDirectory());
-		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
+		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, platformMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}
 
 	private static void validateWithin(Path parent, Path... children) {

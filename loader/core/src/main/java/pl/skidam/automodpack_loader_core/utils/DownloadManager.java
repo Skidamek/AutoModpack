@@ -13,9 +13,10 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
+import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
-import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
@@ -23,6 +24,7 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
+import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
 
 public class DownloadManager {
 
@@ -34,6 +36,8 @@ public class DownloadManager {
 
 	public record AcquisitionResult(boolean success, FailureCategory failureCategory) {}
 
+	private record DeadLink(String murmur, String fileType) {}
+
 	private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
 
@@ -41,6 +45,7 @@ public class DownloadManager {
 
 	private final HttpFileDownloader httpDownloader = new HttpFileDownloader();
 	private DownloadClient downloadClient = null;
+	private final PlatformMetadataCache platformMetadataCache;
 
 	private volatile boolean cancelled = false;
 
@@ -52,6 +57,12 @@ public class DownloadManager {
 
 	private final Map<String, Integer> activeDownloadsPerSource = new ConcurrentHashMap<>();
 
+	// --- DEAD LINK INVALIDATION ---
+	private final Object metadataRefetchLock = new Object();
+	private final Map<String, DeadLink> pendingMetadataRefetch = new HashMap<>();
+	private final Map<String, List<DownloadSource>> resolvedMetadataRefetches = new HashMap<>();
+	private final Set<String> refetchedSha1s = new HashSet<>();
+
 	// --- PROGRESS TRACKING ---
 	private final AtomicLong totalBytesToDownload = new AtomicLong(0);
 	private final AtomicLong totalBytesDownloaded = new AtomicLong(0);
@@ -62,40 +73,29 @@ public class DownloadManager {
 	private final Speedometer speedometer = new Speedometer();
 	private final ClientStorage storage;
 
-	public DownloadManager() {
-		this(0, ClientStorage.open(GameDirectory.current()));
-	}
-
-	public DownloadManager(long bytesToDownload) {
-		this(bytesToDownload, ClientStorage.open(GameDirectory.current()));
-	}
-
-	public DownloadManager(long bytesToDownload, ClientStorage storage) {
-		this(bytesToDownload, storage, Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS,
-				new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build()));
-	}
-
-	DownloadManager(long bytesToDownload, ClientStorage storage, ExecutorService downloadExecutor) {
+	public DownloadManager(long bytesToDownload, ClientStorage storage, PlatformMetadataCache platformMetadataCache) {
 		this.totalBytesToDownload.set(bytesToDownload);
 		this.speedometer.setExpectedBytes(bytesToDownload);
 		this.storage = Objects.requireNonNull(storage, "storage");
-		this.downloadExecutor = Objects.requireNonNull(downloadExecutor, "downloadExecutor");
+		this.downloadExecutor = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS,
+				new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
+		this.platformMetadataCache = Objects.requireNonNull(platformMetadataCache, "platformMetadataCache");
 	}
 
 	public void attachDownloadClient(DownloadClient downloadClient) {
 		this.downloadClient = downloadClient;
 	}
 
-	public synchronized void download(Path file, String sha1, List<DownloadSource> sources, long fileSize, Runnable successCallback, Runnable failureCallback) {
-		download(file, sha1, sources, fileSize, successCallback, ignored -> failureCallback.run());
+	public synchronized void download(Path file, String sha1, String murmur, String fileType, List<DownloadSource> sources, long fileSize, Runnable successCallback, Runnable failureCallback) {
+		download(file, sha1, murmur, fileType, sources, fileSize, successCallback, ignored -> failureCallback.run());
 	}
 
-	public synchronized void download(Path file, String sha1, List<DownloadSource> sources, long fileSize, Runnable successCallback,
+	public synchronized void download(Path file, String sha1, String murmur, String fileType, List<DownloadSource> sources, long fileSize, Runnable successCallback,
 			Consumer<FailureCategory> failureCallback) {
 		FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
 		if (queuedDownloads.containsKey(hashPathPair)) return;
 
-		QueuedDownload task = new QueuedDownload(file, sources, fileSize, 0, successCallback, failureCallback);
+		QueuedDownload task = new QueuedDownload(file, new ArrayList<>(sources), murmur, fileType, fileSize, 0, successCallback, failureCallback);
 		queuedDownloads.put(hashPathPair, task);
 		totalFilesAdded++;
 		downloadNext();
@@ -291,6 +291,7 @@ public class DownloadManager {
 	}
 
 	private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path storeFile) throws InterruptedException {
+		refreshDeadLinkSources(hashPathPair.hash(), task);
 		int numberOfIndexes = task.sources.size();
 		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
 		DownloadSource source = (task.sources.size() > sourceIndex) ? task.sources.get(sourceIndex) : null;
@@ -321,7 +322,8 @@ public class DownloadManager {
 				return false;
 			} catch (HttpFileDownloader.HttpStatusException e) {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
-				if (source != null && source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
+				if (isDeadPlatformLink(source, e)) markDeadPlatformLink(hashPathPair.hash(), task);
+				else if (source != null && source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
 					LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
 					task.attempts = (sourceIndex + 1) * MAX_DOWNLOAD_ATTEMPTS - 1;
 				}
@@ -356,6 +358,68 @@ public class DownloadManager {
 				}
 			}
 		}
+	}
+
+	private static boolean isDeadPlatformLink(DownloadSource source, HttpFileDownloader.HttpStatusException e) {
+		return source != null && (e.statusCode() == HttpURLConnection.HTTP_NOT_FOUND || e.statusCode() == HttpURLConnection.HTTP_GONE);
+	}
+
+	private void markDeadPlatformLink(String sha1, QueuedDownload task) {
+		String normalizedSha1 = sha1.toLowerCase(Locale.ROOT);
+		synchronized (metadataRefetchLock) {
+			platformMetadataCache.evict(normalizedSha1);
+			if (!refetchedSha1s.add(normalizedSha1)) return;
+			pendingMetadataRefetch.put(normalizedSha1, new DeadLink(task.murmur, task.fileType));
+			task.needsMetadataRefetch = true;
+		}
+		LOGGER.warn("Dead platform link for CAS object {}; its metadata will be refetched before the next attempt", sha1);
+	}
+
+	private void refreshDeadLinkSources(String sha1, QueuedDownload task) {
+		if (!task.needsMetadataRefetch) return;
+		List<DownloadSource> fresh = awaitMetadataRefetch(sha1.toLowerCase(Locale.ROOT));
+		task.needsMetadataRefetch = false;
+		if (fresh.isEmpty()) return;
+		task.sources.clear();
+		task.sources.addAll(fresh);
+		task.attempts = 0;
+	}
+
+	/** Waits for one batched refetch covering every sha1 whose platform link died, so concurrent dead links share the bulk calls. */
+	private List<DownloadSource> awaitMetadataRefetch(String normalizedSha1) {
+		synchronized (metadataRefetchLock) {
+			List<DownloadSource> resolved = resolvedMetadataRefetches.remove(normalizedSha1);
+			if (resolved != null) return resolved;
+			if (!pendingMetadataRefetch.containsKey(normalizedSha1)) return List.of();
+			Map<String, DeadLink> batch = new LinkedHashMap<>(pendingMetadataRefetch);
+			pendingMetadataRefetch.clear();
+			resolvedMetadataRefetches.putAll(refetchPlatformMetadata(batch));
+			List<DownloadSource> fresh = resolvedMetadataRefetches.remove(normalizedSha1);
+			return fresh == null ? List.of() : fresh;
+		}
+	}
+
+	private Map<String, List<DownloadSource>> refetchPlatformMetadata(Map<String, DeadLink> batch) {
+		Map<String, List<DownloadSource>> fresh = new HashMap<>();
+		List<ModrinthAPI> modrinthInfos = ModrinthAPI.getModsInfosFromListOfSHA1(new ArrayList<>(batch.keySet()));
+		if (modrinthInfos != null) for (ModrinthAPI info : modrinthInfos) {
+			String sha1 = info.SHA1Hash().toLowerCase(Locale.ROOT);
+			DeadLink deadLink = batch.get(sha1);
+			String mainPageUrl = deadLink == null ? null : ModrinthAPI.getMainPageUrl(info.modrinthID(), deadLink.fileType());
+			platformMetadataCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
+			fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
+		}
+		Map<String, String> murmurs = new HashMap<>();
+		for (Map.Entry<String, DeadLink> entry : batch.entrySet()) if (entry.getValue().murmur() != null && !entry.getValue().murmur().isBlank()) murmurs.put(entry.getKey(), entry.getValue().murmur());
+		if (!murmurs.isEmpty()) {
+			List<CurseForgeAPI> curseForgeInfos = CurseForgeAPI.getModInfosFromFingerPrints(murmurs);
+			if (curseForgeInfos != null) for (CurseForgeAPI info : curseForgeInfos) {
+				String sha1 = info.sha1Hash().toLowerCase(Locale.ROOT);
+				platformMetadataCache.putCurseForge(info.sha1Hash(), info);
+				fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.CURSEFORGE));
+			}
+		}
+		return fresh;
 	}
 
 	private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, boolean success, boolean interrupted) {
@@ -487,15 +551,20 @@ public class DownloadManager {
 	public static class QueuedDownload {
 		public final Path file;
 		public final List<DownloadSource> sources;
+		public final String murmur;
+		public final String fileType;
 		public final long fileSize;
 		public int attempts;
 		public final Runnable successCallback;
 		public final Consumer<FailureCategory> failureCallback;
 		public FailureCategory lastFailureCategory;
+		public boolean needsMetadataRefetch;
 
-		public QueuedDownload(Path f, List<DownloadSource> sources, long size, int a, Runnable s, Consumer<FailureCategory> fa) {
+		public QueuedDownload(Path f, List<DownloadSource> sources, String murmur, String fileType, long size, int a, Runnable s, Consumer<FailureCategory> fa) {
 			file = f;
 			this.sources = sources;
+			this.murmur = murmur;
+			this.fileType = fileType;
 			fileSize = size;
 			attempts = a;
 			successCallback = s;

@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
 
 public class FetchManager {
 
@@ -24,8 +25,10 @@ public class FetchManager {
 	public record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
 	public record Datas(FetchData fetchData, FetchedData fetchedData) {}
 	private final Map<String, Datas> fetchDatas = new HashMap<>();
+	private final PlatformMetadataCache platformMetadataCache;
 
-	public FetchManager(List<FetchData> fetchDatas) {
+	public FetchManager(List<FetchData> fetchDatas, PlatformMetadataCache platformMetadataCache) {
+		this.platformMetadataCache = platformMetadataCache;
 		for (FetchData fetchData : fetchDatas) {
 			this.fetchDatas.put(fetchData.sha1,
 					new Datas(fetchData, new FetchedData(Collections.synchronizedList(new ArrayList<>(2)), Collections.synchronizedList(new ArrayList<>(2)))));
@@ -114,32 +117,69 @@ public class FetchManager {
 	}
 
 	private void fetchBySha1(List<String> sha1s) {
-		List<ModrinthAPI> results = ModrinthAPI.getModsInfosFromListOfSHA1(sha1s);
+		Map<String, PlatformMetadataCache.Record> cached = platformMetadataCache.getAll(sha1s);
+		List<String> missing = new ArrayList<>();
+		for (String sha1 : sha1s) {
+			PlatformMetadataCache.Record record = cached.get(sha1);
+			if (record != null && record.modrinth() != null) applyModrinth(fetchDatas.get(sha1), record.modrinth());
+			else missing.add(sha1);
+		}
+		if (missing.isEmpty()) return;
+
+		List<ModrinthAPI> results = ModrinthAPI.getModsInfosFromListOfSHA1(missing);
 		if (results == null) return;
 
 		for (ModrinthAPI info : results) {
 			Datas datas = fetchDatas.get(info.SHA1Hash());
 			if (datas != null) {
-				datas.fetchedData().sources().add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
 				String mainPageUrl = ModrinthAPI.getMainPageUrl(info.modrinthID(), datas.fetchData.fileType);
-				addMainPageUrl(datas, mainPageUrl, true);
-				fetchesDone.incrementAndGet();
+				platformMetadataCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
+				applyModrinth(datas, info.downloadUrl(), mainPageUrl);
 			}
 		}
 	}
 
 	private void fetchByMurmur(Map<String, String> hashes) {
-		List<CurseForgeAPI> results = CurseForgeAPI.getModInfosFromFingerPrints(hashes);
+		Map<String, PlatformMetadataCache.Record> cached = platformMetadataCache.getAll(hashes.keySet());
+		Map<String, String> missing = new LinkedHashMap<>();
+		for (Map.Entry<String, String> hash : hashes.entrySet()) {
+			PlatformMetadataCache.Record record = cached.get(hash.getKey());
+			if (record != null && record.curseforge() != null) {
+				applyCurseForge(fetchDatas.get(hash.getKey()), record.curseforge().downloadUrl(), record.curseforge().projectPageUrl());
+			} else {
+				missing.put(hash.getKey(), hash.getValue());
+			}
+		}
+		if (missing.isEmpty()) return;
+
+		List<CurseForgeAPI> results = CurseForgeAPI.getModInfosFromFingerPrints(missing);
 		if (results == null) return;
 
 		for (CurseForgeAPI info : results) {
 			Datas datas = fetchDatas.get(info.sha1Hash());
 			if (datas != null) {
-				datas.fetchedData().sources().add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.CURSEFORGE));
-				addMainPageUrl(datas, info.projectPageUrl(), false);
-				fetchesDone.incrementAndGet();
+				platformMetadataCache.putCurseForge(info.sha1Hash(), info);
+				applyCurseForge(datas, info.downloadUrl(), info.projectPageUrl());
 			}
 		}
+	}
+
+	private void applyModrinth(Datas datas, PlatformMetadataCache.ModrinthEntry entry) {
+		applyModrinth(datas, entry.downloadUrl(), entry.mainPageUrl());
+	}
+
+	private void applyModrinth(Datas datas, String downloadUrl, String mainPageUrl) {
+		if (datas == null) return;
+		datas.fetchedData().sources().add(new DownloadSource(downloadUrl, DownloadSource.Provider.MODRINTH));
+		addMainPageUrl(datas, mainPageUrl, true);
+		fetchesDone.incrementAndGet();
+	}
+
+	private void applyCurseForge(Datas datas, String downloadUrl, String projectPageUrl) {
+		if (datas == null) return;
+		datas.fetchedData().sources().add(new DownloadSource(downloadUrl, DownloadSource.Provider.CURSEFORGE));
+		addMainPageUrl(datas, projectPageUrl, false);
+		fetchesDone.incrementAndGet();
 	}
 
 	private static void addMainPageUrl(Datas datas, String url, boolean preferred) {
