@@ -65,6 +65,10 @@ public final class ScreenManager {
 		instance.waiting();
 	}
 
+	public static void waiting(Runnable onCancel) {
+		instance.waiting(onCancel);
+	}
+
 	public static Optional<String> getScreenString() {
 		return instance.getScreenString();
 	}

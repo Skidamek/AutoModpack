@@ -230,7 +230,7 @@ public class Preload {
 
 		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient);
 		if (trustedBootstrapApply) updater.applyTrustedInstall();
-		else updater.processModpackUpdate(null);
+		else updater.processModpackUpdate(null, true);
 	}
 
 	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {

@@ -11,9 +11,11 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 public class PreparingScreen extends VersionedScreen {
 	private final long startedAtNanos = System.nanoTime();
+	private final Runnable onCancel;
 
-	public PreparingScreen() {
+	public PreparingScreen(Runnable onCancel) {
 		super(VersionedText.translatable("automodpack.preparing.title"));
+		this.onCancel = onCancel;
 	}
 
 	@Override
@@ -30,6 +32,6 @@ public class PreparingScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		return false;
+		return onCancel != null && handleBackOnEscape(onCancel);
 	}
 }

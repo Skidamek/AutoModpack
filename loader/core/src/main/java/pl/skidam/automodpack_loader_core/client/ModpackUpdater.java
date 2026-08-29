@@ -82,6 +82,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final DownloadClient downloadClient;
 	private final AtomicBoolean closed = new AtomicBoolean();
+	private final AtomicBoolean playerCancelled = new AtomicBoolean();
 	private final AtomicReference<ConfirmationState> confirmationState = new AtomicReference<>(ConfirmationState.INACTIVE);
 	private final UpdateLoopDetector updateLoopDetector;
 	private final ClientStorage storage;
@@ -207,12 +208,22 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public void startConfirmedUpdate() {
 		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.PREVIEWING)) return;
-		DownloadClient.NET_EXECUTOR.execute(this::startUpdate);
+		DownloadClient.NET_EXECUTOR.execute(() -> startUpdate(true));
 	}
 
 	public void cancelConfirmation() {
 		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED)) return;
 		close();
+	}
+
+	/** Stops the in-flight update work after the player backed out of the preparing screen. */
+	public void cancelFromPlayer() {
+		if (!playerCancelled.compareAndSet(false, true)) return;
+		close();
+	}
+
+	public boolean isCancelledByPlayer() {
+		return playerCancelled.get();
 	}
 
 	/** Applies a new group selection and re-enters the preview path from confirm or preview customize. */
@@ -227,8 +238,8 @@ public class ModpackUpdater implements AutoCloseable {
 			ScreenManager.welcome(this);
 			return;
 		}
-		ScreenManager.waiting();
-		DownloadClient.NET_EXECUTOR.execute(this::startUpdate);
+		ScreenManager.waiting(this::cancelFromPlayer);
+		DownloadClient.NET_EXECUTOR.execute(() -> startUpdate(true));
 	}
 
 	/** First-install review catalogue with Modrinth/CurseForge pages from the completed lookup. */
@@ -355,7 +366,8 @@ public class ModpackUpdater implements AutoCloseable {
 		applySelectedTargetWithoutReview(true);
 	}
 
-	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result) {
+	/** When {@code showWaitingScreen} is false a player-facing screen already owns the wait and shows its own busy state. */
+	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result, boolean showWaitingScreen) {
 		if (preload) {
 			applySelectedTargetWithoutReview(false);
 			return;
@@ -363,7 +375,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 		try {
 			requireLiveConnection();
-			ScreenManager.waiting();
+			if (showWaitingScreen) ScreenManager.waiting(this::cancelFromPlayer);
 
 			if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
@@ -378,19 +390,21 @@ public class ModpackUpdater implements AutoCloseable {
 				ScreenManager.welcome(this);
 			} else if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) {
 				// Handle an installed modpack without an active projection: reactivate it through the reviewed switch plan
-				startInstalledSwitch();
+				startInstalledSwitch(showWaitingScreen);
 			} else {
 				// Handle existing modpack
 				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, storage);
 
-				startUpdate();
+				startUpdate(showWaitingScreen);
 			}
 		} catch (UpdateDeferredException e) {
+			close();
+			if (isCancelledByPlayer()) return;
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
 			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
-			close();
 		} catch (Exception e) {
 			close();
+			if (isCancelledByPlayer()) return;
 			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
@@ -743,33 +757,44 @@ public class ModpackUpdater implements AutoCloseable {
 		return ModpackPathPolicy.MODS_ROOT + "/" + UpdatePlanner.normalize(activeModsDirectory.relativize(normalized).toString());
 	}
 
-	private void startUpdate() {
+	private void startUpdate(boolean showWaitingScreen) {
 		try {
 			requireLiveConnection();
-			ScreenManager.waiting();
+			if (showWaitingScreen) ScreenManager.waiting(this::cancelFromPlayer);
 			switch (requestUpdatePreview()) {
 				case PREVIEW_SHOWN -> {
 					return;
 				}
 				case APPLIED -> LOGGER.info("Applied an already-authorized no-op update without opening a review screen");
 				case DEFERRED -> LOGGER.info("Already-authorized no-op update was deferred to the detached helper");
-				case FAILED -> LOGGER.error("Already-authorized no-op update failed; the installed generation was not advanced");
-				case PREVIEW_NOT_SHOWN -> LOGGER.warn("Update preview could not be shown; leaving the installed generation unchanged");
+				case FAILED -> {
+					if (isCancelledByPlayer()) return;
+					LOGGER.error("Already-authorized no-op update failed; the installed generation was not advanced");
+				}
+				case PREVIEW_NOT_SHOWN -> {
+					if (isCancelledByPlayer()) return;
+					LOGGER.warn("Update preview could not be shown; leaving the installed generation unchanged");
+				}
 			}
 			close();
 		} catch (Exception e) {
-			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			close();
+			if (isCancelledByPlayer()) return;
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			return;
 		}
 	}
 
 	/** Presents the switch plan for an installed modpack that has no active projection, instead of replaying the first-install flow. */
-	private void startInstalledSwitch() {
+	private void startInstalledSwitch(boolean showWaitingScreen) {
 		try {
 			requireLiveConnection();
-			ScreenManager.waiting();
+			if (showWaitingScreen) ScreenManager.waiting(this::cancelFromPlayer);
 			UpdatePreview preview = previewInstalledSwitch();
+			if (isCancelledByPlayer()) {
+				close();
+				return;
+			}
 			Runnable continueAction = () -> {
 				try {
 					applyInstalledSwitch();
@@ -800,6 +825,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private ApplyStatus applyApprovedPlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, long start) {
 		try {
+			if (isCancelledByPlayer()) return ApplyStatus.FAILED;
 			ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
 			recordChangelogs(prepared, selectedTarget);
 			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
@@ -809,10 +835,10 @@ public class ModpackUpdater implements AutoCloseable {
 			return ApplyStatus.APPLIED;
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
+			if (!isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			return ApplyStatus.DEFERRED;
 		} catch (Exception e) {
-			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			if (!isCancelledByPlayer()) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			return ApplyStatus.FAILED;
 		} finally {
 			close();
@@ -961,6 +987,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private PreviewRequestResult requestUpdatePreview() throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
 		ClientUpdatePlanBuilder.PreparedPlan prepared = preparePlanForReview();
+		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = ReviewedClientPlan.pending(prepared, prepared.plan());
 		reviewedUpdatePlan = reviewed;
 		if (firstConnection && confirmationState.get() == ConfirmationState.PREVIEWING) {

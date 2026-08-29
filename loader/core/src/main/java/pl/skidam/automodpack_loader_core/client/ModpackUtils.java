@@ -9,6 +9,7 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -206,7 +207,10 @@ public class ModpackUtils {
 
 	public static ManifestFetchResult requestServerModpackContent(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser) {
 		try {
-			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser).get();
+			CompletableFuture<ManifestFetchResult> future = requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser);
+			if (allowAskingUser) return future.get();
+			// Non-interactive fetch: the protocol's per-stage timeouts sum to at most 5 * NETWORK_TIMEOUT, so anything past 6 gave up somewhere.
+			return future.get(NetUtils.NETWORK_TIMEOUT.multipliedBy(6).toSeconds(), TimeUnit.SECONDS);
 		} catch (Exception e) {
 			Throwable cause = DownloadClient.unwrap(e);
 			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);

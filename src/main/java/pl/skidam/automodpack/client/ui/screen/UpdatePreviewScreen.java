@@ -115,7 +115,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private void continueUpdate() {
 		if (finished) return;
 		finished = true;
-		ScreenImpl.setScreen(new PreparingScreen());
+		ScreenImpl.setScreen(new PreparingScreen(updater::cancelFromPlayer));
 		continueAction.run();
 	}
 

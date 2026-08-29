@@ -122,7 +122,7 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 		}
 		finished = true;
 		updater.setFirstInstallLocalModCleanup(!keepExistingMods);
-		ScreenManager.waiting();
+		ScreenManager.waiting(updater::cancelFromPlayer);
 		updater.startConfirmedUpdate();
 	}
 
