@@ -230,6 +230,7 @@
   "automodpack.groupInspector.status": "%s  |  파일 %s개",
   "automodpack.groupInspector.noDescription": "게시된 설명이 없습니다.",
   "automodpack.selection.platformSummary": "플랫폼: %s  선택한 그룹: %s",
+  "automodpack.selection.platformTooltip": "선택적 그룹을 구성하는 데 사용되는 플랫폼을 전환합니다. 감지된 플랫폼으로 돌아가면 자동 감지를 다시 따릅니다.",
   "automodpack.selection.category": "카테고리: %s",
   "automodpack.selection.requiredAlways": "필수: 항상 포함",
   "automodpack.selection.defaultSelected": "기본: 빼지 않으면 선택됨",

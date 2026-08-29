@@ -46,6 +46,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public class ModpackSelectionScreen extends VersionedScreen {
 
 	private static final int ROW_WIDTH = 500;
+	private static final int PLATFORM_BUTTON_WIDTH = 90;
 
 	private final Screen parent;
 	private final GroupManifest manifest;
@@ -63,6 +64,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final boolean showManagement;
 	private final boolean activeModpack;
 	private final GenerationRecord localRecord;
+	private final ClientPlatform detectedPlatform;
+	private ClientPlatform platformOverride;
 
 	// What the player has actually ticked; resolved is what that implies once required groups,
 	// dependencies, conflicts and platform rules are applied.
@@ -129,40 +132,20 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				? initialSelection
 				: this.expectedSelection == null ? GroupSelectionResolver.defaultIntent(manifest) : this.expectedSelection;
 		this.initialSelection = initial;
+		this.detectedPlatform = ClientPlatform.current();
+		this.platformOverride = initial.platform() == null || initial.platform() == detectedPlatform ? null : initial.platform();
 		this.chosen.addAll(initial.requestedGroups());
 		this.chosenCategories.addAll(initial.requestedCategories());
 		this.excluded.addAll(initial.excludedGroups());
 		try {
 		this.resolution = this.expectedSelection == null && initialSelection == null
-					? GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.current())
-					: GroupSelectionResolver.resolve(manifest, initial, ClientPlatform.current());
+					? GroupSelectionResolver.resolveDefault(manifest, effectivePlatform())
+					: GroupSelectionResolver.resolve(manifest, initial, effectivePlatform());
 		} catch (SelectionResolutionException e) {
 			this.resolution = Objects.requireNonNull(e.resolution(), "Invalid selection did not include a partial resolution");
 			this.resolutionError = VersionedText.translatable("automodpack.selection.savedInvalid").getString();
 		}
 		rebuildRows();
-	}
-
-	public static boolean hasActiveModpackManagement() {
-		return modpackHasGeneration(clientConfig == null ? null : clientConfig.selectedModpackId);
-	}
-
-	public static Screen managementScreen(Screen parent) {
-		if (hasActiveModpackManagement()) {
-			InstalledModpackController controller = new InstalledModpackController();
-			GenerationRecord activeRecord = controller.activeRecord(clientConfig.selectedModpackId);
-			if (activeRecord != null) return new ModpackDetailsScreen(parent, controller, controller.pack(activeRecord));
-		}
-		return new InstalledModpacksScreen(parent);
-	}
-
-	private static boolean modpackHasGeneration(String modpackId) {
-		if (modpackId == null || modpackId.isBlank()) return false;
-		return activeGeneration(modpackId) != null;
-	}
-
-	private static GenerationRecord activeGeneration(String modpackId) {
-		return new InstalledModpackController().activeRecord(modpackId);
 	}
 
 	@Override
@@ -198,6 +181,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int listTop = 64;
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - 8;
 		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(ROW_WIDTH), listTop, listBottom, listItems(), this::onListToggle));
+		Button platformButton = buttonWidget(panelLeft(ROW_WIDTH) + panelWidth(ROW_WIDTH) - PLATFORM_BUTTON_WIDTH, 24, PLATFORM_BUTTON_WIDTH, 20,
+				VersionedText.literal(platformLabel(effectivePlatform())), press -> cyclePlatform());
+		setTooltip(platformButton, VersionedText.translatable("automodpack.selection.platformTooltip"));
+		this.addRenderableWidget(platformButton);
 	}
 
 	private List<GroupSelectionList.Item> listItems() {
@@ -243,19 +230,20 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private boolean canToggle(String groupId, GroupManifest.Group group) {
 		if (isMandatory(manifest, group)) return false;
 		GroupResolution explanation = resolution.resolution(groupId);
-		if (explanation == null) return group.supports(ClientPlatform.current());
+		if (explanation == null) return group.supports(effectivePlatform());
 		if (explanation.selected() && (resolution.requiredGroups().contains(groupId) || resolution.forcedGroups().contains(groupId)
 				|| resolution.dependencyGroups().contains(groupId))) return false;
-		return group.supports(ClientPlatform.current()) || excluded.contains(groupId);
+		return group.supports(effectivePlatform()) || excluded.contains(groupId);
 	}
 
 	/** Toggling a category requests or removes its optional groups through the persisted group intent. */
 	private void toggleCategory(String category) {
 		SelectionIntent previous = currentIntent();
 		// Direction mirrors the header glyph: when every optional group is already in, the click excludes them all.
-		SelectionIntent next = categoryFullySelected(category)
-				? GroupSelectionResolver.excludeCategory(manifest, previous, category, ClientPlatform.current())
-				: GroupSelectionResolver.preferCategory(manifest, previous, category, ClientPlatform.current());
+		SelectionIntent resolved = categoryFullySelected(category)
+				? GroupSelectionResolver.excludeCategory(manifest, previous, category, effectivePlatform())
+				: GroupSelectionResolver.preferCategory(manifest, previous, category, effectivePlatform());
+		SelectionIntent next = resolved.withPlatform(override());
 		Set<String> preferred = next.requestedCategories().contains(category) ? categoryGroups(category) : Set.of();
 		applySelectionChange(next, preferred, categoryLabel(category));
 	}
@@ -274,19 +262,19 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (group == null) return;
 		if (isMandatory(manifest, group)) return;
 		SelectionIntent previous = currentIntent();
-		SelectionIntent next = GroupSelectionResolver.prefer(manifest, previous, groupId, ClientPlatform.current());
+		SelectionIntent next = GroupSelectionResolver.prefer(manifest, previous, groupId, effectivePlatform()).withPlatform(override());
 		Set<String> preferred = resolution.selectedGroups().contains(groupId) ? Set.of() : Set.of(groupId);
 		applySelectionChange(next, preferred, displayName(groupId));
 	}
 
 	private void applySelectionChange(SelectionIntent next, Set<String> preferredGroups, String preferredName) {
 		try {
-			ResolvedSelection nextResolution = GroupSelectionResolver.resolve(manifest, next, ClientPlatform.current());
+			ResolvedSelection nextResolution = GroupSelectionResolver.resolve(manifest, next, effectivePlatform());
 			applyResolved(next, nextResolution);
 		} catch (SelectionResolutionException exception) {
-			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, ClientPlatform.current(), exception.resolution()).orElse(null);
+			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, effectivePlatform(), exception.resolution()).orElse(null);
 			if (replacement != null) {
-				ScreenImpl.setScreen(new FeatureConflictScreen(this, preferredName, names(replacement.conflictingGroups()), () -> applySelectionChange(replacement.intent(), Set.of(), preferredName)));
+				ScreenImpl.setScreen(new FeatureConflictScreen(this, preferredName, names(replacement.conflictingGroups()), () -> applySelectionChange(replacement.intent().withPlatform(override()), Set.of(), preferredName)));
 				return;
 			}
 			resolutionError = preferredGroups.isEmpty()
@@ -298,7 +286,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private Set<String> categoryGroups(String category) {
 		Set<String> result = new TreeSet<>();
-		for (var entry : groups.entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().required() && entry.getValue().supports(ClientPlatform.current())) result.add(entry.getKey());
+		for (var entry : groups.entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().required() && entry.getValue().supports(effectivePlatform())) result.add(entry.getKey());
 		return Set.copyOf(result);
 	}
 
@@ -319,7 +307,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void reresolveDefault() {
-		resolution = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.current());
+		resolution = GroupSelectionResolver.resolveDefault(manifest, effectivePlatform());
 		resolutionError = "";
 		rebuild();
 	}
@@ -423,7 +411,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (!group.requires().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requires", names(group.requires())).getString());
 		if (!group.breaksWith().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.conflicts", names(group.breaksWith())).getString());
 		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.files", group.files().size(), UiFormat.formatSize(groupBytes(group))).getString());
-		if (!group.supports(ClientPlatform.current())) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.unavailableOn", ClientPlatform.current().id()).getString());
+		if (!group.supports(effectivePlatform())) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.unavailableOn", effectivePlatform().id()).getString());
 		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
 	}
 
@@ -431,7 +419,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return switch (groupResolution.status()) {
 			case SELECTED -> selectedResolutionText(groupResolution);
 			case AVAILABLE -> VersionedText.translatable("automodpack.selection.status.available").getString();
-			case UNAVAILABLE -> VersionedText.translatable("automodpack.selection.unavailableOn", ClientPlatform.current().id()).getString();
+			case UNAVAILABLE -> VersionedText.translatable("automodpack.selection.unavailableOn", effectivePlatform().id()).getString();
 			case BLOCKED -> groupResolution.relatedGroups().isEmpty()
 					? VersionedText.translatable("automodpack.selection.status.dependencyUnavailable").getString()
 					: VersionedText.translatable("automodpack.selection.blockedBy", names(groupResolution.relatedGroups())).getString();
@@ -531,11 +519,35 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private SelectionIntent currentIntent() {
-		return new SelectionIntent(chosen, chosenCategories, excluded);
+		return new SelectionIntent(chosen, chosenCategories, excluded, override());
+	}
+
+	private ClientPlatform override() {
+		return platformOverride == detectedPlatform ? null : platformOverride;
+	}
+
+	private ClientPlatform effectivePlatform() {
+		return ClientPlatform.effective(currentIntent());
+	}
+
+	private void cyclePlatform() {
+		ClientPlatform[] platforms = ClientPlatform.values();
+		ClientPlatform candidate = platformOverride == null ? platforms[(detectedPlatform.ordinal() + 1) % platforms.length] : platforms[(platformOverride.ordinal() + 1) % platforms.length];
+		platformOverride = candidate == detectedPlatform ? null : candidate;
+		applySelectionChange(currentIntent(), Set.of(), null);
+	}
+
+	private static String platformLabel(ClientPlatform platform) {
+		return switch (platform) {
+			case WINDOWS -> "Windows";
+			case LINUX -> "Linux";
+			case MACOS -> "macOS";
+			case ANDROID -> "Android";
+		};
 	}
 
 	private boolean canSave() {
-		return resolutionError.isEmpty() && (selectionAction != null || managerEntry && !activeModpack || !initialSelection.equals(currentIntent()));
+		return resolutionError.isEmpty() && (selectionAction != null || managerEntry && !activeModpack || !initialSelection.equals(currentIntent()) || !Objects.equals(initialSelection.platform(), currentIntent().platform()));
 	}
 
 	private static String categoryLabel(String category) {
@@ -576,8 +588,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					: VersionedText.translatable("automodpack.selection.description");
 			drawCenteredTextWithShadow(matrices, this.font, description.withStyle(ChatFormatting.GRAY),
 					this.width / 2, 22, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", ClientPlatform.current().id(), resolution.selectedGroups().size())
-					.withStyle(ChatFormatting.GRAY), this.width / 2, 33, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", effectivePlatform().id(), resolution.selectedGroups().size())
+					.withStyle(platformOverride == null ? ChatFormatting.GRAY : ChatFormatting.YELLOW), this.width / 2, 33, TextColors.WHITE);
 			// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
 			if (!resolutionError.isEmpty()) {
 				drawWrappedStatus(matrices, VersionedText.literal(resolutionError).withStyle(ChatFormatting.RED));

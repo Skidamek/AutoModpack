@@ -233,6 +233,7 @@
   "automodpack.groupInspector.status": "%s  |  %s files",
   "automodpack.groupInspector.noDescription": "No description published.",
   "automodpack.selection.platformSummary": "Platform: %s  Selected groups: %s",
+  "automodpack.selection.platformTooltip": "Cycles the platform used to resolve optional groups. Cycling back to the detected platform follows detection again.",
   "automodpack.selection.category": "Category: %s",
   "automodpack.selection.requiredAlways": "Required: always included",
   "automodpack.selection.defaultSelected": "Default: selected unless you remove it",

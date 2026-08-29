@@ -25,6 +25,11 @@ public enum ClientPlatform {
 		};
 	}
 
+	/** The saved selection's platform override when present, otherwise the detected platform. */
+	public static ClientPlatform effective(SelectionIntent savedSelection) {
+		return savedSelection != null && savedSelection.platform() != null ? savedSelection.platform() : current();
+	}
+
 	public static ClientPlatform parse(String value) {
 		if (value == null) throw new IllegalArgumentException("Platform is null");
 		return switch (value.toLowerCase(Locale.ROOT)) {

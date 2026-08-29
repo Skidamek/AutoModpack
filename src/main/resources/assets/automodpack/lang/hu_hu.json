@@ -233,6 +233,7 @@
   "automodpack.groupInspector.status": "%s  |  %s fájl",
   "automodpack.groupInspector.noDescription": "Nincs kiadott leírás.",
   "automodpack.selection.platformSummary": "Platform: %s  Kiválasztott csoportok: %s",
+  "automodpack.selection.platformTooltip": "Váltja az opcionális csoportok feloldásához használt platformot. Az észlelt platformra visszaállás ismét az észlelést követi.",
   "automodpack.selection.category": "Kategória: %s",
   "automodpack.selection.requiredAlways": "Kötelező: mindig benne van",
   "automodpack.selection.defaultSelected": "Alapértelmezett: ki van választva, amíg el nem távolítod",

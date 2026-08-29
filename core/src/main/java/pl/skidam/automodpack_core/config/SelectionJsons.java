@@ -5,6 +5,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.gson.annotations.SerializedName;
+
 public class SelectionJsons {
 
 	public static class ClientSelectionStoreFields {
@@ -15,6 +17,8 @@ public class SelectionJsons {
 			public Set<String> requestedGroups = new HashSet<>();
 			public Set<String> requestedCategories = new HashSet<>();
 			public Set<String> excludedGroups = new HashSet<>();
+			@SerializedName("platform")
+			public String platform;
 
 			public ModpackSelection() {}
 
@@ -27,9 +31,14 @@ public class SelectionJsons {
 			}
 
 			public ModpackSelection(Set<String> requestedGroups, Set<String> requestedCategories, Set<String> excludedGroups) {
+				this(requestedGroups, requestedCategories, excludedGroups, null);
+			}
+
+			public ModpackSelection(Set<String> requestedGroups, Set<String> requestedCategories, Set<String> excludedGroups, String platform) {
 				this.requestedGroups = requestedGroups;
 				this.requestedCategories = requestedCategories;
 				this.excludedGroups = excludedGroups;
+				this.platform = platform;
 			}
 		}
 	}

@@ -30,7 +30,7 @@ final class InstalledModpackSwitch {
 			try {
 				var fields = new ClientGenerationStore(storage).readFields(record.metadata().generationId())
 						.orElseThrow(() -> new IOException("Installed modpack generation record is missing"));
-				SelectedModpackTarget target = SelectedModpackTarget.prepare(fields, expectedSelection, targetSelection, ClientPlatform.current());
+				SelectedModpackTarget target = SelectedModpackTarget.prepare(fields, expectedSelection, targetSelection, ClientPlatform.effective(targetSelection));
 				updater = updater(storage, target);
 				UpdatePreview preview = updater.previewInstalledSwitch();
 				ModpackUpdater finalUpdater = updater;

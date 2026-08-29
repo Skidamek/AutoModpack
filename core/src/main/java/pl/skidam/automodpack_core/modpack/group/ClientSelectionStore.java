@@ -35,7 +35,7 @@ public final class ClientSelectionStore {
 			if (!Objects.equals(current, expected) && !Objects.equals(current, target))
 				throw new IOException("Group selection changed after planning for modpack " + modpackId);
 			fields.selections.put(modpackId, new SelectionJsons.ClientSelectionStoreFields.ModpackSelection(new LinkedHashSet<>(target.requestedGroups()),
-					new LinkedHashSet<>(target.requestedCategories()), new LinkedHashSet<>(target.excludedGroups())));
+					new LinkedHashSet<>(target.requestedCategories()), new LinkedHashSet<>(target.excludedGroups()), target.platform() == null ? null : target.platform().id()));
 			fields.selections = new LinkedHashMap<>(new TreeMap<>(fields.selections));
 			ConfigTools.writeAtomic(path, fields);
 		}
@@ -57,7 +57,16 @@ public final class ClientSelectionStore {
 	}
 
 	private static SelectionIntent intent(SelectionJsons.ClientSelectionStoreFields.ModpackSelection selection) {
-		return new SelectionIntent(selection.requestedGroups, selection.requestedCategories, selection.excludedGroups);
+		return new SelectionIntent(selection.requestedGroups, selection.requestedCategories, selection.excludedGroups, platform(selection.platform));
+	}
+
+	private static ClientPlatform platform(String platform) {
+		if (platform == null) return null;
+		try {
+			return ClientPlatform.parse(platform);
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
 	}
 
 	private SelectionJsons.ClientSelectionStoreFields read() {
