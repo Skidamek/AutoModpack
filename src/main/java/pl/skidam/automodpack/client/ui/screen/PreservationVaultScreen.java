@@ -1,16 +1,20 @@
 package pl.skidam.automodpack.client.ui.screen;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -19,9 +23,13 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
+import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
@@ -41,6 +49,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private PreservationVault.Snapshot snapshot;
 	private String selectedClaimId;
 	private String pendingDeleteClaimId;
+	private final Map<String, List<PlatformReferences.Page>> platformPagesByClaimId = new HashMap<>();
 	private boolean loading;
 	private boolean busy;
 	private boolean restoreFailed;
@@ -74,6 +83,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 				primaryAction(VersionedText.translatable("automodpack.vault.restore"), press -> restore()),
 				optionalAction(VersionedText.translatable("automodpack.vault.saveCopy"), press -> saveCopy()),
 				optionalAction(deleteLabel, press -> delete())));
+		List<PlatformReferences.Page> platformPages = selected == null ? List.of() : platformPagesByClaimId.getOrDefault(selected.claimId(), List.of());
+		if (!platformPages.isEmpty()) actions.add(platformRow(platformPages));
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
 		pageSize = rowsPerPage(actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
 		int pageCount = Math.max(1, (claims.size() + pageSize - 1) / pageSize);
@@ -139,7 +150,9 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		loading = false;
 		busy = false;
 		if (selectedClaimId != null && loaded.claims().stream().noneMatch(claim -> claim.claimId().equals(selectedClaimId))) selectedClaimId = null;
+		platformPagesByClaimId.keySet().retainAll(loaded.claims().stream().map(PreservationVault.Claim::claimId).toList());
 		pendingDeleteClaimId = null;
+		resolvePlatformPages(selected());
 		rebuild();
 	}
 
@@ -168,7 +181,35 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		selectedClaimId = claim.claimId();
 		pendingDeleteClaimId = null;
 		restoreFailed = false;
+		resolvePlatformPages(claim);
 		rebuild();
+	}
+
+	/** Cache-only Modrinth/CurseForge page lookup for the selected claim; no buttons when nothing was cached. */
+	private void resolvePlatformPages(PreservationVault.Claim claim) {
+		if (claim == null || platformPagesByClaimId.containsKey(claim.claimId())) return;
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			List<PlatformReferences.Page> pages = cachedPlatformPages(claim.objectHash());
+			this.minecraft.execute(() -> {
+				if (closed) return;
+				platformPagesByClaimId.put(claim.claimId(), pages);
+				rebuild();
+			});
+		});
+	}
+
+	private ActionRow platformRow(List<PlatformReferences.Page> pages) {
+		List<ActionDefinition> definitions = new ArrayList<>();
+		for (PlatformReferences.Page page : pages) definitions.add(optionalAction(VersionedText.translatable("automodpack.browser." + page.platform()), button -> Util.getPlatform().openUri(page.url())));
+		return actionRow(ActionAreaLayout.RowKind.AUXILIARY, definitions.toArray(ActionDefinition[]::new));
+	}
+
+	private static List<PlatformReferences.Page> cachedPlatformPages(String sha1) {
+		try (PlatformMetadataCache cache = PlatformMetadataCache.open(ClientStorage.open(GameDirectory.current()).platformMetadataDirectory())) {
+			return PlatformReferences.cachedPages(cache, sha1);
+		} catch (IOException | RuntimeException e) {
+			return List.of();
+		}
 	}
 
 	private void changePage(int amount) {
