@@ -245,12 +245,12 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 			}
 			finished = true;
 			updater.setFirstInstallLocalModCleanup(!keepExistingMods);
-			ScreenManager.waiting();
+			ScreenManager.waiting(updater::cancelFromPlayer);
 			updater.startConfirmedUpdate();
 			return;
 		}
 		finished = true;
-		ScreenImpl.setScreen(new PreparingScreen());
+		ScreenImpl.setScreen(new PreparingScreen(updater::cancelFromPlayer));
 		laterContinue.run();
 	}
 

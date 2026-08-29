@@ -30,6 +30,11 @@ public interface ScreenService {
 
 	void waiting();
 
+	/** Shows the preparing screen; {@code onCancel} runs when the player backs out with Esc. */
+	default void waiting(Runnable onCancel) {
+		waiting();
+	}
+
 	Optional<String> getScreenString();
 
 	Optional<Object> getScreen();

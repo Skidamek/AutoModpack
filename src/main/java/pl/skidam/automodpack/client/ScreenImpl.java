@@ -80,7 +80,12 @@ public class ScreenImpl implements ScreenService {
 
 	@Override
 	public void waiting() {
-		executeOnClient(Screens::waiting);
+		executeOnClient(() -> Screens.waiting(null));
+	}
+
+	@Override
+	public void waiting(Runnable onCancel) {
+		executeOnClient(() -> Screens.waiting(onCancel));
 	}
 
 	@Override
@@ -228,8 +233,16 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new FingerprintVerificationScreen(parent, fingerprint, origin, validated, canceled));
 		}
 
-		public static void waiting() {
-			Screens.setScreen(new PreparingScreen());
+		public static void waiting(Runnable onCancel) {
+			Screens.setScreen(new PreparingScreen(onCancel == null ? null : () -> {
+				onCancel.run();
+				Screens.setScreen(cancelDestination());
+			}));
+		}
+
+		private static Screen cancelDestination() {
+			if (interactiveParent != null && !(interactiveParent instanceof ConnectScreen) && !isTransient(interactiveParent)) return interactiveParent;
+			return multiplayerScreen();
 		}
 	}
 }

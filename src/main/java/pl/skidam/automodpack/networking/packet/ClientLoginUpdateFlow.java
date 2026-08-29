@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 
@@ -61,18 +62,24 @@ final class ClientLoginUpdateFlow {
 			SelectedModpackTarget selectedTarget;
 			try {
 				selectedTarget = savedSelection == null
-						? SelectedModpackTarget.prepareDefault(manifestResult.content(), ClientPlatform.current())
-						: SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, savedSelection, ClientPlatform.current());
+						? SelectedModpackTarget.prepareDefault(manifestResult.content(), ClientPlatform.effective(savedSelection))
+						: SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, savedSelection, ClientPlatform.effective(savedSelection));
 			} catch (SelectionResolutionException e) {
-				if (savedSelection != null && canRepair(manifestResult.content())) {
+				if (savedSelection != null && canRepair(manifestResult.content(), savedSelection)) {
 					disconnectImmediately(handler);
+					AtomicBoolean repairCancelled = new AtomicBoolean();
 					ScreenImpl.repairSelection(manifestResult.content(), savedSelection, intent -> {
-						ScreenManager.waiting();
+						ScreenManager.waiting(() -> {
+							repairCancelled.set(true);
+							downloadClient.close();
+						});
 						DownloadClient.NET_EXECUTOR.execute(() -> {
+							if (repairCancelled.get()) return;
 							try {
-								SelectedModpackTarget repaired = SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, intent, ClientPlatform.current());
+								SelectedModpackTarget repaired = SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, intent, ClientPlatform.effective(intent));
 								continueReconcile(handler, connectionInfo, secret, storage, downloadClient, repaired, true);
 							} catch (RuntimeException repairError) {
+								if (repairCancelled.get()) return;
 								downloadClient.close();
 								presentFailure(repairError, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
 							}
@@ -122,10 +129,10 @@ final class ClientLoginUpdateFlow {
 		ScreenManager.failure(FailureRequest.of(failure, messageKey, category, FailureDestination.MULTIPLAYER, null));
 	}
 
-	private static boolean canRepair(ModpackJsons.CompleteModpackContentFields fields) {
+	private static boolean canRepair(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection) {
 		try {
 			GenerationRecord record = GenerationRecord.fromFields(fields);
-			SelectedModpackTarget.prepareDefault(fields, ClientPlatform.current());
+			SelectedModpackTarget.prepareDefault(fields, ClientPlatform.effective(savedSelection));
 			return true;
 		} catch (RuntimeException ignored) {
 			return false;
@@ -155,10 +162,10 @@ final class ClientLoginUpdateFlow {
 			}
 			if (!alreadyDisconnected) {
 				LOGGER.info("Modpack update required; leaving the connecting screen");
-				ScreenManager.waiting();
+				ScreenManager.waiting(updater::cancelFromPlayer);
 				disconnectImmediately(handler);
 			}
-			updater.processModpackUpdate(updateCheckResult);
+			updater.processModpackUpdate(updateCheckResult, true);
 			return LoginUpdateResponse.UPDATE_REQUIRED;
 		} catch (Exception e) {
 			updater.close();
