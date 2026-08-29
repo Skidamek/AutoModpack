@@ -10,6 +10,7 @@ import java.util.Set;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -20,6 +21,7 @@ import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
+import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -172,13 +174,15 @@ public class SelfUpdater {
 			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
 			ClientObjectStore.publishOwnership(storage, Set.of(automodpack.SHA1Hash()));
 
-			DownloadManager downloadManager = new DownloadManager(0, storage);
-			ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
-			downloadManager.download(targetJar, automodpack.SHA1Hash(),
-					List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
-					() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
-			downloadManager.joinAll();
-			downloadManager.cancelAllAndShutdown();
+			try (PlatformMetadataCache platformMetadataCache = PlatformMetadataCache.open(storage.platformMetadataDirectory())) {
+				DownloadManager downloadManager = new DownloadManager(0, storage, platformMetadataCache);
+				ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
+				downloadManager.download(targetJar, automodpack.SHA1Hash(), null, ModpackContentType.MOD,
+						List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
+						() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
+				downloadManager.joinAll();
+				downloadManager.cancelAllAndShutdown();
+			}
 
 			Path storeObject = storage.objectFile(automodpack.SHA1Hash());
 			if (!FileIntegrity.matches(storeObject, automodpack.fileSize(), automodpack.SHA1Hash()))
