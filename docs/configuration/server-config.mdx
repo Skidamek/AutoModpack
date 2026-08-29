@@ -16,6 +16,7 @@ This configuration file controls the behavior of the AutoModpack server-side com
 | `autoExcludeUnnecessaryFiles` | `true`          | Automatically skips syncing files that are empty, hidden, temporary, disabled, or backup files.                                                   |
 | `requireAutoModpackOnClient`  | `true`          | If true, players are kicked if they do not have AutoModpack installed.                                                                            |
 | `acceptedLoaders`             | `["<current>"]` | A list of modloaders allowed to connect (e.g., Fabric, Forge). Use with caution; most mods are loader-specific.                                   |
+| `syncLoaderVersion`           | `true`          | When false, the server does not provide a loader version, so clients keep whatever loader version their launcher has installed. Recommended for Docker or Prism setups that track the latest loader. |
 | `selfUpdater`                 | `false`         | Enables AutoModpack to update its own jar file automatically when new version is published on modrinth.                                           |
 
 ## File Synchronization
