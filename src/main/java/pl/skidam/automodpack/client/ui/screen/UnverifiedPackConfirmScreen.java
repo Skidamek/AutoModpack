@@ -134,6 +134,8 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 			topLines.addAll(wrapWithHighlight(this.font, PackConfirmCopy.intro(originDisplay), originDisplay, wrapWidth, ChatFormatting.YELLOW, ChatFormatting.BOLD));
 			topLines.add(blankLine());
 		}
+		appendStatLines(topLines, wrapWidth);
+		topLines.add(blankLine());
 		int jars = PackConfirmCopy.selectedJarCount(updater.getSelectedTarget());
 		topLines.addAll(wrapParagraph(this.font, PackConfirmCopy.unverifiedCount(unverifiedPaths.size(), jars), wrapWidth, ChatFormatting.RED));
 		List<MutableComponent> bottomLines = new ArrayList<>();
@@ -169,6 +171,21 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 		all.add(blankLine());
 		all.addAll(bottomLines);
 		this.addCenteredScrollBody(BODY, 42, bottomY, all);
+	}
+
+	private void appendStatLines(List<MutableComponent> lines, int wrapWidth) {
+		var target = updater.getSelectedTarget();
+		appendStat(lines, wrapWidth, PackConfirmCopy.selectedSummary(target), ChatFormatting.GREEN);
+		if (firstInstall) appendStat(lines, wrapWidth, PackConfirmCopy.existingMods(keepExistingMods, updater.firstInstallLocalModCount()), keepExistingMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY);
+		appendStat(lines, wrapWidth, PackConfirmCopy.requestedGroups(target), ChatFormatting.WHITE);
+		appendStat(lines, wrapWidth, PackConfirmCopy.includedGroups(target), ChatFormatting.WHITE);
+		appendStat(lines, wrapWidth, PackConfirmCopy.staleRequestedGroups(target), ChatFormatting.RED);
+		appendStat(lines, wrapWidth, PackConfirmCopy.requestedUnavailableGroups(target), ChatFormatting.RED);
+	}
+
+	private void appendStat(List<MutableComponent> lines, int wrapWidth, String text, ChatFormatting style) {
+		if (text.isEmpty()) return;
+		lines.addAll(wrapParagraph(this.font, text, wrapWidth, style));
 	}
 
 	private void placeUnverifiedBody(int topY, int bottomY, List<MutableComponent> topLines, List<MutableComponent> bottomLines, int topHeight, int listHeight) {
@@ -332,7 +349,6 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = updater.getSelectedTarget().manifest().modpackName().isBlank() ? "AutoModpack" : updater.getSelectedTarget().manifest().modpackName();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, PackConfirmCopy.packSummary(updater.getSelectedTarget()), panelWidth(BODY))).withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
 		// The disabled primary needs its reason on screen: the gate is the risk checkbox (the label carries the countdown).
 		if (!finished && primaryButton != null && !primaryButton.active && !unverifiedPaths.isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.confirm.ackUnlock").withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 40, TextColors.WHITE);

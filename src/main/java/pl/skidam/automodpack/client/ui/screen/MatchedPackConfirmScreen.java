@@ -106,12 +106,29 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 		List<MutableComponent> lines = new ArrayList<>();
 		lines.addAll(wrapWithHighlight(this.font, PackConfirmCopy.intro(originDisplay), originDisplay, wrapWidth, ChatFormatting.YELLOW, ChatFormatting.BOLD));
 		lines.add(blankLine());
+		appendStatLines(lines, wrapWidth);
+		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.matchedHonesty(), wrapWidth));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.computerRisk(), wrapWidth));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
 		return lines;
+	}
+
+	private void appendStatLines(List<MutableComponent> lines, int wrapWidth) {
+		var target = updater.getSelectedTarget();
+		appendStat(lines, wrapWidth, PackConfirmCopy.selectedSummary(target), ChatFormatting.GREEN);
+		appendStat(lines, wrapWidth, PackConfirmCopy.existingMods(keepExistingMods, updater.firstInstallLocalModCount()), keepExistingMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY);
+		appendStat(lines, wrapWidth, PackConfirmCopy.requestedGroups(target), ChatFormatting.WHITE);
+		appendStat(lines, wrapWidth, PackConfirmCopy.includedGroups(target), ChatFormatting.WHITE);
+		appendStat(lines, wrapWidth, PackConfirmCopy.staleRequestedGroups(target), ChatFormatting.RED);
+		appendStat(lines, wrapWidth, PackConfirmCopy.requestedUnavailableGroups(target), ChatFormatting.RED);
+	}
+
+	private void appendStat(List<MutableComponent> lines, int wrapWidth, String text, ChatFormatting style) {
+		if (text.isEmpty()) return;
+		lines.addAll(wrapParagraph(this.font, text, wrapWidth, style));
 	}
 
 	private void download() {
@@ -183,7 +200,6 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = updater.getSelectedTarget().manifest().modpackName().isBlank() ? "AutoModpack" : updater.getSelectedTarget().manifest().modpackName();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, PackConfirmCopy.packSummary(updater.getSelectedTarget()), panelWidth(BODY))).withStyle(ChatFormatting.GRAY), this.width / 2, 28, TextColors.WHITE);
 		int y = bodyTop;
 		for (MutableComponent line : bodyLines) {
 			drawCenteredTextWithShadow(matrices, this.font, line, this.width / 2, y, TextColors.WHITE);
