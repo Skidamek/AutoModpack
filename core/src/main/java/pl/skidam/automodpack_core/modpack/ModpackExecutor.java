@@ -267,7 +267,7 @@ public class ModpackExecutor {
 		try (FileMetadataCache fileMetadataCache = FileMetadataCache.open(dataLayout.fileMetadataDirectory());
 				ModFileCache modFileCache = ModFileCache.open(dataLayout.modMetadataDirectory())) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
-					LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
+					serverConfig.syncLoaderVersion ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
 					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
 					generationStore.objectRoot(), fileMetadataCache, modFileCache);
 			ModpackCandidate candidate = candidateScan.scan(request);

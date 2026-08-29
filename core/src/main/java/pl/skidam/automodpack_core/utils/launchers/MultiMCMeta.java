@@ -21,7 +21,7 @@ public class MultiMCMeta {
 			"net.minecraftforge", "neoforge", "net.neoforged");
 
 	public static boolean requiresLoaderVersionUpdate(String loaderType, String newVersion) {
-		String targetUid = LOADER_UID_MAP.get(loaderType.toLowerCase(Locale.ROOT));
+		String targetUid = componentUid(loaderType);
 		if (targetUid == null) return false;
 		try {
 			return needsUpdate(LauncherVersionSwapper.readJson(MMC_PACK_PATH), targetUid, newVersion);
@@ -32,7 +32,7 @@ public class MultiMCMeta {
 	}
 
 	public static boolean updateLoaderVersion(String loaderType, String newVersion) throws IOException {
-		String targetUid = LOADER_UID_MAP.get(loaderType.toLowerCase(Locale.ROOT));
+		String targetUid = componentUid(loaderType);
 		if (targetUid == null) return false;
 		JsonObject json = LauncherVersionSwapper.readJsonStrict(MMC_PACK_PATH);
 		try {
@@ -73,6 +73,10 @@ public class MultiMCMeta {
 			throw new IOException("Invalid persisted MultiMC/Prism launcher metadata", e);
 		}
 		return true;
+	}
+
+	static String componentUid(String loaderType) {
+		return loaderType == null ? null : LOADER_UID_MAP.get(loaderType.toLowerCase(Locale.ROOT));
 	}
 
 	private static boolean isSupported(JsonObject json) {

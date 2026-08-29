@@ -33,6 +33,7 @@ public class ServerConfigJsons {
 		public long secretLifetime = 336; // 336 hours = 14 days
 		public boolean selfUpdater = false;
 		public Set<String> acceptedLoaders = new HashSet<>();
+		public boolean syncLoaderVersion = true;
 	}
 
 	// Default group for a fresh config.
