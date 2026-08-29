@@ -230,6 +230,7 @@
   "automodpack.groupInspector.status": "%s  |  %s 個檔案",
   "automodpack.groupInspector.noDescription": "沒有發佈說明。",
   "automodpack.selection.platformSummary": "平台：%s  已選群組：%s",
+  "automodpack.selection.platformTooltip": "切換解析可選分組所用的平台。循環回偵測到的平台後即恢復自動偵測。",
   "automodpack.selection.category": "分類：%s",
   "automodpack.selection.requiredAlways": "必要：永遠包含",
   "automodpack.selection.defaultSelected": "預設：已選取，除非你將它移除",

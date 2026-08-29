@@ -239,6 +239,7 @@
   "automodpack.groupInspector.status": "%s  |  %s файлов",
   "automodpack.groupInspector.noDescription": "Описание не опубликовано.",
   "automodpack.selection.platformSummary": "Платформа: %s  Выбрано групп: %s",
+  "automodpack.selection.platformTooltip": "Переключает платформу, используемую для подбора необязательных групп. Возврат к определённой платформе снова включает автоопределение.",
   "automodpack.selection.category": "Категория: %s",
   "automodpack.selection.requiredAlways": "Обязательная: всегда включена",
   "automodpack.selection.defaultSelected": "По умолчанию: выбрана, пока вы её не уберёте",

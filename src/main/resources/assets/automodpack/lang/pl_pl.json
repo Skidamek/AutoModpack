@@ -239,6 +239,7 @@
   "automodpack.groupInspector.status": "%s  |  %s plików",
   "automodpack.groupInspector.noDescription": "Nie opublikowano opisu.",
   "automodpack.selection.platformSummary": "Platforma: %s  Wybrane grupy: %s",
+  "automodpack.selection.platformTooltip": "Przełącza platformę używaną do doboru grup opcjonalnych. Powrót do wykrytej platformy przywraca automatyczne wykrywanie.",
   "automodpack.selection.category": "Kategoria: %s",
   "automodpack.selection.requiredAlways": "Wymagane: zawsze uwzględnione",
   "automodpack.selection.defaultSelected": "Domyślne: wybrane, dopóki go nie usuniesz",

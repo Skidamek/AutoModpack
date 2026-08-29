@@ -186,8 +186,8 @@ final class InstalledModpackController {
 					ModpackJsons.CompleteModpackContentFields advertised = connection.advertisedFields();
 					SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
 					target = savedSelection == null
-							? SelectedModpackTarget.prepareDefault(advertised, ClientPlatform.current())
-							: SelectedModpackTarget.prepare(advertised, savedSelection, savedSelection, ClientPlatform.current());
+							? SelectedModpackTarget.prepareDefault(advertised, ClientPlatform.effective(savedSelection))
+							: SelectedModpackTarget.prepare(advertised, savedSelection, savedSelection, ClientPlatform.effective(savedSelection));
 					updater = connection.newUpdater(target, storage);
 				}
 				ModpackUtils.UpdateCheckResult updateResult = ModpackUtils.isUpdate(target.flatTarget(), storage);
@@ -196,7 +196,7 @@ final class InstalledModpackController {
 					releaseOnClient(() -> completed.accept(true));
 					return;
 				}
-				updater.processModpackUpdate(updateResult);
+				updater.processModpackUpdate(updateResult, false);
 				releaseOnClient(() -> completed.accept(false));
 			} catch (Exception e) {
 				if (updater != null) updater.close();

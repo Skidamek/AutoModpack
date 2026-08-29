@@ -233,6 +233,7 @@
   "automodpack.groupInspector.status": "%s  |  %s fichiers",
   "automodpack.groupInspector.noDescription": "Aucune description publiée.",
   "automodpack.selection.platformSummary": "Plateforme : %s  Groupes sélectionnés : %s",
+  "automodpack.selection.platformTooltip": "Fait défiler la plateforme utilisée pour résoudre les groupes optionnels. Revenir à la plateforme détectée réactive la détection.",
   "automodpack.selection.category": "Catégorie : %s",
   "automodpack.selection.requiredAlways": "Obligatoire : toujours inclus",
   "automodpack.selection.defaultSelected": "Par défaut : sélectionné tant que vous ne le retirez pas",

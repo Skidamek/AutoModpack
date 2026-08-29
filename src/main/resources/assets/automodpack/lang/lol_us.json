@@ -233,6 +233,7 @@
   "automodpack.groupInspector.status": "%s  |  %s fylez",
   "automodpack.groupInspector.noDescription": "no description. mysterious cat.",
   "automodpack.selection.platformSummary": "platform: %s  pickd groups: %s",
+  "automodpack.selection.platformTooltip": "Cycles da platform used to pick optional groups. Goin bak to da detected platform goes bak to auto detect.",
   "automodpack.selection.category": "kategury: %s",
   "automodpack.selection.requiredAlways": "must has: always in",
   "automodpack.selection.defaultSelected": "defawlt: pickd unless u yeet it",

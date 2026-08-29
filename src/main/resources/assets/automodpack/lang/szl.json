@@ -239,6 +239,7 @@
   "automodpack.groupInspector.status": "%s  |  %s plikōw",
   "automodpack.groupInspector.noDescription": "Niy ma wydanego ôpisu.",
   "automodpack.selection.platformSummary": "Platforma: %s  Wybrane grupy: %s",
+  "automodpack.selection.platformTooltip": "Przełōnczo platforma używanŏ do doboru grup ôpcjonalnych. Powrōt do wykryntyj platformy wrŏcŏ do autōmatycznego wykrywanio.",
   "automodpack.selection.category": "Kategoryjo: %s",
   "automodpack.selection.requiredAlways": "Wymŏgane: zawdy dołōne",
   "automodpack.selection.defaultSelected": "Dōmyślne: wybrane, dopōki ich niy wyciepiesz",
