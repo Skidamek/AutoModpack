@@ -4,6 +4,7 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
 
 import java.time.Instant;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.concurrent.ExecutionException;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.ChangeSummary;
@@ -25,11 +27,15 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
@@ -177,9 +183,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		if (localHistory.isEmpty()) return;
 		GenerationRecord latest = localByGenerationId.get(historyIndex.currentGenerationId());
 		if (latest == null) latest = localHistory.get(localHistory.size() - 1);
-		Map<String, String> featureNames = featureNames(latest.manifest());
-		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.files.title", modpackName),
-				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(latest.manifest()), featureNames));
+		openBrowserScreen(VersionedText.translatable("automodpack.files.title", modpackName), VersionedText.translatable("automodpack.files.description"),
+				ChangeSet.catalogue(latest.manifest()), featureNames(latest.manifest()));
 	}
 
 	private void openEntry(int index) {
@@ -247,9 +252,23 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private void openBrowser(HistoryEntry entry, GroupManifest current, GroupManifest parentManifest) {
 		if (parentManifest == null && !entry.parentGenerationId().isEmpty()) throw new IllegalStateException("A history diff requires its parent catalogue");
 		GenerationDiff diff = GenerationDiff.between(parentManifest, current);
-		ScreenImpl.setScreen(new ChangeBrowserScreen(this,
-				VersionedText.translatable("automodpack.history.detailsTitle", VersionedText.translatable("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString()),
-				VersionedText.translatable("automodpack.history.detailsDescription"), diff.changeSet(), featureNames(current)));
+		openBrowserScreen(VersionedText.translatable("automodpack.history.detailsTitle", VersionedText.translatable("automodpack.history.updated", UiFormat.formatInstant(entry.createdAt())).getString()),
+				VersionedText.translatable("automodpack.history.detailsDescription"), diff.changeSet(), featureNames(current));
+	}
+
+	/** Resolves the cached Modrinth/CurseForge page references off the render thread, then opens the shared browser. */
+	private void openBrowserScreen(Component heading, Component description, ChangeSet changes, Map<String, String> featureNames) {
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, platformMetadataDirectory());
+			this.minecraft.execute(() -> {
+				if (closed) return;
+				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, featureNames));
+			});
+		});
+	}
+
+	private static Path platformMetadataDirectory() {
+		return ClientStorage.open(GameDirectory.current()).platformMetadataDirectory();
 	}
 
 	private boolean canOpen(HistoryEntry entry) {

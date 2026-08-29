@@ -20,6 +20,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
@@ -273,10 +274,14 @@ final class InstalledModpackController {
 		Map<String, String> featureNames = new TreeMap<>();
 		pack.record().manifest().groups().forEach((groupId, group) -> featureNames.put(groupId,
 				group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : group.displayName()));
-		ScreenImpl.setScreen(new ChangeBrowserScreen(parent,
-				VersionedText.translatable("automodpack.files.title", pack.name()),
-				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), featureNames,
-				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, this)), true)));
+		ChangeSet changes = ChangeSet.catalogue(pack.record().manifest());
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, storage.platformMetadataDirectory());
+			releaseOnClient(() -> ScreenImpl.setScreen(new ChangeBrowserScreen(parent,
+					VersionedText.translatable("automodpack.files.title", pack.name()),
+					VersionedText.translatable("automodpack.files.description"), referenced, featureNames,
+					new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, this)), true))));
+		});
 	}
 
 	void openPreservedFiles(Screen parent, Pack pack, Runnable released) {
