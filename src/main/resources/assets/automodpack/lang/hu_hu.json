@@ -313,6 +313,7 @@
   "automodpack.vault.reason.player_consent": "Telepítési hozzájárulás",
   "automodpack.vault.reason.strict_repair": "Javítási tisztítás",
   "automodpack.vault.reason.editable_reset": "Szerkeszthető fájl visszaállítása",
+  "automodpack.vault.reason.local_drift": "Helyi fájlmódosítás",
   "automodpack.update.title": "Frissítés áttekintése",
   "automodpack.update.deactivationTitle": "Modpack kikapcsolása",
   "automodpack.update.deactivateNamed": "%s kikapcsolása",

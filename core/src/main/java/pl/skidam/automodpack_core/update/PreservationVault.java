@@ -40,7 +40,8 @@ public final class PreservationVault {
 		LOCAL_CONFLICT,
 		PLAYER_CONSENT,
 		STRICT_REPAIR,
-		EDITABLE_RESET
+		EDITABLE_RESET,
+		LOCAL_DRIFT
 	}
 
 	public enum Status {
@@ -132,6 +133,25 @@ public final class PreservationVault {
 			if (Files.exists(source, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matches(object(storage, claim.objectHash()), claim.size(), claim.objectHash()))
 				throw new IOException("Conflict source removal could not be verified: " + source);
 			return claim;
+		}
+	}
+
+	/** Replaces the claim for a path with one for new bytes as one vault operation: a claim already matching the new bytes is returned unchanged, superseded claims are released. */
+	public static Claim replaceClaim(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size)
+			throws IOException {
+		Objects.requireNonNull(storage, "storage");
+		String pack = ModpackId.requireValid(modpackId);
+		Reason normalizedReason = Objects.requireNonNull(reason, "preservation reason");
+		Root normalizedRoot = requireRestorableRoot(sourceRoot);
+		if (size < 0) throw new IOException("Preservation object size is invalid");
+		synchronized (MUTATION_LOCK) {
+			for (Claim claim : read(storage, pack).claims()) {
+				if (claim.reason() != normalizedReason || claim.sourceRoot() != normalizedRoot) continue;
+				if (!UpdatePlanner.normalize(claim.originalPath()).equals(UpdatePlanner.normalize(originalPath))) continue;
+				if (claim.objectHash().equalsIgnoreCase(objectHash) && claim.size() == size) return claim;
+				delete(storage, pack, claim.claimId());
+			}
+			return preserve(storage, pack, generationId, normalizedReason, normalizedRoot, originalPath, objectHash, size);
 		}
 	}
 

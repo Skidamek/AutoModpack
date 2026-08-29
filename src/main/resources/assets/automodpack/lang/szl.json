@@ -321,6 +321,7 @@
   "automodpack.vault.reason.player_consent": "Zgoda przi instalacyji",
   "automodpack.vault.reason.strict_repair": "Porzōndkowanie przi naprawie",
   "automodpack.vault.reason.editable_reset": "Reset edytowalnego pliku",
+  "automodpack.vault.reason.local_drift": "Lokalny dryf pliku",
   "automodpack.update.title": "Ôbejrzij aktualizacyjo",
   "automodpack.update.deactivationTitle": "Wyłōncz modpak",
   "automodpack.update.deactivateNamed": "Wyłōncz %s",

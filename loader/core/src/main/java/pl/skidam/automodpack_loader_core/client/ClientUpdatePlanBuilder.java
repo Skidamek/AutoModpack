@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_loader_core.client;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
@@ -26,6 +28,7 @@ import pl.skidam.automodpack_core.update.ClientOverlaySnapshot;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.GeneratedCopyState;
+import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
@@ -88,7 +91,7 @@ final class ClientUpdatePlanBuilder {
 	PreparedPlan buildPlan(Input input, FileMetadataCache cache, ModFileCache modCache) throws Exception {
 		ClientProjectionView projectionView = ClientProjectionView.open(storage);
 		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
-		captureActiveEditableOverlays(cache, projection);
+		captureActiveEditableOverlays(cache, projection, input.target());
 		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(input.currentConfig(), expectedClientConfig);
@@ -138,7 +141,7 @@ final class ClientUpdatePlanBuilder {
 			AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId, cache);
 			ClientStorageJsons.ClientBaselineFields baseline = availableBaseline.fields();
 			ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
-			captureActiveEditableOverlays(cache, projection);
+			captureActiveEditableOverlays(cache, projection, null);
 			GeneratedCopyState generatedCopies = projection.generatedCopies();
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, projection,
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
@@ -227,12 +230,17 @@ final class ClientUpdatePlanBuilder {
 		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
 	}
 
-	private void captureActiveEditableOverlays(FileMetadataCache cache, ClientProjectionView.Snapshot projection) throws IOException {
+	private void captureActiveEditableOverlays(FileMetadataCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields target) throws IOException {
 		ModpackJsons.ModpackContentFields activeTarget = projection.target();
 		if (activeTarget == null || activeTarget.list == null) return;
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
+		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(UpdatePlanner.normalize(item.file), item));
 		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.modpackId).deletedPaths);
 		for (var item : activeTarget.list) {
-			if (!item.editable) continue;
+			if (!item.editable) {
+				resetDriftedServerFile(cache, projection, activeTarget, targetItems, item);
+				continue;
+			}
 			Path live = livePath(item);
 			Path overlay = storage.overlayFile(activeTarget.modpackId, item.file);
 			if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) {
@@ -243,8 +251,13 @@ final class ClientUpdatePlanBuilder {
 			}
 			String hash = cache.getOrComputeHash(live);
 			long size = Files.size(live);
-			if (projection.matchesPendingGameState(item.file, new UpdatePlan.FileState(hash, size, true))) continue;
-			if (item.sha1.equalsIgnoreCase(hash) && Long.parseLong(item.size) == size) {
+			UpdatePlan.FileState state = new UpdatePlan.FileState(hash, size, true);
+			if (projection.matchesPendingGameState(item.file, state)) continue;
+			if (item.overwriteEditable) {
+				UpdatePlan.FileState reset = resetDriftedFile(cache, activeTarget, item, live, state, PreservationVault.Reason.EDITABLE_RESET);
+				if (reset != null) state = reset;
+			}
+			if (item.sha1.equalsIgnoreCase(state.sha1()) && Long.parseLong(item.size) == state.size()) {
 				Files.deleteIfExists(overlay);
 				deletedPaths.remove(UpdatePlanner.normalize(item.file));
 				continue;
@@ -255,6 +268,35 @@ final class ClientUpdatePlanBuilder {
 			deletedPaths.remove(UpdatePlanner.normalize(item.file));
 		}
 		storage.writeOverlayState(activeTarget.modpackId, deletedPaths);
+	}
+
+	/** A drifted file the pack owns: the drifted bytes go to the vault and the live file gets the pack version back, without a review. */
+	private UpdatePlan.FileState resetDriftedFile(FileMetadataCache cache, ModpackJsons.ModpackContentFields activeTarget, ModpackJsons.ModpackContentFields.ModpackContentItem item,
+			Path live, UpdatePlan.FileState drift, PreservationVault.Reason reason) throws IOException {
+		long packSize = Long.parseLong(item.size);
+		Path object = storage.objectFile(item.sha1);
+		if (!FileIntegrity.matches(object, packSize, item.sha1, cache)) {
+			LOGGER.warn("Pack version is unavailable locally; keeping the drifted file in place: {}", item.file);
+			return null;
+		}
+		PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.targetGenerationId, reason, UpdatePlan.Root.GAME_DIR, item.file, drift.sha1(), drift.size());
+		VerifiedFileTransfer.copyAtomic(object, live, packSize, item.sha1, cache);
+		return new UpdatePlan.FileState(cache.rehash(live), Files.size(live), true);
+	}
+
+	/** Silently resets client-side drift of an unchanged server-provided non-mod file so it never becomes an update prompt; the server changing the file stays a reviewable update. */
+	private void resetDriftedServerFile(FileMetadataCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields activeTarget,
+			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, ModpackJsons.ModpackContentFields.ModpackContentItem item) throws IOException {
+		if (targetItems.isEmpty()) return;
+		String relative = UpdatePlanner.normalize(item.file);
+		var targetItem = targetItems.get(relative);
+		if (targetItem == null || !targetItem.sha1.equalsIgnoreCase(item.sha1) || ModpackPathPolicy.isActiveMod(relative, item.type)) return;
+		Path live = livePath(item);
+		if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) return;
+		UpdatePlan.FileState state = new UpdatePlan.FileState(cache.getOrComputeHash(live), Files.size(live), true);
+		if (projection.matchesPendingGameState(item.file, state)) return;
+		if (state.sha1().equalsIgnoreCase(item.sha1) && Long.parseLong(item.size) == state.size()) return;
+		resetDriftedFile(cache, activeTarget, item, live, state, PreservationVault.Reason.LOCAL_DRIFT);
 	}
 
 	private Path livePath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {

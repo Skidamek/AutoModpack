@@ -309,6 +309,7 @@
   "automodpack.vault.reason.player_consent": "安裝時同意",
   "automodpack.vault.reason.strict_repair": "修復清理",
   "automodpack.vault.reason.editable_reset": "可編輯檔案重設",
+  "automodpack.vault.reason.local_drift": "本機檔案漂移",
   "automodpack.update.title": "檢視更新",
   "automodpack.update.deactivationTitle": "停用模組包",
   "automodpack.update.deactivateNamed": "停用 %s",

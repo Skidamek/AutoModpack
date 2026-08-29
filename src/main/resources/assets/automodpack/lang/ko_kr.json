@@ -309,6 +309,7 @@
   "automodpack.vault.reason.player_consent": "설치 시 동의",
   "automodpack.vault.reason.strict_repair": "복구 정리",
   "automodpack.vault.reason.editable_reset": "편집 파일 되돌림",
+  "automodpack.vault.reason.local_drift": "로컬 변경 파일",
   "automodpack.update.title": "업데이트 검토",
   "automodpack.update.deactivationTitle": "모드팩 비활성화",
   "automodpack.update.deactivateNamed": "%s 비활성화",

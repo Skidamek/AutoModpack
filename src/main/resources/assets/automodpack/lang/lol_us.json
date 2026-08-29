@@ -313,6 +313,7 @@
   "automodpack.vault.reason.player_consent": "u sed yus",
   "automodpack.vault.reason.strict_repair": "fix kleenup",
   "automodpack.vault.reason.editable_reset": "editabul reset",
+  "automodpack.vault.reason.local_drift": "local drift",
   "automodpack.update.title": "review updayt",
   "automodpack.update.deactivationTitle": "turn off modpak",
   "automodpack.update.deactivateNamed": "turn off %s",
