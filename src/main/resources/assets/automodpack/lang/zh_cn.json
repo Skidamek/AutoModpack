@@ -309,6 +309,7 @@
   "automodpack.vault.reason.player_consent": "安装时同意",
   "automodpack.vault.reason.strict_repair": "修复清理",
   "automodpack.vault.reason.editable_reset": "可编辑文件重置",
+  "automodpack.vault.reason.local_drift": "本地文件漂移",
   "automodpack.update.title": "查看更新",
   "automodpack.update.deactivationTitle": "停用整合包",
   "automodpack.update.deactivateNamed": "停用 %s",

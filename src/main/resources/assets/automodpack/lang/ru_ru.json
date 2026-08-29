@@ -321,6 +321,7 @@
   "automodpack.vault.reason.player_consent": "Согласие при установке",
   "automodpack.vault.reason.strict_repair": "Очистка при исправлении",
   "automodpack.vault.reason.editable_reset": "Сброс изменяемого файла",
+  "automodpack.vault.reason.local_drift": "Локальное изменение файла",
   "automodpack.update.title": "Просмотр обновления",
   "automodpack.update.deactivationTitle": "Отключить модпак",
   "automodpack.update.deactivateNamed": "Отключить %s",

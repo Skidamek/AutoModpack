@@ -313,6 +313,7 @@
   "automodpack.vault.reason.player_consent": "Ye said aye",
   "automodpack.vault.reason.strict_repair": "Repair cleanup",
   "automodpack.vault.reason.editable_reset": "Editable reset",
+  "automodpack.vault.reason.local_drift": "Local drift",
   "automodpack.update.title": "Review update",
   "automodpack.update.deactivationTitle": "Deactivate modpack",
   "automodpack.update.deactivateNamed": "Deactivate %s",

@@ -321,6 +321,7 @@
   "automodpack.vault.reason.player_consent": "Zgoda przy instalacji",
   "automodpack.vault.reason.strict_repair": "Czyszczenie przy naprawie",
   "automodpack.vault.reason.editable_reset": "Reset pliku edytowalnego",
+  "automodpack.vault.reason.local_drift": "Lokalna modyfikacja pliku",
   "automodpack.update.title": "Sprawdź aktualizację",
   "automodpack.update.deactivationTitle": "Dezaktywuj modpack",
   "automodpack.update.deactivateNamed": "Dezaktywuj %s",
