@@ -203,8 +203,9 @@ public class ModpackUpdater implements AutoCloseable {
 		return confirmationState.get();
 	}
 
-	/** Minecraft join target as `host:port` from the connection origin. */
+	/** Minecraft join target as `host:port` from the connection origin, or an empty string when offline. */
 	public String joinOrigin() {
+		if (connectionInfo == null) return "";
 		return connectionInfo.origin.getHostString() + ":" + connectionInfo.origin.getPort();
 	}
 

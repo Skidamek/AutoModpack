@@ -111,7 +111,7 @@ class FakeBridge:
         self.error_parent = "details"
         self.selected_claim_path: str | None = None
         self.repair_expected: dict[str, bytes] = {}
-        self.vault_parent = "settings"
+        self.vault_parent = "details"
 
     # --- snapshot ---------------------------------------------------------
     def render_frame(self) -> None:
@@ -419,7 +419,7 @@ class FakeBridge:
             self.screen = "changelog"
         elif element_id == 7:
             self.settings_parent = "multiplayer"
-            self.screen = "settings"
+            self.screen = "manager"
         elif element_id == 8:
             self.screen = "multiplayer"
         elif element_id == 9 and self.screen == "manager":
@@ -433,7 +433,14 @@ class FakeBridge:
         elif element_id == 69:
             if self.detail_pack != self.selected_pack:
                 self.pending_pack = self.detail_pack
-            self.screen = "preview"
+                if self._switch_writes_unverified_jar(self.detail_pack):
+                    # A cached record carrying mod jars reviews through the unverified confirm.
+                    self.acknowledged = False
+                    self.screen = "strict_confirm"
+                else:
+                    self.screen = "preview"
+            else:
+                self.screen = "preview"
         elif element_id == 70:
             self.repair_editable_reset = True
             self.repair_keep_unowned = False
@@ -472,8 +479,10 @@ class FakeBridge:
             self.screen = "patch_history"
         elif element_id == 57:
             self.screen = "content_history"
+        elif element_id == 73:
+            self.screen = "content_history"
         elif element_id == 58:
-            self.screen = "settings"
+            self.screen = "details"
         elif element_id == 59:
             self.history_parent = "content_history"
             self.screen = "content_patch_history"
@@ -486,8 +495,8 @@ class FakeBridge:
             self.screen = "manager"
         elif element_id == 43:
             self.vault_claim_selected = False
-            self.vault_parent = "settings"
-            self.screen = "vault_conflict"
+            self.vault_parent = "details"
+            self.screen = "preservation" if self.detail_pack == "A" else "vault_conflict"
         elif element_id == 49 and self.screen == "vault_conflict":
             self.vault_claim_selected = True
             self.selected_claim_path = "mods/amp-autotest-conflict.jar"
@@ -513,7 +522,7 @@ class FakeBridge:
                 self._compact_local_storage()
                 self.storage_running = False
         elif element_id == 47:
-            self.screen = self.storage_parent if self.screen == "storage" else "settings"
+            self.screen = self.storage_parent if self.screen == "storage" else "multiplayer"
         elif element_id == 91:
             if self._has_damaged_preservation_object():
                 self.error_parent = "storage"
@@ -544,7 +553,7 @@ class FakeBridge:
             self._save_preservation_copy()
             self.screen = "preservation"
         elif element_id == 86:
-            self.screen = "pack_storage"
+            self.screen = self.vault_parent
         elif element_id == 103:
             self.screen = "preservation"
         elif element_id in (90, 92):
@@ -588,6 +597,11 @@ class FakeBridge:
     # --- helpers ----------------------------------------------------------
     def _pack_id(self, pack: str) -> str:
         return {"A": "packaaa", "B": "packbbb"}[pack]
+
+    def _switch_writes_unverified_jar(self, pack: str) -> bool:
+        if pack == "B":
+            return any(str(name).endswith(".jar") for name, _ in self.pack_b_files)
+        return True
 
     def _editable_overlay_path(self, pack: str) -> Path:
         return self.ctx.game_dir / "automodpack" / "client" / "overlays" / self._pack_id(pack) / "config" / "pack-shared-editable.txt"
@@ -998,6 +1012,7 @@ class FakeBridge:
                 *([{"id": 70, "text": "Repair", "enabled": True, "visible": True}] if active else []),
                 {"id": 72, "text": "Features", "enabled": True, "visible": True},
                 {"id": 73, "text": "History", "enabled": True, "visible": True},
+                {"id": 43, "text": "Preserved files", "enabled": True, "visible": True},
                 {"id": 74, "text": "Files", "enabled": True, "visible": True},
                 {"id": 75, "text": "Storage", "enabled": True, "visible": True},
                 *([{"id": 76, "text": "Deactivate", "enabled": True, "visible": True}] if active else []),

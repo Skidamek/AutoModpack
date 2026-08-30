@@ -661,7 +661,7 @@ def _write_server_orphan_object(ctx: Context, object_root: Path) -> str:
     result = _container(ctx.srv_name).exec_run([
         "sh",
         "-c",
-        'set -eu; shard="$1/$(printf %s "$3" | cut -c1-2)"; rest=$(printf %s "$3" | cut -c3-); mkdir -p "$shard"; dest="$shard/$rest"; if [ -e "$dest" ]; then test -f "$dest"; else printf "%s" "$2" > "$dest"; fi; test "$(sha1sum "$dest" | cut -d " " -f 1)" = "$3"',
+        'set -eu; shard="$1/$(printf %s "$3" | cut -c1-2)"; rest=$(printf %s "$3" | cut -c3-); mkdir -p "$shard"; chmod 777 "$shard"; dest="$shard/$rest"; if [ -e "$dest" ]; then test -f "$dest"; else printf "%s" "$2" > "$dest"; chmod 666 "$dest"; fi; test "$(sha1sum "$dest" | cut -d " " -f 1)" = "$3"',
         "autotester",
         str(object_root),
         payload.decode("utf-8"),
@@ -1007,14 +1007,20 @@ def _v_seed_bootstrap(ctx: Context, step):
     })
 
 
-def _published_objects(ctx: Context) -> dict[str, int]:
+def _published_objects(ctx: Context, only_groups: list[str] | None = None) -> dict[str, int]:
     projection_path = ctx.server_dir / "automodpack" / "server" / "current-projection.json"
     try:
         projection = json.loads(projection_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"published projection is not readable: {error}") from error
+    groups = projection.get("groups", {}) or {}
+    if only_groups:
+        unknown = [group for group in only_groups if group not in groups]
+        if unknown:
+            raise AssertionError(f"published projection has no such groups: {unknown}")
+        groups = {name: groups[name] for name in only_groups}
     expected = {}
-    for group in (projection.get("groups", {}) or {}).values():
+    for group in groups.values():
         for file in (group.get("files", {}) or {}).values():
             sha1 = str(file.get("sha1", "")).strip().lower()
             if not sha1:
@@ -1048,8 +1054,8 @@ def _v_assert_preload_rejected(ctx: Context, _step):
 
 @verb("assert_preload_acquired")
 def _v_assert_preload_acquired(ctx: Context, _step):
-    """Assert that launch apply put every object in the published catalogue into CAS."""
-    expected = _published_objects(ctx)
+    """Assert that launch apply put every object of the client's selected target into CAS."""
+    expected = _published_objects(ctx, only_groups=_step.get("groups"))
     if not expected:
         raise AssertionError("published projection contains no object hashes")
     objects = _ensure_client_data_root(ctx.game_dir) / "objects"

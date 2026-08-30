@@ -281,17 +281,26 @@ flow:
     name: review the A to B cached switch
     select: { text: Activate }
   - do: wait_for
-    name: show cached switch preview
+    name: show the A to B unverified switch confirm
+    timeout: 90s
     until:
       all:
-        - screen: UpdatePreviewScreen
-        - element: { text: Update, enabled: true }
+        - screen: UnverifiedPackConfirmScreen
+        - element: { key: automodpack.confirm.ack, enabled: true }
   - do: screenshot
     name: capture A to B switch review
     file: all-switch-a-to-b
   - do: click
+    name: acknowledge unverified risk for the A to B switch
+    select: { key: automodpack.confirm.ack }
+  - do: wait_for
+    name: unlock the A to B switch after acknowledgement
+    timeout: 20s
+    until:
+      element: { key: automodpack.update.apply, enabled: true }
+  - do: click
     name: accept the A to B switch
-    select: { text: Update }
+    select: { key: automodpack.update.apply }
   - do: wait_for
     name: wait for A to B restart
     until: { screen: RestartScreen }
@@ -369,14 +378,11 @@ flow:
         - screen: ModpackDetailsScreen
         - element: { text: Repair, enabled: true }
   - do: click
-    name: open Pack B storage from the same details screen
-    select: { text: Storage }
-  - do: click
-    name: open the owned conflict in the preservation vault
+    name: open the owned conflict in the preservation vault from Pack B details
     select: { text: Preserved files }
   - do: click
     name: select the still-owned local conflict
-    select: { text: mods/amp-autotest-conflict.jar }
+    select: { text: amp-autotest-conflict.jar }
   - do: click
     name: attempt an unsafe restore without overwriting the active pack
     select: { text: Restore }
@@ -404,7 +410,7 @@ flow:
     until:
       all:
         - screen: PreservationVaultScreen
-        - element: { text: mods/amp-autotest-conflict.jar, enabled: true }
+        - element: { text: amp-autotest-conflict.jar, enabled: true }
   - do: assert_preservation_claim
     name: verify save-copy status stayed durable
     packId: packbbb
@@ -412,28 +418,28 @@ flow:
     status: SAVED_COPY
   - do: click
     name: select the saved conflict for delete-confirmation testing
-    select: { text: mods/amp-autotest-conflict.jar }
+    select: { text: amp-autotest-conflict.jar }
   - do: click
     name: arm preservation deletion without deleting yet
     select: { text: Delete }
   - do: click
     name: cancel pending deletion by selecting the claim again
-    select: { text: mods/amp-autotest-conflict.jar }
+    select: { text: amp-autotest-conflict.jar }
   - do: click
     name: leave the preservation vault
     select: { text: Back }
-  - do: click
-    name: leave Pack B storage
-    select: { text: Back }
+  - do: wait_for
+    name: return to Pack B details from the vault
+    until: { screen: ModpackDetailsScreen }
   - do: click
     name: leave Pack B details
     select: { text: Back }
   - do: click
     name: leave the installed pack manager
     select: { text: Back }
-  - do: click
+  - do: wait_for
     name: return to multiplayer after repair navigation
-    select: { text: Back }
+    until: { screen: Play Multiplayer }
   - do: disconnect
     name: reset to the title screen after the repair navigation cycle
   - do: write_file
@@ -463,14 +469,26 @@ flow:
     name: review the B to A cached switch
     select: { text: Activate }
   - do: wait_for
-    name: show reverse cached switch preview
-    until: { element: { text: Update, enabled: true } }
+    name: show the B to A unverified switch confirm
+    timeout: 90s
+    until:
+      all:
+        - screen: UnverifiedPackConfirmScreen
+        - element: { key: automodpack.confirm.ack, enabled: true }
   - do: screenshot
     name: capture B to A switch review
     file: all-switch-b-to-a
   - do: click
+    name: acknowledge unverified risk for the B to A switch
+    select: { key: automodpack.confirm.ack }
+  - do: wait_for
+    name: unlock the B to A switch after acknowledgement
+    timeout: 20s
+    until:
+      element: { key: automodpack.update.apply, enabled: true }
+  - do: click
     name: accept the B to A switch
-    select: { text: Update }
+    select: { key: automodpack.update.apply }
   - do: wait_for
     name: wait for B to A restart
     until: { screen: RestartScreen }
@@ -553,10 +571,19 @@ flow:
     name: open Pack B v2 settings directly from multiplayer
     select: { text: Modpack settings }
   - do: wait_for
+    name: show the installed pack list from multiplayer
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Pack B, enabled: true }
+  - do: click
+    name: open Pack B v2 details
+    select: { text: Pack B }
+  - do: wait_for
     name: show Pack B preservation action
     until:
       all:
-        - screen: ModpackSelectionScreen
+        - screen: ModpackDetailsScreen
         - element: { text: History, enabled: true }
         - element: { text: Preserved files, enabled: true }
   - do: click
@@ -584,8 +611,8 @@ flow:
     name: leave Pack B content history
     select: { text: Back }
   - do: wait_for
-    name: return to Pack B settings after history
-    until: { screen: ModpackSelectionScreen }
+    name: return to Pack B details after history
+    until: { screen: ModpackDetailsScreen }
   - do: screenshot
     name: capture Pack B preservation action
     file: all-preservation-settings
@@ -594,7 +621,7 @@ flow:
     select: { text: Preserved files }
   - do: click
     name: select the preserved local conflict
-    select: { text: mods/amp-autotest-conflict.jar }
+    select: { text: amp-autotest-conflict.jar }
   - do: wait_for
     name: show the safe preservation restore action
     until:
@@ -619,14 +646,20 @@ flow:
     packId: packbbb
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
   - do: click
-    name: return from preservation to Pack B settings
+    name: return from preservation to Pack B details
     select: { text: Back }
   - do: wait_for
-    name: return to Pack B settings after restore
-    until: { screen: ModpackSelectionScreen }
+    name: return to Pack B details after restore
+    until: { screen: ModpackDetailsScreen }
   - do: click
     name: return to the installed pack manager
-    select: { text: Pack manager }
+    select: { text: Back }
+  - do: wait_for
+    name: return to the installed pack list after restore
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Pack A, enabled: true }
   - do: click
     name: open client local storage maintenance
     select: { text: Local storage }
@@ -683,11 +716,23 @@ flow:
     name: review the Pack B v2 to Pack A switch
     select: { text: Activate }
   - do: wait_for
-    name: show the return to Pack A preview
-    until: { element: { text: Update, enabled: true } }
+    name: show the return to Pack A unverified switch confirm
+    timeout: 90s
+    until:
+      all:
+        - screen: UnverifiedPackConfirmScreen
+        - element: { key: automodpack.confirm.ack, enabled: true }
+  - do: click
+    name: acknowledge unverified risk for the return to Pack A
+    select: { key: automodpack.confirm.ack }
+  - do: wait_for
+    name: unlock the return to Pack A after acknowledgement
+    timeout: 20s
+    until:
+      element: { key: automodpack.update.apply, enabled: true }
   - do: click
     name: accept the return to Pack A
-    select: { text: Update }
+    select: { key: automodpack.update.apply }
   - do: wait_for
     name: wait for return to Pack A restart
     until: { screen: RestartScreen }
@@ -785,9 +830,12 @@ flow:
   - do: click
     name: open Pack A settings for recovered
     select: { text: Modpack settings }
-  - do: click
-    name: open the installed pack manager for recovered
-    select: { text: Pack manager }
+  - do: wait_for
+    name: show the installed pack list for recovered
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Pack A, enabled: true }
   - do: click
     name: open Pack A details for recovered
     select: { text: Pack A }
@@ -798,32 +846,20 @@ flow:
         - screen: ModpackDetailsScreen
         - element: { text: Storage, enabled: true }
   - do: click
-    name: open Pack A storage actions
-    select: { text: Storage }
-  - do: wait_for
-    name: expose the first recovered candidate
-    until:
-      all:
-        - screen: ModpackStorageScreen
-        - element: { text: Preserved files, enabled: true }
-  - do: screenshot
-    name: capture storage with recovered available
-    file: all-pack-storage-recovered
-  - do: click
-    name: open the recovered archive
+    name: open the recovered archive from Pack A details
     select: { text: Preserved files }
   - do: wait_for
     name: show the removed file as recoverable
     until:
       all:
         - screen: PreservationVaultScreen
-        - element: { text: config/amp-autotest-gamma.cfg, enabled: true }
+        - element: { text: amp-autotest-gamma.cfg, enabled: true }
   - do: screenshot
     name: capture available recovered files
     file: all-recovered-available
   - do: click
     name: select the removed file
-    select: { text: config/amp-autotest-gamma.cfg }
+    select: { text: amp-autotest-gamma.cfg }
   - do: click
     name: save a copy of the removed file
     select: { text: Save copy }
@@ -869,10 +905,7 @@ flow:
     path: config/amp-autotest-delta.txt
     action: delete
   - do: click
-    name: return to Pack A storage with deliberate corruption present
-    select: { text: Back }
-  - do: click
-    name: return to Pack A details before storage verification
+    name: return to Pack A details with deliberate corruption present
     select: { text: Back }
   - do: click
     name: return to the installed pack manager before storage verification
@@ -1069,9 +1102,6 @@ flow:
     name: open Pack A to delete one repaired claim
     select: { text: Pack A }
   - do: click
-    name: open Pack A storage after repair
-    select: { text: Storage }
-  - do: click
     name: reopen the preservation vault after repair
     select: { text: Preserved files }
   - do: wait_for
@@ -1079,22 +1109,22 @@ flow:
     timeout: 30s
     until:
       any:
-        - element: { text: config/amp-autotest-gamma.cfg, visible: true }
+        - element: { text: amp-autotest-gamma.cfg, visible: true }
         - element: { text: "Next >", enabled: true }
   - do: click
     name: browse forward to the removed-file claim page
     select: { text: "Next >" }
-    when: { no_element: { text: config/amp-autotest-gamma.cfg, visible: true } }
+    when: { no_element: { text: amp-autotest-gamma.cfg, visible: true } }
     repeat: 12
   - do: click
     name: select the removed-file claim for deletion
-    select: { text: config/amp-autotest-gamma.cfg }
+    select: { text: amp-autotest-gamma.cfg }
   - do: click
     name: arm removed-file claim deletion
     select: { text: Delete }
   - do: click
     name: cancel the first deletion attempt by reselecting
-    select: { text: config/amp-autotest-gamma.cfg }
+    select: { text: amp-autotest-gamma.cfg }
   - do: click
     name: arm removed-file claim deletion again
     select: { text: Delete }
@@ -1106,7 +1136,7 @@ flow:
     until:
       all:
         - screen: PreservationVaultScreen
-        - no_element: { text: config/amp-autotest-gamma.cfg, visible: true }
+        - no_element: { text: amp-autotest-gamma.cfg, visible: true }
   - do: assert_preservation_claim
     name: verify explicit deletion removed only the server-removal claim
     packId: "${bootstrap_modpack_id}"
@@ -1114,20 +1144,17 @@ flow:
     reason: SERVER_REMOVAL
     present: false
   - do: click
-    name: return to Pack A storage after deletion
-    select: { text: Back }
-  - do: click
     name: return to Pack A details after deletion
     select: { text: Back }
   - do: click
     name: return to the installed pack manager after deletion
     select: { text: Back }
   - do: click
-    name: return to Pack A settings after deletion
-    select: { text: Back }
-  - do: click
     name: return to multiplayer after repair and vault review
     select: { text: Back }
+  - do: wait_for
+    name: verify the installed pack list closes onto multiplayer
+    until: { screen: Play Multiplayer }
   - do: quit
     name: stop the installed client before fresh-client reset
   - do: wait_client_exit
@@ -1162,7 +1189,8 @@ flow:
   - do: wait_bridge
     name: wait for the fresh client bridge
   - do: assert_preload_acquired
-    name: verify the fresh client reacquired current objects into empty CAS
+    name: verify the fresh client reacquired its selected groups into empty CAS
+    groups: [main, visual]
   - do: wait_for
     name: verify first install waits for in-game review
     until:
@@ -1180,14 +1208,14 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: [MatchedPackConfirmScreen, UnverifiedPackConfirmScreen]
         - element: { key: automodpack.firstConnect.leftoverArchive, enabled: true }
   - do: screenshot
     name: capture first-install cleanup with its safe default
     file: all-first-install-cleanup-default
   - do: click
     name: navigate into first-install customization before consent
-    select: { text: Customize groups }
+    select: { key: automodpack.confirm.customize }
   - do: wait_for
     name: show first-install group customization
     until: { screen: ModpackSelectionScreen }
@@ -1198,7 +1226,7 @@ flow:
     name: return to the same first-install consent state
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: [MatchedPackConfirmScreen, UnverifiedPackConfirmScreen]
         - element: { key: automodpack.firstConnect.leftoverArchive, enabled: true }
   - do: click
     name: opt into keeping existing mods
@@ -1213,13 +1241,16 @@ flow:
     name: return to the default removal consent before continuing
     select: { key: automodpack.firstConnect.leftoverKeep }
   - do: wait_for
-    name: wait for the unverified ack checkbox after the lock
-    timeout: 20s
+    name: wait for the unverified ack checkbox or an already trusted download
+    timeout: 30s
     until:
-      element: { key: automodpack.confirm.ack, enabled: true }
+      any:
+        - element: { key: automodpack.confirm.ack, enabled: true }
+        - element: { key: automodpack.firstConnect.download, enabled: true }
   - do: click
     name: acknowledge unverified risk
     select: { key: automodpack.confirm.ack }
+    when: { element: { key: automodpack.confirm.ack, enabled: true } }
   - do: wait_for
     name: unlock download after acknowledgement
     timeout: 20s
@@ -1229,28 +1260,25 @@ flow:
     name: continue with defaults and approved cleanup
     select: { key: automodpack.firstConnect.download }
   - do: wait_for
-    name: review the strict first-install update
+    name: review the strict first-install update or restart directly
     timeout: 90s
     until:
-      all:
-        - screen: UnverifiedPackConfirmScreen
-        - element: { key: automodpack.update.apply }
-  - do: wait_for
-    name: wait for the later unverified ack checkbox after the lock
-    timeout: 20s
-    until:
-      element: { key: automodpack.confirm.ack, enabled: true }
+      any:
+        - screen: RestartScreen
+        - all:
+            - screen: UpdatePreviewScreen
+            - element: { key: automodpack.update.apply, enabled: true }
+        - all:
+            - screen: UnverifiedPackConfirmScreen
+            - element: { key: automodpack.confirm.ack, enabled: true }
   - do: click
     name: acknowledge later unverified risk
     select: { key: automodpack.confirm.ack }
-  - do: wait_for
-    name: unlock update after acknowledgement
-    timeout: 20s
-    until:
-      element: { text: Update, enabled: true }
+    when: { element: { key: automodpack.confirm.ack, enabled: true } }
   - do: click
     name: approve strict first-install reconciliation
     select: { text: Update }
+    when: { element: { key: automodpack.update.apply, enabled: true } }
   - do: wait_file
     name: wait for the fresh strict installation
     path: "${active_dir}/${marker}"
@@ -1286,15 +1314,13 @@ flow:
     name: open modpack settings for the installed Pack A
     select: { text: Modpack settings }
   - do: wait_for
-    name: show Pack A settings without lifecycle actions
+    name: show Pack A row without lifecycle actions on the list
     until:
       all:
-        - screen: ModpackSelectionScreen
-        - element: { text: Pack manager, enabled: true }
+        - screen: InstalledModpacksScreen
+        - element: { text: Pack A, enabled: true }
+        - element: { text: Local storage, enabled: true }
         - no_element: { text: Remove }
-  - do: click
-    name: open the Pack A manager
-    select: { text: Pack manager }
   - do: click
     name: open active Pack A details
     select: { text: Pack A }

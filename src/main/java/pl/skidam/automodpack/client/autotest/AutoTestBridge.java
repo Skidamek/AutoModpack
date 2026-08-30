@@ -30,7 +30,7 @@ import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.client.multiplayer.TransferState;
 /*?}*/
 import net.minecraft.network.chat.Component;
-/*? if >= 1.20 {*/
+/*? if >= 1.19.2 {*/
 import net.minecraft.network.chat.contents.TranslatableContents;
 /*?} else {*/
 /*import net.minecraft.network.chat.TranslatableComponent;
@@ -65,8 +65,6 @@ public final class AutoTestBridge {
 	private static final AtomicBoolean READY_STATE_PUBLISHED = new AtomicBoolean(false);
 	private static final AtomicBoolean READY_STATE_WRITE_FAILED = new AtomicBoolean(false);
 	private static final AtomicReference<PendingScreenshot> PENDING_SCREENSHOT = new AtomicReference<>();
-	private static final AtomicReference<Screen> OBSERVED_SCREEN = new AtomicReference<>();
-	private static final AtomicLong SCREEN_REVISION = new AtomicLong();
 	private static final long SCREENSHOT_SETTLE_TIMEOUT_SECONDS = 30;
 
 	public static void markReloadFinished() {
@@ -484,7 +482,7 @@ public final class AutoTestBridge {
 
 	private static String translationKey(Component component) {
 		if (component == null) return "";
-		/*? if >= 1.20 {*/
+		/*? if >= 1.19.2 {*/
 		if (component.getContents() instanceof TranslatableContents translatable) return translatable.getKey();
 		/*?} else {*/
 		/*if (component instanceof TranslatableComponent translatable) return translatable.getKey();
@@ -542,12 +540,16 @@ public final class AutoTestBridge {
 	}
 
 	private static long screenRevision(Screen screen) {
-		Screen observed = OBSERVED_SCREEN.get();
-		while (observed != screen) {
-			if (OBSERVED_SCREEN.compareAndSet(observed, screen)) return SCREEN_REVISION.incrementAndGet();
-			observed = OBSERVED_SCREEN.get();
+		// The revision must change whenever the widget set is replaced (rebuildWidgets swaps
+		// screen.children()), not only when the screen instance changes: element ids are
+		// positional over children, so a rebuild shifts every id and a click dumped before the
+		// rebuild would otherwise land on a different button.
+		if (screen == null) return 0;
+		long revision = System.identityHashCode(screen);
+		for (GuiEventListener child : screen.children()) {
+			revision = revision * 31 + System.identityHashCode(child);
 		}
-		return SCREEN_REVISION.get();
+		return revision;
 	}
 
 	private static boolean has(JsonObject o, String k) {

@@ -42,21 +42,35 @@ flow:
     timeout: 10s
     until: { screen: Play Multiplayer }
   - do: click
-    name: open the active modpack settings
+    name: open the installed pack manager from multiplayer
     select: { text: Modpack settings }
   - do: wait_for
-    name: keep lifecycle actions out of settings and align an unchanged disabled save action
+    name: keep lifecycle actions out of the installed pack list
     until:
       all:
-        - screen: ModpackSelectionScreen
-        - element: { text: Pack manager, enabled: true }
-        - element: { text: Pack files, enabled: true }
-        - element: { text: Save, enabled: false }
+        - screen: InstalledModpacksScreen
+        - element: { text: Note-only Test Pack, enabled: true }
+        - element: { text: Local storage, enabled: true }
         - no_element: { text: Deactivate }
         - no_element: { text: Remove }
   - do: screenshot
-    name: capture the aligned settings rows
+    name: capture the installed pack list without lifecycle actions
     file: note-only-settings-aligned
+  - do: click
+    name: open the installed pack details
+    select: { text: Note-only Test Pack }
+  - do: wait_for
+    name: show the reusable lifecycle action area
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { text: Update, enabled: true }
+        - element: { text: Modpack settings, enabled: true }
+        - element: { text: Deactivate, enabled: true }
+        - element: { text: Remove, enabled: true }
+  - do: screenshot
+    name: capture per-pack lifecycle actions
+    file: note-only-pack-actions
   - do: click
     name: open downloaded generation history
     select: { text: History }
@@ -102,32 +116,14 @@ flow:
     name: return to generation history from owned files
     select: { text: Back }
   - do: click
-    name: return to modpack settings from history
+    name: return to pack details from history
     select: { text: Back }
-  - do: click
-    name: open per-pack lifecycle actions
-    select: { text: Pack manager }
   - do: wait_for
-    name: show the installed pack row before opening its details
-    until:
-      all:
-        - screen: InstalledModpacksScreen
-        - element: { text: Note-only Test Pack, enabled: true }
-  - do: click
-    name: open the installed pack details
-    select: { text: Note-only Test Pack }
-  - do: wait_for
-    name: show the reusable lifecycle action area
+    name: return to the pack details after history
     until:
       all:
         - screen: ModpackDetailsScreen
-        - element: { text: Update, enabled: true }
         - element: { text: Modpack settings, enabled: true }
-        - element: { text: Deactivate, enabled: true }
-        - element: { text: Remove, enabled: true }
-  - do: screenshot
-    name: capture per-pack lifecycle actions
-    file: note-only-pack-actions
   - do: click
     name: review the installed pack from its manager
     select: { text: Modpack settings }
@@ -136,10 +132,10 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: Pack files, enabled: true }
         - element: { text: Save, enabled: false }
         - element: { text: Back, enabled: true }
-        - no_element: { text: Pack manager }
+        - no_element: { text: Deactivate }
+        - no_element: { text: Remove }
   - do: click
     name: return to pack details from settings
     select: { text: Back }
@@ -175,26 +171,14 @@ flow:
         - screen: InstalledModpacksScreen
         - element: { text: Note-only Test Pack, enabled: true }
   - do: click
-    name: return to the original active settings route
-    select: { text: Back }
-  - do: wait_for
-    name: restore the active settings route
-    until:
-      all:
-        - screen: ModpackSelectionScreen
-        - element: { text: Pack manager, enabled: true }
-  - do: click
-    name: leave the original settings route
+    name: return to multiplayer from the installed pack list
     select: { text: Back }
   - do: wait_for
     name: return to the multiplayer parent
     until: { screen: Play Multiplayer }
   - do: click
-    name: reopen active modpack settings
+    name: reopen the installed pack manager
     select: { text: Modpack settings }
-  - do: click
-    name: reopen per-pack lifecycle actions
-    select: { text: Pack manager }
   - do: wait_for
     name: restore the installed pack row
     until:
@@ -254,15 +238,14 @@ flow:
     name: wait for the relaunched client test bridge
   - use: open_multiplayer
   - do: wait_for
-    name: replace settings with the direct pack-manager entry while inactive
+    name: keep the direct pack-manager entry while inactive
     until:
       all:
         - screen: Play Multiplayer
-        - element: { text: Pack manager, enabled: true }
-        - no_element: { text: Modpack settings }
+        - element: { text: Modpack settings, enabled: true }
   - do: click
     name: open the retained inactive pack directly
-    select: { text: Pack manager }
+    select: { text: Modpack settings }
   - do: wait_for
     name: verify deactivation retained an activatable installed pack
     until:
