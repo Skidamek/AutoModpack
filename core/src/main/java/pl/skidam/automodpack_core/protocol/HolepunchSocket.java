@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
+import static pl.skidam.automodpack_core.protocol.NetUtils.MAX_CHUNK_SIZE;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -13,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLKeyException;
 import javax.net.ssl.SSLSession;
@@ -24,6 +27,8 @@ import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
 
 public class HolepunchSocket extends Socket {
+	// Tripwire: one max protocol chunk. File requests never reach this; only a stalled consumer does.
+	static final int MAX_QUEUED_READ_BYTES = MAX_CHUNK_SIZE;
 	private volatile HolepunchConnection connection;
 	private final HolepunchInputStream in;
 	private volatile HolepunchOutputStream out;
@@ -185,8 +190,10 @@ public class HolepunchSocket extends Socket {
 		in.feed(data);
 	}
 
-	private static class HolepunchInputStream extends InputStream {
+	private class HolepunchInputStream extends InputStream {
 		private final BlockingQueue<byte[]> queue = new LinkedBlockingQueue<>();
+		private final AtomicInteger queuedBytes = new AtomicInteger();
+		private volatile boolean readsPaused;
 		private byte[] current;
 		private int offset;
 		private volatile boolean end;
@@ -197,11 +204,27 @@ public class HolepunchSocket extends Socket {
 		}
 
 		void feed(byte[] data) {
-			if (data.length != 0 && !end) queue.offer(data);
+			if (data.length == 0 || end) return;
+			queuedBytes.addAndGet(data.length);
+			queue.offer(data);
+			updateReadPause();
 		}
 
 		void feedEnd() {
 			end = true;
+		}
+
+		private synchronized void updateReadPause() {
+			HolepunchConnection activeConnection = connection;
+			if (activeConnection == null) return;
+			int queued = queuedBytes.get();
+			if (queued >= MAX_QUEUED_READ_BYTES && !readsPaused) {
+				readsPaused = true;
+				activeConnection.pauseReads();
+			} else if (queued <= MAX_QUEUED_READ_BYTES / 2 && readsPaused) {
+				readsPaused = false;
+				activeConnection.resumeReads();
+			}
 		}
 
 		@Override
@@ -242,6 +265,8 @@ public class HolepunchSocket extends Socket {
 			int n = Math.min(len, current.length - offset);
 			System.arraycopy(current, offset, b, off, n);
 			offset += n;
+			queuedBytes.addAndGet(-n);
+			updateReadPause();
 			return n;
 		}
 

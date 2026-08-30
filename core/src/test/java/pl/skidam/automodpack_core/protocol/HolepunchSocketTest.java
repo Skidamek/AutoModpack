@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
@@ -53,7 +54,22 @@ class HolepunchSocketTest {
 		assertFalse(socket.isConnected());
 	}
 
+	@Test
+	void pausesReadsWhenInboundQueueHitsTripwire() throws Exception {
+		StubConnection connection = new StubConnection();
+		try (HolepunchSocket socket = new HolepunchSocket(connection)) {
+			socket.feedPlainReadData(new byte[HolepunchSocket.MAX_QUEUED_READ_BYTES]);
+			assertEquals(1, connection.pauses.get());
+			assertEquals(0, connection.resumes.get());
+			assertEquals(HolepunchSocket.MAX_QUEUED_READ_BYTES, socket.getInputStream().readNBytes(HolepunchSocket.MAX_QUEUED_READ_BYTES).length);
+			assertEquals(1, connection.resumes.get());
+		}
+	}
+
 	private static final class StubConnection implements HolepunchConnection {
+		private final AtomicInteger pauses = new AtomicInteger();
+		private final AtomicInteger resumes = new AtomicInteger();
+
 		@Override
 		public CompletionStage<Void> write(ByteBuffer data) {
 			return CompletableFuture.completedFuture(null);
@@ -75,10 +91,14 @@ class HolepunchSocketTest {
 		}
 
 		@Override
-		public void pauseReads() {}
+		public void pauseReads() {
+			pauses.incrementAndGet();
+		}
 
 		@Override
-		public void resumeReads() {}
+		public void resumeReads() {
+			resumes.incrementAndGet();
+		}
 
 		@Override
 		public void close() {}
