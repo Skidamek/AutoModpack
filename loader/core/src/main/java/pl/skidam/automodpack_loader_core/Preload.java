@@ -1,9 +1,6 @@
 package pl.skidam.automodpack_loader_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_core.storage.StoragePaths.CREDENTIALS_DIR;
-import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
-import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_DIR;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -19,7 +16,6 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -51,12 +47,16 @@ public class Preload {
 		try {
 			long start = System.currentTimeMillis();
 			LOGGER.info("Prelaunching AutoModpack...");
-			storage = ClientStorage.open(GameDirectory.current());
 			initializeConstants();
-			loadConfigs();
-			recoverPendingRepair();
-			recoverPendingTransaction();
-			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) importBootstrap();
+			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
+				storage = ClientStorage.open(GameDirectory.current());
+				loadClientConfig();
+				recoverPendingRepair();
+				recoverPendingTransaction();
+				importBootstrap();
+			} else {
+				serverConfig = ConfigUtils.loadOrCreateServerConfig();
+			}
 			updateAll();
 			LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
 		} catch (Exception e) {
@@ -293,36 +293,10 @@ public class Preload {
 		AM_VERSION = FileInspection.getModVersion(THIS_MOD_JAR);
 	}
 
-	private void loadConfigs() {
+	private void loadClientConfig() {
 		long startTime = System.currentTimeMillis();
-
-		// load client config
 		clientConfig = ConfigTools.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
-
-		// load server config
-		serverConfig = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
-
-		if (serverConfig != null) {
-			String serverConfigBefore = ConfigTools.GSON.toJson(serverConfig);
-			if (serverConfig.acceptedLoaders == null) {
-				serverConfig.acceptedLoaders = new HashSet<>(Set.of(LOADER));
-			} else {
-				serverConfig.acceptedLoaders.add(LOADER);
-			}
-
-			ConfigUtils.normalizeServerConfig(serverConfig);
-			if (!serverConfigBefore.equals(ConfigTools.GSON.toJson(serverConfig))) writeConfig(SERVER_CONFIG_FILE, serverConfig);
-		}
-
-		try {
-			Files.createDirectories(SERVER_DIR);
-			Files.createDirectories(CREDENTIALS_DIR);
-		} catch (IOException e) {
-			LOGGER.error("Failed to create AutoModpack state roots", e);
-		}
-
-		if (serverConfig == null || clientConfig == null) throw new RuntimeException("Failed to load config!");
-
+		if (clientConfig == null) throw new RuntimeException("Failed to load config!");
 		LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
 	}
 
