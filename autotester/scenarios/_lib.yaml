@@ -181,17 +181,8 @@ open_multiplayer:
 
 open_pack_manager:
   - do: click
-    name: open modpack settings from multiplayer
-    select: { key_any: [automodpack.selection.button, automodpack.selection.shortButton, automodpack.packManager.switch] }
-  - do: wait_for
-    name: wait for modpack settings
-    until: { screen: ModpackSelectionScreen }
-  - do: screenshot
-    name: capture modpack settings before manager action
-    file: all-pack-settings
-  - do: click
-    name: open installed pack manager
-    select: { key: automodpack.packManager.switch }
+    name: open installed pack manager from multiplayer
+    select: { key_any: [automodpack.selection.button, automodpack.selection.shortButton] }
   - do: wait_for
     name: wait for installed pack manager
     until: { screen: InstalledModpacksScreen }

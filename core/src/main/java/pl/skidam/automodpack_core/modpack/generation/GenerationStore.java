@@ -714,7 +714,13 @@ public final class GenerationStore {
 		for (Path object : beforeFiles) {
 			String hash = DataRootResolver.objectHash(objectsDirectory, object);
 			if (hash == null || reachable.contains(hash) || !FileIntegrity.matchesCanonicalSha1(object, hash)) continue;
-			long size = Files.size(object);
+			long size;
+			try {
+				size = Files.size(object);
+			} catch (NoSuchFileException e) {
+				// Another collector removed the unreachable object between the listing and this stat.
+				continue;
+			}
 			if (ImmutableFiles.deleteIfExists(object)) {
 				deletedCount = addExact(deletedCount, 1, "deleted object count");
 				deletedBytes = addExact(deletedBytes, size, "deleted object bytes");
@@ -735,12 +741,16 @@ public final class GenerationStore {
 	}
 
 	private FileTotals fileTotals(List<Path> paths) throws IOException {
-		long bytes = 0;
 		long count = 0;
+		long bytes = 0;
 		for (Path path : paths) {
 			if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
-			count = addExact(count, 1, "file count");
-			bytes = addExact(bytes, Files.size(path), "file bytes");
+			try {
+				count = addExact(count, 1, "file count");
+				bytes = addExact(bytes, Files.size(path), "file bytes");
+			} catch (NoSuchFileException e) {
+				// A concurrent collector may remove an unreachable object between the listing and this stat; the file is simply gone.
+			}
 		}
 		return new FileTotals(count, bytes);
 	}

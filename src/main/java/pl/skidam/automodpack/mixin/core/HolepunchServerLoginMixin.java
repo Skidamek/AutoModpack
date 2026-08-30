@@ -10,9 +10,8 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import io.netty.channel.Channel;
 import net.minecraft.network.Connection;
-/*? if >=1.19.2 {*/
 import net.minecraft.network.chat.Component;
-/*?} else {*/
+/*? if <=1.19.1 {*/
 /*import net.minecraft.network.chat.TextComponent;
 *//*?}*/
 import net.minecraft.network.protocol.login.ServerboundHelloPacket;
@@ -80,7 +79,7 @@ public abstract class HolepunchServerLoginMixin {
 	}
 
 	@WrapMethod(method = "disconnect")
-	private void automodpack$skipHolepunchDisconnect(/*? if >=1.19.2 {*/Component/*?} else {*//*TextComponent*//*?}*/ reason, Operation<Void> original) {
+	private void automodpack$skipHolepunchDisconnect(Component reason, Operation<Void> original) {
 		if (automodpack$holepunchTakenOver) return;
 		original.call(reason);
 	}

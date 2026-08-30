@@ -19,7 +19,25 @@ flow:
     name: return to the title screen
   - use: open_multiplayer
   - do: click
-    name: open the installed modpack settings
+    name: open the installed pack manager
+    select: { text: Modpack settings }
+  - do: wait_for
+    name: show the installed pack row
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Installed Group Acquisition, enabled: true }
+  - do: click
+    name: open the installed pack details
+    select: { text: Installed Group Acquisition }
+  - do: wait_for
+    name: show the pack details actions
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { text: Modpack settings, enabled: true }
+  - do: click
+    name: open the installed group selection
     select: { text: Modpack settings }
   - do: wait_for
     name: show the unchanged required-only selection

@@ -273,7 +273,7 @@ public class VersionedScreen extends Screen {
 	}
 
 	private static Component checkboxButtonMessage(Component message, boolean selected) {
-		return VersionedText.literal((selected ? "[x] " : "[ ] ") + message.getString());
+		return VersionedText.literal(selected ? "[x] " : "[ ] ").append(message);
 	}
 	*//*?}*/
 

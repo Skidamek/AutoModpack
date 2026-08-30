@@ -56,7 +56,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		actions.add(new Action("automodpack.packDetails.storage", this::openStorage));
 		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.translatable("automodpack.management.deactivateTooltip")));
 		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.translatable("automodpack.management.removeTooltip")));
-		int columns = actions.size() > 3 ? 2 : 1;
+		int columns = actionColumns(actions.size());
 		List<ActionRow> rows = new ArrayList<>();
 		for (int index = 0; index < actions.size(); index += columns) {
 			int end = Math.min(actions.size(), index + columns);
@@ -182,6 +182,19 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		y += 12;
 		y += 12;
 		return y + ActionAreaLayout.GAP;
+	}
+
+	/** Picks the widest column count whose grid stays clear of the footer rail; 3 columns still keeps every button at or above the 88px minimum width. */
+	private int actionColumns(int actionCount) {
+		int footerTop = actionAreaTop(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+				secondaryAction(VersionedText.translatable("automodpack.back"), button -> {})));
+		int gridTop = actionGridTop();
+		for (int columns = 2; columns <= 3; columns++) {
+			int rows = (actionCount + columns - 1) / columns;
+			int bottom = gridTop + rows * ActionAreaLayout.BUTTON_HEIGHT + (rows - 1) * ActionAreaLayout.GAP;
+			if (bottom <= footerTop - ActionAreaLayout.GAP) return columns;
+		}
+		return 3;
 	}
 
 	private void rebuild() {
