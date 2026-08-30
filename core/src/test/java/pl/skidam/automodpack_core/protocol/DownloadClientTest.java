@@ -6,6 +6,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_COMPRES
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_ECHO_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.END_OF_TRANSMISSION;
 import static pl.skidam.automodpack_core.protocol.NetUtils.FILE_REQUEST_TYPE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.MAX_CHUNK_SIZE;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -58,6 +59,16 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 
 class DownloadClientTest {
+
+	@Test
+	void fileFrameCopyDoesNotOverflowForSizesAbove2GiB() {
+		long remaining = 2230765895L;
+		assertEquals(-2064201401, (int) remaining);
+		assertEquals(1024, DownloadClient.writableFrameBytes(1024, remaining));
+		assertEquals(MAX_CHUNK_SIZE, DownloadClient.writableFrameBytes(MAX_CHUNK_SIZE, remaining));
+		assertEquals(100, DownloadClient.writableFrameBytes(1024, 100L));
+		assertEquals(0, DownloadClient.writableFrameBytes(1024, 0L));
+	}
 
 	@Test
 	void localDestinationOpenFailureHasTypedStorageBoundary(@TempDir Path directory) throws Exception {

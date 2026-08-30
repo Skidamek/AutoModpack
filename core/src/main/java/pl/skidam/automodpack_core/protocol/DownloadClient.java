@@ -438,6 +438,13 @@ public class DownloadClient implements AutoCloseable {
 		return downloadFile(requestKey.getBytes(StandardCharsets.UTF_8), destination, chunkCallback);
 	}
 
+	/** Copies a protocol frame into a remaining file length without truncating remaining through int. */
+	static int writableFrameBytes(int frameLength, long remaining) {
+		if (frameLength < 0) throw new IllegalArgumentException("frameLength must be non-negative");
+		if (remaining <= 0L) return 0;
+		return (int) Math.min(frameLength, remaining);
+	}
+
 	static boolean isSelfSigned(X509Certificate certificate) {
 		if (certificate == null || !certificate.getSubjectX500Principal().equals(certificate.getIssuerX500Principal())) return false;
 
@@ -597,12 +604,14 @@ class Connection implements AutoCloseable {
 		if (messageType != FILE_RESPONSE_TYPE) throw new IOException("Unexpected message type: " + messageType);
 
 		long expectedFileSize = headerWrap.getLong();
+		if (expectedFileSize < 0) throw new IOException("Negative file size: " + expectedFileSize);
 		long receivedBytes = 0;
 
 		try (OutputStream fos = LocalFileWriter.open(destination)) {
 			while (receivedBytes < expectedFileSize) {
 				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
-				int toWrite = Math.min(dataFrame.length(), (int) (expectedFileSize - receivedBytes));
+				int toWrite = DownloadClient.writableFrameBytes(dataFrame.length(), expectedFileSize - receivedBytes);
+				if (toWrite <= 0) throw new IOException("File frame did not advance the download");
 				fos.write(dataFrame.data(), 0, toWrite);
 				receivedBytes += toWrite;
 				if (chunkCallback != null) chunkCallback.accept(toWrite);
