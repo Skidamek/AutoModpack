@@ -166,16 +166,34 @@ class FileMetadataCacheTest {
 	}
 
 	@Test
-	void rejectsFutureModifiedTimeOnlyWhenChangeTimeIsUnavailable() {
+	void gitRacyMtimeIsUntrustedForWorktreeEvenWhenChangeTimeMatches() {
 		long validatedAt = 1_700_000_000L * 1_000_000_000L;
 		long futureModified = validatedAt + 2 * 1_000_000_000L;
-		FileMetadataCache.FileFingerprint unavailableChangeTime = new FileMetadataCache.FileFingerprint(futureModified, 1L, Long.MIN_VALUE, 4L, "key");
-		FileMetadataCache.CachedFile unavailableRecord = new FileMetadataCache.CachedFile("path", "hash", futureModified, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
+		FileMetadataCache.FileFingerprint racy = new FileMetadataCache.FileFingerprint(futureModified, 1L, 2L, 4L, "key");
+		FileMetadataCache.CachedFile record = new FileMetadataCache.CachedFile("path", "hash", futureModified, 1L, 2L, 4L, "key", validatedAt);
 
-		assertFalse(FileMetadataCache.isCacheValid(unavailableRecord, unavailableChangeTime));
+		assertTrue(FileMetadataCache.statsMatch(record, racy));
+		assertFalse(FileMetadataCache.isCacheValid(record, racy));
+	}
 
-		FileMetadataCache.FileFingerprint availableChangeTime = new FileMetadataCache.FileFingerprint(futureModified, 1L, 2L, 4L, "key");
-		FileMetadataCache.CachedFile availableRecord = new FileMetadataCache.CachedFile("path", "hash", futureModified, 1L, 2L, 4L, "key", validatedAt);
-		assertTrue(FileMetadataCache.isCacheValid(availableRecord, availableChangeTime));
+	@Test
+	void worktreeCacheTrustsMtimeOlderThanTheRecord() {
+		long validatedAt = 1_700_000_000L * 1_000_000_000L;
+		long olderModified = validatedAt - 1;
+		FileMetadataCache.FileFingerprint fingerprint = new FileMetadataCache.FileFingerprint(olderModified, 1L, Long.MIN_VALUE, 4L, "key");
+		FileMetadataCache.CachedFile record = new FileMetadataCache.CachedFile("path", "hash", olderModified, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
+
+		assertTrue(FileMetadataCache.statsMatch(record, fingerprint));
+		assertTrue(FileMetadataCache.isCacheValid(record, fingerprint));
+	}
+
+	@Test
+	void immutableTripwireUsesStatMatchEvenWhenWorktreeCacheIsRacy() {
+		long validatedAt = 1_700_000_000L * 1_000_000_000L;
+		FileMetadataCache.FileFingerprint racy = new FileMetadataCache.FileFingerprint(validatedAt, 1L, Long.MIN_VALUE, 4L, "key");
+		FileMetadataCache.CachedFile record = new FileMetadataCache.CachedFile("path", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", validatedAt, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
+
+		assertTrue(FileMetadataCache.statsMatch(record, racy));
+		assertFalse(FileMetadataCache.isCacheValid(record, racy));
 	}
 }
