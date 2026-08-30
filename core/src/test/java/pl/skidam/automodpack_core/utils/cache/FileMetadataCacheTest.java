@@ -137,6 +137,35 @@ class FileMetadataCacheTest {
 	}
 
 	@Test
+	void murmurIsComputedOnceAndReusedForAnUnchangedFile() throws Exception {
+		Path file = temporaryDirectory.resolve("pack.zip");
+		Files.writeString(file, "resource pack", StandardCharsets.UTF_8);
+		Path cacheDirectory = temporaryDirectory.resolve("file-metadata");
+		String murmur;
+		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+			cache.getOrComputeHash(file);
+			murmur = cache.getOrComputeMurmur(file);
+			assertEquals(murmur, cache.getOrComputeMurmur(file));
+		}
+		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+			assertEquals(murmur, cache.getOrComputeMurmur(file));
+		}
+	}
+
+	@Test
+	void namedObjectTripwireTrustsSizeAndRejectsDisturbedFingerprint() throws Exception {
+		Path object = temporaryDirectory.resolve("object.bin");
+		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
+		String sha1;
+		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+			sha1 = cache.getOrComputeHash(object);
+			assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
+			Files.writeString(object, "other-bytes", StandardCharsets.UTF_8);
+			assertFalse(cache.matchesImmutable(object, Files.size(object), sha1));
+		}
+	}
+
+	@Test
 	void rejectsFutureModifiedTimeOnlyWhenChangeTimeIsUnavailable() {
 		long validatedAt = 1_700_000_000L * 1_000_000_000L;
 		long futureModified = validatedAt + 2 * 1_000_000_000L;

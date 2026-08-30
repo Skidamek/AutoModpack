@@ -147,7 +147,7 @@ public class ModpackUtils {
 			Path storeFile = storage.objectFile(entry.sha1);
 			long expectedSize = Long.parseLong(entry.size);
 
-			if (FileIntegrity.matches(storeFile, expectedSize, entry.sha1, cache)) {
+			if (FileIntegrity.matchesNamed(storeFile, expectedSize, entry.sha1, cache)) {
 				LOGGER.debug("Verified file already exists in store: {}", entry.file);
 				continue;
 			}
@@ -179,7 +179,7 @@ public class ModpackUtils {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
 			Path storeFile = storage.objectFile(entry.sha1);
-			if (FileIntegrity.matches(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
+			if (FileIntegrity.matchesNamed(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
 			if (Files.exists(storeFile)) {
 				try {
 					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);

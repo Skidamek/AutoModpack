@@ -42,4 +42,19 @@ public final class FileIntegrity {
 		if (cache != null) return cache.getHashOrNull(file);
 		return HashUtils.getHash(file);
 	}
+
+	/**
+	 * Whether a named immutable object is still the advertised bytes. Never reads file content.
+	 * With a cache this is the Git-stat tripwire; without one, a regular file of the advertised size.
+	 */
+	public static boolean matchesNamed(Path file, long expectedSize, String expectedSha1, FileMetadataCache cache) {
+		if (!HashUtils.isSha1(expectedSha1) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
+		try {
+			if (Files.size(file) != expectedSize) return false;
+			if (cache != null) return cache.matchesImmutable(file, expectedSize, expectedSha1);
+			return true;
+		} catch (IOException e) {
+			return false;
+		}
+	}
 }

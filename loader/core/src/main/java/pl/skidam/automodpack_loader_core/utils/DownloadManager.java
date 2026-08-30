@@ -24,6 +24,7 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
 
 public class DownloadManager {
@@ -266,8 +267,8 @@ public class DownloadManager {
 		boolean success = false;
 		boolean interrupted = false;
 
-		try {
-			if (FileIntegrity.matches(storeFile, task.fileSize, hashPathPair.hash())) {
+		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			if (FileIntegrity.matchesNamed(storeFile, task.fileSize, hashPathPair.hash(), cache)) {
 				// CACHE HIT
 				totalBytesDownloaded.addAndGet(task.fileSize);
 				// IMPORTANT: Do NOT add cached bytes to Speedometer.
@@ -277,7 +278,7 @@ public class DownloadManager {
 			} else {
 				// DOWNLOAD REQUIRED. A corrupt object is never a cache hit.
 				ImmutableFiles.deleteIfExists(storeFile);
-				success = attemptDownload(hashPathPair, task, storeFile);
+				success = attemptDownload(hashPathPair, task, storeFile, cache);
 			}
 		} catch (InterruptedException e) {
 			interrupted = true;
@@ -290,7 +291,7 @@ public class DownloadManager {
 		}
 	}
 
-	private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path storeFile) throws InterruptedException {
+	private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path storeFile, FileMetadataCache cache) throws InterruptedException {
 		refreshDeadLinkSources(hashPathPair.hash(), task);
 		int numberOfIndexes = task.sources.size();
 		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
@@ -340,7 +341,7 @@ public class DownloadManager {
 				return false;
 			}
 			try {
-				VerifiedFileTransfer.promoteAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash());
+				VerifiedFileTransfer.promoteAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash(), cache);
 			} catch (IOException e) {
 				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
 				LOGGER.warn("Failed to persist verified CAS object {}", hashPathPair.hash(), e);

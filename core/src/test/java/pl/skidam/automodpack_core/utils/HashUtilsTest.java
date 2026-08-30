@@ -58,6 +58,14 @@ class HashUtilsTest {
 	}
 
 	@Test
+	void copyAndSha1MatchesFileHash() throws IOException {
+		Path file = Files.writeString(tempDir.resolve("source.bin"), "test content 2137!", StandardCharsets.UTF_8);
+		Path copy = tempDir.resolve("copy.bin");
+		assertEquals(HashUtils.getHash(file), HashUtils.copyAndSha1(file, copy));
+		assertEquals(Files.readString(file, StandardCharsets.UTF_8), Files.readString(copy, StandardCharsets.UTF_8));
+	}
+
+	@Test
 	void missingFileHasNoHash() {
 		assertNull(HashUtils.getHash(tempDir.resolve("does-not-exist.txt")));
 	}

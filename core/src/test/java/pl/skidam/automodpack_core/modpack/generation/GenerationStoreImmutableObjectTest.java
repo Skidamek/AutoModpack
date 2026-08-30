@@ -63,21 +63,21 @@ class GenerationStoreImmutableObjectTest {
 	}
 
 	@Test
-	void rejectsCorruptExistingObjectWithoutOverwritingIt() throws Exception {
+	void replacesWrongSizeExistingObjectFromStagedSnapshot() throws Exception {
 		Path root = tempDir.resolve("host-generations");
 		GenerationStore store = new GenerationStore(root);
-		ModpackCandidate candidate = scan();
-		StagedObject staged = onlyObject(candidate);
-		Path existing = DataRootResolver.objectFile(root.resolve("objects"), staged.sha1());
-		Files.createDirectories(existing.getParent());
-		Files.writeString(existing, "corrupt", StandardCharsets.UTF_8);
+		try (ModpackCandidate candidate = scan()) {
+			StagedObject staged = onlyObject(candidate);
+			Path existing = DataRootResolver.objectFile(root.resolve("objects"), staged.sha1());
+			Files.createDirectories(existing.getParent());
+			Files.writeString(existing, "corrupt", StandardCharsets.UTF_8);
 
-		IOException failure = assertThrows(IOException.class, () -> store.publish(candidate, Optional.empty(), ""));
-		candidate.close();
+			GenerationStore.Publication publication = store.publish(candidate, Optional.empty(), "");
 
-		assertTrue(failure.getMessage().contains("Refusing to replace corrupt immutable object"));
-		assertEquals("corrupt", Files.readString(existing, StandardCharsets.UTF_8));
-		assertFalse(Files.exists(staged.stagedPath(), LinkOption.NOFOLLOW_LINKS));
+			assertEquals(existing, publication.hostingPaths().get(staged.sha1()));
+			assertEquals("before publication", Files.readString(existing, StandardCharsets.UTF_8));
+			assertFalse(Files.exists(staged.stagedPath(), LinkOption.NOFOLLOW_LINKS));
+		}
 	}
 
 	@Test

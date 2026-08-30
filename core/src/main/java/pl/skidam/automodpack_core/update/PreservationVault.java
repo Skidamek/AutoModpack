@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /** Owns durable user-recoverable claims and the CAS bytes that satisfy them. */
 public final class PreservationVault {
@@ -86,53 +87,57 @@ public final class PreservationVault {
 		String claimId = claimId(pack, generation, normalizedReason, normalizedRoot, path, hash, size);
 
 		synchronized (MUTATION_LOCK) {
-			ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
-			ClientStorageJsons.ClientPreservationVaultFields.ClaimFields existing = fields.claims.stream().filter(claim -> claimId.equals(claim.claimId)).findFirst().orElse(null);
-			Path source = source(storage, pack, normalizedRoot, path);
-			Path object = object(storage, hash);
-			if (existing != null) {
-				if (!FileIntegrity.matches(object, size, hash)) repairObjectFromSource(storage, source, object, hash, size);
-				if (!FileIntegrity.matches(object, size, hash)) throw new IOException("Preserved object is missing or corrupt: " + hash);
-				return toClaim(existing);
+			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
+				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields existing = fields.claims.stream().filter(claim -> claimId.equals(claim.claimId)).findFirst().orElse(null);
+				Path source = source(storage, pack, normalizedRoot, path);
+				Path object = object(storage, hash);
+				if (existing != null) {
+					if (!FileIntegrity.matchesNamed(object, size, hash, cache)) repairObjectFromSource(storage, source, object, hash, size, cache);
+					if (!FileIntegrity.matchesNamed(object, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
+					return toClaim(existing);
+				}
+
+				validateSource(storage, pack, normalizedRoot, source);
+				if (!FileIntegrity.matches(source, size, hash, cache)) throw new IOException("Preservation source changed after planning: " + source);
+				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash, cache);
+				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) throw new IOException("Preserved object verification failed: " + object);
+
+				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = new ClientStorageJsons.ClientPreservationVaultFields.ClaimFields();
+				claim.claimId = claimId;
+				claim.originalPath = path;
+				claim.sourceRoot = normalizedRoot.name();
+				claim.objectHash = hash;
+				claim.size = size;
+				claim.modpackId = pack;
+				claim.generationId = generation;
+				claim.reason = normalizedReason.name();
+				claim.preservedAt = time.toString();
+				claim.status = Status.AVAILABLE.name();
+				fields.claims = new ArrayList<>(fields.claims);
+				fields.claims.add(claim);
+				fields.claims.sort(CLAIM_ORDER);
+				write(storage, pack, fields);
+				return toClaim(claim);
 			}
-
-			validateSource(storage, pack, normalizedRoot, source);
-			if (!FileIntegrity.matches(source, size, hash)) throw new IOException("Preservation source changed after planning: " + source);
-			if (!FileIntegrity.matches(object, size, hash)) VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash);
-			if (!FileIntegrity.matches(object, size, hash)) throw new IOException("Preserved object verification failed: " + object);
-
-			ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = new ClientStorageJsons.ClientPreservationVaultFields.ClaimFields();
-			claim.claimId = claimId;
-			claim.originalPath = path;
-			claim.sourceRoot = normalizedRoot.name();
-			claim.objectHash = hash;
-			claim.size = size;
-			claim.modpackId = pack;
-			claim.generationId = generation;
-			claim.reason = normalizedReason.name();
-			claim.preservedAt = time.toString();
-			claim.status = Status.AVAILABLE.name();
-			fields.claims = new ArrayList<>(fields.claims);
-			fields.claims.add(claim);
-			fields.claims.sort(CLAIM_ORDER);
-			write(storage, pack, fields);
-			return toClaim(claim);
 		}
 	}
 
 	/** Preserves and then removes a conflicting local file. Retrying the same conflict is idempotent. */
 	public static Claim preserveConflict(ClientStorage storage, String generationId, Conflict conflict) throws IOException {
 		synchronized (MUTATION_LOCK) {
-			Claim claim = preserve(storage, conflict.modpackId(), generationId, Reason.LOCAL_CONFLICT, Root.GAME_DIR, conflict.sourcePath(), conflict.sourceHash(), conflict.sourceSize());
-			Path source = storage.gamePath(conflict.sourcePath());
-			if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
-				validateSource(storage, conflict.modpackId(), Root.GAME_DIR, source);
-				if (!FileIntegrity.matches(source, conflict.sourceSize(), conflict.sourceHash())) throw new IOException("Conflict source changed before removal: " + source);
-				Files.delete(source);
+			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+				Claim claim = preserve(storage, conflict.modpackId(), generationId, Reason.LOCAL_CONFLICT, Root.GAME_DIR, conflict.sourcePath(), conflict.sourceHash(), conflict.sourceSize());
+				Path source = storage.gamePath(conflict.sourcePath());
+				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
+					validateSource(storage, conflict.modpackId(), Root.GAME_DIR, source);
+					if (!FileIntegrity.matches(source, conflict.sourceSize(), conflict.sourceHash(), cache)) throw new IOException("Conflict source changed before removal: " + source);
+					Files.delete(source);
+				}
+				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matchesNamed(object(storage, claim.objectHash()), claim.size(), claim.objectHash(), cache))
+					throw new IOException("Conflict source removal could not be verified: " + source);
+				return claim;
 			}
-			if (Files.exists(source, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matches(object(storage, claim.objectHash()), claim.size(), claim.objectHash()))
-				throw new IOException("Conflict source removal could not be verified: " + source);
-			return claim;
 		}
 	}
 
@@ -159,16 +164,18 @@ public final class PreservationVault {
 	public static Claim preserveAndRemove(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash,
 			long size) throws IOException {
 		synchronized (MUTATION_LOCK) {
-			Claim claim = preserve(storage, modpackId, generationId, reason, sourceRoot, originalPath, objectHash, size);
-			Path source = source(storage, modpackId, sourceRoot, originalPath);
-			if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
-				validateSource(storage, modpackId, sourceRoot, source);
-				if (!FileIntegrity.matches(source, size, objectHash)) throw new IOException("Preservation source changed before removal: " + source);
-				Files.delete(source);
+			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+				Claim claim = preserve(storage, modpackId, generationId, reason, sourceRoot, originalPath, objectHash, size);
+				Path source = source(storage, modpackId, sourceRoot, originalPath);
+				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
+					validateSource(storage, modpackId, sourceRoot, source);
+					if (!FileIntegrity.matches(source, size, objectHash, cache)) throw new IOException("Preservation source changed before removal: " + source);
+					Files.delete(source);
+				}
+				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matchesNamed(object(storage, claim.objectHash()), claim.size(), claim.objectHash(), cache))
+					throw new IOException("Preserved source removal could not be verified: " + source);
+				return claim;
 			}
-			if (Files.exists(source, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matches(object(storage, claim.objectHash()), claim.size(), claim.objectHash()))
-				throw new IOException("Preserved source removal could not be verified: " + source);
-			return claim;
 		}
 	}
 
@@ -218,14 +225,16 @@ public final class PreservationVault {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
 		synchronized (MUTATION_LOCK) {
-			ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
-			ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
-			if (Root.valueOf(claim.sourceRoot) != Root.GAME_DIR) throw new IOException("Only game-directory claims can be restored to their original path");
-			requireActiveUnownedPath(storage, pack, claim.originalPath);
-			Path destination = storage.gamePath(claim.originalPath);
-			copyWithoutOverwrite(storage.gameDirectory(), object(storage, claim.objectHash), destination, claim.size, claim.objectHash);
-			setStatus(storage, pack, fields, claim, Status.RESTORED);
-			return destination;
+			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
+				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
+				if (Root.valueOf(claim.sourceRoot) != Root.GAME_DIR) throw new IOException("Only game-directory claims can be restored to their original path");
+				requireActiveUnownedPath(storage, pack, claim.originalPath);
+				Path destination = storage.gamePath(claim.originalPath);
+				copyWithoutOverwrite(storage.gameDirectory(), object(storage, claim.objectHash), destination, claim.size, claim.objectHash, cache);
+				setStatus(storage, pack, fields, claim, Status.RESTORED);
+				return destination;
+			}
 		}
 	}
 
@@ -234,13 +243,15 @@ public final class PreservationVault {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
 		synchronized (MUTATION_LOCK) {
-			ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
-			ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
-			Path root = storage.restoredClaimDirectory(pack, claim.generationId, id);
-			Path destination = LogicalPath.resolve(root, claim.originalPath);
-			copyWithoutOverwrite(storage.gameDirectory(), object(storage, claim.objectHash), destination, claim.size, claim.objectHash);
-			setStatus(storage, pack, fields, claim, Status.SAVED_COPY);
-			return destination;
+			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
+				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
+				Path root = storage.restoredClaimDirectory(pack, claim.generationId, id);
+				Path destination = LogicalPath.resolve(root, claim.originalPath);
+				copyWithoutOverwrite(storage.gameDirectory(), object(storage, claim.objectHash), destination, claim.size, claim.objectHash, cache);
+				setStatus(storage, pack, fields, claim, Status.SAVED_COPY);
+				return destination;
+			}
 		}
 	}
 
@@ -274,17 +285,17 @@ public final class PreservationVault {
 		throw new IOException("The active modpack still owns " + logicalPath);
 	}
 
-	private static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash) throws IOException {
+	private static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileMetadataCache cache) throws IOException {
 		validateNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
-		if (!FileIntegrity.matches(source, size, hash)) throw new IOException("Preserved object is missing or corrupt: " + hash);
+		if (!FileIntegrity.matchesNamed(source, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
-			if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matches(destination, size, hash))
+			if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matches(destination, size, hash, cache))
 				throw new IOException("Restore destination already exists: " + destination);
 			return;
 		}
-		VerifiedFileTransfer.copyCreateOnly(source, destination, size, hash);
+		VerifiedFileTransfer.copyCreateOnly(source, destination, size, hash, cache);
 		validateNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
-		if (!FileIntegrity.matches(destination, size, hash)) throw new IOException("Restored file failed verification: " + destination);
+		if (!FileIntegrity.matches(destination, size, hash, cache)) throw new IOException("Restored file failed verification: " + destination);
 	}
 
 	private static void setStatus(ClientStorage storage, String modpackId, ClientStorageJsons.ClientPreservationVaultFields fields,
@@ -391,11 +402,11 @@ public final class PreservationVault {
 		if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation source is not a regular file: " + source);
 	}
 
-	private static void repairObjectFromSource(ClientStorage storage, Path source, Path object, String hash, long size) throws IOException {
+	private static void repairObjectFromSource(ClientStorage storage, Path source, Path object, String hash, long size, FileMetadataCache cache) throws IOException {
 		Path sourceRoot = source.startsWith(storage.gameDirectory()) ? storage.gameDirectory() : storage.clientDirectory();
 		validateNoSymbolicLinkDescendants(sourceRoot, source, "preservation source");
-		if (!FileIntegrity.matches(source, size, hash)) throw new IOException("Preserved object is corrupt and its source is unavailable: " + hash);
-		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash);
+		if (!FileIntegrity.matches(source, size, hash, cache)) throw new IOException("Preserved object is corrupt and its source is unavailable: " + hash);
+		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash, cache);
 	}
 
 	private static Path object(ClientStorage storage, String hash) throws IOException {

@@ -81,7 +81,7 @@ public class ModpackExecutor {
 		try (operation) {
 			Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
 			GenerationStore.CurrentSnapshot previousSnapshot = previous.orElse(null);
-			try (ModpackCandidate candidate = buildCandidate(previousSnapshot)) {
+			try (ModpackCandidate candidate = buildCandidate(previousSnapshot, false)) {
 				GenerationDiff diff = GenerationDiff.between(previous.map(snapshot -> snapshot.record().manifest()).orElse(null), candidate.manifest());
 				String stateDigest = GenerationIdentity.stateDigest(candidate.manifest());
 				GenerationPatchNotes.Resolution notes = GenerationPatchNotes.resolve(inlineNotes, patchNotesFile);
@@ -170,7 +170,7 @@ public class ModpackExecutor {
 			if (expectedStateDigest != null && previous.isEmpty())
 				return new PublishGuardUnsupported("A state guard is unavailable before the root generation is published");
 			GenerationStore.CurrentSnapshot previousSnapshot = previous.orElse(null);
-			try (ModpackCandidate candidate = buildCandidate(previousSnapshot)) {
+			try (ModpackCandidate candidate = buildCandidate(previousSnapshot, true)) {
 				GenerationRecord parent = previous.map(GenerationStore.CurrentSnapshot::record).orElse(null);
 				GenerationDiff diff = GenerationDiff.between(parent == null ? null : parent.manifest(), candidate.manifest());
 				String stateDigest = GenerationIdentity.stateDigest(candidate.manifest());
@@ -260,7 +260,7 @@ public class ModpackExecutor {
 		return new CandidateState(Optional.ofNullable(previous).map(GenerationStore.CurrentSnapshot::record), stateDigest, diff, CandidateSummary.from(candidate, diff), Optional.of(source));
 	}
 
-	private ModpackCandidate buildCandidate(GenerationStore.CurrentSnapshot previous) throws IOException, CandidateBuildException {
+	private ModpackCandidate buildCandidate(GenerationStore.CurrentSnapshot previous, boolean materializeMissingObjects) throws IOException, CandidateBuildException {
 		validateConfiguration();
 		prepareDirectories();
 		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.record().manifest().modpackId());
@@ -269,7 +269,7 @@ public class ModpackExecutor {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
 					serverConfig.syncLoaderVersion ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
 					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
-					generationStore.objectRoot(), fileMetadataCache, modFileCache);
+					generationStore.objectRoot(), fileMetadataCache, modFileCache, materializeMissingObjects);
 			ModpackCandidate candidate = candidateScan.scan(request);
 			for (ExcludedCandidate exclusion : candidate.exclusions())
 				LOGGER.info("Excluded from the modpack: {}/{} - {} ({})", exclusion.source().groupId(), exclusion.source().logicalPath(),
