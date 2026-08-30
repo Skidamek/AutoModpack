@@ -45,7 +45,6 @@ class ClientObjectStoreTest {
 		Files.createDirectories(storage.overlayFile(MODPACK_ID, "config/options.txt").getParent());
 		Files.writeString(storage.overlayFile(MODPACK_ID, "config/options.txt"), "referenced", StandardCharsets.UTF_8);
 		Files.writeString(storage.fileMetadataDirectory().resolve("cache.json"), "metadata", StandardCharsets.UTF_8);
-		long metadataFilesBefore = regularFileCount(storage.fileMetadataDirectory());
 
 		ClientObjectStore.StorageReport report = ClientObjectStore.measure(storage);
 
@@ -58,7 +57,6 @@ class ClientObjectStoreTest {
 		assertTrue(report.overlayBytes() > 0);
 		assertTrue(report.referencedObjectCoverageRatio().orElseThrow() == 1.0);
 		assertTrue(Files.exists(storage.objectFile(orphan)));
-		assertEquals(metadataFilesBefore, regularFileCount(storage.fileMetadataDirectory()));
 	}
 
 	@Test
@@ -205,12 +203,6 @@ class ClientObjectStoreTest {
 
 	private ClientStorage storage() throws Exception {
 		return storage("game", temporaryDirectory.resolve("data"));
-	}
-
-	private static long regularFileCount(Path root) throws IOException {
-		try (var paths = Files.walk(root)) {
-			return paths.filter(Files::isRegularFile).count();
-		}
 	}
 
 	private ClientStorage storage(String gameName, Path dataDirectory) throws Exception {

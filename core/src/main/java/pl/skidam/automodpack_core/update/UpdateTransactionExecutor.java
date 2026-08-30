@@ -49,12 +49,14 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /** Validates and applies the one journaled client operation plan. */
 public final class UpdateTransactionExecutor {
 	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
 			.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
 	private final Context context;
+	private FileMetadataCache fileCache;
 
 	@FunctionalInterface
 	public interface CommitAction {
@@ -104,14 +106,16 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Execution commitPreparedLocked(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {
-		validate(transaction, unpublishedTarget);
-		validateSelectionBeforeMutation(transaction);
-		preparePendingReplacement(transaction);
-		if (unpublishedTarget != null)
-			new ClientGenerationStore(context.storage()).write(unpublishedTarget.generationRecord(), unpublishedTarget.patchNotesHistory(), unpublishedTarget.historyIndex());
-		ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
-		ClientObjectStore.publishOwnership(context.storage());
-		return executePersisted(transaction);
+		return withFileCache(cache -> {
+			validate(transaction, unpublishedTarget);
+			validateSelectionBeforeMutation(transaction);
+			preparePendingReplacement(transaction);
+			if (unpublishedTarget != null)
+				new ClientGenerationStore(context.storage()).write(unpublishedTarget.generationRecord(), unpublishedTarget.patchNotesHistory(), unpublishedTarget.historyIndex());
+			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+			ClientObjectStore.publishOwnership(context.storage());
+			return executePersisted(transaction);
+		});
 	}
 
 	private void preparePendingReplacement(UpdateTransaction replacement) throws IOException {
@@ -160,14 +164,16 @@ public final class UpdateTransactionExecutor {
 
 	/** Reports mutable input drift that requires a fresh plan before live mutation can continue. */
 	public boolean hasMutableInputDrift(UpdateTransaction transaction) throws IOException {
-		if (!isModpackTransaction(transaction)) return false;
-		boolean configChanged = configurationChangedAfterPlanning(transaction);
-		if (projectionPublicationStarted(transaction))
-			return configChanged || transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
-					&& (!overlayStateMatches(transaction) || hasNewerSelection(transaction));
-		if (configChanged) return true;
-		if (!Objects.equals(transaction.overlayDigest, context.storage().overlayDigest(transaction.modpackId))) return true;
-		return hasNewerSelection(transaction);
+		return withFileCache(cache -> {
+			if (!isModpackTransaction(transaction)) return false;
+			boolean configChanged = configurationChangedAfterPlanning(transaction);
+			if (projectionPublicationStarted(transaction))
+				return configChanged || transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+						&& (!overlayStateMatches(transaction) || hasNewerSelection(transaction));
+			if (configChanged) return true;
+			if (!Objects.equals(transaction.overlayDigest, context.storage().overlayDigest(transaction.modpackId))) return true;
+			return hasNewerSelection(transaction);
+		});
 	}
 
 	private boolean configurationChangedAfterPlanning(UpdateTransaction transaction) throws IOException {
@@ -189,15 +195,17 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Execution recoverPersisted(String expectedTransactionId) throws IOException {
-		UpdateTransaction pending = readPersistedTransaction();
-		if (pending == null) return new Execution(UpdateTransaction.Status.SUCCESS, null, null, null, null);
-		if (expectedTransactionId != null && !expectedTransactionId.equals(pending.transactionId))
-			throw new IOException("The requested update transaction was superseded by a newer pending request");
-		boolean publicationStarted = projectionPublicationStarted(pending);
-		if (!publicationStarted && hasMutableInputDrift(pending)) throw new UpdateReplanRequiredException(null, "Pending update input changed after planning");
-		validateUnchecked(pending, null, !publicationStarted);
-		if (!publicationStarted) validateSelectionBeforeMutation(pending);
-		return executePersisted(pending);
+		return withFileCache(cache -> {
+			UpdateTransaction pending = readPersistedTransaction();
+			if (pending == null) return new Execution(UpdateTransaction.Status.SUCCESS, null, null, null, null);
+			if (expectedTransactionId != null && !expectedTransactionId.equals(pending.transactionId))
+				throw new IOException("The requested update transaction was superseded by a newer pending request");
+			boolean publicationStarted = projectionPublicationStarted(pending);
+			if (!publicationStarted && hasMutableInputDrift(pending)) throw new UpdateReplanRequiredException(null, "Pending update input changed after planning");
+			validateUnchecked(pending, null, !publicationStarted);
+			if (!publicationStarted) validateSelectionBeforeMutation(pending);
+			return executePersisted(pending);
+		});
 	}
 
 	private boolean selectionChangedAfterPlanning(UpdateTransaction transaction) throws IOException {
@@ -235,13 +243,16 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget) throws IOException {
-		try {
-			validateUnchecked(transaction, selectedTarget, true);
-		} catch (IOException e) {
-			throw e;
-		} catch (RuntimeException e) {
-			throw new IOException("Invalid update transaction", e);
-		}
+		withFileCache(cache -> {
+			try {
+				validateUnchecked(transaction, selectedTarget, true);
+				return null;
+			} catch (IOException e) {
+				throw e;
+			} catch (RuntimeException e) {
+				throw new IOException("Invalid update transaction", e);
+			}
+		});
 	}
 
 	private void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs) throws IOException {
@@ -665,7 +676,7 @@ public final class UpdateTransactionExecutor {
 				|| !operation.expectedObjectHash().equalsIgnoreCase(projected.expectedHash()))))
 			throw new IOException("Install operation does not match projected final state");
 		Path source = context.storage().objectFile(operation.expectedObjectHash()).normalize();
-		if (!source.startsWith(context.storage().objectsDirectory()) || !FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash()))
+		if (!source.startsWith(context.storage().objectsDirectory()) || !FileIntegrity.matchesNamed(source, operation.expectedSize(), operation.expectedObjectHash(), fileCache))
 			throw new IOException("Required CAS object is missing or corrupt: " + operation.expectedObjectHash());
 	}
 
@@ -817,10 +828,10 @@ public final class UpdateTransactionExecutor {
 			if (operation.operation() != OperationType.INSTALL_OBJECT || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
-			if (FileIntegrity.matches(target, operation.expectedSize(), operation.expectedObjectHash())) continue;
+			if (FileIntegrity.matches(target, operation.expectedSize(), operation.expectedObjectHash(), fileCache)) continue;
 			verifyExpectedExisting(operation, target);
 			Path source = context.storage().objectFile(operation.expectedObjectHash());
-			VerifiedFileTransfer.copyAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash());
+			VerifiedFileTransfer.copyAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
 		}
 		for (Operation operation : transaction.operations) {
 			if (operation.operation() != OperationType.DELETE || operation.root() == Root.PROJECTION) continue;
@@ -840,7 +851,7 @@ public final class UpdateTransactionExecutor {
 				if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new UpdateReplanRequiredException(target, "Client overlay target appeared after planning: " + target);
 			} else
 				if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
-						|| !FileIntegrity.matches(target, Files.size(target), operation.expectedExistingHash()))
+						|| !FileIntegrity.matches(target, Files.size(target), operation.expectedExistingHash(), fileCache))
 					throw new UpdateReplanRequiredException(target, "Client overlay target changed after planning: " + target);
 			return;
 		}
@@ -850,7 +861,7 @@ public final class UpdateTransactionExecutor {
 			return;
 		}
 		if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
-				|| !FileIntegrity.matches(target, Files.size(target), operation.expectedExistingHash()))
+				|| !FileIntegrity.matches(target, Files.size(target), operation.expectedExistingHash(), fileCache))
 			throw new UpdateReplanRequiredException(target, "Game-directory target changed after planning: " + target);
 	}
 
@@ -889,7 +900,7 @@ public final class UpdateTransactionExecutor {
 			if (projected.root() == Root.PROJECTION) continue;
 			Path target = resolve(projected.root(), projected.relativePath(), transaction);
 			if (projected.present()) {
-				if (!FileIntegrity.matches(target, projected.expectedSize(), projected.expectedHash()))
+				if (!FileIntegrity.matches(target, projected.expectedSize(), projected.expectedHash(), fileCache))
 					throw new UpdateReplanRequiredException(target, "Projected target changed during update: " + target);
 			} else
 				if (Files.exists(target, LinkOption.NOFOLLOW_LINKS))
@@ -914,7 +925,7 @@ public final class UpdateTransactionExecutor {
 					? new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true)
 					: new UpdatePlan.FileState(null, -1, false));
 		}
-		return expected.equals(ClientOverlaySnapshot.capture(context.storage(), transaction.modpackId, null).files());
+		return expected.equals(ClientOverlaySnapshot.capture(context.storage(), transaction.modpackId, fileCache).files());
 	}
 
 	private void buildIncomingProjection(UpdateTransaction transaction) throws IOException {
@@ -926,7 +937,7 @@ public final class UpdateTransactionExecutor {
 			Path source = context.storage().objectFile(projected.expectedHash());
 			Path target = incoming.resolve(normalizeOperationPath(projected.relativePath())).normalize();
 			if (!target.startsWith(incoming)) throw new IOException("Projection path escapes incoming directory");
-			VerifiedFileTransfer.linkAtomic(source, target, projected.expectedSize(), projected.expectedHash());
+			VerifiedFileTransfer.linkAtomic(source, target, projected.expectedSize(), projected.expectedHash(), fileCache);
 		}
 		verifyProjection(incoming, transaction.projectedFinalState);
 	}
@@ -960,7 +971,7 @@ public final class UpdateTransactionExecutor {
 				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				String relative = normalizeOperationPath(projection.relativize(path).toString());
 				ProjectedFile expectedFile = expected.remove(relative);
-				if (expectedFile == null || !FileIntegrity.matches(path, expectedFile.expectedSize(), expectedFile.expectedHash()))
+				if (expectedFile == null || !FileIntegrity.matches(path, expectedFile.expectedSize(), expectedFile.expectedHash(), fileCache))
 					throw new IOException("Client projection file verification failed: " + path);
 			}
 		}
@@ -1001,9 +1012,9 @@ public final class UpdateTransactionExecutor {
 				entry.objectHash = "";
 				entry.size = -1;
 			} else {
-				if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash())) throw new IOException("Baseline source changed: " + source);
+				if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash(), fileCache)) throw new IOException("Baseline source changed: " + source);
 				Path object = context.storage().objectFile(capture.expectedHash());
-				VerifiedFileTransfer.copyAtomicImmutable(source, object, capture.expectedSize(), capture.expectedHash());
+				VerifiedFileTransfer.copyAtomicImmutable(source, object, capture.expectedSize(), capture.expectedHash(), fileCache);
 				entry.objectHash = capture.expectedHash().toLowerCase(Locale.ROOT);
 				entry.size = capture.expectedSize();
 			}
@@ -1130,6 +1141,23 @@ public final class UpdateTransactionExecutor {
 
 	private static void validateHash(String hash, String description) throws IOException {
 		if (!HashUtils.isSha1(hash)) throw new IOException("Invalid " + description);
+	}
+
+	@FunctionalInterface
+	private interface FileCacheWork<T> {
+		T run(FileMetadataCache cache) throws IOException;
+	}
+
+	private <T> T withFileCache(FileCacheWork<T> work) throws IOException {
+		if (fileCache != null) return work.run(fileCache);
+		try (FileMetadataCache cache = FileMetadataCache.open(context.storage().fileMetadataDirectory())) {
+			fileCache = cache;
+			try {
+				return work.run(cache);
+			} finally {
+				fileCache = null;
+			}
+		}
 	}
 
 	private static int compareFileKeys(FileKey first, FileKey second) {

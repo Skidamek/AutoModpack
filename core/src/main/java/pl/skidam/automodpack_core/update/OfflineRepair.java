@@ -200,7 +200,7 @@ public final class OfflineRepair {
 			if (source == null) continue;
 			assertPinned(request);
 			requireSafePath(storage.objectsDirectory(), expected.path());
-			if (VerifiedFileTransfer.copyAtomicImmutable(source, expected.path(), expected.content().size(), expected.content().hash())) repairedCas++;
+			if (VerifiedFileTransfer.copyAtomicImmutable(source, expected.path(), expected.content().size(), expected.content().hash(), fileCache)) repairedCas++;
 			fileCache.rehash(expected.path());
 		}
 
@@ -215,8 +215,8 @@ public final class OfflineRepair {
 			assertPinned(request);
 			requireSafePath(expected.root(), expected.path());
 			boolean repaired = expected.place() == Place.PROJECTION
-					? VerifiedFileTransfer.linkAtomic(object, expected.path(), expected.content().size(), expected.content().hash())
-					: VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash());
+					? VerifiedFileTransfer.linkAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache)
+					: VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache);
 			if (repaired) repairedFiles++;
 			fileCache.rehash(expected.path());
 		}
@@ -286,12 +286,12 @@ public final class OfflineRepair {
 		for (var fields : journal.editableResets) {
 			Path live = storage.gamePath(fields.logicalPath);
 			Path object = storage.objectFile(fields.defaultHash).normalize();
-			if (!FileIntegrity.matches(object, fields.defaultSize, fields.defaultHash)) throw new IOException("Editable default is unavailable locally: " + fields.logicalPath);
-			boolean alreadyReset = FileIntegrity.matches(live, fields.defaultSize, fields.defaultHash);
+			if (!FileIntegrity.matchesNamed(object, fields.defaultSize, fields.defaultHash, fileCache)) throw new IOException("Editable default is unavailable locally: " + fields.logicalPath);
+			boolean alreadyReset = FileIntegrity.matches(live, fields.defaultSize, fields.defaultHash, fileCache);
 			if (!alreadyReset) {
 				if (fields.absent) {
 					if (Files.exists(live, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Editable file changed after repair was journaled: " + fields.logicalPath);
-				} else if (!FileIntegrity.matches(live, fields.currentSize, fields.currentHash)) {
+				} else if (!FileIntegrity.matches(live, fields.currentSize, fields.currentHash, fileCache)) {
 					throw new IOException("Editable file changed after repair was journaled: " + fields.logicalPath);
 				}
 				assertPinned(request);
@@ -299,7 +299,7 @@ public final class OfflineRepair {
 					PreservationVault.preserve(storage, journal.modpackId, journal.generationId, PreservationVault.Reason.EDITABLE_RESET, Root.GAME_DIR, fields.logicalPath,
 							fields.currentHash, fields.currentSize);
 				requireSafePath(storage.gameDirectory(), live);
-				VerifiedFileTransfer.copyAtomic(object, live, fields.defaultSize, fields.defaultHash);
+				VerifiedFileTransfer.copyAtomic(object, live, fields.defaultSize, fields.defaultHash, fileCache);
 				fileCache.rehash(live);
 				reset++;
 			}
@@ -322,7 +322,7 @@ public final class OfflineRepair {
 				continue;
 			}
 			requireSafePath(storage.modsDirectory(), source);
-			if (!FileIntegrity.matches(source, fields.size, fields.objectHash)) throw new IOException("Unowned mod changed after repair was journaled: " + fields.logicalPath);
+			if (!FileIntegrity.matches(source, fields.size, fields.objectHash, fileCache)) throw new IOException("Unowned mod changed after repair was journaled: " + fields.logicalPath);
 			assertPinned(request);
 			PreservationVault.preserveAndRemove(storage, journal.modpackId, journal.generationId, PreservationVault.Reason.STRICT_REPAIR, Root.GAME_DIR, fields.logicalPath,
 					fields.objectHash, fields.size);

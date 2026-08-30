@@ -41,6 +41,7 @@ public class FileMetadataCache implements AutoCloseable {
 	public static final class CachedFile {
 		private String path;
 		private String contentHash;
+		private String murmur;
 		private long lastModifiedNanos;
 		private long creationTimeNanos;
 		private long changeTimeNanos;
@@ -51,8 +52,13 @@ public class FileMetadataCache implements AutoCloseable {
 		public CachedFile() {}
 
 		public CachedFile(String path, String contentHash, long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey, long validatedAtNanos) {
+			this(path, contentHash, lastModifiedNanos, creationTimeNanos, changeTimeNanos, size, fileKey, validatedAtNanos, null);
+		}
+
+		public CachedFile(String path, String contentHash, long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey, long validatedAtNanos, String murmur) {
 			this.path = path;
 			this.contentHash = contentHash;
+			this.murmur = murmur;
 			this.lastModifiedNanos = lastModifiedNanos;
 			this.creationTimeNanos = creationTimeNanos;
 			this.changeTimeNanos = changeTimeNanos;
@@ -67,6 +73,10 @@ public class FileMetadataCache implements AutoCloseable {
 
 		public String contentHash() {
 			return contentHash;
+		}
+
+		public String murmur() {
+			return murmur;
 		}
 
 		public long lastModifiedNanos() {
@@ -132,7 +142,7 @@ public class FileMetadataCache implements AutoCloseable {
 		}
 	}
 
-	/** Hashes stable bytes without consulting or publishing cache state. */
+	/** Full-read identity for explicit fsck. Hot paths use {@link #getOrComputeHash(Path)}. */
 	public String hash(Path file) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
 		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
@@ -165,17 +175,72 @@ public class FileMetadataCache implements AutoCloseable {
 
 	private String publishComputed(String pathKey, ComputedHash computed) {
 		FileFingerprint stableFingerprint = computed.fingerprint();
-		CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
-				stableFingerprint.fileKey(), validationTimeNanos());
 		CachedFile previous = hotRecords.get(pathKey);
+		String murmur = previous != null && Objects.equals(previous.contentHash(), computed.hash()) ? previous.murmur() : null;
+		CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.changeTimeNanos(), stableFingerprint.size(),
+				stableFingerprint.fileKey(), validationTimeNanos(), murmur);
 		if (previous != null && Objects.equals(previous.contentHash(), record.contentHash()) && previous.lastModifiedNanos() == record.lastModifiedNanos()
 				&& previous.creationTimeNanos() == record.creationTimeNanos() && previous.changeTimeNanos() == record.changeTimeNanos() && previous.size() == record.size()
-				&& Objects.equals(previous.fileKey(), record.fileKey())) {
+				&& Objects.equals(previous.fileKey(), record.fileKey()) && Objects.equals(previous.murmur(), record.murmur())) {
 			hotRecords.put(pathKey, record);
 			return computed.hash();
 		}
 		writeRecord(record);
 		return computed.hash();
+	}
+
+	/**
+	 * CurseForge murmur of stable bytes. Requires a valid SHA-1 record for {@code file}; computes and
+	 * stores murmur only when that record has none.
+	 */
+	public String getOrComputeMurmur(Path file) throws IOException {
+		Path absPath = file.toAbsolutePath().normalize();
+		String pathKey = absPath.toString();
+		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
+		synchronized (locks[lockIndex]) {
+			BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+			FileFingerprint fingerprint = fingerprint(absPath, attrs);
+			CachedFile cached = readRecord(pathKey);
+			if (!isCacheValid(cached, fingerprint)) {
+				getOrComputeHashWithAttributes(absPath, attrs);
+				cached = readRecord(pathKey);
+				if (!isCacheValid(cached, fingerprint(absPath, Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS))))
+					throw new IOException("Cannot obtain a stable hash record for murmur: " + absPath);
+			}
+			if (cached.murmur() != null) return cached.murmur();
+			String murmur = HashUtils.getCurseforgeMurmurHash(absPath);
+			if (murmur == null) throw new IOException("CurseForge murmur calculation returned null: " + absPath);
+			CachedFile updated = new CachedFile(cached.path(), cached.contentHash(), cached.lastModifiedNanos(), cached.creationTimeNanos(), cached.changeTimeNanos(), cached.size(), cached.fileKey(),
+					cached.validatedAtNanos(), murmur);
+			writeRecord(updated);
+			return murmur;
+		}
+	}
+
+	/**
+	 * Whether {@code file} is still the named immutable bytes. Never reads file content. A missing
+	 * record with a matching size seeds the Git-stat tripwire from the advertised SHA-1. A record
+	 * whose fingerprint no longer matches is disturbed.
+	 */
+	public boolean matchesImmutable(Path file, long expectedSize, String expectedSha1) throws IOException {
+		if (!HashUtils.isSha1(expectedSha1)) return false;
+		Path absPath = file.toAbsolutePath().normalize();
+		if (!Files.isRegularFile(absPath, LinkOption.NOFOLLOW_LINKS)) return false;
+		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+		if (attrs.isSymbolicLink() || attrs.size() != expectedSize) return false;
+		String sha1 = HashUtils.normalizeSha1(expectedSha1);
+		String pathKey = absPath.toString();
+		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
+		synchronized (locks[lockIndex]) {
+			FileFingerprint fingerprint = fingerprint(absPath, attrs);
+			CachedFile cached = readRecord(pathKey);
+			if (isCacheValid(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
+			if (cached != null) return false;
+			CachedFile record = new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
+					validationTimeNanos());
+			writeRecord(record);
+			return true;
+		}
 	}
 
 	private CachedFile readRecord(String pathKey) {
@@ -270,15 +335,21 @@ public class FileMetadataCache implements AutoCloseable {
 
 	// Use only if you are SURE of the file state!
 	public void overwriteCache(Path file, String hash) throws IOException {
+		overwriteCache(file, hash, null);
+	}
+
+	public void overwriteCache(Path file, String hash, String murmur) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
-		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class);
+		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 		FileFingerprint fingerprint = fingerprint(absPath, attrs);
-		CachedFile record = new CachedFile(absPath.toString(), hash, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
-				validationTimeNanos());
-		int lockIndex = Math.floorMod(record.path().hashCode(), locks.length);
+		String pathKey = absPath.toString();
+		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
 		synchronized (locks[lockIndex]) {
-			hotRecords.put(record.path(), record);
-			ConfigTools.writeAtomic(recordPath(record.path()), record);
+			CachedFile previous = readRecord(pathKey);
+			String storedMurmur = murmur != null ? murmur : previous != null && Objects.equals(previous.contentHash(), hash) ? previous.murmur() : null;
+			CachedFile record = new CachedFile(pathKey, hash, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
+					validationTimeNanos(), storedMurmur);
+			writeRecord(record);
 		}
 	}
 

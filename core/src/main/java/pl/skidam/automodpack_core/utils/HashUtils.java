@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -68,11 +69,7 @@ public final class HashUtils {
 		try {
 			MessageDigest digest = newSha1Digest();
 			try (InputStream is = Files.newInputStream(path)) {
-				byte[] buffer = new byte[64 * 1024];
-				int bytesRead;
-				while ((bytesRead = is.read(buffer)) != -1) {
-					digest.update(buffer, 0, bytesRead);
-				}
+				digestStream(digest, is);
 			}
 			return HexFormat.of().formatHex(digest.digest());
 		} catch (IOException ignored) {
@@ -81,6 +78,26 @@ public final class HashUtils {
 			LOGGER.error("Failed to get hash for path: {}", path, e);
 		}
 		return null;
+	}
+
+	/** Copies {@code source} to {@code destination} and returns the SHA-1 of the bytes written. */
+	public static String copyAndSha1(Path source, Path destination) throws IOException {
+		MessageDigest digest = newSha1Digest();
+		try (InputStream in = Files.newInputStream(source); OutputStream out = Files.newOutputStream(destination)) {
+			byte[] buffer = new byte[64 * 1024];
+			int bytesRead;
+			while ((bytesRead = in.read(buffer)) != -1) {
+				digest.update(buffer, 0, bytesRead);
+				out.write(buffer, 0, bytesRead);
+			}
+		}
+		return HexFormat.of().formatHex(digest.digest());
+	}
+
+	private static void digestStream(MessageDigest digest, InputStream is) throws IOException {
+		byte[] buffer = new byte[64 * 1024];
+		int bytesRead;
+		while ((bytesRead = is.read(buffer)) != -1) digest.update(buffer, 0, bytesRead);
 	}
 
 	/**

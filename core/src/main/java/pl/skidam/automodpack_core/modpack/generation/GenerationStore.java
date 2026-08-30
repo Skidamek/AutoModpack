@@ -23,6 +23,7 @@ import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFilePublisher;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 public final class GenerationStore {
 	public static final int CURRENT_POINTER_SCHEMA_VERSION = 1;
@@ -437,7 +438,9 @@ public final class GenerationStore {
 		createStoreDirectories();
 		GenerationRecord record = GenerationRecord.create(candidate.manifest(), previous, clock.instant(), patchNotes);
 		publishOwnershipWith(candidate.manifest());
-		objectStore.promoteAll(candidate.objects());
+		try (FileMetadataCache cache = openMetadataCache()) {
+			objectStore.promoteAll(candidate.objects(), cache);
+		}
 		OwnershipDelta delta = writeDeltaNoClobber(record, previous);
 		writeCatalogueNoClobber(record);
 		writeCommitNoClobber(record, delta);
@@ -776,13 +779,15 @@ public final class GenerationStore {
 	}
 
 	private long verifyObjectReferences(Map<String, Long> expectedSizes) throws IOException {
-		Set<String> verified = new HashSet<>();
-		long bytes = 0;
-		for (var entry : expectedSizes.entrySet()) {
-			verifyObject(entry.getKey(), entry.getValue(), expectedSizes, verified);
-			bytes = addExact(bytes, entry.getValue(), "referenced object bytes");
+		try (FileMetadataCache cache = openMetadataCache()) {
+			Set<String> verified = new HashSet<>();
+			long bytes = 0;
+			for (var entry : expectedSizes.entrySet()) {
+				verifyObject(entry.getKey(), entry.getValue(), expectedSizes, verified, cache);
+				bytes = addExact(bytes, entry.getValue(), "referenced object bytes");
+			}
+			return bytes;
 		}
-		return bytes;
 	}
 
 	private void verifyPinnedObject(String sha1) throws IOException {
@@ -1058,14 +1063,19 @@ public final class GenerationStore {
 		verifyObjectReferences(expectedSizes);
 	}
 
-	private void verifyObject(String sha1, long expectedSize, Map<String, Long> expectedSizes, Set<String> verified) throws IOException {
+	private void verifyObject(String sha1, long expectedSize, Map<String, Long> expectedSizes, Set<String> verified, FileMetadataCache cache) throws IOException {
 		Path object = objectPath(sha1);
 		Long previousSize = expectedSizes.putIfAbsent(sha1, expectedSize);
 		if (previousSize != null && previousSize.longValue() != expectedSize)
 			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
 		if (!verified.add(sha1)) return;
 		FileTrees.requireRegularFile(object, "immutable object " + sha1);
-		if (!FileIntegrity.matches(object, expectedSize, sha1)) throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
+		if (!FileIntegrity.matchesNamed(object, expectedSize, sha1, cache)) throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
+	}
+
+	private FileMetadataCache openMetadataCache() throws IOException {
+		Path directory = dataLocation != null ? dataLocation.layout().fileMetadataDirectory() : objectsDirectory.toAbsolutePath().normalize().getParent().resolve("file-metadata");
+		return FileMetadataCache.open(directory);
 	}
 
 	private Path objectPath(String sha1) throws IOException {

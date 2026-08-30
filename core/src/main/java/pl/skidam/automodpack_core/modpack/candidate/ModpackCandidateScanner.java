@@ -114,11 +114,12 @@ public final class ModpackCandidateScanner {
 				if (result.shadow != null) shadows.add(result.shadow);
 				if (result.selected == null || result.file == null) continue;
 				GroupManifest.GroupFile file = result.file;
-				if (result.object == null) throw new CandidateBuildException("Selected source has no staged object: " + result.selected.sourcePath());
 				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(
 						String.valueOf(file.size()), file.type(), file.editable(), file.overwriteEditable(), file.sha1(), file.murmur()));
-				StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
-				if (redundant != null) result.object.delete();
+				if (result.object != null) {
+					StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
+					if (redundant != null) result.object.delete();
+				}
 				provenance.put(ModpackCandidate.provenanceKey(result.selected.groupId(), result.selected.logicalPath()), result.provenance);
 			}
 
@@ -165,7 +166,7 @@ public final class ModpackCandidateScanner {
 		StagedObject object = null;
 		if (candidate != null) {
 			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
-					request.stagingDirectory(), request.fileMetadataCache(), request.modFileCache(), request.objectStoreDirectory());
+					request.stagingDirectory(), request.fileMetadataCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
 			if (snapshot.exclusion() == null) {
 				selected = candidate;
 				file = snapshot.file();
@@ -333,12 +334,13 @@ public final class ModpackCandidateScanner {
 			Executor executor,
 			Path objectStoreDirectory,
 			FileMetadataCache fileMetadataCache,
-			ModFileCache modFileCache) {
+			ModFileCache modFileCache,
+			boolean materializeMissingObjects) {
 		public Request(String modpackId, String modpackName, String automodpackVersion, String loader, String loaderVersion, String mcVersion, Path serverRoot,
 				Path groupRoot, Map<String, ServerConfigJsons.GroupDeclaration> groups, boolean autoExcludeUnnecessaryFiles,
 				boolean autoExcludeServerSideMods, Path stagingDirectory, Executor executor) {
 			this(modpackId, modpackName, automodpackVersion, loader, loaderVersion, mcVersion, serverRoot, groupRoot, groups, autoExcludeUnnecessaryFiles,
-					autoExcludeServerSideMods, stagingDirectory, executor, null, null, null);
+					autoExcludeServerSideMods, stagingDirectory, executor, null, null, null, true);
 		}
 
 		public Request {

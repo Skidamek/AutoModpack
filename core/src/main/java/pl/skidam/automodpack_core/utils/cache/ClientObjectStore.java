@@ -168,14 +168,13 @@ public final class ClientObjectStore {
 		Objects.requireNonNull(storage, "storage");
 		ReferenceSet references = collectReferences(storage, null);
 		TreeSet<String> existing = new TreeSet<>();
-		for (var entry : references.sizes().entrySet()) {
-			Path object = storage.objectFile(entry.getKey());
-			if (!Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) continue;
-			if (entry.getValue() >= 0) {
-				if (FileIntegrity.matches(object, entry.getValue(), entry.getKey())) existing.add(entry.getKey());
-				continue;
+		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			for (var entry : references.sizes().entrySet()) {
+				Path object = storage.objectFile(entry.getKey());
+				if (!Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) continue;
+				long size = entry.getValue() >= 0 ? entry.getValue() : Files.size(object);
+				if (FileIntegrity.matchesNamed(object, size, entry.getKey(), cache)) existing.add(entry.getKey());
 			}
-			if (entry.getKey().equals(FileIntegrity.identityHash(object, null))) existing.add(entry.getKey());
 		}
 		return Set.copyOf(existing);
 	}
@@ -296,7 +295,7 @@ public final class ClientObjectStore {
 				try (Stream<Path> files = Files.walk(modpack)) {
 					for (Path file : files.filter(path -> !path.equals(modpack)).sorted().toList()) {
 						FileTrees.requireNoSymbolicLink(file, "client overlay");
-						if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.addOptional(metadata.hash(file), Files.size(file), "client overlay");
+						if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.addOptional(metadata.getOrComputeHash(file), Files.size(file), "client overlay");
 					}
 				}
 			}
@@ -383,24 +382,27 @@ public final class ClientObjectStore {
 		long validBytes = 0;
 		long missingCount = 0;
 		long invalidCount = 0;
-		for (var entry : references.sizes().entrySet()) {
-			String hash = entry.getKey();
-			long expectedSize = entry.getValue();
-			if (expectedSize >= 0) expectedBytes = addExact(expectedBytes, expectedSize, "referenced object bytes");
-			Path object = storage.objectFile(hash);
-			if (Files.isSymbolicLink(object) || !Files.exists(object, LinkOption.NOFOLLOW_LINKS)) {
-				if (requireRequiredReferences && references.required().contains(hash)) throw new IOException("Required client object is missing: " + hash);
-				missingCount = addExact(missingCount, 1, "missing referenced object count");
-				continue;
+		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			for (var entry : references.sizes().entrySet()) {
+				String hash = entry.getKey();
+				long expectedSize = entry.getValue();
+				if (expectedSize >= 0) expectedBytes = addExact(expectedBytes, expectedSize, "referenced object bytes");
+				Path object = storage.objectFile(hash);
+				if (Files.isSymbolicLink(object) || !Files.exists(object, LinkOption.NOFOLLOW_LINKS)) {
+					if (requireRequiredReferences && references.required().contains(hash)) throw new IOException("Required client object is missing: " + hash);
+					missingCount = addExact(missingCount, 1, "missing referenced object count");
+					continue;
+				}
+				long size = expectedSize >= 0 ? expectedSize : Files.size(object);
+				boolean valid = FileIntegrity.matchesNamed(object, size, hash, cache);
+				if (!valid) {
+					if (requireRequiredReferences && references.required().contains(hash)) throw new IOException("Required client object is corrupt: " + hash);
+					invalidCount = addExact(invalidCount, 1, "invalid referenced object count");
+					continue;
+				}
+				validCount = addExact(validCount, 1, "valid referenced object count");
+				validBytes = addExact(validBytes, Files.size(object), "valid referenced object bytes");
 			}
-			boolean valid = expectedSize >= 0 ? FileIntegrity.matches(object, expectedSize, hash) : Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && hash.equals(FileIntegrity.identityHash(object, null));
-			if (!valid) {
-				if (requireRequiredReferences && references.required().contains(hash)) throw new IOException("Required client object is corrupt: " + hash);
-				invalidCount = addExact(invalidCount, 1, "invalid referenced object count");
-				continue;
-			}
-			validCount = addExact(validCount, 1, "valid referenced object count");
-			validBytes = addExact(validBytes, Files.size(object), "valid referenced object bytes");
 		}
 		return new ReferenceTotals(expectedBytes, validCount, validBytes, missingCount, invalidCount);
 	}

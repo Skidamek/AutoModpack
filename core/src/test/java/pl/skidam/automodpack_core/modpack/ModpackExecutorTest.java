@@ -53,10 +53,7 @@ class ModpackExecutorTest {
 			assertTrue(Files.notExists(generationRoot.resolve("current.json")));
 			assertTrue(Files.notExists(generationRoot.resolve("records")));
 			assertTrue(Files.notExists(generationRoot.resolve("objects")));
-			assertTrue(Files.isDirectory(generationRoot.resolve("staging")));
-			try (var entries = Files.list(generationRoot.resolve("staging"))) {
-				assertEquals(0, entries.count());
-			}
+			assertTrue(Files.notExists(generationRoot.resolve("staging")));
 
 			ModpackExecutor.PublishResult root = executor.publish();
 			ModpackExecutor.Published publishedRoot = assertInstanceOf(ModpackExecutor.Published.class, root);
