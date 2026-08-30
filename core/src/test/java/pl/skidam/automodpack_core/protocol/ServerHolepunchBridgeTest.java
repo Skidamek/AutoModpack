@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -12,17 +13,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.stream.ChunkedStream;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
+import pl.skidam.automodpack_core.protocol.netty.BackpressuredEmbeddedChannel;
 import pl.skidam.mcholepunch.HolepunchConnection;
 
 class ServerHolepunchBridgeTest {
 	@Test
 	void pumpDrainsChunkedWritesAndTrailingControlFrame() throws Exception {
-		EmbeddedChannel channel = new EmbeddedChannel(new ChunkedWriteHandler());
+		EmbeddedChannel channel = new BackpressuredEmbeddedChannel(4);
+		channel.pipeline().addLast(new ChunkedWriteHandler());
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 		DataOutputStream output = new DataOutputStream(bytes);
 
@@ -31,6 +35,33 @@ class ServerHolepunchBridgeTest {
 		ServerHolepunchBridge.pumpEmbeddedChannel(channel, output);
 
 		assertArrayEquals(new byte[]{1, 2, 3, 4, 5, 6, 7}, bytes.toByteArray());
+		channel.finishAndReleaseAll();
+	}
+
+	@Test
+	void chunkedWriteDoesNotMaterializeTheWholeStreamUntilDrained() throws Exception {
+		int watermark = 2048;
+		int chunkSize = 256;
+		byte[] payload = new byte[64 * 1024];
+		for (int i = 0; i < payload.length; i++) payload[i] = (byte) i;
+		BackpressuredEmbeddedChannel channel = new BackpressuredEmbeddedChannel(watermark);
+		channel.pipeline().addLast(new ChunkedWriteHandler());
+		channel.writeAndFlush(new ChunkedStream(new ByteArrayInputStream(payload), chunkSize));
+		channel.runPendingTasks();
+		channel.flushOutbound();
+
+		long queued = 0;
+		for (Object message : channel.outboundMessages()) queued += ((ByteBuf) message).readableBytes();
+		assertTrue(queued > 0);
+		assertTrue(queued <= watermark, "queued=" + queued);
+		assertTrue(channel.outboundMessages().size() < payload.length / chunkSize);
+		int queuedMessages = channel.outboundMessages().size();
+		channel.flushOutbound();
+		assertEquals(queuedMessages, channel.outboundMessages().size());
+
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		ServerHolepunchBridge.pumpEmbeddedChannel(channel, new DataOutputStream(bytes));
+		assertArrayEquals(payload, bytes.toByteArray());
 		channel.finishAndReleaseAll();
 	}
 

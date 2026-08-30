@@ -25,6 +25,7 @@ import io.netty.util.ReferenceCountUtil;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
+import pl.skidam.automodpack_core.protocol.netty.BackpressuredEmbeddedChannel;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.ProtocolPipeline;
 import pl.skidam.automodpack_core.protocol.netty.handler.ErrorPrinter;
@@ -132,7 +133,7 @@ public final class ServerHolepunchBridge {
 		try (
 				socket;
 				DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()))) {
-			channel = new EmbeddedChannel();
+			channel = new BackpressuredEmbeddedChannel(maxPendingWriteBytes());
 			AtomicBoolean tlsHandshakeComplete = new AtomicBoolean(server.getSslCtx() == null);
 			AtomicBoolean transportUpgradeStarted = new AtomicBoolean(server.getSslCtx() == null);
 			AtomicBoolean transportUpgradeInProgress = new AtomicBoolean(false);
@@ -173,7 +174,7 @@ public final class ServerHolepunchBridge {
 				// Hold produced output while the transport upgrade is in flight: bytes written in
 				// that window must not enter the pre-raw stream queue, they have to be submitted
 				// after the raw switch so HolepunchSocket camouflages them and the peer decodes
-				// them from onRawRead. The EmbeddedChannel buffers them until pumping resumes.
+				// them from onRawRead. BackpressuredEmbeddedChannel keeps the undrained window to one pending frame.
 				if (transportUpgradeInProgress.get()) continue;
 				pumpEmbeddedChannel(channel, socket);
 				if (tlsHandshakeComplete.get() && transportUpgradeStarted.compareAndSet(false, true)) {
