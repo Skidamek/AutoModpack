@@ -130,7 +130,7 @@ class FakeBridge:
                 "screenClass": "UnverifiedPackConfirmScreen",
                 "buttons": [{"id": 3, "text": "Download", "enabled": self.acknowledged, "visible": True, "key": "automodpack.firstConnect.download"},
                             {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True},
-                            {"id": 18, "text": "Customize groups", "enabled": True, "visible": True},
+                            {"id": 18, "text": "Customize groups", "enabled": True, "visible": True, "key": "automodpack.confirm.customize"},
                             *([{"id": 89, "text": (f"Keep {len(self._first_install_local_mods())} existing mod files in mods" if self.first_install_archive_existing else f"Archive {len(self._first_install_local_mods())} existing mod files"), "enabled": True, "visible": True, "key": ("automodpack.firstConnect.leftoverKeep" if self.first_install_archive_existing else "automodpack.firstConnect.leftoverArchive")}] if self._first_install_local_mods() else []),
                             {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
                 "textFields": [],
