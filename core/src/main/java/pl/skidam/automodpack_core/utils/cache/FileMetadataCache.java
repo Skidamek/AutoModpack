@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.utils.cache;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -25,8 +24,8 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * <p>
  * Worktree reuse follows Git: {@code ce_match_stat} (size, mtime, ctime, inode) plus
  * {@code is_racy_timestamp} (mtime not older than the record → rehash). Named CAS objects
- * use only the stat match; racy-mtime is not tamper. On Windows, ctime is NTFS ChangeTime
- * when the JDK exposes it, matching Git for Windows {@code GetFileInformationByHandle}.
+ * use only the stat match; racy-mtime is not tamper. {@code unix:ctime} is the NIO change
+ * time; Windows has no equivalent in the JDK, so the racy-mtime fallback applies there.
  * </p>
  *
  * <p>
@@ -278,33 +277,16 @@ public class FileMetadataCache implements AutoCloseable {
 
 	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
 		String fileKey = attrs.fileKey() == null ? "null" : attrs.fileKey().toString();
-		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos(path, attrs), attrs.size(), fileKey);
+		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos(path), attrs.size(), fileKey);
 	}
 
-	private static long changeTimeNanos(Path path, BasicFileAttributes attrs) {
-		for (String attribute : new String[]{"unix:ctime", "windows:ctime"}) {
-			try {
-				Object value = Files.getAttribute(path, attribute, LinkOption.NOFOLLOW_LINKS);
-				if (value instanceof FileTime time) return toNanos(time);
-			} catch (IOException | UnsupportedOperationException | IllegalArgumentException ignored) {
-			}
-		}
-		return windowsChangeTimeNanos(attrs);
-	}
-
-	/**
-	 * NTFS ChangeTime, the field Git for Windows puts in {@code st_ctime} via
-	 * {@code GetFileInformationByHandle}. The JDK keeps it on the internal Windows attribute type.
-	 * If it is inaccessible, racy-mtime applies the same way Git does without ctime.
-	 */
-	private static long windowsChangeTimeNanos(BasicFileAttributes attrs) {
+	private static long changeTimeNanos(Path path) {
 		try {
-			Method method = attrs.getClass().getMethod("ctime");
-			Object value = method.invoke(attrs);
-			if (value instanceof FileTime time) return toNanos(time);
-		} catch (ReflectiveOperationException | RuntimeException ignored) {
+			Object value = Files.getAttribute(path, "unix:ctime", LinkOption.NOFOLLOW_LINKS);
+			return value instanceof FileTime time ? toNanos(time) : UNAVAILABLE_CHANGE_TIME_NANOS;
+		} catch (IOException | UnsupportedOperationException | IllegalArgumentException e) {
+			return UNAVAILABLE_CHANGE_TIME_NANOS;
 		}
-		return UNAVAILABLE_CHANGE_TIME_NANOS;
 	}
 
 	private static long toNanos(FileTime time) {
