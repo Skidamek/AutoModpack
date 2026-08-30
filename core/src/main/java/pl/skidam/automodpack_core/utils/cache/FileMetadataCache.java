@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.utils.cache;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -22,6 +23,13 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * A shared, path-keyed file hash cache backed by immutable loose records.
  *
  * <p>
+ * Worktree reuse follows Git: {@code ce_match_stat} (size, mtime, ctime, inode) plus
+ * {@code is_racy_timestamp} (mtime not older than the record → rehash). Named CAS objects
+ * use only the stat match; racy-mtime is not tamper. On Windows, ctime is NTFS ChangeTime
+ * when the JDK exposes it, matching Git for Windows {@code GetFileInformationByHandle}.
+ * </p>
+ *
+ * <p>
  * Each record is published with an atomic rename. This keeps the cache safe
  * when a client and a logical server use the same data root, without keeping a
  * process-wide database open or requiring a database dependency.
@@ -31,7 +39,6 @@ public class FileMetadataCache implements AutoCloseable {
 
 	private static final SharedCacheRegistry<FileMetadataCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final String RECORD_SUFFIX = ".json";
-	private static final long NANOSECONDS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
 	private static final long UNAVAILABLE_CHANGE_TIME_NANOS = Long.MIN_VALUE;
 
 	private final Path recordsDirectory;
@@ -201,10 +208,10 @@ public class FileMetadataCache implements AutoCloseable {
 			BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 			FileFingerprint fingerprint = fingerprint(absPath, attrs);
 			CachedFile cached = readRecord(pathKey);
-			if (!isCacheValid(cached, fingerprint)) {
+			if (!statsMatch(cached, fingerprint)) {
 				getOrComputeHashWithAttributes(absPath, attrs);
 				cached = readRecord(pathKey);
-				if (!isCacheValid(cached, fingerprint(absPath, Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS))))
+				if (!statsMatch(cached, fingerprint(absPath, Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS))))
 					throw new IOException("Cannot obtain a stable hash record for murmur: " + absPath);
 			}
 			if (cached.murmur() != null) return cached.murmur();
@@ -219,8 +226,8 @@ public class FileMetadataCache implements AutoCloseable {
 
 	/**
 	 * Whether {@code file} is still the named immutable bytes. Never reads file content. A missing
-	 * record with a matching size seeds the Git-stat tripwire from the advertised SHA-1. A record
-	 * whose fingerprint no longer matches is disturbed.
+	 * record with a matching size seeds the Git-stat tripwire from the advertised SHA-1. Disturbed
+	 * means {@code ce_match_stat} fields changed; Git racy-mtime does not count as disturbed.
 	 */
 	public boolean matchesImmutable(Path file, long expectedSize, String expectedSha1) throws IOException {
 		if (!HashUtils.isSha1(expectedSha1)) return false;
@@ -234,7 +241,7 @@ public class FileMetadataCache implements AutoCloseable {
 		synchronized (locks[lockIndex]) {
 			FileFingerprint fingerprint = fingerprint(absPath, attrs);
 			CachedFile cached = readRecord(pathKey);
-			if (isCacheValid(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
+			if (statsMatch(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
 			if (cached != null) return false;
 			CachedFile record = new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
 					validationTimeNanos());
@@ -271,16 +278,33 @@ public class FileMetadataCache implements AutoCloseable {
 
 	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
 		String fileKey = attrs.fileKey() == null ? "null" : attrs.fileKey().toString();
-		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos(path), attrs.size(), fileKey);
+		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos(path, attrs), attrs.size(), fileKey);
 	}
 
-	private static long changeTimeNanos(Path path) {
-		try {
-			Object value = Files.getAttribute(path, "unix:ctime", LinkOption.NOFOLLOW_LINKS);
-			return value instanceof FileTime time ? toNanos(time) : UNAVAILABLE_CHANGE_TIME_NANOS;
-		} catch (IOException | UnsupportedOperationException | IllegalArgumentException e) {
-			return UNAVAILABLE_CHANGE_TIME_NANOS;
+	private static long changeTimeNanos(Path path, BasicFileAttributes attrs) {
+		for (String attribute : new String[]{"unix:ctime", "windows:ctime"}) {
+			try {
+				Object value = Files.getAttribute(path, attribute, LinkOption.NOFOLLOW_LINKS);
+				if (value instanceof FileTime time) return toNanos(time);
+			} catch (IOException | UnsupportedOperationException | IllegalArgumentException ignored) {
+			}
 		}
+		return windowsChangeTimeNanos(attrs);
+	}
+
+	/**
+	 * NTFS ChangeTime, the field Git for Windows puts in {@code st_ctime} via
+	 * {@code GetFileInformationByHandle}. The JDK keeps it on the internal Windows attribute type.
+	 * If it is inaccessible, racy-mtime applies the same way Git does without ctime.
+	 */
+	private static long windowsChangeTimeNanos(BasicFileAttributes attrs) {
+		try {
+			Method method = attrs.getClass().getMethod("ctime");
+			Object value = method.invoke(attrs);
+			if (value instanceof FileTime time) return toNanos(time);
+		} catch (ReflectiveOperationException | RuntimeException ignored) {
+		}
+		return UNAVAILABLE_CHANGE_TIME_NANOS;
 	}
 
 	private static long toNanos(FileTime time) {
@@ -313,15 +337,22 @@ public class FileMetadataCache implements AutoCloseable {
 	}
 
 	static boolean isCacheValid(CachedFile cached, FileFingerprint fingerprint) {
-		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
-				&& cached.creationTimeNanos() == fingerprint.creationTimeNanos() && cached.changeTimeNanos() == fingerprint.changeTimeNanos()
-				&& cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey())
-				&& isFingerprintNonRacy(cached, fingerprint);
+		return statsMatch(cached, fingerprint) && !isRacyTimestamp(cached, fingerprint);
 	}
 
-	private static boolean isFingerprintNonRacy(CachedFile cached, FileFingerprint fingerprint) {
-		if (fingerprint.changeTimeNanos() != UNAVAILABLE_CHANGE_TIME_NANOS) return true;
-		return Math.floorDiv(fingerprint.lastModifiedNanos(), NANOSECONDS_PER_SECOND) < Math.floorDiv(cached.validatedAtNanos(), NANOSECONDS_PER_SECOND);
+	/** Git {@code ce_match_stat}: size, mtime, ctime, creation time, and inode/file key. */
+	static boolean statsMatch(CachedFile cached, FileFingerprint fingerprint) {
+		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
+				&& cached.creationTimeNanos() == fingerprint.creationTimeNanos() && cached.changeTimeNanos() == fingerprint.changeTimeNanos()
+				&& cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey());
+	}
+
+	/**
+	 * Git {@code is_racy_timestamp}: the file's mtime is not strictly older than when the cache
+	 * record was written. Worktree identity then rehashes. A racily-clean stat is not tamper.
+	 */
+	private static boolean isRacyTimestamp(CachedFile cached, FileFingerprint fingerprint) {
+		return fingerprint.lastModifiedNanos() >= cached.validatedAtNanos();
 	}
 
 	public String getHashOrNull(Path path) {
