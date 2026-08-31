@@ -3,6 +3,8 @@ package pl.skidam.automodpack_core.utils.cache;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -11,9 +13,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.util.Locale;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 class FileMetadataCacheTest {
 	@TempDir
@@ -55,6 +60,46 @@ class FileMetadataCacheTest {
 		}
 		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
 			assertEquals(expectedHash, cache.getOrComputeHash(file));
+		}
+	}
+
+	@Test
+	void windowsNativeStatIsAbsentOrComplete() throws Exception {
+		Path file = temporaryDirectory.resolve("file.bin");
+		Files.writeString(file, "native-stat", StandardCharsets.UTF_8);
+		WindowsFileStat.Snapshot snapshot = WindowsFileStat.read(file);
+		if (PlatformUtils.operatingSystem() != PlatformUtils.OperatingSystem.WINDOWS) {
+			assertNull(snapshot);
+			return;
+		}
+		String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
+		if (!arch.equals("amd64") && !arch.equals("x86_64")) return;
+		System.err.println("WindowsFileStat: " + WindowsFileStat.loadError());
+		System.err.flush();
+		assertNotNull(snapshot, WindowsFileStat.loadError());
+		assertNotEquals(Long.MIN_VALUE, snapshot.changeTimeNanos());
+		assertNotNull(snapshot.fileKey());
+		assertTrue(snapshot.fileKey().contains(":"));
+	}
+
+	@Test
+	void detectsSameSizeChangeWhenModifiedTimeIsRestoredOnWindows() throws Exception {
+		Path file = temporaryDirectory.resolve("file.bin");
+		Files.writeString(file, "first", StandardCharsets.UTF_8);
+		WindowsFileStat.Snapshot before = WindowsFileStat.read(file);
+		assumeTrue(before != null, "Windows NTFS stat native is unavailable");
+		FileTime originalLastModifiedTime = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
+		Files.setLastModifiedTime(file, originalLastModifiedTime);
+		before = WindowsFileStat.read(file);
+		assumeTrue(before != null, "Windows NTFS stat native is unavailable");
+
+		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+			String firstHash = cache.getOrComputeHash(file);
+			Files.writeString(file, "other", StandardCharsets.UTF_8);
+			Files.setLastModifiedTime(file, originalLastModifiedTime);
+			WindowsFileStat.Snapshot after = WindowsFileStat.read(file);
+			assumeTrue(after != null && after.changeTimeNanos() != before.changeTimeNanos(), "The filesystem did not advance NTFS change time");
+			assertNotEquals(firstHash, cache.getOrComputeHash(file));
 		}
 	}
 
