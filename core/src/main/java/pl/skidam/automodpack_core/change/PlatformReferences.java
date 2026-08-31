@@ -49,11 +49,10 @@ public final class PlatformReferences {
 		Map<String, List<String>> referencesByPath = new LinkedHashMap<>();
 		for (ChangeSet.Change change : changes.changes()) {
 			Set<String> references = new LinkedHashSet<>();
-			for (ChangeSet.Occurrence occurrence : change.occurrences())
-				for (String hash : List.of(occurrence.beforeHash(), occurrence.afterHash())) {
-					List<Page> pages = hash == null ? null : pagesBySha1.get(hash.toLowerCase(Locale.ROOT));
-					if (pages != null) for (Page page : pages) references.add(page.url());
-				}
+			for (ChangeSet.Occurrence occurrence : change.occurrences()) {
+				addPages(references, pagesBySha1.get(occurrence.beforeHash()));
+				addPages(references, pagesBySha1.get(occurrence.afterHash()));
+			}
 			if (!references.isEmpty()) referencesByPath.put(change.logicalPath(), List.copyOf(references));
 		}
 		if (referencesByPath.isEmpty()) return changes;
@@ -68,6 +67,11 @@ public final class PlatformReferences {
 			if (!found.isEmpty()) pages.put(sha1.toLowerCase(Locale.ROOT), found);
 		}
 		return pages;
+	}
+
+	private static void addPages(Set<String> references, List<Page> pages) {
+		if (pages == null) return;
+		for (Page page : pages) references.add(page.url());
 	}
 
 	private static List<Page> pagesOf(PlatformMetadataCache.Record record) {

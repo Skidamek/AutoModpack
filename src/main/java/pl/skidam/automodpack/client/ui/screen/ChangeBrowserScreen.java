@@ -30,6 +30,10 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.widget.ChangeBrowserWidget;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.change.PlatformReferences;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Shared vanilla-style file browser used for installed catalogues and generation diffs. */
 public class ChangeBrowserScreen extends VersionedScreen {
@@ -38,9 +42,11 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private final Screen parent;
 	private final Component heading;
 	private final Component description;
-	private final ChangeSet changes;
+	private ChangeSet changes;
 	private final Map<String, String> featureNames;
 	private final BrowserAction auxiliaryAction;
+	private boolean closed;
+	private boolean cacheLookupStarted;
 	private final Set<String> collapsedFolders = new TreeSet<>();
 	private ChangeBrowserProjection.Mode mode = ChangeBrowserProjection.Mode.TREE;
 	private String search = "";
@@ -74,6 +80,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
+		resolveCachedReferences();
 		int panelLeft = panelLeft(PANEL_WIDTH);
 		int panelWidth = panelWidth(PANEL_WIDTH);
 		boolean narrow = panelWidth < 500;
@@ -223,6 +230,19 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (detailsButton != null) detailsButton.setMessage(VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsTechnical" : "automodpack.browser.detailsSimple"));
 	}
 
+	private void resolveCachedReferences() {
+		if (cacheLookupStarted) return;
+		cacheLookupStarted = true;
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, ClientStorage.open(GameDirectory.current()).platformMetadataDirectory());
+			this.minecraft.execute(() -> {
+				if (closed || referenced == changes) return;
+				changes = referenced;
+				rebuild();
+			});
+		});
+	}
+
 	private List<PlatformLink> platformLinks() {
 		if (selectedPath == null || selectedPath.isBlank()) return List.of();
 		LinkedHashMap<String, PlatformLink> distinct = new LinkedHashMap<>();
@@ -278,6 +298,12 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	@Override
 	public boolean shouldCloseOnEsc() {
 		return handleBackOnEscape(this::back);
+	}
+
+	@Override
+	public void removed() {
+		closed = true;
+		super.removed();
 	}
 
 	private record PlatformLink(String key, Component label, String url) {
