@@ -1,5 +1,6 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
 plugins {
 	kotlin("jvm")
@@ -68,6 +69,9 @@ tasks.withType<JavaCompile> {
 
 tasks.named<Test>("test") {
 	useJUnitPlatform()
+	testLogging {
+		exceptionFormat = TestExceptionFormat.FULL
+	}
 	// ClientLeakTripwireTest scans the versioned targets' compiled classes. Ordering-only
 	// (mustRunAfter, not dependsOn): version projects implement :core, so depending on their
 	// tasks from here would form a project dependency cycle and break their compile classpath.

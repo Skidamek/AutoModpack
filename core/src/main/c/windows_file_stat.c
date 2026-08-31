@@ -42,7 +42,8 @@ static int is_drive_absolute(const jchar *chars, jsize len) {
 	return (drive >= 'A' && drive <= 'Z') || (drive >= 'a' && drive <= 'z');
 }
 
-JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_core_utils_cache_WindowsFileStat_read0(JNIEnv *env, jclass cls, jstring jpath, jlongArray out) {
+/* JNI encodes '_' in automodpack_core as _1. javac -h emits Java_pl_skidam_automodpack_1core_utils_cache_WindowsFileStat_read0. */
+JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_cache_WindowsFileStat_read0(JNIEnv *env, jclass cls, jstring jpath, jlongArray out) {
 	const jchar *chars;
 	jsize len;
 	jsize src;
