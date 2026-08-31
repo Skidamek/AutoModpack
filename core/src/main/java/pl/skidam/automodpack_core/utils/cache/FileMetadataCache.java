@@ -24,8 +24,9 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * <p>
  * Worktree reuse follows Git: {@code ce_match_stat} (size, mtime, ctime, inode) plus
  * {@code is_racy_timestamp} (mtime not older than the record → rehash). Named CAS objects
- * use only the stat match; racy-mtime is not tamper. {@code unix:ctime} is the NIO change
- * time; Windows has no equivalent in the JDK, so the racy-mtime fallback applies there.
+ * use only the stat match; racy-mtime is not tamper. Change time is {@code unix:ctime} on
+ * POSIX and optional NTFS ChangeTime plus volume/file index from a guarded JNI helper on
+ * Windows; if that helper is missing the racy-mtime fallback still applies.
  * </p>
  *
  * <p>
@@ -276,11 +277,13 @@ public class FileMetadataCache implements AutoCloseable {
 	}
 
 	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
-		String fileKey = attrs.fileKey() == null ? "null" : attrs.fileKey().toString();
-		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos(path), attrs.size(), fileKey);
+		WindowsFileStat.Snapshot nativeStat = WindowsFileStat.read(path);
+		long changeTimeNanos = nativeStat != null ? nativeStat.changeTimeNanos() : unixChangeTimeNanos(path);
+		String fileKey = nativeStat != null ? nativeStat.fileKey() : attrs.fileKey() == null ? "null" : attrs.fileKey().toString();
+		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos, attrs.size(), fileKey);
 	}
 
-	private static long changeTimeNanos(Path path) {
+	private static long unixChangeTimeNanos(Path path) {
 		try {
 			Object value = Files.getAttribute(path, "unix:ctime", LinkOption.NOFOLLOW_LINKS);
 			return value instanceof FileTime time ? toNanos(time) : UNAVAILABLE_CHANGE_TIME_NANOS;
