@@ -26,6 +26,7 @@ import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
@@ -77,7 +78,7 @@ final class ClientLoginUpdateFlow {
 							if (repairCancelled.get()) return;
 							try {
 								SelectedModpackTarget repaired = SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, intent, ClientPlatform.effective(intent));
-								continueReconcile(handler, connectionInfo, secret, storage, downloadClient, repaired, true);
+								continueReconcile(handler, connectionInfo, secret, storage, downloadClient, repaired, true, false);
 							} catch (RuntimeException repairError) {
 								if (repairCancelled.get()) return;
 								downloadClient.close();
@@ -98,7 +99,7 @@ final class ClientLoginUpdateFlow {
 				return LoginUpdateResponse.UPDATE_REQUIRED;
 			}
 
-			return continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, false);
+			return continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, false, false);
 		}, DownloadClient.NET_EXECUTOR).exceptionally(e -> {
 			disconnectImmediately(handler);
 			Throwable failure = DownloadClient.unwrap(e);
@@ -140,8 +141,12 @@ final class ClientLoginUpdateFlow {
 	}
 
 	private static LoginUpdateResponse continueReconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
-			ClientStorage storage, DownloadClient downloadClient, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected) {
+			ClientStorage storage, DownloadClient downloadClient, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, boolean originApproved) {
 		ModpackJsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
+		ConnectionJsons.ConnectionInfo stored = originApproved ? null : storedConnection(storage, serverModpackContent.modpackId);
+		if (stored != null && stored.origin != null && !AddressHelpers.formatAddress(stored.origin).equals(AddressHelpers.formatAddress(connectionInfo.origin))) {
+			return offerOriginChange(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, alreadyDisconnected, stored);
+		}
 		try {
 			ConnectionStore.saveConnection(storage, serverModpackContent.modpackId, connectionInfo);
 			SecretsStore.saveClientSecret(storage, serverModpackContent.modpackId, connectionInfo.origin, secret);
@@ -178,5 +183,34 @@ final class ClientLoginUpdateFlow {
 
 	private static void disconnectImmediately(ClientHandshakePacketListenerImpl handler) {
 		ClientLoginDisconnect.disconnect(handler);
+	}
+
+	private static ConnectionJsons.ConnectionInfo storedConnection(ClientStorage storage, String modpackId) {
+		try {
+			return ConnectionStore.getConnection(storage, modpackId);
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Cannot read the stored connection for modpack {}", modpackId, e);
+			return null;
+		}
+	}
+
+	/** A different address serving an installed pack can be a migration or an impostor; the player decides once and the saved connection makes it stick. */
+	private static LoginUpdateResponse offerOriginChange(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
+			ClientStorage storage, DownloadClient downloadClient, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, ConnectionJsons.ConnectionInfo stored) {
+		if (!alreadyDisconnected) disconnectImmediately(handler);
+		if (ScreenManager.getScreen().isEmpty()) {
+			LOGGER.warn("No screen available, refusing the changed origin for modpack {}", selectedTarget.flatTarget().modpackId);
+			downloadClient.close();
+			return LoginUpdateResponse.UPDATE_REQUIRED;
+		}
+		String modpackName = selectedTarget.manifest().modpackName();
+		if (modpackName.isBlank()) modpackName = selectedTarget.flatTarget().modpackId;
+		ScreenManager.originChange(modpackName, AddressHelpers.formatAddress(stored.origin), AddressHelpers.formatAddress(connectionInfo.origin),
+				() -> DownloadClient.NET_EXECUTOR.execute(() -> continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, true, true)),
+				() -> {
+					downloadClient.close();
+					ScreenImpl.multiplayer();
+				});
+		return LoginUpdateResponse.UPDATE_REQUIRED;
 	}
 }

@@ -98,6 +98,11 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
+	public void originChange(String modpackName, String previousOrigin, String newOrigin, Runnable allowed, Runnable refused) {
+		executeOnClient(() -> Screens.originChange(modpackName, previousOrigin, newOrigin, allowed, refused));
+	}
+
+	@Override
 	public void waiting() {
 		executeOnClient(() -> Screens.waiting(null));
 	}
@@ -249,6 +254,10 @@ public class ScreenImpl implements ScreenService {
 
 		public static void validation(Screen parent, String fingerprint, String origin, Runnable validated, Runnable canceled) {
 			Screens.setScreen(new FingerprintVerificationScreen(parent, fingerprint, origin, validated, canceled));
+		}
+
+		public static void originChange(String modpackName, String previousOrigin, String newOrigin, Runnable allowed, Runnable refused) {
+			Screens.setScreen(new OriginChangeConfirmScreen(modpackName, previousOrigin, newOrigin, allowed, refused));
 		}
 
 		public static void waiting(Runnable onCancel) {
