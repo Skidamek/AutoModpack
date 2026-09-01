@@ -48,9 +48,9 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
 		actions.add(new Action("automodpack.selection.button", this::openFeatures));
-		actions.add(new Action("automodpack.management.history", this::openHistory));
-		actions.add(new Action("automodpack.patchNotes.button", this::openPatchNotes));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
+		actions.add(new Action("automodpack.patchNotes.button", this::openPatchNotes));
+		actions.add(new Action("automodpack.management.history", this::openHistory));
 		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.translatable("automodpack.management.deactivateTooltip")));
 		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.translatable("automodpack.management.removeTooltip")));
 		int columns = actionColumns(actions.size());

@@ -271,7 +271,6 @@
   "automodpack.management.activate": "Activate",
   "automodpack.management.preservedFiles": "Preserved files",
   "automodpack.management.history": "History",
-  "automodpack.management.files": "Files",
   "automodpack.management.packFiles": "Pack files",
   "automodpack.packManager.sourceLocal": "local",
   "automodpack.packManager.sourceServer": "server",

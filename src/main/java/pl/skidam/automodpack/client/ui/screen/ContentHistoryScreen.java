@@ -106,7 +106,6 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		List<ActionDefinition> footerActions = new ArrayList<>();
 		footerActions.add(secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()));
 		if (hasPatchNotesHistory()) footerActions.add(optionalAction(VersionedText.translatable("automodpack.patchNotes.button"), button -> openPatchNotes()));
-		if (hasLocalFiles()) footerActions.add(primaryAction(VersionedText.translatable("automodpack.management.files"), button -> openFiles()));
 		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, footerActions.toArray(ActionDefinition[]::new)));
 		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, bottomY, actionRows.toArray(ActionRow[]::new));
 		if (hasPagination) {
@@ -136,10 +135,6 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	private boolean hasPatchNotesHistory() {
 		return entries.size() > 1 || entries.stream().anyMatch(entry -> !entry.patchNotes().isBlank());
-	}
-
-	private boolean hasLocalFiles() {
-		return !localHistory.isEmpty();
 	}
 
 	private int pageCount() {
@@ -177,14 +172,6 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	private void openPatchNotes() {
 		ScreenImpl.setScreen(PatchNotesHistoryScreen.fromIndex(this, historyIndex, modpackName));
-	}
-
-	private void openFiles() {
-		if (localHistory.isEmpty()) return;
-		GenerationRecord latest = localByGenerationId.get(historyIndex.currentGenerationId());
-		if (latest == null) latest = localHistory.get(localHistory.size() - 1);
-		openBrowserScreen(VersionedText.translatable("automodpack.files.title", modpackName), VersionedText.translatable("automodpack.files.description"),
-				ChangeSet.catalogue(latest.manifest()), featureNames(latest.manifest()));
 	}
 
 	private void openEntry(int index) {
