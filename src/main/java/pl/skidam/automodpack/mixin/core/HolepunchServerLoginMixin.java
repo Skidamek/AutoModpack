@@ -22,6 +22,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 
+import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 import pl.skidam.mcholepunch.internal.DebugLog;
 import pl.skidam.mcholepunch.internal.protocol.HolepunchMarker;
 import pl.skidam.mcholepunch.server.HolepunchServerRegistry;
@@ -37,9 +38,6 @@ public abstract class HolepunchServerLoginMixin {
 	@Shadow
 	@Final
 	private Connection connection;
-
-	@Unique
-	private boolean automodpack$holepunchTakenOver;
 
 	@WrapMethod(method = "handleHello")
 	private void automodpack$handleHello(ServerboundHelloPacket packet, Operation<Void> original) {
@@ -63,25 +61,16 @@ public abstract class HolepunchServerLoginMixin {
 			*//*?}*/
 			return;
 		}
-		// From here on this listener is owned by the takeover: vanilla must neither drive its login
-		// state machine (the ~30s timeout would write a disconnect packet into the raw pipeline)
-		// nor tear it down. If negotiation fails, NettyLoginNegotiator closes the channel, so a
-		// frozen listener cannot outlive the holepunch connection it belongs to.
-		automodpack$holepunchTakenOver = true;
+		// From here on the takeover owns the channel: vanilla must neither drive this listener (the
+		// ~30s login timeout would write a disconnect packet into the raw pipeline) nor tear the
+		// Connection down when the holepunch channel closes. Detaching the listener leaves vanilla
+		// nothing to tick, disconnect, or log; HolepunchConnectionMixin drops the detached
+		// Connection silently. If negotiation fails, NettyLoginNegotiator closes the channel, so the
+		// abandoned listener cannot outlive the holepunch connection it belonged to.
 		Channel channel = ((HolepunchConnectionAccessor) connection).automodpack$getChannel();
+		channel.attr(ServerHolepunchBridge.DETACHED_MARKER).set(Boolean.TRUE);
+		((HolepunchConnectionAccessor) connection).automodpack$setPacketListener(null);
 		new NettyLoginNegotiator(channel, server.getKeyPair(), username, channel.remoteAddress(), marker, registration, NettyTakeoverSpec.minecraftLogin()).start();
-	}
-
-	@WrapMethod(method = "tick")
-	private void automodpack$skipHolepunchTick(Operation<Void> original) {
-		if (automodpack$holepunchTakenOver) return;
-		original.call();
-	}
-
-	@WrapMethod(method = "disconnect")
-	private void automodpack$skipHolepunchDisconnect(Component reason, Operation<Void> original) {
-		if (automodpack$holepunchTakenOver) return;
-		original.call(reason);
 	}
 
 	@Unique
