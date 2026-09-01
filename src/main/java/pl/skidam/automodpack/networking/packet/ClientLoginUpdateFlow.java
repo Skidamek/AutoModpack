@@ -158,6 +158,7 @@ final class ClientLoginUpdateFlow {
 			if (!updater.requiresUpdateBeforeLogin(updateCheckResult)) {
 				updater.close();
 				if (alreadyDisconnected) ScreenImpl.multiplayer();
+				ScreenImpl.updatePendingRestartToast();
 				return alreadyDisconnected ? LoginUpdateResponse.UPDATE_REQUIRED : LoginUpdateResponse.CONTINUE;
 			}
 			if (!alreadyDisconnected) {
