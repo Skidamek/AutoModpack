@@ -351,8 +351,6 @@
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "unverified",
-  "automodpack.browser.virusTotal": "Check on VirusTotal",
-  "automodpack.browser.virusTotalTooltip": "Opens a VirusTotal search for this exact file hash. No report there means the file was never uploaded.",
   "automodpack.validation.skip.countdown": "The Skip button unlocks in %s seconds.",
   "automodpack.repair.keepUnownedChecked": "[x] Keep %s extra mod files",
   "automodpack.summary.kind.added": "added",

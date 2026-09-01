@@ -107,10 +107,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (hash != null) {
 			setTooltip(actionButtons.get(buttonIndex), VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
 			buttonIndex++;
-			if (selectedFileIsUnverifiedJar()) {
-				setTooltip(actionButtons.get(buttonIndex), VersionedText.translatable("automodpack.browser.virusTotalTooltip"));
-				buttonIndex++;
-			}
 		}
 		if (auxiliaryAction != null) actionButtons.get(buttonIndex).active = auxiliaryAction.active();
 		this.browserBottom = footerTop(actionRows) - this.font.lineHeight - 9;
@@ -134,7 +130,8 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		}
 		String hash = selectedHash();
 		if (hash != null) {
-			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, hashActions(hash).toArray(ActionDefinition[]::new)));
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+					optionalAction(VersionedText.translatable("automodpack.browser.copyHash"), button -> Minecraft.getInstance().keyboardHandler.setClipboard(hash))));
 		}
 		if (auxiliaryAction != null) {
 			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this))));
@@ -157,20 +154,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			}
 		}
 		return after != null ? after : before;
-	}
-
-	/** The VirusTotal detour only answers anything for jars with no storefront provenance; matched files already carry their source badge. */
-	private List<ActionDefinition> hashActions(String hash) {
-		List<ActionDefinition> actions = new ArrayList<>();
-		actions.add(optionalAction(VersionedText.translatable("automodpack.browser.copyHash"), button -> Minecraft.getInstance().keyboardHandler.setClipboard(hash)));
-		if (selectedFileIsUnverifiedJar()) actions.add(optionalAction(VersionedText.translatable("automodpack.browser.virusTotal"), button -> Util.getPlatform().openUri("https://www.virustotal.com/gui/search/" + hash)));
-		return actions;
-	}
-
-	private boolean selectedFileIsUnverifiedJar() {
-		if (selectedPath == null || !selectedPath.toLowerCase(Locale.ROOT).endsWith(".jar")) return false;
-		for (PlatformLink link : platformLinks()) if (link.key().equals("modrinth") || link.key().equals("curseforge")) return false;
-		return true;
 	}
 
 	private void rebuildBrowser() {
