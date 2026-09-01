@@ -16,7 +16,6 @@ public class FabricInit {
 	public static void onInitialize() {
 
 		preload = false;
-		ScreenManager.install(new ScreenImpl());
 
 		long start = System.currentTimeMillis();
 		LOGGER.info("Launching AutoModpack...");
@@ -26,6 +25,7 @@ public class FabricInit {
 		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
 			Common.serverInit();
 		} else {
+			ScreenManager.install(new ScreenImpl());
 			ModPackets.registerC2SPackets();
 			new AudioManager();
 		}
