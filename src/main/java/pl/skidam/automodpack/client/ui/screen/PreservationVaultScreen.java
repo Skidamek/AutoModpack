@@ -5,9 +5,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
@@ -42,37 +44,35 @@ public final class PreservationVaultScreen extends VersionedScreen {
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
-	private final String modpackId;
-	private final String modpackName;
-	private final boolean activePack;
 	private final Runnable closedCallback;
-	private PreservationVault.Snapshot snapshot;
+	private List<PreservationVault.Snapshot> snapshots;
 	private String selectedClaimId;
 	private String pendingDeleteClaimId;
 	private final Map<String, List<PlatformReferences.Page>> platformPagesByClaimId = new HashMap<>();
+	private final Map<String, String> packNames = new HashMap<>();
+	private final Set<String> activePacks = new HashSet<>();
 	private boolean loading;
 	private boolean busy;
 	private boolean restoreFailed;
 	private boolean presentingFailure;
 	private boolean closed;
+	private boolean lastResultRestore;
+	private Path lastResult;
 	private int page;
 	private int pageSize = 1;
 	private Future<?> work;
 
-	public PreservationVaultScreen(Screen parent, InstalledModpackController controller, String modpackId, String modpackName, boolean activePack, Runnable closedCallback) {
+	public PreservationVaultScreen(Screen parent, InstalledModpackController controller, Runnable closedCallback) {
 		super(VersionedText.translatable("automodpack.vault.title"));
 		this.parent = parent;
 		this.controller = controller;
-		this.modpackId = modpackId;
-		this.modpackName = modpackName == null ? "" : modpackName;
-		this.activePack = activePack;
 		this.closedCallback = closedCallback;
 	}
 
 	@Override
 	protected void init() {
 		super.init();
-		if (!loading && snapshot == null) load();
+		if (!loading && snapshots == null) load();
 		List<PreservationVault.Claim> claims = claims();
 		PreservationVault.Claim selected = selected();
 		boolean deleteArmed = selected != null && selected.claimId().equals(pendingDeleteClaimId);
@@ -85,6 +85,11 @@ public final class PreservationVaultScreen extends VersionedScreen {
 				optionalAction(deleteLabel, press -> delete())));
 		List<PlatformReferences.Page> platformPages = selected == null ? List.of() : platformPagesByClaimId.getOrDefault(selected.claimId(), List.of());
 		if (!platformPages.isEmpty()) actions.add(platformRow(platformPages));
+		if (lastResult != null && !restoreFailed) {
+			String key = lastResultRestore ? "automodpack.vault.restoredTo" : "automodpack.vault.savedTo";
+			String confirmation = truncateToWidth(this.font, VersionedText.translatable(key, displayPath(lastResult)).getString(), panelWidth(PANEL_WIDTH) - 12);
+			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, disabledAction(VersionedText.literal(confirmation).withStyle(ChatFormatting.GREEN))));
+		}
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
 		pageSize = rowsPerPage(actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
 		int pageCount = Math.max(1, (claims.size() + pageSize - 1) / pageSize);
@@ -112,10 +117,10 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		Button restore = actionButtons.get(0);
 		Button saveCopy = actionButtons.get(1);
 		Button delete = actionButtons.get(2);
-		restore.active = !busy && selected != null && activePack && selected.sourceRoot() == UpdatePlan.Root.GAME_DIR;
+		restore.active = !busy && canRestore(selected);
 		setTooltip(restore, restoreTooltip(selected));
 		saveCopy.active = !busy && selected != null;
-		setTooltip(saveCopy, VersionedText.translatable("automodpack.vault.saveCopyTooltip"));
+		setTooltip(saveCopy, VersionedText.translatable("automodpack.vault.saveCopyMoves"));
 		delete.active = !busy && selected != null;
 		if (pageCount > 1) {
 			actionButtons.get(3).active = !busy && page > 0;
@@ -127,16 +132,20 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	/** The gate names itself: why Restore is unavailable for this row, or what it will do. */
 	private MutableComponent restoreTooltip(PreservationVault.Claim selected) {
 		if (selected == null) return VersionedText.translatable("automodpack.vault.restorePickFirst");
-		if (!activePack) return VersionedText.translatable("automodpack.vault.restoreInactivePack");
+		if (!activePacks.contains(selected.modpackId())) return VersionedText.translatable("automodpack.vault.restoreInactivePack");
 		if (selected.sourceRoot() != UpdatePlan.Root.GAME_DIR) return VersionedText.translatable("automodpack.vault.restoreManagedFiles");
 		return VersionedText.translatable("automodpack.vault.restoreApplies", selected.originalPath());
+	}
+
+	private boolean canRestore(PreservationVault.Claim selected) {
+		return selected != null && activePacks.contains(selected.modpackId()) && selected.sourceRoot() == UpdatePlan.Root.GAME_DIR;
 	}
 
 	private void load() {
 		loading = true;
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
-				PreservationVault.Snapshot loaded = controller.preservedFiles(modpackId);
+				List<PreservationVault.Snapshot> loaded = controller.preservedFiles();
 				this.minecraft.execute(() -> loaded(loaded));
 			} catch (Exception e) {
 				this.minecraft.execute(() -> fail(e));
@@ -144,21 +153,30 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		});
 	}
 
-	private void loaded(PreservationVault.Snapshot loaded) {
+	private void loaded(List<PreservationVault.Snapshot> loaded) {
 		if (closed) return;
-		snapshot = loaded;
+		snapshots = List.copyOf(loaded);
+		packNames.clear();
+		activePacks.clear();
+		for (InstalledModpackController.Pack pack : controller.installed()) {
+			packNames.put(pack.modpackId(), pack.name());
+			if (pack.active()) activePacks.add(pack.modpackId());
+		}
 		loading = false;
 		busy = false;
-		if (selectedClaimId != null && loaded.claims().stream().noneMatch(claim -> claim.claimId().equals(selectedClaimId))) selectedClaimId = null;
-		platformPagesByClaimId.keySet().retainAll(loaded.claims().stream().map(PreservationVault.Claim::claimId).toList());
+		if (selectedClaimId != null && claims().stream().noneMatch(claim -> claim.claimId().equals(selectedClaimId))) selectedClaimId = null;
+		platformPagesByClaimId.keySet().retainAll(claims().stream().map(PreservationVault.Claim::claimId).toList());
 		pendingDeleteClaimId = null;
 		resolvePlatformPages(selected());
 		rebuild();
 	}
 
 	private List<PreservationVault.Claim> claims() {
-		if (snapshot == null) return List.of();
-		return snapshot.claims().stream().sorted(Comparator.comparing(PreservationVault.Claim::preservedAt).reversed().thenComparing(PreservationVault.Claim::originalPath)).toList();
+		List<PreservationVault.Claim> claims = new ArrayList<>();
+		if (snapshots == null) return claims;
+		for (PreservationVault.Snapshot snapshot : snapshots) claims.addAll(snapshot.claims());
+		claims.sort(Comparator.comparing(PreservationVault.Claim::preservedAt).reversed().thenComparing(PreservationVault.Claim::originalPath).thenComparing(PreservationVault.Claim::modpackId));
+		return claims;
 	}
 
 	private PreservationVault.Claim selected() {
@@ -181,6 +199,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		selectedClaimId = claim.claimId();
 		pendingDeleteClaimId = null;
 		restoreFailed = false;
+		lastResult = null;
 		resolvePlatformPages(claim);
 		rebuild();
 	}
@@ -216,19 +235,20 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		page = Math.max(0, page + amount);
 		selectedClaimId = null;
 		pendingDeleteClaimId = null;
+		lastResult = null;
 		rebuild();
 	}
 
 	private void restore() {
 		PreservationVault.Claim claim = selected();
-		if (claim == null || busy || !activePack || claim.sourceRoot() != UpdatePlan.Root.GAME_DIR) return;
-		run(() -> controller.restorePreservedFile(modpackId, claim.claimId()), true);
+		if (claim == null || busy || !canRestore(claim)) return;
+		run(() -> controller.restorePreservedFile(claim.modpackId(), claim.claimId()), true);
 	}
 
 	private void saveCopy() {
 		PreservationVault.Claim claim = selected();
 		if (claim == null || busy) return;
-		run(() -> controller.savePreservedCopy(modpackId, claim.claimId()), false);
+		run(() -> controller.savePreservedCopy(claim.modpackId(), claim.claimId()), false);
 	}
 
 	private void delete() {
@@ -240,7 +260,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			return;
 		}
 		run(() -> {
-			controller.deletePreservedFile(modpackId, claim.claimId());
+			controller.deletePreservedFile(claim.modpackId(), claim.claimId());
 			return null;
 		}, false);
 	}
@@ -250,9 +270,13 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		rebuild();
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
-				Path ignored = operation.run();
-				PreservationVault.Snapshot refreshed = controller.preservedFiles(modpackId);
-				this.minecraft.execute(() -> loaded(refreshed));
+				Path destination = operation.run();
+				List<PreservationVault.Snapshot> refreshed = controller.preservedFiles();
+				this.minecraft.execute(() -> {
+					lastResult = destination;
+					lastResultRestore = restoreAttempt;
+					loaded(refreshed);
+				});
 			} catch (Exception e) {
 				this.minecraft.execute(() -> fail(e, restoreAttempt));
 			}
@@ -268,6 +292,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		loading = false;
 		busy = false;
 		restoreFailed = restoreAttempt;
+		lastResult = null;
+		if (snapshots == null) snapshots = List.of();
 		rebuild();
 		presentingFailure = true;
 		ScreenManager.failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
@@ -312,10 +338,9 @@ public final class PreservationVaultScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = VersionedText.translatable("automodpack.vault.titleNamed", modpackName).getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 		String description = loading ? VersionedText.translatable("automodpack.vault.loading").getString()
-				: VersionedText.translatable(activePack ? "automodpack.vault.active" : "automodpack.vault.inactive", claims().size()).getString();
+				: VersionedText.translatable("automodpack.vault.description", claims().size()).getString();
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 28, 2);
 		for (int index = 0; index < descriptionLines.size(); index++)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), this.width / 2, 28 + index * 12, TextColors.WHITE);
@@ -324,7 +349,6 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		else {
 			PreservationVault.Claim armed = selected();
 			if (armed != null && armed.claimId().equals(pendingDeleteClaimId)) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.deleteArmed", armed.originalPath()).withStyle(ChatFormatting.RED), this.width / 2, 52, TextColors.WHITE);
-			// One state line: yellow names the selected file the actions below apply to.
 			else if (armed != null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.vault.selected", armed.originalPath()).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		}
 		List<PreservationVault.Claim> claims = claims();
@@ -332,11 +356,18 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		for (int index = start; index < Math.min(claims.size(), start + pageSize); index++) {
 			PreservationVault.Claim claim = claims.get(index);
 			int y = 88 + (index - start) * ROW_HEIGHT;
-			String metadata = claim.originalPath() + "  |  " + reason(claim.reason());
+			String metadata = packNames.getOrDefault(claim.modpackId(), claim.modpackId()) + "  |  " + claim.originalPath() + "  |  " + reason(claim.reason());
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, metadata, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(UiFormat.formatInstant(claim.preservedAt())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 12, TextColors.WHITE);
 		}
-		if (!loading && claims.isEmpty()) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
+		if (!loading && claims.isEmpty() && lastResult == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
+	}
+
+	private static String displayPath(Path path) {
+		Path game = GameDirectory.current().toAbsolutePath().normalize();
+		Path absolute = path.toAbsolutePath().normalize();
+		if (absolute.startsWith(game)) return game.relativize(absolute).toString().replace('\\', '/');
+		return absolute.toString().replace('\\', '/');
 	}
 
 	private static String fileName(String originalPath) {
@@ -348,10 +379,6 @@ public final class PreservationVaultScreen extends VersionedScreen {
 
 	private static String reason(PreservationVault.Reason reason) {
 		return VersionedText.translatable("automodpack.vault.reason." + reason.name().toLowerCase(Locale.ROOT)).getString();
-	}
-
-	private static String status(PreservationVault.Status status) {
-		return VersionedText.translatable("automodpack.vault.status." + status.name().toLowerCase(Locale.ROOT)).getString();
 	}
 
 	@Override

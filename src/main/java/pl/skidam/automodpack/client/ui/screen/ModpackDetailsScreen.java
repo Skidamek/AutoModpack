@@ -50,10 +50,6 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		actions.add(new Action("automodpack.selection.button", this::openFeatures));
 		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
-		int preservedCount = controller.preservedClaimCount(pack);
-		Component preservedLabel = preservedCount > 0 ? VersionedText.translatable("automodpack.management.preservedFilesCount", preservedCount) : VersionedText.translatable("automodpack.management.preservedFiles");
-		actions.add(new Action("automodpack.management.preservedFiles", this::openPreservedFiles, preservedCount == 0 ? VersionedText.translatable("automodpack.vault.empty") : null, preservedLabel));
-		actions.add(new Action("automodpack.packDetails.storage", this::openStorage));
 		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.translatable("automodpack.management.deactivateTooltip")));
 		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.translatable("automodpack.management.removeTooltip")));
 		int columns = actionColumns(actions.size());
@@ -135,16 +131,6 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	private void openFiles() {
 		if (busy) return;
 		controller.openFiles(this, pack);
-	}
-
-	private void openPreservedFiles() {
-		if (busy) return;
-		controller.openPreservedFiles(this, pack, () -> {});
-	}
-
-	private void openStorage() {
-		if (busy) return;
-		ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller));
 	}
 
 	private void remove() {

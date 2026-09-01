@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -89,10 +88,6 @@ final class InstalledModpackController {
 		}
 	}
 
-	boolean hasInstalledPacks() {
-		return !installed().isEmpty() || !orphanedPreservations().isEmpty();
-	}
-
 	Pack pack(GenerationRecord record) {
 		return pack(record, record.manifest().modpackId().equals(activeModpackId()), hasConnection(record.manifest().modpackId()));
 	}
@@ -118,24 +113,15 @@ final class InstalledModpackController {
 		}
 	}
 
-	/** Returns claim-bearing vault snapshots whose installed generation records no longer exist. */
-	List<PreservationVault.Snapshot> orphanedPreservations() {
-		try {
-			Set<String> installedIds = new ClientGenerationStore(storage).installedRecords().stream().map(record -> record.manifest().modpackId()).collect(Collectors.toSet());
-			return PreservationVault.snapshots(storage).stream().filter(snapshot -> !installedIds.contains(snapshot.modpackId())).toList();
-		} catch (IOException | RuntimeException e) {
-			discoveryFailure = e;
-			return List.of();
-		}
-	}
-
 	Throwable discoveryFailure() {
 		return discoveryFailure;
 	}
 
-	int preservedClaimCount(Pack pack) {
+	int preservedClaimCount() {
 		try {
-			return PreservationVault.read(storage, pack.modpackId()).claims().size();
+			int count = 0;
+			for (PreservationVault.Snapshot snapshot : PreservationVault.snapshots(storage)) count += snapshot.claims().size();
+			return count;
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return 0;
@@ -150,8 +136,8 @@ final class InstalledModpackController {
 		return new ClientGenerationStore(storage).compact();
 	}
 
-	PreservationVault.Snapshot preservedFiles(String modpackId) throws IOException {
-		return PreservationVault.read(storage, modpackId);
+	List<PreservationVault.Snapshot> preservedFiles() throws IOException {
+		return PreservationVault.snapshots(storage);
 	}
 
 	Path restorePreservedFile(String modpackId, String claimId) throws IOException {
@@ -282,8 +268,8 @@ final class InstalledModpackController {
 				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, this)), true)));
 	}
 
-	void openPreservedFiles(Screen parent, Pack pack, Runnable released) {
-		ScreenImpl.setScreen(new PreservationVaultScreen(parent, this, pack.modpackId(), pack.name(), pack.active(), released));
+	void openPreservedFiles(Screen parent, Runnable released) {
+		ScreenImpl.setScreen(new PreservationVaultScreen(parent, this, released));
 	}
 
 	private void removeActive(Pack pack, boolean deactivation, Runnable released, Runnable removed) {

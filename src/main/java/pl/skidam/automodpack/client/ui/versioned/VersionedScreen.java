@@ -161,6 +161,11 @@ public class VersionedScreen extends Screen {
 		return action(message, button -> {}, ActionAreaLayout.Role.NAVIGATION, false);
 	}
 
+	/** A visible but inert row, for status lines that must read as output rather than an offered action. */
+	protected final ActionDefinition disabledAction(Component message) {
+		return action(message, button -> {}, ActionAreaLayout.Role.OPTIONAL, false);
+	}
+
 	private ActionDefinition action(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled) {
 		return new ActionDefinition(message, onPress, role, enabled);
 	}

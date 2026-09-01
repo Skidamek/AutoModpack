@@ -218,7 +218,7 @@ def test_preservation_claim_filters_do_not_rely_on_corrupt_object_bytes(make_ctx
     object_path.write_bytes(payload)
     claims = ctx.game_dir / f"automodpack/client/preservation/{pack_id}/claims.json"
     claims.parent.mkdir(parents=True)
-    claims.write_text(json.dumps({"claims": [{"originalPath": "mods/local.jar", "objectHash": object_hash, "size": len(payload), "reason": "STRICT_REPAIR", "status": "AVAILABLE"}]}), encoding="utf-8")
+    claims.write_text(json.dumps({"claims": [{"originalPath": "mods/local.jar", "objectHash": object_hash, "size": len(payload), "reason": "STRICT_REPAIR"}]}), encoding="utf-8")
     selector = {"packId": pack_id, "originalPath": "mods/local.jar", "reason": "STRICT_REPAIR", "content": payload.decode("utf-8")}
 
     assert_preservation_claim(ctx, selector)

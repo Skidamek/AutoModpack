@@ -23,7 +23,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.PreservationVault.Reason;
-import pl.skidam.automodpack_core.update.PreservationVault.Status;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.ConflictAction;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -55,7 +54,7 @@ class PreservationVaultTest {
 	}
 
 	@Test
-	void originalRestoreRequiresAnActiveUnownedPathAndKeepsTheClaim() throws Exception {
+	void originalRestoreRequiresAnActiveUnownedPathAndReleasesTheClaim() throws Exception {
 		ClientStorage storage = storage();
 		Path source = Files.writeString(storage.gamePath("mods/local.jar"), "local-mod", StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(source);
@@ -68,13 +67,12 @@ class PreservationVaultTest {
 		Path restored = PreservationVault.restoreOriginal(storage, MODPACK_ID, claim.claimId());
 
 		assertEquals("local-mod", Files.readString(restored, StandardCharsets.UTF_8));
-		PreservationVault.Claim retained = PreservationVault.read(storage, MODPACK_ID).claims().get(0);
-		assertEquals(Status.RESTORED, retained.status());
+		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().isEmpty());
 		assertTrue(Files.exists(storage.objectFile(hash)));
 	}
 
 	@Test
-	void saveCopyUsesAStablePathAndNeverOverwritesDifferentBytes() throws Exception {
+	void saveCopyUsesAStablePathReleasesTheClaimAndNeverOverwritesDifferentBytes() throws Exception {
 		ClientStorage storage = storage();
 		Path source = Files.writeString(storage.gamePath("config/local.txt"), "local", StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(source);
@@ -82,10 +80,13 @@ class PreservationVaultTest {
 				Files.size(source));
 
 		Path first = PreservationVault.saveCopy(storage, MODPACK_ID, claim.claimId());
-		Path repeated = PreservationVault.saveCopy(storage, MODPACK_ID, claim.claimId());
-		assertEquals(first, repeated);
-		Files.writeString(first, "different", StandardCharsets.UTF_8);
+		assertEquals("local", Files.readString(first, StandardCharsets.UTF_8));
+		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().isEmpty());
 		assertThrows(IOException.class, () -> PreservationVault.saveCopy(storage, MODPACK_ID, claim.claimId()));
+		PreservationVault.Claim repeated = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/local.txt", hash,
+				Files.size(source));
+		Files.writeString(first, "different", StandardCharsets.UTF_8);
+		assertThrows(IOException.class, () -> PreservationVault.saveCopy(storage, MODPACK_ID, repeated.claimId()));
 		assertEquals(1, PreservationVault.read(storage, MODPACK_ID).claims().size());
 	}
 

@@ -52,7 +52,6 @@ public class ClientStorageJsons {
 			public String generationId = "";
 			public String reason = "";
 			public String preservedAt = "";
-			public String status = "";
 		}
 	}
 

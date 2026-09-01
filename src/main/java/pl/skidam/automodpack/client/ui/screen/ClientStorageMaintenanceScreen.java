@@ -36,6 +36,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private ClientGenerationStore.CompactionResult compactionResult;
 	private ClientObjectStore.StorageReport verificationReport;
 	private Future<?> work;
+	private int preservedCount;
 
 	public ClientStorageMaintenanceScreen(Screen parent, InstalledModpackController controller) {
 		super(VersionedText.translatable("automodpack.storage.title"));
@@ -46,6 +47,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
+		preservedCount = controller.preservedClaimCount();
 		int actionY = this.height - 28;
 		List<Button> buttons = addActionArea(PANEL_WIDTH, actionY,
 				actionRow(ActionAreaLayout.RowKind.AUXILIARY,
@@ -158,6 +160,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		y = drawWrapped(matrices, VersionedText.translatable("automodpack.storage.description").getString(), y, textWidth, TextColors.LIGHT_GRAY);
 		y = drawWrapped(matrices, VersionedText.translatable("automodpack.storage.removes").getString(), y + 4, textWidth, TextColors.YELLOW);
 		y = drawWrapped(matrices, VersionedText.translatable("automodpack.storage.keeps").getString(), y + 4, textWidth, TextColors.GREEN);
+		y = drawWrapped(matrices, VersionedText.translatable(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount).getString(), y + 4, textWidth, TextColors.GREEN);
 		if (busy) {
 			String message = operation == Operation.VERIFY ? "automodpack.storage.verifying" : "automodpack.storage.running";
 			drawWrapped(matrices, VersionedText.translatable(message).getString(), y + 8, textWidth, TextColors.YELLOW);

@@ -50,6 +50,7 @@ flow:
       all:
         - screen: InstalledModpacksScreen
         - element: { text: Note-only Test Pack, enabled: true }
+        - element: { text: Preserved files, enabled: true }
         - element: { text: Local storage, enabled: true }
         - no_element: { text: Deactivate }
         - no_element: { text: Remove }
@@ -147,10 +148,20 @@ flow:
         - element: { text: Modpack settings, enabled: true }
         - element: { text: Back, enabled: true }
   - do: click
-    name: open per-pack storage actions
+    name: return to the installed pack list before local storage
+    select: { text: Back }
+  - do: wait_for
+    name: return to the installed pack list parent
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Note-only Test Pack, enabled: true }
+        - element: { text: Local storage, enabled: true }
+  - do: click
+    name: open instance storage from the pack list
     select: { text: Local storage }
   - do: wait_for
-    name: show per-pack storage actions
+    name: show instance storage actions
     until:
       all:
         - screen: ClientStorageMaintenanceScreen
@@ -158,9 +169,6 @@ flow:
   - do: screenshot
     name: capture per-pack storage actions
     file: note-only-pack-storage
-  - do: click
-    name: return to active pack details
-    select: { text: Back }
   - do: click
     name: return to the installed pack list
     select: { text: Back }
