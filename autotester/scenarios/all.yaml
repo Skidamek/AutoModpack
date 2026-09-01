@@ -267,7 +267,7 @@ flow:
       all:
         - element: { text: Pack A }
         - element: { text: Pack B }
-        - element: { text: connected }
+        - element: { text: server }
   - do: click
     name: open Pack B for review only
     select: { text: Pack B }
