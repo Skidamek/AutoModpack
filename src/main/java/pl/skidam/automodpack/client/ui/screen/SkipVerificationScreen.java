@@ -61,6 +61,8 @@ public class SkipVerificationScreen extends VersionedScreen {
 		before.add(blankLine());
 		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.warning2").getString(), wrapWidth, ChatFormatting.RED));
 		before.add(blankLine());
+		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.identity.publiclyTrusted").getString(), wrapWidth, ChatFormatting.GRAY));
+		before.add(blankLine());
 		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.instruction").getString(), wrapWidth));
 		before.add(blankLine());
 		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.confirm.text").getString(), wrapWidth, ChatFormatting.GRAY));
