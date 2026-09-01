@@ -91,9 +91,11 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.browserTop = narrow ? 83 : 59;
 		this.searchField = fieldWidget(panelLeft, 35, searchWidth, VersionedText.translatable("automodpack.browser.search"), null, Integer.MAX_VALUE);
 		this.searchField.setValue(search);
-		this.searchField.setSuggestion(VersionedText.translatable("automodpack.browser.search").getString());
+		String searchHint = VersionedText.translatable("automodpack.browser.search").getString();
+		this.searchField.setSuggestion(search.isEmpty() ? searchHint : "");
 		this.searchField.setResponder(value -> {
 			search = value;
+			searchField.setSuggestion(value.isEmpty() ? searchHint : "");
 			rebuildBrowser();
 		});
 		this.contentButton = buttonWidget(controlsLeft, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleContent());
@@ -114,8 +116,12 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.detailsButton.active = true;
 		updateDetailsLabel();
 		setTooltip(this.detailsButton, VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsStateTechnical" : "automodpack.browser.detailsStateSimple"));
-		this.browserBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new)) - 8;
+		this.browserBottom = footerTop(actionRows) - this.font.lineHeight - 9;
 		rebuildBrowser();
+	}
+
+	private int footerTop(List<ActionRow> actionRows) {
+		return actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
 	}
 
 	private List<ActionRow> buildActionRows() {
@@ -288,8 +294,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature)));
 		String summary = UiFormat.plural(projection.total().fileCount(), "automodpack.browser.summary", UiFormat.formatSize(projection.total().byteCount())).getString();
 		if (!projection.effects().isEmpty()) summary += " | " + projection.effects().size() + " " + VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
-		List<ActionRow> actionRows = buildActionRows();
-		int summaryY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new)) - this.font.lineHeight;
+		int summaryY = footerTop(buildActionRows()) - this.font.lineHeight - 5;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, summaryY, TextColors.WHITE);
 		if (projection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
