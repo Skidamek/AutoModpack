@@ -69,7 +69,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (canCustomize()) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> cancel()),
+				secondaryAction(VersionedText.translatable("automodpack.back"), button -> cancel()),
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
 				primaryAction(VersionedText.translatable(actionKey(mode)), button -> continueUpdate())));
 		return rows;
@@ -115,15 +115,14 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private void continueUpdate() {
 		if (finished) return;
 		finished = true;
-		ScreenImpl.setScreen(new PreparingScreen(updater::cancelFromPlayer));
+		ScreenManager.waiting(updater == null ? null : updater::cancelFromPlayer);
 		continueAction.run();
 	}
 
 	private void cancel() {
-		if (finished) return;
+		if (!finished) cancelAction.run();
 		finished = true;
 		ScreenImpl.setScreen(parent);
-		cancelAction.run();
 	}
 
 	private void customize() {
@@ -185,6 +184,13 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			case DEACTIVATION -> "automodpack.update.deactivate";
 			case REMOVAL -> "automodpack.update.remove";
 		};
+	}
+
+	@Override
+	public void tick() {
+		super.tick();
+		if (updater == null) return;
+		if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING && !updater.isCancelledByPlayer()) finished = false;
 	}
 
 	@Override

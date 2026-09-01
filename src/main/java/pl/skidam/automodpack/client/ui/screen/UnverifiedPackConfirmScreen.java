@@ -101,7 +101,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 		if (leftover) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
 		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
-		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.cancel");
+		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
 		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : "automodpack.update.apply");
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(cancelLabel, button -> cancel()),
@@ -256,10 +256,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 	private void confirm() {
 		if (finished || !acknowledged || ticksRemaining > 0) return;
 		if (firstInstall) {
-			if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) {
-				ScreenImpl.multiplayer();
-				return;
-			}
+			if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) return;
 			finished = true;
 			updater.setFirstInstallLocalModCleanup(!keepExistingMods);
 			ScreenManager.waiting(updater::cancelFromPlayer);
@@ -267,7 +264,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 			return;
 		}
 		finished = true;
-		ScreenImpl.setScreen(new PreparingScreen(updater::cancelFromPlayer));
+		ScreenManager.waiting(updater::cancelFromPlayer);
 		laterContinue.run();
 	}
 
@@ -301,15 +298,15 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 	}
 
 	private void cancel() {
-		if (finished) return;
-		finished = true;
 		if (firstInstall) {
-			updater.cancelConfirmation();
+			if (updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING) updater.cancelConfirmation();
+			finished = true;
 			ScreenImpl.multiplayer();
 			return;
 		}
+		if (!finished) laterCancel.run();
+		finished = true;
 		ScreenImpl.setScreen(parent);
-		laterCancel.run();
 	}
 
 	private void rebuild() {
@@ -333,15 +330,14 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 			if (primaryButton != null) primaryButton.active = ticksRemaining <= 0 && acknowledged;
 		}
 		if (firstInstall) {
-			if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING) {
-				finished = false;
-				return;
-			}
-			if (finished) return;
 			if (updater.getConfirmationState() == ModpackUpdater.ConfirmationState.CANCELLED) {
 				finished = true;
 				ScreenImpl.multiplayer();
+				return;
 			}
+			if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING && !updater.isCancelledByPlayer()) finished = false;
+		} else if (finished && updater != null && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING && !updater.isCancelledByPlayer()) {
+			finished = false;
 		}
 	}
 

@@ -181,7 +181,7 @@ public class SelfUpdater {
 						List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
 						() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
 				downloadManager.joinAll();
-				downloadManager.cancelAllAndShutdown();
+				downloadManager.finish();
 			}
 
 			Path storeObject = storage.objectFile(automodpack.SHA1Hash());

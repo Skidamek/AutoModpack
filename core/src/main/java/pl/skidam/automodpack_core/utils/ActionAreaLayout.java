@@ -53,9 +53,8 @@ public final class ActionAreaLayout {
 	}
 
 	/**
-	 * Lays rows out from top to bottom. Multi-button rows and lone AUXILIARY/NAVIGATION rows fill the
-	 * whole rail with an even split through a 4px seam; leftover pixels go to the last button so the
-	 * row's right edge equals left + width. A lone FOOTER action is LONE_BUTTON wide and centered.
+	 * Lays rows out from top to bottom. Every visible row fills the rail with an even split through a
+	 * 4px seam; leftover pixels go to the last button so the row's right edge equals left + width.
 	 */
 	public static Layout fromTop(int left, int top, int width, int rowGap, List<Row> rows) {
 		int safeWidth = Math.max(1, width);
@@ -87,18 +86,11 @@ public final class ActionAreaLayout {
 	/**
 	 * Splits one rail among the row's buttons with a 4px seam between neighbors. Widths stay equal
 	 * except the last button absorbs the remainder so the right edge of the rail is exact. A lone
-	 * FOOTER action is centered at LONE_BUTTON; other lone rows still fill the rail.
+	 * row fills the rail, including a lone FOOTER action.
 	 */
 	private static List<Placement> layoutRow(int left, int top, int width, Row row) {
 		List<Action> actions = row.actions();
 		int count = actions.size();
-		if (count == 1 && row.kind() == RowKind.FOOTER) {
-			int buttonWidth = LONE_BUTTON;
-			int x = left + (width - buttonWidth) / 2;
-			Action action = actions.get(0);
-			return List.of(new Placement(action.id(), x, top, buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
-		}
-
 		int totalSeams = SEAM * (count - 1);
 		int base = (width - totalSeams) / count;
 		int extra = (width - totalSeams) % count;

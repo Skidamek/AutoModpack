@@ -225,6 +225,13 @@ public class DownloadManager {
 
 		CompletableFuture<Void> future = new CompletableFuture<>();
 		downloadsInProgress.put(key, new DownloadData(future, task.file, activeDomain, task.fileSize));
+		if (cancelled || downloadExecutor.isShutdown()) {
+			downloadsInProgress.remove(key);
+			activeDownloadsPerSource.compute(activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
+			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
+			semaphore.release();
+			return;
+		}
 		try {
 			downloadExecutor.execute(() -> {
 				try {
@@ -235,6 +242,12 @@ public class DownloadManager {
 					future.completeExceptionally(error);
 				}
 			});
+		} catch (RejectedExecutionException error) {
+			downloadsInProgress.remove(key);
+			activeDownloadsPerSource.compute(activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
+			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
+			semaphore.release();
+			future.completeExceptionally(error);
 		} catch (RuntimeException error) {
 			downloadsInProgress.remove(key);
 			activeDownloadsPerSource.compute(activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
@@ -284,8 +297,13 @@ public class DownloadManager {
 			interrupted = true;
 			task.lastFailureCategory = FailureCategory.CANCELLED;
 		} catch (Exception e) {
-			if (task.lastFailureCategory == null) task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
-			LOGGER.warn("Unexpected error processing {}", task.file, e);
+			if (cancelled || Thread.currentThread().isInterrupted()) {
+				interrupted = true;
+				task.lastFailureCategory = FailureCategory.CANCELLED;
+			} else {
+				if (task.lastFailureCategory == null) task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+				LOGGER.warn("Unexpected error processing {}", task.file, e);
+			}
 		} finally {
 			cleanupAndFinalize(hashPathPair, task, storeFile, success, interrupted);
 		}
@@ -446,13 +464,14 @@ public class DownloadManager {
 				handleRetry(key, task, interrupted);
 			}
 		} finally {
-			if (!interrupted) downloadNext();
+			if (!interrupted && !cancelled && !downloadExecutor.isShutdown()) downloadNext();
 		}
 	}
 
 	private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {
-		if (interrupted) {
+		if (interrupted || cancelled) {
 			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
+			semaphore.release();
 			return;
 		}
 		if (task.lastFailureCategory != FailureCategory.LOCAL_STORAGE && task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
@@ -520,6 +539,11 @@ public class DownloadManager {
 
 	public boolean isRunning() {
 		return !downloadExecutor.isShutdown();
+	}
+
+	/** Stops the pool after every queued file has finished. Does not mark the run cancelled. */
+	public void finish() {
+		downloadExecutor.shutdown();
 	}
 
 	public void cancelAllAndShutdown() {

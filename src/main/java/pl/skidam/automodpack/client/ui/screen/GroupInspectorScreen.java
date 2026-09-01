@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -16,12 +15,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** Player-facing feature details. File projection is delegated to the shared tree/list browser. */
@@ -32,7 +27,6 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	private final String groupId;
 	private final GroupManifest manifest;
 	private final GroupManifest.Group group;
-	private volatile boolean closed;
 
 	public GroupInspectorScreen(Screen parent, GroupManifest manifest, String groupId) {
 		super(VersionedText.translatable("automodpack.groupInspector.title"));
@@ -53,19 +47,8 @@ public final class GroupInspectorScreen extends VersionedScreen {
 
 	private void browseFiles() {
 		String name = displayName();
-		ChangeSet changes = featureChanges();
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, platformMetadataDirectory());
-			this.minecraft.execute(() -> {
-				if (closed) return;
-				ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.literal(name),
-						VersionedText.translatable("automodpack.groupInspector.filesDescription"), referenced, Map.of(groupId, name)));
-			});
-		});
-	}
-
-	private static Path platformMetadataDirectory() {
-		return ClientStorage.open(GameDirectory.current()).platformMetadataDirectory();
+		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.literal(name),
+				VersionedText.translatable("automodpack.groupInspector.filesDescription"), featureChanges(), Map.of(groupId, name)));
 	}
 
 	private ChangeSet featureChanges() {
@@ -154,10 +137,5 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	@Override
 	public boolean shouldCloseOnEsc() {
 		return handleBackOnEscape(() -> ScreenImpl.setScreen(parent));
-	}
-
-	@Override
-	public void removed() {
-		closed = true;
 	}
 }

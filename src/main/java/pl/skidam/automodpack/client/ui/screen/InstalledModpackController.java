@@ -20,7 +20,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
@@ -100,6 +99,10 @@ final class InstalledModpackController {
 
 	void switchSelection(GenerationRecord record, SelectionIntent expected, SelectionIntent target, String modpackName, Runnable released) {
 		InstalledModpackSwitch.start(storage, record, expected, target, modpackName, released);
+	}
+
+	Pack installedPack(String modpackId) {
+		return installed().stream().filter(entry -> entry.modpackId().equals(modpackId)).findFirst().orElse(null);
 	}
 
 	List<Pack> installed() {
@@ -236,8 +239,8 @@ final class InstalledModpackController {
 		}
 	}
 
-	void deactivate(Pack pack, Runnable released) {
-		removeActive(pack, true, released);
+	void deactivate(Pack pack, Runnable released, Runnable completed) {
+		removeActive(pack, true, released, completed);
 	}
 
 	void remove(Pack pack, Runnable released, Runnable removed) {
@@ -274,22 +277,13 @@ final class InstalledModpackController {
 		Map<String, String> featureNames = new TreeMap<>();
 		pack.record().manifest().groups().forEach((groupId, group) -> featureNames.put(groupId,
 				group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : group.displayName()));
-		ChangeSet changes = ChangeSet.catalogue(pack.record().manifest());
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, storage.platformMetadataDirectory());
-			releaseOnClient(() -> ScreenImpl.setScreen(new ChangeBrowserScreen(parent,
-					VersionedText.translatable("automodpack.files.title", pack.name()),
-					VersionedText.translatable("automodpack.files.description"), referenced, featureNames,
-					new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, this)), true))));
-		});
+		ScreenImpl.setScreen(new ChangeBrowserScreen(parent, VersionedText.translatable("automodpack.files.title", pack.name()),
+				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), featureNames,
+				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, this)), true)));
 	}
 
 	void openPreservedFiles(Screen parent, Pack pack, Runnable released) {
 		ScreenImpl.setScreen(new PreservationVaultScreen(parent, this, pack.modpackId(), pack.name(), pack.active(), released));
-	}
-
-	private void removeActive(Pack pack, boolean deactivation, Runnable released) {
-		removeActive(pack, deactivation, released, null);
 	}
 
 	private void removeActive(Pack pack, boolean deactivation, Runnable released, Runnable removed) {
@@ -321,22 +315,23 @@ final class InstalledModpackController {
 	}
 
 	private void executeActiveRemoval(ModpackUpdater updater, boolean deactivation, Runnable released, Runnable removed) {
-		boolean success = false;
+		boolean finishedWithoutRestart = false;
 		try {
-			if ((deactivation ? updater.deactivateModpack() : updater.removeModpack()).success()) {
-				success = true;
-			} else {
+			ModpackUpdater.LifecycleApply apply = deactivation ? updater.deactivateModpack() : updater.removeModpack();
+			if (!apply.success()) {
 				String error = deactivation ? "automodpack.error.deactivationIncomplete" : "automodpack.error.removalIncomplete";
 				failure(new IllegalStateException(error), error, FailureCategory.UPDATE);
+			} else {
+				finishedWithoutRestart = removed != null && (!deactivation || !apply.restartRequired());
 			}
 		} catch (Exception e) {
 			failure(e, "automodpack.error.update", FailureCategory.UPDATE);
 		} finally {
 			updater.close();
-			boolean removedSuccessfully = success && !deactivation && removed != null;
+			boolean navigate = finishedWithoutRestart;
 			releaseOnClient(() -> {
 				released.run();
-				if (removedSuccessfully) removed.run();
+				if (navigate) removed.run();
 			});
 		}
 	}

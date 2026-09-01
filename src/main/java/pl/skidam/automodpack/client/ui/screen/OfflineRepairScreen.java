@@ -86,7 +86,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		primaryActions.add(primaryAction(VersionedText.translatable("automodpack.repair.apply"), press -> apply()));
 		if (canUpdate) primaryActions.add(optionalAction(VersionedText.translatable("automodpack.repair.updateAndFinish"), press -> updateAndFinish()));
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryActions.toArray(ActionDefinition[]::new)));
-		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.cancel"), press -> back())));
+		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
 		int pageSize = rowsPerPage(listTop, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
 		int pageCount = pageCount(candidates.size(), pageSize);
 		if (pageCount > 1) {

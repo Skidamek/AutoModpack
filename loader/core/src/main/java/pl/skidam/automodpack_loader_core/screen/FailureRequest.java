@@ -2,6 +2,7 @@ package pl.skidam.automodpack_loader_core.screen;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -10,8 +11,8 @@ import java.util.Objects;
  * A complete request for presenting an operational client failure.
  *
  * <p>
- * The message is a translation key with arguments instead of an exception message. The cause is
- * retained for logging and for an explicit diagnostic copy action only.
+ * The message is a translation key with arguments. The cause message is also kept as a diagnostic
+ * detail for the error screen and the copy action. The stack trace stays in the copy action and log.
  * </p>
  */
 public record FailureRequest(Throwable cause, String messageKey, List<Object> messageArguments, FailureCategory category,
@@ -30,11 +31,24 @@ public record FailureRequest(Throwable cause, String messageKey, List<Object> me
 
 	public static FailureRequest of(Throwable cause, String messageKey, FailureCategory category, FailureDestination returnDestination,
 			Runnable retryAction, Object... messageArguments) {
-		return new FailureRequest(cause, messageKey, Arrays.asList(messageArguments.clone()), category, returnDestination, retryAction, List.of());
+		return new FailureRequest(cause, messageKey, Arrays.asList(messageArguments.clone()), category, returnDestination, retryAction, causeLines(cause));
 	}
 
 	public FailureRequest withDiagnosticDetails(String... details) {
-		return new FailureRequest(cause, messageKey, messageArguments, category, returnDestination, retryAction, Arrays.asList(details.clone()));
+		List<String> merged = new ArrayList<>(Arrays.asList(details.clone()));
+		for (String line : diagnosticDetails) if (!merged.contains(line)) merged.add(line);
+		return new FailureRequest(cause, messageKey, messageArguments, category, returnDestination, retryAction, merged);
+	}
+
+	private static List<String> causeLines(Throwable cause) {
+		List<String> lines = new ArrayList<>();
+		for (Throwable current = cause; current != null; current = current.getCause()) {
+			String message = current.getMessage();
+			if (message == null || message.isBlank()) continue;
+			String line = current.getClass().getSimpleName() + ": " + message.strip();
+			if (!lines.contains(line)) lines.add(line);
+		}
+		return List.copyOf(lines);
 	}
 
 	public static FailureRequest internal(Throwable cause) {

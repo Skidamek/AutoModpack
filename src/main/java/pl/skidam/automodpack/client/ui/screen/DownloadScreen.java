@@ -11,6 +11,7 @@ import net.minecraft.resources.Identifier;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.WaitingPresentation;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -28,6 +29,7 @@ public class DownloadScreen extends VersionedScreen {
 	private final DownloadManager downloadManager;
 	private final String header;
 
+	private final long startedAtNanos = System.nanoTime();
 	private long ticks = 0;
 	private boolean musicStarted = false;
 	private Button cancelButton;
@@ -134,30 +136,21 @@ public class DownloadScreen extends VersionedScreen {
 		return (float) (Math.max(0.0, Math.min(100.0, cachedPercentage)) * 0.01);
 	}
 
+	private boolean downloadsInProgress() {
+		return downloadManager != null && !downloadManager.downloadsInProgress.isEmpty();
+	}
+
 	private void drawDownloadingFiles(VersionedMatrices matrices) {
-		float scale = 1.0F;
 		int y = this.height / 2 - 90;
-
-		matrices.pushPose();
-		matrices.scale(scale, scale, scale);
-		if (downloadManager != null && !downloadManager.downloadsInProgress.isEmpty()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y,
-					TextColors.WHITE);
-
-			int currentY = y + 15;
-			synchronized (downloadManager.downloadsInProgress) {
-				for (DownloadManager.DownloadData data : downloadManager.downloadsInProgress.values()) {
-					String fileName = truncateToWidth(this.font, data.getFileName(), Math.max(1, panelWidth(310) - 20));
-					drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(fileName), (int) (((float) this.width / 2) * scale), currentY, TextColors.GRAY);
-					currentY += 10;
-				}
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
+		int currentY = y + 15;
+		synchronized (downloadManager.downloadsInProgress) {
+			for (DownloadManager.DownloadData data : downloadManager.downloadsInProgress.values()) {
+				String fileName = truncateToWidth(this.font, data.getFileName(), Math.max(1, panelWidth(310) - 20));
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(fileName), this.width / 2, currentY, TextColors.GRAY);
+				currentY += 10;
 			}
-		} else {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.noFiles"), (int) (((float) this.width / 2) * scale), y, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.wait").withStyle(ChatFormatting.BOLD), (int) (((float) this.width / 2) * scale), y + 24,
-					TextColors.WHITE);
 		}
-		matrices.popPose();
 	}
 
 	@Override
@@ -165,10 +158,9 @@ public class DownloadScreen extends VersionedScreen {
 		updateUIState();
 		int lineHeight = 12;
 
-		drawDownloadingFiles(matrices);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110, TextColors.WHITE);
-
 		if (downloadManager != null && downloadManager.isRunning()) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110, TextColors.WHITE);
+			if (downloadsInProgress()) drawDownloadingFiles(matrices);
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 10, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 10 + lineHeight * 2, TextColors.WHITE);
 
@@ -190,7 +182,8 @@ public class DownloadScreen extends VersionedScreen {
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getAcquisitionSummary(), this.width / 2, this.height / 2 + 36 + lineHeight * 3, TextColors.GRAY);
 			cancelButton.active = true;
 		} else {
-			cancelButton.active = false;
+			WaitingPresentation.render(matrices, this.font, this.width, this.height, System.nanoTime() - startedAtNanos);
+			cancelButton.active = downloadManager == null || !downloadManager.isCancelled();
 		}
 
 		checkAndStartMusic();

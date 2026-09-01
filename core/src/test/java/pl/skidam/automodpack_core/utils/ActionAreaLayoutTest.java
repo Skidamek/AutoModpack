@@ -46,12 +46,12 @@ class ActionAreaLayoutTest {
 	}
 
 	@Test
-	void loneFooterOn310Is200Centered() {
+	void loneFooterOn310FillsTheRail() {
 		ActionAreaLayout.Layout layout = ActionAreaLayout.fromTop(LEFT, 0, 310, ActionAreaLayout.GAP, List.of(row(ActionAreaLayout.RowKind.FOOTER, 1)));
 
 		ActionAreaLayout.Placement placement = layout.placements().get(0);
-		assertEquals(ActionAreaLayout.LONE_BUTTON, placement.width());
-		assertEquals(LEFT + (310 - ActionAreaLayout.LONE_BUTTON) / 2, placement.x());
+		assertEquals(310, placement.width());
+		assertEquals(LEFT, placement.x());
 	}
 
 	@Test

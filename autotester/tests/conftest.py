@@ -160,7 +160,7 @@ class FakeBridge:
                 "screenClass": "UpdatePreviewScreen",
                 "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True, "key": "automodpack.update.apply"},
                             {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True},
-                            {"id": 104, "text": "Cancel", "enabled": True, "visible": True}],
+                            {"id": 104, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "removal_preview": {
@@ -679,7 +679,7 @@ class FakeBridge:
         buttons.append({"id": 98, "text": "Repair", "enabled": repair_work, "visible": True})
         if self.update_available:
             buttons.append({"id": 99, "text": "Update and finish repair", "enabled": True, "visible": True})
-        buttons.append({"id": 100, "text": "Cancel", "enabled": True, "visible": True})
+        buttons.append({"id": 100, "text": "Back", "enabled": True, "visible": True})
         return buttons
 
     def _repair_requires_update(self) -> bool:

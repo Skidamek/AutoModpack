@@ -186,9 +186,8 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		private static Screen previewParent(Screen parent) {
-			if (parent instanceof MatchedPackConfirmScreen || parent instanceof UnverifiedPackConfirmScreen) return parent;
-			if (parent instanceof ModpackSelectionScreen selection && (!selection.isUpdateFlow() || selection.isConfirmationFlow())) return parent;
-			return multiplayerScreen();
+			if (parent == null || parent instanceof ConnectScreen || parent instanceof TitleScreen) return multiplayerScreen();
+			return parent;
 		}
 
 		private static boolean isTransient(Screen screen) {
@@ -212,7 +211,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		private static Screen resumableFailureParent(Screen parent) {
-			if (parent == null || parent instanceof MatchedPackConfirmScreen || parent instanceof UnverifiedPackConfirmScreen || parent instanceof UpdatePreviewScreen) return multiplayerScreen();
+			if (parent == null || parent instanceof ConnectScreen || parent instanceof TitleScreen) return multiplayerScreen();
 			return parent;
 		}
 
@@ -234,8 +233,8 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void waiting(Runnable onCancel) {
-			Screens.setScreen(new PreparingScreen(onCancel == null ? null : () -> {
-				onCancel.run();
+			Screens.setScreen(new PreparingScreen(() -> {
+				if (onCancel != null) onCancel.run();
 				Screens.setScreen(cancelDestination());
 			}));
 		}
