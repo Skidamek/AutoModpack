@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -92,7 +93,7 @@ final class InstalledModpackController {
 	}
 
 	Pack pack(GenerationRecord record) {
-		return pack(record, record.manifest().modpackId().equals(activeModpackId()), PackConfirmCopy.displayOrigin(connectionAddress(record.manifest().modpackId())));
+		return pack(record, record.manifest().modpackId().equals(activeModpackId()), connection(record.manifest().modpackId()));
 	}
 
 	void switchSelection(GenerationRecord record, SelectionIntent expected, SelectionIntent target, String modpackName, Runnable released) {
@@ -108,11 +109,12 @@ final class InstalledModpackController {
 		try {
 			List<Pending> pending = new ArrayList<>();
 			for (GenerationRecord record : new ClientGenerationStore(storage).installedRecords()) {
-				String connectionOrigin = PackConfirmCopy.displayOrigin(connectionAddress(record.manifest().modpackId()));
-				pending.add(new Pending(record, record.manifest().modpackId().equals(activeId), connectionOrigin, displayName(record, connectionOrigin)));
+				ConnectionJsons.ConnectionInfo connection = connection(record.manifest().modpackId());
+				String connectionOrigin = connectionOrigin(connection);
+				pending.add(new Pending(record, record.manifest().modpackId().equals(activeId), connection, displayName(record, connectionOrigin)));
 			}
 			pending.sort(Comparator.comparing(Pending::displayName, String.CASE_INSENSITIVE_ORDER));
-			return pending.stream().map(entry -> pack(entry.record(), entry.active(), entry.connectionOrigin())).toList();
+			return pending.stream().map(entry -> pack(entry.record(), entry.active(), entry.connection())).toList();
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return List.of();
@@ -360,14 +362,22 @@ final class InstalledModpackController {
 		}
 	}
 
-	private String connectionAddress(String modpackId) {
+	private ConnectionJsons.ConnectionInfo connection(String modpackId) {
 		try {
 			ConnectionJsons.ConnectionRecordFields fields = ConnectionStore.read(storage, modpackId);
-			return fields.connection != null && fields.connection.isComplete() ? AddressHelpers.formatAddress(fields.connection.origin) : null;
+			return fields.connection != null && fields.connection.isComplete() ? fields.connection : null;
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return null;
 		}
+	}
+
+	private static String connectionOrigin(ConnectionJsons.ConnectionInfo connection) {
+		return connection == null ? null : PackConfirmCopy.displayOrigin(AddressHelpers.formatAddress(connection.origin));
+	}
+
+	private static String connectionDetail(ConnectionJsons.ConnectionInfo connection) {
+		return connection == null ? null : AddressHelpers.formatAddress(connection.endpoint) + " · " + connection.connectionMode.name().toLowerCase(Locale.ROOT).replace('_', ' ');
 	}
 
 	/** Player-facing pack name: explicit name, else the vanilla server list entry, else the address, else the raw id. */
@@ -390,14 +400,14 @@ final class InstalledModpackController {
 		ScreenManager.failure(FailureRequest.of(cause, messageKey, category, FailureDestination.CURRENT_SCREEN, null));
 	}
 
-	private static Pack pack(GenerationRecord record, boolean active, String connectionOrigin) {
+	private static Pack pack(GenerationRecord record, boolean active, ConnectionJsons.ConnectionInfo connection) {
 		ChangeBrowserProjection.Aggregate aggregate = ChangeBrowserProjection.project(ChangeSet.catalogue(record.manifest()), ChangeBrowserProjection.Mode.LIST).total();
-		return new Pack(record, active, connectionOrigin, Math.toIntExact(aggregate.fileCount()), aggregate.byteCount());
+		return new Pack(record, active, connectionOrigin(connection), connectionDetail(connection), Math.toIntExact(aggregate.fileCount()), aggregate.byteCount());
 	}
 
-	private record Pending(GenerationRecord record, boolean active, String connectionOrigin, String displayName) {}
+	private record Pending(GenerationRecord record, boolean active, ConnectionJsons.ConnectionInfo connection, String displayName) {}
 
-	record Pack(GenerationRecord record, boolean active, String connectionOrigin, int fileCount, long fileBytes) {
+	record Pack(GenerationRecord record, boolean active, String connectionOrigin, String connectionDetail, int fileCount, long fileBytes) {
 		boolean connectionAvailable() {
 			return connectionOrigin != null;
 		}

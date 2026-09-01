@@ -93,6 +93,8 @@
   "automodpack.packDetails.storageDescription": "Remove unused modpack data from this instance.",
   "automodpack.packDetails.localStorage": "Clean local storage",
   "automodpack.packDetails.server": "Server: %s",
+  "automodpack.packDetails.connection": "Server %s  |  %s",
+  "automodpack.packDetails.generation": "Generation %s  |  %s",
   "automodpack.packDetails.working": "Working...",
   "automodpack.changelog.view": "View changelogs",
   "automodpack.changelog.noChanges": "No changes found.",
