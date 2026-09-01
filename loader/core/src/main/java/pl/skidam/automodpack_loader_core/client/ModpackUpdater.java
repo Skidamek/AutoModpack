@@ -1093,8 +1093,13 @@ public class ModpackUpdater implements AutoCloseable {
 				: PreviewRequestResult.PREVIEW_NOT_SHOWN;
 	}
 
-	/** A review is required for first install, a changed generation identity, or any plan impact. */
+	/**
+	 * A review is required for first install, a missing projection, or any plan impact. A content-identical
+	 * generation advance - only the installed bookmark lags the advertised identity, with zero consequences -
+	 * applies silently through the authorized no-op path instead of prompting.
+	 */
 	private boolean requiresPlayerReview(ClientUpdatePlanBuilder.PreparedPlan prepared, boolean firstInstall) throws IOException {
+		if (!firstInstall && !hasPlanImpact(prepared) && storedTarget() != null) return false;
 		ModpackJsons.ModpackContentFields installed = storedTarget();
 		GenerationTarget installedTarget = installed == null ? null : GenerationTarget.fromFlat(installed);
 		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared));
