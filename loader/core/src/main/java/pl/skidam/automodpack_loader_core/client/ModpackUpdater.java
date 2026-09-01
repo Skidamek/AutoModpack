@@ -211,7 +211,10 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public void startConfirmedUpdate() {
-		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.PREVIEWING)) return;
+		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.PREVIEWING)) {
+			LOGGER.info("Ignoring modpack download confirmation while another confirmation run is still active");
+			return;
+		}
 		DownloadClient.NET_EXECUTOR.execute(() -> startUpdate(true));
 	}
 
@@ -220,12 +223,15 @@ public class ModpackUpdater implements AutoCloseable {
 		close();
 	}
 
-	/** Stops the in-flight update work after the player backed out of the preparing screen. */
+	/**
+	 * Stops the in-flight update work after the player backed out of the preparing screen. The flag stays raised
+	 * until the draining work observes it; only then is the confirmation seam restored (or the updater closed),
+	 * so a follow-up confirmation can never race a still-draining run.
+	 */
 	public void cancelFromPlayer() {
 		if (!playerCancelled.compareAndSet(false, true)) return;
+		LOGGER.info("Modpack update cancelled by the player");
 		interruptInFlight();
-		if (confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING)) return;
-		close();
 	}
 
 	public boolean isCancelledByPlayer() {
@@ -544,7 +550,7 @@ public class ModpackUpdater implements AutoCloseable {
 		planBuilder.populateStoreFromCachedLocations(target, cache);
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missing = ModpackUtils.identifyUncachedFiles(targetObjects, cache, storage);
 		if (missing.isEmpty()) {
-			if (!playerFacing) LOGGER.info("Launch apply reused all {} verified complete modpack objects", targetObjects.size());
+			LOGGER.info("All {} selected modpack objects are already acquired locally", targetObjects.size());
 			return 0;
 		}
 
@@ -694,8 +700,18 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void restartAfterApply(ApplyResult applyResult) {
+		// Only the launch-time apply hot-loads projection content; any mid-session apply with content changes
+		// leaves the running process without them until restart, whether or not the player accepts the restart.
+		if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) SessionUpdateState.markAppliedContentNotLoaded();
 		if (!applyResult.requiresRestart()) {
 			updateLoopDetector.clear();
+			// Ask the player to restart instead of silently returning to the game where the next join fails with a mod mismatch.
+			if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) {
+				LOGGER.info("Update applied with {} changed and {} removed files, but they cannot load into the running game; asking the player to restart", changelogs.changedFiles().size(),
+						changelogs.removedFiles().size());
+				ScreenManager.restart(fullDownload ? UpdateType.FULL : UpdateType.UPDATE, changelogs);
+				return;
+			}
 			ScreenManager.completeWithoutRestart();
 			return;
 		}
@@ -783,6 +799,15 @@ public class ModpackUpdater implements AutoCloseable {
 		return ModpackPathPolicy.MODS_ROOT + "/" + UpdatePlanner.normalize(activeModsDirectory.relativize(normalized).toString());
 	}
 
+	/** Returns the updater to the confirmation seam once drained work observes the player's cancellation. */
+	private void confirmCancellationHandled() {
+		if (confirmationState.get() == ConfirmationState.WAITING || confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING)) {
+			clearPlayerCancel();
+			return;
+		}
+		close();
+	}
+
 	private void startUpdate(boolean showWaitingScreen) {
 		try {
 			requireLiveConnection();
@@ -794,11 +819,17 @@ public class ModpackUpdater implements AutoCloseable {
 				case APPLIED -> LOGGER.info("Applied an already-authorized no-op update without opening a review screen");
 				case DEFERRED -> LOGGER.info("Already-authorized no-op update was deferred to the detached helper");
 				case FAILED -> {
-					if (isCancelledByPlayer()) return;
+					if (isCancelledByPlayer()) {
+						confirmCancellationHandled();
+						return;
+					}
 					LOGGER.error("Already-authorized no-op update failed; the installed generation was not advanced");
 				}
 				case PREVIEW_NOT_SHOWN -> {
-					if (isCancelledByPlayer()) return;
+					if (isCancelledByPlayer()) {
+						confirmCancellationHandled();
+						return;
+					}
 					LOGGER.warn("Update preview could not be shown; leaving the installed generation unchanged");
 				}
 			}
@@ -809,9 +840,8 @@ public class ModpackUpdater implements AutoCloseable {
 				return;
 			}
 			if (abortedByPlayer(e) || confirmationState.get() == ConfirmationState.WAITING) {
-				clearPlayerCancel();
-				confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
-				playerCancelled.set(false);
+				if (abortedByPlayer(e)) LOGGER.warn("Modpack update preparation was aborted by the player", e);
+				confirmCancellationHandled();
 				return;
 			}
 			close();
@@ -873,7 +903,8 @@ public class ModpackUpdater implements AutoCloseable {
 			if (!isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			return ApplyStatus.DEFERRED;
 		} catch (Exception e) {
-			if (!abortedByPlayer(e)) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			if (abortedByPlayer(e)) LOGGER.warn("Modpack update apply was aborted by the player", e);
+			else ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			return ApplyStatus.FAILED;
 		} finally {
 			close();
@@ -1104,6 +1135,8 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private ClientUpdatePlanBuilder.PreparedPlan executePlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, SelectedModpackTarget target) throws Exception {
 		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
+		// An executing plan is a durable fact; a player cancel during the commit must not cancel it afterwards.
+		reviewed.beginExecution();
 		boolean replanned = false;
 		while (true) {
 			UpdatePlan plan = prepared.plan();
