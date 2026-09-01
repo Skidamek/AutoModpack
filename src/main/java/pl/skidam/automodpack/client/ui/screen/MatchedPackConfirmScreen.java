@@ -132,11 +132,7 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 	}
 
 	private void download() {
-		if (finished) return;
-		if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) {
-			ScreenImpl.multiplayer();
-			return;
-		}
+		if (finished || updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) return;
 		finished = true;
 		updater.setFirstInstallLocalModCleanup(!keepExistingMods);
 		ScreenManager.waiting(updater::cancelFromPlayer);
@@ -168,9 +164,8 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 	}
 
 	private void cancel() {
-		if (finished) return;
+		if (updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING) updater.cancelConfirmation();
 		finished = true;
-		updater.cancelConfirmation();
 		ScreenImpl.multiplayer();
 	}
 
@@ -186,14 +181,12 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 	@Override
 	public void tick() {
 		super.tick();
-		if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING) {
-			finished = false;
+		if (updater.getConfirmationState() == ModpackUpdater.ConfirmationState.CANCELLED) {
+			finished = true;
+			ScreenImpl.multiplayer();
 			return;
 		}
-		if (finished) return;
-		if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.CANCELLED) return;
-		finished = true;
-		ScreenImpl.multiplayer();
+		if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING && !updater.isCancelledByPlayer()) finished = false;
 	}
 
 	@Override

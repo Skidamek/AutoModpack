@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import java.util.Objects;
 import java.util.Optional;
 
+import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -52,6 +53,7 @@ public final class ScreenManager {
 	/** Logs and presents an operational failure exactly once through the installed screen adapter. */
 	public static void failure(FailureRequest request) {
 		Objects.requireNonNull(request, "request");
+		if (CertificateTrustCancelledException.is(request.cause())) return;
 		String previousScreen = getScreen().map(screen -> screen.getClass().getSimpleName()).orElse("none");
 		LOGGER.error("AutoModpack client failure [{}] ({}) on {}", request.category().key(), request.messageKey(), previousScreen, request.cause());
 		instance.failure(request);

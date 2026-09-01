@@ -38,6 +38,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
@@ -222,11 +223,17 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Stops the in-flight update work after the player backed out of the preparing screen. */
 	public void cancelFromPlayer() {
 		if (!playerCancelled.compareAndSet(false, true)) return;
+		interruptInFlight();
+		if (confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING)) return;
 		close();
 	}
 
 	public boolean isCancelledByPlayer() {
-		return playerCancelled.get();
+		return playerCancelled.get() || downloadManager != null && downloadManager.isCancelled();
+	}
+
+	private boolean abortedByPlayer(Throwable cause) {
+		return isCancelledByPlayer() || CertificateTrustCancelledException.is(cause);
 	}
 
 	/** Applies a new group selection and re-enters the preview path from confirm or preview customize. */
@@ -416,7 +423,7 @@ public class ModpackUpdater implements AutoCloseable {
 			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 		} catch (Exception e) {
 			close();
-			if (isCancelledByPlayer()) return;
+			if (abortedByPlayer(e)) return;
 			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 		}
 	}
@@ -496,7 +503,7 @@ public class ModpackUpdater implements AutoCloseable {
 			new ReLauncher(UpdateType.UPDATE, changelogs).restart(true);
 		} catch (Exception e) {
 			LOGGER.error("Failed to apply the selected modpack; no projection changes were made outside the existing transaction guarantees", e);
-			if (!preload) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			if (!preload && !abortedByPlayer(e)) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 		} finally {
 			try {
 				if (preload) loadSelectedActiveProjection();
@@ -549,7 +556,10 @@ public class ModpackUpdater implements AutoCloseable {
 			if (!downloadModpack(missing, start, fetchManager, playerFacing))
 				throw new IOException("One or more selected modpack objects could not be acquired");
 		} catch (Exception e) {
-			if (downloadManager != null) downloadManager.cancelAllAndShutdown();
+			if (downloadManager != null) {
+				if (downloadManager.isCancelled()) playerCancelled.compareAndSet(false, true);
+				else downloadManager.cancelAllAndShutdown();
+			}
 			throw e;
 		}
 
@@ -609,16 +619,18 @@ public class ModpackUpdater implements AutoCloseable {
 		return UpdatePreview.create(preparation.plan(), removalSelection(preparation), mode).withFeatureManifest(removalManifest(preparation));
 	}
 
-	public UpdateTransactionExecutor.Execution deactivateModpack() throws Exception {
+	public record LifecycleApply(boolean success, boolean restartRequired) {}
+
+	public LifecycleApply deactivateModpack() throws Exception {
 		return applyRemovalLike(false);
 	}
 
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
-	public UpdateTransactionExecutor.Execution removeModpack() throws Exception {
+	public LifecycleApply removeModpack() throws Exception {
 		return applyRemovalLike(true);
 	}
 
-	private UpdateTransactionExecutor.Execution applyRemovalLike(boolean remove) throws Exception {
+	private LifecycleApply applyRemovalLike(boolean remove) throws Exception {
 		ReviewedClientPlan<ClientUpdatePlanBuilder.RemovalPreparation> reviewed = reviewedRemovalPlan;
 		if (reviewed == null) throw new IllegalStateException("Modpack lifecycle action was not prepared");
 		if (!reviewed.isApproved()) reviewed.approve();
@@ -647,9 +659,11 @@ public class ModpackUpdater implements AutoCloseable {
 			changelogs.replaceWith(applied);
 			ApplyResult applyResult = applyResult(preparation.plan());
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
-			restartAfterApply(applyResult);
+			if (applyResult.requiresRestart()) restartAfterApply(applyResult);
+			else updateLoopDetector.clear();
+			return new LifecycleApply(true, applyResult.requiresRestart());
 		}
-		return execution;
+		return new LifecycleApply(false, false);
 	}
 
 	private static ResolvedSelection removalSelection(ClientUpdatePlanBuilder.RemovalPreparation preparation) {
@@ -790,8 +804,17 @@ public class ModpackUpdater implements AutoCloseable {
 			}
 			close();
 		} catch (Exception e) {
+			if (downloadManager != null && downloadManager.isCancelled()) {
+				close();
+				return;
+			}
+			if (abortedByPlayer(e) || confirmationState.get() == ConfirmationState.WAITING) {
+				clearPlayerCancel();
+				confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
+				playerCancelled.set(false);
+				return;
+			}
 			close();
-			if (isCancelledByPlayer()) return;
 			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			return;
 		}
@@ -811,7 +834,7 @@ public class ModpackUpdater implements AutoCloseable {
 				try {
 					applyInstalledSwitch();
 				} catch (Exception e) {
-					ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+					if (!abortedByPlayer(e)) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 				}
 			};
 			if (!ScreenManager.preview(preview, getModpackName(), this, (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), this::close)) {
@@ -819,7 +842,7 @@ public class ModpackUpdater implements AutoCloseable {
 				close();
 			}
 		} catch (Exception e) {
-			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			if (!abortedByPlayer(e)) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			close();
 		}
 	}
@@ -850,7 +873,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (!isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			return ApplyStatus.DEFERRED;
 		} catch (Exception e) {
-			if (!isCancelledByPlayer()) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			if (!abortedByPlayer(e)) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 			return ApplyStatus.FAILED;
 		} finally {
 			close();
@@ -918,7 +941,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return false;
 		}
 
-		downloadManager.cancelAllAndShutdown();
+		downloadManager.finish();
 		totalBytesToDownload = 0;
 
 		if (failedDownloads.isEmpty()) return true;
@@ -998,6 +1021,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private PreviewRequestResult requestUpdatePreview() throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
+		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		ClientUpdatePlanBuilder.PreparedPlan prepared = preparePlanForReview();
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = ReviewedClientPlan.pending(prepared, prepared.plan());
@@ -1141,14 +1165,22 @@ public class ModpackUpdater implements AutoCloseable {
 		return confirmationState.compareAndSet(ConfirmationState.INACTIVE, ConfirmationState.WAITING);
 	}
 
-	@Override
-	public void close() {
-		confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED);
-		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.CANCELLED);
+	private boolean clearPlayerCancel() {
+		return playerCancelled.compareAndSet(true, false);
+	}
+
+	private void interruptInFlight() {
 		FetchManager sourceFetch = sourceFetchManager;
 		if (sourceFetch != null && !sourceFetch.isComplete()) sourceFetch.cancel();
 		DownloadManager manager = downloadManager;
 		if (manager != null && manager.isRunning()) manager.cancelAllAndShutdown();
+	}
+
+	@Override
+	public void close() {
+		confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED);
+		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.CANCELLED);
+		interruptInFlight();
 		if (reviewedUpdatePlan != null && reviewedUpdatePlan.isApproved()) reviewedUpdatePlan.cancel();
 		if (reviewedRemovalPlan != null && reviewedRemovalPlan.isApproved()) reviewedRemovalPlan.cancel();
 		if (installedSwitchPlan != null && installedSwitchPlan.isApproved()) installedSwitchPlan.cancel();

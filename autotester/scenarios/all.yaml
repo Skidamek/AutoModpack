@@ -370,7 +370,7 @@ flow:
         - element: { text: "[ ] Keep 1 extra mod files", enabled: true }
   - do: click
     name: cancel the healthy repair review
-    select: { text: Cancel }
+    select: { text: Back }
   - do: wait_for
     name: return from repair without leaving Pack B details stale
     until:
@@ -987,7 +987,7 @@ flow:
     select: { text: "[x] Keep 2 extra mod files" }
   - do: click
     name: cancel repair after exercising every choice
-    select: { text: Cancel }
+    select: { text: Back }
   - do: wait_for
     name: return to usable Pack A details after repair cancellation
     until:

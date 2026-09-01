@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client.ui.screen;
 
 import pl.skidam.automodpack.client.ui.TextColors;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
@@ -52,6 +53,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
+		refreshEntries();
 		if (controller.discoveryFailure() != null && !discoveryFailureShown) {
 			discoveryFailureShown = true;
 			ScreenManager.failure(FailureRequest.of(controller.discoveryFailure(), "automodpack.error.storage", FailureCategory.STORAGE,
@@ -61,15 +63,39 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		int x = panelLeft(PANEL_WIDTH);
 		int listTop = 68;
 		int actionY = this.height - 28;
-		int listBottomWithoutPagination = actionY - 8;
-		int rowsWithoutPagination = Math.max(1, (listBottomWithoutPagination - listTop) / ROW_HEIGHT);
+		ActionRow management = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+				optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
+				optionalAction(VersionedText.translatable("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
+		List<ActionRow> rows = new ArrayList<>();
+		rows.add(management);
+		rows.add(footer);
 		int totalEntries = entries.size() + orphanedPreservations.size();
-		boolean showPagination = totalEntries > rowsWithoutPagination;
-		int listBottom = showPagination ? actionY - 20 - actionRowGap() - 8 : listBottomWithoutPagination;
+		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new)) - 8;
 		int rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
-		int pageCount = Math.max(1, (int) Math.ceil((double) totalEntries / rowsPerPage));
+		boolean showPagination = totalEntries > rowsPerPage;
+		if (showPagination) {
+			rows.add(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION, navigationAction(VersionedText.literal(""), press -> {}),
+					disabledNavigationAction(VersionedText.literal("")), navigationAction(VersionedText.literal(""), press -> {})));
+			listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new)) - 8;
+			rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
+		}
+		int pageCount = Math.max(1, (int) Math.ceil((double) Math.max(totalEntries, 1) / rowsPerPage));
+		if (showPagination) rows.set(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+				navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
+					if (page > 0) {
+						page--;
+						rebuild();
+					}
+				}),
+				disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
+				navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
+					if (page < pageCount - 1) {
+						page++;
+						rebuild();
+					}
+				})));
 		if (page >= pageCount) page = pageCount - 1;
-
 		int start = page * rowsPerPage;
 		for (int index = start; index < Math.min(totalEntries, start + rowsPerPage); index++) {
 			int y = listTop + (index - start) * ROW_HEIGHT;
@@ -83,39 +109,11 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			}
 			this.addRenderableWidget(row);
 		}
-
-		if (showPagination) {
-			List<ActionRow> rows = List.of(
-					actionRow(ActionAreaLayout.RowKind.NAVIGATION,
-							navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
-								if (page > 0) {
-									page--;
-									rebuild();
-								}
-							}),
-							disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
-							navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
-								if (page < pageCount - 1) {
-									page++;
-									rebuild();
-								}
-							})),
-						actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-								optionalAction(VersionedText.translatable("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this)))),
-						actionRow(ActionAreaLayout.RowKind.FOOTER,
-								secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
-								optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller)))));
-			List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new));
+		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new));
+		if (pageCount > 1) {
 			actionButtons.get(0).active = page > 0;
 			actionButtons.get(2).active = page < pageCount - 1;
-			return;
 		}
-		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY,
-				actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-						optionalAction(VersionedText.translatable("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this)))),
-				actionRow(ActionAreaLayout.RowKind.FOOTER,
-						secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
-						optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller)))));
 	}
 
 	private void clickPack(InstalledModpackController.Pack entry) {

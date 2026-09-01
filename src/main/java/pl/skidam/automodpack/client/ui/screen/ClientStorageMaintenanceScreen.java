@@ -48,12 +48,12 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		super.init();
 		int actionY = this.height - 28;
 		List<Button> buttons = addActionArea(PANEL_WIDTH, actionY,
-				actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.storage.verify"), button -> verify())),
-				actionRow(ActionAreaLayout.RowKind.FOOTER,
-						secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent()),
-						primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> compact())));
+				actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+						optionalAction(VersionedText.translatable("automodpack.storage.verify"), button -> verify()),
+						primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> compact())),
+				actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent())));
 		buttons.get(0).active = !busy && !closed;
-		buttons.get(2).active = !busy && !closed;
+		buttons.get(1).active = !busy && !closed;
 	}
 
 	private void verify() {

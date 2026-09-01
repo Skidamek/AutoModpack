@@ -144,19 +144,28 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 
 	private void openStorage() {
 		if (busy) return;
-		ScreenImpl.setScreen(new ModpackStorageScreen(this, controller, pack));
+		ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller));
 	}
 
 	private void remove() {
 		if (busy) return;
 		markBusy();
-		controller.remove(pack, this::released, () -> ScreenImpl.setScreen(new InstalledModpacksScreen(parent)));
+		controller.remove(pack, this::released, this::returnToList);
 	}
 
 	private void deactivate() {
 		if (busy) return;
 		markBusy();
-		controller.deactivate(pack, this::released);
+		controller.deactivate(pack, this::released, this::reopenOrList);
+	}
+
+	private void returnToList() {
+		ScreenImpl.setScreen(parent instanceof InstalledModpacksScreen list ? list : parent);
+	}
+
+	private void reopenOrList() {
+		InstalledModpackController.Pack next = controller.installedPack(pack.modpackId());
+		ScreenImpl.setScreen(next == null ? parent : new ModpackDetailsScreen(parent, controller, next));
 	}
 
 	private void released() {

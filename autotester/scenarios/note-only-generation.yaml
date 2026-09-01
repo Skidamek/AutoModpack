@@ -148,12 +148,12 @@ flow:
         - element: { text: Back, enabled: true }
   - do: click
     name: open per-pack storage actions
-    select: { text: Storage }
+    select: { text: Local storage }
   - do: wait_for
     name: show per-pack storage actions
     until:
       all:
-        - screen: ModpackStorageScreen
+        - screen: ClientStorageMaintenanceScreen
         - element: { text: Clean local storage, enabled: true }
   - do: screenshot
     name: capture per-pack storage actions
