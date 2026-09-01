@@ -99,8 +99,8 @@ class FakeBridge:
         self.preservation_restored = False
         self.preservation_copy_saved = False
         self.vault_claim_selected = False
+        self.vault_message: str | None = None
         self.storage_running = False
-        self.vault_claim_available = False
         self.baseline_snapshots: dict[Path, bytes] = {}
         self.first_install_archive_existing = False
         self.storage_verified = False
@@ -110,8 +110,8 @@ class FakeBridge:
         self.repair_applied = False
         self.error_parent = "details"
         self.selected_claim_path: str | None = None
+        self.selected_claim_pack: str | None = None
         self.repair_expected: dict[str, bytes] = {}
-        self.vault_parent = "details"
 
     # --- snapshot ---------------------------------------------------------
     def render_frame(self) -> None:
@@ -205,21 +205,18 @@ class FakeBridge:
                             {"id": 94, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
-            "pack_storage": {
-                "screenClass": "ModpackStorageScreen",
-                "buttons": [*([{"id": 79, "text": "Preserved files", "enabled": True, "visible": True}] if self.detail_pack is not None and self._claims(self._pack_id(self.detail_pack))[1] else []),
-                            {"id": 81, "text": "Clean local storage", "enabled": True, "visible": True},
-                            {"id": 82, "text": "Back", "enabled": True, "visible": True}],
-                "textFields": [],
-            },
             "preservation": {
                 "screenClass": "PreservationVaultScreen",
-                "buttons": [{"id": 83, "text": "config/amp-autotest-gamma.cfg", "enabled": True, "visible": any(claim.get("originalPath") == "config/amp-autotest-gamma.cfg" for claim in self._claims("packaaa")[1])},
-                            {"id": 84, "text": "Restore", "enabled": self.vault_claim_selected, "visible": True},
-                            {"id": 85, "text": "Save copy", "enabled": self.vault_claim_selected, "visible": True},
-                            {"id": 90, "text": "Delete", "enabled": bool(self.vault_claim_selected), "visible": True},
-                            {"id": 103, "text": "Next >", "enabled": True, "visible": True},
-                            {"id": 86, "text": "Back", "enabled": True, "visible": True}],
+                "buttons": [
+                    {"id": 83, "text": "amp-autotest-gamma.cfg", "enabled": True, "visible": self._claim_exists("packaaa", "config/amp-autotest-gamma.cfg")},
+                    {"id": 49, "text": "amp-autotest-conflict.jar", "enabled": True, "visible": self._claim_exists("packbbb", self.ctx.vars.get("same_path_conflict_path", "mods/amp-autotest-conflict.jar"))},
+                    {"id": 107, "text": "pack-shared-editable.txt", "enabled": True, "visible": self._claim_exists("packaaa", "config/pack-shared-editable.txt")},
+                    {"id": 84, "text": "Restore", "enabled": self._selected_claim_restorable(), "visible": True},
+                    {"id": 85, "text": "Save copy", "enabled": bool(self.vault_claim_selected), "visible": True},
+                    {"id": 90, "text": "Delete", "enabled": bool(self.vault_claim_selected), "visible": True},
+                    *([{"id": 108, "text": self.vault_message, "enabled": False, "visible": True}] if self.vault_message else []),
+                    {"id": 86, "text": "Back", "enabled": True, "visible": True},
+                ],
                 "textFields": [],
             },
             "storage": {
@@ -238,8 +235,7 @@ class FakeBridge:
                             {"id": 13, "text": "Save", "enabled": True, "visible": True},
                             {"id": 57, "text": "History", "enabled": True, "visible": True},
                             {"id": 66, "text": "Files", "enabled": True, "visible": True},
-                            {"id": 88, "text": "Back", "enabled": True, "visible": True},
-                            *([{"id": 43, "text": "Preserved files", "enabled": True, "visible": True}] if self._vault_conflict_available() else [])],
+                            {"id": 88, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "patch_history": {
@@ -269,15 +265,6 @@ class FakeBridge:
                 "screenClass": "ChangelogScreen",
                 "buttons": [{"id": 15, "text": "View all patch notes", "enabled": True, "visible": True},
                             {"id": 16, "text": "Back", "enabled": True, "visible": True}],
-                "textFields": [],
-            },
-            "vault_conflict": {
-                "screenClass": "PreservationVaultScreen",
-                "buttons": [{"id": 49, "text": "mods/amp-autotest-conflict.jar", "enabled": True, "visible": True},
-                            {"id": 44, "text": "Restore", "enabled": self.vault_claim_selected, "visible": True},
-                            {"id": 45, "text": "Save copy", "enabled": self.vault_claim_selected, "visible": True},
-                            {"id": 92, "text": "Delete", "enabled": bool(self.vault_claim_selected), "visible": True},
-                            {"id": 48, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "ingame": {"screenClass": None, "buttons": [{"id": 8, "text": "Multiplayer", "enabled": True, "visible": True}], "textFields": []},
@@ -488,31 +475,39 @@ class FakeBridge:
             self.screen = "content_patch_history"
         elif element_id == 16:
             self.screen = "restart"
-        elif element_id == 75:
-            self.screen = "pack_storage"
         elif element_id == 42:
             self._remove_active_pack()
             self.screen = "manager"
-        elif element_id == 43:
+        elif element_id == 105:
             self.vault_claim_selected = False
-            self.vault_parent = "details"
-            self.screen = "preservation" if self.detail_pack == "A" else "vault_conflict"
-        elif element_id == 49 and self.screen == "vault_conflict":
-            self.vault_claim_selected = True
-            self.selected_claim_path = "mods/amp-autotest-conflict.jar"
-            self.screen = "vault_conflict"
-        elif element_id == 44 and self.screen == "vault_conflict":
-            if self._active_pack_owns_selected_claim("packbbb"):
-                self.error_parent = "vault_conflict"
+            self.selected_claim_path = None
+            self.selected_claim_pack = None
+            self.vault_message = None
+            self.screen = "preservation"
+        elif element_id == 83 and self.screen == "preservation":
+            self._select_vault_claim("packaaa", "config/amp-autotest-gamma.cfg")
+        elif element_id == 49 and self.screen == "preservation":
+            self._select_vault_claim("packbbb", self.ctx.vars.get("same_path_conflict_path", "mods/amp-autotest-conflict.jar"))
+        elif element_id == 107 and self.screen == "preservation":
+            self._select_vault_claim("packaaa", "config/pack-shared-editable.txt")
+        elif element_id == 84 and self.screen == "preservation":
+            if self._active_pack_owns_selected_claim(self.selected_claim_pack):
+                self.error_parent = "preservation"
                 self.screen = "error"
             else:
-                self._restore_preservation_original()
-                self.screen = "vault_conflict"
-        elif element_id == 45 and self.screen == "vault_conflict":
-            self._save_preservation_copy()
-            self.screen = "vault_conflict"
-        elif element_id == 48 and self.screen == "vault_conflict":
-            self.screen = self.vault_parent
+                self._restore_selected_claim()
+        elif element_id == 85 and self.screen == "preservation":
+            self._save_selected_claim_copy()
+        elif element_id == 90 and self.screen == "preservation":
+            if self.vault_claim_selected == "delete-pending":
+                self._delete_selected_claim(self.selected_claim_pack)
+                self.vault_claim_selected = False
+                self.selected_claim_path = None
+                self.selected_claim_pack = None
+            else:
+                self.vault_claim_selected = "delete-pending"
+        elif element_id == 86 and self.screen == "preservation":
+            self.screen = "manager"
         elif element_id == 46:
             if self.screen == "manager":
                 self.storage_parent = "manager"
@@ -529,39 +524,6 @@ class FakeBridge:
                 self.screen = "error"
             else:
                 self.storage_verified = True
-        elif element_id == 79:
-            self.vault_claim_selected = False
-            self.vault_parent = "pack_storage"
-            self.screen = "preservation" if self.detail_pack == "A" else "vault_conflict"
-        elif element_id == 81:
-            self.storage_parent = "pack_storage"
-            self.screen = "storage"
-        elif element_id == 82:
-            self.screen = "details"
-        elif element_id == 83:
-            self.vault_claim_selected = True
-            self.selected_claim_path = "config/amp-autotest-gamma.cfg"
-            self.screen = "preservation"
-        elif element_id == 84:
-            if self._active_pack_owns_selected_claim("packaaa"):
-                self.error_parent = "preservation"
-                self.screen = "error"
-            else:
-                self._restore_pack_a_preservation_original()
-                self.screen = "preservation"
-        elif element_id == 85:
-            self._save_preservation_copy()
-            self.screen = "preservation"
-        elif element_id == 86:
-            self.screen = self.vault_parent
-        elif element_id == 103:
-            self.screen = "preservation"
-        elif element_id in (90, 92):
-            if self.vault_claim_selected == "delete-pending":
-                self._delete_selected_claim("packaaa" if self.screen == "preservation" else "packbbb")
-                self.vault_claim_selected = False
-            else:
-                self.vault_claim_selected = "delete-pending"
         elif element_id == 93:
             self.ctx.vars["fake_error_details_copied"] = True
         elif element_id == 94:
@@ -763,17 +725,7 @@ class FakeBridge:
         return False
 
     def _delete_selected_claim(self, pack_id: str) -> None:
-        manifest, claims = self._claims(pack_id)
-        if not claims:
-            return
-        selected = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), claims[0])
-        remaining = [claim for claim in claims if claim.get("claimId") != selected.get("claimId")]
-        if remaining:
-            manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": remaining}), encoding="utf-8")
-        else:
-            manifest.unlink(missing_ok=True)
-            if pack_id == "packaaa":
-                self.vault_claim_available = False
+        self._release_selected_claim(pack_id)
 
     def _compact_local_storage(self) -> None:
         """Keep the fake bridge focused on the UI; scenario assertions prove preservation."""
@@ -784,7 +736,6 @@ class FakeBridge:
         self.pack_removed = True
         self.pending_pack = None
         self.pack_b_files = []
-        self.vault_claim_available = False
         self.preservation_restored = False
         self.preservation_copy_saved = False
         self.vault_claim_selected = False
@@ -835,7 +786,6 @@ class FakeBridge:
         if self.selected_pack == "B":
             files = self.pack_b_files
         elif self.update_available:
-            self.vault_claim_available = True
             self._vault_claim("packaaa", "config/amp-autotest-gamma.cfg", b"amp-autotest-gamma-v1\n", "SERVER_REMOVAL")
             files = [(Path("config/amp-autotest-alpha.txt"), "amp-autotest-alpha-v2\n"),
                      (Path("config/amp-autotest-beta.json"), '{"id":"beta","value":43}'),
@@ -943,58 +893,80 @@ class FakeBridge:
                     f"root=GAME_DIR\npath={original_path}\nhash={digest}\nsize={len(payload)}\n")
         claim_id = hashlib.sha1(identity.encode()).hexdigest()
         claims = [claim for claim in claims if claim.get("claimId") != claim_id]
-        claims.append({"claimId": claim_id, "originalPath": original_path, "sourceRoot": "GAME_DIR", "objectHash": digest, "size": len(payload), "modpackId": pack_id, "generationId": generation_id, "reason": reason, "preservedAt": "2026-01-01T00:00:00Z", "status": "AVAILABLE"})
+        claims.append({"claimId": claim_id, "originalPath": original_path, "sourceRoot": "GAME_DIR", "objectHash": digest, "size": len(payload), "modpackId": pack_id, "generationId": generation_id, "reason": reason, "preservedAt": "2026-01-01T00:00:00Z"})
         manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": sorted(claims, key=lambda claim: claim["claimId"])}), encoding="utf-8")
         return cas_object(objects, digest)
 
-    def _vault_conflict_available(self) -> bool:
-        return self.selected_pack == "B" and self._conflict_claim_path().is_file()
+    def _claim_exists(self, pack_id: str, original_path: str) -> bool:
+        _manifest, claims = self._claims(pack_id)
+        return any(claim.get("originalPath") == original_path for claim in claims)
 
-    def _conflict_claim_path(self) -> Path:
-        return self.ctx.game_dir / "automodpack" / "client" / "preservation" / "packbbb" / "claims.json"
+    def _select_vault_claim(self, pack_id: str, original_path: str) -> None:
+        self.selected_claim_pack = pack_id
+        self.selected_claim_path = original_path
+        self.vault_claim_selected = True
+        self.vault_message = None
 
-    def _restore_preservation_original(self) -> None:
-        conflict_path = self._conflict_path()
-        if conflict_path is None or not self._conflict_claim_path().is_file():
+    def _selected_claim_restorable(self) -> bool:
+        if not self.vault_claim_selected or self.selected_claim_pack is None:
+            return False
+        return self.selected_pack == {"packaaa": "A", "packbbb": "B"}[self.selected_claim_pack]
+
+    def _release_selected_claim(self, pack_id: str) -> None:
+        manifest, claims = self._claims(pack_id)
+        remaining = [claim for claim in claims if claim.get("originalPath") != self.selected_claim_path]
+        if remaining:
+            manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": remaining}), encoding="utf-8")
+        else:
+            manifest.unlink(missing_ok=True)
+
+    def _restore_selected_claim(self) -> None:
+        if self.selected_claim_pack is None or self.selected_claim_path is None:
+            raise AssertionError("fake preservation restore requested without a selected claim")
+        _manifest, claims = self._claims(self.selected_claim_pack)
+        claim = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), None)
+        if claim is None:
             raise AssertionError("fake preservation restore requested without an available claim")
-        claim = json.loads(self._conflict_claim_path().read_text(encoding="utf-8"))["claims"][0]
-        payload = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
-        target = self.ctx.path(conflict_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(payload, target)
-        self.preservation_restored = True
-
-    def _restore_pack_a_preservation_original(self) -> None:
-        manifest = self.ctx.game_dir / "automodpack" / "client" / "preservation" / "packaaa" / "claims.json"
-        if not manifest.is_file():
-            raise AssertionError("fake preservation restore requested without an available Pack A claim")
-        claim = json.loads(manifest.read_text(encoding="utf-8"))["claims"][0]
         source = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
         destination = self.ctx.path(claim["originalPath"])
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
+        self._release_selected_claim(self.selected_claim_pack)
         self.preservation_restored = True
+        self.vault_message = f"Restored to {claim['originalPath']}"
+        self.vault_claim_selected = False
+        self.selected_claim_path = None
+        self.selected_claim_pack = None
 
-    def _save_preservation_copy(self) -> None:
-        for pack_id in ("packaaa", "packbbb"):
-            manifest = self.ctx.game_dir / "automodpack" / "client" / "preservation" / pack_id / "claims.json"
-            if not manifest.is_file():
-                continue
-            claims = json.loads(manifest.read_text(encoding="utf-8")).get("claims", [])
-            for claim in claims:
-                root = self.ctx.game_dir / "automodpack" / "recovered" / pack_id / claim["generationId"] / claim["claimId"]
-                destination = root / claim["originalPath"]
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                source = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
-                shutil.copy2(source, destination)
-                claim["status"] = "SAVED_COPY"
-            manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": claims}), encoding="utf-8")
+    def _save_selected_claim_copy(self) -> None:
+        if self.selected_claim_pack is None or self.selected_claim_path is None:
+            raise AssertionError("fake preservation save-copy requested without a selected claim")
+        _manifest, claims = self._claims(self.selected_claim_pack)
+        claim = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), None)
+        if claim is None:
+            raise AssertionError("fake preservation save-copy requested without an available claim")
+        root = self.ctx.game_dir / "automodpack" / "recovered" / self.selected_claim_pack / claim["generationId"] / claim["claimId"]
+        destination = root / claim["originalPath"]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        source = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
+        shutil.copy2(source, destination)
+        self._release_selected_claim(self.selected_claim_pack)
         self.preservation_copy_saved = True
+        self.vault_message = f"Saved a copy to {destination.relative_to(self.ctx.game_dir).as_posix()}"
+        self.vault_claim_selected = False
+        self.selected_claim_path = None
+        self.selected_claim_pack = None
+
+    def _preserved_claim_count(self) -> int:
+        return sum(len(self._claims(pack_id)[1]) for pack_id in ("packaaa", "packbbb"))
 
     def _manager_buttons(self) -> list[dict]:
+        count = self._preserved_claim_count()
+        preserved = {"id": 105, "text": f"{count} preserved files" if count else "Preserved files", "enabled": True, "visible": True}
         if self.pack_removed:
             return [{"id": 47, "text": "Back", "enabled": True, "visible": True},
-                    {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
+                    {"id": 46, "text": "Local storage", "enabled": True, "visible": True},
+                    preserved]
         if not self.secondary_pack:
             rows = [{"id": 9, "text": f"Pack A  [{'active' if self.selected_pack == 'A' else 'switch'}]  connected", "enabled": True, "visible": True}]
         else:
@@ -1003,7 +975,8 @@ class FakeBridge:
             rows = [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
                     {"id": 11, "text": f"Pack B  [{b_state}]  local only", "enabled": True, "visible": True}]
         return rows + [{"id": 47, "text": "Back", "enabled": True, "visible": True},
-                       {"id": 46, "text": "Local storage", "enabled": True, "visible": True}]
+                       {"id": 46, "text": "Local storage", "enabled": True, "visible": True},
+                       preserved]
 
     def _details_buttons(self) -> list[dict]:
         pack = self.detail_pack or self.selected_pack
@@ -1012,9 +985,7 @@ class FakeBridge:
                 *([{"id": 70, "text": "Repair", "enabled": True, "visible": True}] if active else []),
                 {"id": 72, "text": "Features", "enabled": True, "visible": True},
                 {"id": 73, "text": "History", "enabled": True, "visible": True},
-                {"id": 43, "text": "Preserved files", "enabled": True, "visible": True},
                 {"id": 74, "text": "Files", "enabled": True, "visible": True},
-                {"id": 75, "text": "Storage", "enabled": True, "visible": True},
                 *([{"id": 76, "text": "Deactivate", "enabled": True, "visible": True}] if active else []),
                 {"id": 77, "text": "Remove", "enabled": True, "visible": True},
                 {"id": 78, "text": "Back", "enabled": True, "visible": True}]

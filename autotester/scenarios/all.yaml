@@ -378,7 +378,16 @@ flow:
         - screen: ModpackDetailsScreen
         - element: { text: Repair, enabled: true }
   - do: click
-    name: open the owned conflict in the preservation vault from Pack B details
+    name: return to the installed pack list before preserved files
+    select: { text: Back }
+  - do: wait_for
+    name: show preserved files on the installed pack list
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Preserved files }
+  - do: click
+    name: open the owned conflict in preserved files from the pack list
     select: { text: Preserved files }
   - do: click
     name: select the still-owned local conflict
@@ -397,43 +406,18 @@ flow:
     name: return to the same preservation selection
     select: { text: Back }
   - do: wait_for
-    name: offer save-copy fallback after the unsafe restore
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: Save copy, enabled: true }
-  - do: click
-    name: save the owned conflict without touching its original path
-    select: { text: Save copy }
-  - do: wait_for
-    name: retain the claim after saving a copy
+    name: keep the owned conflict in preserved files after the unsafe restore
     until:
       all:
         - screen: PreservationVaultScreen
         - element: { text: amp-autotest-conflict.jar, enabled: true }
-  - do: assert_preservation_claim
-    name: verify save-copy status stayed durable
-    packId: packbbb
-    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
-    status: SAVED_COPY
-  - do: click
-    name: select the saved conflict for delete-confirmation testing
-    select: { text: amp-autotest-conflict.jar }
-  - do: click
-    name: arm preservation deletion without deleting yet
-    select: { text: Delete }
-  - do: click
-    name: cancel pending deletion by selecting the claim again
-    select: { text: amp-autotest-conflict.jar }
+        - element: { text: Save copy, enabled: true }
   - do: click
     name: leave the preservation vault
     select: { text: Back }
   - do: wait_for
-    name: return to Pack B details from the vault
-    until: { screen: ModpackDetailsScreen }
-  - do: click
-    name: leave Pack B details
-    select: { text: Back }
+    name: return to the installed pack list from the vault
+    until: { screen: InstalledModpacksScreen }
   - do: click
     name: leave the installed pack manager
     select: { text: Back }
@@ -580,12 +564,11 @@ flow:
     name: open Pack B v2 details
     select: { text: Pack B }
   - do: wait_for
-    name: show Pack B preservation action
+    name: show Pack B history action
     until:
       all:
         - screen: ModpackDetailsScreen
         - element: { text: History, enabled: true }
-        - element: { text: Preserved files, enabled: true }
   - do: click
     name: open Pack B generation history from multiplayer settings
     select: { text: History }
@@ -613,6 +596,15 @@ flow:
   - do: wait_for
     name: return to Pack B details after history
     until: { screen: ModpackDetailsScreen }
+  - do: click
+    name: return to the installed pack list before preserved files restore
+    select: { text: Back }
+  - do: wait_for
+    name: show preserved files on the pack list after history
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Preserved files }
   - do: screenshot
     name: capture Pack B preservation action
     file: all-preservation-settings
@@ -634,6 +626,13 @@ flow:
   - do: click
     name: restore the no-longer-owned local conflict
     select: { text: Restore }
+  - do: wait_for
+    name: show the restored path and drop the claim from the list
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - element: { text: Restored to mods/amp-autotest-conflict.jar }
+        - no_element: { text: amp-autotest-conflict.jar, enabled: true }
   - do: wait_file
     name: wait for the restored local mod
     path: mods/amp-autotest-conflict.jar
@@ -642,17 +641,12 @@ flow:
     path: mods/amp-autotest-conflict.jar
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
   - do: assert_preservation_claim
-    name: verify the restored preservation claim remains durable in the vault
+    name: verify restore released the preservation claim
     packId: packbbb
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
+    present: false
   - do: click
-    name: return from preservation to Pack B details
-    select: { text: Back }
-  - do: wait_for
-    name: return to Pack B details after restore
-    until: { screen: ModpackDetailsScreen }
-  - do: click
-    name: return to the installed pack manager
+    name: return from preservation to the installed pack list
     select: { text: Back }
   - do: wait_for
     name: return to the installed pack list after restore
@@ -694,9 +688,10 @@ flow:
     path: mods/amp-autotest-conflict.jar
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
   - do: assert_preservation_claim
-    name: verify cleanup retained the durable preservation claim
+    name: verify cleanup did not recreate the consumed preservation claim
     packId: packbbb
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
+    present: false
   - do: screenshot
     name: capture client local storage after cleanup
     file: all-local-storage-after
@@ -836,17 +831,9 @@ flow:
       all:
         - screen: InstalledModpacksScreen
         - element: { text: Pack A, enabled: true }
+        - element: { text: Preserved files }
   - do: click
-    name: open Pack A details for recovered
-    select: { text: Pack A }
-  - do: wait_for
-    name: show Pack A storage actions
-    until:
-      all:
-        - screen: ModpackDetailsScreen
-        - element: { text: Storage, enabled: true }
-  - do: click
-    name: open the recovered archive from Pack A details
+    name: open the recovered archive from the pack list
     select: { text: Preserved files }
   - do: wait_for
     name: show the removed file as recoverable
@@ -858,31 +845,15 @@ flow:
     name: capture available recovered files
     file: all-recovered-available
   - do: click
-    name: select the removed file
-    select: { text: amp-autotest-gamma.cfg }
-  - do: click
-    name: save a copy of the removed file
-    select: { text: Save copy }
+    name: return to the pack list with the removed-file claim still held
+    select: { text: Back }
   - do: wait_for
-    name: finish saving the removed file copy
-    timeout: 30s
-    until: { screen: PreservationVaultScreen }
-  - do: sleep
-    name: render the archived removed file
-    duration: 1s
-  - do: screenshot
-    name: capture archived recovered files
-    file: all-recovered-archived
-  - do: assert_preservation_claim
-    name: verify the removed-file copy updated the durable claim
-    packId: "${bootstrap_modpack_id}"
-    originalPath: config/amp-autotest-gamma.cfg
-    status: SAVED_COPY
+    name: return to the installed pack list before corrupting preservation bytes
+    until: { screen: InstalledModpacksScreen }
   - do: mutate_preservation_object
-    name: corrupt the removed-file CAS object while its saved copy remains valid
+    name: corrupt the removed-file CAS object while its claim remains
     packId: "${bootstrap_modpack_id}"
     originalPath: config/amp-autotest-gamma.cfg
-    status: SAVED_COPY
     action: corrupt
   - do: mutate_active_object
     name: corrupt a current CAS object behind the active projection
@@ -904,12 +875,6 @@ flow:
     name: remove the live copy for the unavailable-byte branch
     path: config/amp-autotest-delta.txt
     action: delete
-  - do: click
-    name: return to Pack A details with deliberate corruption present
-    select: { text: Back }
-  - do: click
-    name: return to the installed pack manager before storage verification
-    select: { text: Back }
   - do: click
     name: open client storage verification with corrupt required preservation bytes
     select: { text: Local storage }
@@ -1040,10 +1005,10 @@ flow:
     name: verify repair removed the restored conflict only after consent
     that: { file_gone: mods/amp-autotest-conflict.jar }
   - do: assert_preservation_claim
-    name: verify repair reconstructed the removed-file claim CAS object
+    name: verify repair leaves the unreconstructable preserved bytes flagged
     packId: "${bootstrap_modpack_id}"
     originalPath: config/amp-autotest-gamma.cfg
-    status: SAVED_COPY
+    objectValid: false
   - do: assert_preservation_claim
     name: verify editable reset preserved the player copy
     packId: "${bootstrap_modpack_id}"
@@ -1080,6 +1045,38 @@ flow:
   - use: open_multiplayer
   - use: open_pack_manager
   - do: click
+    name: open the vault to discard the unrecoverable preserved file
+    select: { text: Preserved files }
+  - do: click
+    name: select the corrupted preserved file
+    select: { text: amp-autotest-gamma.cfg }
+  - do: click
+    name: arm deletion of the corrupted preserved file
+    select: { text: Delete }
+  - do: click
+    name: cancel the deletion by reselecting the file
+    select: { text: amp-autotest-gamma.cfg }
+  - do: click
+    name: arm deletion of the corrupted preserved file again
+    select: { text: Delete }
+  - do: click
+    name: discard the corrupted preserved file on the second click
+    select: { text: Delete }
+  - do: wait_for
+    name: drop the discarded preserved file from the vault
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - no_element: { text: amp-autotest-gamma.cfg, enabled: true }
+  - do: assert_preservation_claim
+    name: verify the discard released the corrupted preserved claim
+    packId: "${bootstrap_modpack_id}"
+    originalPath: config/amp-autotest-gamma.cfg
+    present: false
+  - do: click
+    name: return to the pack list after the discard
+    select: { text: Back }
+  - do: click
     name: verify repaired client storage
     select: { text: Local storage }
   - do: click
@@ -1099,53 +1096,34 @@ flow:
     name: return to the manager after successful verification
     select: { text: Back }
   - do: click
-    name: open Pack A to delete one repaired claim
-    select: { text: Pack A }
-  - do: click
     name: reopen the preservation vault after repair
     select: { text: Preserved files }
   - do: wait_for
-    name: wait for the vault listing to expose its pager
+    name: show the surviving editable-reset claim
     timeout: 30s
-    until:
-      any:
-        - element: { text: amp-autotest-gamma.cfg, visible: true }
-        - element: { text: "Next >", enabled: true }
-  - do: click
-    name: browse forward to the removed-file claim page
-    select: { text: "Next >" }
-    when: { no_element: { text: amp-autotest-gamma.cfg, visible: true } }
-    repeat: 12
-  - do: click
-    name: select the removed-file claim for deletion
-    select: { text: amp-autotest-gamma.cfg }
-  - do: click
-    name: arm removed-file claim deletion
-    select: { text: Delete }
-  - do: click
-    name: cancel the first deletion attempt by reselecting
-    select: { text: amp-autotest-gamma.cfg }
-  - do: click
-    name: arm removed-file claim deletion again
-    select: { text: Delete }
-  - do: click
-    name: complete removed-file claim deletion on the second click
-    select: { text: Delete }
-  - do: wait_for
-    name: wait for explicit vault deletion to finish
     until:
       all:
         - screen: PreservationVaultScreen
-        - no_element: { text: amp-autotest-gamma.cfg, visible: true }
-  - do: assert_preservation_claim
-    name: verify explicit deletion removed only the server-removal claim
-    packId: "${bootstrap_modpack_id}"
-    originalPath: config/amp-autotest-gamma.cfg
-    reason: SERVER_REMOVAL
-    present: false
+        - element: { text: pack-shared-editable.txt, enabled: true }
   - do: click
-    name: return to Pack A details after deletion
-    select: { text: Back }
+    name: select the editable-reset claim to save a copy
+    select: { text: pack-shared-editable.txt }
+  - do: click
+    name: save a copy of the editable-reset claim
+    select: { text: Save copy }
+  - do: wait_for
+    name: show the saved copy path and drop the editable-reset claim
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - element: { text: Saved a copy to automodpack/recovered/ }
+        - no_element: { text: pack-shared-editable.txt, enabled: true }
+  - do: assert_preservation_claim
+    name: verify save-copy released the editable-reset claim
+    packId: "${bootstrap_modpack_id}"
+    originalPath: config/pack-shared-editable.txt
+    reason: EDITABLE_RESET
+    present: false
   - do: click
     name: return to the installed pack manager after deletion
     select: { text: Back }

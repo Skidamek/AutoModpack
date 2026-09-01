@@ -45,19 +45,12 @@ public final class PreservationVault {
 		LOCAL_DRIFT
 	}
 
-	public enum Status {
-		AVAILABLE,
-		RESTORED,
-		SAVED_COPY
-	}
-
 	public record Claim(String claimId, String originalPath, Root sourceRoot, String objectHash, long size, String modpackId, String generationId, Reason reason,
-			Instant preservedAt, Status status) {
+			Instant preservedAt) {
 		public Claim {
 			Objects.requireNonNull(sourceRoot, "source root");
 			Objects.requireNonNull(reason, "preservation reason");
 			Objects.requireNonNull(preservedAt, "preservation time");
-			Objects.requireNonNull(status, "preservation status");
 		}
 	}
 
@@ -113,7 +106,6 @@ public final class PreservationVault {
 				claim.generationId = generation;
 				claim.reason = normalizedReason.name();
 				claim.preservedAt = time.toString();
-				claim.status = Status.AVAILABLE.name();
 				fields.claims = new ArrayList<>(fields.claims);
 				fields.claims.add(claim);
 				fields.claims.sort(CLAIM_ORDER);
@@ -220,7 +212,7 @@ public final class PreservationVault {
 		return List.copyOf(snapshots);
 	}
 
-	/** Restores to the original game path only when the same pack is active, the path is unowned, and no different file would be overwritten. */
+	/** Restores to the original game path only when the same pack is active, the path is unowned, and no different file would be overwritten. Success releases the claim. */
 	public static Path restoreOriginal(ClientStorage storage, String modpackId, String claimId) throws IOException {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
@@ -232,13 +224,13 @@ public final class PreservationVault {
 				requireActiveUnownedPath(storage, pack, claim.originalPath);
 				Path destination = storage.gamePath(claim.originalPath);
 				copyWithoutOverwrite(storage.gameDirectory(), object(storage, claim.objectHash), destination, claim.size, claim.objectHash, cache);
-				setStatus(storage, pack, fields, claim, Status.RESTORED);
+				releaseClaim(storage, pack, fields, id);
 				return destination;
 			}
 		}
 	}
 
-	/** Saves a deterministic copy without changing the active modpack or consuming the claim. */
+	/** Saves a deterministic copy without changing the active modpack. Success releases the claim. */
 	public static Path saveCopy(ClientStorage storage, String modpackId, String claimId) throws IOException {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
@@ -249,7 +241,7 @@ public final class PreservationVault {
 				Path root = storage.restoredClaimDirectory(pack, claim.generationId, id);
 				Path destination = LogicalPath.resolve(root, claim.originalPath);
 				copyWithoutOverwrite(storage.gameDirectory(), object(storage, claim.objectHash), destination, claim.size, claim.objectHash, cache);
-				setStatus(storage, pack, fields, claim, Status.SAVED_COPY);
+				releaseClaim(storage, pack, fields, id);
 				return destination;
 			}
 		}
@@ -262,8 +254,7 @@ public final class PreservationVault {
 		synchronized (MUTATION_LOCK) {
 			ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 			requireClaim(fields, id);
-			fields.claims = fields.claims.stream().filter(claim -> !id.equals(claim.claimId)).toList();
-			write(storage, pack, fields);
+			releaseClaim(storage, pack, fields, id);
 		}
 	}
 
@@ -298,10 +289,8 @@ public final class PreservationVault {
 		if (!FileIntegrity.matches(destination, size, hash, cache)) throw new IOException("Restored file failed verification: " + destination);
 	}
 
-	private static void setStatus(ClientStorage storage, String modpackId, ClientStorageJsons.ClientPreservationVaultFields fields,
-			ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim, Status status) throws IOException {
-		if (status.name().equals(claim.status)) return;
-		claim.status = status.name();
+	private static void releaseClaim(ClientStorage storage, String modpackId, ClientStorageJsons.ClientPreservationVaultFields fields, String claimId) throws IOException {
+		fields.claims = fields.claims.stream().filter(claim -> !claimId.equals(claim.claimId)).toList();
 		write(storage, modpackId, fields);
 	}
 
@@ -358,11 +347,9 @@ public final class PreservationVault {
 		String path = requirePath(fields.originalPath);
 		Root root;
 		Reason reason;
-		Status status;
 		try {
 			root = requireRestorableRoot(Root.valueOf(fields.sourceRoot));
 			reason = Reason.valueOf(fields.reason);
-			status = Status.valueOf(fields.status);
 		} catch (RuntimeException e) {
 			throw new IOException("Preservation claim classification is invalid", e);
 		}
@@ -376,7 +363,7 @@ public final class PreservationVault {
 		} catch (RuntimeException e) {
 			throw new IOException("Preservation timestamp is invalid", e);
 		}
-		return new Claim(id, path, root, hash, fields.size, pack, generation, reason, time, status);
+		return new Claim(id, path, root, hash, fields.size, pack, generation, reason, time);
 	}
 
 	private static String claimId(String modpackId, String generationId, Reason reason, Root sourceRoot, String path, String hash, long size) {

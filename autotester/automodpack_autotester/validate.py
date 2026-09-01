@@ -20,7 +20,6 @@ _COUNT_FIELDS = ("count", "min_count", "max_count")
 _REMOTE_MOD_FIELDS = {"url", "sha512", "name"}
 _SHA512 = re.compile(r"[0-9a-fA-F]{128}")
 _PRESERVATION_REASONS = {"SERVER_REMOVAL", "MODPACK_REMOVAL", "MODPACK_DEACTIVATION", "LOCAL_CONFLICT", "PLAYER_CONSENT", "STRICT_REPAIR", "EDITABLE_RESET", "LOCAL_DRIFT"}
-_PRESERVATION_STATUSES = {"AVAILABLE", "RESTORED", "SAVED_COPY"}
 _RELEASE_GATE_CAPABILITIES = frozenset({
     "bootstrap",
     "groups",
@@ -218,8 +217,6 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                     problems.append(f"{label}.originalPath: expected a non-empty relative path")
                 if verb in ("assert_preservation_claim", "mutate_preservation_object") and "reason" in step and step["reason"] not in _PRESERVATION_REASONS:
                     problems.append(f"{label}.reason: unknown preservation reason {step['reason']!r}")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "status" in step and step["status"] not in _PRESERVATION_STATUSES:
-                    problems.append(f"{label}.status: unknown preservation status {step['status']!r}")
                 if verb in ("mutate_client_file", "mutate_active_object", "mutate_preservation_object") and step.get("action") not in ("corrupt", "delete"):
                     problems.append(f"{label}.action: expected 'corrupt' or 'delete'")
                 for field in ("present", "valid", "objectValid"):

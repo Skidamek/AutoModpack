@@ -438,7 +438,6 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
 
     # Storage verification returns to the same screen after a corrupt claimed object fails.
     object_path = bridge._vault_claim("packaaa", "config/amp-autotest-gamma.cfg", b"gamma", "SERVER_REMOVAL")
-    bridge.vault_claim_available = True
     bridge.screen = "storage"
     bridge.click(91)
     assert bridge.storage_verified
