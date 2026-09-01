@@ -182,6 +182,8 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		y += 14;
 		y += 12;
 		y += 12;
+		if (pack.connectionAvailable()) y += 12;
+		y += 12;
 		return y + ActionAreaLayout.GAP;
 	}
 
@@ -225,6 +227,16 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		y += 12;
 		String contents = VersionedText.translatable("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(), UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes())).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contents, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		y += 12;
+		if (pack.connectionDetail() != null) {
+			String connection = VersionedText.translatable("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail()).getString();
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, connection, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+			y += 12;
+		}
+		String generationId = pack.record().metadata().generationId();
+		String generation = VersionedText.translatable("automodpack.packDetails.generation", generationId.substring(0, Math.min(generationId.length(), 7)), UiFormat.formatInstant(pack.record().metadata().createdAt())).getString();
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, generation, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		showHoverTooltip(matrices, VersionedText.literal(generationId), this.width / 2 - this.font.width(generation) / 2, y, this.font.width(generation), mouseX, mouseY);
 		if (busyVisible) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
 	}
 
