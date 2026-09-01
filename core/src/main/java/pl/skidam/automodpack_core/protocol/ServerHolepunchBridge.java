@@ -20,7 +20,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
@@ -37,9 +36,6 @@ import pl.skidam.mcholepunch.MinecraftProtocol;
 import pl.skidam.mcholepunch.server.HolepunchServerRegistry;
 
 public final class ServerHolepunchBridge {
-	// Marks vanilla Connections whose login listener the holepunch takeover detached: their close is
-	// owned by the takeover, so vanilla teardown must stay silent. See HolepunchConnectionMixin.
-	public static final AttributeKey<Boolean> DETACHED_MARKER = AttributeKey.valueOf("DETACHED_MARKER");
 	private static final int EVENT_LOOP_TICK_MILLIS = 10;
 	private static final int MAX_PUMP_PASSES = 1024;
 	private static final Set<HolepunchSocket> sockets = ConcurrentHashMap.newKeySet();
