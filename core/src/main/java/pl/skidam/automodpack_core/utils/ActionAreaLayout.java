@@ -55,18 +55,17 @@ public final class ActionAreaLayout {
 	/**
 	 * Lays rows out from top to bottom. Every visible row fills the rail with an even split through a
 	 * 4px seam; leftover pixels go to the last button so the row's right edge equals left + width.
+	 * A lone FOOTER action heading the area keeps the canonical lone-button width, centered in the rail.
 	 */
 	public static Layout fromTop(int left, int top, int width, int rowGap, List<Row> rows) {
 		int safeWidth = Math.max(1, width);
 		int safeGap = Math.max(0, rowGap);
 		List<Placement> placements = new ArrayList<>();
 		int cursor = top;
-		boolean firstRow = true;
 		for (Row row : rows) {
 			if (row.actions().isEmpty()) continue;
-			if (!firstRow) cursor += safeGap;
-			firstRow = false;
-			placements.addAll(layoutRow(left, cursor, safeWidth, row));
+			if (!placements.isEmpty()) cursor += safeGap;
+			placements.addAll(placements.isEmpty() && row.kind() == RowKind.FOOTER && row.actions().size() == 1 ? layoutLoneFooter(left, cursor, safeWidth, row) : layoutRow(left, cursor, safeWidth, row));
 			cursor += BUTTON_HEIGHT;
 		}
 		return new Layout(placements, top, cursor);
@@ -86,7 +85,7 @@ public final class ActionAreaLayout {
 	/**
 	 * Splits one rail among the row's buttons with a 4px seam between neighbors. Widths stay equal
 	 * except the last button absorbs the remainder so the right edge of the rail is exact. A lone
-	 * row fills the rail, including a lone FOOTER action.
+	 * row fills the rail.
 	 */
 	private static List<Placement> layoutRow(int left, int top, int width, Row row) {
 		List<Action> actions = row.actions();
@@ -103,5 +102,11 @@ public final class ActionAreaLayout {
 			x += buttonWidth + SEAM;
 		}
 		return placements;
+	}
+
+	private static List<Placement> layoutLoneFooter(int left, int top, int width, Row row) {
+		Action action = row.actions().get(0);
+		int buttonWidth = Math.min(LONE_BUTTON, width);
+		return List.of(new Placement(action.id(), left + (width - buttonWidth) / 2, top, buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
 	}
 }

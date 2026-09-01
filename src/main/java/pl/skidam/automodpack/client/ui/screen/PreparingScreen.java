@@ -19,7 +19,7 @@ public class PreparingScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		if (onCancel == null) return;
-		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height / 2 + 56, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> onCancel.run())));
 	}
 

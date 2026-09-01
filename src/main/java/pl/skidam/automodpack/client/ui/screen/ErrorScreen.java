@@ -64,7 +64,7 @@ public class ErrorScreen extends VersionedScreen {
 					actionRow(ActionAreaLayout.RowKind.FOOTER,
 							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		}
-		List<Button> buttons = this.addActionArea(310, this.height - 28, rows.toArray(ActionRow[]::new));
+		List<Button> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
 		if (request.retryAction() != null) {
 			retryButton = buttons.get(0);
 			logsButton = buttons.get(1);

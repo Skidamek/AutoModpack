@@ -141,8 +141,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 
 	private MutableComponent rowLabel(InstalledModpackController.Pack entry, int width) {
 		// State is carried by color, not bracket markers: green = active pack, white = installed pack.
-		String connection = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.connected" : "automodpack.packManager.localRecord").getString();
-		return VersionedText.literal(truncateToWidth(this.font, entry.name() + "  " + connection, width - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
+		String source = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal").getString();
+		return VersionedText.literal(truncateToWidth(this.font, entry.name() + " · " + source, width - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
 	}
 
 	private void rebuild() {

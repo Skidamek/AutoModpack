@@ -46,8 +46,35 @@ class ActionAreaLayoutTest {
 	}
 
 	@Test
-	void loneFooterOn310FillsTheRail() {
+	void loneFooterOn310IsLoneButtonWideAndCentered() {
 		ActionAreaLayout.Layout layout = ActionAreaLayout.fromTop(LEFT, 0, 310, ActionAreaLayout.GAP, List.of(row(ActionAreaLayout.RowKind.FOOTER, 1)));
+
+		ActionAreaLayout.Placement placement = layout.placements().get(0);
+		assertEquals(ActionAreaLayout.LONE_BUTTON, placement.width());
+		assertEquals(LEFT + 55, placement.x());
+	}
+
+	@Test
+	void loneFooterOnNarrowRailFillsTheRail() {
+		ActionAreaLayout.Layout layout = ActionAreaLayout.fromTop(LEFT, 0, 180, ActionAreaLayout.GAP, List.of(row(ActionAreaLayout.RowKind.FOOTER, 1)));
+
+		ActionAreaLayout.Placement placement = layout.placements().get(0);
+		assertEquals(180, placement.width());
+		assertEquals(LEFT, placement.x());
+	}
+
+	@Test
+	void footerRowAfterAuxiliaryRowStillFillsTheRail() {
+		ActionAreaLayout.Layout layout = ActionAreaLayout.fromTop(LEFT, 0, 310, ActionAreaLayout.GAP, List.of(row(ActionAreaLayout.RowKind.AUXILIARY, 1), row(ActionAreaLayout.RowKind.FOOTER, 1)));
+
+		ActionAreaLayout.Placement placement = layout.placements().get(1);
+		assertEquals(310, placement.width());
+		assertEquals(LEFT, placement.x());
+	}
+
+	@Test
+	void loneAuxiliaryRowStillFillsTheRail() {
+		ActionAreaLayout.Layout layout = ActionAreaLayout.fromTop(LEFT, 0, 310, ActionAreaLayout.GAP, List.of(row(ActionAreaLayout.RowKind.AUXILIARY, 1)));
 
 		ActionAreaLayout.Placement placement = layout.placements().get(0);
 		assertEquals(310, placement.width());
