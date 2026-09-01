@@ -10,6 +10,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
@@ -179,7 +180,6 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		int y = 28;
 		y += 16;
 		y += 14;
-		y += 14;
 		y += 12;
 		y += 12;
 		return y + ActionAreaLayout.GAP;
@@ -210,16 +210,14 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		int width = panelWidth(PANEL_WIDTH);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(pack.name()).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
+		MutableComponent name = VersionedText.literal(pack.name()).withStyle(ChatFormatting.BOLD);
+		drawCenteredTextWithShadow(matrices, this.font, name, this.width / 2, 12, TextColors.WHITE);
+		if (pack.connectionAvailable()) showHoverTooltip(matrices, VersionedText.translatable("automodpack.packDetails.server", pack.connectionOrigin()), this.width / 2 - this.font.width(name) / 2, 12, this.font.width(name), mouseX, mouseY);
 		int y = 28;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += 16;
 		String state = pack.active() ? VersionedText.translatable("automodpack.packManager.active", pack.name()).getString() : VersionedText.translatable("automodpack.packManager.noActive").getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,
-				TextColors.WHITE);
-		y += 14;
-		String server = pack.connectionAvailable() ? VersionedText.translatable("automodpack.packDetails.server", pack.connectionOrigin()).getString() : VersionedText.translatable("automodpack.packDetails.localCopy").getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, server, width)).withStyle(pack.connectionAvailable() ? ChatFormatting.AQUA : ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += 14;
 		String version = VersionedText.translatable("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion()).getString();
