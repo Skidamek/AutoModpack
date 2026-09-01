@@ -38,6 +38,7 @@ import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -89,7 +90,7 @@ final class InstalledModpackController {
 	}
 
 	Pack pack(GenerationRecord record) {
-		return pack(record, record.manifest().modpackId().equals(activeModpackId()), hasConnection(record.manifest().modpackId()));
+		return pack(record, record.manifest().modpackId().equals(activeModpackId()), connectionOrigin(record.manifest().modpackId()));
 	}
 
 	void switchSelection(GenerationRecord record, SelectionIntent expected, SelectionIntent target, String modpackName, Runnable released) {
@@ -105,7 +106,7 @@ final class InstalledModpackController {
 		try {
 			return new ClientGenerationStore(storage).installedRecords().stream()
 					.sorted(Comparator.comparing(InstalledModpackController::name, String.CASE_INSENSITIVE_ORDER))
-					.map(record -> pack(record, record.manifest().modpackId().equals(activeId), hasConnection(record.manifest().modpackId())))
+					.map(record -> pack(record, record.manifest().modpackId().equals(activeId), connectionOrigin(record.manifest().modpackId())))
 					.toList();
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
@@ -150,17 +151,6 @@ final class InstalledModpackController {
 
 	void deletePreservedFile(String modpackId, String claimId) throws IOException {
 		PreservationVault.delete(storage, modpackId, claimId);
-	}
-
-	boolean hasHistory(Pack pack) {
-		try {
-			String generationId = historyGenerationId(pack);
-			ClientGenerationStore generationStore = new ClientGenerationStore(storage);
-			boolean indexedHistory = generationStore.historyIndex(generationId).map(index -> index.entries().size() > 1).orElse(false);
-			return indexedHistory || generationStore.availableLineage(pack.modpackId(), generationId).size() > 1 || GenerationPatchNoteHistory.containsNotes(generationStore.patchNotesHistory(generationId));
-		} catch (IOException | RuntimeException e) {
-			return false;
-		}
 	}
 
 	void update(Pack pack, Consumer<Boolean> completed) {
@@ -259,13 +249,24 @@ final class InstalledModpackController {
 		});
 	}
 
+	void openPatchNotes(Screen parent, Pack pack, Runnable released) {
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			try {
+				List<GenerationPatchNoteHistory.Entry> notes = new ClientGenerationStore(storage).patchNotesHistory(historyGenerationId(pack));
+				releaseOnClient(() -> ScreenImpl.setScreen(new PatchNotesHistoryScreen(parent, notes, pack.name(), released)));
+			} catch (Exception e) {
+				releaseOnClient(released);
+				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+			}
+		});
+	}
+
 	void openFiles(Screen parent, Pack pack) {
 		Map<String, String> featureNames = new TreeMap<>();
 		pack.record().manifest().groups().forEach((groupId, group) -> featureNames.put(groupId,
 				group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : group.displayName()));
 		ScreenImpl.setScreen(new ChangeBrowserScreen(parent, VersionedText.translatable("automodpack.files.title", pack.name()),
-				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), featureNames,
-				new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.storage.verify"), screen -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(screen, this)), true)));
+				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), featureNames));
 	}
 
 	void openPreservedFiles(Screen parent, Runnable released) {
@@ -354,13 +355,13 @@ final class InstalledModpackController {
 		}
 	}
 
-	private boolean hasConnection(String modpackId) {
+	private String connectionOrigin(String modpackId) {
 		try {
 			ConnectionJsons.ConnectionRecordFields fields = ConnectionStore.read(storage, modpackId);
-			return fields.connection != null && fields.connection.isComplete();
+			return fields.connection != null && fields.connection.isComplete() ? PackConfirmCopy.displayOrigin(AddressHelpers.formatAddress(fields.connection.origin)) : null;
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
-			return false;
+			return null;
 		}
 	}
 
@@ -376,12 +377,16 @@ final class InstalledModpackController {
 		ScreenManager.failure(FailureRequest.of(cause, messageKey, category, FailureDestination.CURRENT_SCREEN, null));
 	}
 
-	private static Pack pack(GenerationRecord record, boolean active, boolean connectionAvailable) {
+	private static Pack pack(GenerationRecord record, boolean active, String connectionOrigin) {
 		ChangeBrowserProjection.Aggregate aggregate = ChangeBrowserProjection.project(ChangeSet.catalogue(record.manifest()), ChangeBrowserProjection.Mode.LIST).total();
-		return new Pack(record, active, connectionAvailable, Math.toIntExact(aggregate.fileCount()), aggregate.byteCount());
+		return new Pack(record, active, connectionOrigin, Math.toIntExact(aggregate.fileCount()), aggregate.byteCount());
 	}
 
-	record Pack(GenerationRecord record, boolean active, boolean connectionAvailable, int fileCount, long fileBytes) {
+	record Pack(GenerationRecord record, boolean active, String connectionOrigin, int fileCount, long fileBytes) {
+		boolean connectionAvailable() {
+			return connectionOrigin != null;
+		}
+
 		String modpackId() {
 			return record.manifest().modpackId();
 		}

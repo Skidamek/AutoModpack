@@ -48,7 +48,8 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
 		actions.add(new Action("automodpack.selection.button", this::openFeatures));
-		if (controller.hasHistory(pack)) actions.add(new Action("automodpack.management.history", this::openHistory));
+		actions.add(new Action("automodpack.management.history", this::openHistory));
+		actions.add(new Action("automodpack.patchNotes.button", this::openPatchNotes));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
 		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.translatable("automodpack.management.deactivateTooltip")));
 		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.translatable("automodpack.management.removeTooltip")));
@@ -126,6 +127,11 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		if (busy) return;
 		markBusy();
 		controller.openHistory(pack, this::released);
+	}
+
+	private void openPatchNotes() {
+		if (busy) return;
+		controller.openPatchNotes(this, pack, this::released);
 	}
 
 	private void openFiles() {
@@ -212,9 +218,8 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += 14;
-		String connection = VersionedText.translatable(pack.connectionAvailable() ? "automodpack.packDetails.connected" : "automodpack.packDetails.disconnected").getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, connection, width)).withStyle(pack.connectionAvailable() ? ChatFormatting.AQUA : ChatFormatting.GRAY),
-				this.width / 2, y,
+		String server = pack.connectionAvailable() ? VersionedText.translatable("automodpack.packDetails.server", pack.connectionOrigin()).getString() : VersionedText.translatable("automodpack.packDetails.localCopy").getString();
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, server, width)).withStyle(pack.connectionAvailable() ? ChatFormatting.AQUA : ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += 14;
 		String version = VersionedText.translatable("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion()).getString();

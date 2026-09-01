@@ -968,12 +968,12 @@ class FakeBridge:
                     {"id": 46, "text": "Local storage", "enabled": True, "visible": True},
                     preserved]
         if not self.secondary_pack:
-            rows = [{"id": 9, "text": f"Pack A  [{'active' if self.selected_pack == 'A' else 'switch'}]  connected", "enabled": True, "visible": True}]
+            rows = [{"id": 9, "text": f"Pack A  [{'active' if self.selected_pack == 'A' else 'switch'}] · server", "enabled": True, "visible": True}]
         else:
             a_state = "active" if self.selected_pack == "A" else "switch"
             b_state = "active" if self.selected_pack == "B" else "switch"
-            rows = [{"id": 9, "text": f"Pack A  [{a_state}]  connected", "enabled": True, "visible": True},
-                    {"id": 11, "text": f"Pack B  [{b_state}]  local only", "enabled": True, "visible": True}]
+            rows = [{"id": 9, "text": f"Pack A  [{a_state}] · server", "enabled": True, "visible": True},
+                    {"id": 11, "text": f"Pack B  [{b_state}] · local", "enabled": True, "visible": True}]
         return rows + [{"id": 47, "text": "Back", "enabled": True, "visible": True},
                        {"id": 46, "text": "Local storage", "enabled": True, "visible": True},
                        preserved]
@@ -985,6 +985,7 @@ class FakeBridge:
                 *([{"id": 70, "text": "Repair", "enabled": True, "visible": True}] if active else []),
                 {"id": 72, "text": "Features", "enabled": True, "visible": True},
                 {"id": 73, "text": "History", "enabled": True, "visible": True},
+                {"id": 75, "text": "Patch notes", "enabled": True, "visible": True},
                 {"id": 74, "text": "Files", "enabled": True, "visible": True},
                 *([{"id": 76, "text": "Deactivate", "enabled": True, "visible": True}] if active else []),
                 {"id": 77, "text": "Remove", "enabled": True, "visible": True},

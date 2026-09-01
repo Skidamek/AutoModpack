@@ -58,7 +58,7 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private void initWidgets() {
-		cancelButton = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		cancelButton = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height / 2 + 56, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> {
 					cancelButton.active = false;
 					cancelDownload();
@@ -141,9 +141,9 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private void drawDownloadingFiles(VersionedMatrices matrices) {
-		int y = this.height / 2 - 90;
+		int y = this.height / 2 - 94;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
-		int currentY = y + 15;
+		int currentY = y + 14;
 		synchronized (downloadManager.downloadsInProgress) {
 			for (DownloadManager.DownloadData data : downloadManager.downloadsInProgress.values()) {
 				String fileName = truncateToWidth(this.font, data.getFileName(), Math.max(1, panelWidth(310) - 20));
@@ -156,17 +156,16 @@ public class DownloadScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		updateUIState();
-		int lineHeight = 12;
 
 		if (downloadManager != null && downloadManager.isRunning()) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110, TextColors.WHITE);
 			if (downloadsInProgress()) drawDownloadingFiles(matrices);
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 10, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 10 + lineHeight * 2, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 20, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 4, TextColors.WHITE);
 
 			float scaleBar = 1.35F;
 			int barFilledWidth = (int) (PROGRESS_BAR_WIDTH * getDownloadScale());
-			int barY = this.height / 2 + 36;
+			int barY = this.height / 2 + 8;
 			float barDrawX = (this.width - PROGRESS_BAR_WIDTH * scaleBar) / 2.0F / scaleBar;
 			float barDrawY = barY / scaleBar;
 
@@ -178,8 +177,8 @@ public class DownloadScreen extends VersionedScreen {
 					PROGRESS_BAR_HEIGHT);
 			matrices.popPose();
 
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 36 + lineHeight * 2, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getAcquisitionSummary(), this.width / 2, this.height / 2 + 36 + lineHeight * 3, TextColors.GRAY);
+			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 24, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getAcquisitionSummary(), this.width / 2, this.height / 2 + 36, TextColors.GRAY);
 			cancelButton.active = true;
 		} else {
 			WaitingPresentation.render(matrices, this.font, this.width, this.height, System.nanoTime() - startedAtNanos);
