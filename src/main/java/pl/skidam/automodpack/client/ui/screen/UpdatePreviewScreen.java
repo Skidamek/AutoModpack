@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.ChangeSummary;
@@ -60,7 +61,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		setTooltip(buttons.get(buttons.size() - 2), ChangeSummary.diffLegend());
 		int topY = 42;
 		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new)) - 4;
-		this.addScrollBody(PANEL_WIDTH, topY, bottomY, buildBodyLines());
+		this.addCenteredScrollBody(PANEL_WIDTH, topY, bottomY, buildBodyLines());
 	}
 
 	private List<ActionRow> buildRows() {
@@ -84,31 +85,31 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		}
 	}
 
-	private List<String> buildBodyLines() {
+	private List<MutableComponent> buildBodyLines() {
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 20);
-		List<String> lines = new ArrayList<>();
-		lines.add(VersionedText.translatable("automodpack.patchNotes.latest").getString());
+		List<MutableComponent> lines = new ArrayList<>();
 		String patchNotes = preview.latestPatchNotes();
-		if (patchNotes.isBlank()) lines.add(VersionedText.translatable("automodpack.patchNotes.none").getString());
-		else lines.addAll(wrapToWidth(this.font, patchNotes, wrapWidth));
-		lines.add("");
+		if (!patchNotes.isBlank()) {
+			lines.add(VersionedText.translatable("automodpack.patchNotes.latest").withStyle(ChatFormatting.GRAY));
+			lines.addAll(wrapParagraph(this.font, patchNotes, wrapWidth));
+			lines.add(blankLine());
+		}
 		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
-		boolean staleSelection = !groups.staleGroups().isEmpty();
-		lines.add(staleSelection
-				? VersionedText.translatable("automodpack.update.staleSelection").getString()
-				: UiFormat.plural(groups.resolvedGroups().size(), "automodpack.update.groupsSelected").getString());
+		if (!groups.staleGroups().isEmpty()) lines.add(VersionedText.translatable("automodpack.update.staleSelection").withStyle(ChatFormatting.RED));
+		else lines.add(UiFormat.plural(groups.resolvedGroups().size(), "automodpack.update.groupsSelected").withStyle(ChatFormatting.GREEN));
 		if (!preview.conflicts().isEmpty())
-			lines.add(UiFormat.plural(preview.conflicts().size(), "automodpack.browser.conflicts").getString());
+			lines.add(UiFormat.plural(preview.conflicts().size(), "automodpack.browser.conflicts").withStyle(ChatFormatting.RED));
 		ChangeSet.Summary summary = changes.summary();
-		lines.add(ChangeSummary.diffLine(summary.addedFiles(), summary.modifiedFiles(), summary.removedFiles(), summary.preservedFiles(), summary.unsafeFiles()));
-		if (mode == UpdatePreview.Mode.UPDATE)
+		lines.addAll(ChangeSummary.diffLines(summary.addedFiles(), summary.modifiedFiles(), summary.removedFiles(), summary.preservedFiles(), summary.unsafeFiles()));
+		if (mode == UpdatePreview.Mode.UPDATE && (summary.addedFiles() > 0 || summary.modifiedFiles() > 0 || preview.uncachedAcquisitionBytes() > 0))
 			lines.add(VersionedText.translatable("automodpack.browser.downloadSummary", UiFormat.formatSize(preview.uncachedAcquisitionBytes()), UiFormat.formatSize(preview.addedBytes() + preview.changedBytes()))
-					.getString());
+					.withStyle(ChatFormatting.GRAY));
 		long otherEffects = changes.effects().stream().filter(effect -> !"restart".equals(effect.category())).count();
-		if (otherEffects > 0) lines.add(VersionedText.translatable("automodpack.summary.otherEffects", otherEffects).getString());
+		if (otherEffects > 0) lines.add(VersionedText.translatable("automodpack.summary.otherEffects", otherEffects).withStyle(ChatFormatting.YELLOW));
+		lines.add(blankLine());
 		lines.add(preview.restartReasons().isEmpty()
-				? VersionedText.translatable("automodpack.summary.noRestart").getString()
-				: VersionedText.translatable("automodpack.summary.restartRequired").getString());
+				? VersionedText.translatable("automodpack.summary.noRestart").withStyle(ChatFormatting.GREEN)
+				: VersionedText.translatable("automodpack.summary.restartRequired").withStyle(ChatFormatting.YELLOW));
 		return lines;
 	}
 
