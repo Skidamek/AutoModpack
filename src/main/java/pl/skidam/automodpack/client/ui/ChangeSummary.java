@@ -32,6 +32,18 @@ public final class ChangeSummary {
 		return parts.isEmpty() ? VersionedText.translatable("automodpack.summary.noChanges").getString() : String.join("  ", parts);
 	}
 
+	/** One line per non-zero diff kind in canonical order and color; a single gray line when nothing changed. */
+	public static List<MutableComponent> diffLines(int added, int modified, int removed, int preserved, int unsafe) {
+		List<MutableComponent> lines = new ArrayList<>();
+		if (added > 0) lines.add(VersionedText.literal("+" + added + " " + kind("added")).withStyle(ChatFormatting.GREEN));
+		if (modified > 0) lines.add(VersionedText.literal("~" + modified + " " + kind("modified")).withStyle(ChatFormatting.YELLOW));
+		if (removed > 0) lines.add(VersionedText.literal("-" + removed + " " + kind("removed")).withStyle(ChatFormatting.RED));
+		if (preserved > 0) lines.add(VersionedText.translatable("automodpack.summary.kind.kept", preserved).withStyle(ChatFormatting.GRAY));
+		if (unsafe > 0) lines.add(VersionedText.literal("!" + unsafe + " " + kind("unsafe")).withStyle(ChatFormatting.RED));
+		if (lines.isEmpty()) lines.add(VersionedText.translatable("automodpack.summary.noChanges").withStyle(ChatFormatting.GRAY));
+		return lines;
+	}
+
 	/** The hover legend for {@link #diffLine}: one meaning per glyph, built from the translated kind words. */
 	public static MutableComponent diffLegend() {
 		return VersionedText.literal("+ " + kind("added") + "   ~ " + kind("modified") + "   - " + kind("removed") + "   ! " + kind("unsafe")).withStyle(ChatFormatting.GRAY);
