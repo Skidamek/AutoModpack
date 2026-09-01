@@ -227,6 +227,18 @@ public class VersionedScreen extends Screen {
 		return false;
 	}
 
+	/** Shows the tooltip while the pointer stays inside the given text bounds, matching vanilla hover-on-text behavior. */
+	protected final void showHoverTooltip(VersionedMatrices matrices, Component tooltip, int x, int y, int width, int mouseX, int mouseY) {
+		if (mouseX < x || mouseX >= x + width || mouseY < y || mouseY >= y + this.font.lineHeight) return;
+		/*? if >=1.21.8 {*/
+		matrices.getContext().setComponentTooltipForNextFrame(this.font, List.of(tooltip), mouseX, mouseY);
+		/*?} elif >=1.20 {*/
+		/*setTooltipForNextRenderPass(tooltip);
+		*//*?} else {*/
+		/*renderTooltip(matrices.getContext(), tooltip, mouseX, mouseY);
+		*//*?}*/
+	}
+
 	/*? if <1.19.3 {*/
 	/*public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
 		return new Button(x, y, width, height, message, onPress);
