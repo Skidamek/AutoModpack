@@ -41,6 +41,10 @@ final class ReviewedClientPlan<T> {
 		review.approve();
 	}
 
+	void beginExecution() {
+		review.beginExecution();
+	}
+
 	void cancel() {
 		review.cancel();
 	}

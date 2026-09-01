@@ -49,13 +49,20 @@ public final class ReviewedUpdatePlan {
 		state = State.APPROVED;
 	}
 
+	/** Marks the approved plan as committed-to-execution; cancellation can no longer roll it back. */
+	public void beginExecution() {
+		if (state != State.APPROVED) throw new IllegalStateException("Only an approved update plan can begin execution: " + state);
+		state = State.EXECUTING;
+	}
+
 	public void cancel() {
+		if (state == State.EXECUTING) return;
 		if (state != State.PENDING_REVIEW && state != State.APPROVED) throw new IllegalStateException("Update plan cannot be cancelled: " + state);
 		state = State.CANCELLED;
 	}
 
 	public void complete() {
-		if (state != State.APPROVED) throw new IllegalStateException("Only an approved update plan can be completed: " + state);
+		if (state != State.APPROVED && state != State.EXECUTING) throw new IllegalStateException("Only an approved update plan can be completed: " + state);
 		state = State.APPLIED;
 	}
 
@@ -295,6 +302,7 @@ public final class ReviewedUpdatePlan {
 	public enum State {
 		PENDING_REVIEW,
 		APPROVED,
+		EXECUTING,
 		APPLIED,
 		CANCELLED
 	}
