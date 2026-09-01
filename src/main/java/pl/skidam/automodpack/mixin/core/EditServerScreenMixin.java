@@ -47,6 +47,9 @@ public abstract class EditServerScreenMixin extends Screen {
 	@Shadow
 	private EditBox ipEdit;
 
+	@Unique
+	private boolean pinRemoveArmed;
+
 	protected EditServerScreenMixin(Component title) {
 		super(title);
 	}
@@ -57,6 +60,7 @@ public abstract class EditServerScreenMixin extends Screen {
 		var origin = toOrigin(serverData.ip);
 		var trust = CertificateTrustStore.get(origin);
 		if (trust == null) return;
+		pinRemoveArmed = false;
 
 		String shortened = NetUtils.shortenFingerprint(trust.fingerprint);
 		Component reason = switch (trust.reason) {
@@ -66,6 +70,11 @@ public abstract class EditServerScreenMixin extends Screen {
 		};
 		Button button = VersionedScreen.buttonWidget(width / 2 - 110, height / 2 + 105, 220, 20,
 				VersionedText.translatable("automodpack.pin.active", reason, shortened), pressed -> {
+					if (!pinRemoveArmed) {
+						pinRemoveArmed = true;
+						pressed.setMessage(VersionedText.translatable("automodpack.pin.removeConfirm"));
+						return;
+					}
 					CertificateTrustStore.remove(origin);
 					pressed.setMessage(VersionedText.translatable("automodpack.pin.removed"));
 					pressed.active = false;

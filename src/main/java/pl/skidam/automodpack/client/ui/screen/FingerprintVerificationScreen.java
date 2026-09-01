@@ -72,6 +72,8 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		before.add(blankLine());
 		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.identity.notPack").getString(), wrapWidth));
 		before.add(blankLine());
+		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.identity.publiclyTrusted").getString(), wrapWidth, ChatFormatting.GRAY));
+		before.add(blankLine());
 		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.fingerprint.label").getString(), wrapWidth, ChatFormatting.GRAY));
 		before.add(VersionedText.literal(getConcatenatedFingerprint()).withStyle(ChatFormatting.GRAY));
 		before.add(blankLine());
