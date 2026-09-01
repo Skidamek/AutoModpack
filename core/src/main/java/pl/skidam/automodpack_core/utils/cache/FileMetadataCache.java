@@ -22,11 +22,11 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * A shared, path-keyed file hash cache backed by immutable loose records.
  *
  * <p>
- * Worktree reuse follows Git: {@code ce_match_stat} (size, mtime, ctime, inode) plus
- * {@code is_racy_timestamp} (mtime not older than the record → rehash). Named CAS objects
- * use only the stat match; racy-mtime is not tamper. Change time is {@code unix:ctime} on
- * POSIX and optional NTFS ChangeTime plus volume/file index from a guarded JNI helper on
- * Windows; if that helper is missing the racy-mtime fallback still applies.
+ * Mutable worktree reuse follows Git: {@code ce_match_stat} (size, mtime, ctime, inode) plus
+ * {@code is_racy_timestamp} (mtime not older than the record → rehash). Named immutable objects
+ * (CAS store) use a narrower tripwire of only size, mtime, and inode, because {@code link()} and
+ * {@code chmod()} bump inode ctime on every publication and ctime-only disturb would force full
+ * rehashes of multi-gigabyte objects.
  * </p>
  *
  * <p>
@@ -225,12 +225,12 @@ public class FileMetadataCache implements AutoCloseable {
 	}
 
 	/**
-	 * Whether {@code file} is still the named immutable bytes. A matching Git-stat record is trusted
-	 * without reading content. A missing record with a matching size seeds that tripwire from the
-	 * advertised SHA-1. Callers that mutate inode metadata themselves ({@code link()}, {@code chmod()})
-	 * must {@link #overwriteCache(Path, String)} with the known hash so the next lookup does not hash.
-	 * Unexpected disturb ({@code ce_match_stat} fields changed; racy-mtime is not disturbed) still
-	 * rehashes once: matching bytes refresh the record, mismatched bytes fail.
+	 * Whether {@code file} is still the named immutable bytes. A matching record is trusted without
+	 * reading content. A missing record with a matching size seeds that tripwire from the advertised
+	 * SHA-1. The tripwire compares only what a content write changes (size, mtime, inode): our own
+	 * publication ({@code link()}, {@code chmod()}) bumps inode ctime by design, and treating that as
+	 * disturb forced full rehashes of multi-gigabyte objects. A real disturb still rehashes once:
+	 * matching bytes refresh the record, mismatched bytes fail.
 	 */
 	public boolean matchesImmutable(Path file, long expectedSize, String expectedSha1) throws IOException {
 		if (!HashUtils.isSha1(expectedSha1)) return false;
@@ -244,7 +244,7 @@ public class FileMetadataCache implements AutoCloseable {
 		synchronized (locks[lockIndex]) {
 			FileFingerprint fingerprint = fingerprint(absPath, attrs);
 			CachedFile cached = readRecord(pathKey);
-			if (statsMatch(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
+			if (immutableStatsMatch(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
 			if (cached != null) {
 				String actual = HashUtils.getHash(absPath);
 				if (actual == null || !sha1.equalsIgnoreCase(actual)) return false;
@@ -338,6 +338,16 @@ public class FileMetadataCache implements AutoCloseable {
 	static boolean statsMatch(CachedFile cached, FileFingerprint fingerprint) {
 		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
 				&& cached.creationTimeNanos() == fingerprint.creationTimeNanos() && cached.changeTimeNanos() == fingerprint.changeTimeNanos()
+				&& cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey());
+	}
+
+	/**
+	 * Named-object tripwire: only what a content write changes. In-place corruption always changes mtime
+	 * and usually the inode or size, while ctime also moves on {@code link()} and {@code chmod()}, which
+	 * our immutable publication performs on every apply.
+	 */
+	static boolean immutableStatsMatch(CachedFile cached, FileFingerprint fingerprint) {
+		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
 				&& cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey());
 	}
 
