@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -211,14 +212,31 @@ class FileMetadataCacheTest {
 	}
 
 	@Test
-	void namedObjectTripwireRehashesWhenHardlinkUpdatesChangeTime() throws Exception {
+	void namedObjectTripwireTrustsChangeTimeBumpsFromOurOwnHardlinks() throws Exception {
 		Path object = temporaryDirectory.resolve("object.bin");
 		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
-		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+		Path cacheDirectory = temporaryDirectory.resolve("file-metadata");
+		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
 			String sha1 = cache.getOrComputeHash(object);
 			assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
+			FileTime recordStamp = recordStamp(cacheDirectory, sha1);
 			Files.createLink(temporaryDirectory.resolve("alias.bin"), object);
+			assumeTrue(!recordStamp.equals(FileTime.fromMillis(0)), "The filesystem does not expose record timestamps");
 			assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
+			// A ctime-only bump must be trusted without a rehash, so the persisted record stays untouched.
+			assertEquals(recordStamp, recordStamp(cacheDirectory, sha1));
+		}
+	}
+
+	private static FileTime recordStamp(Path cacheDirectory, String sha1) throws IOException {
+		try (var records = Files.walk(cacheDirectory)) {
+			return records.filter(path -> path.getFileName().toString().endsWith(".json")).findFirst().map(path -> {
+				try {
+					return Files.getLastModifiedTime(path);
+				} catch (IOException e) {
+					return FileTime.fromMillis(0);
+				}
+			}).orElse(FileTime.fromMillis(0));
 		}
 	}
 

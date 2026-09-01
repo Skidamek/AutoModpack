@@ -96,7 +96,8 @@ public final class VerifiedFileTransfer {
 			moveAtomicReplace(temporary, targetFile);
 			FileTrees.forceDirectory(parent);
 			ImmutableFiles.protect(targetFile);
-			// link() and chmod() update inode ctime; refresh the named source Git-stat without hashing
+			// Seed the projection-path record so later lookups do not hash; the named source record stays valid
+			// because the immutable tripwire compares size, mtime, and inode, none of which link() or chmod() move.
 			record(cache, targetFile, expectedSha1);
 			return true;
 		} finally {
