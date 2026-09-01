@@ -28,6 +28,11 @@ public interface ScreenService {
 
 	void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled);
 
+	/** Asks before an installed modpack starts being served from a different address; exactly one of the runnables runs. */
+	default void originChange(String modpackName, String previousOrigin, String newOrigin, Runnable allowed, Runnable refused) {
+		refused.run();
+	}
+
 	void waiting();
 
 	/** Shows the preparing screen; {@code onCancel} runs when the player backs out with Esc. */

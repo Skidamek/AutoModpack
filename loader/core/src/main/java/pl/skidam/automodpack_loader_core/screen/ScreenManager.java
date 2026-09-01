@@ -63,6 +63,10 @@ public final class ScreenManager {
 		instance.validation(parent, fingerprint, origin, validated, canceled);
 	}
 
+	public static void originChange(String modpackName, String previousOrigin, String newOrigin, Runnable allowed, Runnable refused) {
+		instance.originChange(modpackName, previousOrigin, newOrigin, allowed, refused);
+	}
+
 	public static void waiting() {
 		instance.waiting();
 	}
