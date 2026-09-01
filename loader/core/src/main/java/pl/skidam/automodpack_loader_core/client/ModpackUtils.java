@@ -19,9 +19,11 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -54,14 +56,26 @@ public class ModpackUtils {
 	public static UpdateCheckResult isUpdate(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
 		Path activeDirectory = storage.activeDirectory();
+		ClientStorageJsons.ClientGenerationStateFields state;
 		try {
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+			state = storage.readActiveState();
 			if (state == null || !Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) {
 				return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 			}
 		} catch (IOException e) {
 			LOGGER.warn("Cannot read active client generation state", e);
 			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
+		}
+
+		// Differing content digests can never pass the per-file scan, so skip straight to the update; equal digests still scan to catch tampering and re-protect matching files.
+		try {
+			GenerationRecord active = new ClientGenerationStore(storage).read(state.generationId).orElse(null);
+			if (active != null && !serverModpackContent.stateDigest.isBlank() && !serverModpackContent.stateDigest.equals(active.metadata().stateDigest())) {
+				LOGGER.info("Server generation content differs from the installed generation; skipping the per-file verification");
+				return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
+			}
+		} catch (IOException | RuntimeException e) {
+			LOGGER.debug("Cannot compare the installed generation digest", e);
 		}
 
 		LOGGER.info("Verifying content against server list...");
