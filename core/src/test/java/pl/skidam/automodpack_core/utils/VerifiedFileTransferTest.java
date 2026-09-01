@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+
 class VerifiedFileTransferTest {
 	@TempDir
 	Path tempDir;
@@ -84,6 +86,20 @@ class VerifiedFileTransferTest {
 		} finally {
 			ImmutableFiles.deleteIfExists(source);
 			if (sourceDirectory != null) Files.deleteIfExists(sourceDirectory);
+		}
+	}
+
+	@Test
+	void projectionHardlinkRefreshesNamedSourceGitStat() throws Exception {
+		Path object = Files.writeString(tempDir.resolve("object"), "named-bytes", StandardCharsets.UTF_8);
+		Path projection = tempDir.resolve("active/video.mp4");
+		String hash = HashUtils.getHash(object);
+		long size = Files.size(object);
+		try (FileMetadataCache cache = FileMetadataCache.open(tempDir.resolve("file-metadata"))) {
+			cache.overwriteCache(object, hash);
+			assertTrue(VerifiedFileTransfer.linkAtomic(object, projection, size, hash, cache));
+			assertTrue(Files.isSameFile(object, projection));
+			assertTrue(FileIntegrity.matchesNamed(object, size, hash, cache));
 		}
 	}
 
