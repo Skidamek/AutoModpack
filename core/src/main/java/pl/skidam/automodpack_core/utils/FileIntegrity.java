@@ -44,8 +44,9 @@ public final class FileIntegrity {
 	}
 
 	/**
-	 * Whether a named immutable object is still the advertised bytes. Never reads file content.
-	 * With a cache this is the Git-stat tripwire; without one, a regular file of the advertised size.
+	 * Whether a named immutable object is still the advertised bytes. With a cache this is the
+	 * Git-stat tripwire, rehashing only when that fingerprint is disturbed. Without a cache, a
+	 * regular file of the advertised size.
 	 */
 	public static boolean matchesNamed(Path file, long expectedSize, String expectedSha1, FileMetadataCache cache) {
 		if (!HashUtils.isSha1(expectedSha1) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;

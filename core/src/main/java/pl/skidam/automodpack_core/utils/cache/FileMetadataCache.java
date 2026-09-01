@@ -225,9 +225,12 @@ public class FileMetadataCache implements AutoCloseable {
 	}
 
 	/**
-	 * Whether {@code file} is still the named immutable bytes. Never reads file content. A missing
-	 * record with a matching size seeds the Git-stat tripwire from the advertised SHA-1. Disturbed
-	 * means {@code ce_match_stat} fields changed; Git racy-mtime does not count as disturbed.
+	 * Whether {@code file} is still the named immutable bytes. A matching Git-stat record is trusted
+	 * without reading content. A missing record with a matching size seeds that tripwire from the
+	 * advertised SHA-1. Callers that mutate inode metadata themselves ({@code link()}, {@code chmod()})
+	 * must {@link #overwriteCache(Path, String)} with the known hash so the next lookup does not hash.
+	 * Unexpected disturb ({@code ce_match_stat} fields changed; racy-mtime is not disturbed) still
+	 * rehashes once: matching bytes refresh the record, mismatched bytes fail.
 	 */
 	public boolean matchesImmutable(Path file, long expectedSize, String expectedSha1) throws IOException {
 		if (!HashUtils.isSha1(expectedSha1)) return false;
@@ -242,7 +245,13 @@ public class FileMetadataCache implements AutoCloseable {
 			FileFingerprint fingerprint = fingerprint(absPath, attrs);
 			CachedFile cached = readRecord(pathKey);
 			if (statsMatch(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
-			if (cached != null) return false;
+			if (cached != null) {
+				String actual = HashUtils.getHash(absPath);
+				if (actual == null || !sha1.equalsIgnoreCase(actual)) return false;
+				writeRecord(new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
+						validationTimeNanos(), cached.murmur()));
+				return true;
+			}
 			CachedFile record = new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
 					validationTimeNanos());
 			writeRecord(record);

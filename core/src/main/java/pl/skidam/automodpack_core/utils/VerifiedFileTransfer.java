@@ -76,8 +76,12 @@ public final class VerifiedFileTransfer {
 			record(cache, targetFile, expectedSha1);
 			return false;
 		}
+		if (cache != null) {
+			if (!FileIntegrity.matchesNamed(sourceFile, expectedSize, expectedSha1, cache)) throw new IOException("Source file failed size/SHA-1 verification: " + sourceFile);
+		} else {
+			requireValidSource(sourceFile, expectedSize, expectedSha1, null);
+		}
 		ImmutableFiles.protect(sourceFile);
-		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 		Path parent = requireTargetParent(targetFile);
 		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
 		Files.deleteIfExists(temporary);
@@ -92,6 +96,7 @@ public final class VerifiedFileTransfer {
 			moveAtomicReplace(temporary, targetFile);
 			FileTrees.forceDirectory(parent);
 			ImmutableFiles.protect(targetFile);
+			// link() and chmod() update inode ctime; refresh the named source Git-stat without hashing
 			record(cache, targetFile, expectedSha1);
 			return true;
 		} finally {

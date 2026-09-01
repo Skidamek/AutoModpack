@@ -211,6 +211,18 @@ class FileMetadataCacheTest {
 	}
 
 	@Test
+	void namedObjectTripwireRehashesWhenHardlinkUpdatesChangeTime() throws Exception {
+		Path object = temporaryDirectory.resolve("object.bin");
+		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
+		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+			String sha1 = cache.getOrComputeHash(object);
+			assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
+			Files.createLink(temporaryDirectory.resolve("alias.bin"), object);
+			assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
+		}
+	}
+
+	@Test
 	void gitRacyMtimeIsUntrustedForWorktreeEvenWhenChangeTimeMatches() {
 		long validatedAt = 1_700_000_000L * 1_000_000_000L;
 		long futureModified = validatedAt + 2 * 1_000_000_000L;
