@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.Constants.MC_VERSION;
 
-import pl.skidam.mcholepunch.MinecraftLoginStartLayout;
 import pl.skidam.mcholepunch.MinecraftProtocol;
 
 public enum ModpackConnectionMode {
@@ -18,7 +17,8 @@ public enum ModpackConnectionMode {
 	public static boolean isHolepunchAvailable(String minecraftVersion) {
 		if (minecraftVersion == null || minecraftVersion.isBlank()) return false;
 		try {
-			return MinecraftProtocol.forMinecraftVersion(minecraftVersion).loginStartLayout() != MinecraftLoginStartLayout.USERNAME_ONLY;
+			MinecraftProtocol.forMinecraftVersion(minecraftVersion);
+			return true;
 		} catch (IllegalArgumentException e) {
 			return false;
 		}
