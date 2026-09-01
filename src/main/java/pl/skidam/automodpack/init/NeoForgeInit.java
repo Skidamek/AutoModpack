@@ -22,7 +22,6 @@ import static pl.skidam.automodpack_core.Constants.*;
 public class NeoForgeInit {
 	public NeoForgeInit(IEventBus eventBus) {
 		preload = false;
-		ScreenManager.install(new ScreenImpl());
 
 		long start = System.currentTimeMillis();
 		LOGGER.info("Launching AutoModpack...");
@@ -32,6 +31,7 @@ public class NeoForgeInit {
 		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
 			Common.serverInit();
 		} else {
+			ScreenManager.install(new ScreenImpl());
 			ModPackets.registerC2SPackets();
 			new AudioManager(eventBus);
 		}
