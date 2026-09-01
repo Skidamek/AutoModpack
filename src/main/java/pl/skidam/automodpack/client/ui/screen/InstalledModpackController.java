@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.versioned.VersionedServers;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
@@ -90,7 +92,7 @@ final class InstalledModpackController {
 	}
 
 	Pack pack(GenerationRecord record) {
-		return pack(record, record.manifest().modpackId().equals(activeModpackId()), connectionOrigin(record.manifest().modpackId()));
+		return pack(record, record.manifest().modpackId().equals(activeModpackId()), PackConfirmCopy.displayOrigin(connectionAddress(record.manifest().modpackId())));
 	}
 
 	void switchSelection(GenerationRecord record, SelectionIntent expected, SelectionIntent target, String modpackName, Runnable released) {
@@ -104,10 +106,13 @@ final class InstalledModpackController {
 	List<Pack> installed() {
 		String activeId = activeModpackId();
 		try {
-			return new ClientGenerationStore(storage).installedRecords().stream()
-					.sorted(Comparator.comparing(InstalledModpackController::name, String.CASE_INSENSITIVE_ORDER))
-					.map(record -> pack(record, record.manifest().modpackId().equals(activeId), connectionOrigin(record.manifest().modpackId())))
-					.toList();
+			List<Pending> pending = new ArrayList<>();
+			for (GenerationRecord record : new ClientGenerationStore(storage).installedRecords()) {
+				String connectionOrigin = PackConfirmCopy.displayOrigin(connectionAddress(record.manifest().modpackId()));
+				pending.add(new Pending(record, record.manifest().modpackId().equals(activeId), connectionOrigin, displayName(record, connectionOrigin)));
+			}
+			pending.sort(Comparator.comparing(Pending::displayName, String.CASE_INSENSITIVE_ORDER));
+			return pending.stream().map(entry -> pack(entry.record(), entry.active(), entry.connectionOrigin())).toList();
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return List.of();
@@ -355,18 +360,26 @@ final class InstalledModpackController {
 		}
 	}
 
-	private String connectionOrigin(String modpackId) {
+	private String connectionAddress(String modpackId) {
 		try {
 			ConnectionJsons.ConnectionRecordFields fields = ConnectionStore.read(storage, modpackId);
-			return fields.connection != null && fields.connection.isComplete() ? PackConfirmCopy.displayOrigin(AddressHelpers.formatAddress(fields.connection.origin)) : null;
+			return fields.connection != null && fields.connection.isComplete() ? AddressHelpers.formatAddress(fields.connection.origin) : null;
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return null;
 		}
 	}
 
-	private static String name(GenerationRecord record) {
-		return record.manifest().modpackName().isBlank() ? record.manifest().modpackId() : record.manifest().modpackName();
+	/** Player-facing pack name: explicit name, else the vanilla server list entry, else the address, else the raw id. */
+	private static String displayName(GenerationRecord record, String connectionOrigin) {
+		String name = record.manifest().modpackName();
+		if (!name.isBlank()) return name;
+		if (connectionOrigin != null) {
+			String server = VersionedServers.entryName(connectionOrigin);
+			if (!server.isBlank()) return server;
+			return connectionOrigin;
+		}
+		return record.manifest().modpackId();
 	}
 
 	private void releaseOnClient(Runnable released) {
@@ -382,6 +395,8 @@ final class InstalledModpackController {
 		return new Pack(record, active, connectionOrigin, Math.toIntExact(aggregate.fileCount()), aggregate.byteCount());
 	}
 
+	private record Pending(GenerationRecord record, boolean active, String connectionOrigin, String displayName) {}
+
 	record Pack(GenerationRecord record, boolean active, String connectionOrigin, int fileCount, long fileBytes) {
 		boolean connectionAvailable() {
 			return connectionOrigin != null;
@@ -392,7 +407,7 @@ final class InstalledModpackController {
 		}
 
 		String name() {
-			return InstalledModpackController.name(record);
+			return InstalledModpackController.displayName(record, connectionOrigin);
 		}
 
 		int groupCount() {

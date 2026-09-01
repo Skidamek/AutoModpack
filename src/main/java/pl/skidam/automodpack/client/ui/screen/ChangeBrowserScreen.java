@@ -16,6 +16,7 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -48,18 +49,14 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private boolean closed;
 	private boolean cacheLookupStarted;
 	private final Set<String> collapsedFolders = new TreeSet<>();
-	private ChangeBrowserProjection.Mode mode = ChangeBrowserProjection.Mode.TREE;
 	private String search = "";
 	private String selectedContent = "";
 	private String selectedFeature = "";
 	private String selectedPath = "";
-	private boolean technicalDetails;
 	private ChangeBrowserWidget browser;
 	private EditBox searchField;
 	private Button contentButton;
 	private Button featureButton;
-	private Button modeButton;
-	private Button detailsButton;
 	private int browserTop;
 	private int browserBottom;
 
@@ -87,7 +84,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int searchWidth = narrow ? panelWidth : 280;
 		int controlsY = narrow ? 59 : 35;
 		int controlsLeft = narrow ? panelLeft : panelLeft + searchWidth + GAP;
-		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * 2 : searchWidth + GAP * 3)) / 3);
+		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * 2 : searchWidth + GAP * 3)) / 2);
 		this.browserTop = narrow ? 83 : 59;
 		this.searchField = fieldWidget(panelLeft, 35, searchWidth, VersionedText.translatable("automodpack.browser.search"), null, Integer.MAX_VALUE);
 		this.searchField.setValue(search);
@@ -100,22 +97,19 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		});
 		this.contentButton = buttonWidget(controlsLeft, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleContent());
 		this.featureButton = buttonWidget(controlsLeft + GAP + controlWidth, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleFeature());
-		this.modeButton = buttonWidget(controlsLeft + GAP * 2 + controlWidth * 2, controlsY, controlWidth, 20, VersionedText.literal(""), button -> toggleMode());
 		this.addRenderableWidget(this.contentButton);
 		this.addRenderableWidget(this.featureButton);
-		this.addRenderableWidget(this.modeButton);
 		updateControlLabels();
 		List<ActionRow> actionRows = buildActionRows();
 		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
 		int buttonIndex = platformLinks().size();
-		if (auxiliaryAction != null) {
-			actionButtons.get(buttonIndex).active = auxiliaryAction.active();
-			buttonIndex++;
+		String hash = selectedHash();
+		if (hash != null) {
+			setTooltip(actionButtons.get(buttonIndex), VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
+			setTooltip(actionButtons.get(buttonIndex + 1), VersionedText.translatable("automodpack.browser.virusTotalTooltip"));
+			buttonIndex += 2;
 		}
-		this.detailsButton = actionButtons.get(buttonIndex + 1);
-		this.detailsButton.active = true;
-		updateDetailsLabel();
-		setTooltip(this.detailsButton, VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsStateTechnical" : "automodpack.browser.detailsStateSimple"));
+		if (auxiliaryAction != null) actionButtons.get(buttonIndex).active = auxiliaryAction.active();
 		this.browserBottom = footerTop(actionRows) - this.font.lineHeight - 9;
 		rebuildBrowser();
 	}
@@ -135,13 +129,33 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			}
 			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, platformActions));
 		}
+		String hash = selectedHash();
+		if (hash != null) {
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+					optionalAction(VersionedText.translatable("automodpack.browser.copyHash"), button -> Minecraft.getInstance().keyboardHandler.setClipboard(hash)),
+					optionalAction(VersionedText.translatable("automodpack.browser.virusTotal"), button -> Util.getPlatform().openUri("https://www.virustotal.com/gui/search/" + hash))));
+		}
 		if (auxiliaryAction != null) {
 			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this))));
 		}
 		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
-				optionalAction(VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsTechnical" : "automodpack.browser.detailsSimple"), button -> toggleDetails())));
+				secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		return actionRows;
+	}
+
+	/** One representative hash for the selected file: the first downloadable state, else the last known state. */
+	private String selectedHash() {
+		if (selectedPath == null || selectedPath.isBlank()) return null;
+		String after = null;
+		String before = null;
+		for (ChangeSet.Change change : changes.changes()) {
+			if (!change.logicalPath().equals(selectedPath)) continue;
+			for (ChangeSet.Occurrence occurrence : change.occurrences()) {
+				if (after == null) after = occurrence.afterHash();
+				if (before == null) before = occurrence.beforeHash();
+			}
+		}
+		return after != null ? after : before;
 	}
 
 	private void rebuildBrowser() {
@@ -149,8 +163,8 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (this.browser != null) this.removeWidget(this.browser);
 		ChangeBrowserProjection.Filter filter = new ChangeBrowserProjection.Filter(search,
 				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature));
-		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, mode, filter).collapse(collapsedFolders);
-		this.browser = new ChangeBrowserWidget(projection, collapsedFolders, featureNames, technicalDetails, this::toggleFolder, this::onFileSelected,
+		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE, filter).collapse(collapsedFolders);
+		this.browser = new ChangeBrowserWidget(projection, collapsedFolders, featureNames, this::toggleFolder, this::onFileSelected,
 				this.minecraft, this.width, this.height, browserTop, browserBottom);
 		this.addRenderableWidget(this.browser);
 		this.browser.selectPath(selectedPath);
@@ -172,19 +186,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	private void toggleFolder(String path) {
 		if (!collapsedFolders.remove(path)) collapsedFolders.add(path);
-		rebuildBrowser();
-	}
-
-	private void toggleMode() {
-		mode = mode == ChangeBrowserProjection.Mode.TREE ? ChangeBrowserProjection.Mode.LIST : ChangeBrowserProjection.Mode.TREE;
-		updateControlLabels();
-		rebuildBrowser();
-	}
-
-	private void toggleDetails() {
-		technicalDetails = !technicalDetails;
-		setTooltip(detailsButton, VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsStateTechnical" : "automodpack.browser.detailsStateSimple"));
-		updateDetailsLabel();
 		rebuildBrowser();
 	}
 
@@ -229,11 +230,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			else if (label == null || label.isBlank()) label = VersionedText.translatable("automodpack.browser.unknownFeature").getString();
 			featureButton.setMessage(VersionedText.translatable("automodpack.browser.featureFilter", label));
 		}
-		if (modeButton != null) modeButton.setMessage(VersionedText.translatable(mode == ChangeBrowserProjection.Mode.TREE ? "automodpack.browser.tree" : "automodpack.browser.list"));
-	}
-
-	private void updateDetailsLabel() {
-		if (detailsButton != null) detailsButton.setMessage(VersionedText.translatable(technicalDetails ? "automodpack.browser.detailsTechnical" : "automodpack.browser.detailsSimple"));
 	}
 
 	private void resolveCachedReferences() {
@@ -290,7 +286,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int contentWidth = panelWidth(PANEL_WIDTH);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, heading.getString(), contentWidth)).withStyle(ChatFormatting.BOLD), this.width / 2, 8, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, description.getString(), contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, 21, TextColors.WHITE);
-		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, mode,
+		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE,
 				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature)));
 		String summary = UiFormat.plural(projection.total().fileCount(), "automodpack.browser.summary", UiFormat.formatSize(projection.total().byteCount())).getString();
 		if (!projection.effects().isEmpty()) summary += " | " + projection.effects().size() + " " + VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
