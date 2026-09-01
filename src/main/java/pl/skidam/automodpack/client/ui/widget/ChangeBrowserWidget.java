@@ -1,12 +1,13 @@
 package pl.skidam.automodpack.client.ui.widget;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
@@ -38,11 +39,16 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 /** A native selection list for the shared tree/list change projection. */
 public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowserWidget.Entry> {
 	private static final int ROW_HEIGHT = 30;
+	private static final int BADGE_SPACING = 4;
+	private static final int BADGE_MARGIN = 6;
+	private static final int BADGE_MODRINTH_COLOR = 0xFF00AF5C;
+	private static final int BADGE_CURSEFORGE_COLOR = 0xFFF16436;
+	private static final int BADGE_UNVERIFIED_COLOR = 0xFFFF5555;
 	private final Consumer<String> folderToggle;
 	private final Consumer<ChangeBrowserProjection.FileRow> selectionChanged;
 
 	public ChangeBrowserWidget(ChangeBrowserProjection.Projection projection, Set<String> collapsedFolders, Map<String, String> featureNames,
-			boolean technicalDetails, Consumer<String> folderToggle, Consumer<ChangeBrowserProjection.FileRow> selectionChanged, Minecraft client, int width, int height, int top, int bottom) {
+			Consumer<String> folderToggle, Consumer<ChangeBrowserProjection.FileRow> selectionChanged, Minecraft client, int width, int height, int top, int bottom) {
 		/*? if <1.20.3 {*/
 		/*super(client, width, height, top, bottom, ROW_HEIGHT);
 		*//*?} else {*/
@@ -53,7 +59,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		this.selectionChanged = selectionChanged;
 		Set<String> collapsed = Set.copyOf(collapsedFolders == null ? Set.of() : collapsedFolders);
 		Map<String, String> names = Map.copyOf(featureNames == null ? Map.of() : featureNames);
-		for (ChangeBrowserProjection.Row row : projection.rows()) this.addEntry(new Entry(row, collapsed.contains(row.path()), names, technicalDetails));
+		for (ChangeBrowserProjection.Row row : projection.rows()) this.addEntry(new Entry(row, collapsed.contains(row.path()), names));
 	}
 
 	public ChangeBrowserProjection.FileRow selectedFile() {
@@ -101,13 +107,13 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		private final ChangeBrowserProjection.Row row;
 		private final boolean collapsed;
 		private final Map<String, String> featureNames;
-		private final boolean technicalDetails;
+		private final List<Badge> badges;
 
-		private Entry(ChangeBrowserProjection.Row row, boolean collapsed, Map<String, String> featureNames, boolean technicalDetails) {
+		private Entry(ChangeBrowserProjection.Row row, boolean collapsed, Map<String, String> featureNames) {
 			this.row = Objects.requireNonNull(row, "browser row");
 			this.collapsed = collapsed;
 			this.featureNames = featureNames;
-			this.technicalDetails = technicalDetails;
+			this.badges = badges(row);
 		}
 
 		@Override
@@ -119,12 +125,12 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		/*? if >= 26.1 {*/
 		@Override
 		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getContentX(), this.getContentY(), this.getContentWidth());
+			versionedRender(new VersionedMatrices(guiGraphics), this.getContentX(), this.getContentY(), this.getContentWidth(), mouseX, mouseY, hovered);
 		}
 		/*?} elif >= 1.21.9 {*/
 		/*@Override
 		public void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), ChangeBrowserWidget.this.getRowWidth());
+			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), ChangeBrowserWidget.this.getRowWidth(), mouseX, mouseY, hovered);
 		}
 		*//*?} else {*/
 		/*@Override
@@ -135,20 +141,74 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
 		/^?}^/
-			versionedRender(versionedMatrices, x, y, entryWidth);
+			versionedRender(versionedMatrices, x, y, entryWidth, mouseX, mouseY, hovered);
 		}
 		*//*?}*/
 
-		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth) {
+		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth, int mouseX, int mouseY, boolean hovered) {
 			int indent = Math.min(72, row.depth() * 12);
+			int badgeWidth = 0;
+			for (Badge badge : badges) badgeWidth += minecraft.font.width(badge.text()) + BADGE_SPACING;
+			badgeWidth = Math.max(0, badgeWidth - BADGE_SPACING);
 			String marker = marker();
 			String label = row instanceof ChangeBrowserProjection.EffectRow effect ? effectName(effect.effect()) : row instanceof ChangeBrowserProjection.FolderRow || row.depth() > 0 ? leafName(row.path()) : row.path();
 			ChatFormatting color = row instanceof ChangeBrowserProjection.FileRow file ? kindColor(file.kind()) : row instanceof ChangeBrowserProjection.EffectRow effect ? kindColor(effectKind(effect.effect())) : ChatFormatting.WHITE;
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
-					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, marker + label, Math.max(1, entryWidth - indent - 12))).withStyle(color), x + indent + 6, y + 4, TextColors.WHITE);
+					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, marker + label, Math.max(1, entryWidth - indent - 12 - badgeWidth))).withStyle(color), x + indent + 6, y + 4, TextColors.WHITE);
+			int badgeRight = x + entryWidth - BADGE_MARGIN;
+			for (int index = badges.size() - 1; index >= 0; index--) {
+				Badge badge = badges.get(index);
+				badgeRight -= minecraft.font.width(badge.text());
+				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(badge.text()), badgeRight, y + 4, badge.color());
+				badgeRight -= BADGE_SPACING;
+			}
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
 					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, detail(), Math.max(1, entryWidth - indent - 22))).withStyle(ChatFormatting.GRAY), x + indent + 16, y + 17, TextColors.WHITE);
+			/*? if >=1.21.8 {*/
+			if (hovered) tooltip(matrices, mouseX, mouseY);
+			/*?}*/
 		}
+
+		private record Badge(String text, String key, int color) {}
+
+		/** Right-aligned first-line tags: the storefronts this file is published on, or the unverified mark for plain jars. */
+		private static List<Badge> badges(ChangeBrowserProjection.Row row) {
+			if (!(row instanceof ChangeBrowserProjection.FileRow file)) return List.of();
+			List<Badge> badges = new ArrayList<>();
+			boolean modrinth = false;
+			boolean curseforge = false;
+			for (ChangeSet.Occurrence occurrence : file.occurrences()) {
+				for (String reference : occurrence.references()) {
+					String platform = platform(reference);
+					if (platform.equals("modrinth")) modrinth = true;
+					else if (platform.equals("curseforge")) curseforge = true;
+				}
+			}
+			if (modrinth) badges.add(new Badge("MR", "automodpack.browser.modrinth", BADGE_MODRINTH_COLOR));
+			if (curseforge) badges.add(new Badge("CF", "automodpack.browser.curseforge", BADGE_CURSEFORGE_COLOR));
+			if (badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.translatable("automodpack.browser.unverifiedShort").getString(), null, BADGE_UNVERIFIED_COLOR));
+			return badges;
+		}
+
+		/*? if >=1.21.8 {*/
+		private void tooltip(VersionedMatrices matrices, int mouseX, int mouseY) {
+			if (!(row instanceof ChangeBrowserProjection.FileRow file)) return;
+			List<Component> lines = new ArrayList<>();
+			lines.add(VersionedText.literal(row.path()));
+			String after = null;
+			String before = null;
+			for (ChangeSet.Occurrence occurrence : file.occurrences()) {
+				if (after == null) after = occurrence.afterHash();
+				if (before == null) before = occurrence.beforeHash();
+			}
+			String hash = shortHash(after != null ? after : before);
+			if (hash != null) lines.add(VersionedText.literal("sha1: " + hash));
+			if (before != null && after != null && !before.equals(after)) lines.add(VersionedText.literal(shortHash(before) + " -> " + shortHash(after)));
+			List<String> platforms = badges.stream().filter(badge -> badge.key() != null).map(badge -> VersionedText.translatable(badge.key()).getString()).toList();
+			if (!platforms.isEmpty()) lines.add(VersionedText.literal(String.join(", ", platforms)));
+			matrices.getContext().setComponentTooltipForNextFrame(minecraft.font, lines, mouseX, mouseY);
+		}
+		/*?}*/
 
 		private String marker() {
 			if (row instanceof ChangeBrowserProjection.FolderRow) return collapsed ? "+ " : "- ";
@@ -172,40 +232,12 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 				return folderDetail(folder.aggregate());
 			if (row instanceof ChangeBrowserProjection.EffectRow effect) return kindName(effectKind(effect.effect()));
 			ChangeBrowserProjection.FileRow file = (ChangeBrowserProjection.FileRow) row;
-			if (technicalDetails) return technicalDetail(file);
 			List<String> parts = new ArrayList<>();
 			parts.add(kindName(file.kind()));
 			parts.add(UiFormat.formatSize(file.size()));
 			if (!file.contentKinds().isEmpty()) parts.add(String.join(", ", file.contentKinds().stream().map(ChangeBrowserWidget::contentName).toList()));
 			List<String> visibleFeatures = file.features().stream().map(featureNames::get).filter(name -> name != null && !name.isBlank()).distinct().sorted().toList();
 			if (!visibleFeatures.isEmpty()) parts.add(String.join(", ", visibleFeatures));
-			return String.join(" | ", parts);
-		}
-
-		private String technicalDetail(ChangeBrowserProjection.FileRow file) {
-			Set<String> locations = new TreeSet<>();
-			Set<String> hashes = new TreeSet<>();
-			Set<String> features = new TreeSet<>();
-			int references = 0;
-			for (ChangeSet.Occurrence occurrence : file.occurrences()) {
-				locations.add(occurrence.location());
-				for (String featureId : occurrence.featureIds()) {
-					String name = featureNames.get(featureId);
-					features.add(name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : name);
-				}
-				String before = shortHash(occurrence.beforeHash());
-				String after = shortHash(occurrence.afterHash());
-				if (before != null && after != null && !before.equals(after)) hashes.add(before + " -> " + after);
-				else if (after != null) hashes.add(after);
-				else if (before != null) hashes.add(before);
-				references += occurrence.references().size();
-			}
-			List<String> parts = new ArrayList<>();
-			parts.add(UiFormat.formatSize(file.size()));
-			parts.add(String.join(", ", locations));
-			if (!features.isEmpty()) parts.add(String.join(", ", features));
-			if (!hashes.isEmpty()) parts.add(String.join(", ", hashes));
-			if (references > 0) parts.add(VersionedText.translatable("automodpack.browser.references", references).getString());
 			return String.join(" | ", parts);
 		}
 
@@ -266,6 +298,20 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		if (effect.category().endsWith(".added")) return ChangeSet.Kind.ADDED;
 		if (effect.category().endsWith(".removed")) return ChangeSet.Kind.REMOVED;
 		return ChangeSet.Kind.METADATA_ONLY;
+	}
+
+	/** Storefront a reference URL belongs to, or "" for every other host; badges only cover the vetted platforms. */
+	private static String platform(String url) {
+		try {
+			String host = new URI(url).getHost();
+			if (host == null || host.isBlank()) return "";
+			String lower = host.toLowerCase(Locale.ROOT);
+			if (lower.equals("modrinth.com") || lower.endsWith(".modrinth.com")) return "modrinth";
+			if (lower.equals("curseforge.com") || lower.endsWith(".curseforge.com") || lower.equals("curseforge.net") || lower.endsWith(".curseforge.net")) return "curseforge";
+			return "";
+		} catch (URISyntaxException | IllegalArgumentException ignored) {
+			return "";
+		}
 	}
 
 	private static String shortHash(String hash) {

@@ -104,7 +104,9 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		for (int index = start; index < Math.min(totalEntries, start + rowsPerPage); index++) {
 			int y = listTop + (index - start) * ROW_HEIGHT;
 			InstalledModpackController.Pack entry = entries.get(index);
-			this.addRenderableWidget(buttonWidget(x, y, rowWidth, 28, rowLabel(entry, rowWidth), press -> clickPack(entry)));
+			Button row = buttonWidget(x, y, rowWidth, 28, rowLabel(entry, rowWidth), press -> clickPack(entry));
+			setTooltip(row, VersionedText.literal(entry.modpackId()));
+			this.addRenderableWidget(row);
 		}
 		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new));
 		if (preservedCount == 0) setTooltip(actionButtons.get(showPagination ? 3 : 0), VersionedText.translatable("automodpack.vault.empty"));
