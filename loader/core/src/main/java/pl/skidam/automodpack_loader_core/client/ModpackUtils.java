@@ -36,7 +36,7 @@ public class ModpackUtils {
 		SUCCESS, OPERATION_FAILED, CONNECTION_FAILED
 	}
 
-	public record ManifestFetchResult(ManifestFetchState state, Jsons.ModpackContentFields content, DownloadClient client, Throwable failure) {
+	public record ManifestFetchResult(ManifestFetchState state, Jsons.CompleteModpackContentFields content, DownloadClient client, Throwable failure) {
 		public boolean successful() {
 			return state == ManifestFetchState.SUCCESS;
 		}
@@ -264,7 +264,7 @@ public class ModpackUtils {
 		}
 	}
 
-	public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(DownloadClient client, byte[][] fileHashes) {
+	public static Optional<Jsons.CompleteModpackContentFields> refreshServerModpackContent(DownloadClient client, byte[][] fileHashes) {
 		try {
 			return fetchModpackContentAsync(client, current -> current.requestRefresh(fileHashes, modpackContentTempFile)).get();
 		} catch (Exception e) {
@@ -303,7 +303,7 @@ public class ModpackUtils {
 				});
 	}
 
-	private static CompletableFuture<Optional<Jsons.ModpackContentFields>> fetchModpackContentAsync(DownloadClient client,
+	private static CompletableFuture<Optional<Jsons.CompleteModpackContentFields>> fetchModpackContentAsync(DownloadClient client,
 			Function<DownloadClient, CompletableFuture<Path>> operation) {
 		CompletableFuture<Path> operationFuture;
 		try {
@@ -313,9 +313,8 @@ public class ModpackUtils {
 		}
 
 		return operationFuture.thenApplyAsync(path -> {
-			Jsons.ModpackContentFields content = ModpackContentTools.read(path);
-			if (content == null || potentiallyMalicious(content)) return Optional.<Jsons.ModpackContentFields>empty();
-			return Optional.of(content);
+			Jsons.CompleteModpackContentFields content = ModpackContentTools.readCompleteFields(path);
+			return Optional.ofNullable(content);
 		}, DownloadClient.NET_EXECUTOR).whenComplete((content, error) -> {
 			try {
 				Files.deleteIfExists(modpackContentTempFile);
@@ -384,77 +383,5 @@ public class ModpackUtils {
 		Runnable cancelAction = () -> result.complete(false);
 		new ScreenManager().validation(parent, fingerprint, trustAction, cancelAction);
 		return result;
-	}
-
-	public static boolean potentiallyMalicious(Jsons.ModpackContentFields serverModpackContent) {
-		if (!ModpackId.isValid(serverModpackContent.modpackId)) {
-			LOGGER.error("Modpack content has an invalid modpack ID: '{}'", serverModpackContent.modpackId);
-			return true;
-		}
-
-		if (serverModpackContent.list == null || serverModpackContent.list.isEmpty()) return false;
-
-		boolean listInvalid = serverModpackContent.list.stream().anyMatch(item -> {
-			if (isHashInvalid(item.sha1)) {
-				LOGGER.error("Modpack content is invalid: file '{}' has invalid sha1 '{}'", item.file, item.sha1);
-				return true;
-			}
-			if (isUnsafePath(item.file, false)) {
-				LOGGER.error("Modpack content is invalid: file path '{}' is unsafe/malicious", item.file);
-				return true;
-			}
-			return false;
-		});
-
-		boolean nonModpackFilesToDeleteInvalid = serverModpackContent.nonModpackFilesToDelete.stream().anyMatch(item -> {
-			if (isHashInvalid(item.sha1)) {
-				LOGGER.error("Modpack content is invalid: file '{}' has invalid sha1 '{}'", item.file, item.sha1);
-				return true;
-			}
-			if (isUnsafePath(item.file, false)) {
-				LOGGER.error("Modpack content is invalid: file to delete path '{}' is unsafe/malicious", item.file);
-				return true;
-			}
-			return false;
-		});
-
-		return listInvalid || nonModpackFilesToDeleteInvalid;
-	}
-
-	// Assumes sha1 hash
-	private static boolean isHashInvalid(String hash) {
-		if (hash == null || hash.isBlank()) return true;
-
-		// SHA-1 hashes are 40 hexadecimal characters
-		return !hash.matches("^[a-fA-F0-9]{40}$");
-	}
-
-	private static boolean isUnsafePath(String rawPath, boolean blankIsFine) {
-		if (rawPath == null) return true;
-
-		if (!blankIsFine && rawPath.isBlank()) return true;
-
-		// Null Byte Check
-		if (rawPath.indexOf('\0') != -1) return true;
-
-		// Most files are just "mods/fabric-api.jar", so they hit this and return false immediately
-		if (!rawPath.contains("..")) return false;
-
-		// We must distinguish between malicious "../" and valid names like "super..mario.jar"
-		String normalized = rawPath.replace('\\', '/');
-
-		// Edge case
-		if (normalized.equals("..") || normalized.equals(".")) return true;
-
-		String[] segments = normalized.split("/");
-		for (String segment : segments) {
-			if (segment.equals("..")) return true; // Directory traversal
-		}
-
-		if (normalized.startsWith("automodpack/") || normalized.startsWith("/automodpack/")) {
-			return true; // Trying to mess with automodpack internal files
-		}
-
-		return false;
 	}
 }

@@ -1,15 +1,32 @@
 package pl.skidam.automodpack_core.update;
 
 import java.nio.file.Path;
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 
 public final class UpdatePlanner {
+	private static final Set<String> PLAYER_LOCAL_ROOTS = Set.of("automodpack", "logs", "player-local", "saves", "screenshots", "server-resource-packs");
 	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
 			.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
 	private static final Comparator<FileKey> FILE_KEY_ORDER = Comparator.comparing((FileKey key) -> key.root().ordinal()).thenComparing(FileKey::relativePath);
@@ -20,8 +37,6 @@ public final class UpdatePlanner {
 			Jsons.ModpackContentFields installedManifest,
 			Jsons.ModpackContentFields targetManifest,
 			Map<FileKey, FileState> files,
-			boolean allowRemoteDeletions,
-			Set<String> evaluatedDeletionTimestamps,
 			Set<String> forceCopyServicePaths,
 			List<ModInfo> targetMods,
 			List<ModInfo> standardMods,
@@ -30,7 +45,6 @@ public final class UpdatePlanner {
 			Jsons.ClientConfigFieldsV3 plannedClientConfig) {
 		public Input {
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
-			evaluatedDeletionTimestamps = Collections.unmodifiableSet(new LinkedHashSet<>(evaluatedDeletionTimestamps));
 			forceCopyServicePaths = Collections.unmodifiableSet(new LinkedHashSet<>(forceCopyServicePaths));
 			targetMods = List.copyOf(targetMods);
 			standardMods = List.copyOf(standardMods);
@@ -44,6 +58,10 @@ public final class UpdatePlanner {
 		Objects.requireNonNull(input);
 		Jsons.ModpackContentFields target = Objects.requireNonNull(input.targetManifest());
 		ModpackId.requireValid(target.modpackId);
+		GenerationTarget generationTarget = GenerationTarget.fromFlat(target);
+		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
+		if (!target.modpackId.equals(ledger.modpackId())) throw new IllegalArgumentException("Target ledger modpack ID does not match target");
+		if (input.installedManifest() != null) GenerationTarget.fromFlat(input.installedManifest());
 		if (target.list == null) throw new IllegalArgumentException("Target manifest list is missing");
 
 		Map<String, Jsons.ModpackContentFields.ModpackContentItem> targetItems = sortedItems(target.list);
@@ -53,8 +71,6 @@ public final class UpdatePlanner {
 		Set<FileKey> projectedScope = new HashSet<>(input.files().keySet());
 		Map<FileKey, Operation> operations = new HashMap<>();
 		EnumSet<RestartReason> restartReasons = EnumSet.noneOf(RestartReason.class);
-		Set<String> timestamps = new TreeSet<>();
-		List<Warning> warnings = new ArrayList<>();
 
 		for (var entry : installedItems.entrySet()) {
 			if (targetItems.containsKey(entry.getKey())) continue;
@@ -68,7 +84,9 @@ public final class UpdatePlanner {
 			}
 		}
 
-		planRemoteDeletions(input, projected, operations, timestamps, restartReasons, warnings);
+		planLedgerCleanup(ledger, targetItems.keySet(), projected, operations, restartReasons);
+		if (input.installedManifest() != null && !Objects.equals(input.installedManifest().selectedGroups, target.selectedGroups))
+			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
 		if (isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
 		planPreviousEditablePreservation(input.selection(), target.modpackId, projected, operations);
 
@@ -81,9 +99,8 @@ public final class UpdatePlanner {
 			FileState existing = projected.get(modpackKey);
 			boolean installedHashChanged = !hashesEqual(item.sha1, Optional.ofNullable(installedItems.get(relative)).map(old -> old.sha1).orElse(null));
 			boolean preserveEditable = item.editable && existing != null && !(item.overwriteEditable && installedHashChanged);
-			if (!preserveEditable && !matches(existing, item.sha1, parseSize(item.size))) {
+			if (!preserveEditable && !matches(existing, item.sha1, parseSize(item.size)))
 				install(operations, projected, modpackKey, item.sha1, parseSize(item.size), "mod".equals(item.type));
-			}
 
 			boolean copyToLive = !"mod".equals(item.type) || forceCopyPaths.contains(relative);
 			FileKey liveKey = liveKey(item);
@@ -120,7 +137,41 @@ public final class UpdatePlanner {
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
-		return new UpdatePlan(target.modpackId, ordered, finalState, input.plannedClientConfig(), timestamps, restartReasons, warnings);
+		return new UpdatePlan(target.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons);
+	}
+
+	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> targetPaths, Map<FileKey, FileState> projected,
+			Map<FileKey, Operation> operations, EnumSet<RestartReason> restartReasons) {
+		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
+			if (targetPaths.contains(entry.logicalPath())) continue;
+			Optional<FileKey> candidateKey = managedCleanupKey(entry.logicalPath());
+			if (candidateKey.isEmpty()) continue;
+			FileKey key = candidateKey.get();
+			FileState state = projected.get(key);
+			if (state == null || !state.regularFile() || state.sha1() == null) continue;
+			OwnershipLedger.Content content = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
+			if (!entry.historicalHashes().contains(content)) continue;
+			delete(operations, projected, key, state.sha1());
+			restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
+		}
+	}
+
+	public static Optional<FileKey> managedCleanupKey(String logicalPath) {
+		final String normalized;
+		try {
+			normalized = normalize(logicalPath);
+		} catch (RuntimeException e) {
+			return Optional.empty();
+		}
+		String firstComponent = normalized.indexOf('/') < 0 ? normalized : normalized.substring(0, normalized.indexOf('/'));
+		if (PLAYER_LOCAL_ROOTS.contains(firstComponent)) return Optional.empty();
+		if (normalized.equals("mods")) return Optional.empty();
+		if (normalized.startsWith("mods/")) {
+			Path path = Path.of(normalized);
+			if (path.getNameCount() != 2) return Optional.empty();
+			return Optional.of(new FileKey(Root.MODS_DIR, path.getFileName().toString()));
+		}
+		return Optional.of(new FileKey(Root.GAME_DIR, normalized));
 	}
 
 	private static boolean isSelectionChange(SelectionContext selection, String targetModpackId) {
@@ -154,45 +205,6 @@ public final class UpdatePlanner {
 			FileState selectedCopy = projected.get(new FileKey(Root.MODPACK_DIR, normalize(item.file)));
 			if (selectedCopy == null || !selectedCopy.regularFile()) continue;
 			install(operations, projected, liveKey(item), selectedCopy.sha1(), selectedCopy.size(), selectedCopy.mod());
-		}
-	}
-
-	private static void planRemoteDeletions(Input input, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, Set<String> timestamps,
-			EnumSet<RestartReason> restartReasons, List<Warning> warnings) {
-		Set<Jsons.ModpackContentFields.FileToDelete> requests = input.targetManifest().nonModpackFilesToDelete == null
-				? Set.of()
-				: input.targetManifest().nonModpackFilesToDelete;
-		Comparator<Jsons.ModpackContentFields.FileToDelete> requestOrder = Comparator.comparing((Jsons.ModpackContentFields.FileToDelete value) -> value.timestamp == null
-				? ""
-				: value.timestamp).thenComparing(value -> value.file == null ? "" : value.file).thenComparing(value -> value.sha1 == null ? "" : value.sha1);
-		for (var request : requests.stream().sorted(requestOrder).toList()) {
-			if (request.timestamp == null || input.evaluatedDeletionTimestamps().contains(request.timestamp)) continue;
-			String requested = normalize(request.file);
-			if (!input.allowRemoteDeletions()) {
-				warnings.add(new Warning(WarningType.REMOTE_DELETION_DISABLED, request.timestamp, requested, request.sha1, null, null));
-				continue;
-			}
-			List<FileKey> candidates = projected.keySet().stream().filter(key -> key.root() == Root.GAME_DIR || key.root() == Root.MODS_DIR)
-					.filter(key -> logicalGamePath(key).equals(requested) || sameParent(logicalGamePath(key), requested))
-					.sorted(Comparator.comparing(UpdatePlanner::logicalGamePath)).toList();
-			boolean matched = false;
-			List<Warning> mismatches = new ArrayList<>();
-			for (FileKey key : candidates) {
-				FileState state = projected.get(key);
-				if (state != null && state.regularFile() && hashesEqual(state.sha1(), request.sha1)) {
-					delete(operations, projected, key, request.sha1);
-					matched = true;
-					if (state.mod()) restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
-				} else if (state != null && state.regularFile()) {
-					mismatches.add(new Warning(WarningType.REMOTE_DELETION_HASH_MISMATCH, request.timestamp, requested, request.sha1,
-							logicalGamePath(key), state.sha1()));
-				}
-			}
-			if (!matched) {
-				if (mismatches.isEmpty()) warnings.add(new Warning(WarningType.REMOTE_DELETION_HASH_MISMATCH, request.timestamp, requested, request.sha1, null, null));
-				else warnings.addAll(mismatches);
-			}
-			timestamps.add(request.timestamp);
 		}
 	}
 
@@ -249,9 +261,9 @@ public final class UpdatePlanner {
 
 	private static void addDependencies(ModInfo mod, List<ModInfo> all, Set<ModInfo> result) {
 		if (!result.add(mod)) return;
-		for (String dependency : mod.dependencies()) for (ModInfo candidate : all) {
-			if (candidate.ids().stream().anyMatch(id -> id.equalsIgnoreCase(dependency))) addDependencies(candidate, all, result);
-		}
+		for (String dependency : mod.dependencies())
+			for (ModInfo candidate : all)
+				if (candidate.ids().stream().anyMatch(id -> id.equalsIgnoreCase(dependency))) addDependencies(candidate, all, result);
 	}
 
 	private static Map<String, Jsons.ModpackContentFields.ModpackContentItem> sortedItems(Set<Jsons.ModpackContentFields.ModpackContentItem> items) {
@@ -291,16 +303,6 @@ public final class UpdatePlanner {
 		return first.stream().anyMatch(second::contains);
 	}
 
-	private static String logicalGamePath(FileKey key) {
-		return key.root() == Root.MODS_DIR ? "mods/" + key.relativePath() : key.relativePath();
-	}
-
-	private static boolean sameParent(String first, String second) {
-		Path firstParent = Path.of(first).getParent();
-		Path secondParent = Path.of(second).getParent();
-		return firstParent != null && firstParent.equals(secondParent);
-	}
-
 	private static long parseSize(String size) {
 		try {
 			long parsed = Long.parseLong(size);
@@ -312,11 +314,6 @@ public final class UpdatePlanner {
 	}
 
 	public static String normalize(String path) {
-		if (path == null || path.indexOf('\0') >= 0) throw new IllegalArgumentException("Invalid relative path");
-		String normalized = path.replace('\\', '/');
-		while (normalized.startsWith("/")) normalized = normalized.substring(1);
-		Path value = Path.of(normalized).normalize();
-		if (value.isAbsolute() || normalized.isBlank() || value.startsWith("..")) throw new IllegalArgumentException("Unsafe relative path: " + path);
-		return value.toString().replace('\\', '/');
+		return LogicalPath.normalize(path);
 	}
 }

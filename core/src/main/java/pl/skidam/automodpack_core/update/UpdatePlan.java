@@ -3,25 +3,25 @@ package pl.skidam.automodpack_core.update;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 
 public record UpdatePlan(
 		String modpackId,
+		GenerationTarget generationTarget,
 		List<Operation> operations,
 		List<ProjectedFile> projectedFinalState,
 		Jsons.ClientConfigFieldsV3 plannedClientConfig,
-		Set<String> plannedDeletionTimestamps,
-		Set<RestartReason> restartReasons,
-		List<Warning> warnings) {
+		Set<RestartReason> restartReasons) {
 
 	public UpdatePlan {
+		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
 		operations = List.copyOf(operations);
 		projectedFinalState = List.copyOf(projectedFinalState);
-		plannedDeletionTimestamps = stableSet(plannedDeletionTimestamps);
 		restartReasons = stableSet(restartReasons);
-		warnings = List.copyOf(warnings);
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
@@ -51,15 +51,9 @@ public record UpdatePlan(
 		REMOVED_STANDARD_MODS,
 		APPLIED_SERVER_DELETIONS,
 		CHANGED_LOADER_VERSION,
+		CHANGED_GROUP_SELECTION,
 		SELECTED_MODPACK
 	}
-
-	public enum WarningType {
-		REMOTE_DELETION_DISABLED,
-		REMOTE_DELETION_HASH_MISMATCH
-	}
-
-	public record Warning(WarningType type, String timestamp, String requestedPath, String expectedHash, String actualPath, String actualHash) {}
 
 	public record Operation(
 			Root root,

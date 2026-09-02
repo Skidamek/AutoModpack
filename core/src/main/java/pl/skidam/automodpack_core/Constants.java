@@ -35,12 +35,19 @@ public class Constants {
 	public static final Path automodpackDir = Path.of("automodpack");
 	public static final Path storeDir = automodpackDir.resolve("store");
 	public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
+	public static final Path hostGenerationsDir = automodpackDir.resolve("host-generations");
+	public static final Path hostGenerationCurrentFile = hostGenerationsDir.resolve("current.json");
+	public static final Path hostGenerationRecordsDir = hostGenerationsDir.resolve("records");
+	public static final Path hostGenerationObjectsDir = hostGenerationsDir.resolve("objects");
+	public static final Path hostGenerationStagingDir = hostGenerationsDir.resolve("staging");
+	public static final Path hostPatchNotesFile = automodpackDir.resolve("host-patch-notes.md");
 	// TODO More server modpacks
 	// Main - required
 	// Addons - optional addon packs
 	// Switches - optional or required packs, chosen by the player, only one can be installed at a time
 	public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
-	public static Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
+	public static final Path modpackContentFileName = Path.of("automodpack-content.json");
+	public static final Path modpackCatalogueFileName = Path.of("automodpack-catalogue.json");
 	public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
 	public static Path clientLocalMetadataFile = automodpackDir.resolve("automodpack-client-metadata.json");
 	public static Path cacheDir = automodpackDir.resolve("cache");
@@ -48,7 +55,6 @@ public class Constants {
 	public static Path modCacheDBFile = cacheDir.resolve("mod-cache.db");
 	public static Path clientSelectionFile = automodpackDir.resolve("automodpack-client-selection.json");
 	public static Path clientDummyFilesFile = automodpackDir.resolve("automodpack-dummy-files.json");
-	public static Path clientDeletionTimeStamps = automodpackDir.resolve("automodpack-deletion-timestamps-files.json");
 	public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
 	public static final Path privateDir = automodpackDir.resolve(".private");
 	public static final Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");
