@@ -1,6 +1,6 @@
 AutoModpack's built-in hosting behavior depends on `connectionMode` and `bindPort`.
 
-- `HOLEPUNCH` uses marked Minecraft Login connections and does not use `bindPort`. It is enabled from Minecraft 1.19.2, where Login Start includes a profile UUID. Minecraft 1.18.2 uses `MAGIC_PACKET` instead. Forge and NeoForge holepunch Handshakes include the normal `\0FML3\0` extra so packed servers do not reject the connection as vanilla.
+- `HOLEPUNCH` is the default. It uses marked Minecraft Login connections and does not use `bindPort`. Forge and NeoForge holepunch Handshakes include the normal `\0FML3\0` extra so packed servers do not reject the connection as vanilla.
 - `MAGIC_PACKET` with `bindPort: -1` shares the Minecraft port through AMMH/AMOK routing. With an explicit port, it starts a dedicated magic-only listener.
 - `DIRECT` starts a dedicated direct-TLS listener only when `bindPort` is explicit. With `bindPort: -1`, no built-in listener is started.
 
