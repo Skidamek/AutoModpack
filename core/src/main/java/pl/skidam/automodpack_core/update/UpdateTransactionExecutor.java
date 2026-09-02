@@ -53,8 +53,6 @@ import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /** Validates and applies the one journaled client operation plan. */
 public final class UpdateTransactionExecutor {
-	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
-			.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
 	private final Context context;
 	private FileMetadataCache fileCache;
 
@@ -169,10 +167,10 @@ public final class UpdateTransactionExecutor {
 			boolean configChanged = configurationChangedAfterPlanning(transaction);
 			if (projectionPublicationStarted(transaction))
 				return configChanged || transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
-						&& (!overlayStateMatches(transaction) || hasNewerSelection(transaction));
+						&& (!overlayStateMatches(transaction) || selectionChangedAfterPlanning(transaction));
 			if (configChanged) return true;
 			if (!Objects.equals(transaction.overlayDigest, context.storage().overlayDigest(transaction.modpackId))) return true;
-			return hasNewerSelection(transaction);
+			return selectionChangedAfterPlanning(transaction);
 		});
 	}
 
@@ -182,11 +180,6 @@ public final class UpdateTransactionExecutor {
 		ClientConfigJsons.ClientConfigFieldsV3 current = readClientConfig();
 		if (current.equals(transaction.expectedClientConfig)) return false;
 		return transaction.plannedClientConfig == null || !current.equals(transaction.plannedClientConfig);
-	}
-
-	private boolean hasNewerSelection(UpdateTransaction transaction) throws IOException {
-		if (!isModpackTransaction(transaction)) return false;
-		return selectionChangedAfterPlanning(transaction);
 	}
 
 	/** Reports whether the live state has already reached the point where only projection publication remains. */
@@ -298,7 +291,7 @@ public final class UpdateTransactionExecutor {
 		for (Operation operation : transaction.operations)
 			if (operation == null || operation.root() == null || operation.operation() == null || operation.relativePath() == null)
 				throw new IOException("Incomplete transaction operation");
-		List<Operation> sortedOperations = transaction.operations.stream().sorted(OPERATION_ORDER).toList();
+		List<Operation> sortedOperations = transaction.operations.stream().sorted(Operation.ORDER).toList();
 		if (!transaction.operations.equals(sortedOperations)) throw new IOException("Transaction operations are not deterministically ordered");
 		Set<FileKey> operationKeys = new HashSet<>();
 		Set<Path> operationTargets = new HashSet<>();
@@ -498,7 +491,7 @@ public final class UpdateTransactionExecutor {
 			Path physicalTarget = validateRootAndPath(entry.root(), relative, modpackId, purpose);
 			if (!physicalTargets.add(physicalTarget)) throw new IOException("Projected entries alias the same physical target");
 			FileKey key = new FileKey(entry.root(), relative);
-			if (previous != null && compareFileKeys(previous, key) >= 0) throw new IOException("Projected final state is not uniquely ordered");
+			if (previous != null && FileKey.ORDER.compare(previous, key) >= 0) throw new IOException("Projected final state is not uniquely ordered");
 			previous = key;
 			if (entry.present()) {
 				validateHash(entry.expectedHash(), "projected SHA-1");
@@ -774,43 +767,32 @@ public final class UpdateTransactionExecutor {
 		} catch (IOException e) {
 			Operation currentOperation = current.get();
 			if (blockedPath == null && currentOperation != null) blockedPath = resolve(currentOperation, transaction);
-			if (e instanceof UpdateReplanRequiredException replan) {
-				if (blockedPath == null) blockedPath = replan.changedPath();
+			String operationName = currentOperation == null ? null : currentOperation.operation().name();
+			if (e instanceof UpdateReplanRequiredException replan && blockedPath == null) blockedPath = replan.changedPath();
+			UpdateTransaction.Status status = e instanceof UpdateReplanRequiredException
+					? UpdateTransaction.Status.REPLAN_REQUIRED
+					: isLockFailure(e) ? UpdateTransaction.Status.DEFERRED_LOCKED : UpdateTransaction.Status.FAILED;
+			if (status != UpdateTransaction.Status.FAILED) {
 				transaction.phase = UpdateTransaction.Phase.DEFERRED;
-				transaction.resultStatus = UpdateTransaction.Status.REPLAN_REQUIRED;
-				transaction.resultOperation = currentOperation == null ? null : currentOperation.operation().name();
-				transaction.resultPath = blockedPath == null ? null : blockedPath.toString();
-				transaction.resultMessage = e.getMessage();
-				try {
-					ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
-				} catch (IOException journalFailure) {
-					e.addSuppressed(journalFailure);
-				}
-				return new Execution(UpdateTransaction.Status.REPLAN_REQUIRED, transaction, currentOperation == null ? null : currentOperation.operation().name(), blockedPath, e.getMessage());
+				recordResult(transaction, status, operationName, blockedPath, e.getMessage(), e);
+				return new Execution(status, transaction, operationName, blockedPath, e.getMessage());
 			}
-			if (isLockFailure(e)) {
-				transaction.phase = UpdateTransaction.Phase.DEFERRED;
-				transaction.resultStatus = UpdateTransaction.Status.DEFERRED_LOCKED;
-				transaction.resultOperation = currentOperation == null ? null : currentOperation.operation().name();
-				transaction.resultPath = blockedPath == null ? null : blockedPath.toString();
-				transaction.resultMessage = e.getMessage();
-				try {
-					ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
-				} catch (IOException journalFailure) {
-					e.addSuppressed(journalFailure);
-				}
-				return new Execution(UpdateTransaction.Status.DEFERRED_LOCKED, transaction, currentOperation == null ? null : currentOperation.operation().name(), blockedPath, e.getMessage());
-			}
-			transaction.resultStatus = UpdateTransaction.Status.FAILED;
-			transaction.resultOperation = currentOperation == null ? null : currentOperation.operation().name();
-			transaction.resultPath = blockedPath == null ? null : blockedPath.toString();
-			transaction.resultMessage = e.getMessage();
-			try {
-				ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
-			} catch (IOException journalFailure) {
-				e.addSuppressed(journalFailure);
-			}
-			throw new UpdateExecutionException(currentOperation == null ? null : currentOperation.operation().name(), blockedPath, e);
+			recordResult(transaction, UpdateTransaction.Status.FAILED, operationName, blockedPath, e.getMessage(), e);
+			throw new UpdateExecutionException(operationName, blockedPath, e);
+		}
+	}
+
+	/** Persists the terminal result fields of an interrupted transaction onto its journal record. */
+	private void recordResult(UpdateTransaction transaction, UpdateTransaction.Status status, String operationName, Path blockedPath, String message, IOException cause)
+			throws IOException {
+		transaction.resultStatus = status;
+		transaction.resultOperation = operationName;
+		transaction.resultPath = blockedPath == null ? null : blockedPath.toString();
+		transaction.resultMessage = message;
+		try {
+			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+		} catch (IOException journalFailure) {
+			cause.addSuppressed(journalFailure);
 		}
 	}
 
@@ -841,7 +823,7 @@ public final class UpdateTransactionExecutor {
 				verifyExpectedExisting(operation, target);
 				Files.delete(target);
 			}
-			FileTrees.pruneEmptyAncestors(target, root(operation.root(), transaction));
+			FileTrees.pruneEmptyAncestors(target, root(operation.root(), transaction.modpackId));
 		}
 	}
 
@@ -1048,12 +1030,7 @@ public final class UpdateTransactionExecutor {
 
 	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {
 		if (!isModpackTransaction(transaction)) return;
-		SelectionIntent current = new ClientSelectionStore(context.storage().selectionFile()).get(transaction.modpackId).orElse(null);
-		SelectionIntent expected = transaction.expectedPriorIntent();
-		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
-				? Objects.equals(current, transaction.targetIntent())
-				: transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL ? current == null : Objects.equals(current, expected);
-		if (!Objects.equals(current, expected) && !alreadyCommitted) throw new IOException("Group selection changed after planning for modpack " + transaction.modpackId);
+		if (selectionChangedAfterPlanning(transaction)) throw new IOException("Group selection changed after planning for modpack " + transaction.modpackId);
 	}
 
 	private Path resolve(Operation operation, UpdateTransaction transaction) throws IOException {
@@ -1061,25 +1038,23 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Path resolve(Root root, String relativePath, UpdateTransaction transaction) throws IOException {
-		Path base = root(root, transaction).toAbsolutePath().normalize();
+		Path base = root(root, transaction.modpackId).toAbsolutePath().normalize();
 		Path resolved = base.resolve(normalizeOperationPath(relativePath)).normalize();
 		if (!resolved.startsWith(base)) throw new IOException("Operation escapes constrained root");
 		FileTrees.requireNoSymbolicLinkDescendants(base, resolved, "Operation target");
 		return resolved;
 	}
 
-	private Path root(Root root, UpdateTransaction transaction) throws IOException {
+	private Path root(Root root, String modpackId) throws IOException {
 		return switch (root) {
 			case PROJECTION -> context.storage().activeDirectory();
-			case OVERLAY -> context.storage().overlayDirectory(transaction.modpackId);
+			case OVERLAY -> context.storage().overlayDirectory(modpackId);
 			case GAME_DIR -> context.storage().gameDirectory();
 		};
 	}
 
 	private Path validateRootAndPath(Root root, String relativePath, String currentModpackId, UpdateTransaction.Purpose purpose) throws IOException {
-		UpdateTransaction synthetic = new UpdateTransaction();
-		synthetic.modpackId = currentModpackId;
-		Path constrainedRoot = root(root, synthetic).toAbsolutePath().normalize();
+		Path constrainedRoot = root(root, currentModpackId).toAbsolutePath().normalize();
 		Path resolved = constrainedRoot.resolve(relativePath).normalize();
 		if (!resolved.startsWith(constrainedRoot)) throw new IOException("Transaction path escapes constrained root");
 		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, resolved, "Transaction target");
@@ -1146,11 +1121,6 @@ public final class UpdateTransactionExecutor {
 				fileCache = null;
 			}
 		}
-	}
-
-	private static int compareFileKeys(FileKey first, FileKey second) {
-		int root = Integer.compare(first.root().ordinal(), second.root().ordinal());
-		return root != 0 ? root : first.relativePath().compareTo(second.relativePath());
 	}
 
 	public static boolean isLockFailure(IOException exception) {

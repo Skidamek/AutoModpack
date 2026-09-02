@@ -34,9 +34,6 @@ import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class UpdatePlanner {
-	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
-			.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
-	private static final Comparator<FileKey> FILE_KEY_ORDER = Comparator.comparing((FileKey key) -> key.root().ordinal()).thenComparing(FileKey::relativePath);
 
 	private UpdatePlanner() {}
 
@@ -174,9 +171,9 @@ public final class UpdatePlanner {
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
 
-		List<Operation> ordered = operations.values().stream().sorted(OPERATION_ORDER).toList();
+		List<Operation> ordered = operations.values().stream().sorted(Operation.ORDER).toList();
 		projectedScope.addAll(operations.keySet());
-		List<ProjectedFile> finalState = projectedScope.stream().sorted(FILE_KEY_ORDER).map(key -> {
+		List<ProjectedFile> finalState = projectedScope.stream().sorted(FileKey.ORDER).map(key -> {
 			FileState state = projected.get(key);
 			return state == null || !state.regularFile()
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
@@ -281,9 +278,9 @@ public final class UpdatePlanner {
 		conflicts.addAll(planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), forceCopyPaths, installedLedger, projected, operations, restartReasons, listedPins));
 
 		planBaselineCaptures(input.files(), operations, baselineCaptures);
-		List<Operation> ordered = operations.values().stream().sorted(OPERATION_ORDER).toList();
+		List<Operation> ordered = operations.values().stream().sorted(Operation.ORDER).toList();
 		projectedScope.addAll(operations.keySet());
-		List<ProjectedFile> finalState = projectedScope.stream().sorted(FILE_KEY_ORDER).map(key -> {
+		List<ProjectedFile> finalState = projectedScope.stream().sorted(FileKey.ORDER).map(key -> {
 			FileState state = projected.get(key);
 			return state == null || !state.regularFile()
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)

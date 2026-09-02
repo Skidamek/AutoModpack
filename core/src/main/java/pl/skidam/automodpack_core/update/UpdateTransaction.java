@@ -175,8 +175,7 @@ public final class UpdateTransaction {
 	}
 
 	private static void sortOperations(List<Operation> operations) {
-		operations.sort(Comparator.comparing((Operation operation) -> operation.operation().ordinal()).thenComparing(operation -> operation.root().ordinal())
-				.thenComparing(Operation::relativePath));
+		operations.sort(Operation.ORDER);
 	}
 
 	private enum IntentPart {
