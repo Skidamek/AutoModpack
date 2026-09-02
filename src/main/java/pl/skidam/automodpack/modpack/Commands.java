@@ -20,6 +20,7 @@ import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationCompactor;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
@@ -641,7 +642,7 @@ public class Commands {
 		private static int generationStorageCompactPreview(CommandContext<CommandSourceStack> context) {
 			String boundary = StringArgumentType.getString(context, "generation-id");
 			try {
-				GenerationStore.CompactionPreview preview = modpackExecutor.previewCompactHistory(boundary);
+				GenerationCompactor.CompactionPreview preview = modpackExecutor.previewCompactHistory(boundary);
 				sendCompactionPreview(context, preview);
 				send(context, "Run /automodpack generate storage compact before " + boundary + " confirm to apply this exact compaction", ChatFormatting.YELLOW, false);
 				return Command.SINGLE_SUCCESS;
@@ -655,7 +656,7 @@ public class Commands {
 			String boundary = StringArgumentType.getString(context, "generation-id");
 			Util.backgroundExecutor().execute(() -> {
 				try {
-					GenerationStore.CompactionResult result = modpackExecutor.compactHistoryBefore(boundary);
+					GenerationCompactor.CompactionResult result = modpackExecutor.compactHistoryBefore(boundary);
 					send(context, "Generation details compacted before the retained boundary", ChatFormatting.GREEN, false);
 					send(context, "Boundary generation", ChatFormatting.WHITE, copyable(result.boundaryGenerationId()), ChatFormatting.YELLOW, false);
 					send(context, "Deleted history", ChatFormatting.WHITE,
@@ -669,7 +670,7 @@ public class Commands {
 		return Command.SINGLE_SUCCESS;
 		}
 
-		private static void sendCompactionPreview(CommandContext<CommandSourceStack> context, GenerationStore.CompactionPreview preview) {
+		private static void sendCompactionPreview(CommandContext<CommandSourceStack> context, GenerationCompactor.CompactionPreview preview) {
 			send(context, "Generation-history compaction preview", ChatFormatting.YELLOW, false);
 			send(context, "Retained boundary", ChatFormatting.WHITE, copyable(preview.boundaryGenerationId()), ChatFormatting.YELLOW, false);
 			send(context, "Rollback targets lost", ChatFormatting.WHITE, String.valueOf(preview.rollbackUnavailableGenerationIds().size()), ChatFormatting.YELLOW, false);

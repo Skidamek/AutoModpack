@@ -153,14 +153,14 @@ class GenerationStoreStorageTest {
 		URI archive = URI.create("jar:" + tempDir.resolve("generation.zip").toUri());
 		try (FileSystem fileSystem = FileSystems.newFileSystem(archive, Map.of("create", "true"))) {
 			Path root = fileSystem.getPath("/generation");
-			GenerationStore store = new GenerationStore(root, Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC), () -> {});
+			GenerationStore store = new GenerationStore(root, root.resolve("objects"), Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC), () -> {}, path -> {}, null);
 
 			assertEquals(root.resolve("objects"), store.objectRoot());
 		}
 	}
 
 	private GenerationStore store(Instant instant) {
-		return new GenerationStore(tempDir, Clock.fixed(instant, ZoneOffset.UTC), () -> {});
+		return new GenerationStore(tempDir, tempDir.resolve("objects"), Clock.fixed(instant, ZoneOffset.UTC), () -> {}, path -> {}, null);
 	}
 
 	private String createObject(String value) throws Exception {

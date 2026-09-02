@@ -109,10 +109,10 @@ class GenerationStoreTest {
 		Path equalRoot = Path.of(firstRoot.toString());
 		assertEquals(firstRoot, equalRoot);
 		assertNotSame(firstRoot, equalRoot);
-		GenerationStore firstStore = new GenerationStore(firstRoot, Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC), () -> {});
+		GenerationStore firstStore = new GenerationStore(firstRoot, firstRoot.resolve("objects"), Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC), () -> {}, path -> {}, null);
 		firstStore.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot parent = firstStore.loadCurrent().orElseThrow();
-		GenerationStore secondStore = new GenerationStore(equalRoot, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC), () -> {});
+		GenerationStore secondStore = new GenerationStore(equalRoot, equalRoot.resolve("objects"), Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC), () -> {}, path -> {}, null);
 		ExecutorService executor = Executors.newFixedThreadPool(2);
 		try {
 			var first = executor.submit(() -> firstStore.publish(candidate("second"), Optional.of(parent), ""));
@@ -140,8 +140,8 @@ class GenerationStoreTest {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		byte[] oldPointer = Files.readAllBytes(tempDir.resolve("current.json"));
-		GenerationStore failing = new GenerationStore(tempDir, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC),
-				() -> { throw new IOException("injected pointer failure"); });
+		GenerationStore failing = new GenerationStore(tempDir, tempDir.resolve("objects"), Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC),
+				() -> { throw new IOException("injected pointer failure"); }, path -> {}, null);
 		GenerationStore.CurrentSnapshot current = failing.loadCurrent().orElseThrow();
 		assertThrows(IOException.class, () -> failing.publish(candidate("second"), Optional.of(current), ""));
 		assertArrayEquals(oldPointer, Files.readAllBytes(tempDir.resolve("current.json")));
@@ -329,10 +329,10 @@ class GenerationStoreTest {
 		GenerationStore.CurrentSnapshot secondCurrent = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication third = store.publish(candidate("third"), Optional.of(secondCurrent), "third notes");
 
-		GenerationStore.CompactionPreview preview = store.previewCompaction(third.record().metadata().generationId());
+		GenerationCompactor.CompactionPreview preview = store.previewCompaction(third.record().metadata().generationId());
 		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId()).stream().sorted().toList(), preview.rollbackUnavailableGenerationIds());
 		assertTrue(preview.reclaimableBytes() > 0);
-		GenerationStore.CompactionResult result = store.compactBefore(third.record().metadata().generationId());
+		GenerationCompactor.CompactionResult result = store.compactBefore(third.record().metadata().generationId());
 
 		assertEquals(third.record().metadata().generationId(), result.boundaryGenerationId());
 		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId()).stream().sorted().toList(), result.supersededGenerationIds());
@@ -352,7 +352,7 @@ class GenerationStoreTest {
 		assertFalse(compactedIndex.find(first.record().metadata().generationId()).orElseThrow().rollbackAvailable());
 		assertTrue(compactedIndex.find(third.record().metadata().generationId()).orElseThrow().detailsAvailable());
 		assertEquals(third.record().metadata().generationId(), compactedIndex.compactionBoundaryGenerationId());
-		GenerationStore.CompactionResult retry = store.compactBefore(third.record().metadata().generationId());
+		GenerationCompactor.CompactionResult retry = store.compactBefore(third.record().metadata().generationId());
 		assertEquals(result.supersededGenerationIds(), retry.supersededGenerationIds());
 		assertEquals(0, retry.deletedCommitCount());
 		assertEquals(0, retry.deletedDeltaCount());
@@ -413,7 +413,7 @@ class GenerationStoreTest {
 		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(store.loadCurrent().orElseThrow()), "second notes");
 		GenerationStore.Publication third = store.publish(candidate("third"), Optional.of(store.loadCurrent().orElseThrow()), "third notes");
 
-		GenerationStore.CompactionResult result = store.compactBefore(second.record().metadata().generationId());
+		GenerationCompactor.CompactionResult result = store.compactBefore(second.record().metadata().generationId());
 
 		assertEquals(List.of(first.record().metadata().generationId()), result.supersededGenerationIds());
 		assertEquals(third.record(), store.loadCurrentDeep().orElseThrow().record());
@@ -474,9 +474,9 @@ class GenerationStoreTest {
 		GenerationStore.CurrentSnapshot secondCurrent = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication third = store.publish(candidate("third"), Optional.of(secondCurrent), "");
 		AtomicBoolean interrupt = new AtomicBoolean(true);
-		GenerationStore interrupted = new GenerationStore(tempDir, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC), () -> {}, path -> {
+		GenerationStore interrupted = new GenerationStore(tempDir, tempDir.resolve("objects"), Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC), () -> {}, path -> {
 			if (interrupt.getAndSet(false)) throw new IOException("injected compaction interruption");
-		});
+		}, null);
 
 		assertThrows(IOException.class, () -> interrupted.compactBefore(third.record().metadata().generationId()));
 		assertTrue(Files.exists(tempDir.resolve("checkpoint.json")));
@@ -484,7 +484,7 @@ class GenerationStoreTest {
 		assertTrue(Files.exists(tempDir.resolve("deltas").resolve(first.record().metadata().generationId() + ".json")));
 		assertTrue(Files.exists(tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json")));
 
-		GenerationStore.CompactionResult retry = interrupted.compactBefore(third.record().metadata().generationId());
+		GenerationCompactor.CompactionResult retry = interrupted.compactBefore(third.record().metadata().generationId());
 		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId()).stream().sorted().toList(), retry.supersededGenerationIds());
 		assertTrue(retry.deletedCommitCount() >= 2);
 		assertTrue(retry.deletedDeltaCount() >= 2);
@@ -507,9 +507,9 @@ class GenerationStoreTest {
 		byte[] staleProjection = Files.readAllBytes(tempDir.resolve("current-projection.json"));
 		GenerationStore.Publication third = store.publish(candidate("third"), Optional.of(store.loadCurrent().orElseThrow()), "third notes");
 		AtomicBoolean interrupt = new AtomicBoolean(true);
-		GenerationStore interrupted = new GenerationStore(tempDir, Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC), () -> {}, path -> {
+		GenerationStore interrupted = new GenerationStore(tempDir, tempDir.resolve("objects"), Clock.fixed(Instant.parse("2026-01-02T00:00:00Z"), ZoneOffset.UTC), () -> {}, path -> {
 			if (interrupt.getAndSet(false)) throw new IOException("injected compaction interruption");
-		});
+		}, null);
 
 		assertThrows(IOException.class, () -> interrupted.compactBefore(third.record().metadata().generationId()));
 		Files.write(tempDir.resolve("current-projection.json"), staleProjection);
@@ -524,7 +524,7 @@ class GenerationStoreTest {
 	}
 
 	private GenerationStore store(Instant instant) {
-		return new GenerationStore(tempDir, Clock.fixed(instant, ZoneOffset.UTC), () -> {});
+		return new GenerationStore(tempDir, tempDir.resolve("objects"), Clock.fixed(instant, ZoneOffset.UTC), () -> {}, path -> {}, null);
 	}
 
 	private ModpackCandidate candidate(String description) throws Exception {

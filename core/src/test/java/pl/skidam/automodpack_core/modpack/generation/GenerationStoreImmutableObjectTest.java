@@ -83,9 +83,9 @@ class GenerationStoreImmutableObjectTest {
 	@Test
 	void pointerFailureLeavesPromotedObjectAndCompactStateUnreachable() throws Exception {
 		Path root = tempDir.resolve("host-generations");
-		GenerationStore store = new GenerationStore(root, Clock.systemUTC(), () -> {
+		GenerationStore store = new GenerationStore(root, root.resolve("objects"), Clock.systemUTC(), () -> {
 			throw new IOException("pointer failure");
-		});
+		}, path -> {}, null);
 		try (ModpackCandidate candidate = scan()) {
 			StagedObject staged = onlyObject(candidate);
 			assertThrows(IOException.class, () -> store.publish(candidate, Optional.empty(), ""));
