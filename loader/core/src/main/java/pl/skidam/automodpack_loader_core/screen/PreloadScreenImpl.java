@@ -4,8 +4,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
@@ -41,10 +39,10 @@ public class PreloadScreenImpl implements ScreenService {
 	public void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed) {}
 
 	@Override
-	public void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed) {}
+	public void history(HistoryViewRequest request) {}
 
 	@Override
-	public void error(String... args) {}
+	public void failure(FailureRequest request) {}
 
 	@Override
 	public void title() {}

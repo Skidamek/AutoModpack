@@ -78,6 +78,8 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields fields = ConfigTools.read(tempDir.resolve("current-projection.json"), ModpackJsons.CompleteModpackContentFields.class).orElseThrow();
 		assertEquals(List.of("First generation notes", "Updated generation notes"), GenerationPatchNoteHistory.fromFields(fields).stream()
 				.map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
+		assertEquals(List.of(first.record().metadata().generationId(), changedNotes.record().metadata().generationId()),
+				GenerationHistoryIndex.fromFields(fields.generationHistory).entries().stream().map(GenerationHistoryIndex.Entry::generationId).toList());
 	}
 
 	@Test
@@ -321,7 +323,10 @@ class GenerationStoreTest {
 		GenerationStore.CurrentSnapshot secondCurrent = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication third = store.publish(candidate("third"), Optional.of(secondCurrent), "third notes");
 
-		GenerationStore.CompactionResult result = store.compact();
+		GenerationStore.CompactionPreview preview = store.previewCompaction(third.record().metadata().generationId());
+		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId()).stream().sorted().toList(), preview.rollbackUnavailableGenerationIds());
+		assertTrue(preview.reclaimableBytes() > 0);
+		GenerationStore.CompactionResult result = store.compactBefore(third.record().metadata().generationId());
 
 		assertEquals(third.record().metadata().generationId(), result.boundaryGenerationId());
 		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId()).stream().sorted().toList(), result.supersededGenerationIds());
@@ -334,7 +339,14 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields compactedFields = ConfigTools.read(tempDir.resolve("current-projection.json"), ModpackJsons.CompleteModpackContentFields.class).orElseThrow();
 		assertEquals(List.of("first notes", "second notes", "third notes"), GenerationPatchNoteHistory.fromFields(compactedFields).stream()
 				.map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
-		GenerationStore.CompactionResult retry = store.compact();
+		GenerationHistoryIndex compactedIndex = GenerationHistoryIndex.fromFields(compactedFields.generationHistory);
+		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId(), third.record().metadata().generationId()),
+				compactedIndex.entries().stream().map(GenerationHistoryIndex.Entry::generationId).toList());
+		assertFalse(compactedIndex.find(first.record().metadata().generationId()).orElseThrow().detailsAvailable());
+		assertFalse(compactedIndex.find(first.record().metadata().generationId()).orElseThrow().rollbackAvailable());
+		assertTrue(compactedIndex.find(third.record().metadata().generationId()).orElseThrow().detailsAvailable());
+		assertEquals(third.record().metadata().generationId(), compactedIndex.compactionBoundaryGenerationId());
+		GenerationStore.CompactionResult retry = store.compactBefore(third.record().metadata().generationId());
 		assertEquals(result.supersededGenerationIds(), retry.supersededGenerationIds());
 		assertEquals(0, retry.deletedCommitCount());
 		assertEquals(0, retry.deletedDeltaCount());
@@ -349,6 +361,7 @@ class GenerationStoreTest {
 		ModpackJsons.CompleteModpackContentFields reloadedFields = ConfigTools.read(tempDir.resolve("current-projection.json"), ModpackJsons.CompleteModpackContentFields.class).orElseThrow();
 		assertEquals(List.of("first notes", "second notes", "third notes"), GenerationPatchNoteHistory.fromFields(reloadedFields).stream()
 				.map(GenerationPatchNoteHistory.Entry::patchNotes).toList());
+		assertEquals(compactedIndex, GenerationHistoryIndex.fromFields(reloadedFields.generationHistory));
 	}
 
 	@Test
@@ -359,7 +372,7 @@ class GenerationStoreTest {
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication removed = store.publish(emptyCandidate("removed"), Optional.of(current), "removed notes");
 
-		store.compact();
+		store.compactBefore(removed.record().metadata().generationId());
 		GenerationRecord reloaded = store.loadCurrentDeep().orElseThrow().record();
 		OwnershipLedger.Entry entry = reloaded.ownershipLedger().entries().get("config/example.txt");
 		assertEquals(OwnershipLedger.Status.TOMBSTONE, entry.currentStatus());
@@ -373,7 +386,7 @@ class GenerationStoreTest {
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(current), "");
-		store.compact();
+		store.compactBefore(second.record().metadata().generationId());
 
 		GenerationStore reloaded = store(Instant.parse("2026-01-02T00:00:00Z"));
 		GenerationStore.CurrentSnapshot compacted = reloaded.loadCurrent().orElseThrow();
@@ -388,12 +401,34 @@ class GenerationStoreTest {
 	}
 
 	@Test
+	void compactionCanRetainABoundaryOlderThanTheCurrentGeneration() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "first notes");
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(store.loadCurrent().orElseThrow()), "second notes");
+		GenerationStore.Publication third = store.publish(candidate("third"), Optional.of(store.loadCurrent().orElseThrow()), "third notes");
+
+		GenerationStore.CompactionResult result = store.compactBefore(second.record().metadata().generationId());
+
+		assertEquals(List.of(first.record().metadata().generationId()), result.supersededGenerationIds());
+		assertEquals(third.record(), store.loadCurrentDeep().orElseThrow().record());
+		assertEquals(List.of(second.record().metadata().generationId(), third.record().metadata().generationId()), store.currentHistory().stream()
+				.map(entry -> entry.metadata().generationId()).toList());
+		GenerationHistoryIndex index = store.currentHistoryIndex().orElseThrow();
+		assertEquals(second.record().metadata().generationId(), index.compactionBoundaryGenerationId());
+		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId(), third.record().metadata().generationId()),
+				index.entries().stream().map(GenerationHistoryIndex.Entry::generationId).toList());
+		assertFalse(index.find(first.record().metadata().generationId()).orElseThrow().rollbackAvailable());
+		assertTrue(index.find(second.record().metadata().generationId()).orElseThrow().rollbackAvailable());
+		assertTrue(index.find(third.record().metadata().generationId()).orElseThrow().rollbackAvailable());
+	}
+
+	@Test
 	void revertCanTargetTheCompactionBoundary() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		store.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(current), "");
-		store.compact();
+		store.compactBefore(second.record().metadata().generationId());
 
 		GenerationStore.CurrentSnapshot compacted = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication reverted = store.publishRevert(second.record().metadata().generationId(), Optional.of(compacted), "revert after compact");
@@ -417,7 +452,7 @@ class GenerationStoreTest {
 		byte[] deltaBefore = Files.readAllBytes(oldDelta);
 		Files.writeString(checkpoint, "not-json", StandardCharsets.UTF_8);
 
-		assertThrows(IOException.class, store::compact);
+		assertThrows(IOException.class, () -> store.compactBefore(second.record().metadata().generationId()));
 		assertArrayEquals(commitBefore, Files.readAllBytes(oldCommit));
 		assertArrayEquals(deltaBefore, Files.readAllBytes(oldDelta));
 		assertEquals("not-json", Files.readString(checkpoint, StandardCharsets.UTF_8));
@@ -437,13 +472,13 @@ class GenerationStoreTest {
 			if (interrupt.getAndSet(false)) throw new IOException("injected compaction interruption");
 		});
 
-		assertThrows(IOException.class, interrupted::compact);
+		assertThrows(IOException.class, () -> interrupted.compactBefore(third.record().metadata().generationId()));
 		assertTrue(Files.exists(tempDir.resolve("checkpoint.json")));
 		assertTrue(Files.exists(tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json")));
 		assertTrue(Files.exists(tempDir.resolve("deltas").resolve(first.record().metadata().generationId() + ".json")));
 		assertTrue(Files.exists(tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json")));
 
-		GenerationStore.CompactionResult retry = interrupted.compact();
+		GenerationStore.CompactionResult retry = interrupted.compactBefore(third.record().metadata().generationId());
 		assertEquals(List.of(first.record().metadata().generationId(), second.record().metadata().generationId()).stream().sorted().toList(), retry.supersededGenerationIds());
 		assertTrue(retry.deletedCommitCount() >= 2);
 		assertTrue(retry.deletedDeltaCount() >= 2);

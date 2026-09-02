@@ -16,8 +16,34 @@ public class GenerationJsons {
 		public String boundaryGenerationId = "";
 		public ModpackJsons.CompleteModpackContentFields record = new ModpackJsons.CompleteModpackContentFields();
 		public List<ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields> patchNotesHistory = List.of();
+		public GenerationHistoryIndexFields historyIndex;
 		public List<String> supersededGenerationIds = List.of();
 		public List<String> supersededCatalogueStateDigests = List.of();
+	}
+
+	public static class GenerationHistoryIndexFields {
+		public String modpackId = "";
+		public String currentGenerationId = "";
+		public String compactionBoundaryGenerationId = "";
+		public List<GenerationHistoryIndexEntryFields> entries = List.of();
+	}
+
+	public static class GenerationHistoryIndexEntryFields {
+		public String generationId = "";
+		public String parentGenerationId = "";
+		public String createdAt = "";
+		public String stateDigest = "";
+		public String rollbackTargetGenerationId = "";
+		public String patchNotes = "";
+		public String patchNotesDigest = "";
+		public int addedFiles;
+		public int modifiedFiles;
+		public int removedFiles;
+		public int metadataOnlyFiles;
+		public int metadataChanges;
+		public String diffDigest = "";
+		public boolean detailsAvailable;
+		public boolean rollbackAvailable;
 	}
 
 	public static class OwnershipLedgerFields {

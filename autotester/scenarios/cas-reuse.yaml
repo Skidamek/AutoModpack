@@ -19,8 +19,8 @@ flow:
     until:
       all:
         - screen: RestartScreen
-        - log: { container: client, matches: "No files to download" }
-        - log: { container: client, matches: "Prepared update changes: 8 changed, 0 removed" }
+        # The fixture has three files plus its marker, all already present in CAS.
+        - log: { container: client, matches: "Prepared update changes: 4 changed, 0 removed" }
   - do: screenshot
     name: capture the CAS-backed completion summary
     file: cas-update-complete

@@ -121,7 +121,7 @@ class GenerationStoreStorageTest {
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
 		store.publish(candidate("second"), Optional.of(current), "");
-		store.compact();
+		store.compactBefore(store.loadCurrent().orElseThrow().record().metadata().generationId());
 		String historicalHash = first.record().manifest().groups().get("main").files().get("config/example.txt").sha1();
 		String orphanHash = createObject("orphan-after-compaction");
 

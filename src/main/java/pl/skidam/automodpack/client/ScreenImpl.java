@@ -2,7 +2,6 @@ package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack.client.ui.*;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -11,6 +10,10 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
+import pl.skidam.automodpack_loader_core.screen.HistoricalCatalogueLoader;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
+import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
@@ -68,13 +71,13 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed) {
-		executeOnClient(() -> Screens.history(history, modpackName, patchNotesHistory, closed));
+	public void history(HistoryViewRequest request) {
+		executeOnClient(() -> Screens.history(request));
 	}
 
 	@Override
-	public void error(String... args) {
-		executeOnClient(() -> Screens.error(args));
+	public void failure(FailureRequest request) {
+		executeOnClient(() -> Screens.failure(request));
 	}
 
 	@Override
@@ -117,6 +120,7 @@ public class ScreenImpl implements ScreenService {
 
 	private static class Screens {
 		private static Screen interactiveParent;
+		private static final LoadingTransition LOADING_TRANSITION = new LoadingTransition(ScreenImpl::executeOnClient);
 
 		private static Screen getScreen() {
 			/*? if >=26.2 {*/
@@ -127,6 +131,20 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void setScreen(Screen screen) {
+			if (isTransient(screen)) {
+				beginTransient(screen);
+				return;
+			}
+			LOADING_TRANSITION.complete(() -> setScreenNow(screen));
+		}
+
+		private static void beginTransient(Screen screen) {
+			Screen current = Screens.getScreen();
+			if (!isTransient(current)) interactiveParent = current;
+			LOADING_TRANSITION.begin(() -> setScreenNow(screen));
+		}
+
+		private static void setScreenNow(Screen screen) {
 			Screen current = Screens.getScreen();
 			if (isTransient(screen)) {
 				if (!isTransient(current)) interactiveParent = current;
@@ -180,17 +198,20 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new RecoveryArchiveScreen(parent, modpackUpdater, recoverySnapshot, modpackName, closed));
 		}
 
-		public static void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed) {
+		public static void history(HistoryViewRequest request) {
 			Screen parent = Screens.getScreen();
-			Screens.setScreen(new ContentHistoryScreen(parent, history, modpackName, patchNotesHistory, closed));
+			Screens.setScreen(new ContentHistoryScreen(parent, request.historyIndex(), request.availableHistory(), request.modpackName(), request.catalogueLoader(), request.closed()));
 		}
 
-		public static void error(String... errors) {
+		public static void failure(FailureRequest request) {
 			Screen parent = Screens.getScreen();
 			if (isTransient(parent)) parent = interactiveParent;
-			if (parent instanceof FirstConnectScreen || parent instanceof UpdatePreviewScreen || parent instanceof ModpackSelectionScreen selection && selection.isUpdateFlow())
-				parent = multiplayerScreen();
-			Screens.setScreen(new ErrorScreen(parent, errors));
+			parent = switch (request.returnDestination()) {
+				case CURRENT_SCREEN -> parent;
+				case MULTIPLAYER -> multiplayerScreen();
+				case TITLE -> new TitleScreen();
+			};
+			Screens.setScreen(new ErrorScreen(parent, request));
 		}
 
 		public static void title() {

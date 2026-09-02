@@ -297,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
             executor.shutdown(wait=False)
             ok = all(r.get("ok", False) for r in results.values())
             (out_dir / "results.json").write_text(
-                json.dumps({"ok": ok, "results": list(results.values())}, indent=2)
+                json.dumps({"ok": ok, "results": list(results.values())}, indent=2), encoding="utf-8"
             )
             if interrupted:
                 os._exit(1)

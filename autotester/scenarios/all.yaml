@@ -54,50 +54,62 @@ flow:
     name: open advanced group selection
     select: { text: customize groups }
   - do: wait_for
-    name: show group selection
+    name: show the first paginated group-selection page
     until:
       all:
         - screen: ModpackSelectionScreen
         - element: { text: Core }
-        - element: { text: Visuals }
-        - element: { text: Client }
+        - element: { text: "< Prev", enabled: false }
+        - element: { text: "Next >", enabled: true }
   - do: screenshot
-    name: capture group selection at the supported 320x240 logical size
+    name: capture the first group-selection page at the supported 320x240 logical size
     file: all-groups-page-one
   - do: click
-    name: toggle the derived client category
-    select: { text: client }
+    name: open the optional feature page
+    select: { text: "Next >" }
   - do: click
-    name: show dependency and conflict groups
+    name: open the platform and visual feature page
     select: { text: Next > }
   - do: wait_for
-    name: show extras and platform groups
+    name: show the optional feature pages
     until:
       all:
-        - element: { text: Addon }
-        - element: { text: Alternative }
-        - element: { text: Platform }
+        - element: { text: Visuals }
+        - element: { text: "Category: Visuals" }
+        - element: { text: Windows-only }
+  - do: click
+    name: select the visual category
+    select: { text: "Category: Visuals" }
+  - do: click
+    name: return to the optional feature page
+    select: { text: "< Prev" }
   - do: click
     name: select a group with a dependency
     select: { text: Addon }
   - do: wait_for
-    name: return to the dependency selected by Addon
-    until: { element: { text: "< Prev" } }
+    name: return to the visual page to inspect the dependency
+    until: { element: { text: "Next >", enabled: true } }
   - do: click
     name: inspect the dependency selected by Addon
-    select: { text: "< Prev" }
+    select: { text: "Next >" }
   - do: wait_for
     name: show the dependency explanation
-    until: { element: { text: "[+] Visuals (" } }
+    until: { element: { text: "[+] Visuals (required by Addon)" } }
   - do: click
     name: return to dependency and conflict groups
-    select: { text: "Next >" }
+    select: { text: "< Prev" }
   - do: click
     name: select the conflicting alternative
     select: { text: Alternative }
   - do: wait_for
     name: show the conflict explanation
-    until: { element: { text: conflict } }
+    until:
+      all:
+        - screen: FeatureConflictScreen
+        - element: { text: "Use Alternative", enabled: true }
+  - do: click
+    name: keep the alternative and replace the conflicting visual choice
+    select: { text: "Use Alternative" }
   - do: click
     name: inspect unavailable platform filtering
     select: { text: Next > }
@@ -156,10 +168,10 @@ flow:
     name: verify advanced group metadata and latest notes were installed
     groups:
       main: { required: true, defaultSelected: true }
-      visual: { required: false, defaultSelected: true, tag: client, requires: [main] }
-      addon: { required: false, defaultSelected: false, tag: extras, requires: [visual] }
-      alternative: { required: false, defaultSelected: false, tag: extras, breaksWith: [visual] }
-      windows: { required: false, compatiblePlatforms: [windows], tag: platform }
+      visual: { required: false, defaultSelected: true, category: visuals, requires: [main] }
+      addon: { required: false, defaultSelected: false, category: extras, requires: [visual] }
+      alternative: { required: false, defaultSelected: false, category: extras, breaksWith: [visual] }
+      windows: { required: false, compatiblePlatforms: [windows], category: platform }
     patchNotes: "Initial release: core content and optional client groups."
   - do: wait_for
     name: wait for restart review
@@ -193,10 +205,7 @@ flow:
     select: { text: Back }
   - do: click
     name: restart after bootstrap
-    # RestartScreen adds buttons in this stable semantic order: cancel, confirm,
-    # changelog. Select the confirm action by role/index because its label is
-    # localized (for example, "Yes, close the game").
-    select: { role: button, index: 1 }
+    select: { text: "Yes, close the game" }
   - do: wait_client_exit
     name: wait for bootstrap restart
   - use: rejoin
@@ -255,14 +264,14 @@ flow:
     name: open Pack B for review only
     select: { text: Pack B }
   - do: wait_for
-    name: show Pack B review settings
+    name: show Pack B lifecycle actions
     until:
       all:
-        - screen: ModpackSelectionScreen
-        - element: { text: Review pack switch }
+        - screen: ModpackDetailsScreen
+        - element: { text: Activate, enabled: true }
   - do: click
     name: review the A to B cached switch
-    select: { text: Review pack switch }
+    select: { text: Activate }
   - do: wait_for
     name: show cached switch preview
     until:
@@ -280,7 +289,7 @@ flow:
     until: { screen: RestartScreen }
   - do: click
     name: restart into Pack B
-    select: { role: button, index: 1 }
+    select: { text: "Yes, close the game" }
   - do: wait_client_exit
     name: wait for Pack B restart
   - do: launch_client
@@ -327,11 +336,14 @@ flow:
     name: open Pack A for the reverse switch
     select: { text: Pack A }
   - do: wait_for
-    name: show Pack A review settings
-    until: { element: { text: Review pack switch } }
+    name: show Pack A lifecycle actions
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { text: Activate, enabled: true }
   - do: click
     name: review the B to A cached switch
-    select: { text: Review pack switch }
+    select: { text: Activate }
   - do: wait_for
     name: show reverse cached switch preview
     until: { element: { text: Update, enabled: true } }
@@ -346,7 +358,7 @@ flow:
     until: { screen: RestartScreen }
   - do: click
     name: restart into Pack A
-    select: { role: button, index: 1 }
+    select: { text: "Yes, close the game" }
   - do: wait_client_exit
     name: wait for reverse switch restart
   - use: rejoin
@@ -399,7 +411,7 @@ flow:
     select: { text: Pack B }
   - do: click
     name: review the Pack A to Pack B v2 switch
-    select: { text: Review pack switch }
+    select: { text: Activate }
   - do: wait_for
     name: show Pack B v2 switch preview
     until: { element: { text: Update, enabled: true } }
@@ -411,7 +423,7 @@ flow:
     until: { screen: RestartScreen }
   - do: click
     name: restart into Pack B v2
-    select: { role: button, index: 1 }
+    select: { text: "Yes, close the game" }
   - do: wait_client_exit
     name: wait for Pack B v2 restart
   - do: launch_client
@@ -440,7 +452,7 @@ flow:
     file: all-content-history
   - do: click
     name: open all Pack B patch notes from content history
-    select: { text: View all patch notes }
+    select: { text: Patch notes }
   - do: wait_for
     name: show all Pack B patch notes
     until: { screen: PatchNotesHistoryScreen }
@@ -516,7 +528,8 @@ flow:
     until:
       all:
         - screen: ClientStorageMaintenanceScreen
-        - element: { text: Cleanup complete, enabled: false }
+        # Completion is rendered as status text; the enabled command proves the operation returned to idle.
+        - element: { text: Clean local storage, enabled: true }
   - do: assert_file_content
     name: verify cleanup kept the active Pack B v2 projection
     path: "${active_dir}/config/pack-b.txt"
@@ -545,7 +558,7 @@ flow:
     select: { text: Pack A }
   - do: click
     name: review the Pack B v2 to Pack A switch
-    select: { text: Review pack switch }
+    select: { text: Activate }
   - do: wait_for
     name: show the return to Pack A preview
     until: { element: { text: Update, enabled: true } }
@@ -557,7 +570,7 @@ flow:
     until: { screen: RestartScreen }
   - do: click
     name: restart into Pack A before the generation update
-    select: { role: button, index: 1 }
+    select: { text: "Yes, close the game" }
   - do: wait_client_exit
     name: wait for return to Pack A restart
   - use: rejoin
@@ -639,7 +652,7 @@ flow:
     select: { text: back }
   - do: click
     name: restart after changed generation
-    select: { role: button, index: 1 }
+    select: { text: "Yes, close the game" }
   - do: wait_client_exit
     name: wait for final restart
   - use: rejoin
@@ -721,11 +734,14 @@ flow:
   - do: click
     name: open the Pack A manager
     select: { text: Pack manager }
+  - do: click
+    name: open active Pack A details
+    select: { text: Pack A }
   - do: wait_for
     name: show active Pack A lifecycle actions
     until:
       all:
-        - screen: InstalledModpacksScreen
+        - screen: ModpackDetailsScreen
         - element: { text: Remove, enabled: true }
   - do: screenshot
     name: capture active Pack A manager actions
@@ -746,12 +762,16 @@ flow:
     name: accept Pack A removal
     select: { text: Remove }
   - do: wait_for
-    name: return to title after Pack A removal
+    name: return to installed pack list after Pack A removal
     until:
       all:
-        - screen: Title Screen
-        - element: { role: button, text: Singleplayer, enabled: true, visible: true }
-        - element: { role: button, text: Multiplayer, enabled: true, visible: true }
+        - screen: InstalledModpacksScreen
+        - element: { text: Back, enabled: true }
+        - element: { text: Local storage, enabled: true }
+        - no_element: { text: Pack A }
+  - do: screenshot
+    name: capture installed pack list after removal
+    file: all-pack-manager-after-removal
   - do: assert
     name: verify Pack A active state was removed
     that: { file_gone: automodpack/client/active-state.json }
@@ -802,26 +822,26 @@ topology:
           visual:
             displayName: Visuals
             description: Default client visuals
-            tag: client
+            category: visuals
             defaultSelected: true
             requires: [main]
             syncedFiles: ["/config/amp-autotest-visual.txt"]
           addon:
             displayName: Addon
             description: Optional addon depending on visuals
-            tag: extras
+            category: extras
             requires: [visual]
             syncedFiles: ["/config/amp-autotest-addon.txt"]
           alternative:
             displayName: Alternative
             description: Mutually exclusive alternative
-            tag: extras
+            category: extras
             breaksWith: [visual]
             syncedFiles: ["/config/amp-autotest-alternative.txt"]
           windows:
             displayName: Windows-only
             description: Platform-filtered fixture
-            tag: platform
+            category: platform
             compatiblePlatforms: [windows]
             syncedFiles: ["/config/amp-autotest-windows.txt"]
 

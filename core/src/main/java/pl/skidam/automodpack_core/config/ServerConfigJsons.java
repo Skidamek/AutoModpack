@@ -53,13 +53,14 @@ public class ServerConfigJsons {
 		// UI metadata. The map key is the group id; displayName is what the player sees.
 		public String displayName = "";
 		public String description = "";
-		public String tag = "";
+		public String category = "";
+		public String icon = "";
 
 		// If required, the client cannot uncheck it. defaultSelected is ignored when required.
 		public boolean required = false;
 		public boolean defaultSelected = false;
 
-		// Group ids this one conflicts with / depends on and its optional category tag.
+		// Group ids this one conflicts with / depends on and its optional player-facing category.
 		public Set<String> breaksWith = Set.of();
 		public Set<String> requires = Set.of();
 		public Set<String> compatiblePlatforms = Set.of();

@@ -19,6 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
@@ -38,6 +39,8 @@ class NettyServerObjectResolutionTest {
 
 		assertEquals(projection, server.getPath("").orElseThrow());
 		assertEquals(store.objectRoot().resolve(firstHash), server.getPath(firstHash.toUpperCase(Locale.ROOT)).orElseThrow());
+		assertEquals(tempDir.resolve("host-generations/catalogues").resolve(first.record().metadata().stateDigest() + ".json").toAbsolutePath().normalize(),
+				server.getPath(GenerationHistoryIndex.catalogueRequestKey(first.record().metadata().stateDigest())).orElseThrow());
 
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication second = publish(store, "second", Optional.of(current));

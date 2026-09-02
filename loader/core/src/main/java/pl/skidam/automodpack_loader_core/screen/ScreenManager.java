@@ -2,14 +2,11 @@ package pl.skidam.automodpack_loader_core.screen;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
@@ -54,20 +51,15 @@ public final class ScreenManager {
 		instance.recovery(modpackUpdater, recoverySnapshot, modpackName, closed);
 	}
 
-	public void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed) {
-		instance.history(history, modpackName, patchNotesHistory, closed);
+	public void history(HistoryViewRequest request) {
+		instance.history(Objects.requireNonNull(request, "history request"));
 	}
 
-	public void error(Throwable throwable, String... args) {
-		report(throwable, "Displaying AutoModpack error screen: " + Arrays.toString(args));
-		instance.error(args);
-	}
-
-	/** Records a client-facing failure while allowing its screen to choose between inline and dedicated error presentation. */
-	public void report(Throwable throwable, String context) {
-		Objects.requireNonNull(throwable, "throwable");
-		Objects.requireNonNull(context, "context");
-		LOGGER.error("AutoModpack client failure: {}", context, throwable);
+	/** Logs and presents an operational failure exactly once through the installed screen adapter. */
+	public void failure(FailureRequest request) {
+		Objects.requireNonNull(request, "request");
+		LOGGER.error("AutoModpack client failure [{}] while displaying {}", request.category().key(), request.messageKey(), request.cause());
+		instance.failure(request);
 	}
 
 	public void title() {

@@ -16,7 +16,7 @@ from pathlib import Path
 import docker as docker_py
 
 from .bridge import BridgeClient
-from .config import REPO_ROOT, Target, load_macros, parse_server_files
+from .config import CLIENT_GENERATION_STATE_PATHS, REPO_ROOT, Target, load_macros, parse_server_files
 from .mod_fixtures import write_valid_mod_fixture
 from .mods import resolve_mod
 from .engine import ClientExited, Context, run_flow
@@ -179,7 +179,7 @@ def _ensure_client_data_root(game_dir: Path) -> Path:
     data_root = game_dir / _CLIENT_DATA_ROOT
     if not marker.exists():
         data_root.mkdir(parents=True, exist_ok=True)
-        marker.write_text(json.dumps({"root": _CLIENT_DATA_ROOT_IN_CONTAINER, "shared": False}, indent=2) + "\n")
+        marker.write_text(json.dumps({"root": _CLIENT_DATA_ROOT_IN_CONTAINER, "shared": False}, indent=2) + "\n", encoding="utf-8")
     else:
         data_root.mkdir(parents=True, exist_ok=True)
     return data_root
@@ -224,7 +224,7 @@ def _prepare_server(ctx: Context):
     cfg["modpackName"] = ctx.modpack_name
     cfg["acceptedLoaders"] = [ctx.target.loader]
     (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
-    (srv_dir / "automodpack" / "server-config.json").write_text(json.dumps(cfg, indent=2))
+    (srv_dir / "automodpack" / "server-config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
     (srv_dir / "automodpack" / "data-root.json").write_text(
         json.dumps({"root": "/data/automodpack/data", "shared": False}, indent=2) + "\n",
         encoding="utf-8",
@@ -255,7 +255,7 @@ def _write_server_generation(ctx: Context, index: int) -> None:
     host_root.mkdir(parents=True, exist_ok=True)
     main_root = host_root / "main"
     (main_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
-    (main_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
+    (main_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n", encoding="utf-8")
     configured_groups = {
         str(group_id)
         for group_id in ((ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {}).get("groups", {}) or {})
@@ -279,11 +279,11 @@ def _write_server_generation(ctx: Context, index: int) -> None:
                 raise ValueError(f"server generation fixture for {rel} must be a mapping")
             write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
         else:
-            f.write_text(str(item.get("content", "")))
+            f.write_text(str(item.get("content", "")), encoding="utf-8")
     patch_notes = generation.get("patchNotes", "")
     patch_path = srv_dir / "automodpack" / "server" / "patch-notes.md"
     patch_path.parent.mkdir(parents=True, exist_ok=True)
-    patch_path.write_text(str(patch_notes))
+    patch_path.write_text(str(patch_notes), encoding="utf-8")
 
 
 def _launch_server(ctx: Context):
@@ -578,8 +578,8 @@ def _v_rollback_server_generation(ctx: Context, step):
         raise AssertionError(f"server rollback has no valid retained ancestor: {ancestor_ids}")
     target_commit = _read_server_json(ctx, f"commits/{target_id}.json", "retained generation commit")
     state_digest = str(target_commit.get("stateDigest", ""))
-    ledger_digest = str(target_commit.get("ledgerDigest", ""))
-    if not re.fullmatch(r"[0-9a-f]{40}", state_digest) or not re.fullmatch(r"[0-9a-f]{40}", ledger_digest) or not (ctx.server_dir / "automodpack" / "server" / "catalogues" / f"{state_digest}.json").is_file():
+    target_ledger_digest = str(target_commit.get("ledgerDigest", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", state_digest) or not re.fullmatch(r"[0-9a-f]{40}", target_ledger_digest) or not (ctx.server_dir / "automodpack" / "server" / "catalogues" / f"{state_digest}.json").is_file():
         raise AssertionError(f"server rollback target metadata is not retained: {target_id}")
     notes = str(step.get("notes", "Release gate rollback verification.")).strip()
     if not notes:
@@ -607,7 +607,8 @@ def _v_rollback_server_generation(ctx: Context, step):
             return None
         if str(after_current.get("rollbackTargetGenerationId", "")) != target_id or str(after_current.get("patchNotes", "")) != notes:
             return None
-        if str(after_current.get("stateDigest", "")) != state_digest or str(after_current.get("ledgerDigest", "")) != ledger_digest:
+        after_ledger_digest = str(after_current.get("ledgerDigest", ""))
+        if str(after_current.get("stateDigest", "")) != state_digest or not re.fullmatch(r"[0-9a-f]{40}", after_ledger_digest):
             return None
         history_ids = [str(entry.get("generationId", "")) for entry in after_history if isinstance(entry, dict)]
         expected_history_ids = [str(entry.get("generationId", "")) for entry in history] + [new_id]
@@ -619,7 +620,7 @@ def _v_rollback_server_generation(ctx: Context, step):
         if current_history.get(new_id, {}).get("patchNotes") != notes:
             return None
         commit = _read_server_json(ctx, f"commits/{new_id}.json", "server rollback commit")
-        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id:
+        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id or str(commit.get("stateDigest", "")) != state_digest or str(commit.get("ledgerDigest", "")) != after_ledger_digest:
             return None
         return after_pointer, after_projection
 
@@ -721,7 +722,8 @@ def _v_compact_server_history(ctx: Context, step):
         server_root / "deltas" / f"{generation_id}.json"
         for generation_id in expected_superseded_ids
     }
-    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "compact", "confirm"])
+    boundary_id = expected_ids[-1]
+    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "compact", "before", boundary_id, "confirm"])
     output = result.output.decode("utf-8", errors="replace") if result.output else ""
     if result.exit_code != 0:
         raise RuntimeError(f"server history compaction command failed ({result.exit_code}): {output}")
@@ -791,12 +793,12 @@ def _v_launch_client(ctx: Context, step):
 
 @verb("reset_client_generation")
 def _v_reset_client_generation(ctx: Context, _step):
-    """Reset only records, active projection, active state, and object CAS for a fresh-client test.
+    """Reset generation-owned durable state and object CAS for a fresh-client test.
 
     Trust and connection data remain in place deliberately, as do all ordinary game files such as mods/.
     """
     client = ctx.game_dir / "automodpack" / "client"
-    for relative in ("records", "active", "active-state.json", "data/objects"):
+    for relative in CLIENT_GENERATION_STATE_PATHS:
         path = client / relative
         if path.is_dir():
             shutil.rmtree(path)
@@ -1102,6 +1104,7 @@ def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict], modpa
         .string(modpack_name if modpack_name is not None else ctx.modpack_name)
         .string("")
         .string("")
+        .string("")
         .boolean(True)
         .boolean(True)
     )
@@ -1172,7 +1175,8 @@ def _write_staged_generation(
             "main": {
                 "displayName": modpack_name,
                 "description": "",
-                "tag": "",
+                "category": "",
+                "icon": "",
                 "required": True,
                 "defaultSelected": True,
                 "breaksWith": [],
@@ -1216,7 +1220,7 @@ def _write_staged_generation(
         manifest["patchNotesHistory"] = [*parent_history, _staged_patch_note_entry(manifest["generation"])]
     generation_path = client_root / "records" / generation_id / "manifest.json"
     generation_path.parent.mkdir(parents=True, exist_ok=True)
-    generation_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    generation_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     objects = data_root / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     for entry in files:
@@ -1302,7 +1306,7 @@ def _v_stage_modpack(ctx: Context, step):
         if isinstance(item, dict) and item.get("editable") is True
     }
     (root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
-    (root / ctx.marker_rel).write_text(json.dumps({"marker": modpack_name}) + "\n")
+    (root / ctx.marker_rel).write_text(json.dumps({"marker": modpack_name}) + "\n", encoding="utf-8")
     for item in declared_files:
         if not isinstance(item, dict) or "path" not in item:
             raise ValueError("stage_modpack files entries need path/content")
@@ -1317,7 +1321,7 @@ def _v_stage_modpack(ctx: Context, step):
             write_valid_mod_fixture(f, fixture, ctx.target.minecraft)
         else:
             f.parent.mkdir(parents=True, exist_ok=True)
-            f.write_text(content)
+            f.write_text(content, encoding="utf-8")
 
     mods = step.get("mods") or []
     if mods:
@@ -1361,13 +1365,13 @@ def _v_stage_modpack(ctx: Context, step):
         "stateDigest": generation["stateDigest"],
         "ledgerDigest": generation["ledgerDigest"],
     }
-    (client_root / "active-state.json").write_text(json.dumps(state, indent=2) + "\n")
+    (client_root / "active-state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
     selection_store = client_root / "selections.json"
     selection_store.write_text(json.dumps({
         "DO_NOT_CHANGE_IT": 1,
         "selections": {modpack_id: {"requestedGroups": [], "excludedGroups": []}},
-    }, indent=2) + "\n")
+    }, indent=2) + "\n", encoding="utf-8")
 
     # A client config that selects the staged pack and disables the launch update,
     # so Preload loads it locally (no server contact, no file reconciliation). The
@@ -1389,7 +1393,7 @@ def _v_stage_modpack(ctx: Context, step):
     }
     cfg.update(ctx.resolve(step.get("config", {}) or {}))
     automodpack.mkdir(parents=True, exist_ok=True)
-    (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2))
+    (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 
 @verb("seed_cas")

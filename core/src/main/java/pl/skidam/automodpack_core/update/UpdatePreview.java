@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.update;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -14,11 +13,14 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupResolution;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
@@ -31,20 +33,29 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class UpdatePreview {
 	private final UpdatePlan plan;
+	private final ChangeSet changeSet;
 	private final List<Entry> entries;
 	private final GroupConsequences groupConsequences;
 	private final String patchNotes;
 	private final List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
 	private final Mode mode;
+	private final Map<String, String> featureNames;
 
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences, String patchNotes,
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Mode mode) {
+		this(plan, entries, groupConsequences, patchNotes, patchNotesHistory, mode, createChangeSet(entries, plan.restartReasons()), Map.of());
+	}
+
+	private UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences, String patchNotes,
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Mode mode, ChangeSet changeSet, Map<String, String> featureNames) {
 		this.plan = Objects.requireNonNull(plan, "plan");
-		this.entries = logicalEntries(entries);
+		this.changeSet = Objects.requireNonNull(changeSet, "preview change set");
+		this.entries = legacyEntries(this.changeSet);
 		this.groupConsequences = Objects.requireNonNull(groupConsequences, "groupConsequences");
 		this.patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
 		this.patchNotesHistory = List.copyOf(Objects.requireNonNull(patchNotesHistory, "patchNotesHistory"));
 		this.mode = Objects.requireNonNull(mode, "mode");
+		this.featureNames = Map.copyOf(new TreeMap<>(featureNames == null ? Map.of() : featureNames));
 	}
 
 	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences) {
@@ -64,6 +75,11 @@ public final class UpdatePreview {
 		return entries;
 	}
 
+	/** The canonical logical changes and physical occurrences for this preview. */
+	public ChangeSet changeSet() {
+		return changeSet;
+	}
+
 	public GroupConsequences groupConsequences() {
 		return groupConsequences;
 	}
@@ -78,6 +94,39 @@ public final class UpdatePreview {
 
 	public Mode mode() {
 		return mode;
+	}
+
+	public Map<String, String> featureNames() {
+		return featureNames;
+	}
+
+	/** Adds player-facing feature names and exact current ownership to the canonical preview changes. */
+	public UpdatePreview withFeatureManifest(GroupManifest manifest) {
+		Objects.requireNonNull(manifest, "feature manifest");
+		Map<String, String> names = new TreeMap<>();
+		Map<String, List<String>> ownersByPath = new TreeMap<>();
+		Map<String, GroupManifest.GroupFile> filesByPath = new TreeMap<>();
+		manifest.groups().forEach((groupId, group) -> {
+			names.put(groupId, group.displayName());
+			group.files().forEach((path, file) -> {
+				ownersByPath.computeIfAbsent(path, ignored -> new ArrayList<>()).add(groupId);
+				filesByPath.putIfAbsent(path, file);
+			});
+		});
+		List<ChangeSet.Change> enriched = new ArrayList<>();
+		for (ChangeSet.Change change : changeSet.changes()) {
+			List<String> owners = ownersByPath.getOrDefault(change.logicalPath(), List.of());
+			GroupManifest.GroupFile currentFile = filesByPath.get(change.logicalPath());
+			List<ChangeSet.Occurrence> occurrences = new ArrayList<>();
+			for (ChangeSet.Occurrence occurrence : change.occurrences()) {
+				List<String> featureIds = owners.isEmpty() ? occurrence.featureIds() : owners;
+				String contentKind = currentFile == null ? occurrence.contentKind() : currentFile.type();
+				String afterHash = currentFile == null || change.kind() == ChangeSet.Kind.REMOVED ? occurrence.afterHash() : currentFile.sha1();
+				occurrences.add(new ChangeSet.Occurrence(occurrence.location(), occurrence.logicalPath(), occurrence.size(), occurrence.beforeHash(), afterHash, contentKind, featureIds, occurrence.references()));
+			}
+			enriched.add(new ChangeSet.Change(change.logicalPath(), change.kind(), occurrences));
+		}
+		return new UpdatePreview(plan, entries, groupConsequences, patchNotes, patchNotesHistory, mode, ChangeSet.of(enriched, changeSet.effects()), names);
 	}
 
 	public long addedBytes() {
@@ -103,53 +152,21 @@ public final class UpdatePreview {
 	}
 
 	public Summary summary() {
-		Set<String> changed = new HashSet<>();
-		Set<String> removed = new HashSet<>();
-		Set<String> preserved = new HashSet<>();
-		Set<String> unsafe = new HashSet<>();
-		for (Entry entry : entries) {
-			switch (entry.kind.summaryBucket()) {
-				case CHANGED -> changed.add(entry.relativePath);
-				case REMOVED -> removed.add(entry.relativePath);
-				case PRESERVED -> preserved.add(entry.relativePath);
-				case UNSAFE -> unsafe.add(entry.relativePath);
-			}
-		}
-		Set<String> otherEffects = new TreeSet<>();
-		for (RestartReason reason : plan.restartReasons()) otherEffects.add(reason.name());
-		return new Summary(changed.size(), removed.size(), preserved.size(), unsafe.size(), otherEffects.size());
-	}
-
-	private static List<Entry> logicalEntries(List<Entry> entries) {
-		Map<String, Entry> unique = new TreeMap<>();
-		for (Entry entry : List.copyOf(entries)) unique.merge(entry.relativePath(), entry, UpdatePreview::mergeLogicalEntry);
-		return unique.values().stream().sorted(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
-				.thenComparing(Entry::relativePath)).toList();
-	}
-
-	private static Entry mergeLogicalEntry(Entry first, Entry second) {
-		List<Entry> entries = List.of(first, second);
-		Kind kind;
-		if (entries.stream().anyMatch(entry -> entry.kind == Kind.UNSAFE)) kind = Kind.UNSAFE;
-		else
-			if (entries.stream().anyMatch(entry -> entry.kind == Kind.CHANGED)
-					|| entries.stream().anyMatch(entry -> entry.kind == Kind.ADDED) && entries.stream().anyMatch(entry -> entry.kind == Kind.REMOVED))
-				kind = Kind.CHANGED;
-			else
-				if (entries.stream().anyMatch(entry -> entry.kind == Kind.ADDED)) kind = Kind.ADDED;
-				else if (entries.stream().anyMatch(entry -> entry.kind == Kind.REMOVED)) kind = Kind.REMOVED;
-				else if (entries.stream().anyMatch(entry -> entry.kind == Kind.PRESERVED_CHANGED)) kind = Kind.PRESERVED_CHANGED;
-				else if (entries.stream().anyMatch(entry -> entry.kind == Kind.PRESERVED_UNAVAILABLE)) kind = Kind.PRESERVED_UNAVAILABLE;
-				else kind = Kind.PRESERVED_OUTSIDE;
-		Entry sizeSource = entries.stream().filter(entry -> entry.kind == kind).findFirst()
-				.orElseGet(() -> entries.stream().filter(entry -> entry.kind == Kind.ADDED || entry.kind == Kind.CHANGED).findFirst().orElse(first));
-		Root root = first.root.ordinal() <= second.root.ordinal() ? first.root : second.root;
-		return new Entry(kind, root, first.relativePath, sizeSource.size);
+		ChangeSet.Summary summary = changeSet.summary();
+		return new Summary(summary.addedFiles() + summary.modifiedFiles(), summary.removedFiles(), summary.preservedFiles(), summary.unsafeFiles(), summary.effectCount());
 	}
 
 	public String latestPatchNotes() {
-		if (!patchNotes.isBlank()) return patchNotes;
-		return GenerationPatchNoteHistory.latestNotes(patchNotesHistory);
+		return patchNotes;
+	}
+
+	public Optional<GenerationPatchNoteHistory.Entry> featuredPatchNotes() {
+		if (patchNotes.isBlank()) return Optional.empty();
+		for (int index = patchNotesHistory.size() - 1; index >= 0; index--) {
+			GenerationPatchNoteHistory.Entry entry = patchNotesHistory.get(index);
+			if (entry.patchNotes().equals(patchNotes)) return Optional.of(entry);
+		}
+		return Optional.empty();
 	}
 
 	public Set<RestartReason> restartReasons() {
@@ -163,6 +180,83 @@ public final class UpdatePreview {
 
 	private long bytesOf(Kind kind) {
 		return entries.stream().filter(entry -> entry.kind == kind).mapToLong(Entry::size).sum();
+	}
+
+	private static ChangeSet createChangeSet(List<Entry> entries, Set<RestartReason> restartReasons) {
+		List<ChangeSet.Change> changes = new ArrayList<>();
+		for (Entry entry : List.copyOf(Objects.requireNonNull(entries, "entries"))) {
+			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence(entry.root.name(), entry.relativePath(), entry.size());
+			changes.add(new ChangeSet.Change(entry.relativePath(), canonicalKind(entry.kind), List.of(occurrence)));
+		}
+		List<ChangeSet.Effect> effects = new ArrayList<>();
+		if (restartReasons != null) for (RestartReason reason : restartReasons) effects.add(new ChangeSet.Effect("restart", reason.name()));
+		return ChangeSet.of(changes, effects);
+	}
+
+	private static ChangeSet createChangeSet(List<Entry> entries, Set<RestartReason> restartReasons, Map<FileKey, FileState> originalFiles,
+			ModpackJsons.ModpackContentFields target, OwnershipLedger ledger) {
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetFiles = new TreeMap<>();
+		if (target.list != null) for (ModpackJsons.ModpackContentFields.ModpackContentItem item : target.list) targetFiles.put(UpdatePlanner.normalize(item.file), item);
+		List<ChangeSet.Change> changes = new ArrayList<>();
+		for (Entry entry : entries) {
+			FileKey key = new FileKey(entry.root(), entry.relativePath());
+			FileState before = originalFiles.get(key);
+			ModpackJsons.ModpackContentFields.ModpackContentItem after = targetFiles.get(entry.relativePath());
+			OwnershipLedger.Entry ownership = ledger.entries().get(entry.relativePath());
+			String beforeHash = before == null || !HashUtils.isSha1(before.sha1()) ? null : before.sha1();
+			String afterHash = after == null || !HashUtils.isSha1(after.sha1) ? null : after.sha1;
+			String contentKind = after == null ? null : after.type;
+			List<String> featureIds = ownership == null ? List.of() : List.copyOf(ownership.historicalGroupIds());
+			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence(entry.root.name(), entry.relativePath(), entry.size(), beforeHash, afterHash, contentKind, featureIds, List.of());
+			changes.add(new ChangeSet.Change(entry.relativePath(), canonicalKind(entry.kind()), List.of(occurrence)));
+		}
+		List<ChangeSet.Effect> effects = new ArrayList<>();
+		for (RestartReason reason : restartReasons) effects.add(new ChangeSet.Effect("restart", reason.name()));
+		return ChangeSet.of(changes, effects);
+	}
+
+	private static List<Entry> legacyEntries(ChangeSet changeSet) {
+		List<Entry> entries = new ArrayList<>();
+		for (ChangeSet.Change change : changeSet.changes()) {
+			ChangeSet.Occurrence occurrence = change.occurrences().stream().min(Comparator.comparingInt(entry -> root(entry.location()).ordinal())).orElseThrow();
+			long size = change.occurrences().stream().mapToLong(ChangeSet.Occurrence::size).max().orElseThrow();
+			entries.add(new Entry(legacyKind(change.kind()), root(occurrence.location()), change.logicalPath(), size));
+		}
+		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.sortBucket()).thenComparing(entry -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
+				.thenComparing(Entry::relativePath));
+		return List.copyOf(entries);
+	}
+
+	private static ChangeSet.Kind canonicalKind(Kind kind) {
+		return switch (kind) {
+			case ADDED -> ChangeSet.Kind.ADDED;
+			case CHANGED -> ChangeSet.Kind.MODIFIED;
+			case REMOVED -> ChangeSet.Kind.REMOVED;
+			case PRESERVED_CHANGED -> ChangeSet.Kind.PRESERVED_CHANGED;
+			case PRESERVED_UNAVAILABLE -> ChangeSet.Kind.PRESERVED_UNAVAILABLE;
+			case PRESERVED_OUTSIDE -> ChangeSet.Kind.PRESERVED_OUTSIDE;
+			case UNSAFE -> ChangeSet.Kind.UNSAFE;
+		};
+	}
+
+	private static Kind legacyKind(ChangeSet.Kind kind) {
+		return switch (kind) {
+			case ADDED -> Kind.ADDED;
+			case MODIFIED, METADATA_ONLY -> Kind.CHANGED;
+			case REMOVED -> Kind.REMOVED;
+			case PRESERVED_CHANGED -> Kind.PRESERVED_CHANGED;
+			case PRESERVED_UNAVAILABLE -> Kind.PRESERVED_UNAVAILABLE;
+			case PRESERVED_OUTSIDE, PRESERVED -> Kind.PRESERVED_OUTSIDE;
+			case UNSAFE -> Kind.UNSAFE;
+		};
+	}
+
+	private static Root root(String location) {
+		try {
+			return Root.valueOf(location);
+		} catch (IllegalArgumentException e) {
+			throw new IllegalStateException("Preview change has an unknown physical root: " + location, e);
+		}
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
@@ -242,15 +336,15 @@ public final class UpdatePreview {
 			entries.add(new Entry(kind, key.root(), key.relativePath(), current.size()));
 		}
 
-		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal()).thenComparing(Entry::relativePath));
+		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.sortBucket()).thenComparing(entry -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal())
+				.thenComparing(Entry::relativePath));
 		GroupConsequences consequences = selection == null ? new GroupConsequences(Set.of(), Set.of(), Set.of()) : consequences(selection);
-		return new UpdatePreview(plan, entries, consequences, patchNotes, patchNotesHistory, mode);
+		return new UpdatePreview(plan, entries, consequences, patchNotes, patchNotesHistory, mode,
+				createChangeSet(entries, plan.restartReasons(), originalFiles, target, ledger), Map.of());
 	}
 
 	private static GroupConsequences consequences(ResolvedSelection selection) {
-		Map<String, String> explanations = new TreeMap<>();
-		selection.explanations().forEach((groupId, resolution) -> explanations.put(groupId, resolution.explanation()));
-		return new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), explanations);
+		return new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), selection.groupResolutions());
 	}
 
 	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
@@ -278,7 +372,7 @@ public final class UpdatePreview {
 
 	public record Summary(int changedFiles, int removedFiles, int preservedFiles, int unsafeFiles, int otherEffects) {}
 
-	public record GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups, Map<String, String> explanations) {
+	public record GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups, Map<String, GroupResolution> resolutions) {
 		public GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups) {
 			this(explicitGroups, resolvedGroups, staleGroups, Map.of());
 		}
@@ -287,16 +381,13 @@ public final class UpdatePreview {
 			explicitGroups = immutable(explicitGroups);
 			resolvedGroups = immutable(resolvedGroups);
 			staleGroups = immutable(staleGroups);
-			explanations = immutableMap(explanations);
+			resolutions = Map.copyOf(new TreeMap<>(resolutions == null ? Map.of() : resolutions));
 		}
 
 		private static Set<String> immutable(Set<String> values) {
 			return Set.copyOf(new TreeSet<>(values == null ? Set.of() : values));
 		}
 
-		private static Map<String, String> immutableMap(Map<String, String> values) {
-			return Map.copyOf(new TreeMap<>(values == null ? Map.of() : values));
-		}
 	}
 
 	public enum Mode {
