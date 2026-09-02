@@ -524,10 +524,7 @@ def test_record_only_generation_state_digest_matches_its_manifest(make_ctx):
         for logical_path, file in sorted(group["files"].items()):
             encoder.string(logical_path).long(int(file["size"])).string(
                 file["type"]
-            ).boolean(file["editable"])
-            encoder.boolean(file["overwriteEditable"]).string(file["sha1"]).string(
-                file["murmur"]
-            )
+            ).boolean(file["editable"]).string(file["sha1"]).string(file["murmur"])
 
     assert manifest["generation"]["stateDigest"] == encoder.digest()
 

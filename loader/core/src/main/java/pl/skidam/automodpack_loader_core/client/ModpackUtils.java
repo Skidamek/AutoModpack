@@ -39,8 +39,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public class ModpackUtils {
 
 	// Modpack may require update even if there's no files to update, because some files may need to be deleted
-	public record UpdateCheckResult(boolean requiresUpdate, Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate,
-			Set<String> changedOverwriteEditableFiles) {}
+	public record UpdateCheckResult(boolean requiresUpdate, Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
 
 	public enum ManifestFetchState {
 		SUCCESS, OPERATION_FAILED, CONNECTION_FAILED
@@ -60,11 +59,11 @@ public class ModpackUtils {
 		try {
 			state = storage.readActiveState();
 			if (state == null || !Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) {
-				return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
+				return new UpdateCheckResult(true, serverModpackContent.list);
 			}
 		} catch (IOException e) {
 			LOGGER.warn("Cannot read active client generation state", e);
-			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
+			return new UpdateCheckResult(true, serverModpackContent.list);
 		}
 
 		// Differing content digests can never pass the per-file scan, so skip straight to the update; equal digests still scan to catch tampering and re-protect matching files.
@@ -72,7 +71,7 @@ public class ModpackUtils {
 			GenerationRecord active = new ClientGenerationStore(storage).read(state.generationId).orElse(null);
 			if (active != null && !serverModpackContent.stateDigest.isBlank() && !serverModpackContent.stateDigest.equals(active.metadata().stateDigest())) {
 				LOGGER.info("Server generation content differs from the installed generation; skipping the per-file verification");
-				return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
+				return new UpdateCheckResult(true, serverModpackContent.list);
 			}
 		} catch (IOException | RuntimeException e) {
 			LOGGER.debug("Cannot compare the installed generation digest", e);
@@ -82,10 +81,8 @@ public class ModpackUtils {
 		var start = System.currentTimeMillis();
 
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
-		Set<String> changedOverwriteEditableFiles;
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
-			changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, live);
 			for (var serverItem : serverModpackContent.list) {
 				String relative = UpdatePlanner.normalize(serverItem.file);
 				UpdatePlan.FileState observed = live.get(relative);
@@ -94,12 +91,7 @@ public class ModpackUtils {
 					continue;
 				}
 				if (serverItem.editable) {
-					if (changedOverwriteEditableFiles.contains(serverItem.file)) {
-						LOGGER.info("Server changed overwrite-editable file: {}", serverItem.file);
-						filesToUpdate.add(serverItem);
-					} else {
-						LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
-					}
+					LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
 					continue;
 				}
 				long size;
@@ -119,40 +111,22 @@ public class ModpackUtils {
 				for (String relative : live.keySet()) {
 					if (!serverFileSet.contains(relative)) {
 						LOGGER.info("Found projected file marked for deletion: {}", relative);
-						return new UpdateCheckResult(true, Set.of(), Set.of());
+						return new UpdateCheckResult(true, Set.of());
 					}
 				}
 			}
 		} catch (Exception e) {
 			LOGGER.error("Error during update check", e);
-			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
+			return new UpdateCheckResult(true, serverModpackContent.list);
 		}
 
 		if (!filesToUpdate.isEmpty()) {
 			LOGGER.info("Active projection requires update! Took {} ms", System.currentTimeMillis() - start);
-			return new UpdateCheckResult(true, filesToUpdate, changedOverwriteEditableFiles);
+			return new UpdateCheckResult(true, filesToUpdate);
 		}
 
 		LOGGER.info("Active projection is up to date! Took {} ms", System.currentTimeMillis() - start);
-		return new UpdateCheckResult(false, Set.of(), Set.of());
-	}
-
-	static Set<String> findChangedOverwriteEditableFiles(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> serverItems, Map<String, UpdatePlan.FileState> live) {
-		Set<String> changedPaths = new HashSet<>();
-		for (var item : serverItems) {
-			if (!item.editable || !item.overwriteEditable) continue;
-			long size;
-			try {
-				size = Long.parseLong(item.size);
-			} catch (NumberFormatException e) {
-				changedPaths.add(item.file);
-				continue;
-			}
-			UpdatePlan.FileState observed = live.get(UpdatePlanner.normalize(item.file));
-			if (observed == null || !observed.regularFile() || observed.size() != size || item.sha1 == null || !item.sha1.equalsIgnoreCase(observed.sha1()))
-				changedPaths.add(item.file);
-		}
-		return changedPaths;
+		return new UpdateCheckResult(false, Set.of());
 	}
 
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.

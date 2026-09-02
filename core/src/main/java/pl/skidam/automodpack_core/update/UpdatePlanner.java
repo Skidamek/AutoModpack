@@ -250,9 +250,7 @@ public final class UpdatePlanner {
 			boolean activeMod = ModpackPathPolicy.isActiveMod(relative, item.type);
 			FileKey modpackKey = new FileKey(Root.PROJECTION, relative);
 			FileState existing = projected.get(modpackKey);
-			boolean installedHashChanged = !hashesEqual(item.sha1, Optional.ofNullable(installedItems.get(relative)).map(old -> old.sha1).orElse(null));
-			boolean overwriteEditable = item.editable && item.overwriteEditable && installedHashChanged;
-			FileState overlay = item.editable && !overwriteEditable ? input.editableOverlays().get(relative) : null;
+			FileState overlay = item.editable ? input.editableOverlays().get(relative) : null;
 			if (overlay != null && overlay.regularFile() && !matches(projected.get(new FileKey(Root.OVERLAY, relative)), overlay.sha1(), overlay.size()))
 				install(operations, projected, new FileKey(Root.OVERLAY, relative), overlay.sha1(), overlay.size());
 			if (overlay == null && projected.containsKey(new FileKey(Root.OVERLAY, relative)))

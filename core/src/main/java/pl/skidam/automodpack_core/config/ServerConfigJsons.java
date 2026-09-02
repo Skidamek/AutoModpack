@@ -67,6 +67,5 @@ public class ServerConfigJsons {
 		// File rules scoped to this group.
 		public Set<String> syncedFiles = Set.of();
 		public Set<String> allowEditsInFiles = Set.of();
-		public Set<String> overwriteEditableFiles = Set.of();
 	}
 }

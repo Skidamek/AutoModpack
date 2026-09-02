@@ -59,17 +59,15 @@ public class ModpackJsons {
 			public String size = "";
 			public String type = "";
 			public boolean editable;
-			public boolean overwriteEditable;
 			public String sha1 = "";
 			public String murmur;
 
 			public GroupFileFields() {}
 
-			public GroupFileFields(String size, String type, boolean editable, boolean overwriteEditable, String sha1, String murmur) {
+			public GroupFileFields(String size, String type, boolean editable, String sha1, String murmur) {
 				this.size = size;
 				this.type = type;
 				this.editable = editable;
-				this.overwriteEditable = overwriteEditable;
 				this.sha1 = sha1;
 				this.murmur = murmur;
 			}
@@ -103,16 +101,14 @@ public class ModpackJsons {
 			public final String size;
 			public final String type;
 			public final boolean editable;
-			public final boolean overwriteEditable;
 			public final String sha1;
 			public final String murmur;
 
-			public ModpackContentItem(String file, String size, String type, boolean editable, boolean overwriteEditable, String sha1, String murmur) {
+			public ModpackContentItem(String file, String size, String type, boolean editable, String sha1, String murmur) {
 				this.file = file;
 				this.size = size;
 				this.type = type;
 				this.editable = editable;
-				this.overwriteEditable = overwriteEditable;
 				this.sha1 = sha1;
 				this.murmur = murmur;
 			}
@@ -127,14 +123,14 @@ public class ModpackJsons {
 				if (this == obj) return true;
 				if (obj == null || getClass() != obj.getClass()) return false;
 				ModpackContentItem that = (ModpackContentItem) obj;
-				return editable == that.editable && overwriteEditable == that.overwriteEditable
+				return editable == that.editable
 						&& Objects.equals(file, that.file) && Objects.equals(size, that.size) && Objects.equals(type, that.type)
 						&& Objects.equals(sha1, that.sha1) && Objects.equals(murmur, that.murmur);
 			}
 
 			@Override
 			public int hashCode() {
-				return Objects.hash(file, size, type, editable, overwriteEditable, sha1, murmur);
+				return Objects.hash(file, size, type, editable, sha1, murmur);
 			}
 		}
 

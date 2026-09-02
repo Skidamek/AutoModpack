@@ -29,7 +29,7 @@ public final class GenerationIdentity {
 			encoder.integer(group.files().size());
 			for (var fileEntry : group.files().entrySet()) {
 				GroupManifest.GroupFile file = fileEntry.getValue();
-				encoder.string(fileEntry.getKey()).longValue(file.size()).string(file.type()).bool(file.editable()).bool(file.overwriteEditable())
+				encoder.string(fileEntry.getKey()).longValue(file.size()).string(file.type()).bool(file.editable())
 						.string(file.sha1()).nullableString(file.murmur());
 			}
 		}

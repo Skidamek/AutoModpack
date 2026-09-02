@@ -43,7 +43,7 @@ public record GroupManifest(
 			for (var fileEntry : group.files().entrySet()) {
 				GroupFile file = fileEntry.getValue();
 				files.put(fileEntry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.size()), file.type(), file.editable(),
-						file.overwriteEditable(), file.sha1(), file.murmur()));
+						file.sha1(), file.murmur()));
 			}
 			serialized.files = files;
 			serializedGroups.put(entry.getKey(), serialized);
@@ -103,9 +103,9 @@ public record GroupManifest(
 					&& Objects.equals(compatiblePlatforms, other.compatiblePlatforms);
 		}
 	}
-	public record GroupFile(long size, String type, boolean editable, boolean overwriteEditable, String sha1, String murmur) {
+	public record GroupFile(long size, String type, boolean editable, String sha1, String murmur) {
 		public boolean sameEffectiveState(GroupFile other) {
-			return other != null && size == other.size && editable == other.editable && overwriteEditable == other.overwriteEditable
+			return other != null && size == other.size && editable == other.editable
 					&& Objects.equals(type, other.type) && sha1.equalsIgnoreCase(other.sha1);
 		}
 	}

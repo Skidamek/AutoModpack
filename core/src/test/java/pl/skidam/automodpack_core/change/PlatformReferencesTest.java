@@ -45,7 +45,7 @@ class PlatformReferencesTest {
 	}
 
 	private static ChangeSet catalogue() {
-		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, false, SHA1, null);
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, SHA1, null);
 		GroupManifest.Group group = new GroupManifest.Group("Main", "", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));
 		return ChangeSet.catalogue(new GroupManifest("pack", "Pack", "1", "fabric", "1", "1.21", new TreeMap<>(Map.of("main", group))));
 	}

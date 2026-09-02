@@ -205,7 +205,7 @@ class GenerationStoreStorageTest {
 		fields.modpackId = modpackId;
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
-		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, false, hash, null));
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "config", false, hash, null));
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}

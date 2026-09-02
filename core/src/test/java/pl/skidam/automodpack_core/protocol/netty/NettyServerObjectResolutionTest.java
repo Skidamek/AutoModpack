@@ -138,7 +138,7 @@ class NettyServerObjectResolutionTest {
 		fields.modpackId = "abc1234";
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
-		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "config", false, false, hash, null));
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "config", false, hash, null));
 		fields.groups = Map.of("main", group);
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), List.of(), List.of());
