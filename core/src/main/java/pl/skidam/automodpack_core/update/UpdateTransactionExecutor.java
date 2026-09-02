@@ -232,54 +232,7 @@ public final class UpdateTransactionExecutor {
 			transaction.resultMessage = null;
 			setPhase(transaction, UpdateTransaction.Phase.PREPARING);
 			if (isModpackTransaction(transaction)) {
-				if (!publicationStarted && configurationChangedAfterPlanning(transaction))
-					throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
-				captureBaselines(transaction);
-				preserveConflicts(transaction);
-				preserveBeforeMutation(transaction);
-				if (!liveAlreadyApplied) applyOperations(transaction, current);
-				current.set(null);
-				if (!publicationStarted) {
-					verifyManagedFinalState(transaction);
-					if (selectionChangedAfterPlanning(transaction)) throw new UpdateReplanRequiredException(null, "Group selection changed while applying the update");
-					if (configurationChangedAfterPlanning(transaction))
-						throw new UpdateReplanRequiredException(null, "Client configuration changed while applying the update");
-				}
-				if (transaction.operations.isEmpty()) {
-					if (!verifyProjectionQuietly(context.storage().activeDirectory(), transaction.projectedFinalState)) {
-						buildIncomingProjection(transaction);
-						setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
-						setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
-						swapProjection(transaction);
-					}
-				} else {
-					buildIncomingProjection(transaction);
-					setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
-					setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
-					swapProjection(transaction);
-				}
-				if (publicationStarted && isModpackTransaction(transaction)
-						&& (!managedStateMatches(transaction) || preserveNewerSelection || configurationChangedAfterPlanning(transaction)))
-					throw new UpdateReplanRequiredException(null, "Mutable client state changed while publishing the update");
-				if (selectionChangedAfterPlanning(transaction) || configurationChangedAfterPlanning(transaction))
-					throw new UpdateReplanRequiredException(null, "Mutable client configuration changed before update finalization");
-				ModpackJsons.ModpackContentFields target = validator.resolvedTarget(transaction, validator.storedRecord(transaction)).flatTarget();
-				if (transaction.plannedClientConfig != null && !preserveNewerSelection)
-					ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
-				if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
-					context.beforeManifestAction().run(transaction, target);
-				if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-					GenerationTarget generation = transaction.generationTarget();
-					GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies).write(context.storage());
-					context.storage().writeActiveState(transaction.modpackId, generation.targetGenerationId());
-				} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
-					FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.targetGenerationId));
-					context.storage().clearActiveState();
-					Files.deleteIfExists(context.storage().baselineFile(transaction.modpackId));
-				} else {
-					context.storage().clearActiveState();
-				}
-				claimSelection(transaction);
+				applyModpackTransaction(transaction, current, publicationStarted, liveAlreadyApplied, preserveNewerSelection);
 			} else applyOperations(transaction, current);
 			ClientObjectStore.publishOwnership(context.storage());
 			setPhase(transaction, UpdateTransaction.Phase.COMMITTED);
@@ -302,6 +255,61 @@ public final class UpdateTransactionExecutor {
 			}
 			recordResult(transaction, UpdateTransaction.Status.FAILED, operationName, blockedPath, e.getMessage(), e);
 			throw new UpdateExecutionException(operationName, blockedPath, e);
+		}
+	}
+
+	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
+	private void applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean publicationStarted, boolean liveAlreadyApplied,
+			boolean preserveNewerSelection) throws IOException {
+		if (!publicationStarted && configurationChangedAfterPlanning(transaction))
+			throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
+		captureBaselines(transaction);
+		preserveConflicts(transaction);
+		preserveBeforeMutation(transaction);
+		if (!liveAlreadyApplied) applyOperations(transaction, current);
+		current.set(null);
+		if (!publicationStarted) {
+			verifyManagedFinalState(transaction);
+			if (selectionChangedAfterPlanning(transaction)) throw new UpdateReplanRequiredException(null, "Group selection changed while applying the update");
+			if (configurationChangedAfterPlanning(transaction))
+				throw new UpdateReplanRequiredException(null, "Client configuration changed while applying the update");
+		}
+		publishProjection(transaction);
+		if (publicationStarted
+				&& (!managedStateMatches(transaction) || preserveNewerSelection || configurationChangedAfterPlanning(transaction)))
+			throw new UpdateReplanRequiredException(null, "Mutable client state changed while publishing the update");
+		if (selectionChangedAfterPlanning(transaction) || configurationChangedAfterPlanning(transaction))
+			throw new UpdateReplanRequiredException(null, "Mutable client configuration changed before update finalization");
+		finalizeModpackState(transaction, preserveNewerSelection);
+		claimSelection(transaction);
+	}
+
+	/** Builds and swaps the incoming projection unless the active tree already matches; no-ops when the projection was published earlier. */
+	private void publishProjection(UpdateTransaction transaction) throws IOException {
+		if (transaction.operations.isEmpty() && verifyProjectionQuietly(context.storage().activeDirectory(), transaction.projectedFinalState)) return;
+		buildIncomingProjection(transaction);
+		setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
+		setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
+		swapProjection(transaction);
+	}
+
+	/** The durable finalization: planned config, pack state, active-state pointer, and the before-manifest hook. */
+	private void finalizeModpackState(UpdateTransaction transaction, boolean preserveNewerSelection) throws IOException {
+		ModpackJsons.ModpackContentFields target = validator.resolvedTarget(transaction, validator.storedRecord(transaction)).flatTarget();
+		if (transaction.plannedClientConfig != null && !preserveNewerSelection)
+			ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
+		if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
+			context.beforeManifestAction().run(transaction, target);
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
+			GenerationTarget generation = transaction.generationTarget();
+			GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies).write(context.storage());
+			context.storage().writeActiveState(transaction.modpackId, generation.targetGenerationId());
+		} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
+			FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.targetGenerationId));
+			context.storage().clearActiveState();
+			Files.deleteIfExists(context.storage().baselineFile(transaction.modpackId));
+		} else {
+			context.storage().clearActiveState();
 		}
 	}
 
