@@ -342,7 +342,7 @@ public final class UpdatePlanner {
 		}
 
 		Set<String> targetPaths = targetFiles.keySet();
-		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries = removal ? consequenceBaselineEntries(baseline) : Map.of();
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries = removal ? baselineEntries(baseline) : Map.of();
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
 			if (!removal && targetPaths.contains(ledgerEntry.logicalPath())) continue;
 			Optional<FileKey> optionalKey = managedCleanupKey(ledgerEntry.logicalPath());
@@ -369,13 +369,6 @@ public final class UpdatePlanner {
 
 		List<ChangeSet.Effect> effects = restartReasons.stream().map(reason -> new ChangeSet.Effect("restart", reason.name())).toList();
 		return ChangeSet.of(changes, effects);
-	}
-
-	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> consequenceBaselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
-		if (baseline == null || baseline.entries == null) return Map.of();
-		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
-		for (var entry : baseline.entries) if (entry != null && entry.logicalPath != null) entries.put(normalize(entry.logicalPath), entry);
-		return entries;
 	}
 
 	private static boolean consequenceBaselineMatches(FileState current, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
@@ -429,6 +422,11 @@ public final class UpdatePlanner {
 
 	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline, String modpackId) {
 		if (baseline == null || !Objects.equals(modpackId, baseline.modpackId) || baseline.entries == null) return Map.of();
+		return baselineEntries(baseline);
+	}
+
+	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
+		if (baseline == null || baseline.entries == null) return Map.of();
 		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
 		for (var entry : baseline.entries) if (entry != null && entry.logicalPath != null) entries.put(normalize(entry.logicalPath), entry);
 		return entries;

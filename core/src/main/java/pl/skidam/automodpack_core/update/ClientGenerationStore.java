@@ -305,10 +305,7 @@ public final class ClientGenerationStore {
 			if (record == null) continue;
 			String modpackId = record.manifest().modpackId();
 			GenerationRecord previous = newest.get(modpackId);
-			if (previous == null || record.metadata().createdAt().compareTo(previous.metadata().createdAt()) > 0
-					|| record.metadata().createdAt().equals(previous.metadata().createdAt())
-							&& record.metadata().generationId().compareTo(previous.metadata().generationId()) > 0)
-				newest.put(modpackId, record);
+			if (previous == null || newer(record, previous)) newest.put(modpackId, record);
 		}
 		return List.copyOf(newest.values());
 	}

@@ -51,10 +51,10 @@ public final class GroupManifestValidator {
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
 				value(fields.loaderVersion), value(fields.mcVersion), new TreeMap<>(groups));
 		validatePlatformPaths(manifest, errors);
+		validateDefaultAndIndividualSelections(manifest, errors);
+		validateObjectSizes(manifest, errors);
+		validateOverlaps(manifest, errors);
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
-		validateDefaultAndIndividualSelections(manifest);
-		validateObjectSizes(manifest);
-		validateOverlaps(manifest);
 		return manifest;
 	}
 
@@ -220,8 +220,7 @@ public final class GroupManifestValidator {
 		active.remove(id);
 	}
 
-	private static void validateDefaultAndIndividualSelections(GroupManifest manifest) {
-		List<String> errors = new ArrayList<>();
+	private static void validateDefaultAndIndividualSelections(GroupManifest manifest, List<String> errors) {
 		for (ClientPlatform platform : ClientPlatform.values()) {
 			try {
 				GroupSelectionResolver.resolveDefault(manifest, platform);
@@ -249,25 +248,22 @@ public final class GroupManifestValidator {
 		return resolution != null && (resolution.status() == GroupResolution.Status.BLOCKED || resolution.status() == GroupResolution.Status.UNAVAILABLE);
 	}
 
-	private static void validateObjectSizes(GroupManifest manifest) {
+	private static void validateObjectSizes(GroupManifest manifest, List<String> errors) {
 		Map<String, Long> sizesByHash = new TreeMap<>();
-		List<String> errors = new ArrayList<>();
 		for (var groupEntry : manifest.groups().entrySet()) for (var fileEntry : groupEntry.getValue().files().entrySet()) {
 			GroupManifest.GroupFile file = fileEntry.getValue();
 			Long previous = sizesByHash.putIfAbsent(file.sha1(), file.size());
 			if (previous != null && previous.longValue() != file.size())
 				errors.add("SHA-1 '" + file.sha1() + "' has inconsistent advertised sizes: " + previous + " and " + file.size());
 		}
-		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 	}
 
-	private static void validateOverlaps(GroupManifest manifest) {
+	private static void validateOverlaps(GroupManifest manifest, List<String> errors) {
 		Map<String, List<Map.Entry<String, GroupManifest.GroupFile>>> byPath = new TreeMap<>();
 		for (var groupEntry : manifest.groups().entrySet())
 			for (var fileEntry : groupEntry.getValue().files().entrySet())
 				byPath.computeIfAbsent(fileEntry.getKey(), ignored -> new ArrayList<>()).add(Map.entry(groupEntry.getKey(), fileEntry.getValue()));
 
-		List<String> errors = new ArrayList<>();
 		for (var pathEntry : byPath.entrySet()) {
 			List<Map.Entry<String, GroupManifest.GroupFile>> owners = pathEntry.getValue();
 			for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
@@ -279,7 +275,6 @@ public final class GroupManifestValidator {
 							+ first.getKey() + "' and '" + second.getKey() + "'");
 			}
 		}
-		if (!errors.isEmpty()) throw new GroupValidationException(errors);
 	}
 
 	private static boolean coSelectable(GroupManifest manifest, String first, String second) {
