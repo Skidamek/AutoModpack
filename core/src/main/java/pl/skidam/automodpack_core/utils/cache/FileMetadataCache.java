@@ -9,9 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -35,16 +33,10 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * process-wide database open or requiring a database dependency.
  * </p>
  */
-public class FileMetadataCache implements AutoCloseable {
+public class FileMetadataCache extends LooseRecordCache<FileMetadataCache.CachedFile> {
 
 	private static final SharedCacheRegistry<FileMetadataCache> REGISTRY = new SharedCacheRegistry<>();
-	private static final String RECORD_SUFFIX = ".json";
 	private static final long UNAVAILABLE_CHANGE_TIME_NANOS = Long.MIN_VALUE;
-
-	private final Path recordsDirectory;
-	/* Hot records are read/written from scanner threads holding different per-key locks, so the map itself must be concurrent. */
-	private final Map<String, CachedFile> hotRecords = new ConcurrentHashMap<>();
-	private final Object[] locks = new Object[64];
 
 	public static final class CachedFile {
 		private String path;
@@ -121,8 +113,7 @@ public class FileMetadataCache implements AutoCloseable {
 	}
 
 	private FileMetadataCache(Path recordsDirectory) {
-		this.recordsDirectory = recordsDirectory;
-		for (int i = 0; i < locks.length; i++) locks[i] = new Object();
+		super(recordsDirectory, "file metadata");
 	}
 
 	/** Applies a Git-style persisted stat cache; explicit integrity repair uses rehash(). */
@@ -141,9 +132,7 @@ public class FileMetadataCache implements AutoCloseable {
 		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 		if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
 		String pathKey = absPath.toString();
-		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
-
-		synchronized (locks[lockIndex]) {
+		synchronized (lock(pathKey)) {
 			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
 			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
 			return publishComputed(pathKey, computed);
@@ -156,8 +145,7 @@ public class FileMetadataCache implements AutoCloseable {
 		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 		if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
 		String pathKey = absPath.toString();
-		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
-		synchronized (locks[lockIndex]) {
+		synchronized (lock(pathKey)) {
 			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
 			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
 			return computed.hash();
@@ -168,10 +156,8 @@ public class FileMetadataCache implements AutoCloseable {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
 		FileFingerprint fingerprint = fingerprint(absPath, attrs);
-		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
-
-		synchronized (locks[lockIndex]) {
-			CachedFile cached = readRecord(pathKey);
+		synchronized (lock(pathKey)) {
+			CachedFile cached = readRecord(pathKey, CachedFile.class);
 			if (isCacheValid(cached, fingerprint)) return cached.contentHash();
 
 			ComputedHash computed = computeStableHash(absPath, attrs);
@@ -193,7 +179,7 @@ public class FileMetadataCache implements AutoCloseable {
 			hotRecords.put(pathKey, record);
 			return computed.hash();
 		}
-		writeRecord(record);
+		writeRecord(pathKey, record);
 		return computed.hash();
 	}
 
@@ -204,14 +190,13 @@ public class FileMetadataCache implements AutoCloseable {
 	public String getOrComputeMurmur(Path file) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
-		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
-		synchronized (locks[lockIndex]) {
+		synchronized (lock(pathKey)) {
 			BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 			FileFingerprint fingerprint = fingerprint(absPath, attrs);
-			CachedFile cached = readRecord(pathKey);
+			CachedFile cached = readRecord(pathKey, CachedFile.class);
 			if (!statsMatch(cached, fingerprint)) {
 				getOrComputeHashWithAttributes(absPath, attrs);
-				cached = readRecord(pathKey);
+				cached = readRecord(pathKey, CachedFile.class);
 				if (!statsMatch(cached, fingerprint(absPath, Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS))))
 					throw new IOException("Cannot obtain a stable hash record for murmur: " + absPath);
 			}
@@ -220,7 +205,7 @@ public class FileMetadataCache implements AutoCloseable {
 			if (murmur == null) throw new IOException("CurseForge murmur calculation returned null: " + absPath);
 			CachedFile updated = new CachedFile(cached.path(), cached.contentHash(), cached.lastModifiedNanos(), cached.creationTimeNanos(), cached.changeTimeNanos(), cached.size(), cached.fileKey(),
 					cached.validatedAtNanos(), murmur);
-			writeRecord(updated);
+			writeRecord(pathKey, updated);
 			return murmur;
 		}
 	}
@@ -241,43 +226,26 @@ public class FileMetadataCache implements AutoCloseable {
 		if (attrs.isSymbolicLink() || attrs.size() != expectedSize) return false;
 		String sha1 = HashUtils.normalizeSha1(expectedSha1);
 		String pathKey = absPath.toString();
-		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
-		synchronized (locks[lockIndex]) {
+		synchronized (lock(pathKey)) {
 			FileFingerprint fingerprint = fingerprint(absPath, attrs);
-			CachedFile cached = readRecord(pathKey);
+			CachedFile cached = readRecord(pathKey, CachedFile.class);
 			if (immutableStatsMatch(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
 			String actual = HashUtils.getHash(absPath);
 			if (actual == null || !sha1.equalsIgnoreCase(actual)) return false;
-			writeRecord(new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
+			writeRecord(pathKey, new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
 					validationTimeNanos(), cached == null ? null : cached.murmur()));
 			return true;
 		}
 	}
 
-	private CachedFile readRecord(String pathKey) {
-		CachedFile hot = hotRecords.get(pathKey);
-		if (hot != null) return hot;
-
-		Path recordPath = recordPath(pathKey);
-		if (!Files.isRegularFile(recordPath, LinkOption.NOFOLLOW_LINKS)) return null;
-		try {
-			CachedFile record = ConfigTools.read(recordPath, CachedFile.class).orElse(null);
-			if (record == null || !pathKey.equals(record.path())) return null;
-			hotRecords.put(pathKey, record);
-			return record;
-		} catch (RuntimeException e) {
-			LOGGER.debug("Ignoring invalid file metadata cache record: {}", recordPath);
-			return null;
-		}
+	@Override
+	protected boolean validate(CachedFile record, String key) {
+		return key.equals(record.path());
 	}
 
-	private void writeRecord(CachedFile record) {
-		hotRecords.put(record.path(), record);
-		try {
-			ConfigTools.writeAtomic(recordPath(record.path()), record);
-		} catch (IOException e) {
-			LOGGER.debug("Could not persist file metadata cache record: {}", record.path(), e);
-		}
+	@Override
+	protected boolean releaseFromRegistry() {
+		return REGISTRY.release(recordsDirectory, this);
 	}
 
 	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
@@ -373,13 +341,12 @@ public class FileMetadataCache implements AutoCloseable {
 		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 		FileFingerprint fingerprint = fingerprint(absPath, attrs);
 		String pathKey = absPath.toString();
-		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
-		synchronized (locks[lockIndex]) {
-			CachedFile previous = readRecord(pathKey);
+		synchronized (lock(pathKey)) {
+			CachedFile previous = readRecord(pathKey, CachedFile.class);
 			String storedMurmur = murmur != null ? murmur : previous != null && Objects.equals(previous.contentHash(), hash) ? previous.murmur() : null;
 			CachedFile record = new CachedFile(pathKey, hash, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
 					validationTimeNanos(), storedMurmur);
-			writeRecord(record);
+			writeRecord(pathKey, record);
 		}
 	}
 
@@ -401,19 +368,13 @@ public class FileMetadataCache implements AutoCloseable {
 		hotRecords.entrySet().removeIf(entry -> Files.notExists(Path.of(entry.getKey())));
 	}
 
-	private Path recordPath(String pathKey) {
-		String key = sha1(pathKey);
-		return recordsDirectory.resolve(key.substring(0, 2)).resolve(key.substring(2) + RECORD_SUFFIX);
+	@Override
+	protected Path recordPath(String pathKey) {
+		return super.recordPath(sha1(pathKey));
 	}
 
 	private static String sha1(String value) {
 		return HashUtils.sha1(value);
 	}
 
-	@Override
-	public void close() {
-		if (REGISTRY.release(recordsDirectory, this)) {
-			hotRecords.clear();
-		}
-	}
 }

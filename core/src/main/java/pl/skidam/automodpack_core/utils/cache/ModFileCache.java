@@ -3,51 +3,40 @@ package pl.skidam.automodpack_core.utils.cache;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
 /** A shared content-keyed mod inspection cache backed by immutable loose records. */
-public class ModFileCache implements AutoCloseable {
+public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 
 	private static final SharedCacheRegistry<ModFileCache> REGISTRY = new SharedCacheRegistry<>();
-	private static final String RECORD_SUFFIX = ".json";
-
-	private final Path recordsDirectory;
-	/* Scanner threads operate on different hashes through different per-key locks, so the map itself must be concurrent. */
-	private final Map<String, ModRecord> hotRecords = new ConcurrentHashMap<>();
-	private final Object[] locks = new Object[64];
 
 	public static ModFileCache open(Path path) throws IOException {
 		return REGISTRY.acquire(path, ModFileCache::new);
 	}
 
 	private ModFileCache(Path recordsDirectory) {
-		this.recordsDirectory = recordsDirectory;
-		for (int i = 0; i < locks.length; i++) locks[i] = new Object();
+		super(recordsDirectory, "mod metadata");
 	}
 
 	public FileInspection.Mod getOrComputeMod(Path file, FileMetadataCache cache) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
 		String hash = cache.getOrComputeHash(absPath);
 		if (hash == null) return null;
-		int lockIndex = Math.floorMod(hash.hashCode(), locks.length);
+		hash = hash.toLowerCase(Locale.ROOT);
 
-		synchronized (locks[lockIndex]) {
-			ModRecord cached = readRecord(hash);
+		synchronized (lock(hash)) {
+			ModRecord cached = readRecord(hash, ModRecord.class);
 			if (isComplete(cached)) return cached.at(absPath);
 
 			hash = cache.getOrComputeHash(absPath);
 			if (hash == null) return null;
-			cached = readRecord(hash);
+			hash = hash.toLowerCase(Locale.ROOT);
+			cached = readRecord(hash, ModRecord.class);
 			if (isComplete(cached)) return cached.at(absPath);
 
 			FileInspection.Mod modFile = FileInspection.getMod(absPath, cache);
@@ -69,43 +58,17 @@ public class ModFileCache implements AutoCloseable {
 		return cached != null && cached.id != null && cached.services != null;
 	}
 
-	private ModRecord readRecord(String hash) {
-		String normalizedHash = hash.toLowerCase(Locale.ROOT);
-		ModRecord hot = hotRecords.get(normalizedHash);
-		if (hot != null && normalizedHash.equalsIgnoreCase(hot.hash)) return hot;
-		Path recordPath = recordPath(normalizedHash);
-		if (!Files.isRegularFile(recordPath, LinkOption.NOFOLLOW_LINKS)) return null;
-		try {
-			ModRecord record = ConfigTools.read(recordPath, ModRecord.class).orElse(null);
-			if (record == null || !normalizedHash.equalsIgnoreCase(record.hash)) return null;
-			hotRecords.put(normalizedHash, record);
-			return record;
-		} catch (RuntimeException e) {
-			LOGGER.debug("Ignoring invalid mod metadata cache record: {}", recordPath);
-			return null;
-		}
-	}
-
-	private void writeRecord(String hash, ModRecord record) {
-		String normalizedHash = hash.toLowerCase(Locale.ROOT);
-		hotRecords.put(normalizedHash, record);
-		try {
-			ConfigTools.writeAtomic(recordPath(normalizedHash), record);
-		} catch (IOException e) {
-			LOGGER.debug("Could not persist mod metadata cache record: {}", normalizedHash, e);
-		}
-	}
-
-	private Path recordPath(String hash) {
-		return recordsDirectory.resolve(hash.substring(0, 2)).resolve(hash.substring(2) + RECORD_SUFFIX);
+	@Override
+	protected boolean validate(ModRecord record, String key) {
+		return key.equalsIgnoreCase(record.hash);
 	}
 
 	@Override
-	public void close() {
-		if (REGISTRY.release(recordsDirectory, this)) hotRecords.clear();
+	protected boolean releaseFromRegistry() {
+		return REGISTRY.release(recordsDirectory, this);
 	}
 
-	private static final class ModRecord {
+	static final class ModRecord {
 		private Set<String> IDs;
 		private String hash;
 		private String version;
