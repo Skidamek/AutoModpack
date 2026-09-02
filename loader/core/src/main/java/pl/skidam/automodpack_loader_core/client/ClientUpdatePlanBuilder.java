@@ -52,11 +52,17 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	record Input(SelectedModpackTarget selectedTarget, ModpackJsons.ModpackContentFields target, ConnectionJsons.ConnectionInfo connectionInfo,
-			ClientConfigJsons.ClientConfigFieldsV3 currentConfig, boolean prepareObjects) {
+			ClientConfigJsons.ClientConfigFieldsV3 currentConfig, boolean prepareObjects, Map<String, UpdatePlan.FileState> consentedLocalModFiles) {
 		Input {
 			Objects.requireNonNull(selectedTarget, "selectedTarget");
 			Objects.requireNonNull(target, "target");
 			Objects.requireNonNull(currentConfig, "currentConfig");
+			consentedLocalModFiles = Map.copyOf(consentedLocalModFiles == null ? Map.of() : consentedLocalModFiles);
+		}
+
+		Input(SelectedModpackTarget selectedTarget, ModpackJsons.ModpackContentFields target, ConnectionJsons.ConnectionInfo connectionInfo,
+				ClientConfigJsons.ClientConfigFieldsV3 currentConfig, boolean prepareObjects) {
+			this(selectedTarget, target, connectionInfo, currentConfig, prepareObjects, Map.of());
 		}
 	}
 
@@ -101,15 +107,10 @@ final class ClientUpdatePlanBuilder {
 				.collect(Collectors.toMap(entry -> entry.getKey().relativePath(), Map.Entry::getValue));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, input.target(), files, editableOverlays, forceCopyServices, targetMods, standardMods,
-				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), nestedCopies, selection, plannedConfig));
+				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), nestedCopies, selection, plannedConfig, input.consentedLocalModFiles()));
 		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(input.target().loader, input.target().loaderVersion, input.currentConfig().syncLoaderVersion, loaderType))
 			return new PreparedPlan(plan, files, targetOverlay.digest());
-		Set<UpdatePlan.RestartReason> restartReasons = EnumSet.noneOf(UpdatePlan.RestartReason.class);
-		restartReasons.addAll(plan.restartReasons());
-		restartReasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
-		UpdatePlan withLoaderRestart = new UpdatePlan(plan.modpackId(), plan.generationTarget(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(),
-				restartReasons, plan.preservations(), plan.baselineCaptures(), plan.conflicts(), plan.generatedCopies());
-		return new PreparedPlan(withLoaderRestart, files, targetOverlay.digest());
+		return new PreparedPlan(plan.withRestartReason(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION), files, targetOverlay.digest());
 	}
 
 	RemovalPreparation prepareRemoval() throws Exception {

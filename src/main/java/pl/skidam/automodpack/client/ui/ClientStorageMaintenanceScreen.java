@@ -29,6 +29,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private final ClientStorage storage;
 	private boolean busy;
 	private boolean closed;
+	private boolean presentingFailure;
 	private Operation operation;
 	private ClientGenerationStore.CompactionResult compactionResult;
 	private ClientObjectStore.StorageReport verificationReport;
@@ -109,6 +110,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		if (closed) return;
 		busy = false;
 		operation = null;
+		presentingFailure = true;
 		new ScreenManager().failure(FailureRequest.of(exception, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
@@ -136,6 +138,11 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 
 	@Override
 	public void removed() {
+		if (presentingFailure) {
+			presentingFailure = false;
+			super.removed();
+			return;
+		}
 		if (!closed) {
 			closed = true;
 			cancelWork();
@@ -177,8 +184,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		String records = VersionedText.translatable("automodpack.storage.records", compacted.generationRecordCountBefore(), compacted.generationRecordCountAfter(), UiFormat.formatSize(compacted.generationRecordBytesBefore()), UiFormat.formatSize(compacted.generationRecordBytesAfter())).getString();
 		String objects = VersionedText.translatable("automodpack.storage.objects", compacted.objectCollection().before().objectCount(), compacted.objectCollection().after().objectCount(), UiFormat.formatSize(compacted.objectCollection().before().objectBytes()), UiFormat.formatSize(compacted.objectCollection().after().objectBytes())).getString();
 		String generatedCopies = VersionedText.translatable("automodpack.storage.generatedCopies", compacted.generatedCopyCountBefore(), compacted.generatedCopyCountAfter(), UiFormat.formatSize(compacted.generatedCopyBytesBefore()), UiFormat.formatSize(compacted.generatedCopyBytesAfter())).getString();
-		y = drawWrapped(matrices, records, y, textWidth, TextColors.WHITE) + 4;
-		y = drawWrapped(matrices, objects, y, textWidth, TextColors.WHITE) + 4;
+		y = drawWrapped(matrices, records, y, textWidth, TextColors.WHITE);
+		y = drawWrapped(matrices, objects, y, textWidth, TextColors.WHITE);
 		drawWrapped(matrices, generatedCopies, y, textWidth, TextColors.GRAY);
 	}
 

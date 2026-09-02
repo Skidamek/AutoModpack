@@ -19,8 +19,7 @@ public final class StoragePaths {
 	public static final Path CLIENT_ACTIVE_DIR = CLIENT_DIR.resolve("active");
 	public static final Path CLIENT_INCOMING_DIR = CLIENT_DIR.resolve("incoming");
 	public static final Path CLIENT_BACKUP_DIR = CLIENT_DIR.resolve("backup");
-	public static final Path CLIENT_RECOVERY_DIR = CLIENT_DIR.resolve("recovery");
-	public static final Path CLIENT_QUARANTINE_DIR = CLIENT_DIR.resolve("quarantine");
+	public static final Path CLIENT_PRESERVATION_DIR = CLIENT_DIR.resolve("preservation");
 	public static final Path CLIENT_ACTIVE_STATE_FILE = CLIENT_DIR.resolve("active-state.json");
 	public static final Path CLIENT_SELECTION_FILE = CLIENT_DIR.resolve("selections.json");
 	public static final Path CLIENT_RESTART_LOOP_STATE_FILE = CLIENT_DIR.resolve("restart-state.json");

@@ -103,6 +103,43 @@ public class FileMetadataCache implements AutoCloseable {
 		return getOrComputeHashWithAttributes(file, attrs);
 	}
 
+	/**
+	 * Hashes the current bytes without consulting a cached record and publishes the stable
+	 * observation back to the cache. This is intended for explicit integrity checks where
+	 * the cache itself is one of the things being verified.
+	 */
+	public String rehash(Path file) throws IOException {
+		Path absPath = file.toAbsolutePath().normalize();
+		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+		if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
+		String pathKey = absPath.toString();
+		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
+
+		synchronized (locks[lockIndex]) {
+			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
+			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
+			FileFingerprint stableFingerprint = fingerprint(computed.attributes());
+			CachedFile record = new CachedFile(pathKey, computed.hash(), stableFingerprint.lastModifiedNanos(), stableFingerprint.creationTimeNanos(), stableFingerprint.size(),
+					stableFingerprint.fileKey(), validationTimeNanos());
+			writeRecord(record);
+			return computed.hash();
+		}
+	}
+
+	/** Hashes stable bytes without consulting or publishing cache state. */
+	public String hash(Path file) throws IOException {
+		Path absPath = file.toAbsolutePath().normalize();
+		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+		if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
+		String pathKey = absPath.toString();
+		int lockIndex = Math.floorMod(pathKey.hashCode(), locks.length);
+		synchronized (locks[lockIndex]) {
+			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
+			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
+			return computed.hash();
+		}
+	}
+
 	public String getOrComputeHashWithAttributes(Path file, BasicFileAttributes attrs) {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
@@ -168,13 +205,14 @@ public class FileMetadataCache implements AutoCloseable {
 		return fingerprint(first).equals(fingerprint(second));
 	}
 
-	private ComputedHash computeStableHash(Path file, BasicFileAttributes initialAttributes) {
+	private ComputedHash computeStableHash(Path file, BasicFileAttributes initialAttributes, LinkOption... options) {
 		BasicFileAttributes before = initialAttributes;
 		for (int attempt = 0; attempt < 3; attempt++) {
 			String hash = HashUtils.getHash(file);
 			if (hash == null) return null;
 			try {
-				BasicFileAttributes after = Files.readAttributes(file, BasicFileAttributes.class);
+				BasicFileAttributes after = Files.readAttributes(file, BasicFileAttributes.class, options);
+				if (!after.isRegularFile() || after.isSymbolicLink()) return null;
 				if (sameFingerprint(before, after)) return new ComputedHash(hash, after);
 				before = after;
 			} catch (IOException e) {

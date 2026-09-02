@@ -8,12 +8,14 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
+/** Immutable prepared reconciliation decision: executable intent and its canonical user-visible consequences. */
 public record UpdatePlan(
 		String modpackId,
 		GenerationTarget generationTarget,
@@ -24,7 +26,8 @@ public record UpdatePlan(
 		List<Preservation> preservations,
 		List<BaselineCapture> baselineCaptures,
 		List<Conflict> conflicts,
-		List<NestedCopy> generatedCopies) {
+		List<NestedCopy> generatedCopies,
+		ChangeSet consequences) {
 
 	public UpdatePlan {
 		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
@@ -35,6 +38,14 @@ public record UpdatePlan(
 		baselineCaptures = List.copyOf(baselineCaptures);
 		conflicts = List.copyOf(conflicts);
 		generatedCopies = List.copyOf(generatedCopies);
+		consequences = Objects.requireNonNull(consequences, "reconciliation consequences");
+	}
+
+	public UpdatePlan withRestartReason(RestartReason reason) {
+		LinkedHashSet<RestartReason> reasons = new LinkedHashSet<>(restartReasons);
+		if (!reasons.add(Objects.requireNonNull(reason, "restart reason"))) return this;
+		return new UpdatePlan(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, reasons, preservations, baselineCaptures, conflicts,
+				generatedCopies, consequences.withEffects(List.of(new ChangeSet.Effect("restart", reason.name()))));
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
@@ -54,6 +65,7 @@ public record UpdatePlan(
 
 	public enum RestartReason {
 		REMOVED_NON_MODPACK_FILES,
+		REMOVED_LOCAL_MODS,
 		CORRECTED_FILE_LOCATIONS,
 		FIXED_NESTED_MODS,
 		REMOVED_DUPLICATE_MODS,
@@ -66,7 +78,8 @@ public record UpdatePlan(
 
 	public enum PreservationProof {
 		ACTIVE_LEDGER,
-		SERVER_LEDGER
+		SERVER_LEDGER,
+		PLAYER_CONSENT
 	}
 
 	public record Preservation(Root root, String relativePath, String expectedHash, long expectedSize, PreservationProof proof) {
@@ -78,7 +91,7 @@ public record UpdatePlan(
 	public record BaselineCapture(Root root, String relativePath, String expectedHash, long expectedSize, boolean absent) {}
 
 	public enum ConflictAction {
-		QUARANTINE,
+		PRESERVE_LOCAL,
 		REMOVE_OWNED
 	}
 

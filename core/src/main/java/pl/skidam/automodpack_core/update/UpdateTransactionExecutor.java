@@ -391,6 +391,7 @@ public final class UpdateTransactionExecutor {
 		if (transaction.plannedPreservations.isEmpty()) return;
 		OwnershipLedger activeLedger = cleanupLedger();
 		OwnershipLedger targetLedger = OwnershipLedger.fromFields(target.ownershipLedger);
+		ClientStorageJsons.ClientGenerationStateFields activeState = context.storage().readActiveState();
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
 		List<Preservation> sorted = transaction.plannedPreservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal())
@@ -406,6 +407,26 @@ public final class UpdateTransactionExecutor {
 			if (!preservationKeys.add(new FileKey(preservation.root(), relative))) throw new IOException("Duplicate preservation target");
 			validateHash(preservation.expectedHash(), "preservation SHA-1");
 			String logicalPath = relative;
+			if (preservation.proof() == PreservationProof.PLAYER_CONSENT) {
+				if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE
+						|| Path.of(relative).getNameCount() != 2 || !Path.of(relative).getName(0).toString().equals(ModpackPathPolicy.MODS_ROOT))
+					throw new IOException("Player-consent preservation is restricted to direct mods files on first install");
+				Operation deletion = transaction.operations.stream().filter(operation -> operation.root() == Root.GAME_DIR
+						&& operation.operation() == OperationType.DELETE && relative.equals(operation.relativePath())).findFirst().orElse(null);
+				Operation installation = transaction.operations.stream().filter(operation -> operation.root() == Root.GAME_DIR
+						&& operation.operation() == OperationType.INSTALL_OBJECT && relative.equals(operation.relativePath())).findFirst().orElse(null);
+				boolean deleteProof = deletion != null && deletion.expectedExistingHash() != null && preservation.expectedHash().equalsIgnoreCase(deletion.expectedExistingHash());
+				boolean replaceProof = installation != null && installation.expectedExistingHash() != null
+						&& preservation.expectedHash().equalsIgnoreCase(installation.expectedExistingHash());
+				if (!deleteProof && !replaceProof) throw new IOException("Player-consent preservation has no matching hash-pinned operation");
+				if (activeState != null && !(activeState.modpackId.equals(transaction.modpackId) && activeState.generationId.equals(transaction.targetGenerationId)
+						&& hasStrictInstallClaim(transaction, preservation, relative)))
+					throw new IOException("Player-consent preservation is only valid on a first install");
+				ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
+				if (projected == null || (deleteProof && projected.present()) || (replaceProof && !projected.present()))
+					throw new IOException("Player-consent preservation target has an invalid projected final state");
+				continue;
+			}
 			if (!removal && targetPaths.contains(logicalPath)) throw new IOException("Preservation target remains in the selected target");
 			OwnershipLedger ledger = preservation.proof() == PreservationProof.ACTIVE_LEDGER ? activeLedger : targetLedger;
 			if (ledger == null) throw new IOException("Preservation has no active ownership ledger");
@@ -416,8 +437,16 @@ public final class UpdateTransactionExecutor {
 			if (!ledgerEntry.historicalHashes().contains(new OwnershipLedger.Content(preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize())))
 				throw new IOException("Preservation target is not owned by the target ledger");
 			ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
-			if (projected == null || projected.present()) throw new IOException("Preservation target is not absent from projected final state");
+			if (projected == null) throw new IOException("Preservation target is missing from projected final state");
+			if (projected.present() && preservation.expectedHash().equalsIgnoreCase(projected.expectedHash()) && preservation.expectedSize() == projected.expectedSize())
+				throw new IOException("Preserved bytes remain in projected final state");
 		}
+	}
+
+	private boolean hasStrictInstallClaim(UpdateTransaction transaction, Preservation preservation, String relative) throws IOException {
+		return PreservationVault.read(context.storage(), transaction.modpackId).claims().stream().anyMatch(claim -> claim.sourceRoot() == Root.GAME_DIR
+				&& claim.originalPath().equals(relative) && claim.objectHash().equalsIgnoreCase(preservation.expectedHash()) && claim.size() == preservation.expectedSize()
+				&& claim.reason() == PreservationVault.Reason.STRICT_INSTALL && claim.generationId().equals(transaction.targetGenerationId));
 	}
 
 	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
@@ -429,7 +458,7 @@ public final class UpdateTransactionExecutor {
 		List<Conflict> sorted = transaction.plannedConflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList();
 		if (!transaction.plannedConflicts.equals(sorted)) throw new IOException("Conflicts are not deterministically ordered");
 		OwnershipLedger activeLedger = cleanupLedger();
-		QuarantineArchive.read(context.storage(), transaction.modpackId);
+		PreservationVault.read(context.storage(), transaction.modpackId);
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
 		Set<String> conflictIds = new HashSet<>();
@@ -459,11 +488,11 @@ public final class UpdateTransactionExecutor {
 			boolean owned = activeLedger != null && activeLedger.entries().get(conflict.sourcePath()) != null
 					&& activeLedger.entries().get(conflict.sourcePath()).historicalHashes().contains(new OwnershipLedger.Content(conflict.sourceHash().toLowerCase(Locale.ROOT), conflict.sourceSize()));
 			if (conflict.action() == ConflictAction.REMOVE_OWNED && !owned) throw new IOException("Conflict claims ownership without ledger proof");
-			if (conflict.action() == ConflictAction.QUARANTINE && owned) throw new IOException("Conflict quarantines a ledger-owned file");
-			if (conflict.action() == ConflictAction.QUARANTINE && sourceOperation.expectedExistingHash() == null)
-				throw new IOException("Quarantine conflict does not pin the source hash");
-			if (conflict.action() == ConflictAction.QUARANTINE && !sourceOperation.expectedExistingHash().equalsIgnoreCase(conflict.sourceHash()))
-				throw new IOException("Quarantine conflict source hash is not pinned");
+			if (conflict.action() == ConflictAction.PRESERVE_LOCAL && owned) throw new IOException("Conflict preserves a ledger-owned file as local");
+			if (conflict.action() == ConflictAction.PRESERVE_LOCAL && sourceOperation.expectedExistingHash() == null)
+				throw new IOException("Preserved local conflict does not pin the source hash");
+			if (conflict.action() == ConflictAction.PRESERVE_LOCAL && !sourceOperation.expectedExistingHash().equalsIgnoreCase(conflict.sourceHash()))
+				throw new IOException("Preserved local conflict source hash is not pinned");
 			ProjectedFile projected = finalState.get(sourceKey);
 			if (projected == null) throw new IOException("Conflict source is missing from projected final state");
 		}
@@ -520,7 +549,7 @@ public final class UpdateTransactionExecutor {
 			setPhase(transaction, UpdateTransaction.Phase.PREPARING);
 			if (isModpackTransaction(transaction)) {
 				captureBaselines(transaction);
-				quarantineConflicts(transaction);
+				preserveConflicts(transaction);
 				preserveBeforeMutation(transaction);
 				applyOperations(transaction, current);
 				current.set(null);
@@ -619,25 +648,34 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void preserveBeforeMutation(UpdateTransaction transaction) throws IOException {
-		Path objects = context.storage().objectsDirectory().toAbsolutePath().normalize();
 		for (Preservation preservation : transaction.plannedPreservations) {
-			Path source = resolve(preservation.root(), preservation.relativePath(), transaction);
-			Path object = objects.resolve(preservation.expectedHash().toLowerCase(Locale.ROOT)).normalize();
-			validateNoSymbolicLinkDescendants(objects, object);
-			if (!FileIntegrity.matches(object, preservation.expectedSize(), preservation.expectedHash())) {
-				if (!FileIntegrity.matches(source, preservation.expectedSize(), preservation.expectedHash()))
-					throw new IOException("Preservation source changed after planning: " + source);
-				VerifiedFileTransfer.copyAtomic(source, object, preservation.expectedSize(), preservation.expectedHash());
-			}
-			if (!FileIntegrity.matches(object, preservation.expectedSize(), preservation.expectedHash()))
-				throw new IOException("Preserved object verification failed: " + object);
+			PreservationOrigin origin = preservationOrigin(transaction, preservation);
+			PreservationVault.preserve(context.storage(), origin.modpackId(), origin.generationId(), origin.reason(), preservation.root(),
+					preservation.relativePath(), preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize());
 		}
 	}
 
-	private void quarantineConflicts(UpdateTransaction transaction) throws IOException {
+	private void preserveConflicts(UpdateTransaction transaction) throws IOException {
 		for (Conflict conflict : transaction.plannedConflicts)
-			if (conflict.action() == ConflictAction.QUARANTINE) QuarantineArchive.archive(context.storage(), transaction.targetGenerationId, conflict);
+			if (conflict.action() == ConflictAction.PRESERVE_LOCAL) PreservationVault.preserveConflict(context.storage(), transaction.targetGenerationId, conflict);
 	}
+
+	private PreservationOrigin preservationOrigin(UpdateTransaction transaction, Preservation preservation) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields active = context.storage().readActiveState();
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL)
+			return new PreservationOrigin(transaction.modpackId, active == null ? transaction.targetGenerationId : HashUtils.normalizeSha1(active.generationId), PreservationVault.Reason.MODPACK_REMOVAL);
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION)
+			return new PreservationOrigin(transaction.modpackId, active == null ? transaction.targetGenerationId : HashUtils.normalizeSha1(active.generationId), PreservationVault.Reason.MODPACK_DEACTIVATION);
+		if (preservation.proof() == PreservationProof.ACTIVE_LEDGER && active != null) {
+			PreservationVault.Reason reason = transaction.modpackId.equals(active.modpackId) ? PreservationVault.Reason.SERVER_REMOVAL : PreservationVault.Reason.MODPACK_DEACTIVATION;
+			return new PreservationOrigin(active.modpackId, HashUtils.normalizeSha1(active.generationId), reason);
+		}
+		if (preservation.proof() == PreservationProof.PLAYER_CONSENT)
+			return new PreservationOrigin(transaction.modpackId, transaction.targetGenerationId, PreservationVault.Reason.STRICT_INSTALL);
+		return new PreservationOrigin(transaction.modpackId, transaction.targetGenerationId, PreservationVault.Reason.SERVER_REMOVAL);
+	}
+
+	private record PreservationOrigin(String modpackId, String generationId, PreservationVault.Reason reason) {}
 
 	private void verifyManagedFinalState(UpdateTransaction transaction) throws IOException {
 		for (ProjectedFile projected : transaction.projectedFinalState) {

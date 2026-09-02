@@ -10,6 +10,7 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
@@ -87,7 +88,7 @@ class ReviewedUpdatePlanTest {
 
 	private static UpdatePlan plan(List<Operation> operations) {
 		return new UpdatePlan("packaa1", new GenerationTarget("packaa1", "a".repeat(40), "", "b".repeat(40), "c".repeat(40)), operations, List.of(),
-				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of());
+				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
 	}
 
 	private static Operation operation(String path, String objectHash) {

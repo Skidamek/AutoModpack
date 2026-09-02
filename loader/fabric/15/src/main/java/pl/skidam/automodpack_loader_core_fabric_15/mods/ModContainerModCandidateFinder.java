@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_loader_core_fabric_15.mods;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import net.fabricmc.loader.api.ModContainer;
@@ -17,7 +19,12 @@ public class ModContainerModCandidateFinder extends ClasspathModCandidateFinder 
 	public void findCandidates(ModCandidateConsumer out) {
 		containers.forEach((ModContainer container) -> {
 			// Nested are added in ModResolver#resolve
-			if (container.getOrigin().getKind().equals(ModOrigin.Kind.PATH)) out.accept(container.getOrigin().getPaths(), false);
+			if (container.getOrigin().getKind().equals(ModOrigin.Kind.PATH) && hasExistingSource(container.getOrigin().getPaths()))
+				out.accept(container.getOrigin().getPaths(), false);
 		});
+	}
+
+	private static boolean hasExistingSource(List<Path> paths) {
+		return !paths.isEmpty() && paths.stream().allMatch(Files::exists);
 	}
 }

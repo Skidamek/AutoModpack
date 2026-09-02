@@ -5,7 +5,6 @@ import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -19,8 +18,6 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.util.Optional;
 import java.util.Locale;
-import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -59,15 +56,9 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
-			Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
-		executeOnClient(() -> Screens.preview(preview, modpackName, continueAction, cancelAction, returnToSelection, mainPageUrls));
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
+		executeOnClient(() -> Screens.preview(preview, modpackName, continueAction, cancelAction, returnToSelection));
 		return true;
-	}
-
-	@Override
-	public void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed) {
-		executeOnClient(() -> Screens.recovery(modpackUpdater, recoverySnapshot, modpackName, closed));
 	}
 
 	@Override
@@ -174,13 +165,12 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new FirstConnectScreen(modpackUpdater));
 		}
 
-		public static void preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
-				Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
+		public static void preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection) {
 			Screen parent = Screens.getScreen();
 			if (isTransient(parent)) parent = interactiveParent;
 			parent = previewParent(parent);
 			interactiveParent = null;
-			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, returnToSelection, continueAction, cancelAction, mainPageUrls));
+			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, returnToSelection, continueAction, cancelAction));
 		}
 
 		private static Screen previewParent(Screen parent) {
@@ -191,11 +181,6 @@ public class ScreenImpl implements ScreenService {
 
 		private static boolean isTransient(Screen screen) {
 			return screen instanceof PreparingScreen || screen instanceof DownloadScreen;
-		}
-
-		public static void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed) {
-			Screen parent = Screens.getScreen();
-			Screens.setScreen(new RecoveryArchiveScreen(parent, modpackUpdater, recoverySnapshot, modpackName, closed));
 		}
 
 		public static void history(HistoryViewRequest request) {

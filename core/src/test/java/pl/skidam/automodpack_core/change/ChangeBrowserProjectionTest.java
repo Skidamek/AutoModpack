@@ -84,6 +84,16 @@ class ChangeBrowserProjectionTest {
 		assertEquals(projection.total(), collapsed.total());
 	}
 
+	@Test
+	void metadataEffectsRemainVisibleWithoutFileChanges() {
+		ChangeSet changes = ChangeSet.empty().withEffects(List.of(new ChangeSet.Effect("pack.modified", "modpackName")));
+
+		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE);
+
+		assertEquals(List.of(new ChangeSet.Effect("pack.modified", "modpackName")), projection.effects().stream().map(ChangeBrowserProjection.EffectRow::effect).toList());
+		assertEquals(1, projection.rows().size());
+	}
+
 	private static ChangeSet changes() {
 		return ChangeSet.of(List.of(
 				change("config/sub/changed.json", ChangeSet.Kind.MODIFIED, "main", 8, "config"),

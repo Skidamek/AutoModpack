@@ -213,8 +213,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, mode,
 				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature)));
 		String summary = VersionedText.translatable("automodpack.browser.summary", projection.total().fileCount(), UiFormat.formatSize(projection.total().byteCount())).getString();
+		if (!projection.effects().isEmpty()) summary += " | " + projection.effects().size() + " " + VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
 		drawTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GRAY), panelLeft(PANEL_WIDTH), this.height - 43, TextColors.WHITE);
-		if (projection.total().fileCount() == 0)
+		if (projection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
 		String reference = firstReference();
 		this.openPageButton.active = reference != null;

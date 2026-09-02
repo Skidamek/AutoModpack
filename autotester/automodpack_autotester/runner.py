@@ -620,7 +620,7 @@ def _v_rollback_server_generation(ctx: Context, step):
         if current_history.get(new_id, {}).get("patchNotes") != notes:
             return None
         commit = _read_server_json(ctx, f"commits/{new_id}.json", "server rollback commit")
-        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id or str(commit.get("stateDigest", "")) != state_digest or str(commit.get("ledgerDigest", "")) != after_ledger_digest:
+        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id or str(commit.get("stateDigest", "")) != state_digest or str(commit.get("ledgerDigest", "")) != after_ledger_digest or str(commit.get("patchNotes", "")) != notes:
             return None
         return after_pointer, after_projection
 
@@ -793,7 +793,7 @@ def _v_launch_client(ctx: Context, step):
 
 @verb("reset_client_generation")
 def _v_reset_client_generation(ctx: Context, _step):
-    """Reset generation-owned durable state and object CAS for a fresh-client test.
+    """Reset generation-owned durable state for a fresh-client test.
 
     Trust and connection data remain in place deliberately, as do all ordinary game files such as mods/.
     """
@@ -805,6 +805,21 @@ def _v_reset_client_generation(ctx: Context, _step):
         else:
             path.unlink(missing_ok=True)
     ctx.vars["client_generation_reset"] = True
+
+
+@verb("reset_isolated_client_objects")
+def _v_reset_isolated_client_objects(ctx: Context, _step):
+    """Remove the test client's CAS only when its data root is explicitly isolated."""
+    marker = ctx.game_dir / "automodpack" / "data-root.json"
+    data_root = _ensure_client_data_root(ctx.game_dir)
+    location = json.loads(marker.read_text(encoding="utf-8"))
+    if location.get("shared") is not False:
+        raise RuntimeError("refusing to reset objects in a shared client data root")
+    objects = data_root / "objects"
+    if objects.is_dir():
+        shutil.rmtree(objects)
+    else:
+        objects.unlink(missing_ok=True)
 
 
 @verb("assert_client_objects_absent")
