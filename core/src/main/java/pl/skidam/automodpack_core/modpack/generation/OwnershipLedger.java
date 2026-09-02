@@ -5,7 +5,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
@@ -122,38 +121,90 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		return new OwnershipLedger(modpackId, Map.of());
 	}
 
+	/** Mutable reconstruction state used by the generation store while replaying compact deltas. */
+	public static Builder builder(String modpackId) {
+		return new Builder(empty(modpackId));
+	}
+
+	/** Mutable reconstruction state seeded from one already materialized ledger. */
+	public static Builder builder(OwnershipLedger ledger) {
+		return new Builder(Objects.requireNonNull(ledger));
+	}
+
+	public static final class Builder {
+		private final String modpackId;
+		private final TreeMap<String, Entry> entries;
+
+		private Builder(OwnershipLedger base) {
+			modpackId = base.modpackId();
+			entries = new TreeMap<>(base.entries());
+		}
+
+		public Builder apply(OwnershipDelta delta, String generationId) {
+			Objects.requireNonNull(delta, "ownership delta");
+			String currentGeneration = requireGenerationReference(generationId, "generation ID");
+			if (!modpackId.equals(delta.modpackId())) throw new IllegalArgumentException("Delta and ledger modpack IDs disagree");
+			for (OwnershipDelta.Change change : delta.changes().values()) apply(change, currentGeneration);
+			return this;
+		}
+
+		public OwnershipLedger build() {
+			return new OwnershipLedger(modpackId, entries);
+		}
+
+		NavigableMap<String, Entry> entriesView() {
+			return Collections.unmodifiableNavigableMap(entries);
+		}
+
+		private void apply(OwnershipDelta.Change change, String generationId) {
+			String path = change.logicalPath();
+			Entry old = entries.get(path);
+			Set<Content> hashes = old == null ? new TreeSet<>(CONTENT_ORDER) : new TreeSet<>(old.historicalHashes());
+			Set<String> groups = old == null ? new TreeSet<>() : new TreeSet<>(old.historicalGroupIds());
+			switch (change.kind()) {
+				case ADDED -> {
+					if (old != null) throw new IllegalArgumentException("Added ownership path already exists: " + path);
+					hashes.addAll(change.contents());
+					groups.addAll(change.groupIds());
+					entries.put(path, new Entry(path, hashes, groups, generationId, generationId, Status.PRESENT));
+				}
+				case REPLACED -> {
+					requirePresent(old, path, change.kind());
+					hashes.addAll(change.contents());
+					groups.addAll(change.groupIds());
+					entries.put(path, new Entry(path, hashes, groups, old.firstPublishedGenerationId(), generationId, Status.PRESENT));
+				}
+				case RETURNED -> {
+					if (old == null || old.currentStatus() != Status.TOMBSTONE)
+						throw new IllegalArgumentException("Returned ownership path is not a tombstone: " + path);
+					hashes.addAll(change.contents());
+					groups.addAll(change.groupIds());
+					entries.put(path, new Entry(path, hashes, groups, old.firstPublishedGenerationId(), generationId, Status.PRESENT));
+				}
+				case GROUP_OWNERSHIP_CHANGED -> {
+					requirePresent(old, path, change.kind());
+					hashes.addAll(change.contents());
+					groups.addAll(change.groupIds());
+					entries.put(path, new Entry(path, hashes, groups, old.firstPublishedGenerationId(), generationId, Status.PRESENT));
+				}
+				case REMOVED -> {
+					requirePresent(old, path, change.kind());
+					entries.put(path, new Entry(path, old.historicalHashes(), old.historicalGroupIds(), old.firstPublishedGenerationId(), generationId, Status.TOMBSTONE));
+				}
+			}
+		}
+
+		private static void requirePresent(Entry entry, String path, OwnershipDelta.Kind kind) {
+			if (entry == null || entry.currentStatus() != Status.PRESENT)
+				throw new IllegalArgumentException(kind + " ownership path is not present: " + path);
+		}
+	}
+
 	public static OwnershipLedger materialize(OwnershipLedger parent, GroupManifest manifest, String generationId) {
 		Objects.requireNonNull(parent, "parent");
 		Objects.requireNonNull(manifest, "manifest");
-		String currentGeneration = requireGenerationReference(generationId, "generation ID");
 		if (!parent.modpackId().equals(manifest.modpackId())) throw new IllegalArgumentException("Ledger and catalogue modpack IDs disagree");
-		Map<String, CurrentPath> current = currentPaths(manifest);
-		OwnershipDelta delta = OwnershipDelta.between(parent, manifest);
-		Map<String, Entry> result = new TreeMap<>();
-		Set<String> paths = new TreeSet<>(parent.entries().keySet());
-		paths.addAll(current.keySet());
-		for (String path : paths) {
-			Entry old = parent.entries().get(path);
-			CurrentPath now = current.get(path);
-			if (now == null) {
-				if (old == null) continue;
-				Status status = old.currentStatus() == Status.PRESENT ? Status.TOMBSTONE : old.currentStatus();
-				String last = old.currentStatus() == Status.PRESENT ? currentGeneration : old.lastPublishedGenerationId();
-				result.put(path, new Entry(path, old.historicalHashes(), old.historicalGroupIds(), old.firstPublishedGenerationId(), last, status));
-				continue;
-			}
-			Set<Content> hashes = new TreeSet<>(CONTENT_ORDER);
-			if (old != null) hashes.addAll(old.historicalHashes());
-			hashes.add(now.content());
-			Set<String> groups = new TreeSet<>();
-			if (old != null) groups.addAll(old.historicalGroupIds());
-			groups.addAll(now.groupIds());
-			boolean changed = delta.changes().containsKey(path);
-			String first = old == null ? currentGeneration : old.firstPublishedGenerationId();
-			String last = changed ? currentGeneration : old.lastPublishedGenerationId();
-			result.put(path, new Entry(path, hashes, groups, first, last, Status.PRESENT));
-		}
-		return new OwnershipLedger(parent.modpackId(), result);
+		return builder(parent).apply(OwnershipDelta.between(parent, manifest), generationId).build();
 	}
 
 	public static OwnershipLedger materializeWithoutGeneration(OwnershipLedger parent, GroupManifest manifest) {
@@ -194,25 +245,6 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		return GenerationIdentity.sha1Bytes(encoder.bytes());
 	}
 
-	private static Map<String, CurrentPath> currentPaths(GroupManifest manifest) {
-		Map<String, CurrentPath> result = new TreeMap<>();
-		for (var groupEntry : manifest.groups().entrySet()) for (var fileEntry : groupEntry.getValue().files().entrySet()) {
-			String path = LogicalPath.normalize(fileEntry.getKey());
-			GroupManifest.GroupFile file = fileEntry.getValue();
-			CurrentPath next = new CurrentPath(new Content(file.sha1().toLowerCase(Locale.ROOT), file.size()), Set.of(groupEntry.getKey()));
-			CurrentPath previous = result.putIfAbsent(path, next);
-			if (previous != null && !previous.content().equals(next.content())) throw new IllegalArgumentException("Conflicting current ownership for path: " + path);
-			if (previous != null) result.put(path, new CurrentPath(previous.content(), union(previous.groupIds(), next.groupIds())));
-		}
-		return result;
-	}
-
-	private static Set<String> union(Set<String> first, Set<String> second) {
-		TreeSet<String> result = new TreeSet<>(first);
-		result.addAll(second);
-		return result;
-	}
-
 	private static NavigableMap<String, Entry> toNavigableMap(Map<String, Entry> entries) {
 		return entries == null ? new TreeMap<>() : new TreeMap<>(entries);
 	}
@@ -230,5 +262,4 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		return value;
 	}
 
-	private record CurrentPath(Content content, Set<String> groupIds) {}
 }

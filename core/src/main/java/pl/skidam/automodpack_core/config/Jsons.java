@@ -175,16 +175,15 @@ public class Jsons {
 		// UI metadata. The map key is the group id; displayName is what the player sees.
 		public String displayName = "";
 		public String description = "";
-		public String category = "";
+		public String tag = "";
 
 		// If required, the client cannot uncheck it. recommended is ignored when required.
 		public boolean required = false;
 		public boolean recommended = false;
 
-		// Group ids this one conflicts with / depends on and selection tags it belongs to.
+		// Group ids this one conflicts with / depends on and its optional selection tag.
 		public Set<String> breaksWith = Set.of();
 		public Set<String> requires = Set.of();
-		public Set<String> tags = Set.of();
 		public Set<String> compatiblePlatforms = Set.of();
 
 		// Per-group equivalents of the V2 flat file rules.
@@ -268,6 +267,75 @@ public class Jsons {
 		}
 	}
 
+	public static class ClientBaselineFields {
+		public int schemaVersion = 1;
+		public String modpackId = "";
+		public List<EntryFields> entries = List.of();
+
+		public static class EntryFields {
+			public String logicalPath = "";
+			public String objectHash = "";
+			public long size = -1;
+			public boolean absent;
+			public String baselineGenerationId = "";
+		}
+	}
+
+	public static class ClientGenerationStateFields {
+		public int schemaVersion = 1;
+		public String modpackId = "";
+		public String generationId = "";
+		public String platform = "";
+		public String stateDigest = "";
+		public String ledgerDigest = "";
+	}
+
+	public static class ClientRecoveryArchiveFields {
+		public int schemaVersion = 1;
+		public List<EntryFields> entries = List.of();
+
+		public static class EntryFields {
+			public String logicalPath = "";
+			public String sha1 = "";
+			public long size = -1;
+			public String sourceGenerationId = "";
+			public String preservedAt = "";
+		}
+	}
+
+	public static class OwnershipDeltaFields {
+		public String modpackId = "";
+		public List<ChangeFields> changes = List.of();
+		public String digest = "";
+
+		public static class ChangeFields {
+			public String logicalPath = "";
+			public String kind = "";
+			public OwnershipLedgerFields.ContentFields content;
+			public List<OwnershipLedgerFields.ContentFields> contents = List.of();
+			public Set<String> groupIds = Set.of();
+		}
+	}
+
+	public static class CatalogueSnapshotFields {
+		public String stateDigest = "";
+		public CompleteModpackContentFields catalogue = new CompleteModpackContentFields();
+	}
+
+	public static class GenerationCommitFields {
+		public int schemaVersion;
+		public String generationId = "";
+		public String parentGenerationId = "";
+		public String modpackId = "";
+		public String createdAt = "";
+		public String stateDigest = "";
+		public String ledgerDigest = "";
+		public String ownershipDeltaDigest = "";
+		public String patchNotes = "";
+		public String patchNotesDigest = "";
+		public String rollbackTargetGenerationId = "";
+	}
+
 	public static class CompleteModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
@@ -295,12 +363,11 @@ public class Jsons {
 		public static class ModpackGroupFields {
 			public String displayName = "";
 			public String description = "";
-			public String category = "";
+			public String tag = "";
 			public boolean required;
 			public boolean recommended;
 			public Set<String> breaksWith = Set.of();
 			public Set<String> requires = Set.of();
-			public Set<String> tags = Set.of();
 			public Set<String> compatiblePlatforms = Set.of();
 			public Map<String, GroupFileFields> files = Map.of();
 		}
@@ -433,13 +500,21 @@ public class Jsons {
 		public Map<String, ModpackSelection> selections = new HashMap<>();
 
 		public static class ModpackSelection {
+			public Set<String> requestedTags = new HashSet<>();
 			@SerializedName(value = "requestedGroups", alternate = "selectedGroups")
 			public Set<String> requestedGroups = new HashSet<>();
+			public Set<String> excludedGroups = new HashSet<>();
 
 			public ModpackSelection() {}
 
 			public ModpackSelection(Set<String> requestedGroups) {
+				this(Set.of(), requestedGroups, Set.of());
+			}
+
+			public ModpackSelection(Set<String> requestedTags, Set<String> requestedGroups, Set<String> excludedGroups) {
+				this.requestedTags = requestedTags;
 				this.requestedGroups = requestedGroups;
+				this.excludedGroups = excludedGroups;
 			}
 		}
 	}

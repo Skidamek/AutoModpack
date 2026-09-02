@@ -15,13 +15,27 @@ public record UpdatePlan(
 		List<Operation> operations,
 		List<ProjectedFile> projectedFinalState,
 		Jsons.ClientConfigFieldsV3 plannedClientConfig,
-		Set<RestartReason> restartReasons) {
+		Set<RestartReason> restartReasons,
+		List<Preservation> preservations,
+		List<BaselineCapture> baselineCaptures) {
 
 	public UpdatePlan {
 		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
 		operations = List.copyOf(operations);
 		projectedFinalState = List.copyOf(projectedFinalState);
 		restartReasons = stableSet(restartReasons);
+		preservations = List.copyOf(preservations);
+		baselineCaptures = List.copyOf(baselineCaptures);
+	}
+
+	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
+			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons) {
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, List.of(), List.of());
+	}
+
+	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
+			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations) {
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, List.of());
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
@@ -29,9 +43,9 @@ public record UpdatePlan(
 	}
 
 	public enum Root {
-		MODPACK_DIR,
+		PROJECTION,
+		OVERLAY,
 		GAME_DIR,
-		MODS_DIR,
 		STORE_DIR,
 		AUTOMODPACK_DIR
 	}
@@ -54,6 +68,10 @@ public record UpdatePlan(
 		CHANGED_GROUP_SELECTION,
 		SELECTED_MODPACK
 	}
+
+	public record Preservation(Root root, String relativePath, String expectedHash, long expectedSize) {}
+
+	public record BaselineCapture(Root root, String relativePath, String expectedHash, long expectedSize, boolean absent) {}
 
 	public record Operation(
 			Root root,

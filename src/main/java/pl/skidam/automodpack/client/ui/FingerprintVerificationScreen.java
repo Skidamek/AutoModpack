@@ -7,6 +7,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.screens.Screen;
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -67,7 +68,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 100, 20,
 				VersionedText.translatable("automodpack.back"),
 				button -> {
-					this.minecraft.gui.setScreen(parent);
+					ScreenImpl.setScreen(parent);
 					if (!this.validated) {
 						this.canceledCallback.run();
 					}
@@ -79,7 +80,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.skip"),
 				button -> {
 					assert this.minecraft != null;
-					this.minecraft.gui.setScreen(new SkipVerificationScreen(this, this.validatedCallback));
+					ScreenImpl.setScreen(new SkipVerificationScreen(this, this.validatedCallback));
 				});
 
 		// Verify button (right - primary action, bold)
@@ -128,11 +129,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	}
 
 	private String getConcatenatedFingerprint() {
-		// Concatenate fingerprint to fit on screen (first 16 chars + "..." + last 16 chars)
-		if (serverFingerprint.length() <= 35) {
-			return serverFingerprint;
-		}
-		return serverFingerprint.substring(0, 16) + "..." + serverFingerprint.substring(serverFingerprint.length() - 16);
+		return truncateToWidth(this.font, serverFingerprint, Math.max(1, this.width - 20));
 	}
 
 	@Override

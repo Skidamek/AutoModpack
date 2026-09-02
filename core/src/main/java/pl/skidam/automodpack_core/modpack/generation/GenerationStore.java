@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class GenerationStore {
@@ -25,20 +26,51 @@ public final class GenerationStore {
 		PUBLISHED, NO_CHANGES
 	}
 
-	public record CurrentSnapshot(GenerationRecord record, Path recordPath, NavigableMap<String, Path> hostingPaths) {
+	public record CurrentSnapshot(GenerationRecord record, Path projectionPath, NavigableMap<String, Path> hostingPaths) {
 		public CurrentSnapshot {
 			record = Objects.requireNonNull(record);
-			recordPath = Objects.requireNonNull(recordPath).toAbsolutePath().normalize();
+			projectionPath = Objects.requireNonNull(projectionPath).toAbsolutePath().normalize();
 			hostingPaths = immutablePaths(hostingPaths);
 		}
 	}
 
-	public record Publication(PublicationStatus status, GenerationRecord record, Path recordPath, NavigableMap<String, Path> hostingPaths) {
+	public record Publication(PublicationStatus status, GenerationRecord record, Path projectionPath, NavigableMap<String, Path> hostingPaths) {
 		public Publication {
 			status = Objects.requireNonNull(status);
 			record = Objects.requireNonNull(record);
-			recordPath = Objects.requireNonNull(recordPath).toAbsolutePath().normalize();
+			projectionPath = Objects.requireNonNull(projectionPath).toAbsolutePath().normalize();
 			hostingPaths = immutablePaths(hostingPaths);
+		}
+	}
+
+	/** A deterministic receipt for the regular files in the generation store. */
+	public record StorageReport(long catalogueCount, long catalogueBytes, long commitCount, long commitBytes,
+			long deltaCount, long deltaBytes, long immutableObjectCount, long immutableObjectBytes, long stagingFileCount, long stagingBytes,
+			long referencedObjectCount, long referencedObjectBytes, long objectReferenceCount) {
+		public StorageReport {
+			if (catalogueCount < 0 || catalogueBytes < 0 || commitCount < 0 || commitBytes < 0 || deltaCount < 0
+					|| deltaBytes < 0 || immutableObjectCount < 0 || immutableObjectBytes < 0 || stagingFileCount < 0 || stagingBytes < 0 || referencedObjectCount < 0
+					|| referencedObjectBytes < 0 || objectReferenceCount < 0)
+				throw new IllegalArgumentException("Storage report values cannot be negative");
+		}
+
+		/** The ratio of unique referenced object hashes to all logical record references. */
+		public OptionalDouble uniqueObjectReferenceRatio() {
+			return objectReferenceCount == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) referencedObjectCount / objectReferenceCount);
+		}
+
+		/** The ratio of unique referenced object hashes to measured immutable object files. */
+		public OptionalDouble referencedObjectRatio() {
+			return immutableObjectCount == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) referencedObjectCount / immutableObjectCount);
+		}
+	}
+
+	/** The result of one explicitly requested object collection pass. */
+	public record CollectionResult(long beforeObjectBytes, long afterObjectBytes, long beforeObjectCount, long afterObjectCount,
+			long deletedObjectCount, long deletedObjectBytes) {
+		public CollectionResult {
+			if (beforeObjectBytes < 0 || afterObjectBytes < 0 || beforeObjectCount < 0 || afterObjectCount < 0 || deletedObjectCount < 0 || deletedObjectBytes < 0)
+				throw new IllegalArgumentException("Collection result values cannot be negative");
 		}
 	}
 
@@ -47,12 +79,20 @@ public final class GenerationStore {
 		void beforeCurrentPointerReplacement() throws IOException;
 	}
 
+	@FunctionalInterface
+	private interface ImmutableJsonReader<T> {
+		T read(Path path) throws IOException;
+	}
+
 	private static final CommitHook NOOP_HOOK = () -> {};
 	private static final Map<Path, ReentrantLock> PUBLICATION_LOCKS = new ConcurrentHashMap<>();
 	private final Path root;
 	private final Path currentPath;
+	private final Path currentProjectionPath;
 	private final Path publicationLockPath;
-	private final Path recordsDirectory;
+	private final Path cataloguesDirectory;
+	private final Path commitsDirectory;
+	private final Path deltasDirectory;
 	private final Path objectsDirectory;
 	private final Path stagingDirectory;
 	private final ServerObjectStore objectStore;
@@ -66,8 +106,11 @@ public final class GenerationStore {
 	GenerationStore(Path root, Clock clock, CommitHook commitHook) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
 		this.currentPath = this.root.resolve(Constants.hostGenerationCurrentFile.getFileName());
+		this.currentProjectionPath = this.root.resolve(Constants.hostGenerationCurrentProjectionFile.getFileName());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
-		this.recordsDirectory = this.root.resolve(Constants.hostGenerationRecordsDir.getFileName());
+		this.cataloguesDirectory = this.root.resolve(Constants.hostGenerationCataloguesDir.getFileName());
+		this.commitsDirectory = this.root.resolve(Constants.hostGenerationCommitsDir.getFileName());
+		this.deltasDirectory = this.root.resolve(Constants.hostGenerationDeltasDir.getFileName());
 		this.objectsDirectory = this.root.resolve(Constants.hostGenerationObjectsDir.getFileName());
 		this.stagingDirectory = this.root.resolve(Constants.hostGenerationStagingDir.getFileName());
 		this.clock = Objects.requireNonNull(clock);
@@ -79,27 +122,79 @@ public final class GenerationStore {
 		return objectsDirectory;
 	}
 
+	/** Measures the current generation store without publishing or deleting managed state. */
+	public StorageReport measureStorage() throws IOException {
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			return measureStorageLocked();
+		}
+	}
+
+	/** Collects only explicitly unreferenced immutable objects; this method is never called automatically. */
+	public CollectionResult collectUnreachableObjects(Set<String> retainedGenerationIds, Set<String> pinnedObjectHashes) throws IOException {
+		Objects.requireNonNull(retainedGenerationIds, "retainedGenerationIds");
+		Objects.requireNonNull(pinnedObjectHashes, "pinnedObjectHashes");
+		NavigableSet<String> generationPins = canonicalPins(retainedGenerationIds, "generation");
+		NavigableSet<String> objectPins = canonicalPins(pinnedObjectHashes, "object");
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			return collectUnreachableObjectsLocked(generationPins, objectPins);
+		}
+	}
+
+	/** Short alias for callers that treat collection as the store's explicit maintenance operation. */
+	public CollectionResult collect(Set<String> retainedGenerationIds, Set<String> pinnedObjectHashes) throws IOException {
+		return collectUnreachableObjects(retainedGenerationIds, pinnedObjectHashes);
+	}
+
+	/** Loads the current materialized projection and verifies only the active target objects. */
 	public Optional<CurrentSnapshot> loadCurrent() throws IOException {
+		return loadCurrent(false, false);
+	}
+
+	/** Performs an explicit ancestry and historical-object verification pass. */
+	public Optional<CurrentSnapshot> loadCurrentDeep() throws IOException {
+		return loadCurrent(true, false);
+	}
+
+	/** Repairs a missing or invalid projection under the publication lock before returning the active hosting map. */
+	public Optional<CurrentSnapshot> loadCurrentAndRepair() throws IOException {
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			return loadCurrent(false, true);
+		}
+	}
+
+	private Optional<CurrentSnapshot> loadCurrent(boolean deepVerification, boolean repairProjection) throws IOException {
 		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) requireDirectory(root, "generation store");
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
-		ensureRegular(currentPath, "current generation pointer");
-		Jsons.GenerationPointerFields pointer;
-		try {
-			pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), Jsons.GenerationPointerFields.class);
-		} catch (RuntimeException e) {
-			throw new IOException("Invalid current generation pointer: " + currentPath, e);
+		Jsons.GenerationPointerFields pointer = readCurrentPointer();
+		GenerationRecord record;
+		Path materializedPath = currentProjectionPath;
+		LoadedProjection loaded = null;
+		if (deepVerification) {
+			record = readCompactState(pointer.generationId).record();
+			if (Files.exists(currentProjectionPath, LinkOption.NOFOLLOW_LINKS)) {
+				GenerationRecord projection = readProjection(currentProjectionPath);
+				if (!projection.equals(record)) throw new IOException("Current projection does not match compact generation metadata: " + currentProjectionPath);
+			}
+		} else {
+			loaded = readProjectionOrCompact(pointer.generationId);
+			record = loaded.record();
+			materializedPath = loaded.path();
 		}
-		if (pointer == null || pointer.schemaVersion != CURRENT_POINTER_SCHEMA_VERSION || !isDigest(pointer.generationId))
-			throw new IOException("Invalid current generation pointer metadata: " + currentPath);
-		requireDirectory(recordsDirectory, "generation records");
-		Path recordPath = recordPath(pointer.generationId);
-		GenerationRecord record = readRecord(recordPath);
 		if (!record.metadata().generationId().equals(pointer.generationId))
-			throw new IOException("Current pointer does not match generation record identity: " + recordPath);
-		validateParentChain(record);
-		NavigableMap<String, Path> hosting = verifyCurrentObjects(record);
-		hosting.put("", recordPath);
-		return Optional.of(new CurrentSnapshot(record, recordPath, hosting));
+			throw new IOException("Current pointer does not match current generation identity: " + pointer.generationId);
+		if (deepVerification) {
+			verifyAllReferencedObjects(record);
+		}
+		NavigableMap<String, Path> hosting = deepVerification ? activeTargetPaths(record) : verifyActiveTargetObjects(record);
+		if (repairProjection && loaded != null && loaded.needsRepair()) {
+			writeCurrentProjection(record);
+			materializedPath = currentProjectionPath;
+		}
+		if (Files.exists(materializedPath, LinkOption.NOFOLLOW_LINKS)) hosting.put("", materializedPath);
+		return Optional.of(new CurrentSnapshot(record, materializedPath, hosting));
 	}
 
 	public Publication publish(ModpackCandidate candidate, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
@@ -107,6 +202,43 @@ public final class GenerationStore {
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
 			return publishLocked(candidate, expectedCurrent, patchNotes);
 		}
+	}
+
+	public Publication publishRevert(String targetGenerationId, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
+		if (!isDigest(targetGenerationId)) throw new IOException("Invalid rollback target generation ID: " + targetGenerationId);
+		Objects.requireNonNull(expectedCurrent, "expectedCurrent");
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			Optional<CurrentSnapshot> actualBefore = loadCurrent();
+			ensureExpected(expectedCurrent, actualBefore);
+			GenerationRecord previous = actualBefore.map(CurrentSnapshot::record).orElseThrow(() -> new IOException("Cannot revert before the root generation is published"));
+			GenerationHistoryEntry target = findAncestor(previous, targetGenerationId);
+			if (target == null) throw new IOException("Rollback target is not in the current generation history: " + targetGenerationId);
+			ensureStoreDirectories();
+			GenerationRecord record = GenerationRecord.create(target.manifest(), previous, clock.instant(), patchNotes, targetGenerationId);
+			OwnershipDelta delta = writeDeltaNoClobber(record, previous);
+			writeCatalogueNoClobber(record);
+			writeCommitNoClobber(record, delta);
+			NavigableMap<String, Path> hosting = verifyActiveTargetObjects(record);
+			writeCurrentProjection(record);
+			hosting.put("", currentProjectionPath);
+			commitHook.beforeCurrentPointerReplacement();
+			ensureCurrentStillMatches(expectedCurrent);
+			ConfigTools.writeAtomic(currentPath, pointer(record));
+			return new Publication(PublicationStatus.PUBLISHED, record, currentProjectionPath, hosting);
+		}
+	}
+
+	public List<GenerationHistoryEntry> currentHistory() throws IOException {
+		Optional<CurrentSnapshot> current = loadCurrent();
+		if (current.isEmpty()) return List.of();
+		return readCompactState(current.orElseThrow().record().metadata().generationId()).entries();
+	}
+
+	private GenerationHistoryEntry findAncestor(GenerationRecord current, String targetGenerationId) throws IOException {
+		for (GenerationHistoryEntry entry : readCompactState(current.metadata().generationId()).entries())
+			if (entry.metadata().generationId().equals(targetGenerationId)) return entry;
+		return null;
 	}
 
 	private Publication publishLocked(ModpackCandidate candidate, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
@@ -132,11 +264,13 @@ public final class GenerationStore {
 		ensureStoreDirectories();
 		GenerationRecord record = GenerationRecord.create(candidate.manifest(), previous, clock.instant(), patchNotes);
 		objectStore.promoteAll(candidate.objects());
-		Path recordPath = recordPath(record.metadata().generationId());
-		writeRecordNoClobber(recordPath, record);
-		NavigableMap<String, Path> hosting = verifyCurrentObjects(record);
-		hosting.put("", recordPath);
-		Publication publication = new Publication(PublicationStatus.PUBLISHED, record, recordPath, hosting);
+		OwnershipDelta delta = writeDeltaNoClobber(record, previous);
+		writeCatalogueNoClobber(record);
+		writeCommitNoClobber(record, delta);
+		NavigableMap<String, Path> hosting = verifyActiveTargetObjects(record);
+		writeCurrentProjection(record);
+		hosting.put("", currentProjectionPath);
+		Publication publication = new Publication(PublicationStatus.PUBLISHED, record, currentProjectionPath, hosting);
 		Jsons.GenerationPointerFields nextPointer = pointer(record);
 		commitHook.beforeCurrentPointerReplacement();
 		ensureCurrentStillMatches(expectedCurrent);
@@ -164,7 +298,7 @@ public final class GenerationStore {
 	}
 
 	private Publication publication(PublicationStatus status, CurrentSnapshot snapshot) {
-		return new Publication(status, snapshot.record(), snapshot.recordPath(), snapshot.hostingPaths());
+		return new Publication(status, snapshot.record(), snapshot.projectionPath(), snapshot.hostingPaths());
 	}
 
 	private void ensureExpected(Optional<CurrentSnapshot> expected, Optional<CurrentSnapshot> actual) throws IOException {
@@ -174,68 +308,369 @@ public final class GenerationStore {
 	}
 
 	private void ensureCurrentStillMatches(Optional<CurrentSnapshot> expected) throws IOException {
-		ensureExpected(expected, loadCurrent());
+		Optional<String> actualGenerationId = Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS) ? Optional.of(readCurrentPointer().generationId) : Optional.empty();
+		if (expected.isPresent() != actualGenerationId.isPresent()) throw new IOException("Current generation changed before publication");
+		if (expected.isPresent() && !expected.orElseThrow().record().metadata().generationId().equals(actualGenerationId.orElseThrow()))
+			throw new IOException("Current generation changed before publication");
 	}
 
 	private void ensureStoreDirectories() throws IOException {
 		ensureDirectory(root, "generation store");
-		ensureDirectory(recordsDirectory, "generation records");
+		ensureDirectory(cataloguesDirectory, "generation catalogues");
+		ensureDirectory(commitsDirectory, "generation commits");
+		ensureDirectory(deltasDirectory, "generation deltas");
 		ensureDirectory(objectsDirectory, "immutable objects");
 		ensureDirectory(stagingDirectory, "generation staging");
 	}
 
-	private GenerationRecord readRecord(Path path) throws IOException {
-		ensureRegular(path, "generation record");
+	private StorageReport measureStorageLocked() throws IOException {
+		GenerationRecord current = loadCurrentDeep().map(CurrentSnapshot::record).orElse(null);
+		Map<String, Long> expectedSizes = new TreeMap<>();
+		long objectReferences = 0;
+		if (current != null) objectReferences = addExact(objectReferences, addReferences(current, expectedSizes), "object reference count");
+		long referencedObjectBytes = verifyObjectReferences(expectedSizes);
+		FileTotals catalogueFiles = fileTotals(regularFiles(cataloguesDirectory, "generation catalogues"));
+		FileTotals commitFiles = fileTotals(regularFiles(commitsDirectory, "generation commits"));
+		FileTotals deltaFiles = fileTotals(regularFiles(deltasDirectory, "generation deltas"));
+		FileTotals objectFiles = fileTotals(regularFiles(objectsDirectory, "immutable objects"));
+		FileTotals stagingFiles = fileTotals(regularFiles(stagingDirectory, "generation staging"));
+		return new StorageReport(catalogueFiles.count(), catalogueFiles.bytes(), commitFiles.count(), commitFiles.bytes(),
+				deltaFiles.count(), deltaFiles.bytes(), objectFiles.count(), objectFiles.bytes(), stagingFiles.count(), stagingFiles.bytes(), expectedSizes.size(),
+				referencedObjectBytes, objectReferences);
+	}
+
+	private CollectionResult collectUnreachableObjectsLocked(Set<String> generationPins, Set<String> objectPins) throws IOException {
+		Optional<CurrentSnapshot> current = loadCurrentDeep();
+		if (current.isEmpty()) throw new IOException("Cannot collect without a valid current generation");
+		String currentGenerationId = current.orElseThrow().record().metadata().generationId();
+		CompactHistory history = readCompactHistory(currentGenerationId);
+		NavigableSet<String> retained = new TreeSet<>(generationPins);
+		retained.add(currentGenerationId);
+		Map<String, Long> expectedSizes = new TreeMap<>();
+		OwnershipLedger.Builder ledger = OwnershipLedger.builder(history.generations().get(0).commit().modpackId());
+		for (CompactGeneration generation : history.generations()) {
+			try {
+				ledger.apply(generation.delta(), generation.commit().generationId());
+			} catch (RuntimeException e) {
+				throw new IOException("Generation ownership delta cannot be applied: " + generation.commit().generationId(), e);
+			}
+			if (retained.contains(generation.commit().generationId())) {
+				addManifestReferences(generation.snapshot().manifest(), expectedSizes);
+				addLedgerReferences(ledger.entriesView().values(), expectedSizes);
+			}
+		}
+		for (String generationId : generationPins) {
+			if (history.generations().stream().noneMatch(generation -> generation.commit().generationId().equals(generationId)))
+				throw new IOException("Retained generation is not in the current lineage: " + generationId);
+		}
+		verifyObjectReferences(expectedSizes);
+		Set<String> reachable = new HashSet<>(expectedSizes.keySet());
+		for (String objectHash : objectPins) {
+			if (!reachable.contains(objectHash)) verifyPinnedObject(objectHash);
+			reachable.add(objectHash);
+		}
+		List<Path> beforeFiles = regularFiles(objectsDirectory, "immutable objects");
+		FileTotals before = fileTotals(beforeFiles);
+		long deletedCount = 0;
+		long deletedBytes = 0;
+		for (Path object : beforeFiles) {
+			String name = object.getFileName().toString();
+			if (!isDigest(name) || reachable.contains(name) || !isValidCanonicalObject(object, name)) continue;
+			long size = Files.size(object);
+			if (Files.deleteIfExists(object)) {
+				deletedCount = addExact(deletedCount, 1, "deleted object count");
+				deletedBytes = addExact(deletedBytes, size, "deleted object bytes");
+			}
+		}
+		if (deletedCount > 0) forceDirectory(objectsDirectory);
+		FileTotals after = fileTotals(regularFiles(objectsDirectory, "immutable objects"));
+		return new CollectionResult(before.bytes(), after.bytes(), before.count(), after.count(), deletedCount, deletedBytes);
+	}
+
+	private List<Path> regularFiles(Path directory, String description) throws IOException {
+		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return List.of();
+		requireDirectory(directory, description);
+		try (var paths = Files.list(directory)) {
+			return paths.filter(path -> !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+					.sorted(Comparator.comparing(value -> value.getFileName().toString())).toList();
+		}
+	}
+
+	private FileTotals fileTotals(List<Path> paths) throws IOException {
+		long bytes = 0;
+		long count = 0;
+		for (Path path : paths) {
+			if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
+			count = addExact(count, 1, "file count");
+			bytes = addExact(bytes, Files.size(path), "file bytes");
+		}
+		return new FileTotals(count, bytes);
+	}
+
+	private long addManifestReferences(GenerationRecord record, Map<String, Long> expectedSizes) throws IOException {
+		return addManifestReferences(record.manifest(), expectedSizes);
+	}
+
+	private long addManifestReferences(GroupManifest manifest, Map<String, Long> expectedSizes) throws IOException {
+		long count = 0;
+		for (var group : manifest.groups().values()) for (var file : group.files().values()) {
+			addExpectedSize(expectedSizes, file.sha1().toLowerCase(Locale.ROOT), file.size());
+			count = addExact(count, 1, "object reference count");
+		}
+		return count;
+	}
+
+	private long addReferences(GenerationRecord record, Map<String, Long> expectedSizes) throws IOException {
+		long count = addManifestReferences(record, expectedSizes);
+		return addLedgerReferences(record.ownershipLedger().entries().values(), expectedSizes, count);
+	}
+
+	private long addLedgerReferences(Collection<OwnershipLedger.Entry> entries, Map<String, Long> expectedSizes) throws IOException {
+		return addLedgerReferences(entries, expectedSizes, 0);
+	}
+
+	private long addLedgerReferences(Collection<OwnershipLedger.Entry> entries, Map<String, Long> expectedSizes, long count) throws IOException {
+		for (var entry : entries) for (var content : entry.historicalHashes()) {
+			addExpectedSize(expectedSizes, content.sha1(), content.size());
+			count = addExact(count, 1, "object reference count");
+		}
+		return count;
+	}
+
+	private static void addExpectedSize(Map<String, Long> expectedSizes, String sha1, long expectedSize) throws IOException {
+		if (!isDigest(sha1) || expectedSize < 0) throw new IOException("Invalid immutable object reference: " + sha1);
+		Long previousSize = expectedSizes.putIfAbsent(sha1, expectedSize);
+		if (previousSize != null && previousSize.longValue() != expectedSize)
+			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
+	}
+
+	private long verifyObjectReferences(Map<String, Long> expectedSizes) throws IOException {
+		Set<String> verified = new HashSet<>();
+		long bytes = 0;
+		for (var entry : expectedSizes.entrySet()) {
+			verifyObject(entry.getKey(), entry.getValue(), expectedSizes, verified);
+			bytes = addExact(bytes, entry.getValue(), "referenced object bytes");
+		}
+		return bytes;
+	}
+
+	private void verifyPinnedObject(String sha1) throws IOException {
+		Path object = objectPath(sha1);
+		ensureRegular(object, "pinned immutable object " + sha1);
+		if (!sha1.equals(HashUtils.getHash(object))) throw new IOException("Pinned immutable object failed SHA-1 verification: " + object);
+	}
+
+	private static NavigableSet<String> canonicalPins(Set<String> pins, String description) throws IOException {
+		TreeSet<String> result = new TreeSet<>();
+		for (String pin : pins) {
+			if (!isDigest(pin)) throw new IOException("Invalid pinned " + description + " hash: " + pin);
+			result.add(pin);
+		}
+		return result;
+	}
+
+	private static long addExact(long first, long second, String description) throws IOException {
+		try {
+			return Math.addExact(first, second);
+		} catch (ArithmeticException e) {
+			throw new IOException("Overflow while measuring " + description, e);
+		}
+	}
+
+	private boolean isValidCanonicalObject(Path object, String name) {
+		return !Files.isSymbolicLink(object) && Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && name.equals(HashUtils.getHash(object));
+	}
+
+	private Jsons.GenerationPointerFields readCurrentPointer() throws IOException {
+		ensureRegular(currentPath, "current generation pointer");
+		try {
+			Jsons.GenerationPointerFields pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), Jsons.GenerationPointerFields.class);
+			if (pointer.schemaVersion != CURRENT_POINTER_SCHEMA_VERSION || !isDigest(pointer.generationId))
+				throw new IOException("Invalid current generation pointer metadata: " + currentPath);
+			return pointer;
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid current generation pointer: " + currentPath, e);
+		}
+	}
+
+	private LoadedProjection readProjectionOrCompact(String generationId) throws IOException {
+		IOException projectionFailure = null;
+		if (Files.exists(currentProjectionPath, LinkOption.NOFOLLOW_LINKS)) {
+			try {
+				GenerationRecord projection = readProjection(currentProjectionPath);
+				if (!projection.metadata().generationId().equals(generationId))
+					throw new IOException("Current projection does not match the current generation identity: " + currentProjectionPath);
+				return new LoadedProjection(projection, currentProjectionPath, false);
+			} catch (IOException e) {
+				projectionFailure = e;
+			}
+		}
+		GenerationRecord record = readCompactRecord(generationId);
+		if (projectionFailure != null)
+			Constants.LOGGER.warn("Current generation projection is invalid; using durable generation state until it is repaired: {}", currentProjectionPath, projectionFailure);
+		else
+			Constants.LOGGER.debug("Current generation projection is missing; rebuilding it from compact metadata: {}", currentProjectionPath);
+		return new LoadedProjection(record, currentProjectionPath, true);
+	}
+
+	private GenerationRecord readProjection(Path path) throws IOException {
+		ensureRegular(path, "current generation projection");
 		try {
 			return GenerationRecord.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CompleteModpackContentFields.class));
 		} catch (RuntimeException e) {
-			throw new IOException("Invalid generation record: " + path, e);
+			throw new IOException("Invalid current generation projection: " + path, e);
 		}
 	}
 
-	private void validateParentChain(GenerationRecord current) throws IOException {
-		Set<String> visited = new HashSet<>();
-		List<GenerationRecord> reverseChain = new ArrayList<>();
-		GenerationRecord record = current;
-		while (true) {
-			String id = record.metadata().generationId();
-			if (!visited.add(id)) throw new IOException("Generation parent cycle detected at " + id);
-			reverseChain.add(record);
-			String parent = record.metadata().parentGenerationId();
-			if (parent.isEmpty()) break;
-			Path parentPath = recordPath(parent);
-			record = readRecord(parentPath);
-			if (!record.metadata().generationId().equals(parent)) throw new IOException("Generation parent filename does not match its identity: " + parentPath);
-			if (!record.manifest().modpackId().equals(current.manifest().modpackId()))
-				throw new IOException("Generation parent modpack ID does not match current lineage: " + parent);
-		}
-		Collections.reverse(reverseChain);
+	private OwnershipDelta readDelta(String generationId) throws IOException {
+		return readDelta(deltaPath(generationId));
+	}
+
+	private OwnershipDelta readDelta(Path path) throws IOException {
+		ensureRegular(path, "generation ownership delta");
 		try {
-			OwnershipLedger.rebuild(reverseChain);
+			return OwnershipDelta.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.OwnershipDeltaFields.class));
 		} catch (RuntimeException e) {
-			throw new IOException("Generation ownership ledger does not match its parent chain", e);
+			throw new IOException("Invalid generation ownership delta: " + path, e);
 		}
 	}
 
-	private NavigableMap<String, Path> verifyCurrentObjects(GenerationRecord record) throws IOException {
-		requireDirectory(objectsDirectory, "immutable objects");
-		TreeMap<String, Path> hosting = new TreeMap<>();
-		Map<String, Long> expectedSizes = new HashMap<>();
-		Set<String> verified = new HashSet<>();
-		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) {
-			String sha1 = file.sha1().toLowerCase(Locale.ROOT);
-			verifyObject(sha1, file.size(), expectedSizes, verified);
-			hosting.put(sha1, objectsDirectory.resolve(sha1));
+	private CatalogueSnapshot readCatalogue(String stateDigest) throws IOException {
+		return readCatalogue(cataloguePath(stateDigest));
+	}
+
+	private CatalogueSnapshot readCatalogue(Path path) throws IOException {
+		ensureRegular(path, "generation catalogue snapshot");
+		try {
+			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CatalogueSnapshotFields.class));
+			if (!snapshot.stateDigest().equals(catalogueStateDigest(path))) throw new IOException("Catalogue snapshot filename does not match its identity: " + path);
+			return snapshot;
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid generation catalogue snapshot: " + path, e);
 		}
-		for (var entry : record.ownershipLedger().entries().values())
-			for (var content : entry.historicalHashes())
-				verifyObject(content.sha1(), content.size(), expectedSizes, verified);
+	}
+
+	private GenerationCommit readCommit(String generationId) throws IOException {
+		return readCommit(commitPath(generationId));
+	}
+
+	private GenerationCommit readCommit(Path path) throws IOException {
+		ensureRegular(path, "generation commit");
+		try {
+			GenerationCommit commit = GenerationCommit.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.GenerationCommitFields.class));
+			if (!commit.generationId().equals(commitGenerationId(path))) throw new IOException("Generation commit filename does not match its identity: " + path);
+			return commit;
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid generation commit: " + path, e);
+		}
+	}
+
+	private GenerationRecord readCompactRecord(String generationId) throws IOException {
+		return readCompactState(generationId).record();
+	}
+
+	private CompactHistory readCompactHistory(String generationId) throws IOException {
+		requireDirectory(cataloguesDirectory, "generation catalogues");
+		requireDirectory(commitsDirectory, "generation commits");
+		requireDirectory(deltasDirectory, "generation deltas");
+		Set<String> visited = new HashSet<>();
+		List<CompactGeneration> reverse = new ArrayList<>();
+		String currentId = generationId;
+		while (true) {
+			if (!visited.add(currentId)) throw new IOException("Generation parent cycle detected at " + currentId);
+			GenerationCommit commit = readCommit(currentId);
+			CatalogueSnapshot snapshot = readCatalogue(commit.stateDigest());
+			if (!commit.modpackId().equals(snapshot.manifest().modpackId()) || !commit.stateDigest().equals(snapshot.stateDigest()))
+				throw new IOException("Generation commit does not match its catalogue snapshot: " + currentId);
+			OwnershipDelta delta = readDelta(currentId);
+			if (!commit.ownershipDeltaDigest().equals(delta.digest()) || !commit.modpackId().equals(delta.modpackId()))
+				throw new IOException("Generation commit does not match its ownership delta: " + currentId);
+			reverse.add(new CompactGeneration(commit, snapshot, delta));
+			String parent = commit.parentGenerationId();
+			if (parent.isEmpty()) break;
+			currentId = parent;
+		}
+		Collections.reverse(reverse);
+		if (reverse.isEmpty()) throw new IOException("Generation compact parent chain is empty");
+		List<GenerationHistoryEntry> entries = new ArrayList<>();
+		String expectedParent = GenerationMetadata.ROOT_PARENT;
+		for (CompactGeneration compact : reverse) {
+			GenerationCommit commit = compact.commit();
+			if (!commit.parentGenerationId().equals(expectedParent))
+				throw new IOException("Generation compact parent chain is not ordered at: " + commit.generationId());
+			try {
+				entries.add(GenerationHistoryEntry.from(commit, compact.snapshot()));
+			} catch (RuntimeException e) {
+				throw new IOException("Generation compact metadata does not form a valid history entry: " + commit.generationId(), e);
+			}
+			expectedParent = commit.generationId();
+		}
+		return new CompactHistory(List.copyOf(reverse), List.copyOf(entries));
+	}
+
+	private CompactState readCompactState(String generationId) throws IOException {
+		CompactHistory history = readCompactHistory(generationId);
+		OwnershipLedger.Builder ledger = OwnershipLedger.builder(history.generations().get(0).commit().modpackId());
+		for (CompactGeneration generation : history.generations()) {
+			try {
+				ledger.apply(generation.delta(), generation.commit().generationId());
+			} catch (RuntimeException e) {
+				throw new IOException("Generation ownership delta cannot be applied: " + generation.commit().generationId(), e);
+			}
+		}
+		CompactGeneration current = history.generations().get(history.generations().size() - 1);
+		OwnershipLedger materialized;
+		try {
+			materialized = ledger.build();
+		} catch (RuntimeException e) {
+			throw new IOException("Generation ownership ledger cannot be reconstructed from compact metadata", e);
+		}
+		if (!materialized.digest().equals(current.commit().ledgerDigest()))
+			throw new IOException("Current compact ledger digest does not match reconstructed ownership state: " + generationId);
+		GenerationRecord record;
+		try {
+			record = new GenerationRecord(current.snapshot().manifest(), current.commit().metadata(), materialized);
+		} catch (RuntimeException e) {
+			throw new IOException("Current compact metadata does not form a valid record: " + generationId, e);
+		}
+		if (!GenerationCommit.from(record, current.delta()).equals(current.commit()))
+			throw new IOException("Current compact commit does not match reconstructed record: " + generationId);
+		return new CompactState(record, history.entries());
+	}
+
+	private NavigableMap<String, Path> verifyActiveTargetObjects(GenerationRecord record) throws IOException {
+		TreeMap<String, Long> expectedSizes = new TreeMap<>();
+		addManifestReferences(record, expectedSizes);
+		verifyObjectReferences(expectedSizes);
+		return activeTargetPaths(expectedSizes);
+	}
+
+	private NavigableMap<String, Path> activeTargetPaths(GenerationRecord record) throws IOException {
+		TreeMap<String, Long> expectedSizes = new TreeMap<>();
+		addManifestReferences(record, expectedSizes);
+		return activeTargetPaths(expectedSizes);
+	}
+
+	private NavigableMap<String, Path> activeTargetPaths(Map<String, Long> expectedSizes) throws IOException {
+		TreeMap<String, Path> hosting = new TreeMap<>();
+		for (String sha1 : expectedSizes.keySet()) hosting.put(sha1, objectPath(sha1));
 		return hosting;
 	}
 
+	private void verifyAllReferencedObjects(GenerationRecord record) throws IOException {
+		TreeMap<String, Long> expectedSizes = new TreeMap<>();
+		addReferences(record, expectedSizes);
+		verifyObjectReferences(expectedSizes);
+	}
+
 	private void verifyObject(String sha1, long expectedSize, Map<String, Long> expectedSizes, Set<String> verified) throws IOException {
-		Path object = objectsDirectory.resolve(sha1).normalize();
-		if (!object.startsWith(objectsDirectory)) throw new IOException("Object path escapes immutable object store: " + sha1);
+		Path object = objectPath(sha1);
 		Long previousSize = expectedSizes.putIfAbsent(sha1, expectedSize);
 		if (previousSize != null && previousSize.longValue() != expectedSize)
 			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
@@ -245,9 +680,43 @@ public final class GenerationStore {
 			throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
 	}
 
-	private Path recordPath(String generationId) throws IOException {
+	private Path objectPath(String sha1) throws IOException {
+		if (!isDigest(sha1)) throw new IOException("Invalid immutable object SHA-1: " + sha1);
+		Path object = objectsDirectory.resolve(sha1).normalize();
+		if (!object.startsWith(objectsDirectory) || !objectsDirectory.equals(object.getParent()))
+			throw new IOException("Object path escapes immutable object store: " + sha1);
+		return object;
+	}
+
+	private Path deltaPath(String generationId) throws IOException {
 		if (!isDigest(generationId)) throw new IOException("Invalid generation ID: " + generationId);
-		return recordsDirectory.resolve(generationId + ".json");
+		return deltasDirectory.resolve(generationId + ".json");
+	}
+
+	private Path cataloguePath(String stateDigest) throws IOException {
+		if (!isDigest(stateDigest)) throw new IOException("Invalid catalogue state digest: " + stateDigest);
+		return cataloguesDirectory.resolve(stateDigest + ".json");
+	}
+
+	private Path commitPath(String generationId) throws IOException {
+		if (!isDigest(generationId)) throw new IOException("Invalid generation ID: " + generationId);
+		return commitsDirectory.resolve(generationId + ".json");
+	}
+
+	private String catalogueStateDigest(Path path) throws IOException {
+		String filename = path.getFileName().toString();
+		if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation catalogue path: " + path);
+		String stateDigest = filename.substring(0, 40);
+		if (!isDigest(stateDigest)) throw new IOException("Invalid generation catalogue filename: " + path);
+		return stateDigest;
+	}
+
+	private String commitGenerationId(Path path) throws IOException {
+		String filename = path.getFileName().toString();
+		if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation commit path: " + path);
+		String generationId = filename.substring(0, 40);
+		if (!isDigest(generationId)) throw new IOException("Invalid generation commit filename: " + path);
+		return generationId;
 	}
 
 	private static Jsons.GenerationPointerFields pointer(GenerationRecord record) {
@@ -257,15 +726,40 @@ public final class GenerationStore {
 		return pointer;
 	}
 
-	private void writeRecordNoClobber(Path path, GenerationRecord record) throws IOException {
-		ensureDirectory(recordsDirectory, "generation records");
-		byte[] bytes = ConfigTools.GSON.toJson(record.toFields()).getBytes(StandardCharsets.UTF_8);
+	private void writeCurrentProjection(GenerationRecord record) throws IOException {
+		ConfigTools.writeAtomic(currentProjectionPath, record.toFields());
+	}
+
+	private OwnershipDelta writeDeltaNoClobber(GenerationRecord record, GenerationRecord parent) throws IOException {
+		OwnershipLedger base = parent == null ? OwnershipLedger.empty(record.manifest().modpackId()) : parent.ownershipLedger();
+		OwnershipDelta delta = OwnershipDelta.between(base, record.manifest());
+		Path path = deltaPath(record.metadata().generationId());
+		writeImmutableJsonNoClobber(path, deltasDirectory, ".delta-", delta.toFields(), delta, this::readDelta, "generation ownership delta");
+		return delta;
+	}
+
+	private void writeCatalogueNoClobber(GenerationRecord record) throws IOException {
+		CatalogueSnapshot snapshot = CatalogueSnapshot.from(record.manifest());
+		Path path = cataloguePath(snapshot.stateDigest());
+		writeImmutableJsonNoClobber(path, cataloguesDirectory, ".catalogue-", snapshot.toFields(), snapshot, this::readCatalogue, "generation catalogue snapshot");
+	}
+
+	private void writeCommitNoClobber(GenerationRecord record, OwnershipDelta delta) throws IOException {
+		GenerationCommit commit = GenerationCommit.from(record, delta);
+		Path path = commitPath(commit.generationId());
+		writeImmutableJsonNoClobber(path, commitsDirectory, ".commit-", commit.toFields(), commit, this::readCommit, "generation commit");
+	}
+
+	private <T> void writeImmutableJsonNoClobber(Path path, Path directory, String temporaryPrefix, Object value, T expected,
+			ImmutableJsonReader<T> reader, String description) throws IOException {
+		ensureDirectory(directory, description + "s");
+		byte[] bytes = ConfigTools.GSON.toJson(value).getBytes(StandardCharsets.UTF_8);
 		if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			GenerationRecord existing = readRecord(path);
-			if (!existing.equals(record)) throw new IOException("Generation record already exists with different content: " + path);
+			T existing = reader.read(path);
+			if (!existing.equals(expected)) throw new IOException(description + " already exists with different content: " + path);
 			return;
 		}
-		Path temporary = Files.createTempFile(recordsDirectory, ".record-", ".tmp");
+		Path temporary = Files.createTempFile(directory, temporaryPrefix, ".tmp");
 		try {
 			try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 				ByteBuffer buffer = ByteBuffer.wrap(bytes);
@@ -274,10 +768,10 @@ public final class GenerationStore {
 			}
 			try {
 				Files.createLink(path, temporary);
-				forceDirectory(recordsDirectory);
+				forceDirectory(directory);
 			} catch (FileAlreadyExistsException e) {
-				GenerationRecord existing = readRecord(path);
-				if (!existing.equals(record)) throw new IOException("Generation record publication race: " + path, e);
+				T existing = reader.read(path);
+				if (!existing.equals(expected)) throw new IOException(description + " publication race: " + path, e);
 			}
 		} finally {
 			Files.deleteIfExists(temporary);
@@ -312,6 +806,16 @@ public final class GenerationStore {
 	private static boolean isDigest(String value) {
 		return value != null && value.matches("[0-9a-f]{40}");
 	}
+
+	private record CompactGeneration(GenerationCommit commit, CatalogueSnapshot snapshot, OwnershipDelta delta) {}
+
+	private record CompactHistory(List<CompactGeneration> generations, List<GenerationHistoryEntry> entries) {}
+
+	private record CompactState(GenerationRecord record, List<GenerationHistoryEntry> entries) {}
+
+	private record LoadedProjection(GenerationRecord record, Path path, boolean needsRepair) {}
+
+	private record FileTotals(long count, long bytes) {}
 
 	private static final class PublicationGuard implements AutoCloseable {
 		private final ReentrantLock jvmLock;

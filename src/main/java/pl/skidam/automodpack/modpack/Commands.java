@@ -18,7 +18,9 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
@@ -27,6 +29,7 @@ import java.net.InetSocketAddress;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.commands.CommandSourceStack;
@@ -56,9 +59,20 @@ public class Commands {
 												.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::previewModpack))))
 								.then(literal("if-state")
 										.then(argument("state-digest", StringArgumentType.word()).executes(Commands::guardedGenerateModpack)
-												.then(literal("notes")
-														.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::guardedGenerateModpack))))
-						))
+															.then(literal("notes")
+																	.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::guardedGenerateModpack))))
+					.then(literal("revert")
+						.then(argument("generation-id", StringArgumentType.word()).executes(Commands::previewRevertGeneration)
+								.then(literal("confirm")
+										.executes(Commands::revertGeneration)
+										.then(literal("notes")
+												.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::revertGeneration)))))
+					.then(literal("history").executes(Commands::generationHistory))
+						.then(literal("storage")
+								.executes(Commands::generationStorage)
+								.then(literal("collect")
+										.then(literal("confirm").executes(Commands::generationStorageCollect))))
+						)))
 						.then(literal("host")
 								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
 								.executes(Commands::modpackHostAbout)
@@ -396,6 +410,8 @@ public class Commands {
 		send(context, "/automodpack generate [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-state <digest> [notes <text...>]", ChatFormatting.YELLOW, false);
+			send(context, "/automodpack generate revert <generation-id> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
+			send(context, "/automodpack generate history/storage [collect confirm]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
@@ -459,7 +475,131 @@ public class Commands {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	private static String optionalArgument(CommandContext<CommandSourceStack> context, String name) {
+	private static int previewRevertGeneration(CommandContext<CommandSourceStack> context) {
+		String targetGenerationId = StringArgumentType.getString(context, "generation-id");
+		try {
+			GenerationHistoryEntry target = findRevertTarget(targetGenerationId);
+			if (target == null) {
+				send(context, "FAILED: generation target was not found", ChatFormatting.RED, true);
+				return 0;
+			}
+			reportRevertTarget(context, target);
+			send(context, "Confirmation required: /automodpack generate revert " + targetGenerationId + " confirm", ChatFormatting.YELLOW, false);
+			return Command.SINGLE_SUCCESS;
+		} catch (IOException e) {
+			send(context, "FAILED: could not read generation history: " + e.getMessage(), ChatFormatting.RED, true);
+			return 0;
+		}
+	}
+
+	private static int revertGeneration(CommandContext<CommandSourceStack> context) {
+		String targetGenerationId = StringArgumentType.getString(context, "generation-id");
+		String notes = optionalArgument(context, "notes");
+		try {
+			GenerationHistoryEntry target = findRevertTarget(targetGenerationId);
+			if (target == null) {
+				send(context, "FAILED: generation target was not found", ChatFormatting.RED, true);
+				return 0;
+			}
+			reportRevertTarget(context, target);
+		} catch (IOException e) {
+			send(context, "FAILED: could not read generation history: " + e.getMessage(), ChatFormatting.RED, true);
+			return 0;
+		}
+		Util.backgroundExecutor().execute(() -> {
+			send(context, "Reverting modpack to generation " + targetGenerationId + "...", ChatFormatting.YELLOW, true);
+			ModpackExecutor.RevertResult result = modpackExecutor.revert(targetGenerationId, notes);
+			if (result instanceof ModpackExecutor.Reverted reverted) {
+				send(context, "REVERTED", ChatFormatting.GREEN, true);
+				send(context, "New generation", ChatFormatting.WHITE, copyable(reverted.current().metadata().generationId()), ChatFormatting.YELLOW, true);
+				send(context, "Rollback target", ChatFormatting.WHITE, copyable(reverted.targetGenerationId()), ChatFormatting.YELLOW, true);
+				reverted.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, false));
+			} else if (result instanceof ModpackExecutor.RevertBusy busy) {
+				send(context, "FAILED: " + busy.detail(), ChatFormatting.RED, true);
+			} else if (result instanceof ModpackExecutor.RevertInvalidTarget invalid) {
+				send(context, "FAILED: " + invalid.detail(), ChatFormatting.RED, true);
+			} else if (result instanceof ModpackExecutor.RevertFailed failed) {
+				send(context, "FAILED: " + failed.failure().getClass().getSimpleName(), ChatFormatting.RED, true);
+			}
+		});
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static GenerationHistoryEntry findRevertTarget(String targetGenerationId) throws IOException {
+		return modpackExecutor.technicalHistory().stream().filter(entry -> entry.metadata().generationId().equals(targetGenerationId)).findFirst().orElse(null);
+	}
+
+	private static void reportRevertTarget(CommandContext<CommandSourceStack> context, GenerationHistoryEntry target) {
+		send(context, "Revert target", ChatFormatting.YELLOW, target.metadata().createdAt().toString(), ChatFormatting.WHITE, true);
+		send(context, "Target generation", ChatFormatting.WHITE, copyable(target.metadata().generationId()), ChatFormatting.YELLOW, false);
+		send(context, "Target content", ChatFormatting.WHITE, copyable(target.metadata().stateDigest()), ChatFormatting.YELLOW, false);
+		send(context, "Target ledger", ChatFormatting.WHITE, copyable(target.metadata().ledgerDigest()), ChatFormatting.YELLOW, false);
+		int targetFiles = target.manifest().groups().values().stream().mapToInt(group -> group.files().size()).sum();
+		send(context, "Target catalogue", ChatFormatting.WHITE, target.manifest().groups().size() + " groups, " + targetFiles + " files", ChatFormatting.YELLOW, false);
+		if (!target.metadata().patchNotes().isBlank()) send(context, "Target patch notes: " + target.metadata().patchNotes(), ChatFormatting.GRAY, false);
+	}
+
+	private static int generationHistory(CommandContext<CommandSourceStack> context) {
+		try {
+			var history = modpackExecutor.technicalHistory();
+			if (history.isEmpty()) {
+				send(context, "No published generations.", ChatFormatting.YELLOW, false);
+				return Command.SINGLE_SUCCESS;
+			}
+			for (GenerationHistoryEntry entry : history) {
+				String operation = entry.metadata().rollbackTargetGenerationId().isEmpty() ? "PUBLISH" : "REVERT";
+				send(context, operation + " " + entry.metadata().createdAt(), ChatFormatting.WHITE, false);
+					send(context, "Generation", ChatFormatting.WHITE, copyable(entry.metadata().generationId()), ChatFormatting.YELLOW, false);
+					send(context, "Parent", ChatFormatting.WHITE, copyable(entry.metadata().parentGenerationId()), ChatFormatting.YELLOW, false);
+					send(context, "Content state", ChatFormatting.WHITE, copyable(entry.metadata().stateDigest()), ChatFormatting.YELLOW, false);
+					send(context, "Ledger", ChatFormatting.WHITE, copyable(entry.metadata().ledgerDigest()), ChatFormatting.YELLOW, false);
+				if (!entry.metadata().rollbackTargetGenerationId().isEmpty())
+					send(context, "Rollback target", ChatFormatting.WHITE, copyable(entry.metadata().rollbackTargetGenerationId()), ChatFormatting.YELLOW, false);
+				if (!entry.metadata().patchNotes().isBlank()) send(context, "Patch notes: " + entry.metadata().patchNotes(), ChatFormatting.GRAY, false);
+			}
+			return Command.SINGLE_SUCCESS;
+		} catch (IOException e) {
+			send(context, "Failed to read generation history: " + e.getMessage(), ChatFormatting.RED, false);
+			return 0;
+		}
+	}
+
+	private static int generationStorage(CommandContext<CommandSourceStack> context) {
+			try {
+				GenerationStore.StorageReport report = modpackExecutor.storageReport();
+				send(context, "Generation storage", ChatFormatting.GREEN, false);
+				send(context, "Catalogues", ChatFormatting.WHITE, report.catalogueCount() + " files, " + report.catalogueBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Commits", ChatFormatting.WHITE, report.commitCount() + " files, " + report.commitBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Deltas", ChatFormatting.WHITE, report.deltaCount() + " files, " + report.deltaBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Immutable objects", ChatFormatting.WHITE, report.immutableObjectCount() + " files, " + report.immutableObjectBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Staging", ChatFormatting.WHITE, report.stagingFileCount() + " files, " + report.stagingBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Referenced objects", ChatFormatting.WHITE, report.referencedObjectCount() + " unique, " + report.referencedObjectBytes() + " bytes", ChatFormatting.YELLOW, false);
+				report.uniqueObjectReferenceRatio().ifPresent(ratio -> send(context, String.format(Locale.ROOT, "Unique/reference ratio: %.4f", ratio), ChatFormatting.WHITE, false));
+				return Command.SINGLE_SUCCESS;
+			} catch (IOException e) {
+				send(context, "Failed to measure generation storage: " + e.getMessage(), ChatFormatting.RED, false);
+				return 0;
+			}
+		}
+
+		private static int generationStorageCollect(CommandContext<CommandSourceStack> context) {
+			try {
+				Set<String> retainedGenerationIds = new TreeSet<>();
+				for (GenerationHistoryEntry entry : modpackExecutor.technicalHistory()) retainedGenerationIds.add(entry.metadata().generationId());
+				GenerationStore.CollectionResult result = new GenerationStore(hostGenerationsDir).collect(retainedGenerationIds, Set.of());
+				send(context, "Generation objects collected", ChatFormatting.GREEN, false);
+				send(context, "Retained generations", ChatFormatting.WHITE, String.valueOf(retainedGenerationIds.size()), ChatFormatting.YELLOW, false);
+				send(context, "Objects", ChatFormatting.WHITE, result.beforeObjectCount() + " -> " + result.afterObjectCount(), ChatFormatting.YELLOW, false);
+				send(context, "Bytes", ChatFormatting.WHITE, result.beforeObjectBytes() + " -> " + result.afterObjectBytes(), ChatFormatting.YELLOW, false);
+				send(context, "Deleted", ChatFormatting.WHITE, result.deletedObjectCount() + " objects, " + result.deletedObjectBytes() + " bytes", ChatFormatting.YELLOW, false);
+				return Command.SINGLE_SUCCESS;
+			} catch (IOException e) {
+				send(context, "Failed to collect generation objects: " + e.getMessage(), ChatFormatting.RED, false);
+				return 0;
+			}
+		}
+
+		private static String optionalArgument(CommandContext<CommandSourceStack> context, String name) {
 		try {
 			return StringArgumentType.getString(context, name);
 		} catch (IllegalArgumentException e) {
@@ -478,6 +618,7 @@ public class Commands {
 		var diff = state.diff().summary();
 		send(context, String.format(Locale.ROOT, "Diff: +%d ~%d -%d metadata-only %d metadata changes %d", diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles(),
 				diff.metadataOnlyFiles(), diff.metadataChanges()), ChatFormatting.WHITE, broadcast);
+		for (String change : state.diff().humanReadableChanges()) send(context, "Change: " + change, ChatFormatting.GRAY, broadcast);
 		var summary = state.summary();
 		send(context, String.format(Locale.ROOT, "Candidate: %d groups, %d files, %d objects, %d exclusions, %d shadows", summary.groups(), summary.files(), summary.objects(),
 				summary.exclusions(), summary.shadows()), ChatFormatting.WHITE, broadcast);

@@ -10,6 +10,7 @@ import java.util.List;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
@@ -160,12 +161,13 @@ public class SelfUpdater {
 
 	public static void installModVersion(ModrinthAPI automodpack) {
 		try {
+			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
 			Path currentJar = THIS_MOD_JAR.toAbsolutePath().normalize();
-			Path modsDirectory = MODS_DIR.toAbsolutePath().normalize();
+			Path modsDirectory = storage.modsDirectory().toAbsolutePath().normalize();
 			if (!currentJar.getParent().equals(modsDirectory)) throw new IllegalStateException("Loaded AutoModpack JAR is not a direct child of the mods directory");
 			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
 
-			DownloadManager downloadManager = new DownloadManager();
+			DownloadManager downloadManager = new DownloadManager(0, storage);
 			new ScreenManager().download(downloadManager, "AutoModpack " + automodpack.fileVersion());
 			downloadManager.download(targetJar, automodpack.SHA1Hash(),
 					List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
@@ -173,7 +175,7 @@ public class SelfUpdater {
 			downloadManager.joinAll();
 			downloadManager.cancelAllAndShutdown();
 
-			Path storeObject = storeDir.resolve(automodpack.SHA1Hash());
+			Path storeObject = storage.objectsDirectory().resolve(automodpack.SHA1Hash());
 			if (!SmartFileUtils.isValidFile(storeObject, automodpack.fileSize(), automodpack.SHA1Hash()))
 				throw new IllegalStateException("Downloaded official AutoModpack JAR failed verification");
 			String currentHash = HashUtils.getHash(currentJar);

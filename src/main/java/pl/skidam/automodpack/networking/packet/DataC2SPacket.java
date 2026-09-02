@@ -3,7 +3,6 @@ package pl.skidam.automodpack.networking.packet;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.net.InetSocketAddress;
-import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 
 import io.netty.buffer.Unpooled;
@@ -23,13 +22,12 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
-import pl.skidam.automodpack_core.update.UpdateDeferredException;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_loader_core.ReLauncher;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
-import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class DataC2SPacket {
 	public static CompletableFuture<FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
@@ -99,14 +97,15 @@ public class DataC2SPacket {
 			return CompletableFuture.completedFuture(buildResponse(null));
 		}
 
-		return ModpackUtils.requestServerModpackContentAsync(connectionInfo, secret, true).thenApplyAsync(manifestResult -> {
+		ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+		return ModpackUtils.requestServerModpackContentAsync(storage, connectionInfo, secret, true).thenApplyAsync(manifestResult -> {
 			if (manifestResult.state() == ModpackUtils.ManifestFetchState.OPERATION_FAILED) return buildResponse(true);
 			if (!manifestResult.successful()) return buildResponse(null);
 
 			DownloadClient downloadClient = manifestResult.client();
 			SelectedModpackTarget selectedTarget;
 			try {
-				selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(clientSelectionFile), ClientPlatform.current());
+				selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(storage.selectionFile()), ClientPlatform.current());
 			} catch (RuntimeException e) {
 				downloadClient.close();
 				LOGGER.error("Failed to resolve the server modpack catalogue and group selection", e);
@@ -115,7 +114,6 @@ public class DataC2SPacket {
 				return buildResponse(true);
 			}
 			Jsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
-			Path modpackDir = ModpackUtils.getModpackPath(serverModpackContent.modpackId);
 			try {
 				SecretsStore.saveClientSecret(connectionInfo.origin, secret);
 			} catch (Exception e) {
@@ -126,29 +124,15 @@ public class DataC2SPacket {
 				return buildResponse(true);
 			}
 
-			ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, modpackDir, downloadClient);
+			ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient);
 			try {
-				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
-				if (updateCheckResult.requiresUpdate()) {
-					new ScreenManager().waiting();
-					disconnectImmediately(handler);
-					updater.processModpackUpdate(updateCheckResult);
-					return buildResponse(true);
+				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, storage);
+				if (!updater.requiresUpdateBeforeLogin(updateCheckResult)) {
+					updater.close();
+					return buildResponse(false);
 				}
-
-				UpdateType restartType = updater.reconcileReceivedManifest();
-				if (restartType == null) return buildResponse(false);
-
-				new ScreenManager().waiting();
 				disconnectImmediately(handler);
-				new ReLauncher(modpackDir, restartType, null).restart(false);
-				return buildResponse(true);
-			} catch (UpdateDeferredException e) {
-				updater.close();
-				LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-				new ScreenManager().waiting();
-				disconnectImmediately(handler);
-				new ReLauncher(modpackDir, UpdateType.UPDATE, null).restart(false);
+				updater.processModpackUpdate(updateCheckResult);
 				return buildResponse(true);
 			} catch (Exception e) {
 				updater.close();

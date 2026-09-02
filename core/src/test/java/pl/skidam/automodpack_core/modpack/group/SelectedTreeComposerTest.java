@@ -60,7 +60,7 @@ class SelectedTreeComposerTest {
 	}
 
 	private static GroupManifest.Group group(GroupManifest.GroupFile file) {
-		return new GroupManifest.Group("", "", "", false, false, new TreeSet<>(), new TreeSet<>(), new TreeSet<>(), Set.of(),
+		return new GroupManifest.Group("", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/example.jar", file)));
 	}
 }

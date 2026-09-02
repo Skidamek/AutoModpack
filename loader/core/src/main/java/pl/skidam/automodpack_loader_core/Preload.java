@@ -15,14 +15,18 @@ import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.config.ServerConfigMigration;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
@@ -35,14 +39,15 @@ import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class Preload {
+	private ClientStorage storage;
 
 	public Preload() {
 		try {
 			long start = System.currentTimeMillis();
 			LOGGER.info("Prelaunching AutoModpack...");
+			storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
 			initializeConstants();
 			loadConfigs();
-			DetachedUpdateHelper.consumeResult();
 			DetachedUpdateHelper.cleanupOldHelperJars();
 			recoverPendingTransaction();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
@@ -66,11 +71,11 @@ public class Preload {
 	}
 
 	private void recoverPendingTransaction() throws IOException {
-		if (!Files.exists(transactionFile)) return;
+		if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) return;
 
 		UpdateTransaction transaction;
 		try {
-			transaction = ConfigTools.read(transactionFile, UpdateTransaction.class)
+			transaction = ConfigTools.read(storage.transactionFile(), UpdateTransaction.class)
 					.orElseThrow(() -> new ConfigTools.ConfigException("Transaction file is missing"));
 		} catch (RuntimeException e) {
 			quarantineTransaction(e);
@@ -89,23 +94,21 @@ public class Preload {
 		UpdateTransactionExecutor.Execution execution = executor.recover(transaction);
 		if (!execution.success()) {
 			DetachedUpdateHelper.launch(transaction);
-			Path modpackDirectory = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
-					? Path.of(transaction.canonicalModpackDirectory).toAbsolutePath().normalize()
-					: null;
-			new ReLauncher(modpackDirectory, UpdateType.UPDATE, null).restart(true);
+			Path projection = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE ? storage.activeDirectory() : null;
+			new ReLauncher(projection, UpdateType.UPDATE, null).restart(true);
 			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
 		}
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			clientConfig = ConfigTools.read(clientConfigFile, Jsons.ClientConfigFieldsV3.class)
+			clientConfig = ConfigTools.read(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class)
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
 		}
 		LOGGER.info("Recovered update transaction {}", transaction.transactionId);
 	}
 
 	private void quarantineTransaction(Exception reason) throws IOException {
-		Files.createDirectories(privateDir);
-		Path quarantine = privateDir.resolve("update-transaction.invalid-" + UUID.randomUUID() + ".json");
-		Files.move(transactionFile, quarantine, StandardCopyOption.REPLACE_EXISTING);
+		Files.createDirectories(storage.privateDirectory());
+		Path quarantine = storage.privateDirectory().resolve("update-transaction.invalid-" + UUID.randomUUID() + ".json");
+		Files.move(storage.transactionFile(), quarantine, StandardCopyOption.REPLACE_EXISTING);
 		LOGGER.error("Quarantined invalid update transaction at {}", quarantine.toAbsolutePath().normalize(), reason);
 	}
 
@@ -120,10 +123,9 @@ public class Preload {
 			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 				LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
 				clientConfig.selectedModpackId = "";
-				writeConfig(clientConfigFile, clientConfig);
+				writeConfig(storage.clientConfigFile(), clientConfig);
 			} else {
 				storedConnectionInfo = clientConfig.modpackConnections.get(clientConfig.selectedModpackId);
-				selectedModpackDir = ModpackUtils.getModpackPath(clientConfig.selectedModpackId);
 			}
 		}
 
@@ -145,7 +147,7 @@ public class Preload {
 		// modpack: don't contact the server and don't reconcile local files,
 		// so the user can freely add/remove mods (e.g. a binary search).
 		if (!clientConfig.updateSelectedModpackOnLaunch) {
-			if (Files.isDirectory(selectedModpackDir)) {
+			if (hasActiveProjection()) {
 				loadLocalModpack(connectionInfo, secret);
 			} else {
 				SelfUpdater.update();
@@ -153,13 +155,13 @@ public class Preload {
 			return;
 		}
 
-		var manifestResult = ModpackUtils.requestServerModpackContent(connectionInfo, secret, false);
-		SelectedModpackTarget selectedTarget = loadStoredTarget(selectedModpackDir);
+		var manifestResult = ModpackUtils.requestServerModpackContent(storage, connectionInfo, secret, false);
+		SelectedModpackTarget selectedTarget = loadStoredTarget();
 		DownloadClient downloadClient = null;
 		if (manifestResult.successful()) {
 			downloadClient = manifestResult.client();
 			try {
-				selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(clientSelectionFile), ClientPlatform.current());
+				selectedTarget = SelectedModpackTarget.prepare(manifestResult.content(), new ClientSelectionStore(storage.selectionFile()), ClientPlatform.current());
 			} catch (RuntimeException e) {
 				LOGGER.error("Failed to resolve the downloaded modpack catalogue and group selection", e);
 				downloadClient.close();
@@ -173,7 +175,6 @@ public class Preload {
 				loadLocalModpack(connectionInfo, secret);
 				return;
 			}
-			selectedModpackDir = ModpackUtils.getModpackPath(latestModpackContent.modpackId);
 			if (SelfUpdater.update(latestModpackContent)) {
 				downloadClient.close();
 				return;
@@ -184,23 +185,36 @@ public class Preload {
 			return;
 		}
 
-		new ModpackUpdater(selectedTarget, connectionInfo, secret, selectedModpackDir, downloadClient).processModpackUpdate(null);
+		new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient).processModpackUpdate(null);
 	}
 
 	private void loadLocalModpack(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
 		try {
-			new ModpackUpdater(connectionInfo, secret, selectedModpackDir).loadModpack();
+			new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
 		} catch (Exception e) {
 			LOGGER.error("Failed to load local modpack", e);
 		}
 	}
 
-	private SelectedModpackTarget loadStoredTarget(Path modpackDirectory) {
+	private boolean hasActiveProjection() {
 		try {
-			Jsons.CompleteModpackContentFields fields = ModpackContentTools.readCompleteFields(modpackDirectory.resolve(modpackCatalogueFileName));
-			if (fields == null) return null;
-			return SelectedModpackTarget.prepare(fields, new ClientSelectionStore(clientSelectionFile), ClientPlatform.current());
-		} catch (RuntimeException e) {
+			return Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS) && storage.readActiveState() != null;
+		} catch (IOException e) {
+			LOGGER.warn("Cannot read active client projection state", e);
+			return false;
+		}
+	}
+
+	private SelectedModpackTarget loadStoredTarget() {
+		try {
+			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state == null) return null;
+			GenerationRecord record = new ClientGenerationStore(storage).read(state.generationId).orElse(null);
+			if (record == null) return null;
+			SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(state.modpackId)
+					.orElseGet(() -> GroupSelectionResolver.defaultIntent(record.manifest()));
+			return SelectedModpackTarget.prepare(record.toFields(), null, intent, ClientPlatform.parse(state.platform));
+		} catch (IOException | RuntimeException e) {
 			LOGGER.error("Failed to resolve the stored modpack catalogue and group selection", e);
 			return null;
 		}
@@ -217,7 +231,6 @@ public class Preload {
 		LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
 		THIS_MOD_JAR = JarUtils.getJarPath(this.getClass());
 		AM_VERSION = FileInspection.getModVersion(THIS_MOD_JAR);
-		MODS_DIR = THIS_MOD_JAR.getParent();
 	}
 
 	private void loadConfigs() {
@@ -225,17 +238,14 @@ public class Preload {
 		boolean shouldSaveClientConfig = false;
 
 		// load client config
-		var clientConfigVersion = ConfigTools.read(clientConfigFile, Jsons.VersionConfigField.class).orElse(null);
+		var clientConfigVersion = ConfigTools.read(storage.clientConfigFile(), Jsons.VersionConfigField.class).orElse(null);
 		if (clientConfigVersion != null && clientConfigVersion.DO_NOT_CHANGE_IT < 3) {
 			clientConfig = new Jsons.ClientConfigFieldsV3();
 			shouldSaveClientConfig = true;
 			LOGGER.warn("Legacy client config detected. Stable modpack IDs require a one-time modpack redownload.");
-			LOGGER.warn("Old name-based modpack directories were left untouched and can be removed manually after the new modpack is installed.");
 		} else {
-			clientConfig = ConfigTools.readOrCreate(clientConfigFile, Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
+			clientConfig = ConfigTools.readOrCreate(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
 		}
-
-		ServerConfigMigration.migrateToLatest(serverConfigFile);
 
 		// load server config
 		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
@@ -261,23 +271,23 @@ public class Preload {
 				clientConfig.selectedModpackId = "";
 				shouldSaveClientConfig = true;
 			}
-			if (shouldSaveClientConfig) writeConfig(clientConfigFile, clientConfig);
+			if (shouldSaveClientConfig) writeConfig(storage.clientConfigFile(), clientConfig);
 		}
 
-		knownHosts = ConfigTools.readOrCreate(knownHostsFile, Jsons.KnownHostsFields.class, Jsons.KnownHostsFields::new);
+		knownHosts = ConfigTools.readOrCreate(storage.knownHostsFile(), Jsons.KnownHostsFields.class, Jsons.KnownHostsFields::new);
 		if (knownHosts != null && knownHosts.hosts == null) {
 			knownHosts.hosts = new HashMap<>();
-			writeConfig(knownHostsFile, knownHosts);
+			writeConfig(storage.knownHostsFile(), knownHosts);
 		}
 		try {
-			Files.createDirectories(privateDir);
+			Files.createDirectories(storage.privateDirectory());
 			String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
 			try {
 				if (os.contains("win")) {
-					Files.setAttribute(privateDir, "dos:hidden", true);
+					Files.setAttribute(storage.privateDirectory(), "dos:hidden", true);
 				} else if (os.contains("nix") || os.contains("nux") || os.contains("aix") || os.contains("mac")) {
 					Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------"); // Corresponds to 0700
-					Files.setPosixFilePermissions(privateDir, perms);
+					Files.setPosixFilePermissions(storage.privateDirectory(), perms);
 				}
 			} catch (UnsupportedOperationException | IOException e) {
 				LOGGER.debug("Failed to set private directory attributes for os: {}", os);
@@ -292,15 +302,15 @@ public class Preload {
 	}
 
 	private void importBootstrap() {
-		if (!Files.isRegularFile(knownHostsBootstrapFile)) return;
+		if (!Files.isRegularFile(storage.knownHostsBootstrapFile())) return;
 
-		Jsons.KnownHostsBootstrapFields fields = ConfigTools.read(knownHostsBootstrapFile, Jsons.KnownHostsBootstrapFields.class)
+		Jsons.KnownHostsBootstrapFields fields = ConfigTools.read(storage.knownHostsBootstrapFile(), Jsons.KnownHostsBootstrapFields.class)
 				.orElseThrow(() -> new ConfigTools.ConfigException("Bootstrap file is not a regular file"));
 		final BootstrapConfig.Validated bootstrap;
 		try {
 			bootstrap = BootstrapConfig.validate(fields);
 		} catch (IllegalArgumentException e) {
-			throw new ConfigTools.ConfigException("Invalid bootstrap file " + knownHostsBootstrapFile.toAbsolutePath().normalize(), e);
+			throw new ConfigTools.ConfigException("Invalid bootstrap file " + storage.knownHostsBootstrapFile().toAbsolutePath().normalize(), e);
 		}
 
 		Jsons.KnownHostsFields updatedKnownHosts = new Jsons.KnownHostsFields();
@@ -319,13 +329,13 @@ public class Preload {
 			updatedClientConfig.selectedModpackId = bootstrap.modpackId();
 		}
 
-		writeConfig(knownHostsFile, updatedKnownHosts);
-		if (bootstrap.installsModpack()) writeConfig(clientConfigFile, updatedClientConfig);
+		writeConfig(storage.knownHostsFile(), updatedKnownHosts);
+		if (bootstrap.installsModpack()) writeConfig(storage.clientConfigFile(), updatedClientConfig);
 
 		knownHosts = updatedKnownHosts;
 		clientConfig = updatedClientConfig;
 		try {
-			Files.delete(knownHostsBootstrapFile);
+			Files.delete(storage.knownHostsBootstrapFile());
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Bootstrap state was saved but the bootstrap file could not be deleted", e);
 		}

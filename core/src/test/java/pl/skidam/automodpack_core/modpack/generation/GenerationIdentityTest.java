@@ -36,7 +36,8 @@ class GenerationIdentityTest {
 
 	@Test
 	void completeRecordReadPreservesGenerationMetadata() throws Exception {
-		GroupManifest manifest = GroupManifestValidator.validate(catalogue("main", "stored"));
+		var fields = catalogue("main", "stored");
+		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-03T00:00:00Z"), "notes\n");
 		Path path = temporaryDirectory.resolve("automodpack-catalogue.json");
 		ConfigTools.writeAtomic(path, record.toFields());
@@ -61,6 +62,22 @@ class GenerationIdentityTest {
 	void metadataChangeChangesStateDigest() {
 		GroupManifest first = GroupManifestValidator.validate(catalogue("main", "first"));
 		GroupManifest second = GroupManifestValidator.validate(catalogue("main", "second"));
+		assertNotEquals(GenerationIdentity.stateDigest(first), GenerationIdentity.stateDigest(second));
+	}
+
+	@Test
+	void groupTagChangesStateDigest() {
+		var firstFields = catalogue("main", "same");
+		var secondFields = catalogue("main", "same");
+		firstFields.groups.get("main").tag = "first-tag";
+		secondFields.groups.get("main").tag = "second-tag";
+		firstFields.selectionTags = Map.of("first-tag", new Jsons.CompleteModpackContentFields.SelectionTagFields(),
+				"second-tag", new Jsons.CompleteModpackContentFields.SelectionTagFields());
+		secondFields.selectionTags = firstFields.selectionTags;
+
+		GroupManifest first = GroupManifestValidator.validate(firstFields);
+		GroupManifest second = GroupManifestValidator.validate(secondFields);
+
 		assertNotEquals(GenerationIdentity.stateDigest(first), GenerationIdentity.stateDigest(second));
 	}
 

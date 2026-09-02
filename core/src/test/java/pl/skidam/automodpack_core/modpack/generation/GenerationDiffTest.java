@@ -17,10 +17,12 @@ class GenerationDiffTest {
 	void reportsAllFileClassesMetadataAndCanonicalOrder() {
 		GroupManifest parent = manifest("parent", Map.of("z-removed", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
 				"b-modified", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
-				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "old")), "old description", "old-tag", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "old")), "old description", "old-tag",
+				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
 		GroupManifest child = manifest("child", Map.of("a-added", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
 				"b-modified", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
-				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "new")), "new description", "new-tag", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98");
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "new")), "new description", "new-tag",
+				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98");
 
 		GenerationDiff diff = GenerationDiff.between(parent, child);
 
@@ -31,6 +33,19 @@ class GenerationDiffTest {
 		assertEquals(List.of("tag"), diff.selectionTagMetadata().modified());
 		assertEquals(new GenerationDiff.Summary(1, 1, 1, 1, 3), diff.summary());
 		assertEquals(List.of("modpackName"), diff.packMetadata().modified());
+		assertEquals(List.of("Changed pack metadata 'modpackName'", "Changed group 'main'", "Changed tag 'tag'", "Added file 'main/a-added'",
+				"Changed metadata for file 'main/a-metadata'", "Changed file 'main/b-modified'", "Removed file 'main/z-removed'"), diff.humanReadableChanges());
+	}
+
+	@Test
+	void reportsGroupTagMetadataChanges() {
+		GroupManifest parent = taggedManifest("old-tag");
+		GroupManifest child = taggedManifest("new-tag");
+
+		GenerationDiff diff = GenerationDiff.between(parent, child);
+
+		assertEquals(List.of("main"), diff.groupMetadata().modified());
+		assertFalse(diff.isEmpty());
 	}
 
 	@Test
@@ -42,6 +57,17 @@ class GenerationDiffTest {
 		assertTrue(diff.files().stream().allMatch(change -> change.classification() == GenerationDiff.FileClassification.ADDED
 				|| change.classification() == GenerationDiff.FileClassification.REMOVED));
 		assertTrue(GenerationDiff.between(parent, parent).isEmpty());
+	}
+
+	private static GroupManifest taggedManifest(String tag) {
+		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		fields.selectionTags = Map.of(tag, tag(tag));
+		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.tag = tag;
+		group.files = Map.of();
+		fields.groups = Map.of("main", group);
+		return GroupManifestValidator.validate(fields);
 	}
 
 	private static GroupManifest manifest(String id, Map<String, Jsons.CompleteModpackContentFields.GroupFileFields> files, String description, String tag,

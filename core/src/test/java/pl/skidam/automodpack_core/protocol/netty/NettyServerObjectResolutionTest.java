@@ -28,21 +28,22 @@ class NettyServerObjectResolutionTest {
 	Path tempDir;
 
 	@Test
-	void blankServesCurrentRecordAndOlderObjectsRemainAvailable() throws Exception {
+	void blankServesCurrentProjectionAndOnlyActiveObjects() throws Exception {
 		GenerationStore store = store();
 		GenerationStore.Publication first = publish(store, "first");
 		NettyServer server = server(store, first);
 		String firstHash = hash(first);
+		Path projection = store.objectRoot().getParent().resolve("current-projection.json");
 
-		assertEquals(first.recordPath(), server.getPath("").orElseThrow());
+		assertEquals(projection, server.getPath("").orElseThrow());
 		assertEquals(store.objectRoot().resolve(firstHash), server.getPath(firstHash.toUpperCase(Locale.ROOT)).orElseThrow());
 
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication second = publish(store, "second", Optional.of(current));
 		server.replacePaths(second.hostingPaths());
 
-		assertEquals(second.recordPath(), server.getPath("").orElseThrow());
-		assertEquals(store.objectRoot().resolve(firstHash), server.getPath(firstHash).orElseThrow());
+		assertEquals(projection, server.getPath("").orElseThrow());
+		assertTrue(server.getPath(firstHash).isEmpty());
 		assertEquals(store.objectRoot().resolve(hash(second)), server.getPath(hash(second)).orElseThrow());
 	}
 
@@ -62,6 +63,9 @@ class NettyServerObjectResolutionTest {
 
 		String missingKey = "a".repeat(40);
 		assertTrue(server.getPath(missingKey).isEmpty());
+		String orphanKey = "d".repeat(40);
+		Files.writeString(objects.resolve(orphanKey), "orphan", StandardCharsets.UTF_8);
+		assertTrue(server.getPath(orphanKey).isEmpty());
 
 		String directoryKey = "c".repeat(40);
 		Files.createDirectory(objects.resolve(directoryKey));
@@ -85,14 +89,9 @@ class NettyServerObjectResolutionTest {
 		}
 		assertTrue(server.getPath(symlinkKey).isEmpty());
 
-		Path symlinkDirectory = tempDir.resolve("objects-link");
-		try {
-			Files.createSymbolicLink(symlinkDirectory, objects);
-		} catch (IOException | UnsupportedOperationException | SecurityException e) {
-			Assumptions.assumeTrue(false, "Symbolic links are unavailable: " + e);
-		}
-		server.setObjectRoot(symlinkDirectory);
+		server.replacePaths(Map.of(symlinkKey, objects.resolve(symlinkKey)));
 		assertTrue(server.getPath(valid).isEmpty());
+		assertTrue(server.getPath(symlinkKey).isEmpty());
 	}
 
 	private TestSetup setup() throws Exception {
@@ -105,7 +104,6 @@ class NettyServerObjectResolutionTest {
 
 	private NettyServer server(GenerationStore store, GenerationStore.Publication publication) {
 		NettyServer server = new NettyServer();
-		server.setObjectRoot(store.objectRoot());
 		server.replacePaths(publication.hostingPaths());
 		return server;
 	}
@@ -136,7 +134,7 @@ class NettyServerObjectResolutionTest {
 		fields.selectionTags = Map.of();
 		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
-		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "other", false, false, false, hash, null));
+		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "config", false, false, false, hash, null));
 		fields.groups = Map.of("main", group);
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), java.util.List.of(), java.util.List.of());

@@ -40,9 +40,12 @@ public final class SelectedTreeComposer {
 		target.mcVersion = manifest.mcVersion();
 		target.selectedGroups = new LinkedHashSet<>(selection.selectedGroups());
 		if (generationTarget != null) {
+			if (!manifest.modpackId().equals(generationTarget.modpackId()))
+				throw new IllegalArgumentException("Selected target generation identity does not match catalogue modpack ID");
 			target.targetGenerationId = generationTarget.targetGenerationId();
 			target.parentGenerationId = generationTarget.parentGenerationId();
 			target.stateDigest = generationTarget.stateDigest();
+			target.ownershipLedger.digest = generationTarget.ledgerDigest();
 		}
 		return target;
 	}
