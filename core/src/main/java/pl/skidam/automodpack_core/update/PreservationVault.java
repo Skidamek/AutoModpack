@@ -23,6 +23,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -183,14 +184,14 @@ public final class PreservationVault {
 	public static List<String> modpackIds(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
 		Path root = storage.preservationDirectory().toAbsolutePath().normalize();
-		validateNoSymbolicLinkDescendants(root, root, "preservation vault");
+		FileTrees.requireNoSymbolicLinkDescendants(root, root, "preservation vault");
 		if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation vault is not a directory: " + root);
 
 		List<String> packs = new ArrayList<>();
 		try (var paths = Files.list(root)) {
 			for (Path packRoot : paths.sorted(Comparator.comparing(path -> path.getFileName().toString())).toList()) {
-				validateNoSymbolicLinkDescendants(root, packRoot, "preservation vault pack");
+				FileTrees.requireNoSymbolicLinkDescendants(root, packRoot, "preservation vault pack");
 				if (!Files.isDirectory(packRoot, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation vault pack is not a directory: " + packRoot);
 				String pack;
 				try {
@@ -277,7 +278,7 @@ public final class PreservationVault {
 	}
 
 	private static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileMetadataCache cache) throws IOException {
-		validateNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
+		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
 		if (!FileIntegrity.matchesNamed(source, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
 			if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matches(destination, size, hash, cache))
@@ -285,7 +286,7 @@ public final class PreservationVault {
 			return;
 		}
 		VerifiedFileTransfer.copyCreateOnly(source, destination, size, hash, cache);
-		validateNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
+		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
 		if (!FileIntegrity.matches(destination, size, hash, cache)) throw new IOException("Restored file failed verification: " + destination);
 	}
 
@@ -300,7 +301,7 @@ public final class PreservationVault {
 
 	private static ClientStorageJsons.ClientPreservationVaultFields readFields(ClientStorage storage, String modpackId) throws IOException {
 		Path root = storage.preservationPackDirectory(modpackId);
-		validateNoSymbolicLinkDescendants(storage.preservationDirectory(), root, "preservation vault");
+		FileTrees.requireNoSymbolicLinkDescendants(storage.preservationDirectory(), root, "preservation vault");
 		Path manifest = storage.preservationManifest(modpackId);
 		if (Files.notExists(manifest, LinkOption.NOFOLLOW_LINKS)) {
 			ClientStorageJsons.ClientPreservationVaultFields empty = new ClientStorageJsons.ClientPreservationVaultFields();
@@ -308,7 +309,7 @@ public final class PreservationVault {
 			empty.claims = new ArrayList<>();
 			return empty;
 		}
-		validateNoSymbolicLinkDescendants(root, manifest, "preservation manifest");
+		FileTrees.requireNoSymbolicLinkDescendants(root, manifest, "preservation manifest");
 		if (!Files.isRegularFile(manifest, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation manifest is not a regular file: " + manifest);
 		ClientStorageJsons.ClientPreservationVaultFields fields;
 		try {
@@ -332,9 +333,9 @@ public final class PreservationVault {
 
 	private static void write(ClientStorage storage, String modpackId, ClientStorageJsons.ClientPreservationVaultFields fields) throws IOException {
 		Path root = storage.preservationPackDirectory(modpackId);
-		validateNoSymbolicLinkDescendants(storage.preservationDirectory(), root, "preservation vault");
+		FileTrees.requireNoSymbolicLinkDescendants(storage.preservationDirectory(), root, "preservation vault");
 		Files.createDirectories(root);
-		validateNoSymbolicLinkDescendants(storage.preservationDirectory(), root, "preservation vault");
+		FileTrees.requireNoSymbolicLinkDescendants(storage.preservationDirectory(), root, "preservation vault");
 		fields.schemaVersion = 1;
 		fields.modpackId = modpackId;
 		ConfigTools.writeAtomic(storage.preservationManifest(modpackId), fields);
@@ -385,13 +386,13 @@ public final class PreservationVault {
 			case OVERLAY -> storage.overlayDirectory(modpackId);
 			case PROJECTION -> storage.activeDirectory();
 		};
-		validateNoSymbolicLinkDescendants(constrainedRoot, source, "preservation source");
+		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, source, "preservation source");
 		if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation source is not a regular file: " + source);
 	}
 
 	private static void repairObjectFromSource(ClientStorage storage, Path source, Path object, String hash, long size, FileMetadataCache cache) throws IOException {
 		Path sourceRoot = source.startsWith(storage.gameDirectory()) ? storage.gameDirectory() : storage.clientDirectory();
-		validateNoSymbolicLinkDescendants(sourceRoot, source, "preservation source");
+		FileTrees.requireNoSymbolicLinkDescendants(sourceRoot, source, "preservation source");
 		if (!FileIntegrity.matches(source, size, hash, cache)) throw new IOException("Preserved object is corrupt and its source is unavailable: " + hash);
 		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash, cache);
 	}
@@ -399,7 +400,7 @@ public final class PreservationVault {
 	private static Path object(ClientStorage storage, String hash) throws IOException {
 		Path root = storage.objectsDirectory().toAbsolutePath().normalize();
 		Path object = storage.objectFile(requireHash(hash, "preservation object hash"));
-		validateNoSymbolicLinkDescendants(root, object, "preservation object");
+		FileTrees.requireNoSymbolicLinkDescendants(root, object, "preservation object");
 		return object;
 	}
 
@@ -429,17 +430,5 @@ public final class PreservationVault {
 	private static Instant requireInstant(Instant instant) throws IOException {
 		if (instant == null || !Instant.parse(instant.toString()).equals(instant)) throw new IOException("Preservation timestamp is invalid");
 		return instant;
-	}
-
-	private static void validateNoSymbolicLinkDescendants(Path constrainedRoot, Path target, String description) throws IOException {
-		Path root = constrainedRoot.toAbsolutePath().normalize();
-		Path resolved = target.toAbsolutePath().normalize();
-		if (!resolved.startsWith(root)) throw new IOException(description + " escapes its root");
-		Path current = root;
-		if (Files.isSymbolicLink(current)) throw new IOException(description + " root is a symbolic link: " + current);
-		for (Path component : root.relativize(resolved)) {
-			current = current.resolve(component);
-			if (Files.isSymbolicLink(current)) throw new IOException(description + " contains a symbolic link: " + current);
-		}
 	}
 }

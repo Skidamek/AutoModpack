@@ -1064,7 +1064,7 @@ public final class UpdateTransactionExecutor {
 		Path base = root(root, transaction).toAbsolutePath().normalize();
 		Path resolved = base.resolve(normalizeOperationPath(relativePath)).normalize();
 		if (!resolved.startsWith(base)) throw new IOException("Operation escapes constrained root");
-		validateNoSymbolicLinkDescendants(base, resolved);
+		FileTrees.requireNoSymbolicLinkDescendants(base, resolved, "Operation target");
 		return resolved;
 	}
 
@@ -1082,8 +1082,7 @@ public final class UpdateTransactionExecutor {
 		Path constrainedRoot = root(root, synthetic).toAbsolutePath().normalize();
 		Path resolved = constrainedRoot.resolve(relativePath).normalize();
 		if (!resolved.startsWith(constrainedRoot)) throw new IOException("Transaction path escapes constrained root");
-		if (root != Root.GAME_DIR && Files.isSymbolicLink(constrainedRoot)) throw new IOException("Transaction root is a symbolic link");
-		validateNoSymbolicLinkDescendants(constrainedRoot, resolved);
+		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, resolved, "Transaction target");
 		Path game = context.storage().gameDirectory();
 		Path automodpack = context.storage().automodpackDirectory();
 		if (root == Root.GAME_DIR && resolved.startsWith(automodpack)) throw new IOException("GAME_DIR operation uses a narrower root");
@@ -1096,17 +1095,6 @@ public final class UpdateTransactionExecutor {
 	private static boolean isModpackPurpose(UpdateTransaction.Purpose purpose) {
 		return purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION
 				|| purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
-	}
-
-	public static void validateNoSymbolicLinkDescendants(Path constrainedRoot, Path target) throws IOException {
-		Path root = constrainedRoot.toAbsolutePath().normalize();
-		Path resolved = target.toAbsolutePath().normalize();
-		if (!resolved.startsWith(root)) throw new IOException("Target escapes constrained root");
-		Path current = root;
-		for (Path component : root.relativize(resolved)) {
-			current = current.resolve(component);
-			if (Files.isSymbolicLink(current)) throw new IOException("Symbolic-link component is not allowed beneath transaction root: " + current);
-		}
 	}
 
 	private static String normalizeManifestPath(String path) throws IOException {

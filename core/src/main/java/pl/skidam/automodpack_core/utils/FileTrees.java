@@ -78,6 +78,33 @@ public final class FileTrees {
 		if (Files.isSymbolicLink(path)) throw new IOException(description + " contains a symbolic link: " + path);
 	}
 
+	/**
+	 * Requires every component from {@code root} down to and including {@code target} to be real
+	 * directories or a real file, never a symbolic link. This is the canonical confinement check
+	 * for every managed root; do not re-implement it locally.
+	 */
+	public static void requireNoSymbolicLinkDescendants(Path root, Path target, String description) throws IOException {
+		Path base = root.toAbsolutePath().normalize();
+		Path resolved = target.toAbsolutePath().normalize();
+		if (!resolved.startsWith(base)) throw new IOException(description + " escapes its root: " + target);
+		if (Files.isSymbolicLink(base)) throw new IOException(description + " root is a symbolic link: " + base);
+		Path current = base;
+		for (Path component : base.relativize(resolved)) {
+			current = current.resolve(component);
+			if (Files.isSymbolicLink(current)) throw new IOException(description + " contains a symbolic link: " + current);
+		}
+	}
+
+	/** Reports whether every component from {@code root} down to {@code target} avoids symbolic links. */
+	public static boolean hasNoSymbolicLinkDescendants(Path root, Path target) {
+		try {
+			requireNoSymbolicLinkDescendants(root, target, "Path");
+			return true;
+		} catch (IOException e) {
+			return false;
+		}
+	}
+
 	public static void delete(Path directory) throws IOException {
 		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return;
 		if (Files.isSymbolicLink(directory)) {
