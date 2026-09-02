@@ -1077,9 +1077,9 @@ def _v_assert_preload_acquired(ctx: Context, _step):
     if client_log.is_file():
         log += "\n" + client_log.read_text(encoding="utf-8", errors="replace")
     acquired = f"Launch apply acquired {len(expected)} complete modpack objects"
-    reused = f"Launch apply reused all {len(expected)} verified complete modpack objects"
-    if acquired not in log and reused not in log:
-        raise AssertionError(f"client log did not prove launch object acquisition: {acquired!r} or {reused!r}")
+    restored = f"All {len(expected)} selected modpack objects are already acquired locally"
+    if acquired not in log and restored not in log:
+        raise AssertionError(f"client log did not prove launch object acquisition: {acquired!r} or {restored!r}")
     ctx.vars["preloaded_object_count"] = len(expected)
 
 
