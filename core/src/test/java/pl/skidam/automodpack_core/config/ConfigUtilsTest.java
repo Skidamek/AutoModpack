@@ -28,20 +28,20 @@ class ConfigUtilsTest {
 	}
 
 	@Test
-	void holepunchRequiresLoginStartProfileUuid() {
+	void holepunchFallsBackToMagicPacketOnUnsupportedMinecraftVersions() {
 		String previousVersion = Constants.MC_VERSION;
 		String previousLoader = Constants.LOADER;
 		try {
 			ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 			config.bindPort = 24444;
 
-			Constants.MC_VERSION = "1.18.2";
-			Constants.LOADER = "forge";
+			Constants.MC_VERSION = "1.19.3";
+			Constants.LOADER = "fabric";
 			config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
 			ConfigUtils.normalizeServerConfig(config);
 			assertEquals(ModpackConnectionMode.MAGIC_PACKET, config.connectionMode);
 
-			for (String[] target : new String[][]{{"1.19.2", "fabric"}, {"1.20.1", "forge"}, {"26.2", "neoforge"}}) {
+			for (String[] target : new String[][]{{"1.18.2", "forge"}, {"1.19.2", "fabric"}, {"1.20.1", "forge"}, {"26.2", "neoforge"}}) {
 				Constants.MC_VERSION = target[0];
 				Constants.LOADER = target[1];
 				config.connectionMode = ModpackConnectionMode.HOLEPUNCH;

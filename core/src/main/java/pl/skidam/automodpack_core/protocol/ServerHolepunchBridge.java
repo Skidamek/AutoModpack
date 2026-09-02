@@ -32,7 +32,6 @@ import pl.skidam.automodpack_core.protocol.netty.handler.ErrorPrinter;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
-import pl.skidam.mcholepunch.MinecraftProtocol;
 import pl.skidam.mcholepunch.server.HolepunchServerRegistry;
 
 public final class ServerHolepunchBridge {
@@ -55,7 +54,6 @@ public final class ServerHolepunchBridge {
 		executor = bridgeExecutor;
 		try {
 			registration = HolepunchServerRegistry.register(
-					MinecraftProtocol.forMinecraftVersion(MC_VERSION).loginPacketLayout(),
 					bridgeExecutor,
 					maxPendingWriteBytes(),
 					NETWORK_TIMEOUT,
