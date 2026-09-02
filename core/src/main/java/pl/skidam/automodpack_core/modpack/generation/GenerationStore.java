@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
 import pl.skidam.automodpack_core.storage.StoragePaths;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
@@ -624,8 +625,8 @@ public final class GenerationStore {
 			long size = Files.size(path);
 			compactionDeleteHook.beforeDelete(path);
 			if (ImmutableFiles.deleteIfExists(path)) {
-				deleted = addExact(deleted, 1, "deleted " + description + " count");
-				bytes = addExact(bytes, size, "deleted " + description + " bytes");
+				deleted = ObjectStoreMaintenance.addExact(deleted, 1, "deleted " + description + " count");
+				bytes = ObjectStoreMaintenance.addExact(bytes, size, "deleted " + description + " bytes");
 			}
 		}
 		if (deleted > 0 && !paths.isEmpty()) FileTrees.forceDirectory(paths.get(0).getParent());
@@ -634,7 +635,7 @@ public final class GenerationStore {
 
 	private long reclaimableBytes(List<Path> paths) throws IOException {
 		long bytes = 0;
-		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) bytes = addExact(bytes, Files.size(path), "compaction reclaimable bytes");
+		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) bytes = ObjectStoreMaintenance.addExact(bytes, Files.size(path), "compaction reclaimable bytes");
 		return bytes;
 	}
 
@@ -654,17 +655,17 @@ public final class GenerationStore {
 
 	private StorageReport measureStorageLocked() throws IOException {
 		GenerationRecord current = loadCurrentState(true, false).map(CurrentSnapshot::record).orElse(null);
-		Map<String, Long> expectedSizes = new TreeMap<>();
+		ObjectStoreMaintenance.ExpectedSizes expectedSizes = new ObjectStoreMaintenance.ExpectedSizes();
 		long objectReferences = 0;
-		if (current != null) objectReferences = addExact(objectReferences, addManifestReferences(current, expectedSizes), "object reference count");
+		if (current != null) objectReferences = ObjectStoreMaintenance.addExact(objectReferences, addManifestReferences(current, expectedSizes), "object reference count");
 		long referencedObjectBytes = verifyObjectReferences(expectedSizes);
-		FileTotals catalogueFiles = fileTotals(regularFiles(cataloguesDirectory, "generation catalogues"));
-		FileTotals commitFiles = fileTotals(regularFiles(commitsDirectory, "generation commits"));
-		FileTotals deltaFiles = fileTotals(regularFiles(deltasDirectory, "generation deltas"));
-		FileTotals objectFiles = fileTotals(objectFiles());
-		FileTotals stagingFiles = fileTotals(regularFiles(stagingDirectory, "generation staging"));
+		ObjectStoreMaintenance.FileTotals catalogueFiles = fileTotals(regularFiles(cataloguesDirectory, "generation catalogues"));
+		ObjectStoreMaintenance.FileTotals commitFiles = fileTotals(regularFiles(commitsDirectory, "generation commits"));
+		ObjectStoreMaintenance.FileTotals deltaFiles = fileTotals(regularFiles(deltasDirectory, "generation deltas"));
+		ObjectStoreMaintenance.FileTotals objectFiles = fileTotals(ObjectStoreMaintenance.objectFiles(objectsDirectory));
+		ObjectStoreMaintenance.FileTotals stagingFiles = fileTotals(regularFiles(stagingDirectory, "generation staging"));
 		return new StorageReport(catalogueFiles.count(), catalogueFiles.bytes(), commitFiles.count(), commitFiles.bytes(),
-				deltaFiles.count(), deltaFiles.bytes(), objectFiles.count(), objectFiles.bytes(), stagingFiles.count(), stagingFiles.bytes(), expectedSizes.size(),
+				deltaFiles.count(), deltaFiles.bytes(), objectFiles.count(), objectFiles.bytes(), stagingFiles.count(), stagingFiles.bytes(), expectedSizes.sizes().size(),
 				referencedObjectBytes, objectReferences);
 	}
 
@@ -675,7 +676,7 @@ public final class GenerationStore {
 		CompactHistory history = readCompactHistory(currentGenerationId);
 		NavigableSet<String> retained = new TreeSet<>(generationPins);
 		retained.add(currentGenerationId);
-		Map<String, Long> expectedSizes = new TreeMap<>();
+		ObjectStoreMaintenance.ExpectedSizes expectedSizes = new ObjectStoreMaintenance.ExpectedSizes();
 		OwnershipLedger.Builder ledger = history.boundaryRecord() == null
 				? OwnershipLedger.builder(history.generations().get(0).commit().modpackId())
 				: OwnershipLedger.builder(history.boundaryRecord().ownershipLedger());
@@ -700,7 +701,7 @@ public final class GenerationStore {
 				throw new IOException("Retained generation is not in the current lineage: " + generationId);
 		}
 		verifyObjectReferences(expectedSizes);
-		Set<String> reachable = new HashSet<>(expectedSizes.keySet());
+		Set<String> reachable = new HashSet<>(expectedSizes.sizes().keySet());
 		for (String objectHash : objectPins) {
 			if (!reachable.contains(objectHash)) verifyPinnedObject(objectHash);
 			reachable.add(objectHash);
@@ -710,28 +711,10 @@ public final class GenerationStore {
 	}
 
 	private CollectionResult deleteUnreachableObjects(Set<String> reachable) throws IOException {
-		List<Path> beforeFiles = objectFiles();
-		FileTotals before = fileTotals(beforeFiles);
-		long deletedCount = 0;
-		long deletedBytes = 0;
-		for (Path object : beforeFiles) {
-			String hash = DataRootResolver.objectHash(objectsDirectory, object);
-			if (hash == null || reachable.contains(hash) || !FileIntegrity.matchesCanonicalSha1(object, hash)) continue;
-			long size;
-			try {
-				size = Files.size(object);
-			} catch (NoSuchFileException e) {
-				// Another collector removed the unreachable object between the listing and this stat.
-				continue;
-			}
-			if (ImmutableFiles.deleteIfExists(object)) {
-				deletedCount = addExact(deletedCount, 1, "deleted object count");
-				deletedBytes = addExact(deletedBytes, size, "deleted object bytes");
-			}
-		}
-		if (deletedCount > 0) FileTrees.forceDirectory(objectsDirectory);
-		FileTotals after = fileTotals(objectFiles());
-		return new CollectionResult(before.bytes(), after.bytes(), before.count(), after.count(), deletedCount, deletedBytes);
+		ObjectStoreMaintenance.FileTotals before = fileTotals(ObjectStoreMaintenance.objectFiles(objectsDirectory));
+		ObjectStoreMaintenance.DeletionReceipt deletion = ObjectStoreMaintenance.deleteUnreachable(objectsDirectory, reachable);
+		ObjectStoreMaintenance.FileTotals after = fileTotals(ObjectStoreMaintenance.objectFiles(objectsDirectory));
+		return new CollectionResult(before.bytes(), after.bytes(), before.count(), after.count(), deletion.deletedCount(), deletion.deletedBytes());
 	}
 
 	private List<Path> regularFiles(Path directory, String description) throws IOException {
@@ -743,48 +726,41 @@ public final class GenerationStore {
 		}
 	}
 
-	private FileTotals fileTotals(List<Path> paths) throws IOException {
+	private ObjectStoreMaintenance.FileTotals fileTotals(List<Path> paths) throws IOException {
 		long count = 0;
 		long bytes = 0;
 		for (Path path : paths) {
 			if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 			try {
-				count = addExact(count, 1, "file count");
-				bytes = addExact(bytes, Files.size(path), "file bytes");
+				count = ObjectStoreMaintenance.addExact(count, 1, "file count");
+				bytes = ObjectStoreMaintenance.addExact(bytes, Files.size(path), "file bytes");
 			} catch (NoSuchFileException e) {
 				// A concurrent collector may remove an unreachable object between the listing and this stat; the file is simply gone.
 			}
 		}
-		return new FileTotals(count, bytes);
+		return new ObjectStoreMaintenance.FileTotals(count, bytes);
 	}
 
-	private long addManifestReferences(GenerationRecord record, Map<String, Long> expectedSizes) throws IOException {
+	private long addManifestReferences(GenerationRecord record, ObjectStoreMaintenance.ExpectedSizes expectedSizes) throws IOException {
 		return addManifestReferences(record.manifest(), expectedSizes);
 	}
 
-	private long addManifestReferences(GroupManifest manifest, Map<String, Long> expectedSizes) throws IOException {
+	private long addManifestReferences(GroupManifest manifest, ObjectStoreMaintenance.ExpectedSizes expectedSizes) throws IOException {
 		long count = 0;
 		for (var group : manifest.groups().values()) for (var file : group.files().values()) {
-			addExpectedSize(expectedSizes, file.sha1().toLowerCase(Locale.ROOT), file.size());
-			count = addExact(count, 1, "object reference count");
+			expectedSizes.require(file.sha1().toLowerCase(Locale.ROOT), file.size(), "generation catalogue");
+			count = ObjectStoreMaintenance.addExact(count, 1, "object reference count");
 		}
 		return count;
 	}
 
-	private static void addExpectedSize(Map<String, Long> expectedSizes, String sha1, long expectedSize) throws IOException {
-		if (!isDigest(sha1) || expectedSize < 0) throw new IOException("Invalid immutable object reference: " + sha1);
-		Long previousSize = expectedSizes.putIfAbsent(sha1, expectedSize);
-		if (previousSize != null && previousSize.longValue() != expectedSize)
-			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
-	}
-
-	private long verifyObjectReferences(Map<String, Long> expectedSizes) throws IOException {
+	private long verifyObjectReferences(ObjectStoreMaintenance.ExpectedSizes expectedSizes) throws IOException {
 		try (FileMetadataCache cache = openMetadataCache()) {
 			Set<String> verified = new HashSet<>();
 			long bytes = 0;
-			for (var entry : expectedSizes.entrySet()) {
+			for (var entry : expectedSizes.sizes().entrySet()) {
 				verifyObject(entry.getKey(), entry.getValue(), expectedSizes, verified, cache);
-				bytes = addExact(bytes, entry.getValue(), "referenced object bytes");
+				bytes = ObjectStoreMaintenance.addExact(bytes, entry.getValue(), "referenced object bytes");
 			}
 			return bytes;
 		}
@@ -797,20 +773,7 @@ public final class GenerationStore {
 	}
 
 	private static NavigableSet<String> canonicalPins(Set<String> pins, String description) throws IOException {
-		TreeSet<String> result = new TreeSet<>();
-		for (String pin : pins) {
-			if (!isDigest(pin)) throw new IOException("Invalid pinned " + description + " hash: " + pin);
-			result.add(pin);
-		}
-		return result;
-	}
-
-	private static long addExact(long first, long second, String description) throws IOException {
-		try {
-			return Math.addExact(first, second);
-		} catch (ArithmeticException e) {
-			throw new IOException("Overflow while measuring " + description, e);
-		}
+		return new TreeSet<>(ObjectStoreMaintenance.canonicalPins(pins, description));
 	}
 
 	private GenerationJsons.GenerationPointerFields readCurrentPointer() throws IOException {
@@ -1039,35 +1002,33 @@ public final class GenerationStore {
 	}
 
 	private NavigableMap<String, Path> verifyActiveTargetObjects(GenerationRecord record) throws IOException {
-		TreeMap<String, Long> expectedSizes = new TreeMap<>();
+		ObjectStoreMaintenance.ExpectedSizes expectedSizes = new ObjectStoreMaintenance.ExpectedSizes();
 		addManifestReferences(record, expectedSizes);
 		verifyObjectReferences(expectedSizes);
 		return activeTargetPaths(expectedSizes);
 	}
 
 	private NavigableMap<String, Path> activeTargetPaths(GenerationRecord record) throws IOException {
-		TreeMap<String, Long> expectedSizes = new TreeMap<>();
+		ObjectStoreMaintenance.ExpectedSizes expectedSizes = new ObjectStoreMaintenance.ExpectedSizes();
 		addManifestReferences(record, expectedSizes);
 		return activeTargetPaths(expectedSizes);
 	}
 
-	private NavigableMap<String, Path> activeTargetPaths(Map<String, Long> expectedSizes) throws IOException {
+	private NavigableMap<String, Path> activeTargetPaths(ObjectStoreMaintenance.ExpectedSizes expectedSizes) throws IOException {
 		TreeMap<String, Path> hosting = new TreeMap<>();
-		for (String sha1 : expectedSizes.keySet()) hosting.put(sha1, objectPath(sha1));
+		for (String sha1 : expectedSizes.sizes().keySet()) hosting.put(sha1, objectPath(sha1));
 		return hosting;
 	}
 
 	private void verifyAllReferencedObjects(GenerationRecord record) throws IOException {
-		TreeMap<String, Long> expectedSizes = new TreeMap<>();
+		ObjectStoreMaintenance.ExpectedSizes expectedSizes = new ObjectStoreMaintenance.ExpectedSizes();
 		addManifestReferences(record, expectedSizes);
 		verifyObjectReferences(expectedSizes);
 	}
 
-	private void verifyObject(String sha1, long expectedSize, Map<String, Long> expectedSizes, Set<String> verified, FileMetadataCache cache) throws IOException {
+	private void verifyObject(String sha1, long expectedSize, ObjectStoreMaintenance.ExpectedSizes expectedSizes, Set<String> verified, FileMetadataCache cache) throws IOException {
 		Path object = objectPath(sha1);
-		Long previousSize = expectedSizes.putIfAbsent(sha1, expectedSize);
-		if (previousSize != null && previousSize.longValue() != expectedSize)
-			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
+		expectedSizes.addExpectedSize(sha1, expectedSize);
 		if (!verified.add(sha1)) return;
 		FileTrees.requireRegularFile(object, "immutable object " + sha1);
 		if (!FileIntegrity.matchesNamed(object, expectedSize, sha1, cache)) throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
@@ -1089,27 +1050,6 @@ public final class GenerationStore {
 
 	private Path objectPathUnchecked(String sha1) {
 		return DataRootResolver.objectFile(objectsDirectory, sha1);
-	}
-
-	private List<Path> objectFiles() throws IOException {
-		if (!Files.exists(objectsDirectory, LinkOption.NOFOLLOW_LINKS)) return List.of();
-		FileTrees.requireDirectory(objectsDirectory, "immutable objects");
-		try (var shards = Files.list(objectsDirectory)) {
-			List<Path> result = new ArrayList<>();
-			for (Path shard : shards.sorted(Comparator.comparing(path -> path.getFileName().toString())).toList()) {
-				if (Files.isSymbolicLink(shard)) throw new IOException("Immutable object store contains a symbolic link: " + shard);
-				if (Files.isRegularFile(shard, LinkOption.NOFOLLOW_LINKS)) continue;
-				if (!Files.isDirectory(shard, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Immutable object store contains an unsupported entry: " + shard);
-				try (var files = Files.list(shard)) {
-					for (Path file : files.sorted(Comparator.comparing(path -> path.getFileName().toString())).toList()) {
-						if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS))
-							throw new IOException("Immutable object store contains an unsupported entry: " + file);
-						if (DataRootResolver.isObjectFile(objectsDirectory, file)) result.add(file);
-					}
-				}
-			}
-			return List.copyOf(result);
-		}
 	}
 
 	private Path deltaPath(String generationId) throws IOException {
@@ -1203,8 +1143,6 @@ public final class GenerationStore {
 	private record CompactState(GenerationRecord record, List<GenerationHistoryEntry> entries) {}
 
 	private record LoadedProjection(GenerationRecord record, Path path, GenerationHistoryIndex historyIndex, boolean needsRepair) {}
-
-	private record FileTotals(long count, long bytes) {}
 
 	private static final class PublicationGuard implements AutoCloseable {
 		private final PublicationLockRegistry.LockLease jvmLock;
