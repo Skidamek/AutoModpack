@@ -42,7 +42,55 @@ public class FileMetadataCache implements AutoCloseable {
 	private final AtomicInteger refCount = new AtomicInteger(1);
 	private final Object[] locks = new Object[64];
 
-	public record CachedFile(String path, String contentHash, long lastModifiedNanos, long creationTimeNanos, long size, String fileKey, long validatedAtNanos) {}
+	public static final class CachedFile {
+		private String path;
+		private String contentHash;
+		private long lastModifiedNanos;
+		private long creationTimeNanos;
+		private long size;
+		private String fileKey;
+		private long validatedAtNanos;
+
+		public CachedFile() {}
+
+		public CachedFile(String path, String contentHash, long lastModifiedNanos, long creationTimeNanos, long size, String fileKey, long validatedAtNanos) {
+			this.path = path;
+			this.contentHash = contentHash;
+			this.lastModifiedNanos = lastModifiedNanos;
+			this.creationTimeNanos = creationTimeNanos;
+			this.size = size;
+			this.fileKey = fileKey;
+			this.validatedAtNanos = validatedAtNanos;
+		}
+
+		public String path() {
+			return path;
+		}
+
+		public String contentHash() {
+			return contentHash;
+		}
+
+		public long lastModifiedNanos() {
+			return lastModifiedNanos;
+		}
+
+		public long creationTimeNanos() {
+			return creationTimeNanos;
+		}
+
+		public long size() {
+			return size;
+		}
+
+		public String fileKey() {
+			return fileKey;
+		}
+
+		public long validatedAtNanos() {
+			return validatedAtNanos;
+		}
+	}
 
 	private record FileFingerprint(long lastModifiedNanos, long creationTimeNanos, long size, String fileKey) {}
 

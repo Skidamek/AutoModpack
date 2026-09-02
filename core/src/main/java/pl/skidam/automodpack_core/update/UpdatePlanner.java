@@ -47,6 +47,7 @@ public final class UpdatePlanner {
 			Set<String> forceCopyServicePaths,
 			List<ModInfo> targetMods,
 			List<ModInfo> standardMods,
+			List<NestedCopy> previousNestedCopies,
 			List<NestedCopy> nestedCopies,
 			SelectionContext selection,
 			Jsons.ClientConfigFieldsV3 plannedClientConfig) {
@@ -58,13 +59,26 @@ public final class UpdatePlanner {
 			forceCopyServicePaths = Collections.unmodifiableSet(new LinkedHashSet<>(forceCopyServicePaths));
 			targetMods = List.copyOf(targetMods);
 			standardMods = List.copyOf(standardMods);
+			previousNestedCopies = List.copyOf(previousNestedCopies);
 			nestedCopies = List.copyOf(nestedCopies);
+		}
+
+		public Input(Jsons.ModpackContentFields installedManifest, Jsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
+				Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods, List<NestedCopy> previousNestedCopies, List<NestedCopy> nestedCopies,
+				SelectionContext selection, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
+			this(installedManifest, targetManifest, files, Map.of(), forceCopyServicePaths, targetMods, standardMods, previousNestedCopies, nestedCopies, selection, plannedClientConfig);
 		}
 
 		public Input(Jsons.ModpackContentFields installedManifest, Jsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
 				Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods, List<NestedCopy> nestedCopies,
 				SelectionContext selection, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
-			this(installedManifest, targetManifest, files, Map.of(), forceCopyServicePaths, targetMods, standardMods, nestedCopies, selection, plannedClientConfig);
+			this(installedManifest, targetManifest, files, Map.of(), forceCopyServicePaths, targetMods, standardMods, List.of(), nestedCopies, selection, plannedClientConfig);
+		}
+
+		public Input(Jsons.ModpackContentFields installedManifest, Jsons.ModpackContentFields targetManifest, Map<FileKey, FileState> files,
+				Map<String, FileState> editableOverlays, Set<String> forceCopyServicePaths, List<ModInfo> targetMods, List<ModInfo> standardMods,
+				List<NestedCopy> nestedCopies, SelectionContext selection, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
+			this(installedManifest, targetManifest, files, editableOverlays, forceCopyServicePaths, targetMods, standardMods, List.of(), nestedCopies, selection, plannedClientConfig);
 		}
 	}
 
@@ -79,7 +93,7 @@ public final class UpdatePlanner {
 	}
 
 	public record RemovalInput(Jsons.ModpackContentFields installedManifest, Jsons.ClientBaselineFields baseline,
-			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
+			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, GeneratedCopyState generatedCopies, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
 		public RemovalInput {
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
 			Set<String> normalizedObjects = new LinkedHashSet<>();
@@ -95,6 +109,9 @@ public final class UpdatePlanner {
 		GenerationTarget generationTarget = GenerationTarget.fromFlat(installed);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(installed.ownershipLedger);
 		if (!installed.modpackId.equals(ledger.modpackId())) throw new IllegalArgumentException("Removal ledger modpack ID does not match installed modpack");
+		if (input.generatedCopies() != null && (!installed.modpackId.equals(input.generatedCopies().modpackId())
+				|| !generationTarget.targetGenerationId().equals(input.generatedCopies().generationId())))
+			throw new IllegalArgumentException("Removal generated-copy state identity is invalid");
 		if (input.baseline() == null || !installed.modpackId.equals(input.baseline().modpackId) || input.baseline().entries == null)
 			throw new IllegalArgumentException("Removal baseline identity is invalid");
 		if (input.plannedClientConfig() == null) throw new IllegalArgumentException("Removal client config is missing");
@@ -123,6 +140,15 @@ public final class UpdatePlanner {
 			if (state != null && state.regularFile() && hashesEqual(state.sha1(), item.sha1)) {
 				delete(operations, projected, key, item.sha1);
 				restartReasons.add(RestartReason.REMOVED_NON_MODPACK_FILES);
+			}
+		}
+
+		if (input.generatedCopies() != null) for (GeneratedCopyState.Entry generated : input.generatedCopies().entries()) {
+			FileKey key = new FileKey(Root.GAME_DIR, generated.logicalPath());
+			FileState state = projected.get(key);
+			if (matches(state, generated.sha1(), generated.size())) {
+				delete(operations, projected, key, generated.sha1());
+				restartReasons.add(RestartReason.FIXED_NESTED_MODS);
 			}
 		}
 
@@ -240,7 +266,8 @@ public final class UpdatePlanner {
 			}
 		}
 
-		planNestedCopies(input.nestedCopies(), projected, operations, restartReasons);
+		List<NestedCopy> generatedCopies = ownedNestedCopies(input.nestedCopies());
+		planNestedCopies(input.previousNestedCopies(), generatedCopies, projected, operations, restartReasons);
 		conflicts.addAll(planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), forceCopyPaths, installedLedger, projected, operations, restartReasons));
 
 		planBaselineCaptures(input.files(), operations, baselineCaptures);
@@ -255,7 +282,7 @@ public final class UpdatePlanner {
 		return new UpdatePlan(target.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
 				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(),
 				baselineCaptures.stream().sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal()).thenComparing(BaselineCapture::relativePath)).toList(),
-				conflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList());
+				conflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList(), generatedCopies);
 	}
 
 	private static void planBaselineCaptures(Map<FileKey, FileState> original, Map<FileKey, Operation> operations,
@@ -327,18 +354,45 @@ public final class UpdatePlanner {
 				&& !selection.previousModpackId().equals(targetModpackId);
 	}
 
-	private static void planNestedCopies(List<NestedCopy> copies, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations,
+	private static void planNestedCopies(List<NestedCopy> previousCopies, List<NestedCopy> copies, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations,
 			EnumSet<RestartReason> restartReasons) {
-		Set<String> standardIds = new HashSet<>();
-		for (NestedCopy copy : copies.stream().sorted(Comparator.comparing(NestedCopy::relativePath)).toList()) {
-			if (copy.ids().stream().anyMatch(standardIds::contains)) continue;
-			FileKey key = new FileKey(Root.GAME_DIR, normalize(copy.relativePath()));
-			if (!matches(projected.get(key), copy.sha1(), copy.size())) {
-				install(operations, projected, key, copy.sha1(), copy.size(), true);
+		Map<String, NestedCopy> previousByPath = previousCopies.stream().collect(Collectors.toMap(NestedCopy::relativePath, Function.identity(), (first, second) -> {
+			throw new IllegalArgumentException("Duplicate previous generated-copy path: " + first.relativePath());
+		}, TreeMap::new));
+		Set<String> targetPaths = copies.stream().map(NestedCopy::relativePath).collect(Collectors.toSet());
+		for (NestedCopy previous : previousCopies.stream().sorted(Comparator.comparing(NestedCopy::relativePath)).toList()) {
+			if (targetPaths.contains(previous.relativePath())) continue;
+			FileKey key = new FileKey(Root.GAME_DIR, normalize(previous.relativePath()));
+			FileState current = projected.get(key);
+			if (matches(current, previous.sha1(), previous.size())) {
+				delete(operations, projected, key, previous.sha1());
 				restartReasons.add(RestartReason.FIXED_NESTED_MODS);
 			}
-			standardIds.addAll(copy.ids());
 		}
+		for (NestedCopy copy : copies) {
+			FileKey key = new FileKey(Root.GAME_DIR, normalize(copy.relativePath()));
+			FileState current = projected.get(key);
+			if (!matches(current, copy.sha1(), copy.size())) {
+				NestedCopy previous = previousByPath.get(copy.relativePath());
+				if (current != null && (previous == null || !matches(current, previous.sha1(), previous.size()))) {
+					continue;
+				}
+				String expectedExistingHash = previous == null ? null : previous.sha1();
+				install(operations, projected, key, copy.sha1(), copy.size(), true, expectedExistingHash);
+				restartReasons.add(RestartReason.FIXED_NESTED_MODS);
+			}
+		}
+	}
+
+	private static List<NestedCopy> ownedNestedCopies(List<NestedCopy> copies) {
+		Set<String> generatedIds = new HashSet<>();
+		List<NestedCopy> owned = new ArrayList<>();
+		for (NestedCopy copy : copies.stream().sorted(Comparator.comparing(NestedCopy::relativePath)).toList()) {
+			if (copy.ids().stream().anyMatch(generatedIds::contains)) continue;
+			owned.add(copy);
+			generatedIds.addAll(copy.ids());
+		}
+		return List.copyOf(owned);
 	}
 
 	private static List<Conflict> planDuplicates(String modpackId, List<ModInfo> targetMods, List<ModInfo> standardMods, Set<String> forceCopyPaths,

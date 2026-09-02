@@ -135,6 +135,10 @@ public final class UpdateTransactionExecutor {
 		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.restartReasons == null
 				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null || transaction.plannedConflicts == null)
 			throw new IOException("Transaction fields are incomplete");
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE && transaction.plannedGeneratedCopies == null)
+			throw new IOException("Generated-copy state is missing from modpack update transaction");
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && transaction.plannedGeneratedCopies != null)
+			throw new IOException("Generated-copy state is only valid for modpack update transactions");
 
 		Jsons.ModpackContentFields target = null;
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
@@ -144,6 +148,7 @@ public final class UpdateTransactionExecutor {
 			validateGenerationIdentity(transaction, record, target);
 			validateManifest(target, transaction.modpackId);
 			validateSelectionMetadata(transaction);
+			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateGeneratedCopies(transaction);
 			validateStoredClientState(transaction, record);
 			if (transaction.plannedClientConfig == null) throw new IOException("Planned client config is missing");
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
@@ -180,6 +185,17 @@ public final class UpdateTransactionExecutor {
 		if (transaction.purpose == UpdateTransaction.Purpose.SELF_UPDATE && !operationKeys.equals(finalState.keySet()))
 			throw new IOException("Special-purpose transaction operations and projected final state must match exactly");
 		if (target != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateManifestProjection(target, finalState);
+	}
+
+	private void validateGeneratedCopies(UpdateTransaction transaction) throws IOException {
+		try {
+			GeneratedCopyState state = GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies);
+			if (!transaction.modpackId.equals(state.modpackId()) || !transaction.targetGenerationId.equals(state.generationId())
+					|| !transaction.selectionDigest.equals(state.selectionDigest()))
+				throw new IOException("Generated-copy state identity does not match transaction");
+		} catch (RuntimeException e) {
+			throw new IOException("Generated-copy state is invalid", e);
+		}
 	}
 
 	private GenerationRecord storedRecord(UpdateTransaction transaction) throws IOException {
@@ -273,7 +289,7 @@ public final class UpdateTransactionExecutor {
 				|| transaction.ledgerDigest != null || transaction.targetPlatform != null || transaction.selectionDigest != null || transaction.overlayDigest != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null
 				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.excludedGroups != null
-				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty()
+				|| transaction.plannedClientConfig != null || transaction.plannedGeneratedCopies != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty()
 				|| !transaction.plannedBaselineCaptures.isEmpty() || !transaction.plannedConflicts.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
 		long installs = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT).count();
@@ -531,8 +547,10 @@ public final class UpdateTransactionExecutor {
 					context.beforeManifestAction().run(transaction, target);
 				if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 					GenerationTarget generation = transaction.generationTarget();
+					GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies).write(context.storage());
 					context.storage().writeActiveState(transaction.modpackId, generation.targetGenerationId());
 				} else {
+					SmartFileUtils.deleteTree(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.targetGenerationId));
 					context.storage().clearActiveState();
 					Files.deleteIfExists(context.storage().baselineFile(transaction.modpackId));
 				}

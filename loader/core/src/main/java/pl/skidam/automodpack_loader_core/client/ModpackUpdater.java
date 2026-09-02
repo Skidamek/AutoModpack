@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -38,6 +39,7 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientOverlaySnapshot;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.GeneratedCopyState;
 import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -304,7 +306,8 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		requireLiveConnection();
-		Collection<Jsons.ModpackContentFields.ModpackContentItem> targetItems = serverModpackContent.list == null ? List.of() : serverModpackContent.list;
+		Jsons.ModpackContentFields preloadTarget = selectedTarget.completeTarget();
+		Collection<Jsons.ModpackContentFields.ModpackContentItem> targetItems = preloadTarget.list == null ? List.of() : preloadTarget.list;
 		if (targetItems.isEmpty()) {
 			LOGGER.info("Selected modpack target contains no files; preload has nothing to acquire");
 			return;
@@ -312,12 +315,13 @@ public class ModpackUpdater implements AutoCloseable {
 
 		long start = System.currentTimeMillis();
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			Set<Jsons.ModpackContentFields.ModpackContentItem> targetSet = new LinkedHashSet<>(targetItems);
-			ModpackUtils.populateStoreFromCWD(targetSet, cache, storage);
-			populateStoreFromActive(serverModpackContent, cache);
+			Set<Jsons.ModpackContentFields.ModpackContentItem> allTargetItems = new LinkedHashSet<>(targetItems);
+			ModpackUtils.populateStoreFromCWD(allTargetItems, cache, storage);
+			populateStoreFromActive(preloadTarget, cache);
+			Set<Jsons.ModpackContentFields.ModpackContentItem> targetSet = uniqueObjects(allTargetItems);
 			Set<Jsons.ModpackContentFields.ModpackContentItem> uncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
 			if (uncached.isEmpty()) {
-				LOGGER.info("Preload reused all {} verified selected modpack objects", targetSet.size());
+				LOGGER.info("Preload reused all {} verified complete modpack objects", targetSet.size());
 				return;
 			}
 
@@ -326,8 +330,14 @@ public class ModpackUpdater implements AutoCloseable {
 			if (!downloadModpack(uncached, start, fetchManager, false)) throw new IOException("One or more selected modpack objects could not be acquired");
 			Set<Jsons.ModpackContentFields.ModpackContentItem> stillUncached = ModpackUtils.identifyUncachedFiles(targetSet, cache, storage);
 			if (!stillUncached.isEmpty()) throw new IOException("Verified CAS objects are still missing after preload: " + stillUncached.size());
-			LOGGER.info("Preloaded {} selected modpack objects in {}ms", targetSet.size(), System.currentTimeMillis() - start);
+			LOGGER.info("Preloaded {} complete modpack objects in {}ms", targetSet.size(), System.currentTimeMillis() - start);
 		}
+	}
+
+	private static Set<Jsons.ModpackContentFields.ModpackContentItem> uniqueObjects(Collection<Jsons.ModpackContentFields.ModpackContentItem> items) {
+		Map<String, Jsons.ModpackContentFields.ModpackContentItem> unique = new LinkedHashMap<>();
+		for (var item : items) unique.putIfAbsent(item.sha1.toLowerCase(Locale.ROOT), item);
+		return new LinkedHashSet<>(unique.values());
 	}
 
 	private void loadSelectedActiveProjection() throws Exception {
@@ -392,7 +402,9 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private RemovalPreparation prepareRemoval() throws Exception {
 		Jsons.ModpackContentFields installed = storedTarget();
-		Jsons.CompleteModpackContentFields completeFields = new ClientGenerationStore(storage).read(storage.readActiveState().generationId)
+		Jsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		if (activeState == null || !installed.modpackId.equals(activeState.modpackId)) throw new IOException("Active modpack generation state is missing");
+		Jsons.CompleteModpackContentFields completeFields = new ClientGenerationStore(storage).read(activeState.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing")).toFields();
 		Jsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(installed.modpackId), Jsons.ClientBaselineFields.class)
 				.orElseGet(() -> {
@@ -405,9 +417,12 @@ public class ModpackUpdater implements AutoCloseable {
 		Jsons.ClientConfigFieldsV3 plannedConfig = new Jsons.ClientConfigFieldsV3(currentConfig);
 		if (installed.modpackId.equals(plannedConfig.selectedModpackId)) plannedConfig.selectedModpackId = "";
 		clientConfig = currentConfig;
+		SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
+		GeneratedCopyState generatedCopies = expectedPriorIntent == null ? null : readGeneratedCopyState(installed, expectedPriorIntent);
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, cache,
+			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null,
+					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
 			Set<String> availableBaselineObjects = new HashSet<>();
 			if (baseline.entries != null) for (var entry : baseline.entries) {
@@ -415,8 +430,7 @@ public class ModpackUpdater implements AutoCloseable {
 				String hash = entry.objectHash.toLowerCase(Locale.ROOT);
 				if (SmartFileUtils.isValidFile(storage.objectsDirectory().resolve(hash), entry.size, hash)) availableBaselineObjects.add(hash);
 			}
-			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaselineObjects, plannedConfig));
-			SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
+			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaselineObjects, generatedCopies, plannedConfig));
 			return new RemovalPreparation(plan, completeFields, installed, baseline, expectedPriorIntent, plannedConfig, files);
 		}
 	}
@@ -806,25 +820,30 @@ public class ModpackUpdater implements AutoCloseable {
 		ClientOverlaySnapshot targetOverlay = storage.overlaySnapshot(target.modpackId, cache);
 		overlaySnapshots.put(target.modpackId, targetOverlay);
 		UpdatePlanner.SelectionContext selection = selectionContext(cache, overlaySnapshots);
-		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, selection, cache, overlaySnapshots);
+		GeneratedCopyState previousGeneratedState = installed == null ? null : readGeneratedCopyState(installed, selection);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, selection,
+				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), cache, overlaySnapshots);
 		if (prepareObjects) populateStoreFromActive(target, cache);
 		Set<String> forceCopyServices = getForceCopyMods(target).stream().map(UpdatePlanner::normalize).collect(Collectors.toSet());
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(target, cache, modCache);
 		List<UpdatePlan.ModInfo> standardMods = inspectStandardMods(cache, modCache);
-		List<UpdatePlan.NestedCopy> nestedCopies = prepareObjects ? inspectNestedCopies(target, cache) : List.of();
+		List<UpdatePlan.NestedCopy> nestedCopies = prepareObjects
+				? inspectNestedCopies(target, cache)
+				: readGeneratedCopyState(target, selectedTarget.selection().intent()).nestedCopies();
 		Jsons.ClientConfigFieldsV3 plannedConfig = connectionInfo == null || !connectionInfo.isComplete()
 				? ModpackUtils.planCachedModpackSelection(target.modpackId)
 				: ModpackUtils.planModpackSelection(target.modpackId, connectionInfo);
 		Map<String, UpdatePlan.FileState> editableOverlays = files.entrySet().stream().filter(entry -> entry.getKey().root() == UpdatePlan.Root.OVERLAY)
 				.collect(Collectors.toMap(entry -> entry.getKey().relativePath(), Map.Entry::getValue));
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, editableOverlays, forceCopyServices, targetMods, standardMods, nestedCopies, selection, plannedConfig));
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, editableOverlays, forceCopyServices, targetMods, standardMods,
+				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), nestedCopies, selection, plannedConfig));
 		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(target.loader, target.loaderVersion)) return new PreparedPlan(plan, files, targetOverlay.digest());
 		Set<UpdatePlan.RestartReason> restartReasons = EnumSet.noneOf(UpdatePlan.RestartReason.class);
 		restartReasons.addAll(plan.restartReasons());
 		restartReasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
 		UpdatePlan withLoaderRestart = new UpdatePlan(plan.modpackId(), plan.generationTarget(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(),
-				restartReasons, plan.preservations(), plan.baselineCaptures(), plan.conflicts());
+				restartReasons, plan.preservations(), plan.baselineCaptures(), plan.conflicts(), plan.generatedCopies());
 		return new PreparedPlan(withLoaderRestart, files, targetOverlay.digest());
 	}
 
@@ -934,36 +953,36 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void populateStoreFromActive(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
-		if (target.list == null) return;
-		for (var item : target.list) {
-			Path object = storage.objectsDirectory().resolve(item.sha1);
-			long size = Long.parseLong(item.size);
-			if (SmartFileUtils.isValidFile(object, size, item.sha1)) continue;
-			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
-			populateStoreObject(source, object, size, item.sha1, cache);
-		}
+		populateStoreFromSources(target, cache, item -> List.of(SmartFileUtils.getPath(storage.activeDirectory(), item.file)));
 	}
 
 	private void populateStoreFromCachedLocations(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
+		populateStoreFromSources(target, cache,
+				item -> List.of(SmartFileUtils.getPath(storage.activeDirectory(), item.file), livePath(item)));
+	}
+
+	private void populateStoreFromSources(Jsons.ModpackContentFields target, FileMetadataCache cache,
+			Function<Jsons.ModpackContentFields.ModpackContentItem, List<Path>> sourceResolver) throws IOException {
 		if (target.list == null) return;
 		for (var item : target.list) {
-			long size = Long.parseLong(item.size);
 			Path object = storage.objectsDirectory().resolve(item.sha1);
+			long size = Long.parseLong(item.size);
 			if (SmartFileUtils.isValidFile(object, size, item.sha1)) continue;
-			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
-			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) source = livePath(item);
-			populateStoreObject(source, object, size, item.sha1, cache);
+			for (Path source : sourceResolver.apply(item))
+				if (populateStoreObject(source, object, size, item.sha1, cache)) break;
 		}
 	}
 
-	private static void populateStoreObject(Path source, Path object, long size, String sha1, FileMetadataCache cache) throws IOException {
-		if (!SmartFileUtils.isValidFile(source, size, sha1)) return;
+	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileMetadataCache cache) throws IOException {
+		if (!SmartFileUtils.isValidFile(source, size, sha1)) return false;
 		SmartFileUtils.copyVerifiedAtomic(source, object, size, sha1);
 		cache.overwriteCache(object, sha1);
+		return true;
 	}
 
 	private Map<UpdatePlan.FileKey, UpdatePlan.FileState> inspectFiles(Jsons.ModpackContentFields target, Jsons.ModpackContentFields installed,
-			UpdatePlanner.SelectionContext selection, FileMetadataCache cache, Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
+			UpdatePlanner.SelectionContext selection, List<UpdatePlan.NestedCopy> previousGeneratedCopies, FileMetadataCache cache,
+			Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = new HashMap<>();
 		if (Files.isDirectory(storage.activeDirectory())) {
 			try (Stream<Path> stream = Files.walk(storage.activeDirectory())) {
@@ -982,6 +1001,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (target.list != null) target.list.forEach(item -> gamePaths.add(item.file));
 		if (installed != null && installed.list != null) installed.list.forEach(item -> gamePaths.add(item.file));
 		if (selection != null && selection.previousManifest() != null && selection.previousManifest().list != null) selection.previousManifest().list.forEach(item -> gamePaths.add(item.file));
+		previousGeneratedCopies.forEach(copy -> gamePaths.add(copy.relativePath()));
 		if (installed != null && installed.ownershipLedger != null && installed.ownershipLedger.entries != null)
 			installed.ownershipLedger.entries.forEach(entry -> {
 				if (entry != null) gamePaths.add(entry.logicalPath);
@@ -1006,6 +1026,17 @@ public class ModpackUpdater implements AutoCloseable {
 			if (path.startsWith(storage.gameDirectory()) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, key.root(), storage.gameDirectory(), path, cache);
 		}
 		return files;
+	}
+
+	private GeneratedCopyState readGeneratedCopyState(Jsons.ModpackContentFields manifest, UpdatePlanner.SelectionContext selection) throws IOException {
+		SelectionIntent intent = selection == null ? null : new ClientSelectionStore(storage.selectionFile()).get(manifest.modpackId).orElse(null);
+		return intent == null ? null : readGeneratedCopyState(manifest, intent);
+	}
+
+	private GeneratedCopyState readGeneratedCopyState(Jsons.ModpackContentFields manifest, SelectionIntent intent) throws IOException {
+		String digest = UpdateTransaction.digest(intent);
+		if (digest.isEmpty()) throw new IOException("Cannot read generated-copy state without a selected group intent");
+		return GeneratedCopyState.read(storage, manifest.modpackId, manifest.targetGenerationId, digest);
 	}
 
 	private void putFileState(Map<UpdatePlan.FileKey, UpdatePlan.FileState> files, UpdatePlan.Root root, Path rootPath, Path path,

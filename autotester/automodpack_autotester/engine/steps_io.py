@@ -5,6 +5,7 @@ dedicated verb is needed for them.
 """
 from __future__ import annotations
 
+import base64
 import json
 from fnmatch import fnmatch
 from pathlib import Path
@@ -38,6 +39,23 @@ def wait_file(ctx, step):
     )
 
 
+@verb("wait_file_content")
+def wait_file_content(ctx, step):
+    """Wait until a UTF-8 file contains the exact requested content."""
+    template = str(step["path"])
+    expected = str(ctx.resolve(step.get("content", "")))
+    path = ctx.path(template)
+    timeout = parse_duration(step.get("timeout"), default=300)
+
+    def _matches():
+        try:
+            return True if path.read_text(encoding="utf-8") == expected else None
+        except (FileNotFoundError, IsADirectoryError, OSError):
+            return None
+
+    await_condition(_matches, timeout, step.get("poll"), f"file {template} did not contain the expected content")
+
+
 @verb("wait_files")
 def wait_files(ctx, step):
     root = ctx.game_dir / ctx.resolve(str(step.get("root", "")))
@@ -68,6 +86,40 @@ def verify_mods(ctx, step):
     await_condition(_all, timeout, step.get("poll"), "expected mods missing")
 
 
+def _read_active_generation(ctx, expected_patch_notes=None):
+    state_path = ctx.game_dir / "automodpack" / "client" / "active-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    if not isinstance(state, dict):
+        raise ValueError("active generation state is not an object")
+    modpack_id = state["modpackId"]
+    generation_id = state["generationId"]
+    if state.get("status") != "ACTIVE" or not isinstance(modpack_id, str) or not isinstance(generation_id, str):
+        raise ValueError("active generation state is not committed")
+    record_path = ctx.game_dir / "automodpack" / "client" / "records" / generation_id / "manifest.json"
+    manifest = json.loads(record_path.read_text(encoding="utf-8"))
+    generation = manifest.get("generation") if isinstance(manifest, dict) else None
+    if not isinstance(generation, dict) or manifest.get("modpackId") != modpack_id or generation.get("generationId") != generation_id:
+        raise ValueError("active generation state does not match its immutable record")
+    if expected_patch_notes is not None and generation.get("patchNotes") != expected_patch_notes:
+        raise ValueError("active generation patch notes are not committed")
+    return state, manifest
+
+
+@verb("wait_generation")
+def wait_generation(ctx, step):
+    """Wait until active-state.json and its immutable generation record are committed."""
+    timeout = parse_duration(step.get("timeout"), default=300)
+    expected_patch_notes = str(ctx.resolve(step["patchNotes"])) if "patchNotes" in step else None
+
+    def _committed():
+        try:
+            return _read_active_generation(ctx, expected_patch_notes)
+        except (FileNotFoundError, IsADirectoryError, OSError, TypeError, ValueError, json.JSONDecodeError):
+            return None
+
+    await_condition(_committed, timeout, step.get("poll"), "active generation state was not committed")
+
+
 @verb("assert_file_content")
 def assert_file_content(ctx, step):
     """Assert the exact UTF-8 contents of a file under the client game directory."""
@@ -81,13 +133,94 @@ def assert_file_content(ctx, step):
         raise AssertionError(f"file {path} contents differ: expected {expected!r}, got {actual!r}")
 
 
+@verb("write_file")
+def write_file(ctx, step):
+    """Write deterministic local content under the client game directory."""
+    raw_path = Path(str(ctx.resolve(step["path"])))
+    path = ctx.path(raw_path)
+    if raw_path.is_absolute() or not path.resolve().is_relative_to(ctx.game_dir.resolve()):
+        raise ValueError(f"local file path escapes the client game directory: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(ctx.resolve(step.get("content", ""))), encoding="utf-8")
+
+
+@verb("assert_bootstrap_import")
+def assert_bootstrap_import(ctx, _step):
+    """Assert that Preload imported and consumed the real bootstrap file."""
+    expected = {
+        "origin": str(ctx.vars.get("bootstrap_origin", "")),
+        "endpoint": str(ctx.vars.get("bootstrap_endpoint", "")),
+        "fingerprint": str(ctx.vars.get("bootstrap_fingerprint", "")),
+        "modpackId": str(ctx.vars.get("bootstrap_modpack_id", "")),
+        "connectionMode": str(ctx.vars.get("bootstrap_connection_mode", "")),
+    }
+    if not all(expected.values()):
+        raise AssertionError("bootstrap expectations were not captured by seed_bootstrap")
+    bootstrap_path = ctx.game_dir / "automodpack-bootstrap.json"
+    if bootstrap_path.exists():
+        raise AssertionError(f"Preload did not delete imported bootstrap file: {bootstrap_path}")
+    try:
+        client_config = json.loads((ctx.game_dir / "automodpack" / "client-config.json").read_text(encoding="utf-8"))
+        known_hosts = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "known-hosts.json").read_text(encoding="utf-8"))
+        connection = json.loads((ctx.game_dir / "automodpack" / "client" / "data" / "packs" / expected["modpackId"] / "connection.json").read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"Preload did not persist bootstrap state: {error}") from error
+    if client_config.get("selectedModpackId") != expected["modpackId"]:
+        raise AssertionError(f"bootstrap selectedModpackId mismatch: expected {expected['modpackId']!r}, got {client_config.get('selectedModpackId')!r}")
+    host = known_hosts.get("hosts", {}).get(expected["origin"])
+    normalized_expected_fingerprint = expected["fingerprint"].replace(":", "").lower()
+    if (not isinstance(host, dict) or host.get("reason") != "SEED"
+            or str(host.get("fingerprint", "")).replace(":", "").lower() != normalized_expected_fingerprint):
+        raise AssertionError(f"bootstrap trust pin was not seeded for {expected['origin']!r}: {host!r}")
+    actual = connection.get("connection", {})
+    for field in ("origin", "endpoint", "connectionMode"):
+        if actual.get(field) != expected[field]:
+            raise AssertionError(f"bootstrap connection {field} mismatch: expected {expected[field]!r}, got {actual.get(field)!r}")
+
+
+@verb("assert_authenticated_secret")
+def assert_authenticated_secret(ctx, _step):
+    """Assert that authenticated login persisted the same non-anonymous secret on both sides."""
+    modpack_id = str(ctx.vars.get("bootstrap_modpack_id", ""))
+    origin = str(ctx.vars.get("bootstrap_origin", ""))
+    if not modpack_id or not origin:
+        raise AssertionError("bootstrap identity was not captured before authenticated secret assertion")
+    connection_path = ctx.game_dir / "automodpack" / "client" / "data" / "packs" / modpack_id / "connection.json"
+    server_secrets_path = ctx.server_dir / "automodpack" / "server" / "secrets.json"
+    try:
+        connection = json.loads(connection_path.read_text(encoding="utf-8"))
+        server_secrets = json.loads(server_secrets_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise AssertionError(f"authenticated secret state is not readable: {error}") from error
+    client_secret = (connection.get("secrets", {}) or {}).get(origin)
+    if not isinstance(client_secret, dict):
+        raise AssertionError("authenticated login did not persist a client secret for the bootstrap origin")
+    value = client_secret.get("secret")
+    timestamp = client_secret.get("timestamp")
+    anonymous = base64.urlsafe_b64encode(bytes(32)).decode("ascii").rstrip("=")
+    if not isinstance(value, str) or not value or value == anonymous or not isinstance(timestamp, (int, float)) or timestamp <= 0:
+        raise AssertionError("persisted client secret is missing, anonymous, or has no valid timestamp")
+    matching_server_secrets = [entry for entry in (server_secrets.get("secrets", {}) or {}).values() if isinstance(entry, dict) and entry.get("secret") == value]
+    if not matching_server_secrets:
+        raise AssertionError("server did not persist the secret issued during authenticated login")
+    ctx.vars["authenticated_secret_persisted"] = True
+
+
 @verb("seed_unowned_local_file")
 def seed_unowned_local_file(ctx, step):
-    """Create a deterministic local file used to verify non-pack content survives switching."""
+    """Create deterministic local content used to verify non-pack content survives switching."""
     raw_path = Path(str(ctx.resolve(step["path"])))
     path = ctx.path(raw_path)
     if raw_path.is_absolute() or not path.resolve().is_relative_to(ctx.game_dir.resolve()):
         raise ValueError(f"local fixture path escapes the client game directory: {path}")
+    fixture = ctx.resolve(step.get("fixture"))
+    if fixture is not None:
+        if not isinstance(fixture, dict):
+            raise ValueError("unowned local fixture must be a valid mod fixture mapping")
+        write_valid_mod_fixture(path, fixture, ctx.target.minecraft)
+        return
+    if path.suffix.lower() == ".jar":
+        raise ValueError("unowned local .jar files require a valid mod fixture mapping")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(str(ctx.resolve(step.get("content", ""))), encoding="utf-8")
 
@@ -102,9 +235,24 @@ def seed_same_path_conflict(ctx, step):
     path = ctx.path(raw_path)
     if raw_path.is_absolute() or not path.resolve().is_relative_to(ctx.game_dir.resolve()):
         raise ValueError(f"local fixture path escapes the client game directory: {path}")
-    write_valid_mod_fixture(path, fixture)
+    write_valid_mod_fixture(path, fixture, ctx.target.minecraft)
     ctx.vars["same_path_conflict_path"] = str(ctx.resolve(step["path"]))
     ctx.vars["same_path_conflict_fixture"] = fixture
+
+
+@verb("seed_mod_fixture")
+def seed_mod_fixture(ctx, step):
+    """Place a valid deterministic mod archive in the ordinary game mods directory."""
+    fixture = ctx.resolve(step.get("fixture"))
+    if not isinstance(fixture, dict):
+        raise ValueError("mod fixture requires a valid fixture mapping")
+    raw_path = Path(str(ctx.resolve(step["path"])))
+    path = ctx.path(raw_path)
+    if raw_path.is_absolute() or not path.resolve().is_relative_to(ctx.game_dir.resolve()):
+        raise ValueError(f"mod fixture path escapes the client game directory: {path}")
+    if raw_path.parts[:1] != ("mods",) or raw_path.suffix.lower() != ".jar":
+        raise ValueError("mod fixtures must use a .jar path under the ordinary mods directory")
+    write_valid_mod_fixture(path, fixture, ctx.target.minecraft)
 
 
 @verb("assert_mod_fixture")
@@ -115,7 +263,7 @@ def assert_mod_fixture(ctx, step):
     if not isinstance(fixture, dict):
         raise ValueError("mod fixture assertion requires a fixture mapping")
     try:
-        assert_valid_mod_fixture(path.read_bytes(), fixture)
+        assert_valid_mod_fixture(path.read_bytes(), fixture, ctx.target.minecraft)
     except (FileNotFoundError, IsADirectoryError, OSError) as error:
         raise AssertionError(f"mod fixture {path} is not readable: {error}") from error
 
@@ -132,7 +280,7 @@ def assert_quarantine_payload(ctx, step):
     for payload in sorted(conflicts.glob("*/payload")):
         try:
             if isinstance(fixture, dict):
-                assert_valid_mod_fixture(payload.read_bytes(), fixture)
+                assert_valid_mod_fixture(payload.read_bytes(), fixture, ctx.target.minecraft)
                 return
             if payload.read_text(encoding="utf-8") == expected:
                 return
@@ -144,11 +292,8 @@ def assert_quarantine_payload(ctx, step):
 @verb("assert_generation")
 def assert_generation(ctx, step):
     """Assert installed generation metadata without coupling scenarios to Java internals."""
-    state_path = ctx.game_dir / "automodpack" / "client" / "active-state.json"
     try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-        record_path = ctx.game_dir / "automodpack" / "client" / "records" / state["generationId"] / "manifest.json"
-        manifest = json.loads(record_path.read_text(encoding="utf-8"))
+        _state, manifest = _read_active_generation(ctx)
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"active generation metadata is invalid: {error}") from error
     for group_id, requirements in (step.get("groups", {}) or {}).items():

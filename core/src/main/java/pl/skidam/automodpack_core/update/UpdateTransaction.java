@@ -53,6 +53,7 @@ public final class UpdateTransaction {
 	public List<Preservation> plannedPreservations;
 	public List<BaselineCapture> plannedBaselineCaptures;
 	public List<Conflict> plannedConflicts;
+	public Jsons.ClientGeneratedCopiesFields plannedGeneratedCopies;
 	public Status resultStatus;
 	public String resultOperation;
 	public String resultPath;
@@ -79,6 +80,7 @@ public final class UpdateTransaction {
 		transaction.selectionDigest = digest(target.selection().intent());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		fillPlan(transaction, plan);
+		transaction.plannedGeneratedCopies = GeneratedCopyState.fromCopies(plan.modpackId(), plan.generationTarget().targetGenerationId(), digest(target.selection().intent()), plan.generatedCopies()).toFields();
 		return transaction;
 	}
 
@@ -144,6 +146,7 @@ public final class UpdateTransaction {
 		transaction.plannedPreservations = new ArrayList<>();
 		transaction.plannedBaselineCaptures = new ArrayList<>();
 		transaction.plannedConflicts = new ArrayList<>();
+		transaction.plannedGeneratedCopies = null;
 		return transaction;
 	}
 
