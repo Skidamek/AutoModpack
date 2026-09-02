@@ -178,12 +178,13 @@ final class InstalledModpackController {
 					updater = connection.newUpdater(target, storage);
 				}
 				ModpackUtils.UpdateCheckResult updateResult = ModpackUtils.isUpdate(target.flatTarget(), storage);
+				ModpackUtils.reprotectActiveFiles(target.flatTarget(), storage);
 				if (!updater.requiresUpdateBeforeLogin(updateResult)) {
 					updater.close();
 					releaseOnClient(() -> completed.accept(true));
 					return;
 				}
-				updater.processModpackUpdate(updateResult, false);
+				updater.processModpackUpdate(false);
 				releaseOnClient(() -> completed.accept(false));
 			} catch (Exception e) {
 				if (updater != null) updater.close();

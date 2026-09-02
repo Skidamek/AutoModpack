@@ -270,10 +270,7 @@ public class ModpackUpdater implements AutoCloseable {
 			break;
 		}
 		if (sha1 == null || sha1.isBlank()) return List.of();
-		FetchManager.Datas data = manager.getFetchDatas().get(sha1);
-		if (data == null) data = manager.getFetchDatas().get(sha1.toLowerCase(Locale.ROOT));
-		if (data == null || data.fetchedData().mainPageUrls().isEmpty()) return List.of();
-		return List.copyOf(data.fetchedData().mainPageUrls());
+		return manager.mainPageUrlsFor(sha1);
 	}
 
 	private void startSourceFetch() throws IOException {
@@ -299,13 +296,7 @@ public class ModpackUpdater implements AutoCloseable {
 	boolean firstPartyHit(String sha1) {
 		FetchManager manager = sourceFetchManager;
 		if (manager == null || sha1 == null || sha1.isBlank()) return false;
-		FetchManager.Datas data = manager.getFetchDatas().get(sha1);
-		if (data == null) data = manager.getFetchDatas().get(sha1.toLowerCase(Locale.ROOT));
-		if (data == null) return false;
-		List<DownloadSource> sources = data.fetchedData().sources();
-		synchronized (sources) {
-			return !sources.isEmpty();
-		}
+		return manager.hasSource(sha1);
 	}
 
 	/** Selected flat-target jar paths without a Modrinth/CurseForge hash hit. */
@@ -336,7 +327,7 @@ public class ModpackUpdater implements AutoCloseable {
 		List<FetchManager.FetchData> fetchData = new ArrayList<>(unique.values());
 		if (fetchData.isEmpty()) return null;
 		FetchManager current = sourceFetchManager;
-		if (current != null && fetchData.stream().allMatch(item -> current.getFetchDatas().containsKey(item.sha1()))) return current;
+		if (current != null && fetchData.stream().allMatch(item -> current.tracks(item.sha1()))) return current;
 		if (current != null) current.cancel();
 		sourceFetchManager = newSourceFetchManager(fetchData);
 		return sourceFetchManager;
@@ -388,7 +379,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** When {@code showWaitingScreen} is false a player-facing screen already owns the wait and shows its own busy state. */
-	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result, boolean showWaitingScreen) {
+	public void processModpackUpdate(boolean showWaitingScreen) {
 		if (preload) {
 			applySelectedTargetWithoutReview(false);
 			return;
@@ -414,7 +405,7 @@ public class ModpackUpdater implements AutoCloseable {
 				startInstalledSwitch(showWaitingScreen);
 			} else {
 				// Handle existing modpack
-				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, storage);
+				ModpackUtils.reprotectActiveFiles(serverModpackContent, storage);
 
 				startUpdate(showWaitingScreen);
 			}
@@ -941,10 +932,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 			Path downloadFile = storage.activePath(serverFilePath);
 
-			List<DownloadSource> sources = new ArrayList<>();
-			if (fetchManager != null && fetchManager.getFetchDatas().containsKey(serverFileHash)) {
-				sources.addAll(fetchManager.getFetchDatas().get(serverFileHash).fetchedData().sources());
-			}
+			List<DownloadSource> sources = fetchManager == null ? List.of() : fetchManager.sourcesFor(serverFileHash);
 
 			Consumer<DownloadManager.FailureCategory> failureCallback = category -> {
 				failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
@@ -1013,9 +1001,9 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 		Map<UpdatePlan.FileKey, List<String>> resolved = new LinkedHashMap<>();
 		for (var entry : hashes.entrySet()) {
-			FetchManager.Datas data = manager.getFetchDatas().get(entry.getValue());
-			if (data == null || data.fetchedData().mainPageUrls().isEmpty()) continue;
-			resolved.put(entry.getKey(), List.copyOf(data.fetchedData().mainPageUrls()));
+			List<String> mainPageUrls = manager.mainPageUrlsFor(entry.getValue());
+			if (mainPageUrls.isEmpty()) continue;
+			resolved.put(entry.getKey(), mainPageUrls);
 		}
 		Map<UpdatePlan.FileKey, List<String>> references = Map.copyOf(resolved);
 		return (location, path) -> {
