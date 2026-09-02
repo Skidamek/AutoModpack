@@ -6,10 +6,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -22,7 +22,8 @@ public class ModFileCache implements AutoCloseable {
 	private static final String RECORD_SUFFIX = ".json";
 
 	private final Path recordsDirectory;
-	private final Map<String, ModRecord> hotRecords = new HashMap<>();
+	/* Scanner threads operate on different hashes through different per-key locks, so the map itself must be concurrent. */
+	private final Map<String, ModRecord> hotRecords = new ConcurrentHashMap<>();
 	private final Object[] locks = new Object[64];
 
 	public static ModFileCache open(Path path) throws IOException {

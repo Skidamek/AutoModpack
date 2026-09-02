@@ -9,9 +9,9 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -42,7 +42,8 @@ public class FileMetadataCache implements AutoCloseable {
 	private static final long UNAVAILABLE_CHANGE_TIME_NANOS = Long.MIN_VALUE;
 
 	private final Path recordsDirectory;
-	private final Map<String, CachedFile> hotRecords = new HashMap<>();
+	/* Hot records are read/written from scanner threads holding different per-key locks, so the map itself must be concurrent. */
+	private final Map<String, CachedFile> hotRecords = new ConcurrentHashMap<>();
 	private final Object[] locks = new Object[64];
 
 	public static final class CachedFile {
