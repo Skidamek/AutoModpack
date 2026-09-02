@@ -612,10 +612,12 @@ flow:
     name: open the preservation archive
     select: { text: Preserved files }
   # The vault lists newest first and the headless window fits one row per page,
-  # so the claim sits behind the newer pack-b deactivation claim and needs paging.
+  # so the claim usually sits behind the newer pack-b deactivation claim and needs paging;
+  # a run that already opens on it skips the page turn.
   - do: click
     name: page past the newer deactivation claim
     select: { key: automodpack.ui.next }
+    skip_if: { element: { text: amp-autotest-conflict.jar, enabled: true } }
   - do: wait_for
     name: show the preserved local conflict after paging
     until:
@@ -1116,10 +1118,12 @@ flow:
     name: reopen the preservation vault after repair
     select: { text: Preserved files }
   # The vault lists newest first and the discarded unowned-mod claim was newer than the
-  # surviving editable-reset claim, so the survivor sits one page behind on the short window.
+  # surviving editable-reset claim, so the survivor usually sits one page behind on the
+  # short window; a run that already opens on it skips the page turn.
   - do: click
     name: page past the surviving strict-repair claim
     select: { key: automodpack.ui.next }
+    skip_if: { element: { text: pack-shared-editable.txt, enabled: true } }
   - do: wait_for
     name: show the surviving editable-reset claim
     timeout: 30s
