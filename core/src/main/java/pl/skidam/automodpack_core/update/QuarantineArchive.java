@@ -16,8 +16,8 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -28,7 +28,7 @@ import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 /** Durable per-modpack storage for local files displaced by an ownership conflict. */
 public final class QuarantineArchive {
-	private static final Comparator<Jsons.ClientQuarantineFields.EntryFields> ENTRY_ORDER = Comparator.comparing(entry -> entry.conflictId);
+	private static final Comparator<ClientStorageJsons.ClientQuarantineFields.EntryFields> ENTRY_ORDER = Comparator.comparing(entry -> entry.conflictId);
 	private static final Object MUTATION_LOCK = new Object();
 
 	private QuarantineArchive() {}
@@ -45,8 +45,8 @@ public final class QuarantineArchive {
 
 	public static void archive(ClientStorage storage, String generationId, Conflict conflict) throws IOException {
 		synchronized (MUTATION_LOCK) {
-			Jsons.ClientQuarantineFields archive = read(storage, conflict.modpackId());
-			Jsons.ClientQuarantineFields.EntryFields existing = archive.entries.stream().filter(entry -> conflict.conflictId().equals(entry.conflictId)).findFirst().orElse(null);
+			ClientStorageJsons.ClientQuarantineFields archive = read(storage, conflict.modpackId());
+			ClientStorageJsons.ClientQuarantineFields.EntryFields existing = archive.entries.stream().filter(entry -> conflict.conflictId().equals(entry.conflictId)).findFirst().orElse(null);
 			Path payload = storage.quarantinePayload(conflict.modpackId(), conflict.conflictId());
 			if (existing != null) {
 				validateEntryPayload(storage, conflict.modpackId(), existing);
@@ -61,7 +61,7 @@ public final class QuarantineArchive {
 			validateNoSymbolicLinkDescendants(storage.quarantinePackDirectory(conflict.modpackId()), payload);
 			Files.createDirectories(payload.getParent());
 			SmartFileUtils.copyVerifiedAtomic(source, payload, conflict.sourceSize(), conflict.sourceHash());
-			Jsons.ClientQuarantineFields.EntryFields entry = toFields(storage, generationId, conflict);
+			ClientStorageJsons.ClientQuarantineFields.EntryFields entry = toFields(storage, generationId, conflict);
 			archive.entries = new ArrayList<>(archive.entries);
 			archive.entries.add(entry);
 			archive.entries.sort(ENTRY_ORDER);
@@ -70,9 +70,9 @@ public final class QuarantineArchive {
 		}
 	}
 
-	public static Jsons.ClientQuarantineFields read(ClientStorage storage, String modpackId) throws IOException {
-		Jsons.ClientQuarantineFields archive = readManifest(storage, modpackId);
-		for (Jsons.ClientQuarantineFields.EntryFields entry : archive.entries) validateEntryPayload(storage, archive.modpackId, entry);
+	public static ClientStorageJsons.ClientQuarantineFields read(ClientStorage storage, String modpackId) throws IOException {
+		ClientStorageJsons.ClientQuarantineFields archive = readManifest(storage, modpackId);
+		for (ClientStorageJsons.ClientQuarantineFields.EntryFields entry : archive.entries) validateEntryPayload(storage, archive.modpackId, entry);
 		return archive;
 	}
 
@@ -81,11 +81,11 @@ public final class QuarantineArchive {
 		return !readManifest(storage, modpackId).entries.isEmpty();
 	}
 
-	private static Jsons.ClientQuarantineFields readManifest(ClientStorage storage, String modpackId) throws IOException {
+	private static ClientStorageJsons.ClientQuarantineFields readManifest(ClientStorage storage, String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		Path root = storage.quarantinePackDirectory(normalizedModpackId);
 		if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) {
-			Jsons.ClientQuarantineFields empty = new Jsons.ClientQuarantineFields();
+			ClientStorageJsons.ClientQuarantineFields empty = new ClientStorageJsons.ClientQuarantineFields();
 			empty.modpackId = normalizedModpackId;
 			empty.entries = new ArrayList<>();
 			return empty;
@@ -94,27 +94,27 @@ public final class QuarantineArchive {
 		Path manifest = storage.quarantineManifest(normalizedModpackId);
 		if (Files.notExists(manifest, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client quarantine manifest is missing: " + manifest);
 		if (Files.isSymbolicLink(manifest) || !Files.isRegularFile(manifest, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client quarantine manifest is invalid: " + manifest);
-		Jsons.ClientQuarantineFields archive;
+		ClientStorageJsons.ClientQuarantineFields archive;
 		try {
-			archive = ConfigTools.read(manifest, Jsons.ClientQuarantineFields.class).orElseThrow(() -> new IOException("Client quarantine manifest is empty"));
+			archive = ConfigTools.read(manifest, ClientStorageJsons.ClientQuarantineFields.class).orElseThrow(() -> new IOException("Client quarantine manifest is empty"));
 		} catch (RuntimeException e) {
 			throw new IOException("Client quarantine manifest is invalid", e);
 		}
 		if (archive.schemaVersion != 1 || !normalizedModpackId.equals(archive.modpackId) || archive.entries == null)
 			throw new IOException("Client quarantine manifest identity is invalid");
 		Set<String> ids = new HashSet<>();
-		for (Jsons.ClientQuarantineFields.EntryFields entry : archive.entries) {
+		for (ClientStorageJsons.ClientQuarantineFields.EntryFields entry : archive.entries) {
 			if (entry == null || !ids.add(entry.conflictId)) throw new IOException("Client quarantine contains duplicate or incomplete entries");
 			validateEntryMetadata(storage, normalizedModpackId, entry);
 		}
-		List<Jsons.ClientQuarantineFields.EntryFields> sorted = new ArrayList<>(archive.entries);
+		List<ClientStorageJsons.ClientQuarantineFields.EntryFields> sorted = new ArrayList<>(archive.entries);
 		sorted.sort(ENTRY_ORDER);
 		if (!sorted.equals(archive.entries)) throw new IOException("Client quarantine entries are not ordered");
 		return archive;
 	}
 
 	public static Snapshot snapshot(ClientStorage storage, String modpackId) throws IOException {
-		Jsons.ClientQuarantineFields archive = read(storage, modpackId);
+		ClientStorageJsons.ClientQuarantineFields archive = read(storage, modpackId);
 		return new Snapshot(archive.modpackId, archive.entries.stream().map(entry -> new ArchiveEntry(entry.conflictId, new TreeSet<>(entry.modIds), entry.sourcePath,
 				entry.sourceHash.toLowerCase(Locale.ROOT), entry.sourceSize, entry.targetPath, entry.targetHash.toLowerCase(Locale.ROOT), entry.targetSize,
 				entry.sourceGenerationId, entry.quarantinedAt)).toList());
@@ -125,10 +125,10 @@ public final class QuarantineArchive {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		if (conflictId == null || !conflictId.matches("[0-9a-f]{40}")) throw new IOException("Invalid quarantine conflict ID");
 		synchronized (MUTATION_LOCK) {
-			Jsons.ClientQuarantineFields archive = read(storage, normalizedModpackId);
-			Jsons.ClientQuarantineFields.EntryFields entry = archive.entries.stream().filter(value -> conflictId.equals(value.conflictId)).findFirst()
+			ClientStorageJsons.ClientQuarantineFields archive = read(storage, normalizedModpackId);
+			ClientStorageJsons.ClientQuarantineFields.EntryFields entry = archive.entries.stream().filter(value -> conflictId.equals(value.conflictId)).findFirst()
 					.orElseThrow(() -> new IOException("Quarantine entry is no longer available: " + conflictId));
-			Jsons.ClientGenerationStateFields activeState = storage.readActiveState();
+			ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 			if (activeState == null || !normalizedModpackId.equals(activeState.modpackId))
 				throw new IOException("The modpack must be active before a quarantined mod can be restored");
 			SelectedModpackTarget activeTarget = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current())
@@ -155,7 +155,7 @@ public final class QuarantineArchive {
 					throw new IOException("Restored destination failed verification: " + destination);
 			}
 
-			Jsons.ClientQuarantineFields remaining = new Jsons.ClientQuarantineFields();
+			ClientStorageJsons.ClientQuarantineFields remaining = new ClientStorageJsons.ClientQuarantineFields();
 			remaining.modpackId = normalizedModpackId;
 			remaining.entries = archive.entries.stream().filter(value -> !conflictId.equals(value.conflictId)).toList();
 			write(storage, normalizedModpackId, remaining);
@@ -249,7 +249,7 @@ public final class QuarantineArchive {
 		}
 	}
 
-	private static void write(ClientStorage storage, String modpackId, Jsons.ClientQuarantineFields archive) throws IOException {
+	private static void write(ClientStorage storage, String modpackId, ClientStorageJsons.ClientQuarantineFields archive) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		archive.schemaVersion = 1;
 		archive.modpackId = normalizedModpackId;
@@ -258,8 +258,8 @@ public final class QuarantineArchive {
 		read(storage, normalizedModpackId);
 	}
 
-	private static Jsons.ClientQuarantineFields.EntryFields toFields(ClientStorage storage, String generationId, Conflict conflict) {
-		Jsons.ClientQuarantineFields.EntryFields entry = new Jsons.ClientQuarantineFields.EntryFields();
+	private static ClientStorageJsons.ClientQuarantineFields.EntryFields toFields(ClientStorage storage, String generationId, Conflict conflict) {
+		ClientStorageJsons.ClientQuarantineFields.EntryFields entry = new ClientStorageJsons.ClientQuarantineFields.EntryFields();
 		entry.conflictId = conflict.conflictId();
 		entry.action = conflict.action().name();
 		entry.modIds = conflict.modIds();
@@ -275,7 +275,7 @@ public final class QuarantineArchive {
 		return entry;
 	}
 
-	private static void validateEntryMetadata(ClientStorage storage, String modpackId, Jsons.ClientQuarantineFields.EntryFields entry) throws IOException {
+	private static void validateEntryMetadata(ClientStorage storage, String modpackId, ClientStorageJsons.ClientQuarantineFields.EntryFields entry) throws IOException {
 		if (entry.conflictId == null || !entry.conflictId.matches("[0-9a-f]{40}") || entry.action == null) throw new IOException("Client quarantine entry identity is invalid");
 		ConflictAction action;
 		try {
@@ -304,7 +304,7 @@ public final class QuarantineArchive {
 		if (action != ConflictAction.QUARANTINE) throw new IOException("Only quarantine actions may be stored in the quarantine archive");
 	}
 
-	private static void validateEntryPayload(ClientStorage storage, String modpackId, Jsons.ClientQuarantineFields.EntryFields entry) throws IOException {
+	private static void validateEntryPayload(ClientStorage storage, String modpackId, ClientStorageJsons.ClientQuarantineFields.EntryFields entry) throws IOException {
 		validateEntryMetadata(storage, modpackId, entry);
 		Path payload = storage.quarantinePayload(modpackId, entry.conflictId);
 		validateNoSymbolicLinkDescendants(storage.quarantinePackDirectory(modpackId), payload);
@@ -320,7 +320,7 @@ public final class QuarantineArchive {
 			throw new IOException("Quarantine source removal could not be verified: " + source);
 	}
 
-	private static boolean same(Jsons.ClientQuarantineFields.EntryFields entry, Conflict conflict) {
+	private static boolean same(ClientStorageJsons.ClientQuarantineFields.EntryFields entry, Conflict conflict) {
 		return conflict.action() == ConflictAction.QUARANTINE && conflict.modIds().equals(new TreeSet<>(entry.modIds))
 				&& conflict.sourcePath().equals(entry.sourcePath) && conflict.sourceHash().equalsIgnoreCase(entry.sourceHash) && conflict.sourceSize() == entry.sourceSize
 				&& conflict.targetPath().equals(entry.targetPath) && conflict.targetHash().equalsIgnoreCase(entry.targetHash) && conflict.targetSize() == entry.targetSize;

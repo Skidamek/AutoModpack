@@ -27,8 +27,8 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 public final class ConfigTools {
 	public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
 			.registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())
-			.registerTypeAdapter(Jsons.ConnectionInfo.class, new ConnectionInfoTypeAdapter())
-			.registerTypeAdapter(Jsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter()).create();
+			.registerTypeAdapter(ConnectionJsons.ConnectionInfo.class, new ConnectionInfoTypeAdapter())
+			.registerTypeAdapter(ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter()).create();
 
 	private ConfigTools() {}
 
@@ -75,9 +75,9 @@ public final class ConfigTools {
 		}
 	}
 
-	private static class ConnectionInfoTypeAdapter implements JsonSerializer<Jsons.ConnectionInfo>, JsonDeserializer<Jsons.ConnectionInfo> {
+	private static class ConnectionInfoTypeAdapter implements JsonSerializer<ConnectionJsons.ConnectionInfo>, JsonDeserializer<ConnectionJsons.ConnectionInfo> {
 		@Override
-		public JsonElement serialize(Jsons.ConnectionInfo source, Type type, JsonSerializationContext context) {
+		public JsonElement serialize(ConnectionJsons.ConnectionInfo source, Type type, JsonSerializationContext context) {
 			JsonObject object = new JsonObject();
 			if (source.origin != null) object.addProperty("origin", AddressHelpers.formatAddress(source.origin));
 			if (source.endpoint != null) object.addProperty("endpoint", AddressHelpers.formatAddress(source.endpoint));
@@ -86,7 +86,7 @@ public final class ConfigTools {
 		}
 
 		@Override
-		public Jsons.ConnectionInfo deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
+		public ConnectionJsons.ConnectionInfo deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
 			if (!json.isJsonObject()) throw new JsonParseException("ConnectionInfo must be an object");
 			JsonObject object = json.getAsJsonObject();
 			try {
@@ -96,7 +96,7 @@ public final class ConfigTools {
 				ModpackConnectionMode connectionMode = modeElement == null || modeElement.isJsonNull()
 						? ModpackConnectionMode.defaultFor(Constants.MC_VERSION, Constants.LOADER)
 						: context.deserialize(modeElement, ModpackConnectionMode.class);
-				return new Jsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
+				return new ConnectionJsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
 			} catch (IllegalArgumentException e) {
 				throw new JsonParseException("Invalid ConnectionInfo", e);
 			}
@@ -109,13 +109,13 @@ public final class ConfigTools {
 		}
 	}
 
-	private static class CertificateTrustEntryTypeAdapter implements JsonDeserializer<Jsons.CertificateTrustEntry> {
+	private static class CertificateTrustEntryTypeAdapter implements JsonDeserializer<ConnectionJsons.CertificateTrustEntry> {
 		@Override
-		public Jsons.CertificateTrustEntry deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
-			if (json.isJsonPrimitive()) return new Jsons.CertificateTrustEntry(json.getAsString(), "TOFU");
+		public ConnectionJsons.CertificateTrustEntry deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
+			if (json.isJsonPrimitive()) return new ConnectionJsons.CertificateTrustEntry(json.getAsString(), "TOFU");
 			var object = json.getAsJsonObject();
 			String reason = object.has("reason") ? object.get("reason").getAsString() : "TOFU";
-			return new Jsons.CertificateTrustEntry(object.get("fingerprint").getAsString(), reason);
+			return new ConnectionJsons.CertificateTrustEntry(object.get("fingerprint").getAsString(), reason);
 		}
 	}
 

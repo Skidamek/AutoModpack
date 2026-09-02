@@ -7,7 +7,7 @@ import java.util.HashSet;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -19,7 +19,7 @@ public class Server {
 		NettyServer server = new NettyServer();
 		hostServer = server;
 
-		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
+		serverConfig = ConfigTools.readOrCreate(serverConfigFile, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 		if (serverConfig == null) {
 			LOGGER.error("Failed to load standalone host configuration");
 			return;

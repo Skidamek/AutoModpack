@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.client;
 
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack.client.ui.*;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -31,39 +31,40 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void download(Object... args) {
-		executeOnClient(() -> Screens.download(args[0], args[1]));
+	public void download(DownloadManager downloadManager, String modpackName) {
+		executeOnClient(() -> Screens.download(downloadManager, modpackName));
 	}
 
 	@Override
-	public void changelog(Object... args) {
-		executeOnClient(() -> Screens.changelog(args[0], args[1]));
+	public void changelog(Object parent, Changelogs changelogs) {
+		executeOnClient(() -> Screens.changelog((Screen) parent, changelogs));
 	}
 
 	@Override
-	public void restart(Object... args) {
-		executeOnClient(() -> Screens.restart(args[1], args[2]));
+	public void restart(UpdateType updateType, Changelogs changelogs) {
+		executeOnClient(() -> Screens.restart(updateType, changelogs));
 	}
 
 	@Override
-	public void welcome(Object... args) {
-		executeOnClient(() -> Screens.welcome(args[0]));
+	public void welcome(ModpackUpdater modpackUpdater) {
+		executeOnClient(() -> Screens.welcome(modpackUpdater));
 	}
 
 	@Override
-	public boolean preview(Object... args) {
-		executeOnClient(() -> Screens.preview(args));
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean removal, boolean returnToSelection,
+			Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
+		executeOnClient(() -> Screens.preview(preview, modpackName, continueAction, cancelAction, removal, returnToSelection, mainPageUrls));
 		return true;
 	}
 
 	@Override
-	public void recovery(Object... args) {
-		executeOnClient(() -> Screens.recovery(args));
+	public void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed) {
+		executeOnClient(() -> Screens.recovery(modpackUpdater, recoverySnapshot, modpackName, closed));
 	}
 
 	@Override
-	public void history(Object... args) {
-		executeOnClient(() -> Screens.history(args));
+	public void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed) {
+		executeOnClient(() -> Screens.history(history, modpackName, patchNotesHistory, closed));
 	}
 
 	@Override
@@ -72,18 +73,13 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void menu(Object... args) {
-		executeOnClient(() -> Screens.menu(args.length > 0 ? args[0] : null));
-	}
-
-	@Override
-	public void title(Object... args) {
+	public void title() {
 		executeOnClient(Screens::title);
 	}
 
 	@Override
-	public void validation(Object... args) {
-		executeOnClient(() -> Screens.validation(args[0], args[1], args[2], args[3]));
+	public void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled) {
+		executeOnClient(() -> Screens.validation((Screen) parent, fingerprint, validated, canceled));
 	}
 
 	@Override
@@ -110,7 +106,7 @@ public class ScreenImpl implements ScreenService {
 		Screens.multiplayer();
 	}
 
-	public static void repairSelection(Jsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+	public static void repairSelection(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
 		executeOnClient(() -> Screens.repairSelection(fields, savedSelection, selectionAction, cancelAction));
 	}
 
@@ -139,32 +135,29 @@ public class ScreenImpl implements ScreenService {
 			*//*?}*/
 		}
 
-		public static void download(Object downloadManager, Object header) {
-			Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
+		public static void download(DownloadManager downloadManager, String modpackName) {
+			Screens.setScreen(new DownloadScreen(downloadManager, modpackName));
 		}
 
-		public static void changelog(Object parent, Object changelog) {
-			Screens.setScreen(new ChangelogScreen((Screen) parent, (Changelogs) changelog));
+		public static void changelog(Screen parent, Changelogs changelogs) {
+			Screens.setScreen(new ChangelogScreen(parent, changelogs));
 		}
 
-		public static void restart(Object updateType, Object changelogs) {
-			Screens.setScreen(new RestartScreen((UpdateType) updateType, (Changelogs) changelogs));
+		public static void restart(UpdateType updateType, Changelogs changelogs) {
+			Screens.setScreen(new RestartScreen(updateType, changelogs));
 		}
 
-		public static void welcome(Object modpackUpdaterInstance) {
-			Screens.setScreen(new FirstConnectScreen((ModpackUpdater) modpackUpdaterInstance));
+		public static void welcome(ModpackUpdater modpackUpdater) {
+			Screens.setScreen(new FirstConnectScreen(modpackUpdater));
 		}
 
-		public static void preview(Object... args) {
+		public static void preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean removal, boolean returnToSelection,
+				Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
 			Screen parent = Screens.getScreen();
 			if (isTransient(parent)) parent = interactiveParent;
 			parent = previewParent(parent);
 			interactiveParent = null;
-			boolean removal = args.length > 4 && Boolean.TRUE.equals(args[4]);
-			boolean returnToSelection = args.length > 5 && Boolean.TRUE.equals(args[5]);
-			@SuppressWarnings("unchecked")
-			Map<UpdatePlan.FileKey, List<String>> mainPageUrls = args.length > 6 ? (Map<UpdatePlan.FileKey, List<String>>) args[6] : Map.of();
-			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, returnToSelection, (Runnable) args[2], (Runnable) args[3], mainPageUrls));
+			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, removal, returnToSelection, continueAction, cancelAction, mainPageUrls));
 		}
 
 		private static Screen previewParent(Screen parent) {
@@ -177,24 +170,14 @@ public class ScreenImpl implements ScreenService {
 			return screen instanceof PreparingScreen || screen instanceof DownloadScreen;
 		}
 
-		public static void recovery(Object... args) {
+		public static void recovery(ModpackUpdater modpackUpdater, ModpackUpdater.RecoverySnapshot recoverySnapshot, String modpackName, Runnable closed) {
 			Screen parent = Screens.getScreen();
-			Runnable closed = args.length > 3 && args[3] instanceof Runnable callback ? callback : () -> {};
-			Screens.setScreen(new RecoveryArchiveScreen(parent, (ModpackUpdater) args[0], (ModpackUpdater.RecoverySnapshot) args[1], (String) args[2], closed));
+			Screens.setScreen(new RecoveryArchiveScreen(parent, modpackUpdater, recoverySnapshot, modpackName, closed));
 		}
 
-		public static void history(Object... args) {
+		public static void history(List<GenerationRecord> history, String modpackName, List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Runnable closed) {
 			Screen parent = Screens.getScreen();
-			@SuppressWarnings("unchecked")
-			List<GenerationRecord> history = (List<GenerationRecord>) args[0];
-			boolean hasPatchNotesHistory = args.length > 2 && args[2] instanceof List<?>;
-			@SuppressWarnings("unchecked")
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory = hasPatchNotesHistory
-					? (List<GenerationPatchNoteHistory.Entry>) args[2]
-					: GenerationPatchNoteHistory.fromRecords(history);
-			int callbackIndex = hasPatchNotesHistory ? 3 : 2;
-			Runnable closed = args.length > callbackIndex && args[callbackIndex] instanceof Runnable callback ? callback : () -> {};
-			Screens.setScreen(new ContentHistoryScreen(parent, history, (String) args[1], patchNotesHistory, closed));
+			Screens.setScreen(new ContentHistoryScreen(parent, history, modpackName, patchNotesHistory, closed));
 		}
 
 		public static void error(String... errors) {
@@ -217,17 +200,13 @@ public class ScreenImpl implements ScreenService {
 			return new JoinMultiplayerScreen(new TitleScreen());
 		}
 
-		public static void menu(Object parent) {
-			Screens.setScreen(ModpackSelectionScreen.forSelectedModpack((Screen) parent));
-		}
-
-		public static void repairSelection(Jsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+		public static void repairSelection(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
 			GroupManifest manifest = GenerationRecord.fromFields(fields).manifest();
 			Screens.setScreen(ModpackSelectionScreen.repair(multiplayerScreen(), manifest, savedSelection, selectionAction, cancelAction));
 		}
 
-		public static void validation(Object parent, Object serverFingerprint, Object validatedCallback, Object canceledCallback) {
-			Screens.setScreen(new FingerprintVerificationScreen((Screen) parent, (String) serverFingerprint, (Runnable) validatedCallback, (Runnable) canceledCallback));
+		public static void validation(Screen parent, String fingerprint, Runnable validated, Runnable canceled) {
+			Screens.setScreen(new FingerprintVerificationScreen(parent, fingerprint, validated, canceled));
 		}
 
 		public static void waiting() {

@@ -9,7 +9,7 @@ import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 public class NullModpackLoader implements ModpackLoaderService {
 
 	@Override
-	public void loadModpack(List<Path> modpackMods) {
+	public void loadModpack(ModpackLoadRequest request) {
 		throw new AssertionError("Loader class not found");
 	}
 

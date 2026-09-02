@@ -47,7 +47,7 @@ public class DownloadScreen extends VersionedScreen {
 	private static final long TEXT_UPDATE_INTERVAL = 100; // Update strings 10x per second
 
 	public DownloadScreen(DownloadManager downloadManager, String header) {
-		super(VersionedText.literal("DownloadScreen"));
+		super(VersionedText.translatable("automodpack.download.title"));
 		this.downloadManager = downloadManager;
 		this.header = header;
 	}
@@ -133,7 +133,7 @@ public class DownloadScreen extends VersionedScreen {
 				else failed++;
 			}
 		}
-		return VersionedText.literal("Acquired: " + acquired + "  Failed: " + failed);
+		return VersionedText.translatable("automodpack.download.acquired", acquired, failed);
 	}
 
 	private float getDownloadScale() {

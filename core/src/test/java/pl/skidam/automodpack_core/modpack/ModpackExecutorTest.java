@@ -17,7 +17,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.config.StorageJsons;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
@@ -58,6 +60,15 @@ class ModpackExecutorTest {
 			ModpackExecutor.PublishResult root = executor.publish();
 			ModpackExecutor.Published publishedRoot = assertInstanceOf(ModpackExecutor.Published.class, root);
 			String rootDigest = publishedRoot.state().candidateStateDigest();
+			var rootRecord = executor.currentRecord().orElseThrow();
+			assertEquals(rootRecord, assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish()).current());
+
+			Files.writeString(notes, "pending", StandardCharsets.UTF_8);
+			ModpackExecutor.Published publishedNotes = assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+			assertEquals("pending", publishedNotes.current().metadata().patchNotes());
+			assertEquals(rootRecord.metadata().generationId(), publishedNotes.current().metadata().parentGenerationId());
+			assertTrue(Files.notExists(notes));
+			assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish());
 			Files.writeString(notes, "pending", StandardCharsets.UTF_8);
 			assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish());
 			assertTrue(Files.exists(notes));
@@ -118,9 +129,44 @@ class ModpackExecutorTest {
 		}
 	}
 
-	private static Jsons.ServerConfigFieldsV3 config() {
-		Jsons.ServerConfigFieldsV3 config = new Jsons.ServerConfigFieldsV3();
-		Jsons.GroupDeclaration main = new Jsons.GroupDeclaration();
+	@Test
+	void repeatedPreviewsReuseInjectedDataLayoutWithoutResolvingServerRoot() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Path dataRoot = tempDir.resolve("selected-data");
+		Path invalidPinnedRoot = tempDir.resolve("invalid-pinned-root");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
+		Files.writeString(invalidPinnedRoot, "not a directory", StandardCharsets.UTF_8);
+		Files.createDirectories(server.resolve("automodpack"));
+		StorageJsons.DataRootFields marker = new StorageJsons.DataRootFields();
+		marker.root = invalidPinnedRoot.toString();
+		ConfigTools.writeAtomic(server.resolve("automodpack/data-root.json"), marker);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		Constants.serverConfig = config();
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, dataRoot.resolve("objects")), new ModpackCandidateScanner()::scan,
+				creation);
+		try {
+			assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview());
+			assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview());
+			assertTrue(Files.isDirectory(dataRoot.resolve("file-metadata")));
+			assertTrue(Files.isDirectory(dataRoot.resolve("mod-metadata")));
+		} finally {
+			executor.stop();
+			snapshot.restore();
+		}
+	}
+
+	private static ServerConfigJsons.ServerConfigFieldsV3 config() {
+		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
+		ServerConfigJsons.GroupDeclaration main = new ServerConfigJsons.GroupDeclaration();
 		main.required = true;
 		main.syncedFiles = Set.of();
 		config.groups = Map.of("main", main);
@@ -130,7 +176,7 @@ class ModpackExecutorTest {
 	}
 
 	private static final class ConstantsSnapshot {
-		private final Jsons.ServerConfigFieldsV3 serverConfig = Constants.serverConfig;
+		private final ServerConfigJsons.ServerConfigFieldsV3 serverConfig = Constants.serverConfig;
 		private final String amVersion = Constants.AM_VERSION;
 		private final String loader = Constants.LOADER;
 		private final String loaderVersion = Constants.LOADER_VERSION;

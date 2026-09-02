@@ -2,7 +2,7 @@ package pl.skidam.automodpack_core.modpack.group;
 
 import java.util.*;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 
 public record GroupManifest(
 		String modpackId,
@@ -16,8 +16,8 @@ public record GroupManifest(
 		groups = immutableMap(groups);
 	}
 
-	public Jsons.CompleteModpackContentFields toFields() {
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+	public ModpackJsons.CompleteModpackContentFields toFields() {
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = modpackId;
 		fields.modpackName = modpackName;
 		fields.automodpackVersion = automodpackVersion;
@@ -25,10 +25,10 @@ public record GroupManifest(
 		fields.loaderVersion = loaderVersion;
 		fields.mcVersion = mcVersion;
 
-		Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> serializedGroups = new LinkedHashMap<>();
+		Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> serializedGroups = new LinkedHashMap<>();
 		for (var entry : groups.entrySet()) {
 			Group group = entry.getValue();
-			Jsons.CompleteModpackContentFields.ModpackGroupFields serialized = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields serialized = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 			serialized.displayName = group.displayName();
 			serialized.description = group.description();
 			serialized.tag = group.tag();
@@ -38,10 +38,10 @@ public record GroupManifest(
 			serialized.requires = new LinkedHashSet<>(group.requires());
 			serialized.compatiblePlatforms = group.compatiblePlatforms().stream().map(ClientPlatform::id)
 					.collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
-			Map<String, Jsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
+			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
 			for (var fileEntry : group.files().entrySet()) {
 				GroupFile file = fileEntry.getValue();
-				files.put(fileEntry.getKey(), new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.size()), file.type(), file.editable(),
+				files.put(fileEntry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(file.size()), file.type(), file.editable(),
 						file.overwriteEditable(), file.sha1(), file.murmur()));
 			}
 			serialized.files = files;

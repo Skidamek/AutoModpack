@@ -52,7 +52,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.imageio.ImageIO;
 
@@ -66,6 +69,8 @@ public final class AutoTestBridge {
 	private static final Object READY_STATE_LOCK = new Object();
 	private static final AtomicBoolean READY_STATE_PUBLISHED = new AtomicBoolean(false);
 	private static final AtomicBoolean READY_STATE_WRITE_FAILED = new AtomicBoolean(false);
+	private static final AtomicReference<PendingScreenshot> PENDING_SCREENSHOT = new AtomicReference<>();
+	private static final long SCREENSHOT_SETTLE_TIMEOUT_SECONDS = 30;
 
 	public static void markReloadFinished() {
 		RELOAD_FINISHED.set(true);
@@ -264,22 +269,102 @@ public final class AutoTestBridge {
 		Path path = screenshots.resolve(name + ".png");
 		CompletableFuture<String> captured = new CompletableFuture<>();
 		Minecraft minecraft = Minecraft.getInstance();
-		minecraft.execute(() -> {
-			try {
-				/*? if >=26.2 {*/
-				Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), 1, image -> completeScreenshot(captured, path, image));
-			/*?} else if >=1.21.6 {*/
-			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), 1, image -> completeScreenshot(captured, path, image));
+		minecraft.execute(() -> queueScreenshot(captured, path));
+		try {
+			return captured.get(SCREENSHOT_SETTLE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+		} catch (TimeoutException e) {
+			PendingScreenshot pending = PENDING_SCREENSHOT.get();
+			if (pending != null && pending.captured() == captured && PENDING_SCREENSHOT.compareAndSet(pending, null)) pending.logTimeout();
+			throw new IOException("screenshot did not settle within " + SCREENSHOT_SETTLE_TIMEOUT_SECONDS + " seconds", e);
+		}
+	}
+
+	private static void queueScreenshot(CompletableFuture<String> captured, Path path) {
+		Screen targetScreen = currentScreen();
+		if (targetScreen == null) {
+			LOGGER.error("AutoModpack autotest screenshot {} rejected: there is no active screen", path.getFileName());
+			captured.completeExceptionally(new IOException("cannot capture a screenshot without an active screen"));
+			return;
+		}
+		if (!PENDING_SCREENSHOT.compareAndSet(null, new PendingScreenshot(captured, path, targetScreen))) {
+			captured.completeExceptionally(new IOException("another screenshot is already pending"));
+		}
+	}
+
+	public static void onFrameRendered() {
+		PendingScreenshot pending = PENDING_SCREENSHOT.get();
+		if (pending == null) return;
+		RenderedFrameState state = RenderedFrameState.capture();
+		if (!pending.observe(state)) return;
+		if (!PENDING_SCREENSHOT.compareAndSet(pending, null)) return;
+		try {
+			Minecraft minecraft = Minecraft.getInstance();
+			/*? if >=26.2 {*/
+			Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), 1, image -> completeScreenshot(pending.captured(), pending.path(), image));
+		/*?} else if >=1.21.6 {*/
+			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), 1, image -> completeScreenshot(pending.captured(), pending.path(), image));
 			*//*?} else if >=1.21.5 {*/
-			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), image -> completeScreenshot(captured, path, image));
+			/*Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), image -> completeScreenshot(pending.captured(), pending.path(), image));
 			*//*?} else {*/
-				/*completeScreenshot(captured, path, Screenshot.takeScreenshot(minecraft.getMainRenderTarget()));
-				*//*?}*/
-			} catch (Exception e) {
-				captured.completeExceptionally(e);
-			}
-		});
-		return captured.get();
+			/*completeScreenshot(pending.captured(), pending.path(), Screenshot.takeScreenshot(minecraft.getMainRenderTarget()));
+			*//*?}*/
+		} catch (Exception e) {
+			pending.captured().completeExceptionally(e);
+		}
+	}
+
+	private static final class PendingScreenshot {
+		private final CompletableFuture<String> captured;
+		private final Path path;
+		private final Screen targetScreen;
+		private volatile RenderedFrameState lastState;
+		private RenderedFrameState previousState;
+
+		private PendingScreenshot(CompletableFuture<String> captured, Path path, Screen targetScreen) {
+			this.captured = captured;
+			this.path = path;
+			this.targetScreen = targetScreen;
+		}
+
+		private boolean observe(RenderedFrameState state) {
+			lastState = state;
+			boolean settled = state.isSettledAfter(previousState, targetScreen);
+			previousState = state;
+			return settled;
+		}
+
+		private void logTimeout() {
+			RenderedFrameState state = lastState;
+			LOGGER.error("AutoModpack autotest screenshot {} did not settle: {}", path.getFileName(), state == null ? "no rendered frame observed" : state.describeFor(targetScreen));
+		}
+
+		private CompletableFuture<String> captured() {
+			return captured;
+		}
+
+		private Path path() {
+			return path;
+		}
+	}
+
+	private record RenderedFrameState(Screen screen, boolean overlayVisible) {
+		private static RenderedFrameState capture() {
+			Minecraft minecraft = Minecraft.getInstance();
+			/*? if >=26.2 {*/
+			// Since 26.2 Gui owns the render overlay; sample it after GameRenderer rendered the frame.
+			return new RenderedFrameState(currentScreen(), minecraft.gui.overlay() != null);
+			/*?} else {*/
+			/*return new RenderedFrameState(currentScreen(), minecraft.getOverlay() != null);
+			*//*?}*/
+		}
+
+		private boolean isSettledAfter(RenderedFrameState previous, Screen targetScreen) {
+			return previous != null && screen == targetScreen && previous.screen == targetScreen && !overlayVisible && !previous.overlayVisible && screen == previous.screen;
+		}
+
+		private String describeFor(Screen targetScreen) {
+			return "targetScreen=" + targetScreen.getClass().getName() + ", renderedScreen=" + (screen == null ? "<none>" : screen.getClass().getName()) + ", overlayVisible=" + overlayVisible;
+		}
 	}
 
 	private static void completeScreenshot(CompletableFuture<String> captured, Path path, NativeImage source) {

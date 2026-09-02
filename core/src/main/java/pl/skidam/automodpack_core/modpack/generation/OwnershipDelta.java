@@ -2,7 +2,7 @@ package pl.skidam.automodpack_core.modpack.generation;
 
 import java.util.*;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -88,13 +88,13 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 		return contents;
 	}
 
-	public Jsons.OwnershipDeltaFields toFields() {
-		Jsons.OwnershipDeltaFields fields = new Jsons.OwnershipDeltaFields();
+	public GenerationJsons.OwnershipDeltaFields toFields() {
+		GenerationJsons.OwnershipDeltaFields fields = new GenerationJsons.OwnershipDeltaFields();
 		fields.modpackId = modpackId;
 		fields.digest = digest;
 		fields.changes = new ArrayList<>();
 		for (Change change : changes.values()) {
-			Jsons.OwnershipDeltaFields.ChangeFields serialized = new Jsons.OwnershipDeltaFields.ChangeFields();
+			GenerationJsons.OwnershipDeltaFields.ChangeFields serialized = new GenerationJsons.OwnershipDeltaFields.ChangeFields();
 			serialized.logicalPath = change.logicalPath();
 			serialized.kind = change.kind().name();
 			serialized.content = contentFields(change.content());
@@ -105,14 +105,14 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 		return fields;
 	}
 
-	public static OwnershipDelta fromFields(Jsons.OwnershipDeltaFields fields) {
+	public static OwnershipDelta fromFields(GenerationJsons.OwnershipDeltaFields fields) {
 		if (fields == null || fields.changes == null) throw new IllegalArgumentException("Ownership delta is missing");
 		Map<String, Change> changes = new TreeMap<>();
-		for (Jsons.OwnershipDeltaFields.ChangeFields serialized : fields.changes) {
+		for (GenerationJsons.OwnershipDeltaFields.ChangeFields serialized : fields.changes) {
 			if (serialized == null || serialized.content == null || serialized.contents == null) throw new IllegalArgumentException("Ownership delta change is incomplete");
 			OwnershipLedger.Content content = content(serialized.content);
 			TreeSet<OwnershipLedger.Content> contents = new TreeSet<>(CONTENT_ORDER);
-			for (Jsons.OwnershipLedgerFields.ContentFields value : serialized.contents) {
+			for (GenerationJsons.OwnershipLedgerFields.ContentFields value : serialized.contents) {
 				if (value == null) throw new IllegalArgumentException("Ownership delta content is incomplete");
 				contents.add(content(value));
 			}
@@ -175,11 +175,11 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 		return values == null ? new TreeMap<>() : new TreeMap<>(values);
 	}
 
-	private static Jsons.OwnershipLedgerFields.ContentFields contentFields(OwnershipLedger.Content content) {
-		return new Jsons.OwnershipLedgerFields.ContentFields(content.sha1(), content.size());
+	private static GenerationJsons.OwnershipLedgerFields.ContentFields contentFields(OwnershipLedger.Content content) {
+		return new GenerationJsons.OwnershipLedgerFields.ContentFields(content.sha1(), content.size());
 	}
 
-	private static OwnershipLedger.Content content(Jsons.OwnershipLedgerFields.ContentFields fields) {
+	private static OwnershipLedger.Content content(GenerationJsons.OwnershipLedgerFields.ContentFields fields) {
 		return new OwnershipLedger.Content(fields.sha1, fields.size);
 	}
 }

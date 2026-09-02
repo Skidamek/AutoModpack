@@ -27,6 +27,8 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "generation-update",
     "conflict-preservation",
     "quarantine-restoration",
+    "storage-maintenance",
+    "server-history-compaction",
     "fresh-generation-deletion",
     "removal",
     "secure-bootstrap",
@@ -40,7 +42,7 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
         problems.append("scenario needs a non-empty string 'id'")
     if scenario.get("id") == "all":
         declared = scenario.get("releaseGate", {}).get("covers", [])
-        if not isinstance(declared, list) or set(declared) != _RELEASE_GATE_CAPABILITIES:
+        if not isinstance(declared, list) or len(declared) != len(_RELEASE_GATE_CAPABILITIES) or set(declared) != _RELEASE_GATE_CAPABILITIES:
             problems.append(f"release-gate scenario must declare exactly these capabilities: {sorted(_RELEASE_GATE_CAPABILITIES)}")
         generations = (scenario.get("serverFiles", {}) or {}).get("generations")
         if not isinstance(generations, list) or len(generations) < 2:

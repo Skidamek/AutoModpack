@@ -31,8 +31,8 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -88,7 +88,8 @@ public final class ClientStorage {
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(this.gameDirectory);
 		this.dataDirectory = dataLocation.root();
 		this.sharedDataDirectory = dataLocation.shared();
-		this.objectsDirectory = dataDirectory.resolve("objects").normalize();
+		DataRootResolver.Layout dataLayout = dataLocation.layout();
+		this.objectsDirectory = dataLayout.objectsDirectory();
 		this.recordsDirectory = this.clientDirectory.resolve(clientRecordsDir.getFileName()).normalize();
 		this.overlaysDirectory = this.clientDirectory.resolve(clientOverlaysDir.getFileName()).normalize();
 		this.baselinesDirectory = this.clientDirectory.resolve(clientBaselinesDir.getFileName()).normalize();
@@ -106,11 +107,11 @@ public final class ClientStorage {
 		this.bootstrapFile = this.gameDirectory.resolve(Constants.bootstrapFile).normalize();
 		this.recoveryDirectory = this.clientDirectory.resolve(clientRecoveryDir.getFileName()).normalize();
 		this.quarantineDirectory = this.clientDirectory.resolve(clientQuarantineDir.getFileName()).normalize();
-		this.fileMetadataDirectory = dataDirectory.resolve("file-metadata").normalize();
-		this.modMetadataDirectory = dataDirectory.resolve("mod-metadata").normalize();
-		this.packsDirectory = dataDirectory.resolve("packs").normalize();
-		this.knownHostsFile = dataDirectory.resolve("known-hosts.json").normalize();
-		this.knownHostsLockFile = dataDirectory.resolve("known-hosts.json.lock").normalize();
+		this.fileMetadataDirectory = dataLayout.fileMetadataDirectory();
+		this.modMetadataDirectory = dataLayout.modMetadataDirectory();
+		this.packsDirectory = dataLayout.packsDirectory();
+		this.knownHostsFile = dataLayout.knownHostsFile();
+		this.knownHostsLockFile = dataLayout.knownHostsLockFile();
 		validateLayout();
 	}
 
@@ -220,6 +221,10 @@ public final class ClientStorage {
 		return modMetadataDirectory;
 	}
 
+	public Path packsDirectory() {
+		return packsDirectory;
+	}
+
 	public Path knownHostsFile() {
 		return knownHostsFile;
 	}
@@ -299,17 +304,17 @@ public final class ClientStorage {
 		return overlaysDirectory.resolve(ModpackId.requireValid(modpackId) + ".json").normalize();
 	}
 
-	public Jsons.ClientOverlayFields readOverlayState(String modpackId) throws IOException {
+	public ClientStorageJsons.ClientOverlayFields readOverlayState(String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		Path stateFile = overlayStateFile(normalizedModpackId);
 		if (!Files.exists(stateFile, LinkOption.NOFOLLOW_LINKS)) {
-			Jsons.ClientOverlayFields empty = new Jsons.ClientOverlayFields();
+			ClientStorageJsons.ClientOverlayFields empty = new ClientStorageJsons.ClientOverlayFields();
 			empty.modpackId = normalizedModpackId;
 			empty.deletedPaths = List.of();
 			return empty;
 		}
 		if (Files.isSymbolicLink(stateFile) || !Files.isRegularFile(stateFile, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client overlay state is not a regular file: " + stateFile);
-		Jsons.ClientOverlayFields state = ConfigTools.read(stateFile, Jsons.ClientOverlayFields.class)
+		ClientStorageJsons.ClientOverlayFields state = ConfigTools.read(stateFile, ClientStorageJsons.ClientOverlayFields.class)
 				.orElseThrow(() -> new IOException("Client overlay state is empty: " + stateFile));
 		if (!normalizedModpackId.equals(state.modpackId) || state.deletedPaths == null) throw new IOException("Client overlay state identity is invalid: " + stateFile);
 		List<String> canonical = state.deletedPaths.stream().map(ClientStorage::requireLogicalPath).distinct().sorted().toList();
@@ -321,14 +326,14 @@ public final class ClientStorage {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		TreeSet<String> canonical = new TreeSet<>();
 		for (String path : deletedPaths) canonical.add(requireLogicalPath(path));
-		Jsons.ClientOverlayFields current = readOverlayState(normalizedModpackId);
+		ClientStorageJsons.ClientOverlayFields current = readOverlayState(normalizedModpackId);
 		if (current.deletedPaths.equals(List.copyOf(canonical))) return;
 		Path stateFile = overlayStateFile(normalizedModpackId);
 		if (canonical.isEmpty()) {
 			Files.deleteIfExists(stateFile);
 			return;
 		}
-		Jsons.ClientOverlayFields state = new Jsons.ClientOverlayFields();
+		ClientStorageJsons.ClientOverlayFields state = new ClientStorageJsons.ClientOverlayFields();
 		state.modpackId = normalizedModpackId;
 		state.deletedPaths = List.copyOf(canonical);
 		ConfigTools.writeAtomic(stateFile, state);
@@ -366,8 +371,8 @@ public final class ClientStorage {
 	public void ensureRoots() throws IOException {
 		ensureDirectory(clientDirectory, "client state root");
 		ensureDirectory(objectsDirectory, "client object store");
-		ensureDirectory(dataDirectory.resolve("file-metadata"), "file metadata cache");
-		ensureDirectory(dataDirectory.resolve("mod-metadata"), "mod metadata cache");
+		ensureDirectory(fileMetadataDirectory, "file metadata cache");
+		ensureDirectory(modMetadataDirectory, "mod metadata cache");
 		ensureDirectory(packsDirectory, "shared pack state");
 		ensureDirectory(recordsDirectory, "client generation records");
 		ensureDirectory(overlaysDirectory, "client overlays");
@@ -379,11 +384,11 @@ public final class ClientStorage {
 		ensureDirectory(quarantineDirectory, "client quarantine root");
 	}
 
-	public Jsons.ClientGenerationStateFields readActiveState() throws IOException {
+	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
 		if (!Files.exists(stateFile, LinkOption.NOFOLLOW_LINKS)) return null;
 		if (Files.isSymbolicLink(stateFile) || !Files.isRegularFile(stateFile, LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("Client active state is not a regular file");
-		Jsons.ClientGenerationStateFields state = ConfigTools.read(stateFile, Jsons.ClientGenerationStateFields.class)
+		ClientStorageJsons.ClientGenerationStateFields state = ConfigTools.read(stateFile, ClientStorageJsons.ClientGenerationStateFields.class)
 				.orElseThrow(() -> new IOException("Client active state is empty"));
 		if (!ModpackId.isValid(state.modpackId) || !DIGEST.matcher(state.generationId).matches() || !"ACTIVE".equals(state.status))
 			throw new IOException("Client active state identity is invalid");
@@ -391,7 +396,7 @@ public final class ClientStorage {
 	}
 
 	public void writeActiveState(String modpackId, String generationId) throws IOException {
-		Jsons.ClientGenerationStateFields state = new Jsons.ClientGenerationStateFields();
+		ClientStorageJsons.ClientGenerationStateFields state = new ClientStorageJsons.ClientGenerationStateFields();
 		state.modpackId = ModpackId.requireValid(modpackId);
 		state.generationId = requireDigest(generationId, "generation ID");
 		Files.createDirectories(stateFile.getParent());

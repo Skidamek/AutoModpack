@@ -6,7 +6,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.*;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -19,7 +20,7 @@ public final class ModpackCandidateScanner {
 	public ModpackCandidate scan(Request request) throws CandidateBuildException {
 		Objects.requireNonNull(request);
 		if (request.groups() == null || request.groups().isEmpty()) throw new CandidateBuildException("No groups are configured");
-		Map<String, Jsons.GroupDeclaration> declarations = new TreeMap<>();
+		Map<String, ServerConfigJsons.GroupDeclaration> declarations = new TreeMap<>();
 		Map<String, GroupRules> rulesByGroup = new TreeMap<>();
 		for (var entry : request.groups().entrySet()) {
 			try {
@@ -36,7 +37,7 @@ public final class ModpackCandidateScanner {
 		Map<String, SourcePair> sources = new TreeMap<>();
 		for (var entry : declarations.entrySet()) {
 			String groupId = entry.getKey();
-			Jsons.GroupDeclaration declaration = entry.getValue();
+			ServerConfigJsons.GroupDeclaration declaration = entry.getValue();
 			PathRuleSet syncedRules = rulesByGroup.get(groupId).syncedFiles();
 			Path groupDirectory = request.groupRoot().resolve(groupId).normalize();
 			if (!groupDirectory.startsWith(request.groupRoot().toAbsolutePath().normalize()))
@@ -101,7 +102,7 @@ public final class ModpackCandidateScanner {
 		}
 		results.sort(Comparator.comparing(result -> result.selected == null ? result.sourceForOrdering() : result.selected));
 
-		Map<String, Map<String, Jsons.CompleteModpackContentFields.GroupFileFields>> filesByGroup = new TreeMap<>();
+		Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> filesByGroup = new TreeMap<>();
 		for (String groupId : declarations.keySet()) filesByGroup.put(groupId, new TreeMap<>());
 		Map<String, StagedObject> objects = new TreeMap<>();
 		Map<String, CandidateProvenance> provenance = new TreeMap<>();
@@ -114,24 +115,24 @@ public final class ModpackCandidateScanner {
 				if (result.selected == null || result.file == null) continue;
 				GroupManifest.GroupFile file = result.file;
 				if (result.object == null) throw new CandidateBuildException("Selected source has no staged object: " + result.selected.sourcePath());
-				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new Jsons.CompleteModpackContentFields.GroupFileFields(
+				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(
 						String.valueOf(file.size()), file.type(), file.editable(), file.overwriteEditable(), file.sha1(), file.murmur()));
 				StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
 				if (redundant != null) result.object.delete();
 				provenance.put(ModpackCandidate.provenanceKey(result.selected.groupId(), result.selected.logicalPath()), result.provenance);
 			}
 
-			Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+			ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 			fields.modpackId = request.modpackId();
 			fields.modpackName = request.modpackName();
 			fields.automodpackVersion = request.automodpackVersion();
 			fields.loader = request.loader();
 			fields.loaderVersion = request.loaderVersion();
 			fields.mcVersion = request.mcVersion();
-			Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> groups = new LinkedHashMap<>();
+			Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> groups = new LinkedHashMap<>();
 			for (var entry : declarations.entrySet()) {
-				Jsons.GroupDeclaration declaration = entry.getValue();
-				Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+				ServerConfigJsons.GroupDeclaration declaration = entry.getValue();
+				ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
 				group.tag = declaration.tag == null ? "" : declaration.tag;
@@ -184,7 +185,7 @@ public final class ModpackCandidateScanner {
 		return new PathResult(selected, file, object, provenance, exclusions, shadow, pair.explicit != null ? pair.explicit : pair.synced);
 	}
 
-	private static GroupRules compileRules(String groupId, Jsons.GroupDeclaration declaration) throws CandidateBuildException {
+	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
 		return new GroupRules(compileRuleSet(declaration.syncedFiles, groupId, "syncedFiles"),
 				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"),
 				compileRuleSet(declaration.overwriteEditableFiles, groupId, "overwriteEditableFiles"));
@@ -313,7 +314,7 @@ public final class ModpackCandidateScanner {
 			String mcVersion,
 			Path serverRoot,
 			Path groupRoot,
-			Map<String, Jsons.GroupDeclaration> groups,
+			Map<String, ServerConfigJsons.GroupDeclaration> groups,
 			boolean autoExcludeUnnecessaryFiles,
 			boolean autoExcludeServerSideMods,
 			Path stagingDirectory,
@@ -322,7 +323,7 @@ public final class ModpackCandidateScanner {
 			FileMetadataCache fileMetadataCache,
 			ModFileCache modFileCache) {
 		public Request(String modpackId, String modpackName, String automodpackVersion, String loader, String loaderVersion, String mcVersion, Path serverRoot,
-				Path groupRoot, Map<String, Jsons.GroupDeclaration> groups, boolean autoExcludeUnnecessaryFiles,
+				Path groupRoot, Map<String, ServerConfigJsons.GroupDeclaration> groups, boolean autoExcludeUnnecessaryFiles,
 				boolean autoExcludeServerSideMods, Path stagingDirectory, Executor executor) {
 			this(modpackId, modpackName, automodpackVersion, loader, loaderVersion, mcVersion, serverRoot, groupRoot, groups, autoExcludeUnnecessaryFiles,
 					autoExcludeServerSideMods, stagingDirectory, executor, null, null, null);

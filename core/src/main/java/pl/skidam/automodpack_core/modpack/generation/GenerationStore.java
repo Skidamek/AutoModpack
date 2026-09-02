@@ -8,12 +8,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Clock;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -117,7 +116,7 @@ public final class GenerationStore {
 
 	private static final CommitHook NOOP_HOOK = () -> {};
 	private static final CompactionDeleteHook NOOP_COMPACTION_DELETE_HOOK = path -> {};
-	private static final Map<Path, ReentrantLock> PUBLICATION_LOCKS = new ConcurrentHashMap<>();
+	private static final PublicationLockRegistry PUBLICATION_LOCKS = new PublicationLockRegistry();
 	private final Path root;
 	private final Path currentPath;
 	private final Path currentProjectionPath;
@@ -224,7 +223,7 @@ public final class GenerationStore {
 		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) requireDirectory(root, "generation store");
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		readCheckpoint();
-		Jsons.GenerationPointerFields pointer = readCurrentPointer();
+		GenerationJsons.GenerationPointerFields pointer = readCurrentPointer();
 		GenerationRecord record;
 		Path materializedPath = currentProjectionPath;
 		LoadedProjection loaded = null;
@@ -330,7 +329,7 @@ public final class GenerationStore {
 		writeCurrentProjection(record);
 		hosting.put("", currentProjectionPath);
 		Publication publication = new Publication(PublicationStatus.PUBLISHED, record, currentProjectionPath, hosting);
-		Jsons.GenerationPointerFields nextPointer = pointer(record);
+		GenerationJsons.GenerationPointerFields nextPointer = pointer(record);
 		commitHook.beforeCurrentPointerReplacement();
 		ensureCurrentStillMatches(expectedCurrent);
 		ConfigTools.writeAtomic(currentPath, nextPointer);
@@ -338,8 +337,7 @@ public final class GenerationStore {
 	}
 
 	private PublicationGuard acquirePublicationGuard() throws IOException {
-		ReentrantLock jvmLock = PUBLICATION_LOCKS.computeIfAbsent(root, ignored -> new ReentrantLock());
-		jvmLock.lock();
+		PublicationLockRegistry.LockLease jvmLock = PUBLICATION_LOCKS.acquire(root);
 		FileChannel channel = null;
 		try {
 			channel = FileChannel.open(publicationLockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
@@ -351,7 +349,7 @@ public final class GenerationStore {
 			} catch (IOException closeFailure) {
 				e.addSuppressed(closeFailure);
 			}
-			jvmLock.unlock();
+			jvmLock.close();
 			throw e;
 		}
 	}
@@ -412,7 +410,7 @@ public final class GenerationStore {
 		validateDeletionTargets(oldCommitPaths, "generation commit");
 		validateDeletionTargets(oldDeltaPaths, "generation ownership delta");
 
-		GenerationCheckpoint checkpoint = new GenerationCheckpoint(currentRecord, supersededGenerationIds, supersededCatalogueStateDigests);
+		GenerationCheckpoint checkpoint = new GenerationCheckpoint(currentRecord, history.patchNotesHistory(), supersededGenerationIds, supersededCatalogueStateDigests);
 		ConfigTools.writeAtomic(checkpointPath, checkpoint.toFields());
 		GenerationCheckpoint verifiedCheckpoint = readCheckpoint().orElseThrow(() -> new IOException("Generation checkpoint disappeared after publication"));
 		if (!verifiedCheckpoint.equals(checkpoint) || !verifiedCheckpoint.record().equals(currentRecord))
@@ -445,7 +443,7 @@ public final class GenerationStore {
 		GenerationRecord current = loadCurrentDeep().map(CurrentSnapshot::record).orElse(null);
 		Map<String, Long> expectedSizes = new TreeMap<>();
 		long objectReferences = 0;
-		if (current != null) objectReferences = addExact(objectReferences, addReferences(current, expectedSizes), "object reference count");
+		if (current != null) objectReferences = addExact(objectReferences, addManifestReferences(current, expectedSizes), "object reference count");
 		long referencedObjectBytes = verifyObjectReferences(expectedSizes);
 		FileTotals catalogueFiles = fileTotals(regularFiles(cataloguesDirectory, "generation catalogues"));
 		FileTotals commitFiles = fileTotals(regularFiles(commitsDirectory, "generation commits"));
@@ -470,7 +468,6 @@ public final class GenerationStore {
 				: OwnershipLedger.builder(history.boundaryRecord().ownershipLedger());
 		if (history.boundaryRecord() != null && retained.contains(history.boundaryRecord().metadata().generationId())) {
 			addManifestReferences(history.boundaryRecord(), expectedSizes);
-			addLedgerReferences(ledger.entriesView().values(), expectedSizes);
 		}
 		for (CompactGeneration generation : history.generations()) {
 			try {
@@ -480,7 +477,6 @@ public final class GenerationStore {
 			}
 			if (retained.contains(generation.commit().generationId())) {
 				addManifestReferences(generation.snapshot().manifest(), expectedSizes);
-				addLedgerReferences(ledger.entriesView().values(), expectedSizes);
 			}
 		}
 		Set<String> availableGenerationIds = new HashSet<>();
@@ -547,23 +543,6 @@ public final class GenerationStore {
 		return count;
 	}
 
-	private long addReferences(GenerationRecord record, Map<String, Long> expectedSizes) throws IOException {
-		long count = addManifestReferences(record, expectedSizes);
-		return addLedgerReferences(record.ownershipLedger().entries().values(), expectedSizes, count);
-	}
-
-	private long addLedgerReferences(Collection<OwnershipLedger.Entry> entries, Map<String, Long> expectedSizes) throws IOException {
-		return addLedgerReferences(entries, expectedSizes, 0);
-	}
-
-	private long addLedgerReferences(Collection<OwnershipLedger.Entry> entries, Map<String, Long> expectedSizes, long count) throws IOException {
-		for (var entry : entries) for (var content : entry.historicalHashes()) {
-			addExpectedSize(expectedSizes, content.sha1(), content.size());
-			count = addExact(count, 1, "object reference count");
-		}
-		return count;
-	}
-
 	private static void addExpectedSize(Map<String, Long> expectedSizes, String sha1, long expectedSize) throws IOException {
 		if (!isDigest(sha1) || expectedSize < 0) throw new IOException("Invalid immutable object reference: " + sha1);
 		Long previousSize = expectedSizes.putIfAbsent(sha1, expectedSize);
@@ -608,10 +587,10 @@ public final class GenerationStore {
 		return !Files.isSymbolicLink(object) && Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && name.equals(HashUtils.getHash(object));
 	}
 
-	private Jsons.GenerationPointerFields readCurrentPointer() throws IOException {
+	private GenerationJsons.GenerationPointerFields readCurrentPointer() throws IOException {
 		ensureRegular(currentPath, "current generation pointer");
 		try {
-			Jsons.GenerationPointerFields pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), Jsons.GenerationPointerFields.class);
+			GenerationJsons.GenerationPointerFields pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), GenerationJsons.GenerationPointerFields.class);
 			if (pointer.schemaVersion != CURRENT_POINTER_SCHEMA_VERSION || !isDigest(pointer.generationId))
 				throw new IOException("Invalid current generation pointer metadata: " + currentPath);
 			return pointer;
@@ -626,7 +605,7 @@ public final class GenerationStore {
 		if (!Files.exists(checkpointPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		ensureRegular(checkpointPath, "generation history checkpoint");
 		try {
-			return Optional.of(GenerationCheckpoint.fromFields(ConfigTools.parse(Files.readString(checkpointPath, StandardCharsets.UTF_8), Jsons.GenerationCheckpointFields.class)));
+			return Optional.of(GenerationCheckpoint.fromFields(ConfigTools.parse(Files.readString(checkpointPath, StandardCharsets.UTF_8), GenerationJsons.GenerationCheckpointFields.class)));
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid generation history checkpoint: " + checkpointPath, e);
 		}
@@ -655,7 +634,7 @@ public final class GenerationStore {
 	private GenerationRecord readProjection(Path path) throws IOException {
 		ensureRegular(path, "current generation projection");
 		try {
-			Jsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CompleteModpackContentFields.class);
+			ModpackJsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), ModpackJsons.CompleteModpackContentFields.class);
 			GenerationPatchNoteHistory.fromFields(fields);
 			return GenerationRecord.fromFields(fields);
 		} catch (RuntimeException e) {
@@ -670,7 +649,7 @@ public final class GenerationStore {
 	private OwnershipDelta readDelta(Path path) throws IOException {
 		ensureRegular(path, "generation ownership delta");
 		try {
-			return OwnershipDelta.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.OwnershipDeltaFields.class));
+			return OwnershipDelta.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.OwnershipDeltaFields.class));
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid generation ownership delta: " + path, e);
 		}
@@ -683,7 +662,7 @@ public final class GenerationStore {
 	private CatalogueSnapshot readCatalogue(Path path) throws IOException {
 		ensureRegular(path, "generation catalogue snapshot");
 		try {
-			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CatalogueSnapshotFields.class));
+			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.CatalogueSnapshotFields.class));
 			if (!snapshot.stateDigest().equals(catalogueStateDigest(path))) throw new IOException("Catalogue snapshot filename does not match its identity: " + path);
 			return snapshot;
 		} catch (IOException e) {
@@ -700,7 +679,7 @@ public final class GenerationStore {
 	private GenerationCommit readCommit(Path path) throws IOException {
 		ensureRegular(path, "generation commit");
 		try {
-			GenerationCommit commit = GenerationCommit.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.GenerationCommitFields.class));
+			GenerationCommit commit = GenerationCommit.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.GenerationCommitFields.class));
 			if (!commit.generationId().equals(commitGenerationId(path))) throw new IOException("Generation commit filename does not match its identity: " + path);
 			return commit;
 		} catch (IOException e) {
@@ -767,7 +746,15 @@ public final class GenerationStore {
 			}
 			expectedParent = commit.generationId();
 		}
-		return new CompactHistory(checkpoint == null ? null : checkpoint.record(), List.copyOf(reverse), List.copyOf(entries));
+		List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
+		if (checkpoint == null) {
+			patchNotesHistory = GenerationPatchNoteHistory.fromHistory(entries);
+		} else {
+			List<GenerationPatchNoteHistory.Entry> patchNotes = new ArrayList<>(checkpoint.patchNotesHistory());
+			for (int index = 1; index < entries.size(); index++) patchNotes.add(GenerationPatchNoteHistory.Entry.fromMetadata(entries.get(index).metadata()));
+			patchNotesHistory = GenerationPatchNoteHistory.validateForGeneration(patchNotes, generationId);
+		}
+		return new CompactHistory(checkpoint == null ? null : checkpoint.record(), List.copyOf(reverse), List.copyOf(entries), patchNotesHistory);
 	}
 
 	private CompactState readCompactState(String generationId) throws IOException {
@@ -836,7 +823,7 @@ public final class GenerationStore {
 
 	private void verifyAllReferencedObjects(GenerationRecord record) throws IOException {
 		TreeMap<String, Long> expectedSizes = new TreeMap<>();
-		addReferences(record, expectedSizes);
+		addManifestReferences(record, expectedSizes);
 		verifyObjectReferences(expectedSizes);
 	}
 
@@ -890,19 +877,17 @@ public final class GenerationStore {
 		return generationId;
 	}
 
-	private static Jsons.GenerationPointerFields pointer(GenerationRecord record) {
-		Jsons.GenerationPointerFields pointer = new Jsons.GenerationPointerFields();
+	private static GenerationJsons.GenerationPointerFields pointer(GenerationRecord record) {
+		GenerationJsons.GenerationPointerFields pointer = new GenerationJsons.GenerationPointerFields();
 		pointer.schemaVersion = CURRENT_POINTER_SCHEMA_VERSION;
 		pointer.generationId = record.metadata().generationId();
 		return pointer;
 	}
 
 	private void writeCurrentProjection(GenerationRecord record) throws IOException {
-		Jsons.CompleteModpackContentFields fields = record.toFields();
+		ModpackJsons.CompleteModpackContentFields fields = record.toFields();
 		CompactHistory history = readCompactHistory(record.metadata().generationId());
-		List<GenerationPatchNoteHistory.Entry> patchNoteHistory = history.compacted()
-				? List.of(GenerationPatchNoteHistory.Entry.fromMetadata(record.metadata()))
-				: GenerationPatchNoteHistory.fromHistory(history.entries());
+		List<GenerationPatchNoteHistory.Entry> patchNoteHistory = history.patchNotesHistory();
 		GenerationPatchNoteHistory.writeFields(fields, patchNoteHistory);
 		ConfigTools.writeAtomic(currentProjectionPath, fields);
 	}
@@ -986,11 +971,8 @@ public final class GenerationStore {
 
 	private record CompactGeneration(GenerationCommit commit, CatalogueSnapshot snapshot, OwnershipDelta delta) {}
 
-	private record CompactHistory(GenerationRecord boundaryRecord, List<CompactGeneration> generations, List<GenerationHistoryEntry> entries) {
-		private boolean compacted() {
-			return boundaryRecord != null;
-		}
-	}
+	private record CompactHistory(GenerationRecord boundaryRecord, List<CompactGeneration> generations, List<GenerationHistoryEntry> entries,
+			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {}
 
 	private record CompactState(GenerationRecord record, List<GenerationHistoryEntry> entries) {}
 
@@ -999,11 +981,11 @@ public final class GenerationStore {
 	private record FileTotals(long count, long bytes) {}
 
 	private static final class PublicationGuard implements AutoCloseable {
-		private final ReentrantLock jvmLock;
+		private final PublicationLockRegistry.LockLease jvmLock;
 		private final FileChannel channel;
 		private final FileLock fileLock;
 
-		private PublicationGuard(ReentrantLock jvmLock, FileChannel channel, FileLock fileLock) {
+		private PublicationGuard(PublicationLockRegistry.LockLease jvmLock, FileChannel channel, FileLock fileLock) {
 			this.jvmLock = jvmLock;
 			this.channel = channel;
 			this.fileLock = fileLock;
@@ -1017,7 +999,7 @@ public final class GenerationStore {
 				try {
 					channel.close();
 				} finally {
-					jvmLock.unlock();
+					jvmLock.close();
 				}
 			}
 		}

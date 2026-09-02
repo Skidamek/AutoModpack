@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
 import java.nio.file.Path;
 import java.util.List;
 
+import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
@@ -21,8 +22,8 @@ public class ModpackLoader implements ModpackLoaderService {
 			: new ModpackLoader15();
 
 	@Override
-	public void loadModpack(List<Path> modpackMods) {
-		INSTANCE.loadModpack(modpackMods);
+	public void loadModpack(ModpackLoadRequest request) {
+		INSTANCE.loadModpack(request);
 	}
 
 	@Override

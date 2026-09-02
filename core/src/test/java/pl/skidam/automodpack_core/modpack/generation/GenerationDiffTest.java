@@ -8,7 +8,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 
@@ -60,8 +60,8 @@ class GenerationDiffTest {
 
 	@Test
 	void summaryCountsOneEffectivePathWhenGroupsRepeatIt() {
-		Jsons.CompleteModpackContentFields.GroupFileFields oldFile = file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
-		Jsons.CompleteModpackContentFields.GroupFileFields newFile = file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
+		ModpackJsons.CompleteModpackContentFields.GroupFileFields oldFile = file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
+		ModpackJsons.CompleteModpackContentFields.GroupFileFields newFile = file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
 		GroupManifest parent = manifestWithGroups("same", Map.of("main", Map.of("shared.txt", oldFile), "optional", Map.of("shared.txt", oldFile)));
 		GroupManifest child = manifestWithGroups("same", Map.of("main", Map.of("shared.txt", newFile), "optional", Map.of("shared.txt", newFile)));
 
@@ -72,32 +72,32 @@ class GenerationDiffTest {
 	}
 
 	private static GroupManifest taggedManifest(String tag) {
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.tag = tag;
 		group.files = Map.of();
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);
 	}
 
-	private static GroupManifest manifest(String id, Map<String, Jsons.CompleteModpackContentFields.GroupFileFields> files, String description, String tag,
+	private static GroupManifest manifest(String id, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> files, String description, String tag,
 			String deletion) {
 		return manifestWithGroups(id, Map.of("main", files), description, tag, deletion);
 	}
 
-	private static GroupManifest manifestWithGroups(String id, Map<String, Map<String, Jsons.CompleteModpackContentFields.GroupFileFields>> groups) {
+	private static GroupManifest manifestWithGroups(String id, Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> groups) {
 		return manifestWithGroups(id, groups, "", "", "");
 	}
 
-	private static GroupManifest manifestWithGroups(String id, Map<String, Map<String, Jsons.CompleteModpackContentFields.GroupFileFields>> groups, String description,
+	private static GroupManifest manifestWithGroups(String id, Map<String, Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields>> groups, String description,
 			String tag, String deletion) {
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.modpackName = id;
-		Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> declarations = new LinkedHashMap<>();
+		Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> declarations = new LinkedHashMap<>();
 		for (var entry : groups.entrySet()) {
-			var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+			var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 			group.description = entry.getKey().equals("main") ? description : "";
 			group.files = entry.getValue();
 			declarations.put(entry.getKey(), group);
@@ -106,7 +106,7 @@ class GenerationDiffTest {
 		return GroupManifestValidator.validate(fields);
 	}
 
-	private static Jsons.CompleteModpackContentFields.GroupFileFields file(String size, String hash, String murmur) {
-		return new Jsons.CompleteModpackContentFields.GroupFileFields(size, "other", false, false, hash, murmur);
+	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields file(String size, String hash, String murmur) {
+		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields(size, "other", false, false, hash, murmur);
 	}
 }

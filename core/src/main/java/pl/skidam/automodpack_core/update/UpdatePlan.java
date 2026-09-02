@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -18,7 +18,7 @@ public record UpdatePlan(
 		GenerationTarget generationTarget,
 		List<Operation> operations,
 		List<ProjectedFile> projectedFinalState,
-		Jsons.ClientConfigFieldsV3 plannedClientConfig,
+		ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig,
 		Set<RestartReason> restartReasons,
 		List<Preservation> preservations,
 		List<BaselineCapture> baselineCaptures,
@@ -34,22 +34,6 @@ public record UpdatePlan(
 		baselineCaptures = List.copyOf(baselineCaptures);
 		conflicts = List.copyOf(conflicts);
 		generatedCopies = List.copyOf(generatedCopies);
-	}
-
-	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
-			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, List.of(), List.of(), List.of(), List.of());
-	}
-
-	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
-			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, List.of(), List.of(), List.of());
-	}
-
-	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
-			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations,
-			List<BaselineCapture> baselineCaptures) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, baselineCaptures, List.of(), List.of());
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {

@@ -1,0 +1,13 @@
+# Client review preference
+
+AutoModpack stores the client review preference in the client-owned `automodpack/client-config.json` file. The field is:
+
+```json
+{
+  "reviewUpdates": true
+}
+```
+
+The default is `true`, so AutoModpack shows the normal first-install, update-review, and cached installed-pack switch screens. Set `reviewUpdates` to `false` only when automatic installation and updates are wanted without those review gates.
+
+This preference is client-local and is preserved when AutoModpack plans a modpack update or switches between cached modpacks. Server manifests and target metadata cannot set it. It suppresses only the normal review gate. Certificate verification, trust prompts, fingerprint mismatch handling, and warnings for untrusted certificates remain mandatory.

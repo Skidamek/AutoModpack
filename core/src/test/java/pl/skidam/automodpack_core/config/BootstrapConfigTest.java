@@ -12,7 +12,7 @@ class BootstrapConfigTest {
 
 	@Test
 	void installRequiresAndPreservesConnectionMode() {
-		Jsons.KnownHostsBootstrapFields fields = ConfigTools.parse("""
+		ConnectionJsons.KnownHostsBootstrapFields fields = ConfigTools.parse("""
 				{
 				  "origin": "Play.Example.com",
 				  "fingerprint": "01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef",
@@ -21,7 +21,7 @@ class BootstrapConfigTest {
 				  "connectionMode": "HOLEPUNCH",
 				  "reservedServerListName": "Future value"
 				}
-				""", Jsons.KnownHostsBootstrapFields.class);
+				""", ConnectionJsons.KnownHostsBootstrapFields.class);
 
 		BootstrapConfig.Validated validated = BootstrapConfig.validate(fields);
 		assertEquals("play.example.com:25565", AddressHelpers.formatAddress(validated.origin()));
@@ -33,7 +33,7 @@ class BootstrapConfigTest {
 
 	@Test
 	void rejectsEndpointWithoutConnectionMode() {
-		Jsons.KnownHostsBootstrapFields fields = new Jsons.KnownHostsBootstrapFields();
+		ConnectionJsons.KnownHostsBootstrapFields fields = new ConnectionJsons.KnownHostsBootstrapFields();
 		fields.origin = "play.example.com";
 		fields.fingerprint = FINGERPRINT;
 		fields.modpackId = "abc1234";
@@ -44,7 +44,7 @@ class BootstrapConfigTest {
 
 	@Test
 	void rejectsMixedForms() {
-		Jsons.KnownHostsBootstrapFields mixed = new Jsons.KnownHostsBootstrapFields();
+		ConnectionJsons.KnownHostsBootstrapFields mixed = new ConnectionJsons.KnownHostsBootstrapFields();
 		mixed.origin = "play.example.com";
 		mixed.fingerprint = FINGERPRINT;
 		mixed.modpackId = "abc1234";

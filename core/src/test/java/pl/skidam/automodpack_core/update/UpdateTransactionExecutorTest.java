@@ -15,8 +15,10 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -54,7 +56,7 @@ class UpdateTransactionExecutorTest {
 		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
 		assertEquals(target.generationRecord(), new ClientGenerationStore(storage).read(target.generationTarget().targetGenerationId()).orElseThrow());
 		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
-		assertEquals(target.manifest().modpackId(), ConfigTools.read(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
+		assertEquals(target.manifest().modpackId(), ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
 		assertFalse(Files.exists(storage.automodpackDirectory().resolve("modpacks")));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
@@ -91,7 +93,7 @@ class UpdateTransactionExecutorTest {
 		String hash = HashUtils.getHash(Files.write(storage.activePath("mods/existing.jar"), bytes));
 		SelectedModpackTarget target = target("mods/existing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), List.of(),
-				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of());
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of());
 
 		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
 
@@ -115,7 +117,7 @@ class UpdateTransactionExecutorTest {
 				new UpdatePlan.FileState(localHash, localBytes.length, true, true));
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(),
 				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
-				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), null,
+				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId())));
 		UpdateTransaction malformed = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
 		malformed.plannedConflicts = new ArrayList<>(List.of(plan.conflicts().get(0)));
@@ -127,7 +129,7 @@ class UpdateTransactionExecutorTest {
 		assertTrue(execution.success());
 		assertFalse(Files.exists(local));
 		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
-		Jsons.ClientQuarantineFields quarantine = QuarantineArchive.read(storage, target.manifest().modpackId());
+		ClientStorageJsons.ClientQuarantineFields quarantine = QuarantineArchive.read(storage, target.manifest().modpackId());
 		assertEquals(1, quarantine.entries.size());
 		assertTrue(SmartFileUtils.isValidFile(storage.quarantinePayload(target.manifest().modpackId(), plan.conflicts().get(0).conflictId()), localBytes.length, localHash));
 	}
@@ -152,11 +154,11 @@ class UpdateTransactionExecutorTest {
 		ClientStorage storage = storage();
 		byte[] bytes = "history-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
-		Jsons.CompleteModpackContentFields fields = fields("mods/history.jar", "mod", false, hash, bytes.length);
+		ModpackJsons.CompleteModpackContentFields fields = fields("mods/history.jar", "mod", false, hash, bytes.length);
 		GenerationRecord first = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "First notes");
 		GenerationRecord second = GenerationRecord.create(first.manifest(), first, Instant.parse("2026-01-02T00:00:00Z"), "Second notes");
 		List<GenerationPatchNoteHistory.Entry> history = GenerationPatchNoteHistory.fromRecords(List.of(first, second));
-		Jsons.CompleteModpackContentFields secondFields = second.toFields();
+		ModpackJsons.CompleteModpackContentFields secondFields = second.toFields();
 		GenerationPatchNoteHistory.writeFields(secondFields, history);
 		SelectedModpackTarget target = SelectedModpackTarget.prepare(secondFields, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
@@ -237,9 +239,9 @@ class UpdateTransactionExecutorTest {
 				UpdateTransaction.digest(expected), List.of(new GeneratedCopyState.Entry("mods/generated-remove.jar", generatedHash, generatedBytes.length)));
 		generatedCopies.write(storage);
 
-		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = target.manifest().modpackId();
-		Jsons.ClientBaselineFields.EntryFields baselineEntry = new Jsons.ClientBaselineFields.EntryFields();
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
 		baselineEntry.logicalPath = "mods/remove.jar";
 		baselineEntry.absent = true;
 		baselineEntry.objectHash = "";
@@ -249,7 +251,7 @@ class UpdateTransactionExecutorTest {
 				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true),
 				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true, true),
 				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/generated-remove.jar"), new UpdatePlan.FileState(generatedHash, generatedBytes.length, true, true));
-		Jsons.ClientConfigFieldsV3 removalConfig = new Jsons.ClientConfigFieldsV3();
+		ClientConfigJsons.ClientConfigFieldsV3 removalConfig = new ClientConfigJsons.ClientConfigFieldsV3();
 		UpdatePlan removal = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), generatedCopies, removalConfig));
 		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, "mods/remove.jar", hash, bytes.length)), removal.preservations());
 		assertTrue(removal.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/generated-remove.jar")
@@ -320,23 +322,23 @@ class UpdateTransactionExecutorTest {
 		if (Files.getFileStore(object).equals(Files.getFileStore(projection))) assertTrue(Files.isSameFile(object, projection));
 	}
 
-	private static UpdatePlan plan(SelectedModpackTarget target, Jsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {
-		return new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), operations, finalState, config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK));
+	private static UpdatePlan plan(SelectedModpackTarget target, ClientConfigJsons.ClientConfigFieldsV3 config, List<Operation> operations, List<ProjectedFile> finalState) {
+		return new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), operations, finalState, config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of());
 	}
 
 	private static SelectedModpackTarget target(String path, String type, boolean editable, String hash, long size) {
-		Jsons.CompleteModpackContentFields fields = fields(path, type, editable, hash, size);
+		ModpackJsons.CompleteModpackContentFields fields = fields(path, type, editable, hash, size);
 		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
 		return SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
 	}
 
-	private static Jsons.CompleteModpackContentFields fields(String path, String type, boolean editable, String hash, long size) {
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+	private static ModpackJsons.CompleteModpackContentFields fields(String path, String type, boolean editable, String hash, long size) {
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.modpackName = "Test";
-		Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.required = true;
-		Jsons.CompleteModpackContentFields.GroupFileFields file = new Jsons.CompleteModpackContentFields.GroupFileFields();
+		ModpackJsons.CompleteModpackContentFields.GroupFileFields file = new ModpackJsons.CompleteModpackContentFields.GroupFileFields();
 		file.size = String.valueOf(size);
 		file.type = type;
 		file.editable = editable;
@@ -347,8 +349,8 @@ class UpdateTransactionExecutorTest {
 		return fields;
 	}
 
-	private static Jsons.ClientConfigFieldsV3 clientConfig(String modpackId) {
-		Jsons.ClientConfigFieldsV3 config = new Jsons.ClientConfigFieldsV3();
+	private static ClientConfigJsons.ClientConfigFieldsV3 clientConfig(String modpackId) {
+		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
 		config.selectedModpackId = modpackId;
 		return config;
 	}

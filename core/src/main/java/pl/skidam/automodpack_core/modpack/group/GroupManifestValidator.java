@@ -6,7 +6,7 @@ import java.text.Normalizer;
 import java.util.*;
 import java.util.regex.Pattern;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 
 public final class GroupManifestValidator {
@@ -16,7 +16,7 @@ public final class GroupManifestValidator {
 
 	private GroupManifestValidator() {}
 
-	public static GroupManifest validate(Jsons.CompleteModpackContentFields fields) {
+	public static GroupManifest validate(ModpackJsons.CompleteModpackContentFields fields) {
 		List<String> errors = new ArrayList<>();
 		if (fields == null) throw new GroupValidationException(List.of("Complete modpack catalogue is missing"));
 		if (!ModpackId.isValid(fields.modpackId)) errors.add("Invalid modpack ID");
@@ -24,7 +24,7 @@ public final class GroupManifestValidator {
 		Map<String, GroupManifest.Group> groups = new TreeMap<>();
 		if (fields.groups != null) for (var entry : fields.groups.entrySet()) {
 			String id = entry.getKey();
-			Jsons.CompleteModpackContentFields.ModpackGroupFields group = entry.getValue();
+			ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = entry.getValue();
 			if (!isValidIdentifier(id)) {
 				errors.add("Invalid group ID: " + id);
 				continue;
@@ -57,7 +57,7 @@ public final class GroupManifestValidator {
 	}
 
 	private static Map<String, GroupManifest.GroupFile> validateFiles(String groupId,
-			Map<String, Jsons.CompleteModpackContentFields.GroupFileFields> input, List<String> errors) {
+			Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> input, List<String> errors) {
 		Map<String, GroupManifest.GroupFile> files = new TreeMap<>();
 		if (input == null) {
 			errors.add("Group '" + groupId + "' files are missing");
@@ -66,7 +66,7 @@ public final class GroupManifestValidator {
 		for (var entry : input.entrySet()) {
 			String path = entry.getKey();
 			if (!isCanonicalPublishedPath(path, groupId, errors)) continue;
-			Jsons.CompleteModpackContentFields.GroupFileFields file = entry.getValue();
+			ModpackJsons.CompleteModpackContentFields.GroupFileFields file = entry.getValue();
 			if (file == null) {
 				errors.add("Group '" + groupId + "' file '" + path + "' is missing metadata");
 				continue;

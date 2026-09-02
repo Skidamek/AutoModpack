@@ -11,9 +11,13 @@ import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -87,12 +91,11 @@ public class Preload {
 		UpdateTransactionExecutor.Execution execution = executor.recover(transaction);
 		if (!execution.success()) {
 			DetachedUpdateHelper.launch(transaction);
-			Path projection = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE ? storage.activeDirectory() : null;
-			new ReLauncher(projection, UpdateType.UPDATE, null).restart(true);
+			new ReLauncher(UpdateType.UPDATE, null).restart(true);
 			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
 		}
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			clientConfig = ConfigTools.read(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class)
+			clientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
 		}
 		LOGGER.info("Recovered update transaction {}", transaction.transactionId);
@@ -111,7 +114,7 @@ public class Preload {
 			return;
 		}
 
-		Jsons.ConnectionInfo storedConnectionInfo = null;
+		ConnectionJsons.ConnectionInfo storedConnectionInfo = null;
 		if (clientConfig.selectedModpackId != null && !clientConfig.selectedModpackId.isBlank()) {
 			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 				LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
@@ -133,7 +136,7 @@ public class Preload {
 		}
 
 		String expectedFingerprint = CertificateTrustStore.getFingerprint(storedConnectionInfo.origin);
-		Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(storedConnectionInfo.origin, storedConnectionInfo.endpoint,
+		ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(storedConnectionInfo.origin, storedConnectionInfo.endpoint,
 				storedConnectionInfo.connectionMode, expectedFingerprint, null);
 		Secrets.Secret secret = SecretsStore.getClientSecret(storage, clientConfig.selectedModpackId, storedConnectionInfo.origin);
 		if (secret == null) {
@@ -166,7 +169,7 @@ public class Preload {
 				loadLocalModpack(connectionInfo, secret);
 				return;
 			}
-			Jsons.ModpackContentFields latestModpackContent = selectedTarget.flatTarget();
+			ModpackJsons.ModpackContentFields latestModpackContent = selectedTarget.flatTarget();
 			if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
 				LOGGER.error("Selected modpack catalogue changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
 				downloadClient.close();
@@ -186,7 +189,7 @@ public class Preload {
 		new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient).processModpackUpdate(null);
 	}
 
-	private void loadLocalModpack(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
+	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
 		if (!hasActiveProjection()) return;
 		try {
 			new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
@@ -202,7 +205,7 @@ public class Preload {
 				return false;
 			}
 			if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return false;
-			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			if (state == null) {
 				LOGGER.warn("Skipping active modpack load because the active projection has no active state");
 				return false;
@@ -250,10 +253,10 @@ public class Preload {
 		long startTime = System.currentTimeMillis();
 
 		// load client config
-		clientConfig = ConfigTools.readOrCreate(storage.clientConfigFile(), Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
+		clientConfig = ConfigTools.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 
 		// load server config
-		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
+		serverConfig = ConfigTools.readOrCreate(serverConfigFile, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 
 		if (serverConfig != null) {
 			String serverConfigBefore = ConfigTools.GSON.toJson(serverConfig);
@@ -282,7 +285,7 @@ public class Preload {
 	private void importBootstrap() {
 		if (!Files.isRegularFile(storage.bootstrapFile())) return;
 
-		Jsons.KnownHostsBootstrapFields fields = ConfigTools.read(storage.bootstrapFile(), Jsons.KnownHostsBootstrapFields.class)
+		ConnectionJsons.KnownHostsBootstrapFields fields = ConfigTools.read(storage.bootstrapFile(), ConnectionJsons.KnownHostsBootstrapFields.class)
 				.orElseThrow(() -> new ConfigTools.ConfigException("Bootstrap file is not a regular file"));
 		final BootstrapConfig.Validated bootstrap;
 		try {
@@ -293,10 +296,10 @@ public class Preload {
 
 		String originKey = AddressHelpers.formatAddress(bootstrap.origin());
 		String previousSelectedModpackId = clientConfig.selectedModpackId;
-		Jsons.ClientConfigFieldsV3 updatedClientConfig = clientConfig;
+		ClientConfigJsons.ClientConfigFieldsV3 updatedClientConfig = clientConfig;
 		String targetModpackId = bootstrap.installsModpack() ? bootstrap.modpackId() : ModpackId.isValid(clientConfig.selectedModpackId) ? clientConfig.selectedModpackId : null;
-		Jsons.ConnectionInfo previousConnection = null;
-		Jsons.CertificateTrustEntry previousTrust;
+		ConnectionJsons.ConnectionInfo previousConnection = null;
+		ConnectionJsons.CertificateTrustEntry previousTrust;
 		try {
 			previousTrust = CertificateTrustStore.get(bootstrap.origin());
 			CertificateTrustStore.save(bootstrap.origin(), bootstrap.fingerprint(), CertificateTrustStore.Reason.SEED);
@@ -304,8 +307,8 @@ public class Preload {
 				previousConnection = ConnectionStore.getConnection(storage, targetModpackId);
 				if (bootstrap.installsModpack()) {
 					ConnectionStore.saveConnection(storage, targetModpackId,
-							new Jsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
-					updatedClientConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
+							new ConnectionJsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
+					updatedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(clientConfig);
 					updatedClientConfig.selectedModpackId = targetModpackId;
 					writeConfig(storage.clientConfigFile(), updatedClientConfig);
 					clientConfig = updatedClientConfig;

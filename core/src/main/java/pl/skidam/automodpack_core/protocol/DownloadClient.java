@@ -39,7 +39,7 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
@@ -60,7 +60,7 @@ public class DownloadClient implements AutoCloseable {
 
 	private static final int MAX_CONNECTIONS = 5;
 
-	private final Jsons.ConnectionInfo connectionInfo;
+	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final byte[] secretBytes;
 	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
@@ -76,7 +76,7 @@ public class DownloadClient implements AutoCloseable {
 
 	private record TlsCandidate(SSLSocket socket, CustomizableTrustManager trustManager) {}
 
-	private DownloadClient(Jsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
+	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
 			TransportRoute route) {
 		this.connectionInfo = connectionInfo;
 		this.secretBytes = secretBytes == null ? null : secretBytes.clone();
@@ -85,7 +85,7 @@ public class DownloadClient implements AutoCloseable {
 		this.sessionTrust = new CustomizableTrustManager.SessionTrust(AddressHelpers.formatAddress(connectionInfo.origin), connectionInfo.expectedFingerprint);
 	}
 
-	public static CompletableFuture<DownloadClient> createAsync(Jsons.ConnectionInfo connectionInfo, byte[] secretBytes,
+	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
 		if (connectionInfo == null || !connectionInfo.isComplete())
 			return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing"));
@@ -104,7 +104,7 @@ public class DownloadClient implements AutoCloseable {
 		});
 	}
 
-	private static CompletableFuture<TransportRoute> resolveRouteAsync(Jsons.ConnectionInfo connectionInfo) {
+	private static CompletableFuture<TransportRoute> resolveRouteAsync(ConnectionJsons.ConnectionInfo connectionInfo) {
 		if (connectionInfo.connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 			return HolepunchClient.resolve(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort()).toCompletableFuture()
 					.thenApply(route -> new TransportRoute(null, route));

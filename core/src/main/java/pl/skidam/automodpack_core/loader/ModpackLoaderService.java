@@ -8,7 +8,7 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 public interface ModpackLoaderService {
-	void loadModpack(List<Path> modpackMods);
+	void loadModpack(ModpackLoadRequest request);
 
 	List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache); // Returns mod conflicts found in the active projection.
 

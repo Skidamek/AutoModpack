@@ -12,7 +12,8 @@ import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -30,7 +31,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 final class ClientLoginUpdateFlow {
 	private ClientLoginUpdateFlow() {}
 
-	static CompletableFuture<LoginUpdateResponse> reconcile(ClientHandshakePacketListenerImpl handler, Jsons.ConnectionInfo connectionInfo,
+	static CompletableFuture<LoginUpdateResponse> reconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, ClientStorage storage) {
 		return ModpackUtils.requestServerModpackContentAsync(storage, connectionInfo, secret, true).thenApplyAsync(manifestResult -> {
 			if (manifestResult.state() == ModpackUtils.ManifestFetchState.OPERATION_FAILED) return LoginUpdateResponse.UPDATE_REQUIRED;
@@ -93,7 +94,7 @@ final class ClientLoginUpdateFlow {
 		});
 	}
 
-	private static boolean canRepair(Jsons.CompleteModpackContentFields fields) {
+	private static boolean canRepair(ModpackJsons.CompleteModpackContentFields fields) {
 		try {
 			GenerationRecord record = GenerationRecord.fromFields(fields);
 			SelectedModpackTarget.prepareDefault(fields, ClientPlatform.current());
@@ -103,9 +104,9 @@ final class ClientLoginUpdateFlow {
 		}
 	}
 
-	private static LoginUpdateResponse continueReconcile(ClientHandshakePacketListenerImpl handler, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
+	private static LoginUpdateResponse continueReconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			ClientStorage storage, DownloadClient downloadClient, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected) {
-		Jsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
+		ModpackJsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
 		try {
 			ConnectionStore.saveConnection(storage, serverModpackContent.modpackId, connectionInfo);
 			SecretsStore.saveClientSecret(storage, serverModpackContent.modpackId, connectionInfo.origin, secret);

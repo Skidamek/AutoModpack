@@ -26,7 +26,8 @@
     "core.MusicTrackerMixin",
     "core.JoinMultiplayerScreenMixin",
     "dev.MinecraftMixin",
-    "dev.ResourceLoadStateTrackerMixin"
+    "dev.ResourceLoadStateTrackerMixin",
+    "dev.GameRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

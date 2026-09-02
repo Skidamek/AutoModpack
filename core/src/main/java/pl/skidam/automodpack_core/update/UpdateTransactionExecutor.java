@@ -23,8 +23,10 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
@@ -59,7 +61,7 @@ public final class UpdateTransactionExecutor {
 
 	@FunctionalInterface
 	public interface CommitAction {
-		void run(UpdateTransaction transaction, Jsons.ModpackContentFields target) throws IOException;
+		void run(UpdateTransaction transaction, ModpackJsons.ModpackContentFields target) throws IOException;
 	}
 
 	public record Context(ClientStorage storage, CommitAction beforeManifestAction) {
@@ -140,7 +142,7 @@ public final class UpdateTransactionExecutor {
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && transaction.plannedGeneratedCopies != null)
 			throw new IOException("Generated-copy state is only valid for modpack update transactions");
 
-		Jsons.ModpackContentFields target = null;
+		ModpackJsons.ModpackContentFields target = null;
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			ModpackId.requireValid(transaction.modpackId);
 			GenerationRecord record = storedRecord(transaction);
@@ -210,7 +212,7 @@ public final class UpdateTransactionExecutor {
 	private SelectedModpackTarget resolvedTarget(UpdateTransaction transaction, GenerationRecord record) throws IOException {
 		try {
 			SelectionIntent expected = transaction.expectedPriorIntent();
-			Jsons.CompleteModpackContentFields fields = new ClientGenerationStore(context.storage()).readFields(transaction.targetGenerationId)
+			ModpackJsons.CompleteModpackContentFields fields = new ClientGenerationStore(context.storage()).readFields(transaction.targetGenerationId)
 					.orElseThrow(() -> new IOException("Client generation record is missing: " + transaction.targetGenerationId));
 			if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && expected == null)
 				return SelectedModpackTarget.prepareDefault(fields, transaction.platform());
@@ -220,7 +222,7 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	private void validateGenerationIdentity(UpdateTransaction transaction, GenerationRecord record, Jsons.ModpackContentFields target) throws IOException {
+	private void validateGenerationIdentity(UpdateTransaction transaction, GenerationRecord record, ModpackJsons.ModpackContentFields target) throws IOException {
 		GenerationTarget transactionTarget;
 		try {
 			transactionTarget = transaction.generationTarget();
@@ -240,7 +242,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateStoredClientState(UpdateTransaction transaction, GenerationRecord targetRecord) throws IOException {
-		Jsons.ClientGenerationStateFields state = context.storage().readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields state = context.storage().readActiveState();
 		if (state == null) return;
 		if (!ModpackId.isValid(state.modpackId)) throw new IOException("Active client state modpack ID is invalid");
 		if (!SHA1.matcher(state.generationId).matches())
@@ -273,13 +275,13 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validatePlannedClientConfig(UpdateTransaction transaction) throws IOException {
-		Jsons.ClientConfigFieldsV3 config = transaction.plannedClientConfig;
+		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plannedClientConfig;
 		if (config == null || !transaction.modpackId.equals(config.selectedModpackId))
 			throw new IOException("Planned client config does not select the transaction modpack");
 	}
 
 	private void validateRemovalClientConfig(UpdateTransaction transaction) throws IOException {
-		Jsons.ClientConfigFieldsV3 config = transaction.plannedClientConfig;
+		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plannedClientConfig;
 		if (config == null || transaction.modpackId.equals(config.selectedModpackId))
 			throw new IOException("Removal client config still selects the removed modpack");
 	}
@@ -312,7 +314,7 @@ public final class UpdateTransactionExecutor {
 		} else throw new IOException("Unsupported transaction purpose");
 	}
 
-	private void validateManifest(Jsons.ModpackContentFields manifest, String modpackId) throws IOException {
+	private void validateManifest(ModpackJsons.ModpackContentFields manifest, String modpackId) throws IOException {
 		if (manifest == null || manifest.list == null || manifest.selectedGroups == null || !modpackId.equals(manifest.modpackId) || !ModpackId.isValid(manifest.modpackId))
 			throw new IOException("Selected target identity is invalid");
 		Set<String> normalizedPaths = new HashSet<>();
@@ -383,7 +385,7 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, Jsons.ModpackContentFields target) throws IOException {
+	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
 		boolean removal = transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !removal) {
 			if (!transaction.plannedPreservations.isEmpty()) throw new IOException("Only modpack transactions can preserve deleted files");
@@ -422,7 +424,7 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, Jsons.ModpackContentFields target) throws IOException {
+	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			if (!transaction.plannedConflicts.isEmpty()) throw new IOException("Only modpack updates may contain conflicts");
 			return;
@@ -472,7 +474,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private OwnershipLedger cleanupLedger() throws IOException {
-		Jsons.ClientGenerationStateFields state = context.storage().readActiveState();
+		ClientStorageJsons.ClientGenerationStateFields state = context.storage().readActiveState();
 		if (state == null) return null;
 		GenerationRecord active = new ClientGenerationStore(context.storage()).read(state.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
@@ -502,7 +504,7 @@ public final class UpdateTransactionExecutor {
 			throw new IOException("Invalid directory operation metadata");
 	}
 
-	private void validateManifestProjection(Jsons.ModpackContentFields manifest, Map<FileKey, ProjectedFile> finalState) throws IOException {
+	private void validateManifestProjection(ModpackJsons.ModpackContentFields manifest, Map<FileKey, ProjectedFile> finalState) throws IOException {
 		for (var item : manifest.list) {
 			String relative = normalizeManifestPath(item.file);
 			ProjectedFile projected = finalState.get(new FileKey(Root.PROJECTION, relative));
@@ -541,7 +543,7 @@ public final class UpdateTransactionExecutor {
 					setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
 					swapProjection(transaction);
 				}
-				Jsons.ModpackContentFields target = resolvedTarget(transaction, storedRecord(transaction)).flatTarget();
+				ModpackJsons.ModpackContentFields target = resolvedTarget(transaction, storedRecord(transaction)).flatTarget();
 				if (transaction.plannedClientConfig != null) ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
 				if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
 					context.beforeManifestAction().run(transaction, target);
@@ -741,15 +743,15 @@ public final class UpdateTransactionExecutor {
 	private void captureBaselines(UpdateTransaction transaction) throws IOException {
 		if (transaction.plannedBaselineCaptures.isEmpty()) return;
 		Path baselinePath = context.storage().baselineFile(transaction.modpackId);
-		Jsons.ClientBaselineFields baseline = readBaseline(baselinePath, transaction.modpackId);
-		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
-		for (Jsons.ClientBaselineFields.EntryFields entry : baseline.entries) entries.put(entry.logicalPath, entry);
+		ClientStorageJsons.ClientBaselineFields baseline = readBaseline(baselinePath, transaction.modpackId);
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
+		for (ClientStorageJsons.ClientBaselineFields.EntryFields entry : baseline.entries) entries.put(entry.logicalPath, entry);
 		boolean changed = false;
 		for (BaselineCapture capture : transaction.plannedBaselineCaptures) {
 			String logicalPath = capture.relativePath();
 			if (entries.containsKey(logicalPath)) continue;
 			Path source = resolve(capture.root(), capture.relativePath(), transaction);
-			Jsons.ClientBaselineFields.EntryFields entry = new Jsons.ClientBaselineFields.EntryFields();
+			ClientStorageJsons.ClientBaselineFields.EntryFields entry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
 			entry.logicalPath = logicalPath;
 			entry.baselineGenerationId = transaction.parentGenerationId == null ? "" : transaction.parentGenerationId;
 			if (capture.absent()) {
@@ -773,14 +775,14 @@ public final class UpdateTransactionExecutor {
 		ConfigTools.writeAtomic(baselinePath, baseline);
 	}
 
-	private Jsons.ClientBaselineFields readBaseline(Path path, String modpackId) throws IOException {
+	private ClientStorageJsons.ClientBaselineFields readBaseline(Path path, String modpackId) throws IOException {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			Jsons.ClientBaselineFields empty = new Jsons.ClientBaselineFields();
+			ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
 			empty.modpackId = modpackId;
 			return empty;
 		}
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Baseline state is not a regular file");
-		Jsons.ClientBaselineFields baseline = ConfigTools.read(path, Jsons.ClientBaselineFields.class).orElseThrow(() -> new IOException("Baseline state is empty"));
+		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(path, ClientStorageJsons.ClientBaselineFields.class).orElseThrow(() -> new IOException("Baseline state is empty"));
 		if (baseline.schemaVersion != 1 || !modpackId.equals(baseline.modpackId) || baseline.entries == null) throw new IOException("Baseline state identity is invalid");
 		return baseline;
 	}
