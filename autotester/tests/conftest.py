@@ -1004,7 +1004,6 @@ class FakeBridge:
             manifest_groups[group_id].setdefault("required", False)
             manifest_groups[group_id].setdefault("defaultSelected", False)
             manifest_groups[group_id].setdefault("category", "")
-            manifest_groups[group_id].setdefault("icon", "")
             manifest_groups[group_id].setdefault("breaksWith", [])
             manifest_groups[group_id].setdefault("requires", [])
             manifest_groups[group_id].setdefault("compatiblePlatforms", [])

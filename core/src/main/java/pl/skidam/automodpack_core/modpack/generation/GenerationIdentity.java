@@ -20,7 +20,7 @@ public final class GenerationIdentity {
 		encoder.integer(manifest.groups().size());
 		for (var groupEntry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = groupEntry.getValue();
-			encoder.string(groupEntry.getKey()).string(group.displayName()).string(group.description()).string(group.category()).string(group.icon())
+			encoder.string(groupEntry.getKey()).string(group.displayName()).string(group.description()).string(group.category())
 					.bool(group.required()).bool(group.defaultSelected());
 			writeStrings(encoder, group.breaksWith());
 			writeStrings(encoder, group.requires());

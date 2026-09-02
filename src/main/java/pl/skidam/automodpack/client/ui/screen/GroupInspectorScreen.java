@@ -13,7 +13,6 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -65,10 +64,6 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		int textWidth = panelWidth(PANEL_WIDTH);
 		int y = 12;
-		if (!group.icon().isBlank()) {
-			drawTexture(Common.resourceId(group.icon()), matrices, this.width / 2 - 8, y, 0, 0, 16, 16, 16, 16);
-			y += 21;
-		}
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, displayName(), textWidth)).withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
 		y += 17;
 		String description = group.description().isBlank() ? VersionedText.translatable("automodpack.groupInspector.noDescription").getString() : group.description();

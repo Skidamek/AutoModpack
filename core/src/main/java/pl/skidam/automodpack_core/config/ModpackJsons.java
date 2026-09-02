@@ -46,7 +46,6 @@ public class ModpackJsons {
 			public String displayName = "";
 			public String description = "";
 			public String category = "";
-			public String icon = "";
 			public boolean required;
 			public boolean defaultSelected;
 			public Set<String> breaksWith = Set.of();
