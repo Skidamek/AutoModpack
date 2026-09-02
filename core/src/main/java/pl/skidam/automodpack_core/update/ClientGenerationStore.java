@@ -35,7 +35,6 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.FileTrees;
-import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /** Persistent immutable client snapshots of downloaded generation records. The server store is compact; client snapshots remain complete so local history and cached switching work without server access. */

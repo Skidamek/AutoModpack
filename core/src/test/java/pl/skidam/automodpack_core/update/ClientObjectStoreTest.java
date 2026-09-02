@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils.cache;
+package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,9 +23,6 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
-import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;

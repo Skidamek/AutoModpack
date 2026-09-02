@@ -33,7 +33,6 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 
 class ClientGenerationStoreTest {
 	private static final String FIRST_PACK = "abc1234";

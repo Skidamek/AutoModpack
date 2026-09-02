@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.utils.cache;
+package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,15 +21,10 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
-import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.GeneratedCopyState;
-import pl.skidam.automodpack_core.update.PreservationVault;
-import pl.skidam.automodpack_core.update.UpdatePlan;
-import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 /** Measures and explicitly maintains the client shared object store. */
 public final class ClientObjectStore {
