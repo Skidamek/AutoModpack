@@ -23,19 +23,7 @@ public final class GenerationHosting {
 		this.paths = Collections.unmodifiableNavigableMap(normalized);
 	}
 
-	public Path get(String key) {
-		return paths.get(key);
-	}
-
-	public boolean containsKey(String key) {
-		return paths.containsKey(key);
-	}
-
 	public NavigableMap<String, Path> asMap() {
 		return paths;
-	}
-
-	public boolean isEmpty() {
-		return paths.isEmpty();
 	}
 }

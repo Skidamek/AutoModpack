@@ -80,19 +80,14 @@ public final class ClientObjectStore {
 	}
 
 	/** The receipt returned by one explicitly requested collection pass. */
-	public record CollectionResult(StorageReport before, StorageReport after, long deletedObjectCount, long deletedObjectBytes, CollectionStatus status) {
+	public record CollectionResult(StorageReport before, StorageReport after, long deletedObjectCount, long deletedObjectBytes) {
 		public CollectionResult {
 			before = Objects.requireNonNull(before, "before receipt");
 			after = Objects.requireNonNull(after, "after receipt");
-			status = Objects.requireNonNull(status, "collection status");
 			if (deletedObjectCount < 0 || deletedObjectBytes < 0) throw new IllegalArgumentException("Deleted object values cannot be negative");
 			if (after.objectCount() > before.objectCount() || after.objectBytes() > before.objectBytes())
 				throw new IllegalArgumentException("Collection increased the measured object store");
 		}
-	}
-
-	public enum CollectionStatus {
-		COLLECTED
 	}
 
 	/** A deterministic measurement of validated generated-copy state files. */
@@ -139,7 +134,7 @@ public final class ClientObjectStore {
 				}
 			}
 			StorageReport after = measure(storage, references, true);
-			return new CollectionResult(before, after, deletedCount, deletedBytes, CollectionStatus.COLLECTED);
+			return new CollectionResult(before, after, deletedCount, deletedBytes);
 		});
 	}
 

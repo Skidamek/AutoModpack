@@ -34,9 +34,7 @@ public class FileInspection {
 
 	public record HashPathPair(String hash, Path path) {}
 
-	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, Set<String> services)
-			implements
-				Serializable {
+	public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods, String id, Set<String> services) {
 		public Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) {
 			this(IDs, hash, version, path, deps, nestedMods, null, Set.of());
 		}
@@ -47,27 +45,6 @@ public class FileInspection {
 
 		public Mod at(Path newPath) {
 			return new Mod(IDs, hash, version, newPath, deps, nestedMods, id, services);
-		}
-
-		// Magic to de/serialize Path properly
-
-		@Serial
-		private Object writeReplace() {
-			return new SerializationProxy(this);
-		}
-
-		private record SerializationProxy(Set<String> IDs, String hash, String version, String pathString, Set<String> deps, Set<Mod> nestedMods, String id,
-				Set<String> services) implements Serializable {
-
-			public SerializationProxy(Mod mod) {
-				this(mod.IDs(), mod.hash(), mod.version(), mod.path() == null ? null : mod.path().toAbsolutePath().normalize().toString(), mod.deps(),
-						mod.nestedMods(), mod.id(), mod.services());
-			}
-
-			@Serial
-			private Object readResolve() {
-				return new Mod(IDs, hash, version, pathString == null ? null : Path.of(pathString), deps, nestedMods, id, services);
-			}
 		}
 	}
 

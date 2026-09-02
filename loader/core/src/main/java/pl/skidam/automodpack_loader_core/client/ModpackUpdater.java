@@ -107,10 +107,6 @@ public class ModpackUpdater implements AutoCloseable {
 		return Objects.requireNonNull(selectedTarget, "Selected modpack target is unavailable");
 	}
 
-	public String getPatchNotes() {
-		return getSelectedTarget().generationRecord().metadata().patchNotes();
-	}
-
 	public List<GenerationPatchNoteHistory.Entry> getFirstInstallPatchNotes() {
 		return List.of(GenerationPatchNoteHistory.Entry.fromMetadata(getSelectedTarget().generationRecord().metadata()));
 	}
@@ -192,7 +188,7 @@ public class ModpackUpdater implements AutoCloseable {
 		return ClientProjectionView.open(storage).target();
 	}
 
-	public void selectTarget(SelectionIntent intent) {
+	private void selectTarget(SelectionIntent intent) {
 		Objects.requireNonNull(intent, "intent");
 		SelectedModpackTarget current = getSelectedTarget();
 		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(current.completeFields(), current.expectedPriorIntent(), intent, current.platform());
@@ -914,11 +910,6 @@ public class ModpackUpdater implements AutoCloseable {
 	private void requireLiveConnection() throws IOException {
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IOException("Modpack connection is unavailable");
 		if (downloadClient == null) throw new IOException("Modpack transfer session is unavailable");
-	}
-
-	private boolean downloadModpack(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager)
-			throws InterruptedException {
-		return downloadModpack(finalFilesToUpdate, startFetching, fetchManager, true);
 	}
 
 	private boolean downloadModpack(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager,

@@ -56,22 +56,6 @@ public class ModFileCache implements AutoCloseable {
 		}
 	}
 
-	/** Re-inspects mod metadata from bytes that are force-rehashed during this call. */
-	public FileInspection.Mod reinspectMod(Path file, FileMetadataCache cache) throws IOException {
-		Path absPath = file.toAbsolutePath().normalize();
-		String hash = cache.rehash(absPath);
-		int lockIndex = Math.floorMod(hash.hashCode(), locks.length);
-		synchronized (locks[lockIndex]) {
-			FileInspection.Mod modFile = FileInspection.getMod(absPath, cache);
-			if (modFile != null) writeRecord(hash, new ModRecord(modFile));
-			else {
-				hotRecords.remove(hash);
-				Files.deleteIfExists(recordPath(hash));
-			}
-			return modFile;
-		}
-	}
-
 	public FileInspection.Mod getModOrNull(Path path, FileMetadataCache cache) {
 		try {
 			return getOrComputeMod(path, cache);
