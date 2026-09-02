@@ -14,7 +14,7 @@ Every mode establishes an AutoModpack TLS session, but each uses a different ope
 
 ```text
 HOLEPUNCH     Minecraft Handshake/Login takeover → TLS → AutoModpack protocol
-MAGIC_PACKET  AMMH → AMOK → TLS → AutoModpack protocol
+MAGIC  AMMH → AMOK → TLS → AutoModpack protocol
 DIRECT        TLS → AutoModpack protocol
 ```
 
@@ -22,9 +22,9 @@ DIRECT        TLS → AutoModpack protocol
 
 On Forge and NeoForge the holepunch Handshake hostname includes the same `\0FML3\0` extra as a normal modded client. Forge classifies VANILLA vs MODDED from that extra during Handshake, before Login Start. A packed Forge server rejects vanilla connections at that point with a Login Disconnect, so a holepunch connection without the extra never reaches the UUID marker.
 
-The advertised mode is strict and clients do not retry another mode after failure. On a shared Minecraft listener, non-AMMH traffic is returned to Minecraft unchanged. On a dedicated `MAGIC_PACKET` listener, non-AMMH traffic is rejected. A `DIRECT` listener never responds with AMOK.
+The advertised mode is strict and clients do not retry another mode after failure. On a shared Minecraft listener, non-AMMH traffic is returned to Minecraft unchanged. On a dedicated `MAGIC` listener, non-AMMH traffic is rejected. A `DIRECT` listener never responds with AMOK.
 
-Optional PROXY protocol metadata may precede dedicated `MAGIC_PACKET` and `DIRECT` connections. It is not consumed by the shared Minecraft-port handler.
+Optional PROXY protocol metadata may precede dedicated `MAGIC` and `DIRECT` connections. It is not consumed by the shared Minecraft-port handler.
 
 `disableInternalTLS` changes only where the required TLS session is terminated. Clients still start TLS; when internal termination is disabled, a compatible external component must decrypt the connection before forwarding AutoModpack protocol traffic.
 

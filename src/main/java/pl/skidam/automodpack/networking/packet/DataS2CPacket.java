@@ -61,10 +61,10 @@ public class DataS2CPacket {
 					LOGGER.warn("Built-in modpack hosting is disabled; the advertised endpoint must be handled externally.");
 				} else if (serverConfig.connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 					LOGGER.warn("HOLEPUNCH expects a marked Minecraft Login connection; bindPort is not used.");
-				} else if (serverConfig.connectionMode == ModpackConnectionMode.MAGIC_PACKET && serverConfig.bindPort == -1) {
-					LOGGER.warn("MAGIC_PACKET expects AMMH/AMOK routing on the Minecraft port.");
-				} else if (serverConfig.connectionMode == ModpackConnectionMode.MAGIC_PACKET) {
-					LOGGER.warn("MAGIC_PACKET expects AMMH/AMOK before TLS on dedicated port '{}'.", serverConfig.bindPort);
+				} else if (serverConfig.connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
+					LOGGER.warn("MAGIC expects AMMH/AMOK routing on the Minecraft port.");
+				} else if (serverConfig.connectionMode == ModpackConnectionMode.MAGIC) {
+					LOGGER.warn("MAGIC expects AMMH/AMOK before TLS on dedicated port '{}'.", serverConfig.bindPort);
 				} else if (serverConfig.bindPort == -1) {
 					LOGGER.warn("DIRECT with bindPort -1 starts no built-in listener; the advertised endpoint must be handled externally.");
 				} else {

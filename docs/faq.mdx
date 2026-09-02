@@ -27,7 +27,7 @@ No. AutoModpack does not support arbitrary client-file deletion. Changed files a
 ### Do I have to open any port on my router?
 Usually not. The default `HOLEPUNCH` mode carries the modpack connection through the Minecraft Login protocol, so the modpack itself needs no extra port.
 
-An explicit `bindPort` starts a dedicated listener for `MAGIC_PACKET` or `DIRECT`. Configure `advertisedEndpointHost` and `advertisedEndpointPort` for the public route clients should use. See the complete matrix in [config](configuration/server-config).
+An explicit `bindPort` starts a dedicated listener for `MAGIC` or `DIRECT`. Configure `advertisedEndpointHost` and `advertisedEndpointPort` for the public route clients should use. See the complete matrix in [config](configuration/server-config).
 
 ### What happens when I update AutoModpack version on server?
 Client always try to sync to the server's version of AutoModpack. It updates or downgrades itself to the server's version if such is found on the Modrinth.

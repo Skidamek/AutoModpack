@@ -33,8 +33,8 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 
 	public ProtocolServerHandler(NettyServer server, ModpackConnectionMode connectionMode, boolean sharedMinecraftSocket) {
 		if (connectionMode == ModpackConnectionMode.HOLEPUNCH) throw new IllegalArgumentException("HOLEPUNCH does not use ProtocolServerHandler");
-		if (sharedMinecraftSocket && connectionMode != ModpackConnectionMode.MAGIC_PACKET) {
-			throw new IllegalArgumentException("Only MAGIC_PACKET can use a shared Minecraft socket");
+		if (sharedMinecraftSocket && connectionMode != ModpackConnectionMode.MAGIC) {
+			throw new IllegalArgumentException("Only MAGIC can use a shared Minecraft socket");
 		}
 
 		this.server = server;
