@@ -82,7 +82,7 @@ def test_connection_path_matrix_runs_every_path(monkeypatch, tmp_path):
         _target(),
         [
             {"id": "all-direct", "connectionPath": {"mode": "DIRECT"}},
-            {"id": "all-magic", "connectionPath": {"mode": "MAGIC_PACKET"}},
+            {"id": "all-magic", "connectionPath": {"mode": "MAGIC"}},
             {"id": "all-holepunch", "connectionPath": {"mode": "HOLEPUNCH"}},
         ],
         out_dir=tmp_path,
@@ -92,7 +92,7 @@ def test_connection_path_matrix_runs_every_path(monkeypatch, tmp_path):
         resource_scope="scope",
     )
 
-    assert seen == ["DIRECT", "MAGIC_PACKET", "HOLEPUNCH"]
+    assert seen == ["DIRECT", "MAGIC", "HOLEPUNCH"]
     assert result["ok"] is True
     assert [path["connectionMode"] for path in result["connectionPaths"]] == seen
 

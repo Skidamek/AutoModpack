@@ -149,7 +149,7 @@ public class DownloadClient implements AutoCloseable {
 
 		try {
 			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
-			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) performMagicHandshake(plainSocket);
+			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC) performMagicHandshake(plainSocket);
 			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
 			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket, tlsSocket);
 			tlsSocket.setSoTimeout(0);

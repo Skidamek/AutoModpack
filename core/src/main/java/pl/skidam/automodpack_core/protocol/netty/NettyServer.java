@@ -126,7 +126,7 @@ public class NettyServer {
 				return Optional.empty();
 			}
 
-			if (connectionMode == ModpackConnectionMode.MAGIC_PACKET && serverConfig.bindPort == -1) {
+			if (connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
 				LOGGER.info("Hosting modpack through magic packet routing on the Minecraft port");
 				new TrafficShaper(null);
 				sharedMagicEnabled = true;

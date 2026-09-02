@@ -12,7 +12,7 @@ from .engine.util import parse_duration
 
 _VALID_MODES = {"full", "client-only"}
 _VALID_NETWORKS = {"bridge", "host"}
-_VALID_CONNECTION_MODES = {"DIRECT", "MAGIC_PACKET", "HOLEPUNCH"}
+_VALID_CONNECTION_MODES = {"DIRECT", "MAGIC", "HOLEPUNCH"}
 _COND_FIELDS = ("when", "until", "that")
 _DURATION_FIELDS = ("timeout", "poll", "duration")
 _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")

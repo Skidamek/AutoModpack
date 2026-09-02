@@ -77,7 +77,7 @@ class ConfigToolsTest {
 				    "pack": {
 				      "serverAddress": "Play.Example.com",
 				      "hostAddress": "[2001:0DB8:0:0:0:0:0:1]:24444",
-				      "connectionMode": "MAGIC_PACKET"
+				      "connectionMode": "MAGIC"
 				    }
 				  }
 				}

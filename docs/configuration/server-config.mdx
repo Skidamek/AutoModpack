@@ -71,10 +71,10 @@ These settings control how the file server is exposed to the internet.
 | Mode           | `bindPort: -1`                                                                                                    | Explicit `bindPort`                                            |
 |----------------|-------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
 | `HOLEPUNCH`    | Accept only marked Minecraft Login takeover connections.                                                          | Same behavior; the configured port remains dormant.            |
-| `MAGIC_PACKET` | Require AMMH/AMOK on fresh connections to the Minecraft port. Non-magic traffic continues to Minecraft unchanged. | Start a dedicated listener that requires AMMH/AMOK before TLS. |
+| `MAGIC` | Require AMMH/AMOK on fresh connections to the Minecraft port. Non-magic traffic continues to Minecraft unchanged. | Start a dedicated listener that requires AMMH/AMOK before TLS. |
 | `DIRECT`       | Start no built-in listener. The advertised endpoint must be handled externally.                                   | Start a dedicated listener that expects TLS immediately.       |
 
-`HOLEPUNCH`, `MAGIC_PACKET`, and `DIRECT` are strict: a client uses only the advertised mode, and the server does not reinterpret a wrong-mode connection. On Forge and NeoForge the holepunch Handshake also sends the normal `\0FML3\0` hostname extra; without it a packed server rejects the connection as vanilla before the UUID marker is read. Optional PROXY protocol metadata is accepted before dedicated `MAGIC_PACKET` and `DIRECT` connections, not on the shared Minecraft listener.
+`HOLEPUNCH`, `MAGIC`, and `DIRECT` are strict: a client uses only the advertised mode, and the server does not reinterpret a wrong-mode connection. On Forge and NeoForge the holepunch Handshake also sends the normal `\0FML3\0` hostname extra; without it a packed server rejects the connection as vanilla before the UUID marker is read. Optional PROXY protocol metadata is accepted before dedicated `MAGIC` and `DIRECT` connections, not on the shared Minecraft listener.
 
 Setting `modpackHost` to `false` disables all built-in listeners and holepunch handling, but it does not suppress connection information sent to clients. This supports reverse proxies and separately hosted endpoints. AutoModpack cannot validate external routing from the Minecraft server process.
 
