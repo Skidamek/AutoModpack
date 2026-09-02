@@ -17,7 +17,7 @@ final class UiFormat {
 	}
 
 	static String changePath(UpdatePlan.FileKey file) {
-		return file.root() == UpdatePlan.Root.PROJECTION ? file.relativePath() : filePath(file);
+		return file.relativePath();
 	}
 
 	static String rootLabel(UpdatePlan.Root root) {
@@ -25,7 +25,6 @@ final class UiFormat {
 			case PROJECTION -> "active";
 			case OVERLAY -> "editable";
 			case GAME_DIR -> "game";
-			case STORE_DIR -> "cas";
 		};
 	}
 }

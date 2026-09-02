@@ -17,11 +17,12 @@ import org.apache.logging.log4j.core.LoggerContext;
 import com.google.gson.Gson;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 public final class DetachedUpdateHelper {
 	private static final String HELPER_MAIN = UpdateHelperMain.class.getName();
@@ -32,7 +33,7 @@ public final class DetachedUpdateHelper {
 		if (transaction == null || transaction.transactionId == null) throw new IOException("Cannot launch update helper without a transaction UUID");
 		Path sourceJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(sourceJar)) throw new IOException("Runnable AutoModpack JAR is missing: " + sourceJar);
-		ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+		ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 		Path absoluteHelperDirectory = storage.helperDirectory();
 		Files.createDirectories(absoluteHelperDirectory);
 		cleanupOldHelperJars(absoluteHelperDirectory);
@@ -41,19 +42,19 @@ public final class DetachedUpdateHelper {
 		String hash = HashUtils.getHash(sourceJar);
 		if (hash == null) throw new IOException("Cannot hash the runnable AutoModpack JAR");
 		Path helperJar = absoluteHelperDirectory.resolve("automodpack-update-helper-" + transaction.transactionId + "-" + UUID.randomUUID() + ".jar");
-		SmartFileUtils.copyVerifiedAtomic(sourceJar, helperJar, size, hash);
+		VerifiedFileTransfer.copyAtomic(sourceJar, helperJar, size, hash);
 
 		Path javaExecutable = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java").toAbsolutePath().normalize();
 		if (!Files.isRegularFile(javaExecutable)) throw new IOException("Java executable is missing: " + javaExecutable);
 		String classpath = String.join(File.pathSeparator, helperJar.toString(), runtimeDependency(Gson.class).toString(), runtimeDependency(LogManager.class).toString(),
 				runtimeDependency(LoggerContext.class).toString());
 		new ProcessBuilder(javaExecutable.toString(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid()), transaction.transactionId)
-				.directory(SmartFileUtils.CWD.toFile()).inheritIO().start();
+				.directory(GameDirectory.current().toFile()).inheritIO().start();
 		LOGGER.info("Launched detached update helper for transaction {} from {}", transaction.transactionId, helperJar);
 	}
 
 	public static void cleanupOldHelperJars() {
-		cleanupOldHelperJars(ClientStorage.fromGameDirectory(SmartFileUtils.CWD).helperDirectory());
+		cleanupOldHelperJars(ClientStorage.fromGameDirectory(GameDirectory.current()).helperDirectory());
 	}
 
 	private static void cleanupOldHelperJars(Path directory) {
@@ -62,7 +63,7 @@ public final class DetachedUpdateHelper {
 		if (!guard.safe()) return;
 		try (Stream<Path> files = Files.list(directory)) {
 			for (Path file : files.filter(path -> path.getFileName().toString().startsWith("automodpack-update-helper-")
-					&& path.getFileName().toString().endsWith(".jar")
+					&& JarUtils.hasJarExtension(path)
 					&& (guard.pendingTransactionId() == null || !path.getFileName().toString().contains(guard.pendingTransactionId()))).toList()) {
 				try {
 					Files.deleteIfExists(file);
@@ -76,7 +77,7 @@ public final class DetachedUpdateHelper {
 	}
 
 	private static CleanupGuard cleanupGuard() {
-		Path pendingPath = ClientStorage.fromGameDirectory(SmartFileUtils.CWD).transactionFile();
+		Path pendingPath = ClientStorage.fromGameDirectory(GameDirectory.current()).transactionFile();
 		if (!Files.exists(pendingPath, LinkOption.NOFOLLOW_LINKS)) return new CleanupGuard(true, null);
 		if (!Files.isRegularFile(pendingPath, LinkOption.NOFOLLOW_LINKS)) {
 			LOGGER.warn("Skipping update-helper cleanup because pending transaction state is not a regular file: {}", pendingPath);

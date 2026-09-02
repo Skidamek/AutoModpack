@@ -8,9 +8,9 @@ import pl.skidam.automodpack_core.auth.OriginTrustStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 /** Exact certificate pins owned by the original Minecraft server identity. */
 public final class CertificateTrustStore {
@@ -60,6 +60,6 @@ public final class CertificateTrustStore {
 	}
 
 	private static ClientStorage storage() {
-		return ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+		return ClientStorage.fromGameDirectory(GameDirectory.current());
 	}
 }

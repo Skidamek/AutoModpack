@@ -16,6 +16,8 @@ import java.util.List;
 
 import com.google.gson.*;
 
+import pl.skidam.automodpack_core.protocol.NetUtils;
+
 @SuppressWarnings("deprecation")
 public class Json {
 	public static JsonArray fromUrlAsArray(String url) {
@@ -23,7 +25,7 @@ public class Json {
 
 		try {
 			HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-			connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
+			connection.setRequestProperty("User-Agent", NetUtils.USER_AGENT);
 			connection.setConnectTimeout(5000);
 			connection.setReadTimeout(5000);
 			connection.setDoOutput(true);
@@ -60,7 +62,7 @@ public class Json {
 
 	public static JsonObject fromUrl(String url) throws IOException {
 		HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-		connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
+		connection.setRequestProperty("User-Agent", NetUtils.USER_AGENT);
 		connection.setConnectTimeout(5000);
 		connection.setReadTimeout(5000);
 		connection.connect();

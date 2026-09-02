@@ -28,11 +28,32 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void modShapedFileOutsideModsIsInstalledAtItsDeclaredPath() {
+		String path = "resourcepacks/mod-shaped-pack.jar";
+		UpdatePlan plan = UpdatePlanner.plan(input(manifest(Map.of(path, item(path, TARGET_HASH, 9, "mod")),
+				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT))), Map.of()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
+				&& operation.operation() == OperationType.INSTALL_OBJECT && TARGET_HASH.equals(operation.expectedObjectHash())));
+		assertFalse(plan.restartReasons().contains(RestartReason.CORRECTED_FILE_LOCATIONS));
+	}
+
+	@Test
+	void genericFileInsideModsIsInstalledAtItsDeclaredPath() {
+		String path = "mods/README.txt";
+		UpdatePlan plan = UpdatePlanner.plan(input(manifest(Map.of(path, item(path, TARGET_HASH, 9, "other")),
+				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT))), Map.of()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
+				&& operation.operation() == OperationType.INSTALL_OBJECT && TARGET_HASH.equals(operation.expectedObjectHash())));
+	}
+
+	@Test
 	void firstInstallQuarantinesAnUnownedSameIdMod() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true, true),
-				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true, true));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(OLD_HASH, 8, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(),
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
@@ -48,8 +69,8 @@ class UpdatePlannerTest {
 	void samePathSameContentStillGetsAnExplicitDisposition() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of("mods/server.jar", item("mods/server.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/server.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true, true),
-				new FileKey(Root.GAME_DIR, "mods/server.jar"), new FileState(TARGET_HASH, 9, true, true));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.PROJECTION, "mods/server.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/server.jar"), new FileState(TARGET_HASH, 9, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, Map.of(), Set.of(),
 				List.of(new ModInfo("mods/server.jar", TARGET_HASH, 9, Set.of("sodium"), Set.of())),
@@ -76,8 +97,8 @@ class UpdatePlannerTest {
 		ModpackJsons.ModpackContentFields b = packManifest("packbb1", Map.of("mods/shared.jar", item("mods/shared.jar", sharedB, 1, "mod"),
 				"mods/b.jar", item("mods/b.jar", bOnly, 1, "mod"), "config/shared.json", editableItem("config/shared.json", baseB, 1, "config")),
 				entryFor("packbb1", "mods/shared.jar", sharedB, 1), entryFor("packbb1", "mods/b.jar", bOnly, 1), entryFor("packbb1", "config/shared.json", baseB, 1));
-		Map<FileKey, FileState> initial = Map.of(new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(local, 1, true, true));
-		Map<String, FileState> aOverlay = Map.of("config/shared.json", new FileState(editedA, 1, true, false));
+		Map<FileKey, FileState> initial = Map.of(new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(local, 1, true));
+		Map<String, FileState> aOverlay = Map.of("config/shared.json", new FileState(editedA, 1, true));
 		UpdatePlan first = UpdatePlanner.plan(new UpdatePlanner.Input(null, a, initial, aOverlay, Set.of(),
 				List.of(mod("mods/shared.jar", sharedA, "shared"), mod("mods/a.jar", aOnly, "a")), List.of(mod("mods/local.jar", local, "local")), List.of(), List.of(), null,
 				config("packaa1")));
@@ -110,9 +131,9 @@ class UpdatePlannerTest {
 						entry("mods/new.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT),
 						entry("config/kept.json", OTHER_HASH, 4, OwnershipLedger.Status.PRESENT)));
 		Map<FileKey, FileState> files = new LinkedHashMap<>();
-		files.put(new FileKey(Root.GAME_DIR, "mods/old.jar"), new FileState(OLD_HASH, 8, true, true));
-		files.put(new FileKey(Root.PROJECTION, "mods/new.jar"), new FileState(TARGET_HASH, 9, true, true));
-		files.put(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OTHER_HASH, 4, true, false));
+		files.put(new FileKey(Root.GAME_DIR, "mods/old.jar"), new FileState(OLD_HASH, 8, true));
+		files.put(new FileKey(Root.PROJECTION, "mods/new.jar"), new FileState(TARGET_HASH, 9, true));
+		files.put(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OTHER_HASH, 4, true));
 
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/old.jar", item("mods/old.jar", OLD_HASH, 8, "mod")),
 				ledger(entry("mods/old.jar", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
@@ -130,9 +151,9 @@ class UpdatePlannerTest {
 	@Test
 	void generatedCopiesAreRemovedOnlyWhenTheirOwnedBytesStillMatch() {
 		Map<FileKey, FileState> files = Map.of(
-				new FileKey(Root.GAME_DIR, "mods/nested-old.jar"), new FileState(OLD_HASH, 8, true, true),
-				new FileKey(Root.GAME_DIR, "mods/nested-edited.jar"), new FileState(OTHER_HASH, 8, true, true),
-				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(TARGET_HASH, 9, true, true));
+				new FileKey(Root.GAME_DIR, "mods/nested-old.jar"), new FileState(OLD_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "mods/nested-edited.jar"), new FileState(OTHER_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(TARGET_HASH, 9, true));
 		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested-old.jar", OLD_HASH, 8, Set.of("nested-old")),
 				new NestedCopy("mods/nested-edited.jar", OLD_HASH, 8, Set.of("nested-edited")));
 
@@ -148,7 +169,7 @@ class UpdatePlannerTest {
 	void generatedCopyReplacementIsPinnedToThePreviouslyOwnedBytes() {
 		List<NestedCopy> previous = List.of(new NestedCopy("mods/nested.jar", OLD_HASH, 8, Set.of("nested")));
 		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("nested")));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OLD_HASH, 8, true, true));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OLD_HASH, 8, true));
 
 		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, previous, targetCopies);
 
@@ -161,7 +182,7 @@ class UpdatePlannerTest {
 	@Test
 	void generatedCopyDoesNotOverwriteAnUnownedLocalFile() {
 		List<NestedCopy> targetCopies = List.of(new NestedCopy("mods/nested.jar", TARGET_HASH, 9, Set.of("nested")));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OTHER_HASH, 8, true, true));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OTHER_HASH, 8, true));
 
 		UpdatePlan plan = planWithGeneratedCopies(manifest(Map.of(), ledger()), files, List.of(), targetCopies);
 
@@ -175,11 +196,11 @@ class UpdatePlannerTest {
 		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
 		baseline.modpackId = installed.modpackId;
 		Map<FileKey, FileState> files = Map.of(
-				new FileKey(Root.PROJECTION, "mods/root.jar"), new FileState(TARGET_HASH, 9, true, true),
-				new FileKey(Root.GAME_DIR, "mods/root.jar"), new FileState(TARGET_HASH, 9, true, true),
-				new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OLD_HASH, 8, true, true),
-				new FileKey(Root.GAME_DIR, "mods/nested-edited.jar"), new FileState(OTHER_HASH, 8, true, true),
-				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(TARGET_HASH, 9, true, true));
+				new FileKey(Root.PROJECTION, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OLD_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "mods/nested-edited.jar"), new FileState(OTHER_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(TARGET_HASH, 9, true));
 		GeneratedCopyState generated = new GeneratedCopyState(installed.modpackId, installed.targetGenerationId, "3".repeat(40), List.of(
 				new GeneratedCopyState.Entry("mods/nested.jar", OLD_HASH, 8), new GeneratedCopyState.Entry("mods/nested-edited.jar", OLD_HASH, 8)));
 
@@ -190,6 +211,25 @@ class UpdatePlannerTest {
 		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("mods/nested-edited.jar") || operation.relativePath().equals("mods/local.jar")));
 		assertTrue(plan.projectedFinalState().stream().noneMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/nested.jar") && file.present()));
 		assertTrue(plan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals("mods/nested-edited.jar") && file.present()));
+		assertTrue(plan.restartReasons().contains(RestartReason.SELECTED_MODPACK));
+	}
+
+	@Test
+	void removalDeletesExactInstalledLiveCopyWhenBaselineEntryIsMissing() {
+		String path = "test/server-owned.mp4";
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of(path, item(path, TARGET_HASH, 9, "other")),
+				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
+		baseline.modpackId = installed.modpackId;
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.PROJECTION, path), new FileState(TARGET_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, path), new FileState(TARGET_HASH, 9, true));
+
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals(path)
+				&& operation.operation() == OperationType.DELETE && TARGET_HASH.equals(operation.expectedExistingHash())));
 	}
 
 	@Test
@@ -201,10 +241,10 @@ class UpdatePlannerTest {
 				entry("config/link.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE),
 				entry("saves/world.dat", localHash, 8, OwnershipLedger.Status.TOMBSTONE)));
 		Map<FileKey, FileState> files = Map.of(
-				new FileKey(Root.GAME_DIR, "config/changed.json"), new FileState(OTHER_HASH, 8, true, false),
-				new FileKey(Root.GAME_DIR, "config/size.json"), new FileState(OLD_HASH, 9, true, false),
-				new FileKey(Root.GAME_DIR, "config/link.json"), new FileState(OLD_HASH, 8, false, false),
-				new FileKey(Root.GAME_DIR, "saves/world.dat"), new FileState(localHash, 8, true, false));
+				new FileKey(Root.GAME_DIR, "config/changed.json"), new FileState(OTHER_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "config/size.json"), new FileState(OLD_HASH, 9, true),
+				new FileKey(Root.GAME_DIR, "config/link.json"), new FileState(OLD_HASH, 8, false),
+				new FileKey(Root.GAME_DIR, "saves/world.dat"), new FileState(localHash, 8, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(input(target, files));
 
@@ -221,7 +261,7 @@ class UpdatePlannerTest {
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/sodium.jar", item("mods/sodium.jar", OLD_HASH, 8, "mod")),
 				ledger(entry("mods/sodium.jar", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/sodium.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/sodium.jar"), new FileState(OTHER_HASH, 8, true, true));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/sodium.jar"), new FileState(OTHER_HASH, 8, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				new ClientConfigJsons.ClientConfigFieldsV3()));
@@ -232,10 +272,45 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void disabledGroupFileIsOutsideClientCleanupScope() {
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.relativePath().equals("config/connector.json")));
+		assertTrue(plan.preservations().isEmpty());
+	}
+
+	@Test
+	void deselectedGroupFileAlreadyMatchingBaselineIsLeftAlone() {
+		ModpackJsons.ModpackContentFields installed = manifest(Map.of("config/connector.json", item("config/connector.json", OLD_HASH, 8, "config")),
+				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
+		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
+		baseline.modpackId = installed.modpackId;
+		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = "config/connector.json";
+		baselineEntry.objectHash = OLD_HASH;
+		baselineEntry.size = 8;
+		baseline.entries = List.of(baselineEntry);
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true));
+		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(OLD_HASH));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), selection,
+				new ClientConfigJsons.ClientConfigFieldsV3()));
+
+		assertTrue(plan.operations().stream().noneMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("config/connector.json")));
+		assertTrue(plan.preservations().isEmpty());
+	}
+
+	@Test
 	void freshClientMayRemoveOnlyExactServerKnownTombstoneBytes() {
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("mods/removed.jar", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/removed.jar"), new FileState(OLD_HASH, 8, true, true),
-				new FileKey(Root.GAME_DIR, "mods/unrelated.jar"), new FileState(OTHER_HASH, 8, true, true));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "mods/removed.jar"), new FileState(OLD_HASH, 8, true),
+				new FileKey(Root.GAME_DIR, "mods/unrelated.jar"), new FileState(OTHER_HASH, 8, true));
 
 		UpdatePlan plan = UpdatePlanner.plan(input(target, files));
 
@@ -263,10 +338,10 @@ class UpdatePlannerTest {
 		previous.parentGenerationId = "";
 		previous.stateDigest = "4".repeat(40);
 		previous.ownershipLedger = ledgerFor("old1234", entry("config/settings.json", OLD_HASH, 6, OwnershipLedger.Status.PRESENT));
-		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(editedTargetHash, 7, true, false),
-				new FileKey(Root.PROJECTION, "config/settings.json"), new FileState(editedTargetHash, 7, true, false));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(editedTargetHash, 7, true),
+				new FileKey(Root.PROJECTION, "config/settings.json"), new FileState(editedTargetHash, 7, true));
 		UpdatePlanner.Input input = new UpdatePlanner.Input(null, target, files,
-				Map.of("config/settings.json", new FileState(editedOldHash, 6, true, false)), Set.of(), List.of(), List.of(), List.of(), List.of(),
+				Map.of("config/settings.json", new FileState(editedOldHash, 6, true)), Set.of(), List.of(), List.of(), List.of(), List.of(),
 				new UpdatePlanner.SelectionContext("old1234", previous), new ClientConfigJsons.ClientConfigFieldsV3());
 
 		UpdatePlan plan = UpdatePlanner.plan(input);
@@ -334,7 +409,7 @@ class UpdatePlannerTest {
 	private static Map<FileKey, FileState> projectedFiles(UpdatePlan plan) {
 		Map<FileKey, FileState> files = new LinkedHashMap<>();
 		for (ProjectedFile file : plan.projectedFinalState())
-			if (file.present()) files.put(new FileKey(file.root(), file.relativePath()), new FileState(file.expectedHash(), file.expectedSize(), true, file.relativePath().startsWith("mods/")));
+			if (file.present()) files.put(new FileKey(file.root(), file.relativePath()), new FileState(file.expectedHash(), file.expectedSize(), true));
 		return files;
 	}
 

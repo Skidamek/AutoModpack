@@ -26,10 +26,13 @@ public class PreloadScreenImpl implements ScreenService {
 	public void restart(UpdateType updateType, Changelogs changelogs) {}
 
 	@Override
+	public void completeWithoutRestart() {}
+
+	@Override
 	public void welcome(ModpackUpdater modpackUpdater) {}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean removal, boolean returnToSelection,
+	public boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection,
 			Map<UpdatePlan.FileKey, List<String>> mainPageUrls) {
 		return false;
 	}

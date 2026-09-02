@@ -32,8 +32,10 @@ import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
@@ -61,7 +63,7 @@ final class ClientUpdatePlanBuilder {
 	record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles, String overlayDigest) {
 		PreparedPlan {
 			originalFiles = Map.copyOf(originalFiles);
-			if (overlayDigest == null || !overlayDigest.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Prepared overlay digest is invalid");
+			if (!HashUtils.isCanonicalSha1(overlayDigest)) throw new IllegalArgumentException("Prepared overlay digest is invalid");
 		}
 	}
 
@@ -72,6 +74,8 @@ final class ClientUpdatePlanBuilder {
 			files = Map.copyOf(files);
 		}
 	}
+
+	private record AvailableBaseline(ClientStorageJsons.ClientBaselineFields fields, Set<String> objectHashes) {}
 
 	PreparedPlan buildPlan(Input input, FileMetadataCache cache, ModFileCache modCache) throws Exception {
 		captureActiveEditableOverlays(cache);
@@ -114,12 +118,8 @@ final class ClientUpdatePlanBuilder {
 		if (activeState == null || !installed.modpackId.equals(activeState.modpackId)) throw new IOException("Active modpack generation state is missing");
 		ModpackJsons.CompleteModpackContentFields completeFields = new ClientGenerationStore(storage).read(activeState.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing")).toFields();
-		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(installed.modpackId), ClientStorageJsons.ClientBaselineFields.class)
-				.orElseGet(() -> {
-					ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
-					empty.modpackId = installed.modpackId;
-					return empty;
-				});
+		AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId);
+		ClientStorageJsons.ClientBaselineFields baseline = availableBaseline.fields();
 		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 plannedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
@@ -128,27 +128,22 @@ final class ClientUpdatePlanBuilder {
 		GeneratedCopyState generatedCopies = expectedPriorIntent == null ? null : readGeneratedCopyState(installed, expectedPriorIntent);
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			captureActiveEditableOverlays(cache);
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null,
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
-			Set<String> availableBaselineObjects = new HashSet<>();
-			if (baseline.entries != null) for (var entry : baseline.entries) {
-				if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
-				String hash = entry.objectHash.toLowerCase(Locale.ROOT);
-				if (SmartFileUtils.isValidFile(storage.objectsDirectory().resolve(hash), entry.size, hash)) availableBaselineObjects.add(hash);
-			}
-			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaselineObjects, generatedCopies, plannedConfig));
+			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaseline.objectHashes(), generatedCopies, plannedConfig));
 			return new RemovalPreparation(plan, completeFields, installed, baseline, expectedPriorIntent, currentConfig, plannedConfig, files);
 		}
 	}
 
 	void populateStoreFromActive(ModpackJsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
-		populateStoreFromSources(target, cache, item -> List.of(SmartFileUtils.getPath(storage.activeDirectory(), item.file)));
+		populateStoreFromSources(target, cache, item -> List.of(storage.activePath(item.file)));
 	}
 
 	void populateStoreFromCachedLocations(ModpackJsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
 		populateStoreFromSources(target, cache,
-				item -> List.of(SmartFileUtils.getPath(storage.activeDirectory(), item.file), livePath(item)));
+				item -> List.of(storage.activePath(item.file), livePath(item)));
 	}
 
 	void ensurePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest) throws IOException {
@@ -157,22 +152,22 @@ final class ClientUpdatePlanBuilder {
 		for (UpdatePlan.Operation operation : plan.operations()) {
 			if (operation.operation() != UpdatePlan.OperationType.INSTALL_OBJECT) continue;
 			Path storeFile = storage.objectsDirectory().resolve(operation.expectedObjectHash());
-			if (SmartFileUtils.isValidFile(storeFile, operation.expectedSize(), operation.expectedObjectHash())) continue;
+			if (FileIntegrity.matches(storeFile, operation.expectedSize(), operation.expectedObjectHash())) continue;
 			if (operation.root() == UpdatePlan.Root.OVERLAY) {
 				Path overlay = storage.overlayFile(targetManifest.modpackId, operation.relativePath());
-				if (SmartFileUtils.isValidFile(overlay, operation.expectedSize(), operation.expectedObjectHash())) {
-					SmartFileUtils.copyVerifiedAtomic(overlay, storeFile, operation.expectedSize(), operation.expectedObjectHash());
+				if (FileIntegrity.matches(overlay, operation.expectedSize(), operation.expectedObjectHash())) {
+					VerifiedFileTransfer.copyAtomic(overlay, storeFile, operation.expectedSize(), operation.expectedObjectHash());
 					continue;
 				}
 				throw new IOException("Required editable overlay object is unavailable: " + operation.expectedObjectHash());
 			}
 			var item = itemsByHash.get(operation.expectedObjectHash().toLowerCase(Locale.ROOT));
 			if (item == null) throw new IOException("Planned CAS object is unavailable: " + operation.expectedObjectHash());
-			Path source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
-			if (!SmartFileUtils.isValidFile(source, operation.expectedSize(), operation.expectedObjectHash())) source = livePath(item);
-			if (!SmartFileUtils.isValidFile(source, operation.expectedSize(), operation.expectedObjectHash()))
+			Path source = storage.activePath(item.file);
+			if (!FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash())) source = livePath(item);
+			if (!FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash()))
 				throw new IOException("Required object is absent from CAS and verified live locations: " + operation.expectedObjectHash());
-			SmartFileUtils.copyVerifiedAtomic(source, storeFile, operation.expectedSize(), operation.expectedObjectHash());
+			VerifiedFileTransfer.copyAtomic(source, storeFile, operation.expectedSize(), operation.expectedObjectHash());
 		}
 	}
 
@@ -194,7 +189,23 @@ final class ClientUpdatePlanBuilder {
 			snapshot = storage.overlaySnapshot(previousId, cache);
 			overlaySnapshots.put(previousId, snapshot);
 		}
-		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files());
+		AvailableBaseline baseline = readAvailableBaseline(previousId);
+		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), baseline.fields(), baseline.objectHashes());
+	}
+
+	private AvailableBaseline readAvailableBaseline(String modpackId) throws IOException {
+		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(modpackId), ClientStorageJsons.ClientBaselineFields.class).orElseGet(() -> {
+			ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
+			empty.modpackId = modpackId;
+			return empty;
+		});
+		Set<String> availableObjects = new HashSet<>();
+		if (baseline.entries != null) for (var entry : baseline.entries) {
+			if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
+			String hash = entry.objectHash.toLowerCase(Locale.ROOT);
+			if (FileIntegrity.matches(storage.objectsDirectory().resolve(hash), entry.size, hash)) availableObjects.add(hash);
+		}
+		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
 	}
 
 	private void captureActiveEditableOverlays(FileMetadataCache cache) throws IOException {
@@ -224,8 +235,8 @@ final class ClientUpdatePlanBuilder {
 				continue;
 			}
 			Path object = storage.objectsDirectory().resolve(hash);
-			if (!SmartFileUtils.isValidFile(object, size, hash)) SmartFileUtils.copyVerifiedAtomic(live, object, size, hash);
-			SmartFileUtils.copyVerifiedAtomic(object, overlay, size, hash);
+			if (!FileIntegrity.matches(object, size, hash)) VerifiedFileTransfer.copyAtomic(live, object, size, hash);
+			VerifiedFileTransfer.copyAtomic(object, overlay, size, hash);
 			deletedPaths.remove(UpdatePlanner.normalize(item.file));
 		}
 		storage.writeOverlayState(activeTarget.manifest().modpackId(), deletedPaths);
@@ -241,14 +252,14 @@ final class ClientUpdatePlanBuilder {
 		for (var item : target.list) {
 			Path object = storage.objectsDirectory().resolve(item.sha1);
 			long size = Long.parseLong(item.size);
-			if (SmartFileUtils.isValidFile(object, size, item.sha1)) continue;
+			if (FileIntegrity.matches(object, size, item.sha1)) continue;
 			for (Path source : sourceResolver.apply(item)) if (populateStoreObject(source, object, size, item.sha1, cache)) break;
 		}
 	}
 
 	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileMetadataCache cache) throws IOException {
-		if (!SmartFileUtils.isValidFile(source, size, sha1)) return false;
-		SmartFileUtils.copyVerifiedAtomic(source, object, size, sha1);
+		if (!FileIntegrity.matches(source, size, sha1)) return false;
+		VerifiedFileTransfer.copyAtomic(source, object, size, sha1);
 		cache.overwriteCache(object, sha1);
 		return true;
 	}
@@ -280,7 +291,7 @@ final class ClientUpdatePlanBuilder {
 				if (entry != null) gamePaths.add(entry.logicalPath);
 			});
 		for (String gamePath : gamePaths) {
-			Path path = SmartFileUtils.getPath(storage.gameDirectory(), gamePath);
+			Path path = storage.gamePath(gamePath);
 			if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, UpdatePlan.Root.GAME_DIR, storage.gameDirectory(), path, cache);
 		}
 		if (Files.isDirectory(storage.modsDirectory(), LinkOption.NOFOLLOW_LINKS)) {
@@ -322,16 +333,17 @@ final class ClientUpdatePlanBuilder {
 			if (hash == null) throw new IOException("Failed to hash live file: " + path);
 			cache.overwriteCache(path, hash);
 		}
-		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true, FileInspection.isMod(path)));
+		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true));
 	}
 
 	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
-		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(value.file, value.type)).sorted(Comparator.comparing(value -> value.file)).toList()) {
+		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type))
+				.sorted(Comparator.comparing(value -> value.file)).toList()) {
 			long size = Long.parseLong(item.size);
 			Path source = storage.objectsDirectory().resolve(item.sha1);
-			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
-			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) continue;
+			if (!FileIntegrity.matches(source, size, item.sha1)) source = storage.activePath(item.file);
+			if (!FileIntegrity.matches(source, size, item.sha1)) continue;
 			FileInspection.Mod mod = modCache.getModOrNull(source, cache);
 			if (mod != null) mods.add(new UpdatePlan.ModInfo(UpdatePlanner.normalize(item.file), item.sha1, size, mod.IDs(), mod.deps()));
 		}
@@ -357,15 +369,15 @@ final class ClientUpdatePlanBuilder {
 		Files.createDirectories(storage.incomingDirectory());
 		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
-			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(value.file, value.type)).toList()) {
+			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type)).toList()) {
 				Path source = storage.objectsDirectory().resolve(item.sha1);
-				if (!SmartFileUtils.isValidFile(source, Long.parseLong(item.size), item.sha1)) source = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
-				if (!SmartFileUtils.isValidFile(source, Long.parseLong(item.size), item.sha1)) continue;
+				if (!FileIntegrity.matches(source, Long.parseLong(item.size), item.sha1)) source = storage.activePath(item.file);
+				if (!FileIntegrity.matches(source, Long.parseLong(item.size), item.sha1)) continue;
 				String logicalPath = UpdatePlanner.normalize(item.file);
 				Path inspectionPath = inspectionDirectory.resolve(logicalPath).normalize();
 				if (!inspectionPath.startsWith(inspectionDirectory)) throw new IOException("Mod inspection path escaped its temporary directory: " + item.file);
 				Files.createDirectories(inspectionPath.getParent());
-				SmartFileUtils.copyVerifiedAtomic(source, inspectionPath, Long.parseLong(item.size), item.sha1);
+				VerifiedFileTransfer.copyAtomic(source, inspectionPath, Long.parseLong(item.size), item.sha1);
 			}
 
 			List<UpdatePlan.NestedCopy> copies = new ArrayList<>();
@@ -374,7 +386,7 @@ final class ClientUpdatePlanBuilder {
 				if (mod.path() == null || mod.hash() == null || !Files.isRegularFile(mod.path())) continue;
 				long size = Files.size(mod.path());
 				Path storeFile = storage.objectsDirectory().resolve(mod.hash());
-				if (!SmartFileUtils.isValidFile(storeFile, size, mod.hash())) SmartFileUtils.copyVerifiedAtomic(mod.path(), storeFile, size, mod.hash());
+				if (!FileIntegrity.matches(storeFile, size, mod.hash())) VerifiedFileTransfer.copyAtomic(mod.path(), storeFile, size, mod.hash());
 				Path targetPath = storage.modsDirectory().resolve(mod.path().getFileName()).normalize();
 				if (!targetPath.startsWith(storage.gameDirectory())) throw new IOException("Nested mod target escaped the game directory: " + targetPath);
 				String relativePath = UpdatePlanner.normalize(storage.gameDirectory().relativize(targetPath).toString());
@@ -383,9 +395,7 @@ final class ClientUpdatePlanBuilder {
 			}
 			return copies;
 		} finally {
-			try (Stream<Path> stream = Files.walk(inspectionDirectory)) {
-				for (Path path : stream.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
-			}
+			FileTrees.delete(inspectionDirectory);
 		}
 	}
 
@@ -395,11 +405,11 @@ final class ClientUpdatePlanBuilder {
 		if (forceCopyServices.isEmpty()) return forceCopyMods;
 
 		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
-			if (!ModpackPathPolicy.isActiveMod(item.file, item.type)) continue;
+			if (!ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(item.file), item.type)) continue;
 			long size = Long.parseLong(item.size);
 			Path modPath = storage.objectsDirectory().resolve(item.sha1);
-			if (!SmartFileUtils.isValidFile(modPath, size, item.sha1)) modPath = SmartFileUtils.getPath(storage.activeDirectory(), item.file);
-			if (!SmartFileUtils.isValidFile(modPath, size, item.sha1)) continue;
+			if (!FileIntegrity.matches(modPath, size, item.sha1)) modPath = storage.activePath(item.file);
+			if (!FileIntegrity.matches(modPath, size, item.sha1)) continue;
 			try (FileSystem fs = FileSystems.newFileSystem(modPath)) {
 				if (!FileInspection.getServices(fs, forceCopyServices).isEmpty()) forceCopyMods.add(item.file);
 			}

@@ -15,11 +15,13 @@ import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 public class DownloadManager {
 
@@ -61,11 +63,11 @@ public class DownloadManager {
 	private final ClientStorage storage;
 
 	public DownloadManager() {
-		this(0, ClientStorage.fromGameDirectory(SmartFileUtils.CWD));
+		this(0, ClientStorage.fromGameDirectory(GameDirectory.current()));
 	}
 
 	public DownloadManager(long bytesToDownload) {
-		this(bytesToDownload, ClientStorage.fromGameDirectory(SmartFileUtils.CWD));
+		this(bytesToDownload, ClientStorage.fromGameDirectory(GameDirectory.current()));
 	}
 
 	public DownloadManager(long bytesToDownload, ClientStorage storage) {
@@ -250,7 +252,7 @@ public class DownloadManager {
 		boolean interrupted = false;
 
 		try {
-			if (SmartFileUtils.isValidFile(storeFile, task.fileSize, hashPathPair.hash())) {
+			if (FileIntegrity.matches(storeFile, task.fileSize, hashPathPair.hash())) {
 				// CACHE HIT
 				totalBytesDownloaded.addAndGet(task.fileSize);
 				// IMPORTANT: Do NOT add cached bytes to Speedometer.
@@ -317,13 +319,13 @@ public class DownloadManager {
 				return false;
 			}
 
-			if (!SmartFileUtils.isValidFile(tempStoreFile, task.fileSize, hashPathPair.hash())) {
+			if (!FileIntegrity.matches(tempStoreFile, task.fileSize, hashPathPair.hash())) {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
 				return false;
 			}
 			try {
-				SmartFileUtils.promoteVerifiedAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash());
+				VerifiedFileTransfer.promoteAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash());
 			} catch (IOException e) {
 				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
 				LOGGER.warn("Failed to persist verified CAS object {}", hashPathPair.hash(), e);

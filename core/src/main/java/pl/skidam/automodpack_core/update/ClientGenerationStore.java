@@ -24,13 +24,12 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
-import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
 
-/** Persistent immutable client copies of complete server generation records. */
+/** Persistent immutable client snapshots of downloaded generation records. The server store is compact; client snapshots remain complete so local history and cached switching work without server access. */
 public final class ClientGenerationStore {
 	private final ClientStorage storage;
 
@@ -157,7 +156,7 @@ public final class ClientGenerationStore {
 		FileTotals recordsBefore = generationTotals(snapshot.records().keySet());
 		ClientObjectStore.GeneratedCopyReport generatedBefore = ClientObjectStore.measureGeneratedCopies(storage);
 
-		for (String generationId : snapshot.removedGenerationIds()) SmartFileUtils.deleteTree(storage.generationDirectory(generationId));
+		for (String generationId : snapshot.removedGenerationIds()) FileTrees.delete(storage.generationDirectory(generationId));
 		removeGeneratedCopies(snapshot.removedGenerationIds());
 
 		ClientObjectStore.CollectionResult objectCollection = ClientObjectStore.collectUnreachableObjects(storage, snapshot.retainedGenerationIds(), Set.of());
@@ -195,6 +194,28 @@ public final class ClientGenerationStore {
 				newest.put(modpackId, record);
 		}
 		return List.copyOf(newest.values());
+	}
+
+	/** Deletes every retained local artifact for one inactive modpack and collects objects no longer referenced by another pack. */
+	public void forgetModpack(String modpackId) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot forget a modpack while an update transaction is active");
+		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		if (activeState != null && normalizedModpackId.equals(activeState.modpackId)) throw new IOException("Cannot forget the active modpack");
+
+		List<String> matchingGenerationIds = new ArrayList<>();
+		for (String generationId : generationIds()) {
+			GenerationRecord record = read(generationId).orElseThrow(() -> new IOException("Client generation record is missing: " + generationId));
+			if (normalizedModpackId.equals(record.manifest().modpackId())) matchingGenerationIds.add(generationId);
+		}
+		for (String generationId : matchingGenerationIds) FileTrees.delete(storage.generationDirectory(generationId));
+		FileTrees.delete(storage.generatedCopiesPackDirectory(normalizedModpackId));
+		storage.clearOverlay(normalizedModpackId);
+		FileTrees.delete(storage.baselineFile(normalizedModpackId).getParent());
+		FileTrees.delete(storage.recoveryDirectory(normalizedModpackId));
+		FileTrees.delete(storage.quarantinePackDirectory(normalizedModpackId));
+		FileTrees.delete(storage.connectionDirectory(normalizedModpackId));
+		ClientObjectStore.collectUnreachableObjects(storage, Set.copyOf(generationIds()), Set.of());
 	}
 
 	/** Returns the committed lineage ending at the generation selected by active-state.json. */
@@ -272,7 +293,7 @@ public final class ClientGenerationStore {
 						if (Files.isSymbolicLink(generation) || !Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS))
 							throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
 						String generationId = generation.getFileName().toString();
-						if (removedGenerationIds.contains(generationId)) SmartFileUtils.deleteTree(storage.generatedCopiesGenerationDirectory(pack.getFileName().toString(), generationId));
+						if (removedGenerationIds.contains(generationId)) FileTrees.delete(storage.generatedCopiesGenerationDirectory(pack.getFileName().toString(), generationId));
 					}
 				}
 			}

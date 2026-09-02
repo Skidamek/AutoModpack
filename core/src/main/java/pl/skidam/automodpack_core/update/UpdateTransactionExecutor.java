@@ -5,14 +5,11 @@ import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -21,7 +18,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -33,10 +29,8 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
-import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
-import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
-import pl.skidam.automodpack_core.modpack.group.SelectedTreeComposer;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
@@ -48,13 +42,14 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.PreservationProof;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.JarUtils;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 /** Validates and applies the one journaled client operation plan. */
 public final class UpdateTransactionExecutor {
-	private static final int COPY_CONCURRENCY = 3;
-	private static final Pattern SHA1 = Pattern.compile("[0-9a-fA-F]{40}");
 	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
 			.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
 	private final Context context;
@@ -143,7 +138,7 @@ public final class UpdateTransactionExecutor {
 			throw new IOException("Generated-copy state is only valid for modpack update transactions");
 
 		ModpackJsons.ModpackContentFields target = null;
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
+		if (isModpackPurpose(transaction.purpose)) {
 			ModpackId.requireValid(transaction.modpackId);
 			GenerationRecord record = storedRecord(transaction);
 			target = resolvedTarget(transaction, record).flatTarget();
@@ -178,7 +173,6 @@ public final class UpdateTransactionExecutor {
 			switch (operation.operation()) {
 				case INSTALL_OBJECT -> validateInstall(operation, projected);
 				case DELETE -> validateDelete(operation, projected);
-				case CREATE_DIRECTORY, REMOVE_EMPTY_DIRECTORY -> validateDirectoryOperation(operation);
 			}
 		}
 		validateBaselineCaptures(transaction);
@@ -245,7 +239,7 @@ public final class UpdateTransactionExecutor {
 		ClientStorageJsons.ClientGenerationStateFields state = context.storage().readActiveState();
 		if (state == null) return;
 		if (!ModpackId.isValid(state.modpackId)) throw new IOException("Active client state modpack ID is invalid");
-		if (!SHA1.matcher(state.generationId).matches())
+		if (!HashUtils.isSha1(state.generationId))
 			throw new IOException("Active client state identity is invalid");
 		GenerationRecord stateRecord = new ClientGenerationStore(context.storage()).read(state.generationId)
 				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
@@ -256,12 +250,14 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateSelectionMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorExcludedGroups == null
-				|| transaction.requestedGroups == null || transaction.excludedGroups == null)
+		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorRequestedTags == null
+				|| transaction.expectedPriorExcludedGroups == null || transaction.requestedGroups == null || transaction.requestedTags == null || transaction.excludedGroups == null)
 			throw new IOException("Selection metadata is incomplete");
 		if (!isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
+				|| !isCanonicalIntentList(transaction.expectedPriorRequestedTags)
 				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups)
-				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.excludedGroups))
+				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.requestedTags)
+				|| !isCanonicalIntentList(transaction.excludedGroups))
 			throw new IOException("Selection metadata is not canonical");
 		try {
 			if (!transaction.selectionDigest.equals(UpdateTransaction.digest(transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
@@ -289,8 +285,8 @@ public final class UpdateTransactionExecutor {
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
 		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
 				|| transaction.ledgerDigest != null || transaction.targetPlatform != null || transaction.selectionDigest != null || transaction.overlayDigest != null
-				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null
-				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.excludedGroups != null
+				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.expectedPriorRequestedTags != null
+				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.requestedTags != null || transaction.excludedGroups != null
 				|| transaction.plannedClientConfig != null || transaction.plannedGeneratedCopies != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty()
 				|| !transaction.plannedBaselineCaptures.isEmpty() || !transaction.plannedConflicts.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
@@ -305,10 +301,10 @@ public final class UpdateTransactionExecutor {
 			if (operation.root() != Root.GAME_DIR || (operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE))
 				throw new IOException("Self-update operations are restricted to JAR replacement in the mods directory");
 			Path relative = Path.of(normalizeOperationPath(operation.relativePath()));
-			if (relative.getNameCount() != 2 || !relative.getName(0).toString().equalsIgnoreCase("mods")
-					|| !relative.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+			if (relative.getNameCount() != 2 || !relative.getName(0).toString().equalsIgnoreCase(ModpackPathPolicy.MODS_ROOT)
+					|| !JarUtils.hasJarExtension(relative))
 				throw new IOException("Self-update target must be a direct JAR child of the mods directory");
-		} else if (purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
+		} else if (isModpackPurpose(purpose)) {
 			if (operation.root() != Root.PROJECTION && operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR)
 				throw new IOException("Modpack operations are restricted to projection, overlays, and managed live files");
 		} else throw new IOException("Unsupported transaction purpose");
@@ -345,8 +341,8 @@ public final class UpdateTransactionExecutor {
 			if (entry == null || entry.root() == null) throw new IOException("Incomplete projected final-state entry");
 			if (purpose == UpdateTransaction.Purpose.SELF_UPDATE) {
 				Path selfUpdatePath = Path.of(normalizeOperationPath(entry.relativePath()));
-				if (entry.root() != Root.GAME_DIR || selfUpdatePath.getNameCount() != 2 || !selfUpdatePath.getName(0).toString().equalsIgnoreCase("mods")
-						|| !selfUpdatePath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+				if (entry.root() != Root.GAME_DIR || selfUpdatePath.getNameCount() != 2 || !selfUpdatePath.getName(0).toString().equalsIgnoreCase(ModpackPathPolicy.MODS_ROOT)
+						|| !JarUtils.hasJarExtension(selfUpdatePath))
 					throw new IOException("Self-update projected state is restricted to direct JAR children of the mods directory");
 			}
 			String relative = normalizeOperationPath(entry.relativePath());
@@ -386,7 +382,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
-		boolean removal = transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
+		boolean removal = transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL || transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION;
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !removal) {
 			if (!transaction.plannedPreservations.isEmpty()) throw new IOException("Only modpack transactions can preserve deleted files");
 			return;
@@ -440,7 +436,7 @@ public final class UpdateTransactionExecutor {
 		for (Conflict conflict : sorted) {
 			if (conflict == null || conflict.action() == null || !transaction.modpackId.equals(conflict.modpackId()) || !conflictIds.add(conflict.conflictId()))
 				throw new IOException("Conflict identity is invalid");
-			if (!conflict.sourcePath().startsWith("mods/") || !conflict.targetPath().startsWith("mods/") || !targetPaths.contains(conflict.targetPath()))
+			if (!ModpackPathPolicy.isModPath(conflict.sourcePath()) || !ModpackPathPolicy.isModPath(conflict.targetPath()) || !targetPaths.contains(conflict.targetPath()))
 				throw new IOException("Conflict path is outside the selected target mods");
 			validateHash(conflict.sourceHash(), "conflict source SHA-1");
 			validateHash(conflict.targetHash(), "conflict target SHA-1");
@@ -482,26 +478,20 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateInstall(Operation operation, ProjectedFile projected) throws IOException {
-		if (operation.root() == Root.STORE_DIR) throw new IOException("Transactions may not mutate the content-addressed store");
 		validateHash(operation.expectedObjectHash(), "install SHA-1");
 		if (operation.expectedExistingHash() != null) validateHash(operation.expectedExistingHash(), "install expected SHA-1");
 		if (operation.expectedSize() < 0 || (projected != null && (!projected.present() || operation.expectedSize() != projected.expectedSize()
 				|| !operation.expectedObjectHash().equalsIgnoreCase(projected.expectedHash()))))
 			throw new IOException("Install operation does not match projected final state");
 		Path source = context.storage().objectsDirectory().resolve(operation.expectedObjectHash()).normalize();
-		if (!source.startsWith(context.storage().objectsDirectory()) || !SmartFileUtils.isValidFile(source, operation.expectedSize(), operation.expectedObjectHash()))
+		if (!source.startsWith(context.storage().objectsDirectory()) || !FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash()))
 			throw new IOException("Required CAS object is missing or corrupt: " + operation.expectedObjectHash());
 	}
 
 	private static void validateDelete(Operation operation, ProjectedFile projected) throws IOException {
-		if (operation.root() == Root.STORE_DIR || operation.expectedObjectHash() != null || operation.expectedSize() != -1 || (projected != null && projected.present()))
+		if (operation.expectedObjectHash() != null || operation.expectedSize() != -1 || (projected != null && projected.present()))
 			throw new IOException("Invalid delete operation metadata");
 		if (operation.expectedExistingHash() != null) validateHash(operation.expectedExistingHash(), "deletion expected SHA-1");
-	}
-
-	private static void validateDirectoryOperation(Operation operation) throws IOException {
-		if (operation.root() == Root.STORE_DIR || operation.expectedObjectHash() != null || operation.expectedExistingHash() != null || operation.expectedSize() != -1)
-			throw new IOException("Invalid directory operation metadata");
 	}
 
 	private void validateManifestProjection(ModpackJsons.ModpackContentFields manifest, Map<FileKey, ProjectedFile> finalState) throws IOException {
@@ -551,10 +541,12 @@ public final class UpdateTransactionExecutor {
 					GenerationTarget generation = transaction.generationTarget();
 					GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies).write(context.storage());
 					context.storage().writeActiveState(transaction.modpackId, generation.targetGenerationId());
-				} else {
-					SmartFileUtils.deleteTree(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.targetGenerationId));
+				} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
+					FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.targetGenerationId));
 					context.storage().clearActiveState();
 					Files.deleteIfExists(context.storage().baselineFile(transaction.modpackId));
+				} else {
+					context.storage().clearActiveState();
 				}
 				claimSelection(transaction);
 			} else applyOperations(transaction, current);
@@ -592,7 +584,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private boolean isModpackTransaction(UpdateTransaction transaction) {
-		return transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
+		return isModpackPurpose(transaction.purpose);
 	}
 
 	private void setPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) throws IOException {
@@ -602,36 +594,27 @@ public final class UpdateTransactionExecutor {
 
 	private void applyOperations(UpdateTransaction transaction, AtomicReference<Operation> current) throws IOException {
 		for (Operation operation : transaction.operations) {
-			if (operation.operation() != OperationType.CREATE_DIRECTORY) continue;
-			current.set(operation);
-			Files.createDirectories(resolve(operation, transaction));
-		}
-		for (Operation operation : transaction.operations) {
 			if (operation.operation() != OperationType.INSTALL_OBJECT || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
-			if (SmartFileUtils.isValidFile(target, operation.expectedSize(), operation.expectedObjectHash())) continue;
+			if (FileIntegrity.matches(target, operation.expectedSize(), operation.expectedObjectHash())) continue;
 			if (operation.expectedExistingHash() != null && Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
 				long size = Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) ? Files.size(target) : -1;
-				if (!SmartFileUtils.isValidFile(target, size, operation.expectedExistingHash())) throw new IOException("Restore target changed after planning: " + target);
+				if (!FileIntegrity.matches(target, size, operation.expectedExistingHash())) throw new IOException("Restore target changed after planning: " + target);
 			}
 			Path source = context.storage().objectsDirectory().resolve(operation.expectedObjectHash());
-			SmartFileUtils.copyVerifiedAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash());
+			VerifiedFileTransfer.copyAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash());
 		}
 		for (Operation operation : transaction.operations) {
 			if (operation.operation() != OperationType.DELETE || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
-			if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) continue;
-			if (operation.expectedExistingHash() != null && !operation.expectedExistingHash().equalsIgnoreCase(HashUtils.getHash(target)))
-				throw new IOException("Deletion target changed after planning: " + target);
-			Files.delete(target);
-		}
-		for (Operation operation : transaction.operations) {
-			if (operation.operation() != OperationType.REMOVE_EMPTY_DIRECTORY) continue;
-			current.set(operation);
-			Path target = resolve(operation, transaction);
-			if (SmartFileUtils.isEmptyDirectory(target)) Files.deleteIfExists(target);
+			if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+				if (operation.expectedExistingHash() != null && !operation.expectedExistingHash().equalsIgnoreCase(HashUtils.getHash(target)))
+					throw new IOException("Deletion target changed after planning: " + target);
+				Files.delete(target);
+			}
+			FileTrees.pruneEmptyAncestors(target, root(operation.root(), transaction));
 		}
 	}
 
@@ -641,12 +624,12 @@ public final class UpdateTransactionExecutor {
 			Path source = resolve(preservation.root(), preservation.relativePath(), transaction);
 			Path object = objects.resolve(preservation.expectedHash().toLowerCase(Locale.ROOT)).normalize();
 			validateNoSymbolicLinkDescendants(objects, object);
-			if (!SmartFileUtils.isValidFile(object, preservation.expectedSize(), preservation.expectedHash())) {
-				if (!SmartFileUtils.isValidFile(source, preservation.expectedSize(), preservation.expectedHash()))
+			if (!FileIntegrity.matches(object, preservation.expectedSize(), preservation.expectedHash())) {
+				if (!FileIntegrity.matches(source, preservation.expectedSize(), preservation.expectedHash()))
 					throw new IOException("Preservation source changed after planning: " + source);
-				SmartFileUtils.copyVerifiedAtomic(source, object, preservation.expectedSize(), preservation.expectedHash());
+				VerifiedFileTransfer.copyAtomic(source, object, preservation.expectedSize(), preservation.expectedHash());
 			}
-			if (!SmartFileUtils.isValidFile(object, preservation.expectedSize(), preservation.expectedHash()))
+			if (!FileIntegrity.matches(object, preservation.expectedSize(), preservation.expectedHash()))
 				throw new IOException("Preserved object verification failed: " + object);
 		}
 	}
@@ -661,21 +644,21 @@ public final class UpdateTransactionExecutor {
 			if (projected.root() == Root.PROJECTION) continue;
 			Path target = resolve(projected.root(), projected.relativePath(), transaction);
 			if (projected.present()) {
-				if (!SmartFileUtils.isValidFile(target, projected.expectedSize(), projected.expectedHash())) throw new IOException("Projected target verification failed: " + target);
+				if (!FileIntegrity.matches(target, projected.expectedSize(), projected.expectedHash())) throw new IOException("Projected target verification failed: " + target);
 			} else if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Projected absent target exists: " + target);
 		}
 	}
 
 	private void buildIncomingProjection(UpdateTransaction transaction) throws IOException {
 		Path incoming = context.storage().incomingTransactionDirectory(transaction.transactionId);
-		SmartFileUtils.deleteTree(incoming);
+		FileTrees.delete(incoming);
 		Files.createDirectories(incoming);
 		for (ProjectedFile projected : transaction.projectedFinalState) {
 			if (projected.root() != Root.PROJECTION || !projected.present()) continue;
 			Path source = context.storage().objectsDirectory().resolve(projected.expectedHash());
 			Path target = incoming.resolve(normalizeOperationPath(projected.relativePath())).normalize();
 			if (!target.startsWith(incoming)) throw new IOException("Projection path escapes incoming directory");
-			SmartFileUtils.linkVerifiedAtomic(source, target, projected.expectedSize(), projected.expectedHash());
+			VerifiedFileTransfer.linkAtomic(source, target, projected.expectedSize(), projected.expectedHash());
 		}
 		verifyProjection(incoming, transaction.projectedFinalState);
 	}
@@ -686,20 +669,20 @@ public final class UpdateTransactionExecutor {
 		Path backup = context.storage().backupTransactionDirectory(transaction.transactionId);
 		if (Files.exists(active, LinkOption.NOFOLLOW_LINKS) && Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 			if (verifyProjectionQuietly(active, transaction.projectedFinalState)) {
-				SmartFileUtils.deleteTree(incoming);
-				SmartFileUtils.deleteTree(backup);
+				FileTrees.delete(incoming);
+				FileTrees.delete(backup);
 				return;
 			}
 			throw new IOException("Client projection swap has two non-final directories");
 		}
 		if (!Files.exists(incoming, LinkOption.NOFOLLOW_LINKS)) buildIncomingProjection(transaction);
-		if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) SmartFileUtils.moveDirectoryAtomic(active, backup);
+		if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) FileTrees.moveAtomic(active, backup);
 		try {
-			SmartFileUtils.moveDirectoryAtomic(incoming, active);
+			FileTrees.moveAtomic(incoming, active);
 		} catch (IOException e) {
 			if (!Files.exists(active, LinkOption.NOFOLLOW_LINKS) && Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 				try {
-					SmartFileUtils.moveDirectoryAtomic(backup, active);
+					FileTrees.moveAtomic(backup, active);
 				} catch (IOException restoreFailure) {
 					e.addSuppressed(restoreFailure);
 				}
@@ -719,7 +702,7 @@ public final class UpdateTransactionExecutor {
 				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				String relative = normalizeOperationPath(projection.relativize(path).toString());
 				ProjectedFile expectedFile = expected.remove(relative);
-				if (expectedFile == null || !SmartFileUtils.isValidFile(path, expectedFile.expectedSize(), expectedFile.expectedHash()))
+				if (expectedFile == null || !FileIntegrity.matches(path, expectedFile.expectedSize(), expectedFile.expectedHash()))
 					throw new IOException("Client projection file verification failed: " + path);
 			}
 		}
@@ -736,8 +719,8 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void cleanupTransactionDirectories(UpdateTransaction transaction) throws IOException {
-		SmartFileUtils.deleteTree(context.storage().incomingTransactionDirectory(transaction.transactionId));
-		SmartFileUtils.deleteTree(context.storage().backupTransactionDirectory(transaction.transactionId));
+		FileTrees.delete(context.storage().incomingTransactionDirectory(transaction.transactionId));
+		FileTrees.delete(context.storage().backupTransactionDirectory(transaction.transactionId));
 	}
 
 	private void captureBaselines(UpdateTransaction transaction) throws IOException {
@@ -760,9 +743,9 @@ public final class UpdateTransactionExecutor {
 				entry.objectHash = "";
 				entry.size = -1;
 			} else {
-				if (!SmartFileUtils.isValidFile(source, capture.expectedSize(), capture.expectedHash())) throw new IOException("Baseline source changed: " + source);
+				if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash())) throw new IOException("Baseline source changed: " + source);
 				Path object = context.storage().objectsDirectory().resolve(capture.expectedHash());
-				SmartFileUtils.copyVerifiedAtomic(source, object, capture.expectedSize(), capture.expectedHash());
+				VerifiedFileTransfer.copyAtomic(source, object, capture.expectedSize(), capture.expectedHash());
 				entry.objectHash = capture.expectedHash().toLowerCase(Locale.ROOT);
 				entry.size = capture.expectedSize();
 			}
@@ -791,14 +774,16 @@ public final class UpdateTransactionExecutor {
 		if (!isModpackTransaction(transaction)) return;
 		ClientSelectionStore selections = new ClientSelectionStore(context.storage().selectionFile());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) selections.compareAndSet(transaction.modpackId, transaction.expectedPriorIntent(), transaction.targetIntent());
-		else selections.remove(transaction.modpackId, transaction.expectedPriorIntent());
+		else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) selections.remove(transaction.modpackId, transaction.expectedPriorIntent());
 	}
 
 	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {
 		if (!isModpackTransaction(transaction)) return;
 		SelectionIntent current = new ClientSelectionStore(context.storage().selectionFile()).get(transaction.modpackId).orElse(null);
 		SelectionIntent expected = transaction.expectedPriorIntent();
-		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE ? Objects.equals(current, transaction.targetIntent()) : current == null;
+		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+				? Objects.equals(current, transaction.targetIntent())
+				: transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL ? current == null : Objects.equals(current, expected);
 		if (!Objects.equals(current, expected) && !alreadyCommitted) throw new IOException("Group selection changed after planning for modpack " + transaction.modpackId);
 	}
 
@@ -819,7 +804,6 @@ public final class UpdateTransactionExecutor {
 			case PROJECTION -> context.storage().activeDirectory();
 			case OVERLAY -> context.storage().overlayDirectory(transaction.modpackId);
 			case GAME_DIR -> context.storage().gameDirectory();
-			case STORE_DIR -> context.storage().objectsDirectory();
 		};
 	}
 
@@ -834,7 +818,6 @@ public final class UpdateTransactionExecutor {
 		Path game = context.storage().gameDirectory();
 		Path automodpack = context.storage().automodpackDirectory();
 		if (root == Root.GAME_DIR && resolved.startsWith(automodpack)) throw new IOException("GAME_DIR operation uses a narrower root");
-		if (root == Root.STORE_DIR) throw new IOException("STORE_DIR is read-only");
 		if (root == Root.OVERLAY && !isModpackPurpose(purpose)) throw new IOException("OVERLAY is restricted to modpack transactions");
 		if (root == Root.PROJECTION && !isModpackPurpose(purpose)) throw new IOException("PROJECTION is restricted to modpack transactions");
 		if (!resolved.startsWith(game)) throw new IOException("Transaction target escaped the game directory");
@@ -842,7 +825,8 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private static boolean isModpackPurpose(UpdateTransaction.Purpose purpose) {
-		return purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
+		return purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION
+				|| purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
 	}
 
 	public static void validateNoSymbolicLinkDescendants(Path constrainedRoot, Path target) throws IOException {
@@ -887,7 +871,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private static void validateHash(String hash, String description) throws IOException {
-		if (hash == null || !SHA1.matcher(hash).matches()) throw new IOException("Invalid " + description);
+		if (!HashUtils.isSha1(hash)) throw new IOException("Invalid " + description);
 	}
 
 	private static int compareFileKeys(FileKey first, FileKey second) {

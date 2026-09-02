@@ -148,7 +148,7 @@ class GroupManifestValidatorTest {
 	void rejectsCaseVariantOfReservedMetadataPath() {
 		var fields = catalogue();
 		var group = group(file("a"));
-		group.files = Map.of("AUTOMODPACK-CATALOGUE.JSON", file("a"));
+		group.files = Map.of("AUTOMODPACK-CONTENT.JSON", file("a"));
 		fields.groups = Map.of("main", group);
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
@@ -170,16 +170,48 @@ class GroupManifestValidatorTest {
 				Map.entry("logs/latest.log", "other"),
 				Map.entry("screenshots/image.png", "other"),
 				Map.entry("server-resource-packs/pack.zip", "other"),
-				Map.entry("mods/readme.txt", "other"),
 				Map.entry("config/settings.json", "other"),
 				Map.entry("shaderpacks/shader.zip", "other"),
 				Map.entry("resourcepacks/pack.zip", "other"),
-				Map.entry("options.txt", "other"),
-				Map.entry("outside/example.jar", "mod"))) {
+				Map.entry("options.txt", "other"))) {
 			var fields = catalogue();
 			fields.groups = Map.of("main", groupAt(invalid.getKey(), fileOfType(invalid.getValue())));
 			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), invalid.getKey());
 		}
+	}
+
+	@Test
+	void acceptsModFilesAtAnyNonPlayerLocalNonReservedPath() {
+		for (String path : List.of("mods/example.jar", "resourcepacks/example.jar", "shaderpacks/example.jar", "config/example.jar", "outside/example.jar")) {
+			var fields = catalogue();
+			fields.groups = Map.of("main", groupAt(path, fileOfType("mod")));
+			assertDoesNotThrow(() -> GroupManifestValidator.validate(fields), path);
+		}
+	}
+
+	@Test
+	void acceptsGenericFilesInsideMods() {
+		var fields = catalogue();
+		fields.groups = Map.of("main", groupAt("mods/README.txt", fileOfType("other")));
+
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsReservedRootFilesAndCaseVariantsForMods() {
+		for (String path : List.of("mods", "config", "shaderpacks", "resourcepacks", "MODS/example.jar", "Config/example.jar", "ShaderPacks/example.jar",
+				"ResourcePacks/example.jar")) {
+			var fields = catalogue();
+			fields.groups = Map.of("main", groupAt(path, fileOfType("mod")));
+			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), path);
+		}
+	}
+
+	@Test
+	void onlyTreatsModsUnderModsAsActive() {
+		assertTrue(ModpackPathPolicy.isActiveMod("mods/example.jar", "mod"));
+		assertFalse(ModpackPathPolicy.isActiveMod("resourcepacks/example.jar", "mod"));
+		assertFalse(ModpackPathPolicy.isActiveMod("mods/example.jar", "other"));
 	}
 
 	@Test
@@ -188,6 +220,15 @@ class GroupManifestValidatorTest {
 		fields.groups = linkedGroups("main", groupAt("mods/main.jar", fileOfType("mod")), "visuals", groupAt("mods/nested/main.jar", fileOfType("mod")));
 
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void acceptsSameModBasenameOutsideLiveModsDirectory() {
+		var fields = catalogue();
+		fields.groups = linkedGroups("main", groupAt("mods/main.jar", fileOfType("mod")), "resourcepack", groupAt("resourcepacks/main.jar", fileOfType("mod")),
+				"shaderpack", groupAt("shaderpacks/main.jar", fileOfType("mod")));
+
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
 	@Test

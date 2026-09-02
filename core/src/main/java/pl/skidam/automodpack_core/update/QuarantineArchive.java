@@ -1,12 +1,9 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,10 +18,13 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.ConflictAction;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 /** Durable per-modpack storage for local files displaced by an ownership conflict. */
 public final class QuarantineArchive {
@@ -56,11 +56,11 @@ public final class QuarantineArchive {
 			}
 
 			Path source = storage.gamePath(conflict.sourcePath());
-			if (!SmartFileUtils.isValidFile(source, conflict.sourceSize(), conflict.sourceHash()))
+			if (!FileIntegrity.matches(source, conflict.sourceSize(), conflict.sourceHash()))
 				throw new IOException("Quarantine source changed after planning: " + source);
 			validateNoSymbolicLinkDescendants(storage.quarantinePackDirectory(conflict.modpackId()), payload);
 			Files.createDirectories(payload.getParent());
-			SmartFileUtils.copyVerifiedAtomic(source, payload, conflict.sourceSize(), conflict.sourceHash());
+			VerifiedFileTransfer.copyAtomic(source, payload, conflict.sourceSize(), conflict.sourceHash());
 			ClientStorageJsons.ClientQuarantineFields.EntryFields entry = toFields(storage, generationId, conflict);
 			archive.entries = new ArrayList<>(archive.entries);
 			archive.entries.add(entry);
@@ -123,7 +123,7 @@ public final class QuarantineArchive {
 	/** Restores one local file only while its owning pack is active and no longer owns the source path. */
 	public static void restore(ClientStorage storage, String modpackId, String conflictId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
-		if (conflictId == null || !conflictId.matches("[0-9a-f]{40}")) throw new IOException("Invalid quarantine conflict ID");
+		if (!HashUtils.isCanonicalSha1(conflictId)) throw new IOException("Invalid quarantine conflict ID");
 		synchronized (MUTATION_LOCK) {
 			ClientStorageJsons.ClientQuarantineFields archive = read(storage, normalizedModpackId);
 			ClientStorageJsons.ClientQuarantineFields.EntryFields entry = archive.entries.stream().filter(value -> conflictId.equals(value.conflictId)).findFirst()
@@ -140,18 +140,18 @@ public final class QuarantineArchive {
 			Path destination = storage.gamePath(entry.sourcePath);
 			validateNoSymbolicLinkDescendants(storage.quarantinePackDirectory(normalizedModpackId), payload);
 			validateDestinationPath(storage.gameDirectory(), destination);
-			if (!SmartFileUtils.isValidFile(payload, entry.sourceSize, entry.sourceHash)) throw new IOException("Quarantine payload is missing or corrupt: " + payload);
+			if (!FileIntegrity.matches(payload, entry.sourceSize, entry.sourceHash)) throw new IOException("Quarantine payload is missing or corrupt: " + payload);
 
 			boolean alreadyRestored = Files.exists(destination, LinkOption.NOFOLLOW_LINKS);
 			if (alreadyRestored) {
 				if (Files.isSymbolicLink(destination) || !Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS))
 					throw new IOException("Restore destination is not a regular file: " + destination);
-				if (!SmartFileUtils.isValidFile(destination, entry.sourceSize, entry.sourceHash))
+				if (!FileIntegrity.matches(destination, entry.sourceSize, entry.sourceHash))
 					throw new IOException("Restore destination contains different bytes: " + destination);
 			} else {
-				copyVerifiedCreateOnly(storage.gameDirectory(), payload, destination, entry.sourceSize, entry.sourceHash);
+				VerifiedFileTransfer.copyCreateOnly(payload, destination, entry.sourceSize, entry.sourceHash);
 				validateDestinationPath(storage.gameDirectory(), destination);
-				if (!SmartFileUtils.isValidFile(destination, entry.sourceSize, entry.sourceHash))
+				if (!FileIntegrity.matches(destination, entry.sourceSize, entry.sourceHash))
 					throw new IOException("Restored destination failed verification: " + destination);
 			}
 
@@ -181,42 +181,11 @@ public final class QuarantineArchive {
 		return true;
 	}
 
-	private static void copyVerifiedCreateOnly(Path root, Path source, Path destination, long expectedSize, String expectedHash) throws IOException {
-		Path parent = destination.toAbsolutePath().normalize().getParent();
-		if (parent == null) throw new IOException("Restore destination has no parent: " + destination);
-		validateDestinationPath(root, destination);
-		Files.createDirectories(parent);
-		Path temporary = Files.createTempFile(parent, "." + destination.getFileName() + ".", ".restore.tmp");
-		try {
-			validateDestinationPath(root, destination);
-			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
-			if (!SmartFileUtils.isValidFile(temporary, expectedSize, expectedHash)) throw new IOException("Restored temporary file failed verification: " + temporary);
-			try {
-				moveCreateOnly(temporary, destination);
-			} catch (FileAlreadyExistsException raced) {
-				validateDestinationPath(root, destination);
-				if (!SmartFileUtils.isValidFile(destination, expectedSize, expectedHash)) throw new IOException("Restore destination contains different bytes: " + destination, raced);
-			}
-			validateDestinationPath(root, destination);
-			if (!SmartFileUtils.isValidFile(destination, expectedSize, expectedHash)) throw new IOException("Restored destination failed verification: " + destination);
-		} finally {
-			Files.deleteIfExists(temporary);
-		}
-	}
-
-	private static void moveCreateOnly(Path temporary, Path destination) throws IOException {
-		try {
-			Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE);
-		} catch (AtomicMoveNotSupportedException unsupported) {
-			Files.move(temporary, destination);
-		}
-	}
-
 	private static void cleanupConsumedPayload(ClientStorage storage, String modpackId, Path payload, long expectedSize, String expectedHash) throws IOException {
 		validateNoSymbolicLinkDescendants(storage.quarantinePackDirectory(modpackId), payload);
 		if (Files.exists(payload, LinkOption.NOFOLLOW_LINKS)) {
 			if (!Files.isRegularFile(payload, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Consumed quarantine payload is not a regular file: " + payload);
-			if (!SmartFileUtils.isValidFile(payload, expectedSize, expectedHash)) throw new IOException("Consumed quarantine payload changed: " + payload);
+			if (!FileIntegrity.matches(payload, expectedSize, expectedHash)) throw new IOException("Consumed quarantine payload changed: " + payload);
 			Files.delete(payload);
 		}
 		Path conflictDirectory = payload.getParent();
@@ -276,7 +245,7 @@ public final class QuarantineArchive {
 	}
 
 	private static void validateEntryMetadata(ClientStorage storage, String modpackId, ClientStorageJsons.ClientQuarantineFields.EntryFields entry) throws IOException {
-		if (entry.conflictId == null || !entry.conflictId.matches("[0-9a-f]{40}") || entry.action == null) throw new IOException("Client quarantine entry identity is invalid");
+		if (!HashUtils.isCanonicalSha1(entry.conflictId) || entry.action == null) throw new IOException("Client quarantine entry identity is invalid");
 		ConflictAction action;
 		try {
 			action = ConflictAction.valueOf(entry.action);
@@ -288,10 +257,10 @@ public final class QuarantineArchive {
 			throw new IOException("Client quarantine mod IDs are not canonical");
 		if (entry.sourcePath == null || !UpdatePlanner.normalize(entry.sourcePath).equals(entry.sourcePath) || entry.targetPath == null || !UpdatePlanner.normalize(entry.targetPath).equals(entry.targetPath))
 			throw new IOException("Client quarantine paths are invalid");
-		if (!entry.sourcePath.startsWith("mods/") || !entry.targetPath.startsWith("mods/")) throw new IOException("Client quarantine path is outside the mods directory");
+		if (!ModpackPathPolicy.isModPath(entry.sourcePath) || !ModpackPathPolicy.isModPath(entry.targetPath)) throw new IOException("Client quarantine path is outside the mods directory");
 		validateHash(entry.sourceHash, "quarantine source hash");
 		validateHash(entry.targetHash, "quarantine target hash");
-		if (entry.sourceSize < 0 || entry.targetSize < 0 || entry.sourceGenerationId == null || (!entry.sourceGenerationId.isEmpty() && !entry.sourceGenerationId.matches("[0-9a-f]{40}")))
+		if (entry.sourceSize < 0 || entry.targetSize < 0 || entry.sourceGenerationId == null || (!entry.sourceGenerationId.isEmpty() && !HashUtils.isCanonicalSha1(entry.sourceGenerationId)))
 			throw new IOException("Client quarantine content metadata is invalid");
 		try {
 			if (entry.quarantinedAt == null || !Instant.parse(entry.quarantinedAt).toString().equals(entry.quarantinedAt)) throw new IOException("Client quarantine timestamp is invalid");
@@ -308,15 +277,15 @@ public final class QuarantineArchive {
 		validateEntryMetadata(storage, modpackId, entry);
 		Path payload = storage.quarantinePayload(modpackId, entry.conflictId);
 		validateNoSymbolicLinkDescendants(storage.quarantinePackDirectory(modpackId), payload);
-		if (!SmartFileUtils.isValidFile(payload, entry.sourceSize, entry.sourceHash)) throw new IOException("Client quarantine payload is missing or corrupt");
+		if (!FileIntegrity.matches(payload, entry.sourceSize, entry.sourceHash)) throw new IOException("Client quarantine payload is missing or corrupt");
 	}
 
 	private static void removeSourceIfPresent(ClientStorage storage, Conflict conflict, Path payload) throws IOException {
 		Path source = storage.gamePath(conflict.sourcePath());
 		if (!Files.exists(source, LinkOption.NOFOLLOW_LINKS)) return;
-		if (!SmartFileUtils.isValidFile(source, conflict.sourceSize(), conflict.sourceHash())) throw new IOException("Quarantine source changed before removal: " + source);
+		if (!FileIntegrity.matches(source, conflict.sourceSize(), conflict.sourceHash())) throw new IOException("Quarantine source changed before removal: " + source);
 		Files.delete(source);
-		if (Files.exists(source, LinkOption.NOFOLLOW_LINKS) || !SmartFileUtils.isValidFile(payload, conflict.sourceSize(), conflict.sourceHash()))
+		if (Files.exists(source, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matches(payload, conflict.sourceSize(), conflict.sourceHash()))
 			throw new IOException("Quarantine source removal could not be verified: " + source);
 	}
 
@@ -327,7 +296,7 @@ public final class QuarantineArchive {
 	}
 
 	private static void validateHash(String value, String description) throws IOException {
-		if (value == null || !value.matches("[0-9a-fA-F]{40}")) throw new IOException("Invalid " + description);
+		if (!HashUtils.isSha1(value)) throw new IOException("Invalid " + description);
 	}
 
 	private static void validateNoSymbolicLinkDescendants(Path root, Path target) throws IOException {

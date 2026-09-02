@@ -29,10 +29,16 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "quarantine-restoration",
     "storage-maintenance",
     "server-history-compaction",
+    "server-generation-rollback",
+    "server-object-gc",
     "fresh-generation-deletion",
     "removal",
     "secure-bootstrap",
 })
+_RELEASE_GATE_REQUIRED_VERBS = {
+    "server-generation-rollback": "rollback_server_generation",
+    "server-object-gc": "collect_server_objects",
+}
 
 
 def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None) -> list[str]:
@@ -41,12 +47,17 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
     if not isinstance(scenario.get("id"), str) or not scenario["id"].strip():
         problems.append("scenario needs a non-empty string 'id'")
     if scenario.get("id") == "all":
+        release_macros = dict(macros)
+        release_macros.update(scenario.get("sequences") or {})
         declared = scenario.get("releaseGate", {}).get("covers", [])
         if not isinstance(declared, list) or len(declared) != len(_RELEASE_GATE_CAPABILITIES) or set(declared) != _RELEASE_GATE_CAPABILITIES:
             problems.append(f"release-gate scenario must declare exactly these capabilities: {sorted(_RELEASE_GATE_CAPABILITIES)}")
         generations = (scenario.get("serverFiles", {}) or {}).get("generations")
         if not isinstance(generations, list) or len(generations) < 2:
             problems.append("release-gate scenario needs at least two serverFiles.generations entries")
+        for capability, required_verb in _RELEASE_GATE_REQUIRED_VERBS.items():
+            if not _contains_verb(scenario.get("flow", []), required_verb, release_macros):
+                problems.append(f"release-gate scenario must cover {capability} with verb {required_verb!r}")
     generations = (scenario.get("serverFiles", {}) or {}).get("generations")
     if generations is not None:
         if not isinstance(generations, list):
@@ -159,6 +170,28 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                     problems.append(f"{label}.fixture: this verb requires a valid mod fixture mapping")
                 if verb == "assert_quarantine_payload" and (not isinstance(step.get("packId"), str) or not step["packId"].strip()):
                     problems.append(f"{label}.packId: expected a non-empty pack ID")
+
+
+def _contains_verb(steps, wanted, macros, stack=()):
+    if not isinstance(steps, list):
+        return False
+    for raw in steps:
+        if isinstance(raw, str):
+            if raw == wanted:
+                return True
+            if raw in macros and raw not in stack and _contains_verb(macros[raw], wanted, macros, (*stack, raw)):
+                return True
+        elif isinstance(raw, dict):
+            if raw.get("do") == wanted:
+                return True
+            name = raw.get("use")
+            if name == wanted:
+                return True
+            if name in macros and name not in stack and _contains_verb(macros[name], wanted, macros, (*stack, name)):
+                return True
+            if _contains_verb(raw.get("steps"), wanted, macros, stack):
+                return True
+    return False
 
 
 def _check_generation_files(generation, problems, where):

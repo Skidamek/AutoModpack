@@ -1,9 +1,10 @@
 package pl.skidam.automodpack_loader_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_DIR;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.file.*;
 import java.util.*;
 
@@ -25,6 +26,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -45,7 +47,7 @@ public class Preload {
 		try {
 			long start = System.currentTimeMillis();
 			LOGGER.info("Prelaunching AutoModpack...");
-			storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
+			storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 			initializeConstants();
 			loadConfigs();
 			DetachedUpdateHelper.cleanupOldHelperJars();
@@ -256,7 +258,7 @@ public class Preload {
 		clientConfig = ConfigTools.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
 
 		// load server config
-		serverConfig = ConfigTools.readOrCreate(serverConfigFile, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
+		serverConfig = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 
 		if (serverConfig != null) {
 			String serverConfigBefore = ConfigTools.GSON.toJson(serverConfig);
@@ -267,12 +269,12 @@ public class Preload {
 			}
 
 			ConfigUtils.normalizeServerConfig(serverConfig);
-			if (!serverConfigBefore.equals(ConfigTools.GSON.toJson(serverConfig))) writeConfig(serverConfigFile, serverConfig);
+			if (!serverConfigBefore.equals(ConfigTools.GSON.toJson(serverConfig))) writeConfig(SERVER_CONFIG_FILE, serverConfig);
 		}
 
 		try {
 			storage.ensureRoots();
-			Files.createDirectories(serverDir);
+			Files.createDirectories(SERVER_DIR);
 		} catch (IOException e) {
 			LOGGER.error("Failed to create AutoModpack state roots", e);
 		}

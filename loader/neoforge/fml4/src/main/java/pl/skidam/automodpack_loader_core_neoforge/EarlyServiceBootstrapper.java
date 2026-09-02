@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 import cpw.mods.cl.JarModuleFinder;
 import cpw.mods.cl.ModuleClassLoader;
@@ -19,9 +18,10 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_loader_core.Preload;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 
@@ -53,8 +53,8 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			new Preload();
 			progress.complete();
 
-			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
-			Path activeModsDirectory = storage.activePath("mods");
+			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
 			if (!Files.isDirectory(activeModsDirectory)) return;
 
 			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);

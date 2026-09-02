@@ -7,7 +7,6 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -69,7 +68,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 				updater.startConfirmedUpdate();
 			} catch (RuntimeException e) {
 				finished = false;
-				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				new ScreenManager().error(e, "automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		};
 		ScreenImpl.setScreen(new ModpackSelectionScreen(this, updater, action));
@@ -170,4 +169,5 @@ public final class FirstConnectScreen extends VersionedScreen {
 	public boolean shouldCloseOnEsc() {
 		return false;
 	}
+
 }

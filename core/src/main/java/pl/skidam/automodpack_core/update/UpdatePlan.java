@@ -12,6 +12,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 public record UpdatePlan(
 		String modpackId,
@@ -43,15 +44,12 @@ public record UpdatePlan(
 	public enum Root {
 		PROJECTION,
 		OVERLAY,
-		GAME_DIR,
-		STORE_DIR
+		GAME_DIR
 	}
 
 	public enum OperationType {
-		CREATE_DIRECTORY,
 		INSTALL_OBJECT,
-		DELETE,
-		REMOVE_EMPTY_DIRECTORY
+		DELETE
 	}
 
 	public enum RestartReason {
@@ -88,7 +86,7 @@ public record UpdatePlan(
 			String targetPath, String targetHash, long targetSize, ConflictAction action) {
 		public Conflict {
 			ModpackId.requireValid(modpackId);
-			if (conflictId == null || !conflictId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid conflict ID");
+			if (!HashUtils.isCanonicalSha1(conflictId)) throw new IllegalArgumentException("Invalid conflict ID");
 			TreeSet<String> normalizedIds = new TreeSet<>();
 			if (modIds != null) for (String modId : modIds) {
 				if (modId == null || modId.isBlank()) throw new IllegalArgumentException("Conflict mod ID is missing");
@@ -98,9 +96,9 @@ public record UpdatePlan(
 			modIds = Collections.unmodifiableSet(new LinkedHashSet<>(normalizedIds));
 			sourcePath = LogicalPath.requireCanonical(sourcePath);
 			targetPath = LogicalPath.requireCanonical(targetPath);
-			if (sourceHash == null || !sourceHash.matches("[0-9a-fA-F]{40}") || sourceSize < 0)
+			if (!HashUtils.isSha1(sourceHash) || sourceSize < 0)
 				throw new IllegalArgumentException("Conflict source content is invalid");
-			if (targetHash == null || !targetHash.matches("[0-9a-fA-F]{40}") || targetSize < 0)
+			if (!HashUtils.isSha1(targetHash) || targetSize < 0)
 				throw new IllegalArgumentException("Conflict target content is invalid");
 			action = Objects.requireNonNull(action, "conflict action");
 		}
@@ -118,7 +116,7 @@ public record UpdatePlan(
 
 	public record FileKey(Root root, String relativePath) {}
 
-	public record FileState(String sha1, long size, boolean regularFile, boolean mod) {}
+	public record FileState(String sha1, long size, boolean regularFile) {}
 
 	public record ModInfo(String relativePath, String sha1, long size, Set<String> ids, Set<String> dependencies) {
 		public ModInfo {
@@ -130,8 +128,8 @@ public record UpdatePlan(
 	public record NestedCopy(String relativePath, String sha1, long size, Set<String> ids) {
 		public NestedCopy {
 			relativePath = LogicalPath.requireCanonical(relativePath);
-			if (sha1 == null || !sha1.matches("[0-9a-fA-F]{40}")) throw new IllegalArgumentException("Nested-copy SHA-1 is invalid");
-			sha1 = sha1.toLowerCase(Locale.ROOT);
+			if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Nested-copy SHA-1 is invalid");
+			sha1 = HashUtils.normalizeSha1(sha1);
 			if (size < 0) throw new IllegalArgumentException("Nested-copy size is invalid");
 			ids = stableSet(ids);
 		}

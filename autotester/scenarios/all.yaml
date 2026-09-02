@@ -2,7 +2,8 @@ id: all
 description: |
   The release gate: exercise secure bootstrap authentication, advanced group
   review, patch-note history, cached pack switching, and a published
-  changed/removed generation in one flow. The focused scenarios remain
+  changed/removed generation, server rollback, history compaction, and server
+  object collection in one flow. The focused scenarios remain
   available for faster diagnosis; this is the default confidence path.
 renderClient: true
 
@@ -18,6 +19,8 @@ releaseGate:
     - quarantine-restoration
     - storage-maintenance
     - server-history-compaction
+    - server-generation-rollback
+    - server-object-gc
     - fresh-generation-deletion
     - removal
     - secure-bootstrap
@@ -197,7 +200,10 @@ flow:
   - do: wait_client_exit
     name: wait for bootstrap restart
   - use: rejoin
-
+  - do: disconnect
+    name: return to the vanilla title screen before opening multiplayer
+  - use: open_multiplayer
+  - use: open_pack_manager
   - do: seed_unowned_local_file
     name: seed an unowned local file for preservation coverage
     path: mods/local-unowned.jar
@@ -421,7 +427,35 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
+        - element: { text: History, enabled: true }
         - element: { text: Quarantine, enabled: true }
+  - do: click
+    name: open Pack B generation history from multiplayer settings
+    select: { text: History }
+  - do: wait_for
+    name: show Pack B generation history and attached notes
+    until: { screen: ContentHistoryScreen }
+  - do: screenshot
+    name: capture Pack B generation history
+    file: all-content-history
+  - do: click
+    name: open all Pack B patch notes from content history
+    select: { text: View all patch notes }
+  - do: wait_for
+    name: show all Pack B patch notes
+    until: { screen: PatchNotesHistoryScreen }
+  - do: click
+    name: return to Pack B content history
+    select: { text: Back }
+  - do: wait_for
+    name: return to Pack B content history after all notes
+    until: { screen: ContentHistoryScreen }
+  - do: click
+    name: leave Pack B content history
+    select: { text: Back }
+  - do: wait_for
+    name: return to Pack B settings after history
+    until: { screen: ModpackSelectionScreen }
   - do: screenshot
     name: capture Pack B quarantine action
     file: all-quarantine-settings
@@ -588,9 +622,6 @@ flow:
   - do: assert_generation
     name: verify the published generation and latest patch notes
     patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
-  - do: compact_server_history
-    name: compact server history and verify retained patch notes and deleted metadata
-    timeout: 180s
   - do: wait_for
     name: wait for changed generation restart
     until: { screen: RestartScreen }
@@ -626,28 +657,54 @@ flow:
     fixture: { modId: amp_autotest_removed, version: "1.0.0-published", marker: published }
   - do: seed_bootstrap
     name: re-bootstrap the fresh client from the live server generation
+  - do: write_file
+    name: keep the fresh client on the mandatory review path
+    path: automodpack/client-config.json
+    content: |
+      {
+        "DO_NOT_CHANGE_IT": 3,
+        "selectedModpackId": "${bootstrap_modpack_id}",
+        "updateSelectedModpackOnLaunch": true
+      }
   - do: launch_client
     name: launch the fresh client without generation history or CAS
   - do: wait_bridge
     name: wait for the fresh client bridge
   - do: assert_preload_acquired
     name: verify the fresh client reacquired current objects into empty CAS
+  - do: wait_for
+    name: verify preload left direct mod cleanup for the review path
+    until:
+      log:
+        container: client
+        matches: 'Preload acquired the complete selected target; active projection remains unchanged until player review'
+  - do: assert_mod_fixture
+    name: verify preload left the direct mod untouched before review
+    path: mods/amp-autotest-removed.jar
+    fixture: { modId: amp_autotest_removed, version: "1.0.0-published", marker: published }
   - do: connect
-    name: connect the fresh client to the same server
+    name: connect the fresh client for the normal review flow
   - use: download_modpack
   - use: restart_client
   - use: rejoin
+  - do: wait_generation
+    name: verify the fresh client committed the advertised generation metadata
+    patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
+    timeout: 300s
+  - do: assert_generation
+    name: verify the fresh client committed the generation record and patch notes
+    patchNotes: "Update 2: changed alpha, added delta, and removed gamma."
+  - do: assert_file_content
+    name: verify the fresh client committed current files after the normal update path
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
   - do: assert
-    name: verify fresh-client tombstone cleanup removed the old published mod
+    name: verify the deferred published tombstone was removed after loader discovery
     that: { file_gone: mods/amp-autotest-removed.jar }
   - do: assert_mod_fixture
     name: verify fresh-client current local content remains intact
     path: mods/local-unowned.jar
     fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
-  - do: assert_file_content
-    name: verify fresh-client current files are installed
-    path: "${active_dir}/config/amp-autotest-alpha.txt"
-    content: "amp-autotest-alpha-v2\n"
   - do: disconnect
     name: return from the server to the vanilla title screen before removal
   - use: open_multiplayer
@@ -655,14 +712,24 @@ flow:
     name: open modpack settings for the installed Pack A
     select: { text: Modpack settings }
   - do: wait_for
-    name: show active Pack A management actions
+    name: show Pack A settings without lifecycle actions
     until:
       all:
         - screen: ModpackSelectionScreen
+        - element: { text: Pack manager, enabled: true }
+        - no_element: { text: Remove }
+  - do: click
+    name: open the Pack A manager
+    select: { text: Pack manager }
+  - do: wait_for
+    name: show active Pack A lifecycle actions
+    until:
+      all:
+        - screen: InstalledModpacksScreen
         - element: { text: Remove, enabled: true }
   - do: screenshot
-    name: capture active Pack A removal settings
-    file: all-removal-settings
+    name: capture active Pack A manager actions
+    file: all-pack-manager-actions
   - do: click
     name: open the Pack A removal review
     select: { text: Remove }
@@ -698,6 +765,18 @@ flow:
     name: verify Pack A removal preserved the unowned local mod
     path: mods/local-unowned.jar
     fixture: { modId: amp_autotest_unowned, version: "1.0.0-local-unowned", marker: unowned-local }
+  # Rollback must precede compaction so the runner can select and verify a
+  # durable ancestor. Both server-maintenance steps run after client assertions.
+  - do: rollback_server_generation
+    name: roll back through the real RCON command to a retained server ancestor
+    notes: "Release gate rollback: restore the retained ancestor."
+    timeout: 180s
+  - do: compact_server_history
+    name: compact the rolled-back server lineage and verify retained patch notes
+    timeout: 180s
+  - do: collect_server_objects
+    name: collect a valid orphan from the mounted server object store through RCON
+    timeout: 120s
   - do: quit
     name: quit the release-gate client
 
