@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -15,17 +14,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.function.IntConsumer;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
@@ -33,7 +27,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
@@ -187,54 +180,6 @@ public final class ClientGenerationStore {
 		Optional<ModpackJsons.CompleteModpackContentFields> fields = readFields(generationId);
 		if (fields.isEmpty() || fields.orElseThrow().generationHistory == null) return Optional.empty();
 		return Optional.of(GenerationHistoryIndex.fromFields(fields.orElseThrow().generationHistory));
-	}
-
-	/** Retrieves one selected historical catalogue through the authenticated object-transfer session. */
-	public CompletableFuture<CatalogueSnapshot> downloadHistoricalCatalogue(DownloadClient client, GenerationHistoryIndex.Entry entry, Path destination,
-			IntConsumer chunkCallback) {
-		Objects.requireNonNull(client, "download client");
-		Objects.requireNonNull(entry, "history entry");
-		Objects.requireNonNull(destination, "destination");
-		if (!entry.detailsAvailable()) return CompletableFuture.failedFuture(new IOException("Historical catalogue details were compacted: " + entry.generationId()));
-		try {
-			Files.createDirectories(destination.toAbsolutePath().normalize().getParent());
-		} catch (IOException e) {
-			return CompletableFuture.failedFuture(e);
-		}
-		return client.downloadHistoricalCatalogue(entry.stateDigest(), destination, chunkCallback).thenApply(path -> readHistoricalCatalogue(path, entry)).handle((snapshot, failure) -> {
-			IOException cleanupFailure = null;
-			try {
-				Files.deleteIfExists(destination);
-			} catch (IOException e) {
-				cleanupFailure = e;
-			}
-			if (failure != null) {
-				if (cleanupFailure != null) failure.addSuppressed(cleanupFailure);
-				throw failure instanceof CompletionException completionException ? completionException : new CompletionException(failure);
-			}
-			if (cleanupFailure != null) throw new CompletionException(cleanupFailure);
-			return snapshot;
-		});
-	}
-
-	private static CatalogueSnapshot readHistoricalCatalogue(Path path, GenerationHistoryIndex.Entry entry) {
-		Throwable failure = null;
-		try {
-			GenerationJsons.CatalogueSnapshotFields catalogueFields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.CatalogueSnapshotFields.class);
-			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(catalogueFields);
-			if (!snapshot.stateDigest().equals(entry.stateDigest())) throw new IOException("Historical catalogue identity does not match history index");
-			return snapshot;
-		} catch (IOException | RuntimeException e) {
-			failure = e;
-			throw new CompletionException("Historical catalogue is invalid", e);
-		} finally {
-			try {
-				Files.deleteIfExists(path);
-			} catch (IOException cleanupFailure) {
-				if (failure != null) failure.addSuppressed(cleanupFailure);
-				else throw new CompletionException("Historical catalogue temporary file could not be deleted", cleanupFailure);
-			}
-		}
 	}
 
 	/** Reconstructs the active target from one validated generation record and the persisted selection intent. */
