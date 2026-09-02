@@ -51,7 +51,6 @@ import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchOptions;
 import pl.skidam.mcholepunch.HolepunchRoute;
-import pl.skidam.mcholepunch.MinecraftProtocol;
 
 public class DownloadClient implements AutoCloseable {
 
@@ -192,11 +191,11 @@ public class DownloadClient implements AutoCloseable {
 			return socket;
 		}
 
-		MinecraftProtocol minecraftProtocol = MinecraftProtocol.forMinecraftVersion(MC_VERSION);
+		int protocolVersion = MinecraftProtocols.forVersion(MC_VERSION);
 
 		try {
 			HolepunchSocket socket = new HolepunchSocket();
-			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), minecraftProtocol, socket.handler(), holepunchOptions())
+			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), protocolVersion, socket.handler(), holepunchOptions())
 					.toCompletableFuture().get(NETWORK_TIMEOUT.plus(NETWORK_TIMEOUT).toSeconds(), TimeUnit.SECONDS);
 			socket.setConnection(connection);
 			return socket;
