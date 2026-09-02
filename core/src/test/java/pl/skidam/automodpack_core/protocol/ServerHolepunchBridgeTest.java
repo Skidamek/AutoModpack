@@ -87,11 +87,6 @@ class ServerHolepunchBridgeTest {
 			}
 
 			@Override
-			public CompletableFuture<Void> prepareTransportUpgrade() {
-				return CompletableFuture.completedFuture(null);
-			}
-
-			@Override
 			public CompletableFuture<Void> commitTransportUpgrade() {
 				return CompletableFuture.completedFuture(null);
 			}

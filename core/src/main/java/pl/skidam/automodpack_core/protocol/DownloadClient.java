@@ -161,7 +161,6 @@ public class DownloadClient implements AutoCloseable {
 
 	private void awaitTransportUpgrade(HolepunchSocket socket, SSLSocket tlsSocket) throws IOException {
 		try {
-			socket.prepareTransportUpgrade().toCompletableFuture().get(NETWORK_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 			socket.enableTlsTrafficCamouflage(tlsSocket.getSession(), true);
 			socket.commitTransportUpgrade().toCompletableFuture().get(NETWORK_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 		} catch (InterruptedException e) {

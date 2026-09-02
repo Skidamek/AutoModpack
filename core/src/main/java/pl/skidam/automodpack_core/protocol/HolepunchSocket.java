@@ -78,14 +78,6 @@ public class HolepunchSocket extends Socket {
 		};
 	}
 
-	CompletionStage<Void> prepareTransportUpgrade() {
-		HolepunchConnection activeConnection = connection;
-		if (activeConnection == null) {
-			return CompletableFuture.failedFuture(new IllegalStateException("HolepunchSocket is not connected"));
-		}
-		return activeConnection.prepareTransportUpgrade();
-	}
-
 	CompletionStage<Void> commitTransportUpgrade() {
 		HolepunchConnection activeConnection = connection;
 		if (activeConnection == null) {
