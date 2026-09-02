@@ -4,35 +4,26 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 
 /** A shared sha1-keyed cache of resolved Modrinth and CurseForge lookups backed by immutable loose records. */
-public class PlatformMetadataCache implements AutoCloseable {
+public class PlatformMetadataCache extends LooseRecordCache<PlatformMetadataCache.Record> {
 
 	private static final SharedCacheRegistry<PlatformMetadataCache> REGISTRY = new SharedCacheRegistry<>();
-	private static final String RECORD_SUFFIX = ".json";
-
-	private final Path recordsDirectory;
-	private final Map<String, Record> hotRecords = new ConcurrentHashMap<>();
-	private final Object[] locks = new Object[64];
 
 	public static PlatformMetadataCache open(Path path) throws IOException {
 		return REGISTRY.acquire(path, PlatformMetadataCache::new);
 	}
 
 	private PlatformMetadataCache(Path recordsDirectory) {
-		this.recordsDirectory = recordsDirectory;
-		for (int i = 0; i < locks.length; i++) locks[i] = new Object();
+		super(recordsDirectory, "platform metadata");
 	}
 
 	/** Returns the cached records for the given sha1 digests, keyed by the requested digest and omitting the missing ones. */
@@ -42,7 +33,7 @@ public class PlatformMetadataCache implements AutoCloseable {
 			if (sha1 == null || sha1.isBlank()) continue;
 			String normalizedHash = sha1.toLowerCase(Locale.ROOT);
 			synchronized (lock(normalizedHash)) {
-				Record record = readRecord(normalizedHash);
+				Record record = readRecord(normalizedHash, Record.class);
 				if (record != null) records.put(sha1, record);
 			}
 		}
@@ -82,47 +73,19 @@ public class PlatformMetadataCache implements AutoCloseable {
 		}
 	}
 
-	private Object lock(String normalizedHash) {
-		return locks[Math.floorMod(normalizedHash.hashCode(), locks.length)];
-	}
-
 	private Record readOrCreateRecord(String normalizedHash) {
-		Record record = readRecord(normalizedHash);
+		Record record = readRecord(normalizedHash, Record.class);
 		return record != null ? record : new Record(normalizedHash);
 	}
 
-	private Record readRecord(String normalizedHash) {
-		Record hot = hotRecords.get(normalizedHash);
-		if (hot != null) return hot;
-		Path recordPath = recordPath(normalizedHash);
-		if (!Files.isRegularFile(recordPath, LinkOption.NOFOLLOW_LINKS)) return null;
-		try {
-			Record record = ConfigTools.read(recordPath, Record.class).orElse(null);
-			if (record == null || !normalizedHash.equals(record.sha1)) return null;
-			hotRecords.put(normalizedHash, record);
-			return record;
-		} catch (RuntimeException e) {
-			LOGGER.debug("Ignoring invalid platform metadata cache record: {}", recordPath);
-			return null;
-		}
-	}
-
-	private void writeRecord(String normalizedHash, Record record) {
-		hotRecords.put(normalizedHash, record);
-		try {
-			ConfigTools.writeAtomic(recordPath(normalizedHash), record);
-		} catch (IOException e) {
-			LOGGER.debug("Could not persist platform metadata cache record: {}", normalizedHash, e);
-		}
-	}
-
-	private Path recordPath(String hash) {
-		return recordsDirectory.resolve(hash.substring(0, 2)).resolve(hash.substring(2) + RECORD_SUFFIX);
+	@Override
+	protected boolean validate(Record record, String key) {
+		return key.equals(record.sha1);
 	}
 
 	@Override
-	public void close() {
-		if (REGISTRY.release(recordsDirectory, this)) hotRecords.clear();
+	protected boolean releaseFromRegistry() {
+		return REGISTRY.release(recordsDirectory, this);
 	}
 
 	public static final class Record {
