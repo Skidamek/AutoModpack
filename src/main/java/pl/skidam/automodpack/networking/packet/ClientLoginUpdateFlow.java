@@ -160,6 +160,7 @@ final class ClientLoginUpdateFlow {
 		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient);
 		try {
 			ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, storage);
+			ModpackUtils.reprotectActiveFiles(serverModpackContent, storage);
 			if (!updater.requiresUpdateBeforeLogin(updateCheckResult)) {
 				updater.close();
 				if (alreadyDisconnected) ScreenImpl.multiplayer();
@@ -171,7 +172,7 @@ final class ClientLoginUpdateFlow {
 				ScreenManager.waiting(updater::cancelFromPlayer);
 				disconnectImmediately(handler);
 			}
-			updater.processModpackUpdate(updateCheckResult, true);
+			updater.processModpackUpdate(true);
 			return LoginUpdateResponse.UPDATE_REQUIRED;
 		} catch (Exception e) {
 			updater.close();

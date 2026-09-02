@@ -22,8 +22,8 @@ public class FetchManager {
 	// Return the results i guess
 
 	public record FetchData(String file, String sha1, String murmur, String fileSize, String fileType) {}
-	public record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
-	public record Datas(FetchData fetchData, FetchedData fetchedData) {}
+	private record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
+	private record Datas(FetchData fetchData, FetchedData fetchedData) {}
 	private final Map<String, Datas> fetchDatas = new HashMap<>();
 	private final PlatformMetadataCache platformMetadataCache;
 
@@ -108,10 +108,12 @@ public class FetchManager {
 			List<DownloadSource> sources = data.fetchedData().sources();
 
 			// Coin filp order
-			if (sources.size() == 2 && rng.nextBoolean()) {
-				DownloadSource first = sources.get(0);
-				sources.set(0, sources.get(1));
-				sources.set(1, first);
+			synchronized (sources) {
+				if (sources.size() == 2 && rng.nextBoolean()) {
+					DownloadSource first = sources.get(0);
+					sources.set(0, sources.get(1));
+					sources.set(1, first);
+				}
 			}
 		}
 	}
@@ -192,7 +194,39 @@ public class FetchManager {
 		}
 	}
 
-	public Map<String, Datas> getFetchDatas() {
-		return fetchDatas;
+	// Lookups accept the hash in any case because plan hashes and manifest hashes may differ in case
+	private Datas dataFor(String sha1) {
+		if (sha1 == null) return null;
+		Datas data = fetchDatas.get(sha1);
+		return data != null ? data : fetchDatas.get(sha1.toLowerCase(Locale.ROOT));
+	}
+
+	private static <T> List<T> snapshot(List<T> list) {
+		synchronized (list) {
+			return List.copyOf(list);
+		}
+	}
+
+	/** Whether the third-party lookup produced at least one source for this sha1. */
+	public boolean hasSource(String sha1) {
+		Datas data = dataFor(sha1);
+		return data != null && !snapshot(data.fetchedData().sources()).isEmpty();
+	}
+
+	/** Whether this sha1 takes part in the third-party lookup at all. */
+	public boolean tracks(String sha1) {
+		return dataFor(sha1) != null;
+	}
+
+	/** Snapshot of the lookup sources for this sha1; empty when unknown. */
+	public List<DownloadSource> sourcesFor(String sha1) {
+		Datas data = dataFor(sha1);
+		return data == null ? List.of() : snapshot(data.fetchedData().sources());
+	}
+
+	/** Snapshot of the Modrinth/CurseForge page urls for this sha1; empty when unknown. */
+	public List<String> mainPageUrlsFor(String sha1) {
+		Datas data = dataFor(sha1);
+		return data == null ? List.of() : snapshot(data.fetchedData().mainPageUrls());
 	}
 }

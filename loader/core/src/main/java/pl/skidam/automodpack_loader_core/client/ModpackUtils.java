@@ -54,28 +54,7 @@ public class ModpackUtils {
 	// Fast and friendly method to check if the modpack is up to date without modifying anything on disk
 	public static UpdateCheckResult isUpdate(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
-		Path activeDirectory = storage.activeDirectory();
-		ClientStorageJsons.ClientGenerationStateFields state;
-		try {
-			state = storage.readActiveState();
-			if (state == null || !Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) {
-				return new UpdateCheckResult(true, serverModpackContent.list);
-			}
-		} catch (IOException e) {
-			LOGGER.warn("Cannot read active client generation state", e);
-			return new UpdateCheckResult(true, serverModpackContent.list);
-		}
-
-		// Differing content digests can never pass the per-file scan, so skip straight to the update; equal digests still scan to catch tampering and re-protect matching files.
-		try {
-			GenerationRecord active = new ClientGenerationStore(storage).read(state.generationId).orElse(null);
-			if (active != null && !serverModpackContent.stateDigest.isBlank() && !serverModpackContent.stateDigest.equals(active.metadata().stateDigest())) {
-				LOGGER.info("Server generation content differs from the installed generation; skipping the per-file verification");
-				return new UpdateCheckResult(true, serverModpackContent.list);
-			}
-		} catch (IOException | RuntimeException e) {
-			LOGGER.debug("Cannot compare the installed generation digest", e);
-		}
+		if (verificationCannotDecide(serverModpackContent, storage)) return new UpdateCheckResult(true, serverModpackContent.list);
 
 		LOGGER.info("Verifying content against server list...");
 		var start = System.currentTimeMillis();
@@ -84,25 +63,7 @@ public class ModpackUtils {
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
 			for (var serverItem : serverModpackContent.list) {
-				String relative = UpdatePlanner.normalize(serverItem.file);
-				UpdatePlan.FileState observed = live.get(relative);
-				if (observed == null || !observed.regularFile()) {
-					filesToUpdate.add(serverItem);
-					continue;
-				}
-				if (serverItem.editable) {
-					LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
-					continue;
-				}
-				long size;
-				try {
-					size = Long.parseLong(serverItem.size);
-				} catch (NumberFormatException e) {
-					filesToUpdate.add(serverItem);
-					continue;
-				}
-				if (observed.size() != size || serverItem.sha1 == null || !serverItem.sha1.equalsIgnoreCase(observed.sha1())) filesToUpdate.add(serverItem);
-				else ImmutableFiles.protect(storage.activePath(relative));
+				if (verifyActiveItem(serverItem, UpdatePlanner.normalize(serverItem.file), live) == FileVerification.MISMATCH) filesToUpdate.add(serverItem);
 			}
 
 			if (filesToUpdate.isEmpty()) {
@@ -127,6 +88,67 @@ public class ModpackUtils {
 
 		LOGGER.info("Active projection is up to date! Took {} ms", System.currentTimeMillis() - start);
 		return new UpdateCheckResult(false, Set.of());
+	}
+
+	// Re-applies the filesystem's immutability to active files that already match the server content; the update verdict above stays read-only
+	public static void reprotectActiveFiles(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
+		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
+		if (verificationCannotDecide(serverModpackContent, storage)) return;
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
+			for (var serverItem : serverModpackContent.list) {
+				String relative = UpdatePlanner.normalize(serverItem.file);
+				if (verifyActiveItem(serverItem, relative, live) == FileVerification.MATCH) ImmutableFiles.protect(storage.activePath(relative));
+			}
+		} catch (Exception e) {
+			LOGGER.warn("Failed to re-protect the matching active files", e);
+		}
+	}
+
+	// True when the per-file scan cannot decide anything and every file must be treated as an update: without an active projection nothing can match, and differing content digests can never pass the per-file scan
+	private static boolean verificationCannotDecide(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
+		Path activeDirectory = storage.activeDirectory();
+		ClientStorageJsons.ClientGenerationStateFields state;
+		try {
+			state = storage.readActiveState();
+			if (state == null || !Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) return true;
+		} catch (IOException e) {
+			LOGGER.warn("Cannot read active client generation state", e);
+			return true;
+		}
+
+		try {
+			GenerationRecord active = new ClientGenerationStore(storage).read(state.generationId).orElse(null);
+			if (active != null && !serverModpackContent.stateDigest.isBlank() && !serverModpackContent.stateDigest.equals(active.metadata().stateDigest())) {
+				LOGGER.info("Server generation content differs from the installed generation; skipping the per-file verification");
+				return true;
+			}
+		} catch (IOException | RuntimeException e) {
+			LOGGER.debug("Cannot compare the installed generation digest", e);
+		}
+		return false;
+	}
+
+	private enum FileVerification {
+		MATCH, MISMATCH, SKIP
+	}
+
+	// Editable files are skipped from the hash check entirely; only non-editable files present in the projection with matching size and sha1 are a match
+	private static FileVerification verifyActiveItem(ModpackJsons.ModpackContentFields.ModpackContentItem serverItem, String relative, Map<String, UpdatePlan.FileState> live) {
+		UpdatePlan.FileState observed = live.get(relative);
+		if (observed == null || !observed.regularFile()) return FileVerification.MISMATCH;
+		if (serverItem.editable) {
+			LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
+			return FileVerification.SKIP;
+		}
+		long size;
+		try {
+			size = Long.parseLong(serverItem.size);
+		} catch (NumberFormatException e) {
+			return FileVerification.MISMATCH;
+		}
+		if (observed.size() != size || serverItem.sha1 == null || !serverItem.sha1.equalsIgnoreCase(observed.sha1())) return FileVerification.MISMATCH;
+		return FileVerification.MATCH;
 	}
 
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
