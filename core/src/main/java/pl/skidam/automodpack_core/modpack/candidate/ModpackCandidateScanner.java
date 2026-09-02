@@ -115,7 +115,7 @@ public final class ModpackCandidateScanner {
 				if (result.selected == null || result.file == null) continue;
 				GroupManifest.GroupFile file = result.file;
 				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(
-						String.valueOf(file.size()), file.type(), file.editable(), file.overwriteEditable(), file.sha1(), file.murmur()));
+						String.valueOf(file.size()), file.type(), file.editable(), file.sha1(), file.murmur()));
 				if (result.object != null) {
 					StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
 					if (redundant != null) result.object.delete();
@@ -179,18 +179,15 @@ public final class ModpackCandidateScanner {
 		CandidateProvenance provenance = null;
 		if (selected != null && file != null) {
 			PathRuleSet.Decision editable = rules.allowEditsInFiles().evaluate(selected.logicalPath());
-			PathRuleSet.Decision overwrite = rules.overwriteEditableFiles().evaluate(selected.logicalPath());
-			boolean isEditable = editable.included();
-			file = new GroupManifest.GroupFile(file.size(), file.type(), isEditable, isEditable && overwrite.included(), file.sha1(), file.murmur());
-			provenance = new CandidateProvenance(selected, editable.decisiveRule(), overwrite.decisiveRule());
+			file = new GroupManifest.GroupFile(file.size(), file.type(), editable.included(), file.sha1(), file.murmur());
+			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
 		return new PathResult(selected, file, object, provenance, exclusions, shadow, pair.explicit != null ? pair.explicit : pair.synced);
 	}
 
 	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
 		return new GroupRules(compileRuleSet(declaration.syncedFiles, groupId, "syncedFiles"),
-				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"),
-				compileRuleSet(declaration.overwriteEditableFiles, groupId, "overwriteEditableFiles"));
+				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"));
 	}
 
 	private static PathRuleSet compileRuleSet(Set<String> rules, String groupId, String name) throws CandidateBuildException {
@@ -297,8 +294,7 @@ public final class ModpackCandidateScanner {
 
 	private record GroupRules(
 			PathRuleSet syncedFiles,
-			PathRuleSet allowEditsInFiles,
-			PathRuleSet overwriteEditableFiles) {}
+			PathRuleSet allowEditsInFiles) {}
 
 	private static final class SourcePair {
 		private CandidateSource explicit;

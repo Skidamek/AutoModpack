@@ -64,7 +64,7 @@ public final class StableSourceSnapshotter {
 			if (ModpackContentType.isSourceFetchable(type)) murmur = fileMetadataCache != null ? fileMetadataCache.getOrComputeMurmur(source.sourcePath()) : HashUtils.getCurseforgeMurmurHash(source.sourcePath());
 			if (!beforeFingerprint.equals(FileMetadataCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
-			GroupManifest.GroupFile file = new GroupManifest.GroupFile(before.size(), type, false, false, sha1, murmur);
+			GroupManifest.GroupFile file = new GroupManifest.GroupFile(before.size(), type, false, sha1, murmur);
 			if (!materializeMissing) return new Snapshot(file, null, null);
 			if (trustedObject(objectStoreDirectory, sha1, before.size(), fileMetadataCache)) return new Snapshot(file, null, null);
 

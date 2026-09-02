@@ -34,7 +34,7 @@ public final class SelectedTreeComposer {
 				} else {
 					GroupManifest.GroupFile file = entry.getValue();
 					selectedFiles.add(new ModpackJsons.ModpackContentFields.ModpackContentItem(entry.getKey(), String.valueOf(file.size()), file.type(), file.editable(),
-							file.overwriteEditable(), file.sha1(), file.murmur()));
+							file.sha1(), file.murmur()));
 				}
 			}
 		}
@@ -43,7 +43,7 @@ public final class SelectedTreeComposer {
 			for (var entry : files.entrySet()) {
 				GroupManifest.GroupFile file = entry.getValue();
 				selectedFiles.add(new ModpackJsons.ModpackContentFields.ModpackContentItem(entry.getKey(), String.valueOf(file.size()), file.type(), file.editable(),
-						file.overwriteEditable(), file.sha1(), file.murmur()));
+						file.sha1(), file.murmur()));
 			}
 		}
 

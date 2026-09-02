@@ -379,7 +379,7 @@ class GroupManifestValidatorTest {
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type, String hash) {
-		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields("1", type, false, false, hash, null);
+		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields("1", type, false, hash, null);
 	}
 
 	private static Map<String, ModpackJsons.CompleteModpackContentFields.ModpackGroupFields> linkedGroups(Object... values) {

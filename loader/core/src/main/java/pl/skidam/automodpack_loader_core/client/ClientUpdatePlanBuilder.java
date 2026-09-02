@@ -235,6 +235,7 @@ final class ClientUpdatePlanBuilder {
 		if (activeTarget == null || activeTarget.list == null) return;
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
 		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(UpdatePlanner.normalize(item.file), item));
+		boolean sameModpackTarget = target != null && target.modpackId.equals(activeTarget.modpackId);
 		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.modpackId).deletedPaths);
 		for (var item : activeTarget.list) {
 			if (!item.editable) {
@@ -253,13 +254,19 @@ final class ClientUpdatePlanBuilder {
 			long size = Files.size(live);
 			UpdatePlan.FileState state = new UpdatePlan.FileState(hash, size, true);
 			if (projection.matchesPendingGameState(item.file, state)) continue;
-			if (item.overwriteEditable) {
-				UpdatePlan.FileState reset = resetDriftedFile(cache, activeTarget, item, live, state, PreservationVault.Reason.EDITABLE_RESET);
-				if (reset != null) state = reset;
-			}
 			if (item.sha1.equalsIgnoreCase(state.sha1()) && Long.parseLong(item.size) == state.size()) {
 				Files.deleteIfExists(overlay);
 				deletedPaths.remove(UpdatePlanner.normalize(item.file));
+				continue;
+			}
+			var targetItem = sameModpackTarget ? targetItems.get(UpdatePlanner.normalize(item.file)) : null;
+			if (targetItem != null && !targetItem.sha1.equalsIgnoreCase(item.sha1)) {
+				// The pack owner replaced the file: vault the player's edited bytes and let the plan install the new server version once; edits after that are preserved again.
+				Files.deleteIfExists(overlay);
+				deletedPaths.remove(UpdatePlanner.normalize(item.file));
+				Path object = storage.objectFile(hash);
+				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash, cache);
+				PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.targetGenerationId, PreservationVault.Reason.EDITABLE_RESET, UpdatePlan.Root.GAME_DIR, item.file, hash, size);
 				continue;
 			}
 			Path object = storage.objectFile(hash);

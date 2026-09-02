@@ -26,12 +26,11 @@ These settings control which files are sent to the client and which files the cl
 | Setting                            | Default                                                                    | Description                                                                                                                                                                                       |
 |------------------------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `syncedFiles`                      | `["/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*"]` | List of relative paths to sync to the client. Supports wildcards.                                                                                                                                 |
-| `allowEditsInFiles`                | `["/options.txt", "/config/**"]`                                           | Files clients download once but can edit locally. Updates to these files on the server are ignored by the client. Supports wildcards.                                                             |
-| `overwriteEditableFiles`           | `[]`                                                                       | Editable files to overwrite when their server version changes. Paths must also match `allowEditsInFiles`. Local edits are otherwise preserved. Supports wildcards.                                |
+| `allowEditsInFiles`                | `["/options.txt", "/config/**"]`                                           | Files clients download but can edit locally. Local edits are preserved until the server version of the file changes; then the edited copy is saved to the client's "Preserved files" and the new server version is applied once. Supports wildcards. |
 
 ## Globbing wildcards
 
-For `syncedFiles`, `allowEditsInFiles` and `overwriteEditableFiles`, use the following patterns relative to the server root:
+For `syncedFiles` and `allowEditsInFiles`, use the following patterns relative to the server root:
 
 - `*` : Matches files in a single directory (e.g., `/mods/*.jar`).
 - `**` : Matches files recursively in all subdirectories (e.g., `/kubejs/**`).

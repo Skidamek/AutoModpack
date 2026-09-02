@@ -111,6 +111,6 @@ class GenerationDiffTest {
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields file(String size, String hash, String murmur) {
-		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields(size, "other", false, false, hash, murmur);
+		return new ModpackJsons.CompleteModpackContentFields.GroupFileFields(size, "other", false, hash, murmur);
 	}
 }

@@ -81,7 +81,6 @@ automodpack:
       - "/emotes/*"
     allowEditsInFiles:
       - "/config/**"
-    overwriteEditableFiles: []
     autoExcludeServerSideMods: true
     autoExcludeUnnecessaryFiles: true
     requireAutoModpackOnClient: true

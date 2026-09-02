@@ -1295,7 +1295,7 @@ def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict], modpa
     encoder.integer(0).integer(len(files))
     for entry in files:
         encoder.string(entry["logicalPath"]).long(int(entry["size"])).string(entry["type"])
-        encoder.boolean(entry["editable"]).boolean(False).string(entry["sha1"]).string("")
+        encoder.boolean(entry["editable"]).string(entry["sha1"]).string("")
     return encoder.digest()
 
 
@@ -1369,7 +1369,6 @@ def _write_staged_generation(
                         "size": entry["size"],
                         "type": entry["type"],
                         "editable": entry["editable"],
-                        "overwriteEditable": False,
                         "sha1": entry["sha1"],
                         "murmur": "",
                     }

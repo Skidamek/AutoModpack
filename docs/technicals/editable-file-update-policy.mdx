@@ -2,19 +2,17 @@
 
 ## Decision
 
-`overwriteEditableFiles` adds a middle ground between regular synced files and `allowEditsInFiles`:
+`allowEditsInFiles` marks files that players may edit locally:
 
-- A file must match `allowEditsInFiles` before this option applies.
-- Players can edit the file without AutoModpack restoring the server copy.
+- After installation, the client keeps a snapshot (overlay) of the player's edited copy, and that copy shadows the pack version for as long as the pack version stays the same.
 - The client compares the server target with the previously installed generation record, not with the player's live file.
-- If the server SHA-1 changed (or the file is new), the client downloads the new server copy and overwrites the active file once.
-- After the new generation is committed, later local edits are preserved in the client overlay until the server changes the file again.
+- When the server SHA-1 of an editable file changes (or the file is new), the player's edited copy is saved to the "Preserved files" UI (vault reason `EDITABLE_RESET`), and the new server copy is applied exactly once.
+- After the new generation is committed, later local edits are preserved again in the client overlay until the server changes the file once more.
 
-This preserves player customization while still giving a server operator a reliable way to publish a replacement configuration.
+An operator who wants a file's edits to never be clobbered simply never changes that file on the server. There is no second list: every editable file follows the same rule.
 
 ## Glossary
 
-- **Editable file:** A file matched by `allowEditsInFiles`; after installation, changes on the client are normally preserved.
-- **Overwrite-editable file:** An editable file also matched by `overwriteEditableFiles`. It is overwritten only when its server manifest SHA-1 changes.
+- **Editable file:** A file matched by `allowEditsInFiles`; after installation, client edits are preserved until the server changes the file.
 - **Installed generation:** The immutable `manifest.json` under `automodpack/client/records/<generationId>/`. It records the target state last applied by the client.
 - **Active file:** The file in the fixed active projection or, when the loader requires it, its managed live-game placement.

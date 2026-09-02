@@ -19,14 +19,12 @@ class ConfigUtilsTest {
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.syncedFiles = new LinkedHashSet<>(List.of("/third", "/first", "/second"));
 		group.allowEditsInFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
-		group.overwriteEditableFiles = new LinkedHashSet<>(List.of("third", "first", "second"));
 		config.groups = new LinkedHashMap<>(Map.of("main", group));
 
 		ConfigUtils.normalizeServerConfig(config);
 
 		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.syncedFiles));
 		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.allowEditsInFiles));
-		assertEquals(List.of("/third", "/first", "/second"), List.copyOf(group.overwriteEditableFiles));
 	}
 
 	@Test

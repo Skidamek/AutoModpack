@@ -120,7 +120,7 @@ class OwnershipLedgerTest {
 	}
 
 	private static GroupManifest.GroupFile file(String hash, long size) {
-		return new GroupManifest.GroupFile(size, "config", false, false, hash, null);
+		return new GroupManifest.GroupFile(size, "config", false, hash, null);
 	}
 
 	private static OwnershipLedger.Entry entry(String path, String hash, long size) {

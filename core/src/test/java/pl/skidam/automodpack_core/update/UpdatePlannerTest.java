@@ -482,11 +482,11 @@ class UpdatePlannerTest {
 	}
 
 	private static ModpackJsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
-		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, false, false, hash, "0");
+		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, false, hash, "0");
 	}
 
 	private static ModpackJsons.ModpackContentFields.ModpackContentItem editableItem(String path, String hash, long size, String type) {
-		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, true, false, hash, "0");
+		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, String.valueOf(size), type, true, hash, "0");
 	}
 
 	private static ModpackJsons.ModpackContentFields packManifest(String modpackId, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> items,
