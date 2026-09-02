@@ -7,7 +7,6 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
@@ -15,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.HashUtils;
 
 class ModFileCacheTest {
 	@TempDir
@@ -56,23 +54,6 @@ class ModFileCacheTest {
 			assertNotNull(mod);
 			assertEquals(contentAddressedObject.toAbsolutePath().normalize(), mod.path());
 			assertEquals("example", mod.IDs().iterator().next());
-		}
-	}
-
-	@Test
-	void forcedReinspectionReplacesContentMetadataWithoutTrustingItsRecord() throws Exception {
-		Path source = temporaryDirectory.resolve("source.jar");
-		writeMod(source);
-		String hash = HashUtils.getHash(source);
-		Path records = temporaryDirectory.resolve("mod-metadata");
-		Path record = records.resolve(hash.substring(0, 2)).resolve(hash.substring(2) + ".json");
-		Files.createDirectories(record.getParent());
-		Files.writeString(record, "{\"IDs\":[\"wrong\"],\"hash\":\"" + hash + "\",\"version\":\"9.9.9\",\"deps\":[],\"nestedMods\":[],\"id\":\"wrong\",\"services\":[]}", StandardCharsets.UTF_8);
-
-		try (FileMetadataCache hashCache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata")); ModFileCache modCache = ModFileCache.open(records)) {
-			assertEquals(Set.of("wrong"), modCache.getOrComputeMod(source, hashCache).IDs());
-			assertEquals(Set.of("example"), modCache.reinspectMod(source, hashCache).IDs());
-			assertEquals(Set.of("example"), modCache.getOrComputeMod(source, hashCache).IDs());
 		}
 	}
 

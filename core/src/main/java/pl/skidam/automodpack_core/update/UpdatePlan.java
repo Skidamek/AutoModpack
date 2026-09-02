@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -315,6 +316,9 @@ public record UpdatePlan(
 	}
 
 	public static final class Operation {
+		/** The canonical deterministic execution order shared by the planner, the transaction, and the executor. */
+		public static final Comparator<Operation> ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
+				.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
 		private Root root;
 		private String relativePath;
 		private OperationType operation;
@@ -433,7 +437,9 @@ public record UpdatePlan(
 		}
 	}
 
-	public record FileKey(Root root, String relativePath) {}
+	public record FileKey(Root root, String relativePath) {
+		public static final Comparator<FileKey> ORDER = Comparator.comparing((FileKey key) -> key.root().ordinal()).thenComparing(FileKey::relativePath);
+	}
 
 	public record FileState(String sha1, long size, boolean regularFile) {}
 
