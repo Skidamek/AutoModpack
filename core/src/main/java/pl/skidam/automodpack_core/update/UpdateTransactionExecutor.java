@@ -264,8 +264,10 @@ public final class UpdateTransactionExecutor {
 		if (!publicationStarted && configurationChangedAfterPlanning(transaction))
 			throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
 		captureBaselines(transaction);
-		preserveConflicts(transaction);
+		// The ledger-driven batch is bookkeeping; the conflict resolutions are the player's last review
+		// decisions and must become the newest vault claims, which the vault surfaces first.
 		preserveBeforeMutation(transaction);
+		preserveConflicts(transaction);
 		if (!liveAlreadyApplied) applyOperations(transaction, current);
 		current.set(null);
 		if (!publicationStarted) {
