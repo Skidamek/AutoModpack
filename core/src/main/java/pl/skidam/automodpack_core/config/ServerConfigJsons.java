@@ -53,7 +53,6 @@ public class ServerConfigJsons {
 		public String displayName = "";
 		public String description = "";
 		public String category = "";
-		public String icon = "";
 
 		// If required, the client cannot uncheck it. defaultSelected is ignored when required.
 		public boolean required = false;

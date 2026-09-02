@@ -32,7 +32,6 @@ public record GroupManifest(
 			serialized.displayName = group.displayName();
 			serialized.description = group.description();
 			serialized.category = group.category();
-			serialized.icon = group.icon();
 			serialized.required = group.required();
 			serialized.defaultSelected = group.defaultSelected();
 			serialized.breaksWith = new LinkedHashSet<>(group.breaksWith());
@@ -74,7 +73,6 @@ public record GroupManifest(
 			String displayName,
 			String description,
 			String category,
-			String icon,
 			boolean required,
 			boolean defaultSelected,
 			NavigableSet<String> breaksWith,
@@ -85,7 +83,6 @@ public record GroupManifest(
 			displayName = displayName == null ? "" : displayName;
 			description = description == null ? "" : description;
 			category = category == null ? "" : category;
-			icon = icon == null ? "" : icon;
 			breaksWith = immutableSet(breaksWith);
 			requires = immutableSet(requires);
 			compatiblePlatforms = immutablePlatforms(compatiblePlatforms);
@@ -98,7 +95,7 @@ public record GroupManifest(
 
 		public boolean hasSameMetadata(Group other) {
 			return other != null && Objects.equals(displayName, other.displayName) && Objects.equals(description, other.description)
-					&& Objects.equals(category, other.category) && Objects.equals(icon, other.icon) && required == other.required
+					&& Objects.equals(category, other.category) && required == other.required
 					&& defaultSelected == other.defaultSelected && Objects.equals(breaksWith, other.breaksWith) && Objects.equals(requires, other.requires)
 					&& Objects.equals(compatiblePlatforms, other.compatiblePlatforms);
 		}

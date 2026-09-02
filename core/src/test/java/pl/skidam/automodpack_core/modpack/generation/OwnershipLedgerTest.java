@@ -108,14 +108,14 @@ class OwnershipLedgerTest {
 	}
 
 	private static GroupManifest.Group group(Set<String> breaksWith, GroupManifest.GroupFile file) {
-		return new GroupManifest.Group("", "", "", "", false, false, new TreeSet<>(breaksWith), new TreeSet<>(), Set.of(),
+		return new GroupManifest.Group("", "", "", false, false, new TreeSet<>(breaksWith), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("config/example.txt", file)));
 	}
 
 	private static GroupManifest manifest(GroupManifest.GroupFile... files) {
 		NavigableMap<String, GroupManifest.GroupFile> values = new TreeMap<>();
 		if (files != null) for (GroupManifest.GroupFile file : files) values.put("config/example.txt", file);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "", "", true, false, new TreeSet<>(), new TreeSet<>(), Set.of(), values);
+		GroupManifest.Group group = new GroupManifest.Group("", "", "", true, false, new TreeSet<>(), new TreeSet<>(), Set.of(), values);
 		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 	}
 

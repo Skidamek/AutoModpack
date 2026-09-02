@@ -100,9 +100,9 @@ class ClientGenerationStoreTest {
 		GroupManifest.GroupFile selectedFile = new GroupManifest.GroupFile(Files.size(storage.objectFile(selectedHash)), "mod", false,
 				selectedHash, null);
 		GroupManifest.GroupFile optionalFile = new GroupManifest.GroupFile(176, "config", false, uncachedOptionalHash, null);
-		GroupManifest.Group selectedGroup = new GroupManifest.Group("Core", "", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group selectedGroup = new GroupManifest.Group("Core", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", selectedFile)));
-		GroupManifest.Group optionalGroup = new GroupManifest.Group("Optional", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group optionalGroup = new GroupManifest.Group("Optional", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("config/optional.json", optionalFile)));
 		GenerationRecord record = GenerationRecord.create(
 				new GroupManifest(FIRST_PACK, "Test", "", "", "", "", new TreeMap<>(Map.of("main", selectedGroup, "optional", optionalGroup))), null,
@@ -358,7 +358,7 @@ class ClientGenerationStoreTest {
 
 	private static GenerationRecord record(String modpackId, String hash, long size, Instant createdAt, GenerationRecord parent) {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(size, "mod", false, hash, null);
-		GroupManifest.Group group = new GroupManifest.Group("", "", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest.Group group = new GroupManifest.Group("", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		return GenerationRecord.create(new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group))), parent, createdAt, "notes");
 	}

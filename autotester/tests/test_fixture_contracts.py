@@ -511,7 +511,7 @@ def test_record_only_generation_state_digest_matches_its_manifest(make_ctx):
     for group_id, group in sorted(manifest["groups"].items()):
         encoder.string(group_id).string(group["displayName"]).string(
             group["description"]
-        ).string(group["category"]).string(group["icon"])
+        ).string(group["category"])
         encoder.boolean(group["required"]).boolean(group["defaultSelected"])
         for values in (group["breaksWith"], group["requires"]):
             encoder.integer(len(values))

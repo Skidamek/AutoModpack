@@ -62,8 +62,8 @@ class SelectedTreeComposerTest {
 				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
 		GroupManifest.GroupFile second = new GroupManifest.GroupFile(1, "config", false,
 				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
-		GroupManifest manifest = manifest(Map.of("main", new GroupManifest.Group("", "", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("config/first.txt", first))), "optional",
-				new GroupManifest.Group("", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		GroupManifest manifest = manifest(Map.of("main", new GroupManifest.Group("", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("config/first.txt", first))), "optional",
+				new GroupManifest.Group("", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(),
 						new TreeMap<>(Map.of("config/second.txt", second)))));
 		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "");
 		SelectedModpackTarget target = SelectedModpackTarget.prepareDefault(record.toFields(), ClientPlatform.LINUX);
@@ -88,7 +88,7 @@ class SelectedTreeComposerTest {
 	}
 
 	private static GroupManifest.Group group(GroupManifest.GroupFile file) {
-		return new GroupManifest.Group("", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(),
+		return new GroupManifest.Group("", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(),
 				new TreeMap<>(Map.of("mods/example.jar", file)));
 	}
 }

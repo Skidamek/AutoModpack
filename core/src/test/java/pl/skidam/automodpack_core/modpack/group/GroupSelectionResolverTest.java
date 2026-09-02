@@ -30,7 +30,7 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void explicitlyRequestedUnavailableOptionalGroupInvalidatesResolution() {
-		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(),
+		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "", false, false, new TreeSet<>(), new TreeSet<>(),
 				Set.of(ClientPlatform.WINDOWS), new TreeMap<>())));
 
 		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
@@ -43,8 +43,8 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void explicitlyRequestedOptionalGroupBlockedByUnavailableDependencyIsHonest() {
-		GroupManifest.Group dependency = new GroupManifest.Group("Dependency", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>());
-		GroupManifest.Group feature = new GroupManifest.Group("Feature", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(Set.of("dependency")), Set.of(), new TreeMap<>());
+		GroupManifest.Group dependency = new GroupManifest.Group("Dependency", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>());
+		GroupManifest.Group feature = new GroupManifest.Group("Feature", "", "", false, false, new TreeSet<>(), new TreeSet<>(Set.of("dependency")), Set.of(), new TreeMap<>());
 		GroupManifest manifest = manifest(Map.of("dependency", dependency, "feature", feature));
 
 		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
@@ -57,7 +57,7 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void unsupportedGroupsNeverRequestedRemainOutsideRequestedUnavailableSubset() {
-		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "", "", false, false, new TreeSet<>(), new TreeSet<>(),
+		GroupManifest manifest = manifest(Map.of("windows", new GroupManifest.Group("Windows", "", "", false, false, new TreeSet<>(), new TreeSet<>(),
 				Set.of(ClientPlatform.WINDOWS), new TreeMap<>())));
 
 		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of()), ClientPlatform.LINUX);
@@ -111,9 +111,9 @@ class GroupSelectionResolverTest {
 	@Test
 	void conflictReplacementKeepsSafeMembersOfASelectedCategory() {
 		GroupManifest.Group dependency = group(false, false, Set.of());
-		GroupManifest.Group oldFeature = new GroupManifest.Group("Old feature", "", "visuals", "", false, false, new TreeSet<>(), new TreeSet<>(Set.of("dependency")), Set.of(ClientPlatform.LINUX), new TreeMap<>());
+		GroupManifest.Group oldFeature = new GroupManifest.Group("Old feature", "", "visuals", false, false, new TreeSet<>(), new TreeSet<>(Set.of("dependency")), Set.of(ClientPlatform.LINUX), new TreeMap<>());
 		GroupManifest.Group safeFeature = categorized("Safe feature", ClientPlatform.LINUX);
-		GroupManifest.Group preferred = new GroupManifest.Group("Preferred", "", "", "", false, false, new TreeSet<>(Set.of("dependency")), new TreeSet<>(), Set.of(), new TreeMap<>());
+		GroupManifest.Group preferred = new GroupManifest.Group("Preferred", "", "", false, false, new TreeSet<>(Set.of("dependency")), new TreeSet<>(), Set.of(), new TreeMap<>());
 		GroupManifest manifest = manifest(Map.of("dependency", dependency, "old", oldFeature, "safe", safeFeature, "preferred", preferred));
 		SelectionIntent category = GroupSelectionResolver.preferCategory(manifest, new SelectionIntent(Set.of()), "visuals", ClientPlatform.LINUX);
 		SelectionIntent candidate = GroupSelectionResolver.prefer(manifest, category, "preferred", ClientPlatform.LINUX);
@@ -132,10 +132,10 @@ class GroupSelectionResolverTest {
 	}
 
 	private static GroupManifest.Group group(boolean required, boolean defaultSelected, Set<String> requires) {
-		return new GroupManifest.Group("", "", "", "", required, defaultSelected, new TreeSet<>(), new TreeSet<>(requires), Set.of(), new TreeMap<>());
+		return new GroupManifest.Group("", "", "", required, defaultSelected, new TreeSet<>(), new TreeSet<>(requires), Set.of(), new TreeMap<>());
 	}
 
 	private static GroupManifest.Group categorized(String name, ClientPlatform platform) {
-		return new GroupManifest.Group(name, "", "visuals", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(platform), new TreeMap<>());
+		return new GroupManifest.Group(name, "", "visuals", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(platform), new TreeMap<>());
 	}
 }

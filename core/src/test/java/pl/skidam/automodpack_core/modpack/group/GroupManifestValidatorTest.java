@@ -29,7 +29,6 @@ class GroupManifestValidatorTest {
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 
 		assertEquals("visuals", manifest.groups().get("main").category());
-		assertEquals("", manifest.groups().get("main").icon());
 		assertEquals(ConfigTools.GSON.toJson(manifest.toFields()), ConfigTools.GSON.toJson(GroupManifestValidator.validate(manifest.toFields()).toFields()));
 	}
 
@@ -49,31 +48,6 @@ class GroupManifestValidatorTest {
 			var fields = catalogue();
 			var group = group(file("a"));
 			group.category = value;
-			fields.groups = Map.of("main", group);
-			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), value);
-		}
-	}
-
-	@Test
-	void validatesOptionalIconResourceLocationAndRoundTrips() {
-		var fields = catalogue();
-		var group = group(file("a"));
-		group.icon = "minecraft:item/diamond";
-		fields.groups = Map.of("main", group);
-
-		GroupManifest manifest = GroupManifestValidator.validate(fields);
-
-		assertEquals("minecraft:item/diamond", manifest.groups().get("main").icon());
-		assertEquals("minecraft:item/diamond", manifest.toFields().groups.get("main").icon);
-	}
-
-	@Test
-	void rejectsUnsafeIconResourceLocations() {
-		for (String value : List.of("diamond", "minecraft:", "minecraft:/diamond", "minecraft:item//diamond", "minecraft:item/../diamond", "Minecraft:item/diamond",
-				"minecraft:item diamond", "minecraft:item#diamond")) {
-			var fields = catalogue();
-			var group = group(file("a"));
-			group.icon = value;
 			fields.groups = Map.of("main", group);
 			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), value);
 		}

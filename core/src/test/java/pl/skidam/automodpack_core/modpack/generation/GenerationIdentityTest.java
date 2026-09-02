@@ -89,19 +89,6 @@ class GenerationIdentityTest {
 	}
 
 	@Test
-	void groupIconChangesStateDigest() {
-		var firstFields = catalogue("main", "same");
-		var secondFields = catalogue("main", "same");
-		firstFields.groups.get("main").icon = "minecraft:item/stone";
-		secondFields.groups.get("main").icon = "minecraft:item/diamond";
-
-		GroupManifest first = GroupManifestValidator.validate(firstFields);
-		GroupManifest second = GroupManifestValidator.validate(secondFields);
-
-		assertNotEquals(GenerationIdentity.stateDigest(first), GenerationIdentity.stateDigest(second));
-	}
-
-	@Test
 	void publicationMetadataChangesGenerationIdButNotStateDigest() {
 		GroupManifest manifest = GroupManifestValidator.validate(catalogue("main", "same"));
 		GenerationRecord first = GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "");
