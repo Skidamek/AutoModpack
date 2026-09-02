@@ -54,6 +54,28 @@ class PreservationVaultTest {
 	}
 
 	@Test
+	void preservingTheSamePathAndBytesSupersedesTheOlderClaimWhileNewBytesStayDistinct() throws Exception {
+		ClientStorage storage = storage();
+		Path source = Files.writeString(storage.gamePath("config/kept.cfg"), "kept", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(source);
+		long size = Files.size(source);
+
+		PreservationVault.Claim deactivation = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.MODPACK_DEACTIVATION, Root.GAME_DIR, "config/kept.cfg", hash, size);
+		PreservationVault.Claim removal = PreservationVault.preserve(storage, MODPACK_ID, "d".repeat(40), Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/kept.cfg", hash, size);
+
+		List<PreservationVault.Claim> superseded = PreservationVault.read(storage, MODPACK_ID).claims();
+		assertEquals(1, superseded.size());
+		assertEquals(removal, superseded.get(0));
+		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().stream().noneMatch(claim -> claim.claimId().equals(deactivation.claimId())));
+		assertTrue(Files.exists(storage.objectFile(hash)));
+
+		Path changed = Files.writeString(storage.gamePath("config/kept.cfg"), "kept-v2", StandardCharsets.UTF_8);
+		PreservationVault.preserve(storage, MODPACK_ID, "d".repeat(40), Reason.MODPACK_DEACTIVATION, Root.GAME_DIR, "config/kept.cfg", HashUtils.getHash(changed), Files.size(changed));
+
+		assertEquals(2, PreservationVault.read(storage, MODPACK_ID).claims().size());
+	}
+
+	@Test
 	void originalRestoreRequiresAnActiveUnownedPathAndReleasesTheClaim() throws Exception {
 		ClientStorage storage = storage();
 		Path source = Files.writeString(storage.gamePath("mods/local.jar"), "local-mod", StandardCharsets.UTF_8);

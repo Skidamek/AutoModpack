@@ -34,6 +34,9 @@ import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
  * <p>
  * Every mutation runs under the game-directory mutation lock, like every other durable client
  * mutation. The nested preserve calls reuse the same held lock instead of a separate lock regime.
+ * The vault keeps one claim per source path and content: re-preserving bytes it already holds
+ * supersedes the older claim's provenance, while different bytes for the same path stay
+ * separately recoverable.
  * </p>
  */
 public final class PreservationVault {
@@ -108,6 +111,9 @@ public final class PreservationVault {
 				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash, cache);
 				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) throw new IOException("Preserved object verification failed: " + object);
 
+				// The vault keeps one recoverable claim per path and content: a new receipt for bytes it
+				// already holds supersedes the older provenance instead of duplicating the row.
+				fields.claims = new ArrayList<>(fields.claims.stream().filter(held -> claimId.equals(held.claimId) || !sameContent(held, normalizedRoot, path, hash, size)).toList());
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = new ClientStorageJsons.ClientPreservationVaultFields.ClaimFields();
 				claim.claimId = claimId;
 				claim.originalPath = path;
@@ -300,6 +306,10 @@ public final class PreservationVault {
 		VerifiedFileTransfer.copyCreateOnly(source, destination, size, hash, cache);
 		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
 		if (!FileIntegrity.matches(destination, size, hash, cache)) throw new IOException("Restored file failed verification: " + destination);
+	}
+
+	private static boolean sameContent(ClientStorageJsons.ClientPreservationVaultFields.ClaimFields held, Root root, String path, String hash, long size) {
+		return root.name().equals(held.sourceRoot) && path.equals(held.originalPath) && held.objectHash != null && hash.equalsIgnoreCase(held.objectHash) && held.size == size;
 	}
 
 	private static void releaseClaim(ClientStorage storage, String modpackId, ClientStorageJsons.ClientPreservationVaultFields fields, String claimId) throws IOException {
