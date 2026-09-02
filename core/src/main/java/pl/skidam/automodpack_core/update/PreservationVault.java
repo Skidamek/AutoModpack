@@ -28,10 +28,16 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
-/** Owns durable user-recoverable claims and the CAS bytes that satisfy them. */
+/**
+ * Owns durable user-recoverable claims and the CAS bytes that satisfy them.
+ *
+ * <p>
+ * Every mutation runs under the game-directory mutation lock, like every other durable client
+ * mutation. The nested preserve calls reuse the same held lock instead of a separate lock regime.
+ * </p>
+ */
 public final class PreservationVault {
 	private static final Comparator<ClientStorageJsons.ClientPreservationVaultFields.ClaimFields> CLAIM_ORDER = Comparator.comparing(claim -> claim.claimId);
-	private static final Object MUTATION_LOCK = new Object();
 
 	private PreservationVault() {}
 
@@ -70,6 +76,11 @@ public final class PreservationVault {
 	static Claim preserve(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size,
 			Instant preservedAt) throws IOException {
 		Objects.requireNonNull(storage, "storage");
+		return ClientStorageMutation.run(storage, () -> preserveLocked(storage, modpackId, generationId, reason, sourceRoot, originalPath, objectHash, size, preservedAt));
+	}
+
+	private static Claim preserveLocked(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size,
+			Instant preservedAt) throws IOException {
 		String pack = ModpackId.requireValid(modpackId);
 		String generation = requireOptionalHash(generationId, "preservation generation ID");
 		Reason normalizedReason = Objects.requireNonNull(reason, "preservation reason");
@@ -80,7 +91,7 @@ public final class PreservationVault {
 		Instant time = requireInstant(preservedAt);
 		String claimId = claimId(pack, generation, normalizedReason, normalizedRoot, path, hash, size);
 
-		synchronized (MUTATION_LOCK) {
+		{
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields existing = fields.claims.stream().filter(claim -> claimId.equals(claim.claimId)).findFirst().orElse(null);
@@ -118,7 +129,7 @@ public final class PreservationVault {
 
 	/** Preserves and then removes a conflicting local file. Retrying the same conflict is idempotent. */
 	public static Claim preserveConflict(ClientStorage storage, String generationId, Conflict conflict) throws IOException {
-		synchronized (MUTATION_LOCK) {
+		return ClientStorageMutation.run(storage, () -> {
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 				Claim claim = preserve(storage, conflict.modpackId(), generationId, Reason.LOCAL_CONFLICT, Root.GAME_DIR, conflict.sourcePath(), conflict.sourceHash(), conflict.sourceSize());
 				Path source = storage.gamePath(conflict.sourcePath());
@@ -131,7 +142,7 @@ public final class PreservationVault {
 					throw new IOException("Conflict source removal could not be verified: " + source);
 				return claim;
 			}
-		}
+		});
 	}
 
 	/** Replaces the claim for a path with one for new bytes as one vault operation: a claim already matching the new bytes is returned unchanged, superseded claims are released. */
@@ -142,7 +153,7 @@ public final class PreservationVault {
 		Reason normalizedReason = Objects.requireNonNull(reason, "preservation reason");
 		Root normalizedRoot = requireRestorableRoot(sourceRoot);
 		if (size < 0) throw new IOException("Preservation object size is invalid");
-		synchronized (MUTATION_LOCK) {
+		return ClientStorageMutation.run(storage, () -> {
 			for (Claim claim : read(storage, pack).claims()) {
 				if (claim.reason() != normalizedReason || claim.sourceRoot() != normalizedRoot) continue;
 				if (!UpdatePlanner.normalize(claim.originalPath()).equals(UpdatePlanner.normalize(originalPath))) continue;
@@ -150,13 +161,13 @@ public final class PreservationVault {
 				delete(storage, pack, claim.claimId());
 			}
 			return preserve(storage, pack, generationId, normalizedReason, normalizedRoot, originalPath, objectHash, size);
-		}
+		});
 	}
 
 	/** Preserves and removes a regular file as one idempotent vault operation. */
 	public static Claim preserveAndRemove(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash,
 			long size) throws IOException {
-		synchronized (MUTATION_LOCK) {
+		return ClientStorageMutation.run(storage, () -> {
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 				Claim claim = preserve(storage, modpackId, generationId, reason, sourceRoot, originalPath, objectHash, size);
 				Path source = source(storage, modpackId, sourceRoot, originalPath);
@@ -169,7 +180,7 @@ public final class PreservationVault {
 					throw new IOException("Preserved source removal could not be verified: " + source);
 				return claim;
 			}
-		}
+		});
 	}
 
 	public static Snapshot read(ClientStorage storage, String modpackId) throws IOException {
@@ -217,7 +228,7 @@ public final class PreservationVault {
 	public static Path restoreOriginal(ClientStorage storage, String modpackId, String claimId) throws IOException {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
-		synchronized (MUTATION_LOCK) {
+		return ClientStorageMutation.run(storage, () -> {
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
@@ -228,14 +239,14 @@ public final class PreservationVault {
 				releaseClaim(storage, pack, fields, id);
 				return destination;
 			}
-		}
+		});
 	}
 
 	/** Saves a deterministic copy without changing the active modpack. Success releases the claim. */
 	public static Path saveCopy(ClientStorage storage, String modpackId, String claimId) throws IOException {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
-		synchronized (MUTATION_LOCK) {
+		return ClientStorageMutation.run(storage, () -> {
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
@@ -245,18 +256,19 @@ public final class PreservationVault {
 				releaseClaim(storage, pack, fields, id);
 				return destination;
 			}
-		}
+		});
 	}
 
 	/** Explicitly releases one durable claim. Its bytes remain until the next explicit CAS collection. */
 	public static void delete(ClientStorage storage, String modpackId, String claimId) throws IOException {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
-		synchronized (MUTATION_LOCK) {
+		ClientStorageMutation.run(storage, () -> {
 			ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 			requireClaim(fields, id);
 			releaseClaim(storage, pack, fields, id);
-		}
+			return null;
+		});
 	}
 
 	private static void requireActiveUnownedPath(ClientStorage storage, String modpackId, String logicalPath) throws IOException {
