@@ -191,13 +191,15 @@ public final class ServerHolepunchBridge {
 	}
 
 	private static void startTlsTransportUpgrade(HolepunchSocket socket, SslHandler sslHandler, SocketAddress remoteAddress, AtomicBoolean inProgress) {
-		socket.prepareTransportUpgrade().thenRun(() -> {
-			try {
-				socket.enableTlsTrafficCamouflage(sslHandler.engine().getSession(), false);
-			} catch (Exception exception) {
-				throw new CompletionException("Failed to enable TLS record camouflage", exception);
-			}
-		}).thenCompose(ignored -> socket.commitTransportUpgrade()).exceptionally(error -> {
+		try {
+			socket.enableTlsTrafficCamouflage(sslHandler.engine().getSession(), false);
+		} catch (Exception exception) {
+			LOGGER.debug("Failed to enable TLS record camouflage via holepunch: {}", remoteAddress, exception);
+			socket.close();
+			inProgress.set(false);
+			return;
+		}
+		socket.commitTransportUpgrade().exceptionally(error -> {
 			LOGGER.debug("TLS record camouflage setup failed via holepunch: {}", remoteAddress, error);
 			socket.close();
 			return null;
