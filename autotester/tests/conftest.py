@@ -211,6 +211,7 @@ class FakeBridge:
                     {"id": 83, "text": "amp-autotest-gamma.cfg", "enabled": True, "visible": self._claim_exists("packaaa", "config/amp-autotest-gamma.cfg")},
                     {"id": 49, "text": "amp-autotest-conflict.jar", "enabled": True, "visible": self._claim_exists("packbbb", self.ctx.vars.get("same_path_conflict_path", "mods/amp-autotest-conflict.jar"))},
                     {"id": 107, "text": "pack-shared-editable.txt", "enabled": True, "visible": self._claim_exists("packaaa", "config/pack-shared-editable.txt")},
+                    {"id": 109, "text": "local-unowned.jar", "enabled": True, "visible": self._claim_exists("packaaa", "mods/local-unowned.jar")},
                     {"id": 84, "text": "Restore", "enabled": self._selected_claim_restorable(), "visible": True},
                     {"id": 85, "text": "Save copy", "enabled": bool(self.vault_claim_selected), "visible": True},
                     {"id": 90, "text": "Delete", "enabled": bool(self.vault_claim_selected), "visible": True},
@@ -490,6 +491,8 @@ class FakeBridge:
             self._select_vault_claim("packbbb", self.ctx.vars.get("same_path_conflict_path", "mods/amp-autotest-conflict.jar"))
         elif element_id == 107 and self.screen == "preservation":
             self._select_vault_claim("packaaa", "config/pack-shared-editable.txt")
+        elif element_id == 109 and self.screen == "preservation":
+            self._select_vault_claim("packaaa", "mods/local-unowned.jar")
         elif element_id == 84 and self.screen == "preservation":
             if self._active_pack_owns_selected_claim(self.selected_claim_pack):
                 self.error_parent = "preservation"
