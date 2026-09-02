@@ -23,7 +23,6 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFilePublisher;
-import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 public final class GenerationStore {
@@ -84,55 +83,6 @@ public final class GenerationStore {
 		}
 	}
 
-	/** A deterministic receipt for one explicit server generation-history compaction pass. */
-	public record CompactionPreview(String boundaryGenerationId, List<String> rollbackUnavailableGenerationIds, List<String> supersededGenerationIds,
-			List<String> supersededCatalogueStateDigests, long reclaimableCatalogueBytes, long reclaimableCommitBytes, long reclaimableDeltaBytes) {
-		public CompactionPreview {
-			boundaryGenerationId = GenerationMetadata.requireDigest(boundaryGenerationId, "compaction boundary generation ID");
-			rollbackUnavailableGenerationIds = CompactionResult.canonicalReceiptIds(rollbackUnavailableGenerationIds, "rollback-unavailable generation ID");
-			supersededGenerationIds = CompactionResult.canonicalReceiptIds(supersededGenerationIds, "superseded generation ID");
-			supersededCatalogueStateDigests = CompactionResult.canonicalReceiptIds(supersededCatalogueStateDigests, "superseded catalogue state digest");
-			if (reclaimableCatalogueBytes < 0 || reclaimableCommitBytes < 0 || reclaimableDeltaBytes < 0)
-				throw new IllegalArgumentException("Compaction preview byte values cannot be negative");
-			if (!rollbackUnavailableGenerationIds.equals(supersededGenerationIds))
-				throw new IllegalArgumentException("Compaction rollback and superseded generation receipts disagree");
-			if (supersededGenerationIds.contains(boundaryGenerationId)) throw new IllegalArgumentException("Compaction boundary is superseded");
-		}
-
-		public long reclaimableBytes() {
-			try {
-				return Math.addExact(Math.addExact(reclaimableCatalogueBytes, reclaimableCommitBytes), reclaimableDeltaBytes);
-			} catch (ArithmeticException e) {
-				throw new IllegalStateException("Compaction preview byte total overflowed", e);
-			}
-		}
-	}
-
-	public record CompactionResult(String boundaryGenerationId, List<String> supersededGenerationIds, List<String> supersededCatalogueStateDigests,
-			long deletedCatalogueCount, long deletedCommitCount, long deletedDeltaCount, long deletedCatalogueBytes, long deletedCommitBytes, long deletedDeltaBytes) {
-		public CompactionResult {
-			boundaryGenerationId = GenerationMetadata.requireDigest(boundaryGenerationId, "compaction boundary generation ID");
-			supersededGenerationIds = canonicalReceiptIds(supersededGenerationIds, "superseded generation ID");
-			supersededCatalogueStateDigests = canonicalReceiptIds(supersededCatalogueStateDigests, "superseded catalogue state digest");
-			if (List.of(deletedCatalogueCount, deletedCommitCount, deletedDeltaCount, deletedCatalogueBytes, deletedCommitBytes, deletedDeltaBytes).stream().anyMatch(value -> value < 0))
-				throw new IllegalArgumentException("Compaction receipt values cannot be negative");
-			if (supersededGenerationIds.contains(boundaryGenerationId)) throw new IllegalArgumentException("Compaction boundary is superseded");
-		}
-
-		public long deletedBytes() {
-			try {
-				return Math.addExact(Math.addExact(deletedCatalogueBytes, deletedCommitBytes), deletedDeltaBytes);
-			} catch (ArithmeticException e) {
-				throw new IllegalStateException("Compaction deleted byte total overflowed", e);
-			}
-		}
-
-		private static List<String> canonicalReceiptIds(List<String> values, String description) {
-			Objects.requireNonNull(values, description);
-			return values.stream().map(value -> GenerationMetadata.requireDigest(value, description)).distinct().sorted().toList();
-		}
-	}
-
 	@FunctionalInterface
 	interface CommitHook {
 		void beforeCurrentPointerReplacement() throws IOException;
@@ -166,37 +116,21 @@ public final class GenerationStore {
 	private final Clock clock;
 	private final CommitHook commitHook;
 	private final CompactionDeleteHook compactionDeleteHook;
+	private final GenerationCompactor compactor;
 
 	public GenerationStore(Path root) {
-		this(root, root.resolve("objects"), Clock.systemUTC(), NOOP_HOOK, NOOP_COMPACTION_DELETE_HOOK);
-	}
-
-	GenerationStore(Path root, Clock clock, CommitHook commitHook) {
-		this(root, root.resolve("objects"), clock, commitHook, NOOP_COMPACTION_DELETE_HOOK);
-	}
-
-	GenerationStore(Path root, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook) {
-		this(root, root.resolve("objects"), clock, commitHook, compactionDeleteHook);
+		this(root, root.resolve("objects"), Clock.systemUTC(), NOOP_HOOK, NOOP_COMPACTION_DELETE_HOOK, null);
 	}
 
 	public GenerationStore(Path root, Path objectsDirectory) {
-		this(root, objectsDirectory, Clock.systemUTC(), NOOP_HOOK, NOOP_COMPACTION_DELETE_HOOK);
+		this(root, objectsDirectory, Clock.systemUTC(), NOOP_HOOK, NOOP_COMPACTION_DELETE_HOOK, null);
 	}
 
 	public GenerationStore(Path root, DataRootResolver.Location dataLocation) {
 		this(root, dataLocation.layout().objectsDirectory(), Clock.systemUTC(), NOOP_HOOK, NOOP_COMPACTION_DELETE_HOOK, dataLocation);
 	}
 
-	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook) {
-		this(root, objectsDirectory, clock, commitHook, NOOP_COMPACTION_DELETE_HOOK);
-	}
-
-	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook) {
-		this(root, objectsDirectory, clock, commitHook, compactionDeleteHook, null);
-	}
-
-	private GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook,
-			DataRootResolver.Location dataLocation) {
+	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook, CompactionDeleteHook compactionDeleteHook, DataRootResolver.Location dataLocation) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
 		this.currentPath = this.root.resolve(StoragePaths.SERVER_CURRENT_FILE.getFileName().toString());
 		this.currentProjectionPath = this.root.resolve(StoragePaths.SERVER_CURRENT_PROJECTION_FILE.getFileName().toString());
@@ -212,6 +146,27 @@ public final class GenerationStore {
 		this.compactionDeleteHook = Objects.requireNonNull(compactionDeleteHook);
 		this.objectStore = new ServerObjectStore(objectsDirectory, stagingDirectory);
 		this.dataLocation = dataLocation;
+		this.compactor = new GenerationCompactor(this);
+	}
+
+	Path checkpointPath() {
+		return checkpointPath;
+	}
+
+	Path cataloguesDirectory() {
+		return cataloguesDirectory;
+	}
+
+	Path commitsDirectory() {
+		return commitsDirectory;
+	}
+
+	Path deltasDirectory() {
+		return deltasDirectory;
+	}
+
+	CompactionDeleteHook compactionDeleteHook() {
+		return compactionDeleteHook;
 	}
 
 	public Path objectRoot() {
@@ -234,24 +189,24 @@ public final class GenerationStore {
 		NavigableSet<String> objectPins = canonicalPins(pinnedObjectHashes, "object");
 		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			recoverCompactionLocked();
+			compactor.recoverCompactionLocked();
 			return collectUnreachableObjectsLocked(generationPins, objectPins);
 		}
 	}
 
 	/** Returns an exact, non-mutating receipt for compacting details before a retained boundary. */
-	public CompactionPreview previewCompaction(String boundaryGenerationId) throws IOException {
+	public GenerationCompactor.CompactionPreview previewCompaction(String boundaryGenerationId) throws IOException {
 		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			return previewCompactionLocked(boundaryGenerationId);
+			return compactor.previewCompactionLocked(boundaryGenerationId);
 		}
 	}
 
 	/** Explicitly removes detailed server state before a validated retained boundary. */
-	public CompactionResult compactBefore(String boundaryGenerationId) throws IOException {
+	public GenerationCompactor.CompactionResult compactBefore(String boundaryGenerationId) throws IOException {
 		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			return compactBeforeLocked(boundaryGenerationId);
+			return compactor.compactBeforeLocked(boundaryGenerationId);
 		}
 	}
 
@@ -259,12 +214,12 @@ public final class GenerationStore {
 	public Optional<GenerationHistoryIndex> currentHistoryIndex() throws IOException {
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			recoverCompactionLocked();
+			compactor.recoverCompactionLocked();
 			return currentHistoryIndexLocked();
 		}
 	}
 
-	private Optional<GenerationHistoryIndex> currentHistoryIndexLocked() throws IOException {
+	Optional<GenerationHistoryIndex> currentHistoryIndexLocked() throws IOException {
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		readCheckpoint();
 		GenerationJsons.GenerationPointerFields pointer = readCurrentPointer();
@@ -287,7 +242,7 @@ public final class GenerationStore {
 	public Optional<CurrentSnapshot> loadCurrentAndRepair() throws IOException {
 		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			recoverCompactionLocked();
+			compactor.recoverCompactionLocked();
 			return loadCurrentState(false, true);
 		}
 	}
@@ -295,12 +250,12 @@ public final class GenerationStore {
 	private Optional<CurrentSnapshot> loadCurrentGuarded(boolean deepVerification, boolean repairProjection) throws IOException {
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			recoverCompactionLocked();
+			compactor.recoverCompactionLocked();
 			return loadCurrentState(deepVerification, repairProjection);
 		}
 	}
 
-	private Optional<CurrentSnapshot> loadCurrentState(boolean deepVerification, boolean repairProjection) throws IOException {
+	Optional<CurrentSnapshot> loadCurrentState(boolean deepVerification, boolean repairProjection) throws IOException {
 		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) FileTrees.requireDirectory(root, "generation store");
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		readCheckpoint();
@@ -344,7 +299,7 @@ public final class GenerationStore {
 	public Publication publish(ModpackCandidate candidate, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
 		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			recoverCompactionLocked();
+			compactor.recoverCompactionLocked();
 			return publishLocked(candidate, expectedCurrent, patchNotes);
 		}
 	}
@@ -354,7 +309,7 @@ public final class GenerationStore {
 		Objects.requireNonNull(expectedCurrent, "expectedCurrent");
 		FileTrees.createManagedDirectory(root, "generation store");
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			recoverCompactionLocked();
+			compactor.recoverCompactionLocked();
 			Optional<CurrentSnapshot> actualBefore = loadCurrentState(false, false);
 			requireExpected(expectedCurrent, actualBefore);
 			GenerationRecord previous = actualBefore.map(CurrentSnapshot::record).orElseThrow(() -> new IOException("Cannot revert before the root generation is published"));
@@ -379,14 +334,14 @@ public final class GenerationStore {
 	public List<GenerationHistoryEntry> currentHistory() throws IOException {
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
-			recoverCompactionLocked();
+			compactor.recoverCompactionLocked();
 			Optional<CurrentSnapshot> current = loadCurrentState(false, false);
 			if (current.isEmpty()) return List.of();
 			return readCompactState(current.orElseThrow().record().metadata().generationId()).entries();
 		}
 	}
 
-	private GenerationHistoryIndex historyIndex(String generationId) throws IOException {
+	GenerationHistoryIndex historyIndex(String generationId) throws IOException {
 		return historyIndex(readCompactHistory(generationId));
 	}
 
@@ -464,7 +419,7 @@ public final class GenerationStore {
 		SharedObjectOwnership.publish(dataLocation, "server", hashes);
 	}
 
-	private void publishCurrentOwnership() throws IOException {
+	void publishCurrentOwnership() throws IOException {
 		if (dataLocation != null) SharedObjectOwnership.publish(dataLocation, "server", currentOwnershipHashes());
 	}
 
@@ -530,128 +485,6 @@ public final class GenerationStore {
 		FileTrees.createManagedDirectory(objectsDirectory, "immutable objects");
 		FileTrees.createManagedDirectory(stagingDirectory, "generation staging");
 	}
-
-	private CompactionPreview previewCompactionLocked(String boundaryGenerationId) throws IOException {
-		GenerationHistoryIndex index = currentHistoryIndexLocked().orElseThrow(() -> new IOException("Cannot compact without a valid current generation"));
-		GenerationHistoryIndex.Entry boundaryEntry = index.find(boundaryGenerationId).orElseThrow(() -> new IOException("Compaction boundary is not in the current generation lineage: " + boundaryGenerationId));
-		if (!boundaryEntry.rollbackAvailable()) throw new IOException("Compaction boundary has already lost detailed rollback state: " + boundaryGenerationId);
-		int boundary = index.entries().stream().map(GenerationHistoryIndex.Entry::generationId).toList().indexOf(boundaryGenerationId);
-		NavigableSet<String> supersededGenerationIds = new TreeSet<>();
-		for (int position = 0; position < boundary; position++) supersededGenerationIds.add(index.entries().get(position).generationId());
-		Set<String> retainedStateDigests = new HashSet<>();
-		for (int position = boundary; position < index.entries().size(); position++) retainedStateDigests.add(index.entries().get(position).stateDigest());
-		NavigableSet<String> supersededCatalogueStateDigests = new TreeSet<>();
-		for (int position = 0; position < boundary; position++) {
-			String stateDigest = index.entries().get(position).stateDigest();
-			if (!retainedStateDigests.contains(stateDigest)) supersededCatalogueStateDigests.add(stateDigest);
-		}
-		List<Path> cataloguePaths = supersededCatalogueStateDigests.stream().map(this::cataloguePathUnchecked).toList();
-		List<Path> commitPaths = supersededGenerationIds.stream().map(this::commitPathUnchecked).toList();
-		List<Path> deltaPaths = supersededGenerationIds.stream().map(this::deltaPathUnchecked).toList();
-		validateDeletionTargets(cataloguePaths, "generation catalogue");
-		validateDeletionTargets(commitPaths, "generation commit");
-		validateDeletionTargets(deltaPaths, "generation ownership delta");
-		return new CompactionPreview(boundaryGenerationId, List.copyOf(supersededGenerationIds), List.copyOf(supersededGenerationIds),
-				List.copyOf(supersededCatalogueStateDigests), reclaimableBytes(cataloguePaths), reclaimableBytes(commitPaths), reclaimableBytes(deltaPaths));
-	}
-
-	private CompactionResult compactBeforeLocked(String boundaryGenerationId) throws IOException {
-		GenerationCheckpoint pending = readCheckpoint().filter(checkpoint -> !checkpoint.supersededGenerationIds().isEmpty() || !checkpoint.supersededCatalogueStateDigests().isEmpty()).orElse(null);
-		if (pending != null) {
-			CompactionCleanup cleanup = finishCompactionLocked(pending);
-			if (pending.boundaryGenerationId().equals(boundaryGenerationId))
-				return new CompactionResult(boundaryGenerationId, List.copyOf(pending.supersededGenerationIds()), List.copyOf(pending.supersededCatalogueStateDigests()),
-						cleanup.catalogues().count(), cleanup.commits().count(), cleanup.deltas().count(), cleanup.catalogues().bytes(), cleanup.commits().bytes(), cleanup.deltas().bytes());
-		}
-		Optional<CurrentSnapshot> current = loadCurrentState(true, false);
-		if (current.isEmpty()) throw new IOException("Cannot compact without a valid current generation");
-		GenerationRecord currentRecord = current.orElseThrow().record();
-		GenerationHistoryIndex fullIndex = historyIndex(currentRecord.metadata().generationId());
-		CompactionPreview preview = previewCompactionLocked(boundaryGenerationId);
-		if (preview.supersededGenerationIds().isEmpty()) return new CompactionResult(boundaryGenerationId, preview.supersededGenerationIds(), preview.supersededCatalogueStateDigests(), 0, 0, 0, 0, 0, 0);
-		CompactHistory history = readCompactHistory(currentRecord.metadata().generationId());
-		GenerationHistoryEntry boundaryEntry = history.entries().stream().filter(entry -> entry.metadata().generationId().equals(boundaryGenerationId)).findFirst().orElse(null);
-		if (boundaryEntry == null) throw new IOException("Compaction boundary details are no longer available: " + boundaryGenerationId);
-		GenerationRecord boundaryRecord = readCompactState(boundaryGenerationId).record();
-		int patchBoundary = history.patchNotesHistory().stream().map(GenerationPatchNoteHistory.Entry::generationId).toList().indexOf(boundaryGenerationId);
-		if (patchBoundary < 0) throw new IOException("Compaction boundary patch-note entry is missing: " + boundaryGenerationId);
-		List<GenerationPatchNoteHistory.Entry> retainedPatchNotes = history.patchNotesHistory().subList(0, patchBoundary + 1);
-		GenerationHistoryIndex compactedIndex;
-		try {
-			compactedIndex = fullIndex.compactBefore(boundaryGenerationId);
-		} catch (RuntimeException e) {
-			throw new IOException("Generation history compaction boundary is invalid: " + boundaryGenerationId, e);
-		}
-		GenerationCheckpoint checkpoint = new GenerationCheckpoint(boundaryRecord, retainedPatchNotes, compactedIndex,
-				new TreeSet<>(preview.supersededGenerationIds()), new TreeSet<>(preview.supersededCatalogueStateDigests()));
-		ConfigTools.writeAtomic(checkpointPath, checkpoint.toFields());
-		GenerationCheckpoint verifiedCheckpoint = readCheckpoint().orElseThrow(() -> new IOException("Generation checkpoint disappeared after publication"));
-		if (!verifiedCheckpoint.equals(checkpoint) || !verifiedCheckpoint.record().equals(boundaryRecord))
-			throw new IOException("Generation checkpoint does not match the retained compaction boundary");
-
-		CompactionCleanup cleanup = finishCompactionLocked(checkpoint);
-		return new CompactionResult(boundaryGenerationId, preview.supersededGenerationIds(), preview.supersededCatalogueStateDigests(), cleanup.catalogues().count(), cleanup.commits().count(),
-				cleanup.deltas().count(), cleanup.catalogues().bytes(), cleanup.commits().bytes(), cleanup.deltas().bytes());
-	}
-
-	private void recoverCompactionLocked() throws IOException {
-		GenerationCheckpoint checkpoint = readCheckpoint().orElse(null);
-		if (checkpoint == null || checkpoint.supersededGenerationIds().isEmpty() && checkpoint.supersededCatalogueStateDigests().isEmpty()) return;
-		finishCompactionLocked(checkpoint);
-	}
-
-	private CompactionCleanup finishCompactionLocked(GenerationCheckpoint checkpoint) throws IOException {
-		GenerationJsons.GenerationPointerFields pointer = readCurrentPointer();
-		GenerationRecord currentRecord = readCompactState(pointer.generationId).record();
-		writeCurrentProjection(currentRecord);
-		DeletionResult catalogues = deleteCompactionFiles(checkpoint.supersededCatalogueStateDigests().stream().map(this::cataloguePathUnchecked).toList(), "generation catalogue");
-		DeletionResult commits = deleteCompactionFiles(checkpoint.supersededGenerationIds().stream().map(this::commitPathUnchecked).toList(), "generation commit");
-		DeletionResult deltas = deleteCompactionFiles(checkpoint.supersededGenerationIds().stream().map(this::deltaPathUnchecked).toList(), "generation ownership delta");
-		publishCurrentOwnership();
-		GenerationCheckpoint completed = new GenerationCheckpoint(checkpoint.record(), checkpoint.patchNotesHistory(), checkpoint.historyIndex(), Set.of(), Set.of());
-		ConfigTools.writeAtomic(checkpointPath, completed.toFields());
-		return new CompactionCleanup(catalogues, commits, deltas);
-	}
-
-	private void validateDeletionTargets(List<Path> paths, String description) throws IOException {
-		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) FileTrees.requireRegularFile(path, description);
-	}
-
-	private DeletionResult deleteCompactionFiles(List<Path> paths, String description) throws IOException {
-		long deleted = 0;
-		long bytes = 0;
-		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			FileTrees.requireRegularFile(path, description);
-			long size = Files.size(path);
-			compactionDeleteHook.beforeDelete(path);
-			if (ImmutableFiles.deleteIfExists(path)) {
-				deleted = ObjectStoreMaintenance.addExact(deleted, 1, "deleted " + description + " count");
-				bytes = ObjectStoreMaintenance.addExact(bytes, size, "deleted " + description + " bytes");
-			}
-		}
-		if (deleted > 0 && !paths.isEmpty()) FileTrees.forceDirectory(paths.get(0).getParent());
-		return new DeletionResult(deleted, bytes);
-	}
-
-	private long reclaimableBytes(List<Path> paths) throws IOException {
-		long bytes = 0;
-		for (Path path : paths) if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) bytes = ObjectStoreMaintenance.addExact(bytes, Files.size(path), "compaction reclaimable bytes");
-		return bytes;
-	}
-
-	private Path cataloguePathUnchecked(String stateDigest) {
-		return cataloguesDirectory.resolve(stateDigest + ".json");
-	}
-
-	private Path commitPathUnchecked(String generationId) {
-		return commitsDirectory.resolve(generationId + ".json");
-	}
-
-	private Path deltaPathUnchecked(String generationId) {
-		return deltasDirectory.resolve(generationId + ".json");
-	}
-
-	private record DeletionResult(long count, long bytes) {}
 
 	private StorageReport measureStorageLocked() throws IOException {
 		GenerationRecord current = loadCurrentState(true, false).map(CurrentSnapshot::record).orElse(null);
@@ -776,7 +609,7 @@ public final class GenerationStore {
 		return new TreeSet<>(ObjectStoreMaintenance.canonicalPins(pins, description));
 	}
 
-	private GenerationJsons.GenerationPointerFields readCurrentPointer() throws IOException {
+	GenerationJsons.GenerationPointerFields readCurrentPointer() throws IOException {
 		FileTrees.requireRegularFile(currentPath, "current generation pointer");
 		try {
 			GenerationJsons.GenerationPointerFields pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), GenerationJsons.GenerationPointerFields.class);
@@ -790,7 +623,7 @@ public final class GenerationStore {
 		}
 	}
 
-	private Optional<GenerationCheckpoint> readCheckpoint() throws IOException {
+	Optional<GenerationCheckpoint> readCheckpoint() throws IOException {
 		if (!Files.exists(checkpointPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		FileTrees.requireRegularFile(checkpointPath, "generation history checkpoint");
 		try {
@@ -845,7 +678,7 @@ public final class GenerationStore {
 		return readDelta(deltaPath(generationId));
 	}
 
-	private OwnershipDelta readDelta(Path path) throws IOException {
+	OwnershipDelta readDelta(Path path) throws IOException {
 		FileTrees.requireRegularFile(path, "generation ownership delta");
 		try {
 			return OwnershipDelta.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.OwnershipDeltaFields.class));
@@ -858,7 +691,7 @@ public final class GenerationStore {
 		return readCatalogue(cataloguePath(stateDigest));
 	}
 
-	private CatalogueSnapshot readCatalogue(Path path) throws IOException {
+	CatalogueSnapshot readCatalogue(Path path) throws IOException {
 		FileTrees.requireRegularFile(path, "generation catalogue snapshot");
 		try {
 			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.CatalogueSnapshotFields.class));
@@ -875,7 +708,7 @@ public final class GenerationStore {
 		return readCommit(commitPath(generationId));
 	}
 
-	private GenerationCommit readCommit(Path path) throws IOException {
+	GenerationCommit readCommit(Path path) throws IOException {
 		FileTrees.requireRegularFile(path, "generation commit");
 		try {
 			GenerationCommit commit = GenerationCommit.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.GenerationCommitFields.class));
@@ -888,11 +721,11 @@ public final class GenerationStore {
 		}
 	}
 
-	private GenerationRecord readCompactRecord(String generationId) throws IOException {
+	GenerationRecord readCompactRecord(String generationId) throws IOException {
 		return readCompactState(generationId).record();
 	}
 
-	private CompactHistory readCompactHistory(String generationId) throws IOException {
+	CompactHistory readCompactHistory(String generationId) throws IOException {
 		FileTrees.requireDirectory(cataloguesDirectory, "generation catalogues");
 		FileTrees.requireDirectory(commitsDirectory, "generation commits");
 		FileTrees.requireDirectory(deltasDirectory, "generation deltas");
@@ -921,7 +754,7 @@ public final class GenerationStore {
 		}
 		if (checkpoint != null) {
 			if (!reachedCheckpoint) throw new IOException("Generation history checkpoint is not an ancestor of the current generation: " + checkpoint.boundaryGenerationId());
-			validateCheckpointBoundaryFiles(checkpoint);
+			compactor.validateCheckpointBoundaryFiles(checkpoint);
 		}
 		Collections.reverse(reverse);
 		List<GenerationHistoryEntry> entries = new ArrayList<>();
@@ -978,29 +811,6 @@ public final class GenerationStore {
 		return new CompactState(record, history.entries());
 	}
 
-	private void validateCheckpointBoundaryFiles(GenerationCheckpoint checkpoint) throws IOException {
-		GenerationRecord record = checkpoint.record();
-		Path commitFile = commitPath(checkpoint.boundaryGenerationId());
-		if (Files.exists(commitFile, LinkOption.NOFOLLOW_LINKS)) {
-			GenerationCommit commit = readCommit(commitFile);
-			if (!commit.metadata().equals(record.metadata()) || !commit.modpackId().equals(record.manifest().modpackId()))
-				throw new IOException("Generation checkpoint does not match its boundary commit: " + commitFile);
-			Path catalogueFile = cataloguePath(record.metadata().stateDigest());
-			if (Files.exists(catalogueFile, LinkOption.NOFOLLOW_LINKS) && !readCatalogue(catalogueFile).manifest().equals(record.manifest()))
-				throw new IOException("Generation checkpoint does not match its boundary catalogue: " + catalogueFile);
-			Path deltaFile = deltaPath(checkpoint.boundaryGenerationId());
-			if (Files.exists(deltaFile, LinkOption.NOFOLLOW_LINKS)) {
-				OwnershipDelta delta = readDelta(deltaFile);
-				if (!delta.modpackId().equals(record.manifest().modpackId()) || !delta.digest().equals(commit.ownershipDeltaDigest()))
-					throw new IOException("Generation checkpoint does not match its boundary ownership delta: " + deltaFile);
-			}
-		} else {
-			Path catalogueFile = cataloguePath(record.metadata().stateDigest());
-			if (Files.exists(catalogueFile, LinkOption.NOFOLLOW_LINKS) && !readCatalogue(catalogueFile).manifest().equals(record.manifest()))
-				throw new IOException("Generation checkpoint does not match its boundary catalogue: " + catalogueFile);
-		}
-	}
-
 	private NavigableMap<String, Path> verifyActiveTargetObjects(GenerationRecord record) throws IOException {
 		ObjectStoreMaintenance.ExpectedSizes expectedSizes = new ObjectStoreMaintenance.ExpectedSizes();
 		addManifestReferences(record, expectedSizes);
@@ -1052,17 +862,17 @@ public final class GenerationStore {
 		return DataRootResolver.objectFile(objectsDirectory, sha1);
 	}
 
-	private Path deltaPath(String generationId) throws IOException {
+	Path deltaPath(String generationId) throws IOException {
 		if (!isDigest(generationId)) throw new IOException("Invalid generation ID: " + generationId);
 		return deltasDirectory.resolve(generationId + ".json");
 	}
 
-	private Path cataloguePath(String stateDigest) throws IOException {
+	Path cataloguePath(String stateDigest) throws IOException {
 		if (!isDigest(stateDigest)) throw new IOException("Invalid catalogue state digest: " + stateDigest);
 		return cataloguesDirectory.resolve(stateDigest + ".json");
 	}
 
-	private Path commitPath(String generationId) throws IOException {
+	Path commitPath(String generationId) throws IOException {
 		if (!isDigest(generationId)) throw new IOException("Invalid generation ID: " + generationId);
 		return commitsDirectory.resolve(generationId + ".json");
 	}
@@ -1090,7 +900,7 @@ public final class GenerationStore {
 		return pointer;
 	}
 
-	private void writeCurrentProjection(GenerationRecord record) throws IOException {
+	void writeCurrentProjection(GenerationRecord record) throws IOException {
 		ModpackJsons.CompleteModpackContentFields fields = record.toFields();
 		CompactHistory history = readCompactHistory(record.metadata().generationId());
 		List<GenerationPatchNoteHistory.Entry> patchNoteHistory = history.patchNotesHistory();
@@ -1135,10 +945,8 @@ public final class GenerationStore {
 
 	private record CompactGeneration(GenerationCommit commit, CatalogueSnapshot snapshot, OwnershipDelta delta) {}
 
-	private record CompactHistory(GenerationRecord boundaryRecord, List<CompactGeneration> generations, List<GenerationHistoryEntry> entries,
+	record CompactHistory(GenerationRecord boundaryRecord, List<CompactGeneration> generations, List<GenerationHistoryEntry> entries,
 			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {}
-
-	private record CompactionCleanup(DeletionResult catalogues, DeletionResult commits, DeletionResult deltas) {}
 
 	private record CompactState(GenerationRecord record, List<GenerationHistoryEntry> entries) {}
 
