@@ -64,6 +64,7 @@ import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
 import pl.skidam.automodpack_loader_core.DetachedUpdateHelper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.UpdateTransactionSupport;
+import pl.skidam.automodpack_loader_core.client.RestartDecision.ApplyResult;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
@@ -142,6 +143,7 @@ public class ModpackUpdater implements AutoCloseable {
 			throw new IllegalArgumentException("Installed modpack target and group selection are already active");
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			acquireTargetObjects(selectedTarget.flatTarget(), cache, true);
+			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 			planBuilder.preparePlanObjects(prepared.plan(), selectedTarget.flatTarget());
 			installedSwitchPlan = ReviewedClientPlan.pending(prepared, prepared.plan());
@@ -513,8 +515,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		if (!applyResult.requiresRestart()) return;
-		UpdateType updateType = firstConnection ? UpdateType.FULL : applyResult.restartReasons().contains(UpdatePlan.RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : UpdateType.UPDATE;
-		new ReLauncher(updateType, changelogs).restart(true);
+		new ReLauncher(RestartDecision.launchRestartType(firstConnection, applyResult.restartReasons()), changelogs).restart(true);
 	}
 
 	private static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uniqueObjects(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
@@ -590,6 +591,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(false), cache, modCache);
 			ModpackJsons.ModpackContentFields installed = storedTarget();
 			return requiresReconciliation(prepared, installed);
@@ -650,7 +652,7 @@ public class ModpackUpdater implements AutoCloseable {
 				}
 			}
 			changelogs.replaceWith(applied);
-			ApplyResult applyResult = applyResult(preparation.plan());
+			ApplyResult applyResult = RestartDecision.applyResult(preparation.plan());
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
 			if (applyResult.requiresRestart()) restartAfterApply(applyResult);
 			else updateLoopDetector.clear();
@@ -702,7 +704,7 @@ public class ModpackUpdater implements AutoCloseable {
 			ScreenManager.completeWithoutRestart();
 			return;
 		}
-		String fingerprint = updateStateFingerprint(applyResult);
+		String fingerprint = RestartDecision.stateFingerprint(storage, applyResult);
 		if (updateLoopDetector.evaluateAndRecord(fingerprint) == UpdateLoopDetector.Decision.SUPPRESS) {
 			LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
 			LOGGER.error("Corrections were applied but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
@@ -710,22 +712,7 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 
-		UpdateType updateType = applyResult.restartReasons().contains(UpdatePlan.RestartReason.SELECTED_MODPACK)
-				? UpdateType.SELECT
-				: fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
-		new ReLauncher(updateType, changelogs).restart(false);
-	}
-
-	private String updateStateFingerprint(ApplyResult applyResult) {
-		String generationId;
-		try {
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			generationId = state == null ? "none" : state.generationId;
-		} catch (IOException e) {
-			LOGGER.warn("Cannot track rapid modpack restarts because active client state is unavailable", e);
-			return null;
-		}
-		return String.join("\n", storage.activeDirectory().toAbsolutePath().normalize().toString(), generationId, String.join(",", applyResult.reasonIds()));
+		new ReLauncher(RestartDecision.applyRestartType(fullDownload, applyResult.restartReasons()), changelogs).restart(false);
 	}
 
 	// Load the modpack mods that aren't already present in the standard mods
@@ -968,14 +955,10 @@ public class ModpackUpdater implements AutoCloseable {
 	private ApplyResult applyPreparedPlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, SelectedModpackTarget target) throws Exception {
 		if (!reviewed.isApproved()) throw new IllegalStateException("Update plan has not been approved");
 		ClientUpdatePlanBuilder.PreparedPlan applied = executePlan(reviewed, target);
-		ApplyResult result = applyResult(applied.plan());
+		ApplyResult result = RestartDecision.applyResult(applied.plan());
 		changelogs.setRestartReasons(result.reasonDescriptions());
 		if (result.requiresRestart()) LOGGER.info("Restart required because: {}", String.join(", ", result.reasonDescriptions()));
 		return result;
-	}
-
-	private static ApplyResult applyResult(UpdatePlan plan) {
-		return new ApplyResult(plan.restartReasons());
 	}
 
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
@@ -1025,6 +1008,7 @@ public class ModpackUpdater implements AutoCloseable {
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			requireLiveConnection();
 			acquireTargetObjects(selectedTarget.flatTarget(), cache, playerFacing);
+			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 			return planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 		}
 	}
@@ -1129,6 +1113,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (execution.replanRequired() && !replanned) {
 				ensureSelectedModpackUnchanged(prepared);
 				try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+					planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 					prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 				}
 				try {
@@ -1217,39 +1202,6 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public enum ConfirmationState {
 		INACTIVE, WAITING, PREVIEWING, STARTED, CANCELLED
-	}
-
-	private record ApplyResult(Set<UpdatePlan.RestartReason> restartReasons) {
-		private ApplyResult {
-			restartReasons = restartReasons.isEmpty() ? Set.of() : Collections.unmodifiableSet(EnumSet.copyOf(restartReasons));
-		}
-
-		private boolean requiresRestart() {
-			return !restartReasons.isEmpty();
-		}
-
-		private List<String> reasonIds() {
-			return restartReasons.stream().map(Enum::name).toList();
-		}
-
-		private List<String> reasonDescriptions() {
-			return restartReasons.stream().map(ModpackUpdater::describeRestartReason).toList();
-		}
-	}
-
-	private static String describeRestartReason(UpdatePlan.RestartReason reason) {
-		return switch (reason) {
-			case REMOVED_NON_MODPACK_FILES -> "files removed from the modpack were deleted from the game directory";
-			case REMOVED_LOCAL_MODS -> "player-approved local mods were preserved and removed from the game directory";
-			case CORRECTED_FILE_LOCATIONS -> "standard-directory mods were copied or updated";
-			case FIXED_NESTED_MODS -> "conflicting nested mods were copied to the standard mods directory";
-			case REMOVED_DUPLICATE_MODS -> "duplicate standard-directory mods were removed";
-			case REMOVED_STANDARD_MODS -> "modpack-owned mods were removed from the standard mods directory";
-			case APPLIED_SERVER_DELETIONS -> "server-requested mod deletions were applied";
-			case CHANGED_LOADER_VERSION -> "launcher loader-version metadata changed";
-			case CHANGED_GROUP_SELECTION -> "the selected modpack groups changed";
-			case SELECTED_MODPACK -> "the selected stable modpack changed";
-		};
 	}
 
 	private enum ApplyStatus {
