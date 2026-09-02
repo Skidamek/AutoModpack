@@ -12,8 +12,13 @@ import java.util.Set;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
+import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
+import pl.skidam.automodpack_core.update.UpdatePlan.NestedCopy;
+import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
+import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
+import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Owns the finite lifecycle and execution fingerprint of one player-reviewed update plan. */
@@ -82,36 +87,48 @@ public final class ReviewedUpdatePlan {
 		return executionDigest(transaction).equals(executionDigest(candidate));
 	}
 
+	/** The complete execution meaning of one update, normalized so plans and durable transactions digest identically. */
+	private record ExecutionTuple(String modpackId, GenerationTarget generation, List<Operation> operations, List<ProjectedFile> projected,
+			ClientConfigJsons.ClientConfigFieldsV3 config, List<String> restartReasons, List<Preservation> preservations, List<BaselineCapture> baselines,
+			List<Conflict> conflicts, List<NestedCopy> nestedCopies, String consequencesDigest) {}
+
+	private static ExecutionTuple tuple(UpdatePlan plan) {
+		return new ExecutionTuple(plan.modpackId(), plan.generationTarget(), safe(plan.operations()), safe(plan.projectedFinalState()), plan.plannedClientConfig(),
+				plan.restartReasons().stream().map(Enum::name).sorted().toList(), safe(plan.preservations()), safe(plan.baselineCaptures()), safe(plan.conflicts()),
+				safe(plan.generatedCopies()), consequencesDigest(plan.consequences()));
+	}
+
+	private static ExecutionTuple tuple(UpdateTransaction transaction) {
+		List<NestedCopy> nestedCopies = transaction.plannedGeneratedCopies == null
+				? List.of()
+				: safe(transaction.plannedGeneratedCopies.entries).stream().map(entry -> new NestedCopy(entry.logicalPath, entry.sha1, entry.size, Set.of())).toList();
+		return new ExecutionTuple(transaction.modpackId, transaction.generationTarget(), safe(transaction.operations), safe(transaction.projectedFinalState),
+				transaction.plannedClientConfig, safe(transaction.restartReasons).stream().map(Enum::name).sorted().toList(), safe(transaction.plannedPreservations),
+				safe(transaction.plannedBaselineCaptures), safe(transaction.plannedConflicts), nestedCopies, transaction.plannedConsequencesDigest);
+	}
+
 	public static String executionDigest(UpdatePlan plan) {
 		Objects.requireNonNull(plan, "update plan");
-		MessageDigest digest = newDigest();
-		value(digest, "modpackId", plan.modpackId());
-		generation(digest, plan.generationTarget());
-		values(digest, "operation", plan.operations(), ReviewedUpdatePlan::operation);
-		values(digest, "projected", plan.projectedFinalState(), ReviewedUpdatePlan::projected);
-		config(digest, plan.plannedClientConfig());
-		values(digest, "restart", plan.restartReasons().stream().map(Enum::name).sorted().toList(), value -> restartValue(value));
-		values(digest, "preservation", plan.preservations(), ReviewedUpdatePlan::preservation);
-		values(digest, "baseline", plan.baselineCaptures(), ReviewedUpdatePlan::baseline);
-		values(digest, "conflict", plan.conflicts(), ReviewedUpdatePlan::conflict);
-		values(digest, "nestedCopy", plan.generatedCopies(), ReviewedUpdatePlan::nestedCopy);
-		value(digest, "consequences", consequencesDigest(plan.consequences()));
-		return digest(digest);
+		return executionDigest(tuple(plan));
 	}
 
 	private static String executionDigest(UpdateTransaction transaction) {
+		return executionDigest(tuple(transaction));
+	}
+
+	private static String executionDigest(ExecutionTuple tuple) {
 		MessageDigest digest = newDigest();
-		value(digest, "modpackId", transaction.modpackId);
-		generation(digest, transaction.generationTarget());
-		values(digest, "operation", safe(transaction.operations), ReviewedUpdatePlan::operation);
-		values(digest, "projected", safe(transaction.projectedFinalState), ReviewedUpdatePlan::projected);
-		config(digest, transaction.plannedClientConfig);
-		values(digest, "restart", safe(transaction.restartReasons).stream().map(Enum::name).sorted().toList(), value -> restartValue(value));
-		values(digest, "preservation", safe(transaction.plannedPreservations), ReviewedUpdatePlan::preservation);
-		values(digest, "baseline", safe(transaction.plannedBaselineCaptures), ReviewedUpdatePlan::baseline);
-		values(digest, "conflict", safe(transaction.plannedConflicts), ReviewedUpdatePlan::conflict);
-		values(digest, "nestedCopy", transaction.plannedGeneratedCopies == null ? List.of() : safe(transaction.plannedGeneratedCopies.entries), ReviewedUpdatePlan::generatedCopyEntry);
-		value(digest, "consequences", transaction.plannedConsequencesDigest);
+		value(digest, "modpackId", tuple.modpackId());
+		generation(digest, tuple.generation());
+		values(digest, "operation", tuple.operations(), ReviewedUpdatePlan::operation);
+		values(digest, "projected", tuple.projected(), ReviewedUpdatePlan::projected);
+		config(digest, tuple.config());
+		values(digest, "restart", tuple.restartReasons(), ReviewedUpdatePlan::restartValue);
+		values(digest, "preservation", tuple.preservations(), ReviewedUpdatePlan::preservation);
+		values(digest, "baseline", tuple.baselines(), ReviewedUpdatePlan::baseline);
+		values(digest, "conflict", tuple.conflicts(), ReviewedUpdatePlan::conflict);
+		values(digest, "nestedCopy", tuple.nestedCopies(), ReviewedUpdatePlan::nestedCopy);
+		value(digest, "consequences", tuple.consequencesDigest());
 		return digest(digest);
 	}
 
@@ -219,14 +236,6 @@ public final class ReviewedUpdatePlan {
 		value(digest, "hash", copy.sha1());
 		value(digest, "size", copy.size());
 		// Durable generated-copy state persists the loader-facing execution tuple, not inspection-only IDs.
-		return digest(digest);
-	}
-
-	private static String generatedCopyEntry(ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields entry) {
-		MessageDigest digest = newDigest();
-		value(digest, "path", entry.logicalPath);
-		value(digest, "hash", entry.sha1);
-		value(digest, "size", entry.size);
 		return digest(digest);
 	}
 
