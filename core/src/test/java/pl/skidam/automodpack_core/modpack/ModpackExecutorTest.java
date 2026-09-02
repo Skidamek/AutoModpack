@@ -124,7 +124,6 @@ class ModpackExecutorTest {
 		main.required = true;
 		main.syncedFiles = Set.of();
 		config.groups = Map.of("main", main);
-		config.selectionTags = Map.of();
 		config.autoExcludeUnnecessaryFiles = false;
 		config.autoExcludeServerSideMods = false;
 		return config;

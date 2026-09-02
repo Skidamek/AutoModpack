@@ -56,7 +56,7 @@ accept_certificate:
     timeout: 20s
     until:
       all:
-        - screen: [PreparingScreen, DangerScreen, DownloadScreen, FetchScreen, RestartScreen]
+        - screen: [PreparingScreen, FirstConnectScreen, UpdatePreviewScreen, DownloadScreen, FetchScreen, RestartScreen]
         - screen_not: DisconnectedScreen
   - do: wait_for
     name: wait for the certificate to be accepted
@@ -64,7 +64,7 @@ accept_certificate:
     until:
       no_element: { text: verify }
 
-# Accept the first-connection prompt, confirm the update preview, and wait for
+# Accept the first-connection prompt, approve the update preview, and wait for
 # the modpack to land on disk.
 download_modpack:
   - do: wait_for
@@ -72,6 +72,9 @@ download_modpack:
     timeout: 90s
     until:
       element: { text: continue, enabled: true }
+  - do: screenshot
+    name: capture the first-connection prompt
+    file: first-connect
   - do: click
     name: accept first connection
     select: { text: continue }
@@ -79,10 +82,13 @@ download_modpack:
     name: wait for the update preview
     timeout: 90s
     until:
-      element: { text: continue, enabled: true }
+      element: { text: update, enabled: true }
+  - do: screenshot
+    name: capture the update preview
+    file: update-preview
   - do: click
-    name: confirm update preview
-    select: { text: continue }
+    name: approve update
+    select: { text: update }
   - do: wait_file
     name: wait for the modpack marker file
     path: "${active_dir}/${marker}"
@@ -95,6 +101,9 @@ restart_client:
     timeout: 20s
     until:
       screen: RestartScreen
+  - do: screenshot
+    name: capture the completed update summary
+    file: update-complete
   - do: click
     name: confirm restart
     select: { role: button, index: 1 }
@@ -128,3 +137,29 @@ rejoin:
   - use: connect_to_server
   - do: wait_join
     name: wait until the player is in-game
+
+# Navigate from the title screen to the vanilla multiplayer screen. The settings
+# button under test is injected there, so this keeps the release scenario honest
+# about the real entry point instead of calling the screen directly.
+open_multiplayer:
+  - do: click
+    name: open vanilla multiplayer
+    select: { text: multiplayer }
+  - do: wait_for
+    name: wait for multiplayer screen
+    timeout: 20s
+    until: { screen: Play Multiplayer }
+
+open_pack_manager:
+  - do: click
+    name: open modpack settings from multiplayer
+    select: { text: modpack settings }
+  - do: wait_for
+    name: wait for modpack settings
+    until: { screen: ModpackSelectionScreen }
+  - do: click
+    name: open installed pack manager
+    select: { text: pack manager }
+  - do: wait_for
+    name: wait for installed pack manager
+    until: { screen: InstalledModpacksScreen }

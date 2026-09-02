@@ -1,9 +1,7 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import java.time.Instant;
-import java.util.Locale;
 import java.util.Objects;
-import java.util.regex.Pattern;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -21,22 +19,20 @@ public record GenerationCommit(
 		String patchNotes,
 		String patchNotesDigest,
 		String rollbackTargetGenerationId) {
-	private static final Pattern DIGEST = Pattern.compile("[0-9a-f]{40}");
-
 	public GenerationCommit {
 		if (schemaVersion != GenerationMetadata.CURRENT_SCHEMA_VERSION) throw new IllegalArgumentException("Unsupported generation commit schema version: " + schemaVersion);
-		generationId = requireDigest(generationId, "generation ID");
-		parentGenerationId = requireOptionalDigest(parentGenerationId, "parent generation ID");
+		generationId = GenerationMetadata.requireDigest(generationId, "generation ID");
+		parentGenerationId = GenerationMetadata.requireOptionalDigest(parentGenerationId, "parent generation ID");
 		modpackId = ModpackId.requireValid(modpackId);
 		createdAt = Objects.requireNonNull(createdAt, "generation creation timestamp");
-		stateDigest = requireDigest(stateDigest, "state digest");
-		ledgerDigest = requireDigest(ledgerDigest, "ledger digest");
-		ownershipDeltaDigest = requireDigest(ownershipDeltaDigest, "ownership delta digest");
+		stateDigest = GenerationMetadata.requireDigest(stateDigest, "state digest");
+		ledgerDigest = GenerationMetadata.requireDigest(ledgerDigest, "ledger digest");
+		ownershipDeltaDigest = GenerationMetadata.requireDigest(ownershipDeltaDigest, "ownership delta digest");
 		String normalizedNotes = GenerationMetadata.validateNotes(patchNotes);
 		if (!normalizedNotes.equals(patchNotes)) throw new IllegalArgumentException("Patch notes must use LF line endings");
 		patchNotes = normalizedNotes;
-		patchNotesDigest = requireDigest(patchNotesDigest, "patch notes digest");
-		rollbackTargetGenerationId = requireOptionalDigest(rollbackTargetGenerationId, "rollback target generation ID");
+		patchNotesDigest = GenerationMetadata.requireDigest(patchNotesDigest, "patch notes digest");
+		rollbackTargetGenerationId = GenerationMetadata.requireOptionalDigest(rollbackTargetGenerationId, "rollback target generation ID");
 		String expected = GenerationIdentity.generationId(schemaVersion, modpackId, parentGenerationId, createdAt.toString(), stateDigest, ledgerDigest,
 				patchNotesDigest, rollbackTargetGenerationId);
 		if (!generationId.equals(expected)) throw new IllegalArgumentException("Generation commit identity does not match its metadata");
@@ -85,15 +81,4 @@ public record GenerationCommit(
 				fields.ledgerDigest, fields.ownershipDeltaDigest, fields.patchNotes, fields.patchNotesDigest, fields.rollbackTargetGenerationId);
 	}
 
-	private static String requireDigest(String value, String name) {
-		if (value == null || !DIGEST.matcher(value).matches() || !value.equals(value.toLowerCase(Locale.ROOT)))
-			throw new IllegalArgumentException("Invalid canonical " + name);
-		return value;
-	}
-
-	private static String requireOptionalDigest(String value, String name) {
-		if (value == null) throw new IllegalArgumentException("Missing " + name);
-		if (value.isEmpty()) return GenerationMetadata.ROOT_PARENT;
-		return requireDigest(value, name);
-	}
 }

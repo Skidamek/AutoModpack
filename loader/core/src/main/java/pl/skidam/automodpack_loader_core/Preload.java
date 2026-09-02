@@ -127,7 +127,8 @@ public class Preload {
 		}
 
 		if (storedConnectionInfo == null || !storedConnectionInfo.isComplete()) {
-			SelfUpdater.update();
+			if (hasActiveProjection()) loadLocalModpack(null, null);
+			else SelfUpdater.update();
 			return;
 		}
 
@@ -186,6 +187,7 @@ public class Preload {
 	}
 
 	private void loadLocalModpack(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
+		if (!hasActiveProjection()) return;
 		try {
 			new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
 		} catch (Exception e) {
@@ -195,7 +197,22 @@ public class Preload {
 
 	private boolean hasActiveProjection() {
 		try {
-			return Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS) && storage.readActiveState() != null;
+			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
+				LOGGER.warn("Skipping active modpack load because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
+				return false;
+			}
+			if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return false;
+			Jsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state == null) {
+				LOGGER.warn("Skipping active modpack load because the active projection has no active state");
+				return false;
+			}
+			if (!clientConfig.selectedModpackId.equals(state.modpackId)) {
+				LOGGER.warn("Skipping active modpack load because active state belongs to {}, but the selected modpack is {}", state.modpackId,
+						clientConfig.selectedModpackId);
+				return false;
+			}
+			return true;
 		} catch (IOException e) {
 			LOGGER.warn("Cannot read active client projection state", e);
 			return false;
@@ -204,7 +221,12 @@ public class Preload {
 
 	private SelectedModpackTarget loadStoredTarget() {
 		try {
-			return new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
+			SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
+			if (target != null && !Objects.equals(clientConfig.selectedModpackId, target.manifest().modpackId())) {
+				LOGGER.warn("Ignoring stored modpack target {} because the selected modpack is {}", target.manifest().modpackId(), clientConfig.selectedModpackId);
+				return null;
+			}
+			return target;
 		} catch (IOException | RuntimeException e) {
 			LOGGER.error("Failed to resolve the stored modpack catalogue and group selection", e);
 			return null;

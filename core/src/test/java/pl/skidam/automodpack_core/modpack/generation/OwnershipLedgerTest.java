@@ -99,7 +99,7 @@ class OwnershipLedgerTest {
 	private static GroupManifest variants(String firstGroup, String firstHash, long firstSize, String secondGroup, String secondHash, long secondSize) {
 		GroupManifest.Group first = group(Set.of(secondGroup), file(firstHash, firstSize));
 		GroupManifest.Group second = group(Set.of(firstGroup), file(secondHash, secondSize));
-		GroupManifest raw = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of(firstGroup, first, secondGroup, second)), new TreeMap<>());
+		GroupManifest raw = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of(firstGroup, first, secondGroup, second)));
 		return GroupManifestValidator.validate(raw.toFields());
 	}
 
@@ -116,11 +116,11 @@ class OwnershipLedgerTest {
 		NavigableMap<String, GroupManifest.GroupFile> values = new TreeMap<>();
 		if (files != null) for (GroupManifest.GroupFile file : files) values.put("config/example.txt", file);
 		GroupManifest.Group group = new GroupManifest.Group("", "", "", true, false, new TreeSet<>(), new TreeSet<>(), Set.of(), values);
-		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", group)), new TreeMap<>());
+		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 	}
 
 	private static GroupManifest.GroupFile file(String hash, long size) {
-		return new GroupManifest.GroupFile(size, "config", false, false, false, hash, null);
+		return new GroupManifest.GroupFile(size, "config", false, false, hash, null);
 	}
 
 	private static OwnershipLedger.Entry entry(String path, String hash, long size) {

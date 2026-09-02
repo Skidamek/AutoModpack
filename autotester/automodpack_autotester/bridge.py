@@ -43,5 +43,8 @@ class BridgeClient:
     def text(self, element_id: int, value: str, timeout: float = 30) -> dict:
         return self.request("text", timeout=timeout, id=element_id, text=value)
 
+    def screenshot(self, name: str, timeout: float = 30) -> dict:
+        return self.request("screenshot", timeout=timeout, name=name)
+
     def connect(self, host: str, timeout: float = 30) -> dict:
         return self.request("connect", timeout=timeout, host=host)

@@ -21,23 +21,6 @@ public final class GroupManifestValidator {
 		if (fields == null) throw new GroupValidationException(List.of("Complete modpack catalogue is missing"));
 		if (!ModpackId.isValid(fields.modpackId)) errors.add("Invalid modpack ID");
 		if (fields.groups == null || fields.groups.isEmpty()) errors.add("Group catalogue is empty");
-		if (fields.selectionTags == null) errors.add("Selection tags are missing");
-
-		Map<String, GroupManifest.SelectionTag> tags = new TreeMap<>();
-		if (fields.selectionTags != null) for (var entry : fields.selectionTags.entrySet()) {
-			String id = entry.getKey();
-			Jsons.CompleteModpackContentFields.SelectionTagFields tag = entry.getValue();
-			if (!isValidIdentifier(id)) {
-				errors.add("Invalid selection tag ID: " + id);
-				continue;
-			}
-			if (tag == null) {
-				errors.add("Selection tag '" + id + "' is missing its declaration");
-				continue;
-			}
-			tags.put(id, new GroupManifest.SelectionTag(tag.displayName, tag.description, tag.defaultSelected, tag.serverForced));
-		}
-
 		Map<String, GroupManifest.Group> groups = new TreeMap<>();
 		if (fields.groups != null) for (var entry : fields.groups.entrySet()) {
 			String id = entry.getKey();
@@ -52,19 +35,19 @@ public final class GroupManifestValidator {
 			}
 			Set<String> breaksWith = validateIds("Group '" + id + "' breaksWith", group.breaksWith, errors);
 			Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
-			String tag = validateOptionalTag(id, group.tag, errors);
+			String tag = validateCategoryTag(id, group.tag, errors);
 			Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
 			Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-			groups.put(id, new GroupManifest.Group(group.displayName, group.description, tag, group.required, group.recommended,
+			groups.put(id, new GroupManifest.Group(group.displayName, group.description, tag, group.required, group.defaultSelected,
 					new TreeSet<>(breaksWith), new TreeSet<>(requires), platforms, new TreeMap<>(files)));
 		}
 
-		validateReferences(groups, tags, errors);
+		validateReferences(groups, errors);
 		validateCycles(groups, errors);
 
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
-				value(fields.loaderVersion), value(fields.mcVersion), new TreeMap<>(groups), new TreeMap<>(tags));
+				value(fields.loaderVersion), value(fields.mcVersion), new TreeMap<>(groups));
 		validatePlatformPaths(manifest, errors);
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		validateDefaultAndIndividualSelections(manifest);
@@ -101,7 +84,7 @@ public final class GroupManifestValidator {
 					errors.add("Group '" + groupId + "' file '" + path + "' has an invalid type/path combination: " + file.type);
 			if (file.sha1 == null || !SHA1.matcher(file.sha1).matches()) errors.add("Group '" + groupId + "' file '" + path + "' has invalid SHA-1");
 			if (file.overwriteEditable && !file.editable) errors.add("Group '" + groupId + "' file '" + path + "' overwrites edits but is not editable");
-			files.put(path, new GroupManifest.GroupFile(size, file.type, file.editable, file.overwriteEditable, file.forceCopy,
+			files.put(path, new GroupManifest.GroupFile(size, file.type, file.editable, file.overwriteEditable,
 					value(file.sha1).toLowerCase(Locale.ROOT), file.murmur));
 		}
 		return files;
@@ -137,24 +120,23 @@ public final class GroupManifestValidator {
 								.add(new PathOwner(groupId, path));
 				}
 			}
-			for (List<PathOwner> owners : aliases.values()) {
-				for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
-					PathOwner first = owners.get(i);
-					PathOwner second = owners.get(j);
-					if (first.path().equals(second.path())) continue;
-					if (first.groupId().equals(second.groupId()) || coSelectable(manifest, first.groupId(), second.groupId()))
-						errors.add(platform.id() + ": paths '" + first.path() + "' (group '" + first.groupId() + "') and '" + second.path()
-								+ "' (group '" + second.groupId() + "') alias on this platform");
-				}
-			}
-			for (List<PathOwner> owners : modBasenameAliases.values()) {
-				for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
-					PathOwner first = owners.get(i);
-					PathOwner second = owners.get(j);
-					if (first.path().equals(second.path())) continue;
-					if (first.groupId().equals(second.groupId()) || coSelectable(manifest, first.groupId(), second.groupId()))
-						errors.add(platform.id() + ": mod files '" + first.path() + "' (group '" + first.groupId() + "') and '" + second.path()
-								+ "' (group '" + second.groupId() + "') share a basename in the live mods directory");
+			validateAliasOwners(platform, manifest, aliases, false, errors);
+			validateAliasOwners(platform, manifest, modBasenameAliases, true, errors);
+		}
+	}
+
+	private static void validateAliasOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, boolean modBasenames,
+			List<String> errors) {
+		String prefix = modBasenames ? "mod files" : "paths";
+		String suffix = modBasenames ? " share a basename in the live mods directory" : " alias on this platform";
+		for (List<PathOwner> owners : aliases.values()) {
+			for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
+				PathOwner first = owners.get(i);
+				PathOwner second = owners.get(j);
+				if (first.path().equals(second.path())) continue;
+				if (first.groupId().equals(second.groupId()) || coSelectable(manifest, first.groupId(), second.groupId())) {
+					errors.add(platform.id() + ": " + prefix + " '" + first.path() + "' (group '" + first.groupId() + "') and '" + second.path()
+							+ "' (group '" + second.groupId() + "')" + suffix);
 				}
 			}
 		}
@@ -182,7 +164,7 @@ public final class GroupManifestValidator {
 
 	private record PathOwner(String groupId, String path) {}
 
-	private static void validateReferences(Map<String, GroupManifest.Group> groups, Map<String, GroupManifest.SelectionTag> tags, List<String> errors) {
+	private static void validateReferences(Map<String, GroupManifest.Group> groups, List<String> errors) {
 		for (var entry : groups.entrySet()) {
 			String id = entry.getKey();
 			GroupManifest.Group group = entry.getValue();
@@ -190,7 +172,6 @@ public final class GroupManifestValidator {
 			if (group.breaksWith().contains(id)) errors.add("Group '" + id + "' cannot conflict with itself");
 			for (String dependency : group.requires()) if (!groups.containsKey(dependency)) errors.add("Group '" + id + "' requires missing group '" + dependency + "'");
 			for (String conflict : group.breaksWith()) if (!groups.containsKey(conflict)) errors.add("Group '" + id + "' conflicts with missing group '" + conflict + "'");
-			if (!group.tag().isEmpty() && !tags.containsKey(group.tag())) errors.add("Group '" + id + "' uses missing selection tag '" + group.tag() + "'");
 		}
 	}
 
@@ -214,33 +195,20 @@ public final class GroupManifestValidator {
 
 	private static void validateDefaultAndIndividualSelections(GroupManifest manifest) {
 		List<String> errors = new ArrayList<>();
-		SelectionIntent defaultIntent = GroupSelectionResolver.defaultIntent(manifest);
 		for (ClientPlatform platform : ClientPlatform.values()) {
 			try {
-				GroupSelectionResolver.resolve(manifest, defaultIntent, platform);
+				GroupSelectionResolver.resolveDefault(manifest, platform);
 			} catch (SelectionResolutionException e) {
 				for (String error : e.errors()) errors.add(platform.id() + ": " + error);
-			}
-			for (var tagEntry : manifest.selectionTags().entrySet()) {
-				try {
-					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(tagEntry.getKey()), Set.of()), platform);
-					for (var groupEntry : manifest.groups().entrySet()) {
-						if (tagEntry.getKey().equals(groupEntry.getValue().tag()) && groupEntry.getValue().supports(platform)
-								&& !selection.selectedGroups().contains(groupEntry.getKey()) && !isOptionalUnavailable(manifest, groupEntry.getKey(), selection))
-							errors.add(platform.id() + ": Selection tag '" + tagEntry.getKey() + "' cannot select group '" + groupEntry.getKey() + "'");
-					}
-				} catch (SelectionResolutionException e) {
-					for (String error : e.errors()) errors.add(platform.id() + ": " + error);
-				}
 			}
 			for (var entry : manifest.groups().entrySet()) {
 				if (!entry.getValue().supports(platform)) continue;
 				try {
-					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(), Set.of(entry.getKey())), platform);
+					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(entry.getKey())), platform);
 					if (!selection.selectedGroups().contains(entry.getKey()) && !isOptionalUnavailable(manifest, entry.getKey(), selection))
 						errors.add(platform.id() + ": Group '" + entry.getKey() + "' cannot be selected on this platform");
 				} catch (SelectionResolutionException e) {
-					for (String error : e.errors()) errors.add(platform.id() + ": " + error);
+					if (!isOptionalUnavailable(manifest, entry.getKey(), e.resolution())) for (String error : e.errors()) errors.add(platform.id() + ": " + error);
 				}
 			}
 		}
@@ -249,9 +217,7 @@ public final class GroupManifestValidator {
 
 	private static boolean isOptionalUnavailable(GroupManifest manifest, String groupId, ResolvedSelection selection) {
 		GroupManifest.Group group = manifest.groups().get(groupId);
-		boolean forcedByTag = group != null && !group.tag().isEmpty()
-				&& Optional.ofNullable(manifest.selectionTags().get(group.tag())).map(GroupManifest.SelectionTag::serverForced).orElse(false);
-		if (group == null || group.required() || forcedByTag) return false;
+		if (group == null || group.required()) return false;
 		GroupResolution resolution = selection.explanation(groupId);
 		return resolution != null && (resolution.status() == GroupResolution.Status.BLOCKED || resolution.status() == GroupResolution.Status.UNAVAILABLE);
 	}
@@ -330,7 +296,7 @@ public final class GroupManifestValidator {
 	}
 
 	public static String requireIdentifier(String id) {
-		if (!isValidIdentifier(id)) throw new IllegalArgumentException("Invalid group or tag ID: " + id);
+		if (!isValidIdentifier(id)) throw new IllegalArgumentException("Invalid group or category ID: " + id);
 		return id;
 	}
 
@@ -346,9 +312,9 @@ public final class GroupManifestValidator {
 		}
 	}
 
-	private static String validateOptionalTag(String groupId, String input, List<String> errors) {
+	private static String validateCategoryTag(String groupId, String input, List<String> errors) {
 		if (input == null || input.isEmpty()) return "";
-		if (!isValidIdentifier(input)) errors.add("Invalid Group '" + groupId + "' selection tag ID: " + input);
+		if (!isValidIdentifier(input)) errors.add("Invalid Group '" + groupId + "' category tag ID: " + input);
 		return input;
 	}
 

@@ -1,7 +1,9 @@
 package pl.skidam.automodpack.client.ui;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -13,16 +15,18 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.ListEntry;
 import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 
 public class ChangelogScreen extends VersionedScreen {
 
 	private final Screen parent;
 	private final Changelogs changelogs;
-	private static Map<String, String> formattedChanges;
+	private List<ListEntryWidget.Row> formattedChanges;
 	private ListEntryWidget listEntryWidget;
 	private EditBox searchField;
 	private Button backButton;
+	private Button patchNotesButton;
 	private Button openMainPageButton;
 
 	public ChangelogScreen(Screen parent, Changelogs changelogs) {
@@ -46,6 +50,7 @@ public class ChangelogScreen extends VersionedScreen {
 		this.addRenderableWidget(this.listEntryWidget);
 		this.addRenderableWidget(this.searchField);
 		this.addRenderableWidget(this.backButton);
+		this.addRenderableWidget(this.patchNotesButton);
 		this.addRenderableWidget(this.openMainPageButton);
 		this.setInitialFocus(this.searchField);
 	}
@@ -56,7 +61,7 @@ public class ChangelogScreen extends VersionedScreen {
 			this.minecraft,
 			this.width,
 			this.height,
-			48,
+			68,
 			this.height - 50,
 			20
 		);
@@ -72,20 +77,30 @@ public class ChangelogScreen extends VersionedScreen {
 		this.searchField.setResponder(textField -> updateChangelogs());
 
 		this.backButton = buttonWidget(
-			this.width / 2 - 140,
+			actionButtonX(310, 3, 0),
 			this.height - 30,
-			140,
+			actionButtonWidth(310, 3),
 			20,
 			VersionedText.translatable("automodpack.back"),
 			button -> ScreenImpl.setScreen(this.parent)
 		);
 
-		this.openMainPageButton = buttonWidget(
-			this.width / 2 + 20,
+		this.patchNotesButton = buttonWidget(
+			actionButtonX(310, 3, 1),
 			this.height - 30,
-			140,
+			actionButtonWidth(310, 3),
 			20,
-			VersionedText.translatable("automodpack.changelog.openPage"),
+			VersionedText.translatable("automodpack.patchNotes.all"),
+			button -> ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, changelogs.patchNotesHistory(), ""))
+		);
+		this.patchNotesButton.active = GenerationPatchNoteHistory.containsNotes(changelogs.patchNotesHistory());
+
+		this.openMainPageButton = buttonWidget(
+			actionButtonX(310, 3, 2),
+			this.height - 30,
+			actionButtonWidth(310, 3),
+			20,
+			VersionedText.literal("Project page"),
 			button -> {
 				ListEntry selectedEntry = listEntryWidget.getSelected();
 
@@ -123,55 +138,46 @@ public class ChangelogScreen extends VersionedScreen {
 	}
 
 	private void drawSummaryOfChanges(VersionedMatrices matrices) {
-		int filesAdded = changelogs.changesAddedList.size();
-		int filesRemoved = changelogs.changesDeletedList.size();
-
-		String summary = "+ " + filesAdded + " | - " + filesRemoved;
-
-		drawCenteredTextWithShadow(
-			matrices,
-			font,
-			VersionedText.literal(summary),
-			this.width / 2,
-			5,
-			TextColors.WHITE
-		);
+		drawCenteredTextWithShadow(matrices, font,
+				VersionedText.translatable("automodpack.summary.files", changelogs.changedFiles().size(), changelogs.removedFiles().size()).withStyle(ChatFormatting.GRAY), this.width / 2, 4, TextColors.WHITE);
+		String notes = changelogs.latestPatchNotes();
+		List<String> noteLines = notes.isBlank() ? List.of(VersionedText.translatable("automodpack.patchNotes.none").getString()) : wrapToWidth(this.font, notes, this.width - 20, 2);
+		drawCenteredTextWithShadow(matrices, font, VersionedText.translatable("automodpack.patchNotes.latest").withStyle(ChatFormatting.YELLOW), this.width / 2, 42, TextColors.WHITE);
+		for (int index = 0; index < noteLines.size(); index++)
+			drawCenteredTextWithShadow(matrices, font, VersionedText.literal(noteLines.get(index)).withStyle(ChatFormatting.WHITE), this.width / 2, 54 + index * 12, TextColors.WHITE);
 	}
 
 	private void updateChangelogs() {
 		if (this.searchField.getValue().isEmpty()) {
 			formattedChanges = reFormatChanges();
 		} else {
-			Map<String, String> filteredChangelogs = new HashMap<>();
-			for (Map.Entry<String, String> changelog : reFormatChanges().entrySet()) {
-				if (changelog.getKey().toLowerCase().contains(this.searchField.getValue().toLowerCase())) {
-					filteredChangelogs.put(changelog.getKey(), changelog.getValue());
-				}
-			}
+			List<ListEntryWidget.Row> filteredChangelogs = new ArrayList<>();
+			for (ListEntryWidget.Row changelog : reFormatChanges())
+				if (changelog.text().getString().toLowerCase(Locale.ROOT).contains(this.searchField.getValue().toLowerCase(Locale.ROOT))) filteredChangelogs.add(changelog);
 			formattedChanges = filteredChangelogs;
 		}
 
 		this.removeWidget(this.listEntryWidget);
-		this.listEntryWidget = new ListEntryWidget(formattedChanges, this.minecraft, this.width, this.height, 48, this.height - 50, 20);
+		this.listEntryWidget = new ListEntryWidget(formattedChanges, this.minecraft, this.width, this.height, 68, this.height - 50, 20);
 		this.addRenderableWidget(this.listEntryWidget);
 	}
 
-	private Map<String, String> reFormatChanges() {
-		Map<String, String> reFormattedChanges = new HashMap<>();
+	private List<ListEntryWidget.Row> reFormatChanges() {
+		List<ListEntryWidget.Row> reFormattedChanges = new ArrayList<>();
 
-		for (var changelog : changelogs.changesAddedList.entrySet()) {
-			String modPageUrl = null;
-			if (changelog.getValue() != null && !changelog.getValue().isEmpty()) modPageUrl = changelog.getValue().get(0);
-			reFormattedChanges.put("+ " + changelog.getKey(), modPageUrl);
+		for (var changelog : changelogs.changedFiles().values()) {
+			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("+ " + UiFormat.changePath(changelog.file())).withStyle(ChatFormatting.GREEN), firstUrl(changelog.mainPageUrls())));
 		}
 
-		for (var changelog : changelogs.changesDeletedList.entrySet()) {
-			String modPageUrl = null;
-			if (changelog.getValue() != null && !changelog.getValue().isEmpty()) modPageUrl = changelog.getValue().get(0);
-			reFormattedChanges.put("- " + changelog.getKey(), modPageUrl);
+		for (var changelog : changelogs.removedFiles().values()) {
+			reFormattedChanges.add(new ListEntryWidget.Row(VersionedText.literal("- " + UiFormat.changePath(changelog.file())).withStyle(ChatFormatting.RED), firstUrl(changelog.mainPageUrls())));
 		}
 
 		return reFormattedChanges;
+	}
+
+	private static String firstUrl(List<String> urls) {
+		return urls == null || urls.isEmpty() ? null : urls.get(0);
 	}
 
 	@Override

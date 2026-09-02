@@ -30,10 +30,9 @@ class GenerationDiffTest {
 		assertEquals(List.of(GenerationDiff.FileClassification.ADDED, GenerationDiff.FileClassification.METADATA_ONLY,
 				GenerationDiff.FileClassification.MODIFIED, GenerationDiff.FileClassification.REMOVED), diff.files().stream().map(GenerationDiff.FileChange::classification).toList());
 		assertEquals(List.of("main"), diff.groupMetadata().modified());
-		assertEquals(List.of("tag"), diff.selectionTagMetadata().modified());
-		assertEquals(new GenerationDiff.Summary(1, 1, 1, 1, 3), diff.summary());
+		assertEquals(new GenerationDiff.Summary(1, 1, 1, 1, 2), diff.summary());
 		assertEquals(List.of("modpackName"), diff.packMetadata().modified());
-		assertEquals(List.of("Changed pack metadata 'modpackName'", "Changed group 'main'", "Changed tag 'tag'", "Added file 'main/a-added'",
+		assertEquals(List.of("Changed pack metadata 'modpackName'", "Changed group 'main'", "Added file 'main/a-added'",
 				"Changed metadata for file 'main/a-metadata'", "Changed file 'main/b-modified'", "Removed file 'main/z-removed'"), diff.humanReadableChanges());
 	}
 
@@ -59,10 +58,22 @@ class GenerationDiffTest {
 		assertTrue(GenerationDiff.between(parent, parent).isEmpty());
 	}
 
+	@Test
+	void summaryCountsOneEffectivePathWhenGroupsRepeatIt() {
+		Jsons.CompleteModpackContentFields.GroupFileFields oldFile = file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
+		Jsons.CompleteModpackContentFields.GroupFileFields newFile = file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null);
+		GroupManifest parent = manifestWithGroups("same", Map.of("main", Map.of("shared.txt", oldFile), "optional", Map.of("shared.txt", oldFile)));
+		GroupManifest child = manifestWithGroups("same", Map.of("main", Map.of("shared.txt", newFile), "optional", Map.of("shared.txt", newFile)));
+
+		GenerationDiff diff = GenerationDiff.between(parent, child);
+
+		assertEquals(2, diff.files().size());
+		assertEquals(new GenerationDiff.Summary(0, 1, 0, 0, 0), diff.summary());
+	}
+
 	private static GroupManifest taggedManifest(String tag) {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		fields.selectionTags = Map.of(tag, tag(tag));
 		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.tag = tag;
 		group.files = Map.of();
@@ -84,7 +95,6 @@ class GenerationDiffTest {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.modpackName = id;
-		fields.selectionTags = tag.isEmpty() ? Map.of() : Map.of("tag", tag(tag));
 		Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> declarations = new LinkedHashMap<>();
 		for (var entry : groups.entrySet()) {
 			var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
@@ -96,13 +106,7 @@ class GenerationDiffTest {
 		return GroupManifestValidator.validate(fields);
 	}
 
-	private static Jsons.CompleteModpackContentFields.SelectionTagFields tag(String description) {
-		var tag = new Jsons.CompleteModpackContentFields.SelectionTagFields();
-		tag.description = description;
-		return tag;
-	}
-
 	private static Jsons.CompleteModpackContentFields.GroupFileFields file(String size, String hash, String murmur) {
-		return new Jsons.CompleteModpackContentFields.GroupFileFields(size, "other", false, false, false, hash, murmur);
+		return new Jsons.CompleteModpackContentFields.GroupFileFields(size, "other", false, false, hash, murmur);
 	}
 }

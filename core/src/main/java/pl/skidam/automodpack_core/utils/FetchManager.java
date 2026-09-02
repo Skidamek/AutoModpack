@@ -121,7 +121,7 @@ public class FetchManager {
 			if (datas != null) {
 				datas.fetchedData().sources().add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
 				String mainPageUrl = ModrinthAPI.getMainPageUrl(info.modrinthID(), datas.fetchData.fileType);
-				datas.fetchedData().mainPageUrls().add(mainPageUrl);
+				addMainPageUrl(datas, mainPageUrl, true);
 				fetchesDone.incrementAndGet();
 			}
 		}
@@ -135,8 +135,19 @@ public class FetchManager {
 			Datas datas = fetchDatas.get(info.sha1Hash());
 			if (datas != null) {
 				datas.fetchedData().sources().add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.CURSEFORGE));
+				addMainPageUrl(datas, info.projectPageUrl(), false);
 				fetchesDone.incrementAndGet();
 			}
+		}
+	}
+
+	private static void addMainPageUrl(Datas datas, String url, boolean preferred) {
+		if (url == null || url.isBlank()) return;
+		List<String> urls = datas.fetchedData().mainPageUrls();
+		synchronized (urls) {
+			if (urls.contains(url)) return;
+			if (preferred) urls.add(0, url);
+			else urls.add(url);
 		}
 	}
 

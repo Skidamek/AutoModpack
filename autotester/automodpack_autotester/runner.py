@@ -16,6 +16,7 @@ import docker as docker_py
 
 from .bridge import BridgeClient
 from .config import REPO_ROOT, Target, load_macros, parse_server_files
+from .mod_fixtures import write_valid_mod_fixture
 from .mods import resolve_mod
 from .engine import ClientExited, Context, run_flow
 from .engine.registry import verb
@@ -191,18 +192,50 @@ def _prepare_server(ctx: Context):
     (srv_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx.artifact, srv_dir / "mods" / "automodpack.jar")
     cfg = dict(ctx.settings.get("automodpack", {}).get("config", {}))
+    cfg.update((ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}) or {}).get("config", {}))
     cfg["modpackName"] = ctx.modpack_name
     cfg["acceptedLoaders"] = [ctx.target.loader]
     (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
     (srv_dir / "automodpack" / "automodpack-server.json").write_text(json.dumps(cfg, indent=2))
+    _write_server_generation(ctx, 0)
+
+
+def _server_generation(ctx: Context, index: int) -> dict:
+    generations = (ctx.scenario.get("serverFiles", {}) or {}).get("generations") or []
+    if not generations:
+        if index != 0:
+            raise ValueError(f"scenario has no server generation {index}")
+        return {"files": [{"path": str(path), "content": content} for path, content in ctx.scenario_files]}
+    if not isinstance(generations, list) or index < 0 or index >= len(generations):
+        raise ValueError(f"server generation index {index} is outside the declared generations")
+    generation = generations[index]
+    if not isinstance(generation, dict):
+        raise ValueError(f"serverFiles.generations[{index}] must be a mapping")
+    return generation
+
+
+def _write_server_generation(ctx: Context, index: int) -> None:
+    generation = _server_generation(ctx, index)
+    srv_dir = ctx.server_dir
     host_root = srv_dir / "automodpack" / "host-modpack" / "main"
+    if host_root.exists():
+        shutil.rmtree(host_root)
     host_root.mkdir(parents=True, exist_ok=True)
     (host_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
     (host_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
-    for rel, content in ctx.scenario_files:
+    for item in generation.get("files", []):
+        if not isinstance(item, dict) or "path" not in item:
+            raise ValueError(f"serverFiles.generations[{index}].files entries need path/content")
+        rel = Path(str(item["path"]))
+        if rel.is_absolute() or ".." in rel.parts:
+            raise ValueError(f"server generation path escapes the host modpack: {rel}")
         f = host_root / rel
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(content)
+        f.write_text(str(item.get("content", "")))
+    patch_notes = generation.get("patchNotes", "")
+    patch_path = srv_dir / "automodpack" / "server" / "patch-notes.md"
+    patch_path.parent.mkdir(parents=True, exist_ok=True)
+    patch_path.write_text(str(patch_notes))
 
 
 def _launch_server(ctx: Context):
@@ -227,6 +260,9 @@ def _launch_server(ctx: Context):
         if val:
             env[v] = val
     env.update({str(k): str(v) for k, v in (topo.get("env", {}) or {}).items()})
+    if scenario.get("serverFiles", {}).get("generations"):
+        env.setdefault("ENABLE_RCON", "true")
+        env.setdefault("RCON_PASSWORD", "amp-autotest")
     # Run the itzg server as the same user the runner uses, so it can write to the
     # bind-mounted mods/automodpack dirs (which the runner created). Without this the
     # server runs as itzg's default UID 1000 and fails on hosts with a different UID
@@ -275,6 +311,12 @@ def _launch_client(ctx: Context):
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx.artifact, game_dir / "mods" / "automodpack.jar")
     (game_dir / "options.txt").write_text("narrator:0\n")
+    automodpack_dir = game_dir / "automodpack"
+    data_root_marker = automodpack_dir / "data-root.json"
+    if not data_root_marker.exists():
+        data_root = automodpack_dir / "data"
+        data_root.mkdir(parents=True, exist_ok=True)
+        data_root_marker.write_text(json.dumps({"root": "/work/game/automodpack/data", "shared": False}, indent=2) + "\n")
     _bridge_state(ctx).unlink(missing_ok=True)
 
     # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
@@ -304,6 +346,7 @@ def _launch_client(ctx: Context):
             "AM_AUTOTEST_GAME_DIR": "/work/game",
             "AM_AUTOTEST_HMC_CACHE_DIR": "/work/hmc-cache",
             "AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS": str(client_run_seconds),
+            "AM_AUTOTEST_RENDER_CLIENT": str(bool(ctx.scenario.get("renderClient", False))).lower(),
         },
         mounts=[
             (game_dir, "/work/game", False),
@@ -338,6 +381,28 @@ def _v_wait_server(ctx: Context, step):
     to = ctx.scenario.get("timeouts", {}) or ctx.settings.get("timeouts", {})
     timeout = parse_duration(step.get("timeout"), default=float(to.get("serverStartSeconds", 180)))
     _wait_for_log(ctx.srv_name, "Done (", timeout=timeout)
+
+
+@verb("publish_server_generation")
+def _v_publish_server_generation(ctx: Context, step):
+    """Replace the fixture host files and publish the next generation in the real server."""
+    index = int(step.get("generation", 1))
+    _write_server_generation(ctx, index)
+    notes = str(_server_generation(ctx, index).get("patchNotes", "")).strip()
+    command = ["rcon-cli", "automodpack", "generate"]
+    if notes:
+        command.extend(["notes", notes.replace("\n", " ")])
+    result = _container(ctx.srv_name).exec_run(command)
+    output = result.output.decode("utf-8", errors="replace") if result.output else ""
+    if result.exit_code != 0:
+        raise RuntimeError(f"server generation command failed ({result.exit_code}): {output}")
+    await_condition(
+        lambda: True if "PUBLISHED" in _container_logs(ctx.srv_name, tail=200) else None,
+        parse_duration(step.get("timeout"), default=120),
+        step.get("poll"),
+        f"server generation {index} was not published",
+    )
+    ctx.vars["published_server_generation"] = index
 
 
 @verb("launch_client")
@@ -473,8 +538,8 @@ def _sha1(path: Path) -> str:
         return hashlib.file_digest(f, "sha1").hexdigest()
 
 
-def _staged_generation_id(modpack_id: str, created_at: str, state_digest: str, ledger_digest: str) -> str:
-    notes_digest = hashlib.sha1(b"").hexdigest()
+def _staged_generation_id(modpack_id: str, created_at: str, state_digest: str, ledger_digest: str, patch_notes: str = "") -> str:
+    notes_digest = hashlib.sha1(patch_notes.encode("utf-8")).hexdigest()
     return (
         CanonicalEncoder()
         .string("automodpack-generation-v1")
@@ -505,19 +570,19 @@ def _staged_ledger_digest(modpack_id: str, entries: list[dict]) -> str:
     return encoder.digest()
 
 
-def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict]) -> str:
+def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict], modpack_name: str | None = None) -> str:
     encoder = (
         CanonicalEncoder()
         .string("automodpack-state-v1")
         .string(modpack_id)
-        .string(ctx.modpack_name)
+        .string(modpack_name if modpack_name is not None else ctx.modpack_name)
         .string("")
         .string(ctx.target.loader)
         .string(_load_ver(ctx.target))
         .string(ctx.target.minecraft)
         .integer(1)
         .string("main")
-        .string(ctx.modpack_name)
+        .string(modpack_name if modpack_name is not None else ctx.modpack_name)
         .string("")
         .string("")
         .boolean(True)
@@ -532,7 +597,16 @@ def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict]) -> st
     return encoder.integer(0).digest()
 
 
-def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_root: Path) -> dict:
+def _write_staged_generation(
+    ctx: Context,
+    root: Path,
+    modpack_id: str,
+    data_root: Path,
+    *,
+    client_root: Path | None = None,
+    modpack_name: str | None = None,
+    patch_notes: str = "",
+) -> dict:
     files = []
     for path in sorted(p for p in root.rglob("*") if p.is_file()):
         if path.name == "automodpack-content.json":
@@ -558,16 +632,17 @@ def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_roo
         }
         for entry in files
     ]
-    state_digest = _staged_state_digest(ctx, modpack_id, files)
+    modpack_name = modpack_name if modpack_name is not None else ctx.modpack_name
+    state_digest = _staged_state_digest(ctx, modpack_id, files, modpack_name)
     provisional_ledger_digest = _staged_ledger_digest(modpack_id, ledger_entries)
     created_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
-    generation_id = _staged_generation_id(modpack_id, created_at, state_digest, provisional_ledger_digest)
+    generation_id = _staged_generation_id(modpack_id, created_at, state_digest, provisional_ledger_digest, patch_notes)
     for entry in ledger_entries:
         entry["firstPublishedGenerationId"] = generation_id
         entry["lastPublishedGenerationId"] = generation_id
 
     manifest = {
-        "modpackName": ctx.modpack_name,
+        "modpackName": modpack_name,
         "modpackId": modpack_id,
         "automodpackVersion": "",
         "loader": ctx.target.loader,
@@ -575,11 +650,11 @@ def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_roo
         "mcVersion": ctx.target.minecraft,
         "groups": {
             "main": {
-                "displayName": ctx.modpack_name,
+                "displayName": modpack_name,
                 "description": "",
                 "tag": "",
                 "required": True,
-                "recommended": True,
+                "defaultSelected": True,
                 "breaksWith": [],
                 "requires": [],
                 "compatiblePlatforms": [],
@@ -589,7 +664,6 @@ def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_roo
                         "type": entry["type"],
                         "editable": entry["editable"],
                         "overwriteEditable": False,
-                        "forceCopy": False,
                         "sha1": entry["sha1"],
                         "murmur": "",
                     }
@@ -597,7 +671,6 @@ def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_roo
                 },
             }
         },
-        "selectionTags": {},
         "ownershipLedger": {
             "modpackId": modpack_id,
             "entries": ledger_entries,
@@ -610,12 +683,12 @@ def _write_staged_generation(ctx: Context, root: Path, modpack_id: str, data_roo
             "createdAt": created_at,
             "stateDigest": state_digest,
             "ledgerDigest": provisional_ledger_digest,
-            "patchNotes": "",
-            "patchNotesDigest": hashlib.sha1(b"").hexdigest(),
+            "patchNotes": patch_notes,
+            "patchNotesDigest": hashlib.sha1(patch_notes.encode("utf-8")).hexdigest(),
             "rollbackTargetGenerationId": "",
         },
     }
-    client_root = root.parent
+    client_root = client_root or root.parent
     generation_path = client_root / "records" / generation_id / "manifest.json"
     generation_path.parent.mkdir(parents=True, exist_ok=True)
     generation_path.write_text(json.dumps(manifest, indent=2) + "\n")
@@ -644,15 +717,20 @@ def _v_stage_modpack(ctx: Context, step):
     overrides).
     """
     game = ctx.game_dir
-    modpack_id = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(7))
+    record_only = bool(step.get("recordOnly", False))
+    modpack_id = str(step.get("packId") or "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(7)))
+    modpack_name = str(step.get("packName") or ctx.modpack_name)
     automodpack = game / "automodpack"
     client_root = automodpack / "client"
     data_root = client_root / "data"
-    root = client_root / "active"
-    ctx.vars["active_dir"] = "automodpack/client/active"
+    root = client_root / "staging" / modpack_id if record_only else client_root / "active"
+    if root.exists():
+        shutil.rmtree(root)
+    if not record_only:
+        ctx.vars["active_dir"] = "automodpack/client/active"
     root.mkdir(parents=True, exist_ok=True)
     data_root.mkdir(parents=True, exist_ok=True)
-    (automodpack / "data-root.json").write_text(json.dumps({"root": str(data_root.resolve()), "shared": False}, indent=2) + "\n")
+    (automodpack / "data-root.json").write_text(json.dumps({"root": "/work/game/automodpack/client/data", "shared": False}, indent=2) + "\n")
 
     src = step.get("from")
     if src:
@@ -664,13 +742,26 @@ def _v_stage_modpack(ctx: Context, step):
             raise FileNotFoundError(f"stage_modpack 'from' is not a directory: {src_path}")
         shutil.copytree(src_path, root, dirs_exist_ok=True)
 
-    # Always (re)write the scenario's declared serverFiles + marker into the pack.
+    declared_files = step.get("files")
+    if declared_files is None:
+        declared_files = [{"path": str(rel), "content": content} for rel, content in ctx.scenario_files]
     (root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
-    (root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
-    for rel, content in ctx.scenario_files:
+    (root / ctx.marker_rel).write_text(json.dumps({"marker": modpack_name}) + "\n")
+    for item in declared_files:
+        if not isinstance(item, dict) or "path" not in item:
+            raise ValueError("stage_modpack files entries need path/content")
+        rel, content = Path(str(item["path"])), str(item.get("content", ""))
+        if rel.is_absolute() or ".." in rel.parts:
+            raise ValueError(f"stage_modpack path escapes the pack: {rel}")
         f = root / rel
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(content)
+        if item.get("fixture") is not None:
+            fixture = item["fixture"]
+            if not isinstance(fixture, dict):
+                raise ValueError("stage_modpack fixture must be a mapping")
+            write_valid_mod_fixture(f, fixture)
+        else:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(content)
 
     mods = step.get("mods") or []
     if mods:
@@ -691,7 +782,19 @@ def _v_stage_modpack(ctx: Context, step):
                 shutil.copy2(mod, root / "mods" / mod.name)
 
     (root / "automodpack-content.json").unlink(missing_ok=True)
-    generation = _write_staged_generation(ctx, root, modpack_id, data_root)
+    generation = _write_staged_generation(
+        ctx,
+        root,
+        modpack_id,
+        data_root,
+        client_root=client_root,
+        modpack_name=modpack_name,
+        patch_notes=str(step.get("patchNotes", "")),
+    )
+    if record_only:
+        shutil.rmtree(root)
+        ctx.vars["staged_pack_id"] = modpack_id
+        return
     state = {
         "schemaVersion": 1,
         "modpackId": modpack_id,
@@ -705,7 +808,7 @@ def _v_stage_modpack(ctx: Context, step):
     selection_store = client_root / "selections.json"
     selection_store.write_text(json.dumps({
         "DO_NOT_CHANGE_IT": 1,
-        "selections": {modpack_id: {"requestedTags": [], "requestedGroups": [], "excludedGroups": []}},
+        "selections": {modpack_id: {"requestedGroups": [], "excludedGroups": []}},
     }, indent=2) + "\n")
 
     # A client config that selects the staged pack and disables the launch update,
@@ -729,6 +832,18 @@ def _v_stage_modpack(ctx: Context, step):
     cfg.update(ctx.resolve(step.get("config", {}) or {}))
     automodpack.mkdir(parents=True, exist_ok=True)
     (automodpack / "client-config.json").write_text(json.dumps(cfg, indent=2))
+
+
+@verb("seed_cas")
+def _v_seed_cas(ctx: Context, _step):
+    """Put the scenario's server files in the client CAS without installing them."""
+    automodpack = ctx.game_dir / "automodpack"
+    objects = automodpack / "data" / "objects"
+    objects.mkdir(parents=True, exist_ok=True)
+    payloads = [json.dumps({"marker": ctx.modpack_name}).encode("utf-8") + b"\n"]
+    payloads.extend(content.encode("utf-8") for _, content in ctx.scenario_files)
+    for payload in payloads:
+        (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
 
 
 # ── case orchestration ────────────────────────────────────────────────────

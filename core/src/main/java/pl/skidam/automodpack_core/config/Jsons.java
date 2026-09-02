@@ -103,7 +103,6 @@ public class Jsons {
 		public Set<String> syncedFiles = Set.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
 		public Set<String> allowEditsInFiles = Set.of("/options.txt", "/config/**");
 		public Set<String> overwriteEditableFiles = Set.of();
-		public Set<String> forceCopyFilesToStandardLocation = Set.of();
 		public boolean autoExcludeServerSideMods = true;
 		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireAutoModpackOnClient = true;
@@ -133,10 +132,9 @@ public class Jsons {
 		public String modpackName = "";
 		public boolean modpackHost = true;
 		public boolean generateModpackOnStart = true;
-		// Replaces V2's flat syncedFiles/allowEditsInFiles/overwriteEditableFiles/forceCopyFilesToStandardLocation.
+		// Replaces V2's flat syncedFiles/allowEditsInFiles/overwriteEditableFiles.
 		// Key is the group id referenced by requires/breaksWith and by the client's saved selection.
 		public Map<String, GroupDeclaration> groups = Map.of("main", mainGroupDeclaration());
-		public Map<String, SelectionTagDeclaration> selectionTags = Map.of();
 		public boolean autoExcludeServerSideMods = true;
 		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireAutoModpackOnClient = true;
@@ -167,7 +165,7 @@ public class Jsons {
 		declaration.displayName = "Main";
 		declaration.description = "Core modpack files";
 		declaration.required = true;
-		declaration.recommended = true;
+		declaration.defaultSelected = true;
 		declaration.syncedFiles = Set.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
 		declaration.allowEditsInFiles = Set.of("/options.txt", "/config/**");
 		return declaration;
@@ -179,11 +177,11 @@ public class Jsons {
 		public String description = "";
 		public String tag = "";
 
-		// If required, the client cannot uncheck it. recommended is ignored when required.
+		// If required, the client cannot uncheck it. defaultSelected is ignored when required.
 		public boolean required = false;
-		public boolean recommended = false;
+		public boolean defaultSelected = false;
 
-		// Group ids this one conflicts with / depends on and its optional selection tag.
+		// Group ids this one conflicts with / depends on and its optional category tag.
 		public Set<String> breaksWith = Set.of();
 		public Set<String> requires = Set.of();
 		public Set<String> compatiblePlatforms = Set.of();
@@ -192,14 +190,6 @@ public class Jsons {
 		public Set<String> syncedFiles = Set.of();
 		public Set<String> allowEditsInFiles = Set.of();
 		public Set<String> overwriteEditableFiles = Set.of();
-		public Set<String> forceCopyFilesToStandardLocation = Set.of();
-	}
-
-	public static class SelectionTagDeclaration {
-		public String displayName = "";
-		public String description = "";
-		public boolean defaultSelected = false;
-		public boolean serverForced = false;
 	}
 
 	public static class DataRootFields {
@@ -300,6 +290,27 @@ public class Jsons {
 		}
 	}
 
+	public static class ClientQuarantineFields {
+		public int schemaVersion = 1;
+		public String modpackId = "";
+		public List<EntryFields> entries = List.of();
+
+		public static class EntryFields {
+			public String conflictId = "";
+			public String action = "";
+			public Set<String> modIds = Set.of();
+			public String sourcePath = "";
+			public String sourceHash = "";
+			public long sourceSize = -1;
+			public String targetPath = "";
+			public String targetHash = "";
+			public long targetSize = -1;
+			public String quarantinePath = "";
+			public String sourceGenerationId = "";
+			public String quarantinedAt = "";
+		}
+	}
+
 	public static class ClientOverlayFields {
 		public String modpackId = "";
 		public List<String> deletedPaths = List.of();
@@ -346,7 +357,6 @@ public class Jsons {
 		public String loaderVersion = "";
 		public String mcVersion = "";
 		public Map<String, ModpackGroupFields> groups = Map.of();
-		public Map<String, SelectionTagFields> selectionTags = Map.of();
 		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
 		public GenerationFields generation;
 		public List<PatchNotesHistoryEntryFields> patchNotesHistory = List.of();
@@ -377,18 +387,11 @@ public class Jsons {
 			public String description = "";
 			public String tag = "";
 			public boolean required;
-			public boolean recommended;
+			public boolean defaultSelected;
 			public Set<String> breaksWith = Set.of();
 			public Set<String> requires = Set.of();
 			public Set<String> compatiblePlatforms = Set.of();
 			public Map<String, GroupFileFields> files = Map.of();
-		}
-
-		public static class SelectionTagFields {
-			public String displayName = "";
-			public String description = "";
-			public boolean defaultSelected;
-			public boolean serverForced;
 		}
 
 		public static class GroupFileFields {
@@ -396,18 +399,16 @@ public class Jsons {
 			public String type = "";
 			public boolean editable;
 			public boolean overwriteEditable;
-			public boolean forceCopy;
 			public String sha1 = "";
 			public String murmur;
 
 			public GroupFileFields() {}
 
-			public GroupFileFields(String size, String type, boolean editable, boolean overwriteEditable, boolean forceCopy, String sha1, String murmur) {
+			public GroupFileFields(String size, String type, boolean editable, boolean overwriteEditable, String sha1, String murmur) {
 				this.size = size;
 				this.type = type;
 				this.editable = editable;
 				this.overwriteEditable = overwriteEditable;
-				this.forceCopy = forceCopy;
 				this.sha1 = sha1;
 				this.murmur = murmur;
 			}
@@ -442,25 +443,22 @@ public class Jsons {
 			public final String type;
 			public final boolean editable;
 			public final boolean overwriteEditable;
-			public final boolean forceCopy;
 			public final String sha1;
 			public final String murmur;
 
-			public ModpackContentItem(String file, String size, String type, boolean editable, boolean overwriteEditable, boolean forceCopy, String sha1, String murmur) {
+			public ModpackContentItem(String file, String size, String type, boolean editable, boolean overwriteEditable, String sha1, String murmur) {
 				this.file = file;
 				this.size = size;
 				this.type = type;
 				this.editable = editable;
 				this.overwriteEditable = overwriteEditable;
-				this.forceCopy = forceCopy;
 				this.sha1 = sha1;
 				this.murmur = murmur;
 			}
 
 			@Override
 			public String toString() {
-				return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, forceCopy=%s, sha1=%s, murmur=%s)", file, size, type,
-						editable, forceCopy, sha1, murmur);
+				return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
 			}
 
 			@Override
@@ -468,14 +466,14 @@ public class Jsons {
 				if (this == obj) return true;
 				if (obj == null || getClass() != obj.getClass()) return false;
 				ModpackContentItem that = (ModpackContentItem) obj;
-				return editable == that.editable && overwriteEditable == that.overwriteEditable && forceCopy == that.forceCopy
+				return editable == that.editable && overwriteEditable == that.overwriteEditable
 						&& Objects.equals(file, that.file) && Objects.equals(size, that.size) && Objects.equals(type, that.type)
 						&& Objects.equals(sha1, that.sha1) && Objects.equals(murmur, that.murmur);
 			}
 
 			@Override
 			public int hashCode() {
-				return Objects.hash(file, size, type, editable, overwriteEditable, forceCopy, sha1, murmur);
+				return Objects.hash(file, size, type, editable, overwriteEditable, sha1, murmur);
 			}
 		}
 
@@ -507,7 +505,6 @@ public class Jsons {
 		public Map<String, ModpackSelection> selections = new HashMap<>();
 
 		public static class ModpackSelection {
-			public Set<String> requestedTags = new HashSet<>();
 			@SerializedName(value = "requestedGroups", alternate = "selectedGroups")
 			public Set<String> requestedGroups = new HashSet<>();
 			public Set<String> excludedGroups = new HashSet<>();
@@ -515,11 +512,10 @@ public class Jsons {
 			public ModpackSelection() {}
 
 			public ModpackSelection(Set<String> requestedGroups) {
-				this(Set.of(), requestedGroups, Set.of());
+				this(requestedGroups, Set.of());
 			}
 
-			public ModpackSelection(Set<String> requestedTags, Set<String> requestedGroups, Set<String> excludedGroups) {
-				this.requestedTags = requestedTags;
+			public ModpackSelection(Set<String> requestedGroups, Set<String> excludedGroups) {
 				this.requestedGroups = requestedGroups;
 				this.excludedGroups = excludedGroups;
 			}

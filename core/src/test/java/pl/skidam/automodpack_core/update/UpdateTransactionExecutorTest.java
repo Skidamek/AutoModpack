@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,6 +60,55 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void metadataOnlyUpdateKeepsProjectionAndDoesNotRequireCasObject() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "metadata-only-projection".getBytes(StandardCharsets.UTF_8);
+		Files.createDirectories(storage.activePath("mods"));
+		String hash = HashUtils.getHash(Files.write(storage.activePath("mods/existing.jar"), bytes));
+		SelectedModpackTarget target = target("mods/existing.jar", "mod", false, hash, bytes.length);
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.generationTarget(), List.of(),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of());
+
+		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
+
+		assertTrue(execution.success());
+		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/existing.jar"), bytes.length, hash));
+		assertFalse(Files.exists(storage.objectsDirectory().resolve(hash)));
+		assertEquals(target.generationTarget().targetGenerationId(), storage.readActiveState().generationId);
+	}
+
+	@Test
+	void firstInstallQuarantinesLocalSameIdModBeforeProjectionApply() throws Exception {
+		ClientStorage storage = storage();
+		byte[] serverBytes = "server-sodium".getBytes(StandardCharsets.UTF_8);
+		String serverHash = store(storage, serverBytes);
+		Path local = storage.modsDirectory().resolve("local-sodium.jar");
+		byte[] localBytes = "local-sodium".getBytes(StandardCharsets.UTF_8);
+		Files.write(local, localBytes);
+		String localHash = HashUtils.getHash(local);
+		SelectedModpackTarget target = target("mods/server-sodium.jar", "mod", false, serverHash, serverBytes.length);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/local-sodium.jar"),
+				new UpdatePlan.FileState(localHash, localBytes.length, true, true));
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(),
+				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
+				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), null,
+				clientConfig(target.manifest().modpackId())));
+		UpdateTransaction malformed = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()));
+		malformed.plannedConflicts = new ArrayList<>(List.of(plan.conflicts().get(0)));
+		malformed.plannedConflicts.set(0, null);
+		assertThrows(IOException.class, () -> executor(storage).validate(malformed));
+
+		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
+
+		assertTrue(execution.success());
+		assertFalse(Files.exists(local));
+		assertTrue(SmartFileUtils.isValidFile(storage.activePath("mods/server-sodium.jar"), serverBytes.length, serverHash));
+		Jsons.ClientQuarantineFields quarantine = QuarantineArchive.read(storage, target.manifest().modpackId());
+		assertEquals(1, quarantine.entries.size());
+		assertTrue(SmartFileUtils.isValidFile(storage.quarantinePayload(target.manifest().modpackId(), plan.conflicts().get(0).conflictId()), localBytes.length, localHash));
+	}
+
+	@Test
 	void refusesPlanBeforePersistingTargetWhenAnotherTransactionIsActive() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "blocked-object".getBytes(StandardCharsets.UTF_8);
@@ -93,6 +143,24 @@ class UpdateTransactionExecutorTest {
 
 		assertEquals(history, new ClientGenerationStore(storage).patchNotesHistory(second.metadata().generationId()));
 		assertEquals(List.of(second), new ClientGenerationStore(storage).availableLineage("abc1234", second.metadata().generationId()));
+	}
+
+	@Test
+	void installedRecordCatalogueKeepsNewestValidPackAndSkipsMalformedRecords() throws Exception {
+		ClientStorage storage = storage();
+		byte[] bytes = "catalogue-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(storage, bytes);
+		GenerationRecord first = GenerationRecord.create(GroupManifestValidator.validate(fields("mods/catalogue.jar", "mod", false, hash, bytes.length)), null,
+				Instant.parse("2026-01-01T00:00:00Z"), "first");
+		GenerationRecord second = GenerationRecord.create(first.manifest(), first, Instant.parse("2026-01-02T00:00:00Z"), "second");
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		generations.write(first);
+		generations.write(second);
+		String malformedId = "0".repeat(40);
+		Files.createDirectories(storage.generationDirectory(malformedId));
+		Files.writeString(storage.generationManifest(malformedId), "{}");
+
+		assertEquals(List.of(second), generations.installedRecords());
 	}
 
 	@Test
@@ -230,7 +298,6 @@ class UpdateTransactionExecutorTest {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.modpackName = "Test";
-		fields.selectionTags = Map.of();
 		Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.required = true;
 		Jsons.CompleteModpackContentFields.GroupFileFields file = new Jsons.CompleteModpackContentFields.GroupFileFields();
