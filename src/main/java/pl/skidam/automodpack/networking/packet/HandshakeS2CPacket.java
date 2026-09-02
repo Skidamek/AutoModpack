@@ -116,7 +116,7 @@ public class HandshakeS2CPacket {
 			int advertisedEndpointPort = serverConfig.advertisedEndpointPort;
 			LOGGER.info("Sending {} AutoModpack endpoint: {}:{} ({})", GameHelpers.getPlayerName(profile), advertisedEndpointHost, advertisedEndpointPort, serverConfig.connectionMode);
 
-			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.requireAutoModpackOnClient, serverConfig.connectionMode);
+			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.connectionMode);
 			String packetContentJson = dataPacket.toJson();
 
 			FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());

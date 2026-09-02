@@ -60,4 +60,5 @@ public class TextColors {
 	 */
 	public static final int CYAN = -11010079;
 	public static final int LIGHT_PINK = -13108;
+
 }

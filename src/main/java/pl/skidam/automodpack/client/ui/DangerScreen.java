@@ -2,12 +2,12 @@ package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.ChatFormatting;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class DangerScreen extends VersionedScreen {
 
@@ -25,10 +25,10 @@ public class DangerScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 115, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.cancel"),
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 115, this.height - 48, 120, 20, VersionedText.translatable("automodpack.danger.cancel"),
 				button -> cancelConfirmation()));
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20,
+		this.addRenderableWidget(buttonWidget(this.width / 2 + 15, this.height - 48, 120, 20,
 				VersionedText.translatable("automodpack.danger.confirm").withStyle(ChatFormatting.BOLD), button -> startUpdate()));
 	}
 
@@ -38,7 +38,7 @@ public class DangerScreen extends VersionedScreen {
 
 	private void cancelConfirmation() {
 		modpackUpdater.cancelConfirmation();
-		new ScreenManager().title();
+		ScreenImpl.multiplayer();
 	}
 
 	@Override
@@ -48,7 +48,7 @@ public class DangerScreen extends VersionedScreen {
 		ModpackUpdater.ConfirmationState state = modpackUpdater.getConfirmationState();
 		if (state != ModpackUpdater.ConfirmationState.EXPIRED && state != ModpackUpdater.ConfirmationState.CANCELLED) return;
 		confirmationFinished = true;
-		new ScreenManager().title();
+		ScreenImpl.multiplayer();
 	}
 
 	@Override

@@ -10,26 +10,36 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_core.utils.FetchManager;
 
 public final class UpdatePreviewScreen extends VersionedScreen {
+	private static final int PANEL_WIDTH = 600;
+	private static final int CONTENT_PADDING = 16;
 	private final Screen parent;
 	private final UpdatePreview preview;
 	private final String modpackName;
 	private final boolean removal;
 	private final Runnable continueAction;
 	private final Runnable cancelAction;
+	private final FetchManager sourceFetchManager;
 	private Button previousButton;
 	private Button nextButton;
 	private int page;
 	private boolean finished;
 
 	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
-		this(parent, preview, modpackName, false, continueAction, cancelAction);
+		this(parent, preview, modpackName, false, continueAction, cancelAction, null);
 	}
 
 	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, Runnable continueAction, Runnable cancelAction) {
+		this(parent, preview, modpackName, removal, continueAction, cancelAction, null);
+	}
+
+	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, Runnable continueAction, Runnable cancelAction,
+			FetchManager sourceFetchManager) {
 		super(VersionedText.literal(removal ? "ModpackRemovalScreen" : "UpdatePreviewScreen"));
 		this.parent = parent;
 		this.preview = preview;
@@ -37,6 +47,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.removal = removal;
 		this.continueAction = continueAction;
 		this.cancelAction = cancelAction;
+		this.sourceFetchManager = sourceFetchManager;
 	}
 
 	@Override
@@ -44,7 +55,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		super.init();
 		int pageCount = pageCount();
 		int navigationY = this.height - 48;
-		int left = this.width / 2 - 155;
+		int left = Math.max(5, (this.width - 310) / 2);
 		this.previousButton = buttonWidget(left, navigationY, 70, 20, VersionedText.literal("< Prev"), button -> changePage(-1));
 		this.nextButton = buttonWidget(left + 240, navigationY, 70, 20, VersionedText.literal("Next >"), button -> changePage(1));
 		this.previousButton.active = page > 0;
@@ -54,6 +65,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.addRenderableWidget(buttonWidget(left + 80, navigationY, 75, 20, VersionedText.translatable("automodpack.cancel"), button -> cancel()));
 		this.addRenderableWidget(buttonWidget(left + 165, navigationY, 75, 20,
 				VersionedText.literal(removal ? "Remove" : "Continue").withStyle(ChatFormatting.BOLD), button -> continueUpdate()));
+		if (GenerationPatchNoteHistory.containsNotes(preview.patchNotesHistory()))
+			this.addRenderableWidget(buttonWidget(left + 80, navigationY - 24, 150, 20, VersionedText.literal("All patch notes"), button -> openPatchNotes()));
 	}
 
 	private int pageCount() {
@@ -62,25 +75,37 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private int pageSize() {
-		return Math.max(1, (summaryY() - 10 - entryTop()) / 18);
+		return Math.max(1, (summaryY() - entryTop() - 6) / 16);
 	}
 
 	private int entryTop() {
-		return headerBottom() + 13;
+		return headerBottom() + 10;
 	}
 
 	private int headerBottom() {
-		return 24 + patchNoteLines().size() * 12 + 15 + 24;
+		return 86 + patchNoteLines().size() * 12 + (sourceFetchManager == null ? 0 : 12);
 	}
 
 	private int summaryY() {
-		return this.height - 84;
+		return panelBottom() - 48;
+	}
+
+	private int panelBottom() {
+		return Math.max(10, this.height - 58);
+	}
+
+	private int contentLeft() {
+		return panelLeft(PANEL_WIDTH) + CONTENT_PADDING;
+	}
+
+	private int contentWidth() {
+		return Math.max(1, panelWidth(PANEL_WIDTH) - CONTENT_PADDING * 2);
 	}
 
 	private List<String> patchNoteLines() {
 		return preview.patchNotes().isBlank()
 				? List.of("No patch notes published.")
-				: wrapToWidth(this.font, preview.patchNotes(), Math.max(1, this.width - 20), 2);
+				: wrapToWidth(this.font, preview.patchNotes(), contentWidth(), 2);
 	}
 
 	private void changePage(int amount) {
@@ -92,8 +117,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private void continueUpdate() {
 		if (finished) return;
 		finished = true;
-		continueAction.run();
 		ScreenImpl.setScreen(new PreparingScreen());
+		continueAction.run();
 	}
 
 	private void cancel() {
@@ -103,65 +128,77 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		cancelAction.run();
 	}
 
+	private void openPatchNotes() {
+		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, preview.patchNotesHistory(), modpackName));
+	}
+
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+		int left = contentLeft();
+		int contentWidth = contentWidth();
 		String title = removal
 				? (modpackName.isBlank() ? "Remove modpack" : "Remove " + modpackName)
 				: (modpackName.isBlank() ? "Update preview" : modpackName + " update preview");
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
-
-		int headerY = 24;
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), left, 16, TextColors.WHITE);
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(removal ? "Review before removal" : "Review before download").withStyle(ChatFormatting.AQUA), left, 31,
+				TextColors.CYAN);
+		int headerY = 50;
 		List<String> notes = patchNoteLines();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Patch notes:").withStyle(ChatFormatting.YELLOW), this.width / 2, headerY, TextColors.WHITE);
+		drawTextWithShadow(matrices, this.font, VersionedText.literal("Patch notes:").withStyle(ChatFormatting.YELLOW), left, headerY, TextColors.WHITE);
 		for (String note : notes) {
 			headerY += 12;
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, note, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, headerY, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, note, contentWidth)).withStyle(ChatFormatting.WHITE), left, headerY, TextColors.WHITE);
 		}
 
 		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
-		headerY += 15;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Tags: " + join(groups.explicitTags()), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, headerY,
+		headerY += 14;
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Tags: " + join(groups.explicitTags()), contentWidth)).withStyle(ChatFormatting.GRAY), left, headerY,
 				TextColors.WHITE);
 		headerY += 12;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Groups: " + join(groups.resolvedGroups()), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2,
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Groups: " + join(groups.resolvedGroups()), contentWidth)).withStyle(ChatFormatting.GRAY), left,
 				headerY, TextColors.WHITE);
 		headerY += 12;
 		String stale = groups.staleTags().isEmpty() && groups.staleGroups().isEmpty()
 				? "none"
 				: "tags=" + join(groups.staleTags()) + " groups=" + join(groups.staleGroups());
-		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.literal(truncateToWidth(this.font, "Stale choices: " + stale, this.width - 20)).withStyle(groups.staleTags().isEmpty() && groups.staleGroups().isEmpty()
+		drawTextWithShadow(matrices, this.font,
+				VersionedText.literal(truncateToWidth(this.font, "Stale choices: " + stale, contentWidth)).withStyle(groups.staleTags().isEmpty() && groups.staleGroups().isEmpty()
 						? ChatFormatting.GRAY
 						: ChatFormatting.RED),
-				this.width / 2, headerY, TextColors.WHITE);
-
+				left, headerY, TextColors.WHITE);
+		if (sourceFetchManager != null) {
+			headerY += 12;
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, sourceAvailability(), contentWidth)).withStyle(ChatFormatting.GRAY), left, headerY,
+					TextColors.WHITE);
+		}
 		List<UpdatePreview.Entry> entries = preview.entries();
 		int pageSize = pageSize();
 		int start = page * pageSize;
 		int end = Math.min(entries.size(), start + pageSize);
 		for (int index = start; index < end; index++) {
 			UpdatePreview.Entry entry = entries.get(index);
-			int y = entryTop() + (index - start) * 18;
-			String line = kindText(entry.kind()) + "  " + rootText(entry.root()) + ":/" + entry.relativePath() + "  (" + formatSize(entry.size()) + ")";
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, line, this.width - 20)).withStyle(color(entry.kind())), this.width / 2, y, TextColors.WHITE);
+			int y = entryTop() + (index - start) * 16;
+			KindPresentation kind = kindPresentation(entry.kind());
+			String line = kind.label() + "  " + rootText(entry.root()) + ":/" + entry.relativePath() + "  (" + UiFormat.formatSize(entry.size()) + ")";
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, line, contentWidth)).withStyle(kind.color()), left, y, TextColors.WHITE);
 		}
 
 		if (entries.isEmpty()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("No file changes are required.").withStyle(ChatFormatting.GREEN), this.width / 2, entryTop(),
+			drawTextWithShadow(matrices, this.font, VersionedText.literal("No file changes are required.").withStyle(ChatFormatting.GREEN), left, entryTop(),
 					TextColors.WHITE);
 		}
 		long acquisitionBytes = entries.stream().filter(entry -> entry.kind() == UpdatePreview.Kind.ADDED || entry.kind() == UpdatePreview.Kind.CHANGED
 				|| entry.kind() == UpdatePreview.Kind.RESTORED_BASELINE).mapToLong(UpdatePreview.Entry::size).sum();
 		long acquisitionFiles = entries.stream().filter(entry -> entry.kind() == UpdatePreview.Kind.ADDED || entry.kind() == UpdatePreview.Kind.CHANGED
 				|| entry.kind() == UpdatePreview.Kind.RESTORED_BASELINE).count();
-		String changeSummary = "Changes: added " + formatSize(preview.addedBytes()) + "  changed " + formatSize(preview.changedBytes()) + "  removed "
-				+ formatSize(preview.removedBytes()) + "  preserved " + formatSize(preview.preservedBytes());
-		String acquisitionSummary = "Download: " + acquisitionFiles + " files, " + formatSize(acquisitionBytes);
+		String changeSummary = "Changes: added " + UiFormat.formatSize(preview.addedBytes()) + "  changed " + UiFormat.formatSize(preview.changedBytes()) + "  removed "
+				+ UiFormat.formatSize(preview.removedBytes()) + "  preserved " + UiFormat.formatSize(preview.preservedBytes());
+		String acquisitionSummary = "Download: " + acquisitionFiles + " files, " + UiFormat.formatSize(acquisitionBytes);
 		String restartSummary = "Restart: " + restartReasons();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, changeSummary, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, summaryY(), TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, acquisitionSummary, this.width - 20)).withStyle(ChatFormatting.GREEN), this.width / 2, summaryY() + 12,
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, changeSummary, contentWidth)).withStyle(ChatFormatting.YELLOW), left, summaryY(), TextColors.WHITE);
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, acquisitionSummary, contentWidth)).withStyle(ChatFormatting.GREEN), left, summaryY() + 12,
 				TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, restartSummary, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, summaryY() + 24,
+		drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, restartSummary, contentWidth)).withStyle(ChatFormatting.GRAY), left, summaryY() + 24,
 				TextColors.WHITE);
 		if (pageCount() > 1) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal((page + 1) + " / " + pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 27,
@@ -176,7 +213,14 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			joined.append(value);
 		}
 		String result = joined.length() == 0 ? "none" : joined.toString();
-		return truncateToWidth(this.font, result, Math.max(1, this.width - 20));
+		return truncateToWidth(this.font, result, contentWidth());
+	}
+
+	private String sourceAvailability() {
+		if (sourceFetchManager.totalFiles() == 0) return "Third-party sources: none queried";
+		if (sourceFetchManager.isCancelled()) return "Third-party sources: lookup cancelled; server download remains available";
+		if (!sourceFetchManager.isComplete()) return "Third-party sources: resolving (" + sourceFetchManager.resolvedFiles() + " / " + sourceFetchManager.totalFiles() + " files matched)";
+		return "Third-party sources: " + sourceFetchManager.resolvedFiles() + " / " + sourceFetchManager.totalFiles() + " files matched; unmatched files use the server";
 	}
 
 	private static String rootText(UpdatePlan.Root root) {
@@ -185,7 +229,6 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			case OVERLAY -> "editable overlay";
 			case GAME_DIR -> "game";
 			case STORE_DIR -> "cas";
-			case AUTOMODPACK_DIR -> "automodpack";
 		};
 	}
 
@@ -208,33 +251,21 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		};
 	}
 
-	private static String kindText(UpdatePreview.Kind kind) {
+	private static KindPresentation kindPresentation(UpdatePreview.Kind kind) {
 		return switch (kind) {
-			case ADDED -> "Added";
-			case CHANGED -> "Changed";
-			case REMOVED -> "Removed";
-			case PRESERVED_CAS -> "Preserved in CAS";
-			case PRESERVED_CHANGED -> "Preserved changed";
-			case PRESERVED_UNAVAILABLE -> "Preserved unavailable";
-			case PRESERVED_OUTSIDE -> "Preserved outside roots";
-			case UNSAFE -> "Unsafe file type";
-			case RESTORED_BASELINE -> "Restored baseline";
+			case ADDED -> new KindPresentation("Added", ChatFormatting.GREEN);
+			case CHANGED -> new KindPresentation("Changed", ChatFormatting.GREEN);
+			case REMOVED -> new KindPresentation("Removed", ChatFormatting.YELLOW);
+			case PRESERVED_CAS -> new KindPresentation("Preserved in CAS", ChatFormatting.YELLOW);
+			case PRESERVED_CHANGED -> new KindPresentation("Preserved changed", ChatFormatting.RED);
+			case PRESERVED_UNAVAILABLE -> new KindPresentation("Preserved unavailable", ChatFormatting.RED);
+			case PRESERVED_OUTSIDE -> new KindPresentation("Preserved outside roots", ChatFormatting.RED);
+			case UNSAFE -> new KindPresentation("Unsafe file type", ChatFormatting.RED);
+			case RESTORED_BASELINE -> new KindPresentation("Restored baseline", ChatFormatting.GREEN);
 		};
 	}
 
-	private static ChatFormatting color(UpdatePreview.Kind kind) {
-		return switch (kind) {
-			case ADDED, CHANGED, RESTORED_BASELINE -> ChatFormatting.GREEN;
-			case REMOVED, PRESERVED_CAS -> ChatFormatting.YELLOW;
-			case PRESERVED_CHANGED, PRESERVED_UNAVAILABLE, PRESERVED_OUTSIDE, UNSAFE -> ChatFormatting.RED;
-		};
-	}
-
-	private static String formatSize(long bytes) {
-		if (bytes < 1024) return bytes + " B";
-		if (bytes < 1024 * 1024) return (bytes / 1024) + " KiB";
-		return (bytes / (1024 * 1024)) + " MiB";
-	}
+	private record KindPresentation(String label, ChatFormatting color) {}
 
 	@Override
 	public boolean shouldCloseOnEsc() {

@@ -61,7 +61,7 @@ import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
  * <p>
  * Handled services - {@code ITransformationService} (forwarded by
  * {@link AutoModpackTransformationService}), {@code IModLocator}, and {@code IDependencyLocator} -
- * let a mod shipping only these load straight from the modpack folder with no copy.
+ * let a mod shipping only these load straight from the active projection with no copy.
  */
 public final class EarlyServiceLayer {
 
@@ -76,7 +76,7 @@ public final class EarlyServiceLayer {
 	// transformation service's lifecycle is forwarded (see AutoModpackTransformationService).
 	static final List<String> ACTIVELY_RUN_SERVICES = List.of(CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE, TRANSFORMATION_SERVICE);
 
-	// Every service hostable from the modpack folder without copying: the actively-run ones above,
+	// Every service hostable from the active projection without copying: the actively-run ones above,
 	// plus language providers (passive - picked up from the GAME layer).
 	public static final Set<String> HANDLEABLE_SERVICES = Stream.concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
 			.collect(Collectors.toUnmodifiableSet());
@@ -164,14 +164,14 @@ public final class EarlyServiceLayer {
 
 		try {
 			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
-			Path modpackMods = storage.activeDirectory().resolve("mods");
-			if (!Files.isDirectory(modpackMods)) return;
+			Path activeModsDirectory = storage.activePath("mods");
+			if (!Files.isDirectory(activeModsDirectory)) return;
 
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
+			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
 
 			if (earlyServiceJars.isEmpty()) return;
 
-			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the modpack folder in place", earlyServiceJars.size());
+			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 
 			ModuleLayer serviceLayer = EarlyServiceLayer.class.getModule().getLayer();
 			if (serviceLayer == null) {
@@ -314,7 +314,7 @@ public final class EarlyServiceLayer {
 	}
 
 	/**
-	 * Whether this jar's early services can all be run from the modpack folder: it must declare at
+	 * Whether this jar's early services can all be run from the active projection: it must declare at
 	 * least one actively-run service, ship no service outside {@link #HANDLEABLE_SERVICES}, and be a
 	 * jar native Forge would itself exclude from mod discovery for the SERVICE layer. The last part is
 	 * what makes in-place treatment safe - such a jar never loads as a plain mod natively, so replaying

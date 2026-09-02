@@ -26,20 +26,28 @@ public final class GenerationStore {
 		PUBLISHED, NO_CHANGES
 	}
 
-	public record CurrentSnapshot(GenerationRecord record, Path projectionPath, NavigableMap<String, Path> hostingPaths) {
+	public record CurrentSnapshot(GenerationRecord record, Path projectionPath, GenerationHosting hostingPaths) {
 		public CurrentSnapshot {
 			record = Objects.requireNonNull(record);
 			projectionPath = Objects.requireNonNull(projectionPath).toAbsolutePath().normalize();
-			hostingPaths = immutablePaths(hostingPaths);
+			hostingPaths = Objects.requireNonNull(hostingPaths);
+		}
+
+		public CurrentSnapshot(GenerationRecord record, Path projectionPath, Map<String, Path> hostingPaths) {
+			this(record, projectionPath, new GenerationHosting(hostingPaths));
 		}
 	}
 
-	public record Publication(PublicationStatus status, GenerationRecord record, Path projectionPath, NavigableMap<String, Path> hostingPaths) {
+	public record Publication(PublicationStatus status, GenerationRecord record, Path projectionPath, GenerationHosting hostingPaths) {
 		public Publication {
 			status = Objects.requireNonNull(status);
 			record = Objects.requireNonNull(record);
 			projectionPath = Objects.requireNonNull(projectionPath).toAbsolutePath().normalize();
-			hostingPaths = immutablePaths(hostingPaths);
+			hostingPaths = Objects.requireNonNull(hostingPaths);
+		}
+
+		public Publication(PublicationStatus status, GenerationRecord record, Path projectionPath, Map<String, Path> hostingPaths) {
+			this(status, record, projectionPath, new GenerationHosting(hostingPaths));
 		}
 	}
 
@@ -100,19 +108,27 @@ public final class GenerationStore {
 	private final CommitHook commitHook;
 
 	public GenerationStore(Path root) {
-		this(root, Clock.systemUTC(), NOOP_HOOK);
+		this(root, root.resolve("objects"), Clock.systemUTC(), NOOP_HOOK);
 	}
 
 	GenerationStore(Path root, Clock clock, CommitHook commitHook) {
+		this(root, root.resolve("objects"), clock, commitHook);
+	}
+
+	public GenerationStore(Path root, Path objectsDirectory) {
+		this(root, objectsDirectory, Clock.systemUTC(), NOOP_HOOK);
+	}
+
+	GenerationStore(Path root, Path objectsDirectory, Clock clock, CommitHook commitHook) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
-		this.currentPath = this.root.resolve(Constants.hostGenerationCurrentFile.getFileName());
-		this.currentProjectionPath = this.root.resolve(Constants.hostGenerationCurrentProjectionFile.getFileName());
+		this.currentPath = this.root.resolve(Constants.serverCurrentFile.getFileName());
+		this.currentProjectionPath = this.root.resolve(Constants.serverCurrentProjectionFile.getFileName());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
-		this.cataloguesDirectory = this.root.resolve(Constants.hostGenerationCataloguesDir.getFileName());
-		this.commitsDirectory = this.root.resolve(Constants.hostGenerationCommitsDir.getFileName());
-		this.deltasDirectory = this.root.resolve(Constants.hostGenerationDeltasDir.getFileName());
-		this.objectsDirectory = this.root.resolve(Constants.hostGenerationObjectsDir.getFileName());
-		this.stagingDirectory = this.root.resolve(Constants.hostGenerationStagingDir.getFileName());
+		this.cataloguesDirectory = this.root.resolve(Constants.serverCataloguesDir.getFileName());
+		this.commitsDirectory = this.root.resolve(Constants.serverCommitsDir.getFileName());
+		this.deltasDirectory = this.root.resolve(Constants.serverDeltasDir.getFileName());
+		this.objectsDirectory = Objects.requireNonNull(objectsDirectory).toAbsolutePath().normalize();
+		this.stagingDirectory = this.root.resolve(Constants.serverStagingDir.getFileName());
 		this.clock = Objects.requireNonNull(clock);
 		this.commitHook = Objects.requireNonNull(commitHook);
 		this.objectStore = new ServerObjectStore(objectsDirectory, stagingDirectory);
@@ -140,11 +156,6 @@ public final class GenerationStore {
 		try (PublicationGuard ignored = acquirePublicationGuard()) {
 			return collectUnreachableObjectsLocked(generationPins, objectPins);
 		}
-	}
-
-	/** Short alias for callers that treat collection as the store's explicit maintenance operation. */
-	public CollectionResult collect(Set<String> retainedGenerationIds, Set<String> pinnedObjectHashes) throws IOException {
-		return collectUnreachableObjects(retainedGenerationIds, pinnedObjectHashes);
 	}
 
 	/** Loads the current materialized projection and verifies only the active target objects. */
@@ -193,7 +204,8 @@ public final class GenerationStore {
 			writeCurrentProjection(record);
 			materializedPath = currentProjectionPath;
 		}
-		if (Files.exists(materializedPath, LinkOption.NOFOLLOW_LINKS)) hosting.put("", materializedPath);
+		boolean projectionReady = loaded == null || !loaded.needsRepair() || repairProjection;
+		if (projectionReady && Files.exists(materializedPath, LinkOption.NOFOLLOW_LINKS)) hosting.put("", materializedPath);
 		return Optional.of(new CurrentSnapshot(record, materializedPath, hosting));
 	}
 
@@ -518,7 +530,9 @@ public final class GenerationStore {
 	private GenerationRecord readProjection(Path path) throws IOException {
 		ensureRegular(path, "current generation projection");
 		try {
-			return GenerationRecord.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CompleteModpackContentFields.class));
+			Jsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CompleteModpackContentFields.class);
+			GenerationPatchNoteHistory.fromFields(fields);
+			return GenerationRecord.fromFields(fields);
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid current generation projection: " + path, e);
 		}
@@ -727,7 +741,9 @@ public final class GenerationStore {
 	}
 
 	private void writeCurrentProjection(GenerationRecord record) throws IOException {
-		ConfigTools.writeAtomic(currentProjectionPath, record.toFields());
+		Jsons.CompleteModpackContentFields fields = record.toFields();
+		GenerationPatchNoteHistory.writeFields(fields, GenerationPatchNoteHistory.fromHistory(readCompactHistory(record.metadata().generationId()).entries()));
+		ConfigTools.writeAtomic(currentProjectionPath, fields);
 	}
 
 	private OwnershipDelta writeDeltaNoClobber(GenerationRecord record, GenerationRecord parent) throws IOException {
@@ -842,9 +858,4 @@ public final class GenerationStore {
 		}
 	}
 
-	private static NavigableMap<String, Path> immutablePaths(Map<String, Path> paths) {
-		TreeMap<String, Path> sorted = new TreeMap<>();
-		if (paths != null) for (var entry : paths.entrySet()) sorted.put(entry.getKey(), entry.getValue().toAbsolutePath().normalize());
-		return Collections.unmodifiableNavigableMap(sorted);
-	}
 }

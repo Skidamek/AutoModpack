@@ -44,16 +44,16 @@ public class RestartScreen extends VersionedScreen {
 	public void initWidgets() {
 		assert this.minecraft != null;
 
-		cancelButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.cancel"), button -> {
+		cancelButton = buttonWidget(this.width / 2 - 155, this.height - 74, 150, 20, VersionedText.translatable("automodpack.restart.cancel"), button -> {
 			ScreenImpl.setScreen(null);
 		});
 
-		restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20,
+		restartButton = buttonWidget(this.width / 2 + 5, this.height - 74, 150, 20,
 				VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> {
 					minecraft.stop();
 				});
 
-		changelogsButton = buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.translatable("automodpack.changelog.view"),
+		changelogsButton = buttonWidget(this.width / 2 - 75, this.height - 48, 150, 20, VersionedText.translatable("automodpack.changelog.view"),
 				button -> {
 					new ScreenManager().changelog(this, changelogs);
 				});

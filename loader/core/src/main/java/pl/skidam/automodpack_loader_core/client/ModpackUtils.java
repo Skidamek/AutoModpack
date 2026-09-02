@@ -49,10 +49,10 @@ public class ModpackUtils {
 	// Fast and friendly method to check if the modpack is up to date without modifying anything on disk
 	public static UpdateCheckResult isUpdate(Jsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
-		Path modpackDir = storage.activeDirectory();
+		Path activeDirectory = storage.activeDirectory();
 		try {
 			Jsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null || !Files.isDirectory(modpackDir, LinkOption.NOFOLLOW_LINKS)) {
+			if (state == null || !Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) {
 				return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 			}
 		} catch (IOException e) {
@@ -64,15 +64,15 @@ public class ModpackUtils {
 		var start = System.currentTimeMillis();
 
 		Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
-		Set<String> changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, modpackDir);
+		Set<String> changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, activeDirectory);
 
 		// Group & Sort Server Files (Optimizes Disk Seek Pattern)
 		// Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
 		// TreeMap ensures alphabetical order of directories (HDD friendly).
 		Map<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> itemsByDir = serverModpackContent.list.stream()
-				.collect(Collectors.groupingBy(item -> SmartFileUtils.getPath(modpackDir, item.file).getParent(), TreeMap::new, Collectors.toList()));
+				.collect(Collectors.groupingBy(item -> SmartFileUtils.getPath(activeDirectory, item.file).getParent(), TreeMap::new, Collectors.toList()));
 
-		try (var cache = FileMetadataCache.open(storage.hashCacheFile())) {
+		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 
 			// Process Directory by Directory
 			for (Map.Entry<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
@@ -151,7 +151,7 @@ public class ModpackUtils {
 		}
 
 		if (!filesToUpdate.isEmpty()) {
-			LOGGER.info("Modpack {} requires update! Took {} ms", modpackDir, System.currentTimeMillis() - start);
+			LOGGER.info("Active projection requires update! Took {} ms", System.currentTimeMillis() - start);
 			return new UpdateCheckResult(true, filesToUpdate, changedOverwriteEditableFiles);
 		}
 
@@ -159,9 +159,9 @@ public class ModpackUtils {
 
 		Set<String> serverFileSet = serverModpackContent.list.stream().map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet());
 		try {
-			try (Stream<Path> projectedFiles = Files.walk(modpackDir)) {
+			try (Stream<Path> projectedFiles = Files.walk(activeDirectory)) {
 				for (Path path : projectedFiles.filter(file -> Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)).toList()) {
-					String relative = UpdatePlanner.normalize(modpackDir.relativize(path).toString());
+					String relative = UpdatePlanner.normalize(activeDirectory.relativize(path).toString());
 					if (!serverFileSet.contains(relative)) {
 						LOGGER.info("Found projected file marked for deletion: {}", relative);
 						return new UpdateCheckResult(true, Set.of(), Set.of());
@@ -173,7 +173,7 @@ public class ModpackUtils {
 			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 		}
 
-		LOGGER.info("Modpack {} is up to date! Took {} ms", modpackDir, System.currentTimeMillis() - start);
+		LOGGER.info("Active projection is up to date! Took {} ms", System.currentTimeMillis() - start);
 		return new UpdateCheckResult(false, Set.of(), Set.of());
 	}
 
@@ -262,7 +262,6 @@ public class ModpackUtils {
 
 		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
 		updatedConfig.selectedModpackId = modpackId;
-		updatedConfig.modpackConnections.put(modpackId, connectionInfo);
 		return updatedConfig;
 	}
 
@@ -273,15 +272,6 @@ public class ModpackUtils {
 			Throwable cause = DownloadClient.unwrap(e);
 			LOGGER.error("Error while getting server modpack content", cause);
 			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);
-		}
-	}
-
-	public static Optional<Jsons.CompleteModpackContentFields> refreshServerModpackContent(ClientStorage storage, DownloadClient client, byte[][] fileHashes) {
-		try {
-			return fetchModpackContentAsync(storage, client, current -> current.requestRefresh(fileHashes, storage.modpackContentTempFile())).get();
-		} catch (Exception e) {
-			LOGGER.error("Error while refreshing server modpack content", DownloadClient.unwrap(e));
-			return Optional.empty();
 		}
 	}
 

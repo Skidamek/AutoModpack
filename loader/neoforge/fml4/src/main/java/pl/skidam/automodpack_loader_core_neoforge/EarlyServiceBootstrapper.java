@@ -54,14 +54,14 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			progress.complete();
 
 			ClientStorage storage = ClientStorage.fromGameDirectory(SmartFileUtils.CWD);
-			Path modpackMods = storage.activeDirectory().resolve("mods");
-			if (!Files.isDirectory(modpackMods)) return;
+			Path activeModsDirectory = storage.activePath("mods");
+			if (!Files.isDirectory(activeModsDirectory)) return;
 
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
+			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
 
 			if (earlyServiceJars.isEmpty()) return;
 
-			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the modpack folder in place", earlyServiceJars.size());
+			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
 
 			ModuleLayer serviceLayer = getClass().getModule().getLayer();
 			if (serviceLayer == null) {

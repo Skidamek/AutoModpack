@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -18,12 +19,10 @@ import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.SpeedFormatter;
 
 public class DownloadScreen extends VersionedScreen {
-
 	private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/green_background.png");
 	private static final Identifier PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/sprites/green_progress.png");
 	private static final int PROGRESS_BAR_WIDTH = 182;
@@ -75,8 +74,8 @@ public class DownloadScreen extends VersionedScreen {
 					AudioManager.stopMusic();
 				}));
 
-		int x = this.width - 40;
-		int y = this.height - 40;
+		int x = this.width - 28;
+		int y = this.height - 28;
 
 		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
 			AudioManager.stopMusic();
@@ -147,24 +146,21 @@ public class DownloadScreen extends VersionedScreen {
 
 		matrices.pushPose();
 		matrices.scale(scale, scale, scale);
-
 		if (downloadManager != null && !downloadManager.downloadsInProgress.isEmpty()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.downloading").withStyle(ChatFormatting.BOLD),
-					this.width / 2, y, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y,
+					TextColors.WHITE);
 
 			int currentY = y + 15;
 			synchronized (downloadManager.downloadsInProgress) {
 				for (DownloadManager.DownloadData data : downloadManager.downloadsInProgress.values()) {
-					drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(data.getFileName()), (int) (((float) this.width / 2) * scale),
-							currentY, TextColors.GRAY);
+					drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(data.getFileName()), (int) (((float) this.width / 2) * scale), currentY, TextColors.GRAY);
 					currentY += 10;
 				}
 			}
 		} else {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.noFiles"),
-					(int) (((float) this.width / 2) * scale), y, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.wait").withStyle(ChatFormatting.BOLD),
-					(int) (((float) this.width / 2) * scale), y + 24, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.noFiles"), (int) (((float) this.width / 2) * scale), y, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.wait").withStyle(ChatFormatting.BOLD), (int) (((float) this.width / 2) * scale), y + 24,
+					TextColors.WHITE);
 		}
 		matrices.popPose();
 	}
@@ -175,36 +171,28 @@ public class DownloadScreen extends VersionedScreen {
 		int lineHeight = 12;
 
 		drawDownloadingFiles(matrices);
-
-		// Title
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(header).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110,
-				TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(header).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110, TextColors.WHITE);
 
 		if (downloadManager != null && downloadManager.isRunning()) {
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 10, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 10 + lineHeight * 2,
-					TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 10 + lineHeight * 2, TextColors.WHITE);
 
 			float scaleBar = 1.35F;
-			int barWidth = PROGRESS_BAR_WIDTH;
-			int barHeight = PROGRESS_BAR_HEIGHT;
-			int barFilledWidth = (int) (barWidth * getDownloadScale());
-			int barYPos = this.height / 2 + 36;
-
-			float barDrawX = (this.width - barWidth * scaleBar) / 2.0F / scaleBar;
-			float barDrawY = barYPos / scaleBar;
+			int barFilledWidth = (int) (PROGRESS_BAR_WIDTH * getDownloadScale());
+			int barY = this.height / 2 + 36;
+			float barDrawX = (this.width - PROGRESS_BAR_WIDTH * scaleBar) / 2.0F / scaleBar;
+			float barDrawY = barY / scaleBar;
 
 			matrices.pushPose();
 			matrices.scale(scaleBar, scaleBar, scaleBar);
-			drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, Math.round(barDrawX), Math.round(barDrawY), 0, 0, barWidth, barHeight, barWidth, barHeight);
-			drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, Math.round(barDrawX), Math.round(barDrawY), 0, 0, Math.min(barFilledWidth, barWidth), barHeight,
-					barWidth, barHeight);
+			drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, Math.round(barDrawX), Math.round(barDrawY), 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH,
+					PROGRESS_BAR_HEIGHT);
+			drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, Math.round(barDrawX), Math.round(barDrawY), 0, 0, Math.min(barFilledWidth, PROGRESS_BAR_WIDTH), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH,
+					PROGRESS_BAR_HEIGHT);
 			matrices.popPose();
 
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 36 + lineHeight * 2,
-					TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getAcquisitionSummary(), this.width / 2, this.height / 2 + 36 + lineHeight * 3,
-					TextColors.GRAY);
+			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 36 + lineHeight * 2, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getAcquisitionSummary(), this.width / 2, this.height / 2 + 36 + lineHeight * 3, TextColors.GRAY);
 			cancelButton.active = true;
 		} else {
 			cancelButton.active = false;
@@ -247,7 +235,7 @@ public class DownloadScreen extends VersionedScreen {
 	public void cancelDownload() {
 		try {
 			if (downloadManager != null) downloadManager.cancelAllAndShutdown();
-			new ScreenManager().title();
+			ScreenImpl.multiplayer();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

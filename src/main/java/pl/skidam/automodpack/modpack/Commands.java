@@ -22,10 +22,15 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.cache.ClientObjectStore;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -265,14 +270,14 @@ public class Commands {
 
 	private static int writeBootstrap(CommandContext<CommandSourceStack> context, Jsons.KnownHostsBootstrapFields fields, boolean install) {
 		try {
-			ConfigTools.writeAtomic(knownHostsBootstrapFile, fields);
+			ConfigTools.writeAtomic(bootstrapFile, fields);
 		} catch (IOException e) {
 			LOGGER.error("Failed to export bootstrap file", e);
 			send(context, "Failed to write bootstrap file: " + e.getMessage(), ChatFormatting.RED, false);
 			return 0;
 		}
 
-		String absolutePath = knownHostsBootstrapFile.toAbsolutePath().normalize().toString();
+		String absolutePath = bootstrapFile.toAbsolutePath().normalize().toString();
 		send(context, "Bootstrap file exported", ChatFormatting.GREEN, copyable(absolutePath), ChatFormatting.YELLOW, false);
 		send(context, "Package it on clients at", ChatFormatting.WHITE, copyable("automodpack/automodpack-bootstrap.json"), ChatFormatting.YELLOW, false);
 		if (install && serverConfig.validateSecrets) {
@@ -586,12 +591,16 @@ public class Commands {
 			try {
 				Set<String> retainedGenerationIds = new TreeSet<>();
 				for (GenerationHistoryEntry entry : modpackExecutor.technicalHistory()) retainedGenerationIds.add(entry.metadata().generationId());
-				GenerationStore.CollectionResult result = new GenerationStore(hostGenerationsDir).collect(retainedGenerationIds, Set.of());
+				Path serverRoot = SmartFileUtils.CWD.resolve(serverDir).normalize();
+				Path objectRoot = DataRootResolver.resolve(SmartFileUtils.CWD).root().resolve("objects").normalize();
+				Set<String> clientObjectPins = ClientObjectStore.referencedHashes(ClientStorage.fromGameDirectory(SmartFileUtils.CWD));
+				GenerationStore.CollectionResult result = new GenerationStore(serverRoot, objectRoot).collectUnreachableObjects(retainedGenerationIds, clientObjectPins);
 				send(context, "Generation objects collected", ChatFormatting.GREEN, false);
 				send(context, "Retained generations", ChatFormatting.WHITE, String.valueOf(retainedGenerationIds.size()), ChatFormatting.YELLOW, false);
 				send(context, "Objects", ChatFormatting.WHITE, result.beforeObjectCount() + " -> " + result.afterObjectCount(), ChatFormatting.YELLOW, false);
 				send(context, "Bytes", ChatFormatting.WHITE, result.beforeObjectBytes() + " -> " + result.afterObjectBytes(), ChatFormatting.YELLOW, false);
 				send(context, "Deleted", ChatFormatting.WHITE, result.deletedObjectCount() + " objects, " + result.deletedObjectBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Client-pinned objects", ChatFormatting.WHITE, String.valueOf(clientObjectPins.size()), ChatFormatting.YELLOW, false);
 				return Command.SINGLE_SUCCESS;
 			} catch (IOException e) {
 				send(context, "Failed to collect generation objects: " + e.getMessage(), ChatFormatting.RED, false);
