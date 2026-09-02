@@ -41,6 +41,35 @@ import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 
+/**
+ * Builds client update plans in two phases.
+ *
+ * <p>
+ * <strong>Inspection</strong> observes the live game directory, overlays and projection, and produces the plan via
+ * {@link UpdatePlanner}: {@link #buildPlan} and {@link #prepareRemoval}. Inspection never edits live, overlay or
+ * vault state; it only fills the content-addressed object store with verified content-identical copies and hashes
+ * files into the shared metadata cache.
+ * </p>
+ *
+ * <p>
+ * <strong>Reconciliation</strong> is the explicit mutating counterpart, {@link #reconcileEditableState}: it deletes
+ * superseded overlay files, vaults edited or drifted bytes as {@link PreservationVault} replace claims, rewrites
+ * overlay tombstones, and silently resets drifted server-owned non-mod files. Callers run it immediately before
+ * {@link #buildPlan} so the plan observes post-reconciliation state.
+ * </p>
+ *
+ * <p>
+ * {@link #prepareRemoval} still runs reconciliation internally at its historical point, because its baseline
+ * availability check must observe pre-reconciliation object-store state while its file inspection must observe
+ * post-reconciliation state; that ordering makes an external split a behavior change, so the side effect stays,
+ * explicitly named and documented.
+ * </p>
+ *
+ * <p>
+ * The only other durable client mutation point is UpdateTransactionExecutor committing the reviewed plan (plus the
+ * PreservationVault and CAS helpers it drives under the mutation lock).
+ * </p>
+ */
 final class ClientUpdatePlanBuilder {
 	private final ClientStorage storage;
 	private final ModpackLoaderService modpackLoader;
@@ -88,10 +117,10 @@ final class ClientUpdatePlanBuilder {
 
 	private record AvailableBaseline(ClientStorageJsons.ClientBaselineFields fields, Set<String> objectHashes) {}
 
+	/** Inspection phase: observes live, overlay and projection state and produces the plan; expects {@link #reconcileEditableState} to have run already. */
 	PreparedPlan buildPlan(Input input, FileMetadataCache cache, ModFileCache modCache) throws Exception {
 		ClientProjectionView projectionView = ClientProjectionView.open(storage);
 		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
-		captureActiveEditableOverlays(cache, projection, input.target());
 		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 logicalConfig = projectionView.logicalConfig(input.currentConfig(), expectedClientConfig);
@@ -141,7 +170,8 @@ final class ClientUpdatePlanBuilder {
 			AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId, cache);
 			ClientStorageJsons.ClientBaselineFields baseline = availableBaseline.fields();
 			ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
-			captureActiveEditableOverlays(cache, projection, null);
+			// Deliberate, documented side effect: the baseline above had to observe pre-reconciliation state, while the inspection below must observe post-reconciliation state.
+			reconcileEditableState(cache, projection, null);
 			GeneratedCopyState generatedCopies = projection.generatedCopies();
 			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, projection,
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
@@ -230,7 +260,21 @@ final class ClientUpdatePlanBuilder {
 		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
 	}
 
-	private void captureActiveEditableOverlays(FileMetadataCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields target) throws IOException {
+	/**
+	 * Reconciles mutable editable client state against the active generation: deletes superseded overlay files,
+	 * vaults edited or drifted bytes as {@link PreservationVault} replace claims, rewrites overlay tombstones, and
+	 * silently resets drifted server-owned non-mod files. This is the deliberate mutating counterpart of
+	 * {@link #buildPlan}; callers run it immediately before planning so the plan observes post-reconciliation state.
+	 *
+	 * @param target
+	 *            the modpack the plan will install, used to detect server-side replacements of editable files; {@code null} for removal planning
+	 */
+	void reconcileEditableState(FileMetadataCache cache, ModpackJsons.ModpackContentFields target) throws IOException {
+		reconcileEditableState(cache, ClientProjectionView.open(storage).snapshot(cache), target);
+	}
+
+	/** Same reconciliation against a caller-held projection snapshot, for callers whose baseline reads must stay pre-reconciliation. */
+	void reconcileEditableState(FileMetadataCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields target) throws IOException {
 		ModpackJsons.ModpackContentFields activeTarget = projection.target();
 		if (activeTarget == null || activeTarget.list == null) return;
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
