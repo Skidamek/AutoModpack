@@ -1,14 +1,20 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
@@ -17,7 +23,6 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Owns one authenticated transfer session opened from a stored per-modpack route. */
@@ -97,7 +102,46 @@ public final class StoredModpackConnection implements AutoCloseable {
 		}
 		Path destination = storage.helperDirectory().resolve("history-catalogue-" + entry.stateDigest() + ".json").normalize();
 		if (!destination.startsWith(storage.helperDirectory())) return CompletableFuture.failedFuture(new IOException("Historical catalogue path escaped client storage"));
-		return new ClientGenerationStore(storage).downloadHistoricalCatalogue(currentClient, entry, destination, null);
+		if (!entry.detailsAvailable()) return CompletableFuture.failedFuture(new IOException("Historical catalogue details were compacted: " + entry.generationId()));
+		try {
+			Files.createDirectories(destination.toAbsolutePath().normalize().getParent());
+		} catch (IOException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		return currentClient.downloadHistoricalCatalogue(entry.stateDigest(), destination, (IntConsumer) null).thenApply(path -> readHistoricalCatalogue(path, entry)).handle((snapshot, failure) -> {
+			IOException cleanupFailure = null;
+			try {
+				Files.deleteIfExists(destination);
+			} catch (IOException e) {
+				cleanupFailure = e;
+			}
+			if (failure != null) {
+				if (cleanupFailure != null) failure.addSuppressed(cleanupFailure);
+				throw failure instanceof CompletionException completionException ? completionException : new CompletionException(failure);
+			}
+			if (cleanupFailure != null) throw new CompletionException(cleanupFailure);
+			return snapshot;
+		});
+	}
+
+	private static CatalogueSnapshot readHistoricalCatalogue(Path path, GenerationHistoryIndex.Entry entry) {
+		Throwable failure = null;
+		try {
+			GenerationJsons.CatalogueSnapshotFields catalogueFields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.CatalogueSnapshotFields.class);
+			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(catalogueFields);
+			if (!snapshot.stateDigest().equals(entry.stateDigest())) throw new IOException("Historical catalogue identity does not match history index");
+			return snapshot;
+		} catch (IOException | RuntimeException e) {
+			failure = e;
+			throw new CompletionException("Historical catalogue is invalid", e);
+		} finally {
+			try {
+				Files.deleteIfExists(path);
+			} catch (IOException cleanupFailure) {
+				if (failure != null) failure.addSuppressed(cleanupFailure);
+				else throw new CompletionException("Historical catalogue temporary file could not be deleted", cleanupFailure);
+			}
+		}
 	}
 
 	/** Transfers this session's client ownership to an updater. This connection becomes empty. */
