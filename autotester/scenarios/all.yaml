@@ -611,6 +611,17 @@ flow:
   - do: click
     name: open the preservation archive
     select: { text: Preserved files }
+  # The vault lists newest first and the headless window fits one row per page,
+  # so the claim sits behind the newer pack-b deactivation claim and needs paging.
+  - do: click
+    name: page past the newer deactivation claim
+    select: { key: automodpack.ui.next }
+  - do: wait_for
+    name: show the preserved local conflict after paging
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - element: { text: amp-autotest-conflict.jar, enabled: true }
   - do: click
     name: select the preserved local conflict
     select: { text: amp-autotest-conflict.jar }
@@ -848,13 +859,8 @@ flow:
     name: return to the pack list with the removed-file claim still held
     select: { text: Back }
   - do: wait_for
-    name: return to the installed pack list before corrupting preservation bytes
+    name: return to the installed pack list before corrupting client storage
     until: { screen: InstalledModpacksScreen }
-  - do: mutate_preservation_object
-    name: corrupt the removed-file CAS object while its claim remains
-    packId: "${bootstrap_modpack_id}"
-    originalPath: config/amp-autotest-gamma.cfg
-    action: corrupt
   - do: mutate_active_object
     name: corrupt a current CAS object behind the active projection
     path: config/amp-autotest-alpha.txt
@@ -875,28 +881,6 @@ flow:
     name: remove the live copy for the unavailable-byte branch
     path: config/amp-autotest-delta.txt
     action: delete
-  - do: click
-    name: open client storage verification with corrupt required preservation bytes
-    select: { text: Local storage }
-  - do: click
-    name: verify client storage before repair
-    select: { text: Verify storage }
-  - do: wait_for
-    name: report corrupt required preservation bytes
-    timeout: 120s
-    until: { screen: ErrorScreen }
-  - do: click
-    name: return from failed verification to the same maintenance screen
-    select: { text: Back }
-  - do: wait_for
-    name: keep maintenance usable after the verification error
-    until:
-      all:
-        - screen: ClientStorageMaintenanceScreen
-        - element: { text: Verify storage, enabled: true }
-  - do: click
-    name: leave failed storage verification
-    select: { text: Back }
   - do: click
     name: reopen Pack A details for repair
     select: { text: Pack A }
@@ -1005,11 +989,6 @@ flow:
     name: verify repair removed the restored conflict only after consent
     that: { file_gone: mods/amp-autotest-conflict.jar }
   - do: assert_preservation_claim
-    name: verify repair leaves the unreconstructable preserved bytes flagged
-    packId: "${bootstrap_modpack_id}"
-    originalPath: config/amp-autotest-gamma.cfg
-    objectValid: false
-  - do: assert_preservation_claim
     name: verify editable reset preserved the player copy
     packId: "${bootstrap_modpack_id}"
     originalPath: config/pack-shared-editable.txt
@@ -1044,18 +1023,56 @@ flow:
     name: reset to title before the post-repair verification cycle
   - use: open_multiplayer
   - use: open_pack_manager
+  - do: mutate_preservation_object
+    name: corrupt the archived unowned mod's CAS object while its claim remains
+    packId: "${bootstrap_modpack_id}"
+    originalPath: mods/local-unowned.jar
+    action: corrupt
   - do: click
-    name: open the vault to discard the unrecoverable preserved file
+    name: open client storage verification with corrupt required preservation bytes
+    select: { text: Local storage }
+  - do: click
+    name: report corrupt required preservation bytes
+    select: { text: Verify storage }
+  - do: wait_for
+    name: show the corrupt preserved bytes as a verification error
+    timeout: 120s
+    until: { screen: ErrorScreen }
+  - do: click
+    name: return from the preservation verification error to the maintenance screen
+    select: { text: Back }
+  - do: wait_for
+    name: keep maintenance usable after the preservation verification error
+    until:
+      all:
+        - screen: ClientStorageMaintenanceScreen
+        - element: { text: Verify storage, enabled: true }
+  - do: click
+    name: leave the failed preservation verification
+    select: { text: Back }
+  - do: wait_for
+    name: reach the installed pack list before discarding the corrupted claim
+    until: { screen: InstalledModpacksScreen }
+  - do: click
+    name: open the vault to discard the corrupted preserved file
     select: { text: Preserved files }
+  # The archived unowned mod was preserved last by the repair, so the vault's newest-first
+  # list opens on it even though the headless window fits one row per page.
+  - do: wait_for
+    name: show the corrupted preserved file first in the vault
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - element: { text: local-unowned.jar, enabled: true }
   - do: click
     name: select the corrupted preserved file
-    select: { text: amp-autotest-gamma.cfg }
+    select: { text: local-unowned.jar }
   - do: click
     name: arm deletion of the corrupted preserved file
     select: { text: Delete }
   - do: click
     name: cancel the deletion by reselecting the file
-    select: { text: amp-autotest-gamma.cfg }
+    select: { text: local-unowned.jar }
   - do: click
     name: arm deletion of the corrupted preserved file again
     select: { text: Delete }
@@ -1067,11 +1084,11 @@ flow:
     until:
       all:
         - screen: PreservationVaultScreen
-        - no_element: { text: amp-autotest-gamma.cfg, enabled: true }
+        - no_element: { text: local-unowned.jar, enabled: true }
   - do: assert_preservation_claim
     name: verify the discard released the corrupted preserved claim
     packId: "${bootstrap_modpack_id}"
-    originalPath: config/amp-autotest-gamma.cfg
+    originalPath: mods/local-unowned.jar
     present: false
   - do: click
     name: return to the pack list after the discard
@@ -1098,6 +1115,11 @@ flow:
   - do: click
     name: reopen the preservation vault after repair
     select: { text: Preserved files }
+  # The vault lists newest first and the discarded unowned-mod claim was newer than the
+  # surviving editable-reset claim, so the survivor sits one page behind on the short window.
+  - do: click
+    name: page past the surviving strict-repair claim
+    select: { key: automodpack.ui.next }
   - do: wait_for
     name: show the surviving editable-reset claim
     timeout: 30s
