@@ -199,7 +199,7 @@ public final class OfflineRepair {
 			Path source = verifiedSource(current.sources().getOrDefault(expected.content(), List.of()), expected.path(), expected.content(), fileCache);
 			if (source == null) continue;
 			assertPinned(request);
-			requireSafePath(storage.objectsDirectory(), expected.path());
+			FileTrees.requireNoSymbolicLinkDescendants(storage.objectsDirectory(), expected.path(), "Repair object path");
 			if (VerifiedFileTransfer.copyAtomicImmutable(source, expected.path(), expected.content().size(), expected.content().hash(), fileCache)) repairedCas++;
 			fileCache.rehash(expected.path());
 		}
@@ -213,7 +213,7 @@ public final class OfflineRepair {
 			Observation objectObservation = withRepairedCas.observations().get(object);
 			if (!matches(objectObservation, expected.content())) continue;
 			assertPinned(request);
-			requireSafePath(expected.root(), expected.path());
+			FileTrees.requireNoSymbolicLinkDescendants(expected.root(), expected.path(), "Repair path");
 			boolean repaired = expected.place() == Place.PROJECTION
 					? VerifiedFileTransfer.linkAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache)
 					: VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache);
@@ -298,7 +298,7 @@ public final class OfflineRepair {
 				if (!fields.absent)
 					PreservationVault.preserve(storage, journal.modpackId, journal.generationId, PreservationVault.Reason.EDITABLE_RESET, Root.GAME_DIR, fields.logicalPath,
 							fields.currentHash, fields.currentSize);
-				requireSafePath(storage.gameDirectory(), live);
+				FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), live, "Repair path");
 				VerifiedFileTransfer.copyAtomic(object, live, fields.defaultSize, fields.defaultHash, fileCache);
 				fileCache.rehash(live);
 				reset++;
@@ -321,7 +321,7 @@ public final class OfflineRepair {
 				if (!preserved) throw new IOException("Journaled unowned mod disappeared before it was preserved: " + fields.logicalPath);
 				continue;
 			}
-			requireSafePath(storage.modsDirectory(), source);
+			FileTrees.requireNoSymbolicLinkDescendants(storage.modsDirectory(), source, "Repair path");
 			if (!FileIntegrity.matches(source, fields.size, fields.objectHash, fileCache)) throw new IOException("Unowned mod changed after repair was journaled: " + fields.logicalPath);
 			assertPinned(request);
 			PreservationVault.preserveAndRemove(storage, journal.modpackId, journal.generationId, PreservationVault.Reason.STRICT_REPAIR, Root.GAME_DIR, fields.logicalPath,
@@ -486,7 +486,7 @@ public final class OfflineRepair {
 	private Observation observe(Path path, Path root, FileMetadataCache fileCache, Map<Path, Observation> observations) throws IOException {
 		Path normalized = path.toAbsolutePath().normalize();
 		if (observations.containsKey(normalized)) return observations.get(normalized);
-		if (!safePath(root, normalized)) {
+		if (!FileTrees.hasNoSymbolicLinkDescendants(root, normalized)) {
 			Observation unsupported = new Observation(normalized, null, -1, true);
 			observations.put(normalized, unsupported);
 			return unsupported;
@@ -537,22 +537,6 @@ public final class OfflineRepair {
 
 	private static boolean matches(Observation observation, Content content) {
 		return observation != null && !observation.unsupported() && observation.size() == content.size() && observation.hash().equals(content.hash());
-	}
-
-	private static boolean safePath(Path root, Path path) {
-		Path normalizedRoot = root.toAbsolutePath().normalize();
-		Path normalizedPath = path.toAbsolutePath().normalize();
-		if (!normalizedPath.startsWith(normalizedRoot) || Files.isSymbolicLink(normalizedRoot)) return false;
-		Path current = normalizedRoot;
-		for (Path part : normalizedRoot.relativize(normalizedPath)) {
-			current = current.resolve(part);
-			if (!current.equals(normalizedPath) && Files.isSymbolicLink(current)) return false;
-		}
-		return true;
-	}
-
-	private static void requireSafePath(Path root, Path path) throws IOException {
-		if (!safePath(root, path) || Files.isSymbolicLink(path)) throw new IOException("Repair path contains a symbolic link or escapes its root: " + path);
 	}
 
 	private static long parseSize(String value) {
