@@ -44,11 +44,10 @@ public final class UpdateHelperMain {
 
 						UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
 						long backoff = INITIAL_BACKOFF_MILLIS;
-						for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+						for (int attempt = 1;; attempt++) {
 							UpdateTransactionExecutor.Execution execution = executor.recoverLatest();
 							if (execution.success()) return 0;
-							if (execution.replanRequired()) return 1;
-							if (attempt == MAX_ATTEMPTS) return 1;
+							if (execution.replanRequired() || attempt >= MAX_ATTEMPTS) return 1;
 							Thread.sleep(backoff);
 							backoff = Math.min(MAX_BACKOFF_MILLIS, backoff * 2);
 						}
@@ -57,7 +56,6 @@ public final class UpdateHelperMain {
 					}
 				}
 			}
-			throw new IOException("Update helper exhausted retries");
 		} catch (Exception failure) {
 			failure.printStackTrace();
 			return 1;

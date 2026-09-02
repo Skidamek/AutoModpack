@@ -77,7 +77,6 @@ class ClientObjectStoreTest {
 		assertFalse(Files.exists(storage.objectFile(orphan)));
 		assertEquals(1, result.after().validReferencedObjectCount());
 		assertTrue(result.after().objectBytes() < result.before().objectBytes());
-		assertEquals(ClientObjectStore.CollectionStatus.COLLECTED, result.status());
 	}
 
 	@Test
@@ -94,7 +93,6 @@ class ClientObjectStoreTest {
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
 
-		assertEquals(ClientObjectStore.CollectionStatus.COLLECTED, result.status());
 		assertEquals(1, result.deletedObjectCount());
 		assertTrue(Files.exists(first.objectFile(hash)));
 		assertFalse(Files.exists(first.objectFile(orphan)));

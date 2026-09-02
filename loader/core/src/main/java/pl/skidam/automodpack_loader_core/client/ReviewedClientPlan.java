@@ -19,18 +19,8 @@ final class ReviewedClientPlan<T> {
 		return new ReviewedClientPlan<>(prepared, plan);
 	}
 
-	static <T> ReviewedClientPlan<T> approved(T prepared, UpdatePlan plan) {
-		ReviewedClientPlan<T> session = new ReviewedClientPlan<>(prepared, plan);
-		session.approve();
-		return session;
-	}
-
 	T prepared() {
 		return prepared;
-	}
-
-	UpdatePlan plan() {
-		return review.plan();
 	}
 
 	boolean isApproved() {

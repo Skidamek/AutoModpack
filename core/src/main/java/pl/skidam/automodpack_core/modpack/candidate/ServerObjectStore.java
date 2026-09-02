@@ -25,10 +25,6 @@ public final class ServerObjectStore {
 			throw new IllegalArgumentException("Managed object and staging directories must be separate");
 	}
 
-	public NavigableMap<String, Path> promoteAll(NavigableMap<String, StagedObject> objects) throws IOException {
-		return promoteAll(objects, null);
-	}
-
 	public NavigableMap<String, Path> promoteAll(NavigableMap<String, StagedObject> objects, FileMetadataCache cache) throws IOException {
 		FileTrees.createManagedDirectory(objectsDirectory, "immutable object directory");
 		FileTrees.createManagedDirectory(stagingDirectory, "staging directory");

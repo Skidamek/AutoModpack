@@ -32,7 +32,7 @@ public final class VerifiedFileTransfer {
 		Path temporary = copyToVerifiedTemporary(sourceFile, targetFile, expectedSize, expectedSha1);
 		try {
 			if (immutable) ImmutableFiles.protect(temporary);
-			moveAtomicReplace(temporary, targetFile);
+			DurableFiles.replace(temporary, targetFile);
 			FileTrees.forceDirectory(temporary.getParent());
 			if (immutable) ImmutableFiles.protect(targetFile);
 			record(cache, targetFile, expectedSha1);
@@ -93,7 +93,7 @@ public final class VerifiedFileTransfer {
 			}
 			if (Files.size(temporary) != expectedSize) throw new IOException("Linked file failed size verification: " + temporary);
 			ImmutableFiles.protect(temporary);
-			moveAtomicReplace(temporary, targetFile);
+			DurableFiles.replace(temporary, targetFile);
 			FileTrees.forceDirectory(parent);
 			ImmutableFiles.protect(targetFile);
 			// Seed the projection-path record so later lookups do not hash; the named source record stays valid
@@ -117,7 +117,7 @@ public final class VerifiedFileTransfer {
 		Path targetParent = requireTargetParent(targetFile);
 		boolean crossFileSystem = false;
 		try {
-			moveAtomicReplace(temporary, targetFile);
+			DurableFiles.replace(temporary, targetFile);
 		} catch (AtomicMoveNotSupportedException crossFileSystemFailure) {
 			promoteAcrossFileSystems(temporary, targetFile, targetParent, expectedSize, expectedSha1, crossFileSystemFailure);
 			crossFileSystem = true;
@@ -138,7 +138,7 @@ public final class VerifiedFileTransfer {
 			if (!FileIntegrity.matches(targetTemporary, expectedSize, expectedSha1))
 				throw new IOException("Cross-filesystem promotion failed size/SHA-1 verification: " + targetTemporary, crossFileSystem);
 			ImmutableFiles.protect(targetTemporary);
-			moveAtomicReplace(targetTemporary, targetFile);
+			DurableFiles.replace(targetTemporary, targetFile);
 		} finally {
 			Files.deleteIfExists(targetTemporary);
 		}
@@ -175,10 +175,6 @@ public final class VerifiedFileTransfer {
 		if (parent == null) throw new IOException("Target path has no parent: " + targetFile);
 		Files.createDirectories(parent);
 		return parent;
-	}
-
-	private static void moveAtomicReplace(Path sourceFile, Path targetFile) throws IOException {
-		DurableFiles.replace(sourceFile, targetFile);
 	}
 
 }
