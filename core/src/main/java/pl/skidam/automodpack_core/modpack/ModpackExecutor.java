@@ -183,7 +183,7 @@ public class ModpackExecutor {
 				if (parent != null && parent.metadata().stateDigest().equals(stateDigest)) {
 					if (notes.source() == GenerationPatchNotes.Source.EMPTY) {
 						publication = generationStore.publish(candidate, previous, parent.metadata().patchNotes());
-						committedState = candidateState;
+						committedState = candidateState.withPatchNotesSource(GenerationPatchNotes.Source.INHERITED);
 						committedResult = finishPublication(publication, committedState, null);
 						return committedResult;
 					}

@@ -19,7 +19,7 @@ public final class GenerationPatchNotes {
 	private GenerationPatchNotes() {}
 
 	public enum Source {
-		INLINE, FILE, EMPTY
+		INLINE, FILE, EMPTY, INHERITED
 	}
 
 	public enum CleanupStatus {

@@ -67,6 +67,11 @@ public final class SharedObjectOwnership {
 		TreeSet<String> result = new TreeSet<>();
 		try (Stream<Path> paths = Files.list(owners)) {
 			for (Path path : paths.sorted().toList()) {
+				if (path.getFileName().toString().endsWith(".tmp")) {
+					// A crash during a receipt write leaves a transient ConfigTools temporary; it is never a receipt.
+					Files.deleteIfExists(path);
+					continue;
+				}
 				if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || !path.getFileName().toString().endsWith(".json"))
 					throw new IOException("Shared object ownership root contains an unsupported entry: " + path);
 				StorageJsons.ObjectOwnershipFields fields = ConfigTools.read(path, StorageJsons.ObjectOwnershipFields.class)

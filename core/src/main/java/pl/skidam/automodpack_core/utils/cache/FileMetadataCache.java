@@ -227,11 +227,11 @@ public class FileMetadataCache implements AutoCloseable {
 
 	/**
 	 * Whether {@code file} is still the named immutable bytes. A matching record is trusted without
-	 * reading content. A missing record with a matching size seeds that tripwire from the advertised
-	 * SHA-1. The tripwire compares only what a content write changes (size, mtime, inode): our own
-	 * publication ({@code link()}, {@code chmod()}) bumps inode ctime by design, and treating that as
-	 * disturb forced full rehashes of multi-gigabyte objects. A real disturb still rehashes once:
-	 * matching bytes refresh the record, mismatched bytes fail.
+	 * reading content. A missing or disturbed record forces one full read before the tripwire is
+	 * seeded or refreshed, so a true answer always means the bytes were seen at least once. The
+	 * tripwire compares only what a content write changes (size, mtime, inode): our own publication
+	 * ({@code link()}, {@code chmod()}) bumps inode ctime by design, and treating that as disturb
+	 * forced full rehashes of multi-gigabyte objects.
 	 */
 	public boolean matchesImmutable(Path file, long expectedSize, String expectedSha1) throws IOException {
 		if (!HashUtils.isSha1(expectedSha1)) return false;
@@ -246,16 +246,10 @@ public class FileMetadataCache implements AutoCloseable {
 			FileFingerprint fingerprint = fingerprint(absPath, attrs);
 			CachedFile cached = readRecord(pathKey);
 			if (immutableStatsMatch(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
-			if (cached != null) {
-				String actual = HashUtils.getHash(absPath);
-				if (actual == null || !sha1.equalsIgnoreCase(actual)) return false;
-				writeRecord(new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
-						validationTimeNanos(), cached.murmur()));
-				return true;
-			}
-			CachedFile record = new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
-					validationTimeNanos());
-			writeRecord(record);
+			String actual = HashUtils.getHash(absPath);
+			if (actual == null || !sha1.equalsIgnoreCase(actual)) return false;
+			writeRecord(new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
+					validationTimeNanos(), cached == null ? null : cached.murmur()));
 			return true;
 		}
 	}
