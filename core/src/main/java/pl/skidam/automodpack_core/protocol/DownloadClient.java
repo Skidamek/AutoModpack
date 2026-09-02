@@ -192,12 +192,7 @@ public class DownloadClient implements AutoCloseable {
 			return socket;
 		}
 
-		MinecraftProtocol minecraftProtocol;
-		try {
-			minecraftProtocol = MinecraftProtocol.forMinecraftVersion(MC_VERSION);
-		} catch (IllegalArgumentException e) {
-			throw new IOException("No mcholepunch protocol for Minecraft " + MC_VERSION, e);
-		}
+		MinecraftProtocol minecraftProtocol = MinecraftProtocol.forMinecraftVersion(MC_VERSION);
 
 		try {
 			HolepunchSocket socket = new HolepunchSocket();

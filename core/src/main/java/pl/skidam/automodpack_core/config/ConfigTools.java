@@ -120,7 +120,7 @@ public final class ConfigTools {
 				InetSocketAddress endpoint = parseAddress(object, "endpoint", "hostAddress", false);
 				JsonElement modeElement = object.get("connectionMode");
 				ModpackConnectionMode connectionMode = modeElement == null || modeElement.isJsonNull()
-						? ModpackConnectionMode.defaultFor()
+						? ModpackConnectionMode.HOLEPUNCH
 						: context.deserialize(modeElement, ModpackConnectionMode.class);
 				return new ConnectionJsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
 			} catch (IllegalArgumentException e) {
