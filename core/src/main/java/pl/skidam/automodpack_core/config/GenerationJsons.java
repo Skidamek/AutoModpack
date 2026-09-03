@@ -37,6 +37,12 @@ public class GenerationJsons {
 		public ModpackJsons.CompleteModpackContentFields policy = new ModpackJsons.CompleteModpackContentFields();
 	}
 
+	public static class LedgerCheckpointFields {
+		public long seq;
+		public String contentToken = "";
+		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
+	}
+
 	public static class OwnershipLedgerFields {
 		public String modpackId = "";
 		public List<EntryFields> entries = List.of();

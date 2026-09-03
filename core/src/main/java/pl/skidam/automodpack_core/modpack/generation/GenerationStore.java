@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_JOURNAL_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_LEDGER_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_PROJECTION_FILE;
 
 import java.io.IOException;
@@ -16,6 +17,7 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
@@ -37,6 +39,7 @@ public final class GenerationStore {
 	private final Path root;
 	private final Path journalFile;
 	private final Path projectionFile;
+	private final Path ledgerFile;
 	private final ServerObjectStore objectStore;
 	private final Path objectsDirectory;
 
@@ -47,6 +50,7 @@ public final class GenerationStore {
 		this.root = root.toAbsolutePath().normalize();
 		this.journalFile = this.root.resolve(SERVER_JOURNAL_FILE.getFileName().toString());
 		this.projectionFile = this.root.resolve(SERVER_PROJECTION_FILE.getFileName().toString());
+		this.ledgerFile = this.root.resolve(SERVER_LEDGER_FILE.getFileName().toString());
 		this.objectsDirectory = objectsDirectory.toAbsolutePath().normalize();
 		this.objectStore = new ServerObjectStore(this.objectsDirectory, this.root.resolve("staging"));
 	}
@@ -178,6 +182,9 @@ public final class GenerationStore {
 		Journal.CompactionResult result = journal.compact(boundarySeq);
 		// Renumbering shifts the head's sequence: the cached state and the projection must follow it.
 		current = new Current(journal.head().seq(), current.contentToken(), current.policySha1(), current.createdAt(), current.manifest(), current.ledger(), current.tree());
+		// Compaction erases the folded history from the journal, so the ledger fold is checkpointed
+		// here; a replay from a lost projection must not lose tombstones and historical hashes.
+		writeLedgerCheckpoint(current);
 		writeProjection(current);
 		return new CompactionSummary(result.removedEntries(), result.entriesBefore(), result.entriesAfter());
 	}
@@ -254,12 +261,41 @@ public final class GenerationStore {
 
 	private OwnershipLedger replayLedger(long seq) throws IOException {
 		OwnershipLedger ledger = null;
+		Long seededAt = null;
+		GenerationJsons.LedgerCheckpointFields checkpoint = readLedgerCheckpoint();
+		if (checkpoint != null) {
+			seededAt = checkpoint.seq;
+			ledger = OwnershipLedger.fromFields(checkpoint.ownershipLedger);
+		}
 		for (JournalEntry entry : journal.entries()) {
+			if (seededAt != null && entry.seq() <= seededAt) continue;
 			GroupManifest manifest = loadPolicy(entry.policySha1());
 			ledger = OwnershipLedger.materialize(ledger == null ? OwnershipLedger.empty(manifest.modpackId()) : ledger, manifest);
 			if (entry.seq() == seq) break;
 		}
 		return ledger;
+	}
+
+	private GenerationJsons.LedgerCheckpointFields readLedgerCheckpoint() throws IOException {
+		if (!Files.exists(ledgerFile)) return null;
+		try {
+			GenerationJsons.LedgerCheckpointFields checkpoint = ConfigTools.read(ledgerFile, GenerationJsons.LedgerCheckpointFields.class).orElse(null);
+			if (checkpoint == null || checkpoint.seq < 1 || !HashUtils.isCanonicalSha1(checkpoint.contentToken) || checkpoint.ownershipLedger == null) return null;
+			if (checkpoint.seq > journal.head().seq()) return null;
+			if (!journal.entryAt(checkpoint.seq).contentToken().equals(checkpoint.contentToken)) return null;
+			return checkpoint;
+		} catch (RuntimeException e) {
+			Constants.LOGGER.warn("Ledger fold checkpoint is unusable; rebuilding the ledger from the journal", e);
+			return null;
+		}
+	}
+
+	private void writeLedgerCheckpoint(Current current) throws IOException {
+		GenerationJsons.LedgerCheckpointFields checkpoint = new GenerationJsons.LedgerCheckpointFields();
+		checkpoint.seq = current.seq();
+		checkpoint.contentToken = current.contentToken();
+		checkpoint.ownershipLedger = current.ledger().toFields();
+		ConfigTools.writeAtomic(ledgerFile, checkpoint);
 	}
 
 	private void writeProjection(Current current) throws IOException {
