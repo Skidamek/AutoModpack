@@ -27,7 +27,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.utils.FileTrees;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Persistent client snapshots of downloaded pack documents, keyed by content token. Snapshots keep
@@ -172,7 +172,7 @@ public final class ClientGenerationStore {
 
 		ClientObjectStore.CollectionResult objectCollection = ClientObjectStore.collectUnreachableObjects(storage, snapshot.retainedTokens(), Set.of());
 		finishCompactionJournal();
-		try (FileMetadataCache metadata = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache metadata = FileCache.open(storage.fileCacheDirectory())) {
 			metadata.cleanup();
 		}
 		FileTotals recordsAfter = recordTotals(snapshot.retainedTokens());

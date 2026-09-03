@@ -14,16 +14,16 @@ import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 
 /** A shared sha1-keyed cache of resolved Modrinth and CurseForge lookups backed by immutable loose records. */
-public class PlatformMetadataCache extends LooseRecordCache<PlatformMetadataCache.Record> {
+public class PlatformCache extends LooseRecordCache<PlatformCache.Record> {
 
-	private static final SharedCacheRegistry<PlatformMetadataCache> REGISTRY = new SharedCacheRegistry<>();
+	private static final SharedCacheRegistry<PlatformCache> REGISTRY = new SharedCacheRegistry<>();
 
-	public static PlatformMetadataCache open(Path path) throws IOException {
-		return REGISTRY.acquire(path, PlatformMetadataCache::new);
+	public static PlatformCache open(Path path) throws IOException {
+		return REGISTRY.acquire(path, PlatformCache::new);
 	}
 
-	private PlatformMetadataCache(Path recordsDirectory) {
-		super(recordsDirectory, "platform metadata");
+	private PlatformCache(Path recordsDirectory) {
+		super(recordsDirectory, "platform cache");
 	}
 
 	/** Returns the cached records for the given sha1 digests, keyed by the requested digest and omitting the missing ones. */
@@ -68,7 +68,7 @@ public class PlatformMetadataCache extends LooseRecordCache<PlatformMetadataCach
 			try {
 				Files.deleteIfExists(recordPath(normalizedHash));
 			} catch (IOException e) {
-				LOGGER.debug("Could not evict platform metadata cache record: {}", normalizedHash, e);
+				LOGGER.debug("Could not evict platform cache record: {}", normalizedHash, e);
 			}
 		}
 	}

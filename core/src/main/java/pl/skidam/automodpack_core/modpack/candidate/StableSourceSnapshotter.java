@@ -18,7 +18,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public final class StableSourceSnapshotter {
@@ -38,41 +38,41 @@ public final class StableSourceSnapshotter {
 	}
 
 	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory,
-			FileMetadataCache fileMetadataCache, ModFileCache modFileCache, Path objectStoreDirectory) throws CandidateBuildException {
-		return snapshot(source, autoExcludeUnnecessary, autoExcludeServerMods, stagingDirectory, fileMetadataCache, modFileCache, objectStoreDirectory, true);
+			FileCache fileCache, ModFileCache modFileCache, Path objectStoreDirectory) throws CandidateBuildException {
+		return snapshot(source, autoExcludeUnnecessary, autoExcludeServerMods, stagingDirectory, fileCache, modFileCache, objectStoreDirectory, true);
 	}
 
 	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory,
-			FileMetadataCache fileMetadataCache, ModFileCache modFileCache, Path objectStoreDirectory, boolean materializeMissing) throws CandidateBuildException {
+			FileCache fileCache, ModFileCache modFileCache, Path objectStoreDirectory, boolean materializeMissing) throws CandidateBuildException {
 		Path staged = null;
 		try {
 			BasicFileAttributes before = attributes(source.sourcePath());
-			FileMetadataCache.FileFingerprint beforeFingerprint = FileMetadataCache.fingerprint(source.sourcePath(), before);
+			FileCache.FileFingerprint beforeFingerprint = FileCache.fingerprint(source.sourcePath(), before);
 			Exclusion exclusion = expectedPathExclusion(source, before, autoExcludeUnnecessary);
 			if (exclusion != null) return new Snapshot(null, exclusion, null);
 
-			String sha1 = fileMetadataCache != null ? fileMetadataCache.getOrComputeHashWithAttributes(source.sourcePath(), before) : HashUtils.getHash(source.sourcePath());
+			String sha1 = fileCache != null ? fileCache.getOrComputeHashWithAttributes(source.sourcePath(), before) : HashUtils.getHash(source.sourcePath());
 			if (sha1 == null) throw new IOException("SHA-1 calculation returned null");
-			if (!beforeFingerprint.equals(FileMetadataCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
+			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 
-			FileInspection.Mod mod = modFileCache == null ? null : modFileCache.getModOrNull(source.sourcePath(), fileMetadataCache);
+			FileInspection.Mod mod = modFileCache == null ? null : modFileCache.getModOrNull(source.sourcePath(), fileCache);
 			exclusion = expectedContentExclusion(source.sourcePath(), autoExcludeServerMods, mod);
 			if (exclusion != null) return new Snapshot(null, exclusion, null);
 			String type = fileType(source.sourcePath(), source.logicalPath(), mod);
 			String murmur = null;
-			if (ModpackContentType.isSourceFetchable(type)) murmur = fileMetadataCache != null ? fileMetadataCache.getOrComputeMurmur(source.sourcePath()) : HashUtils.getCurseforgeMurmurHash(source.sourcePath());
-			if (!beforeFingerprint.equals(FileMetadataCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
+			if (ModpackContentType.isSourceFetchable(type)) murmur = fileCache != null ? fileCache.getOrComputeMurmur(source.sourcePath()) : HashUtils.getCurseforgeMurmurHash(source.sourcePath());
+			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 			GroupManifest.GroupFile file = new GroupManifest.GroupFile(before.size(), type, false, sha1, murmur);
 			if (!materializeMissing) return new Snapshot(file, null, null);
-			if (trustedObject(objectStoreDirectory, sha1, before.size(), fileMetadataCache)) return new Snapshot(file, null, null);
+			if (trustedObject(objectStoreDirectory, sha1, before.size(), fileCache)) return new Snapshot(file, null, null);
 
 			FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
 			String copiedSha1 = copyOperation.copy(source.sourcePath(), staged);
 			FileTrees.forceFile(staged);
-			if (!beforeFingerprint.equals(FileMetadataCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
+			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 			long size = Files.size(staged);
 			if (size != before.size()) throw new IOException("Staged snapshot size does not match stable source size: " + source.sourcePath());
@@ -88,7 +88,7 @@ public final class StableSourceSnapshotter {
 		}
 	}
 
-	private static boolean trustedObject(Path objectStoreDirectory, String sha1, long size, FileMetadataCache cache) {
+	private static boolean trustedObject(Path objectStoreDirectory, String sha1, long size, FileCache cache) {
 		if (objectStoreDirectory == null) return false;
 		Path object;
 		try {

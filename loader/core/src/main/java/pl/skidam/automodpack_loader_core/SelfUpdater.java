@@ -21,7 +21,7 @@ import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
-import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -174,8 +174,8 @@ public class SelfUpdater {
 			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
 			ClientObjectStore.publishOwnership(storage, Set.of(automodpack.SHA1Hash()));
 
-			try (PlatformMetadataCache platformMetadataCache = PlatformMetadataCache.open(storage.platformMetadataDirectory())) {
-				DownloadManager downloadManager = new DownloadManager(0, storage, platformMetadataCache);
+			try (PlatformCache platformCache = PlatformCache.open(storage.platformCacheDirectory())) {
+				DownloadManager downloadManager = new DownloadManager(0, storage, platformCache);
 				ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
 				downloadManager.download(targetJar, automodpack.SHA1Hash(), null, ModpackContentType.MOD,
 						List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),

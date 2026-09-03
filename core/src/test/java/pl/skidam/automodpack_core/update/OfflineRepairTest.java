@@ -179,15 +179,15 @@ class OfflineRepairTest {
 		Path protectedJar = write(storage.modsDirectory().resolve("automodpack.jar"), "self".getBytes(StandardCharsets.UTF_8));
 		write(storage.modsDirectory().resolve("extra.jar"), "extra".getBytes(StandardCharsets.UTF_8));
 		OfflineRepair repair = new OfflineRepair(storage);
-		long fileMetadataBefore = regularFileCount(storage.fileMetadataDirectory());
-		long modMetadataBefore = regularFileCount(storage.modMetadataDirectory());
+		long fileCacheBefore = regularFileCount(storage.fileCacheDirectory());
+		long modCacheBefore = regularFileCount(storage.modCacheDirectory());
 
 		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(target, Set.of(), protectedJar));
 
 		assertEquals(List.of("mods/extra.jar"), prepared.unownedModPaths());
 		assertTrue(prepared.healthy());
-		assertEquals(fileMetadataBefore, regularFileCount(storage.fileMetadataDirectory()));
-		assertEquals(modMetadataBefore, regularFileCount(storage.modMetadataDirectory()));
+		assertEquals(fileCacheBefore, regularFileCount(storage.fileCacheDirectory()));
+		assertEquals(modCacheBefore, regularFileCount(storage.modCacheDirectory()));
 	}
 
 	@Test

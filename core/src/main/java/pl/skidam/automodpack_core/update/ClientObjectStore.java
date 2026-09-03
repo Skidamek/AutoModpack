@@ -24,7 +24,7 @@ import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Measures and explicitly maintains the client shared object store. */
 public final class ClientObjectStore {
@@ -145,7 +145,7 @@ public final class ClientObjectStore {
 		Objects.requireNonNull(storage, "storage");
 		ExpectedSizes references = collectReferences(storage, null);
 		TreeSet<String> existing = new TreeSet<>();
-		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			for (var entry : references.sizes().entrySet()) {
 				Path object = storage.objectFile(entry.getKey());
 				if (!Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) continue;
@@ -265,7 +265,7 @@ public final class ClientObjectStore {
 	}
 
 	private static void collectOverlays(ClientStorage storage, ExpectedSizes retained) throws IOException {
-		try (FileMetadataCache metadata = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache metadata = FileCache.open(storage.fileCacheDirectory())) {
 			for (Path modpack : childDirectories(storage.overlaysDirectory(), "client overlays")) {
 				String modpackId = modpack.getFileName().toString();
 				requireModpackId(modpackId, "client overlay directory");
@@ -359,7 +359,7 @@ public final class ClientObjectStore {
 		long validBytes = 0;
 		long missingCount = 0;
 		long invalidCount = 0;
-		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			for (var entry : references.sizes().entrySet()) {
 				String hash = entry.getKey();
 				long expectedSize = entry.getValue();
@@ -385,8 +385,8 @@ public final class ClientObjectStore {
 	}
 
 	private static ObjectStoreMaintenance.FileTotals metadataTotals(ClientStorage storage) throws IOException {
-		ObjectStoreMaintenance.FileTotals total = fileTotals(regularFiles(storage.fileMetadataDirectory(), "client file metadata"));
-		total = total.plus(fileTotals(regularFiles(storage.modMetadataDirectory(), "client mod metadata")));
+		ObjectStoreMaintenance.FileTotals total = fileTotals(regularFiles(storage.fileCacheDirectory(), "client file cache"));
+		total = total.plus(fileTotals(regularFiles(storage.modCacheDirectory(), "client mod metadata")));
 		total = total.plus(fileTotals(regularFiles(storage.packsDirectory(), "client pack metadata")));
 		for (Path file : List.of(storage.stateFile(), storage.selectionFile(), storage.clientConfigFile(), storage.restartLoopStateFile(), storage.modpackContentTempFile()))
 			if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) total = total.plus(fileTotals(List.of(FileTrees.requireRegularFile(file, "client metadata"))));

@@ -39,7 +39,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Every structural and precondition check a persisted transaction must pass before its plan may mutate live state. */
 public final class UpdateTransactionValidator {
@@ -50,7 +50,7 @@ public final class UpdateTransactionValidator {
 	}
 
 	/** Throws when the transaction is not structurally valid; wraps undiagnosed failures with a common message. */
-	void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileMetadataCache fileCache) throws IOException {
+	void validate(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache) throws IOException {
 		try {
 			validateUnchecked(transaction, selectedTarget, verifyMutableInputs, fileCache);
 		} catch (IOException e) {
@@ -75,7 +75,7 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileMetadataCache fileCache) throws IOException {
+	void validateUnchecked(UpdateTransaction transaction, SelectedModpackTarget selectedTarget, boolean verifyMutableInputs, FileCache fileCache) throws IOException {
 		if (transaction == null) throw new IOException("Transaction is missing");
 		if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported transaction schema");
 		try {
@@ -489,7 +489,7 @@ public final class UpdateTransactionValidator {
 		return active.ownershipLedger();
 	}
 
-	private void validateInstall(Operation operation, ProjectedFile projected, FileMetadataCache fileCache) throws IOException {
+	private void validateInstall(Operation operation, ProjectedFile projected, FileCache fileCache) throws IOException {
 		validateHash(operation.expectedObjectHash(), "install SHA-1");
 		if (operation.expectedExistingHash() != null) validateHash(operation.expectedExistingHash(), "install expected SHA-1");
 		if (operation.expectedSize() < 0 || (projected != null && (!projected.present() || operation.expectedSize() != projected.expectedSize()

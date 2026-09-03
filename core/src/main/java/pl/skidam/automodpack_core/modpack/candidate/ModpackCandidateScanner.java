@@ -11,7 +11,7 @@ import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public final class ModpackCandidateScanner {
@@ -165,7 +165,7 @@ public final class ModpackCandidateScanner {
 		StagedObject object = null;
 		if (candidate != null) {
 			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
-					request.stagingDirectory(), request.fileMetadataCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
+					request.stagingDirectory(), request.fileCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
 			if (snapshot.exclusion() == null) {
 				selected = candidate;
 				file = snapshot.file();
@@ -328,7 +328,7 @@ public final class ModpackCandidateScanner {
 			Path stagingDirectory,
 			Executor executor,
 			Path objectStoreDirectory,
-			FileMetadataCache fileMetadataCache,
+			FileCache fileCache,
 			ModFileCache modFileCache,
 			boolean materializeMissingObjects) {
 		public Request(String modpackId, String modpackName, String automodpackVersion, String loader, String loaderVersion, String mcVersion, Path serverRoot,

@@ -225,7 +225,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (cacheLookupStarted) return;
 		cacheLookupStarted = true;
 		DownloadClient.NET_EXECUTOR.execute(() -> {
-			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, ClientStorage.open(GameDirectory.current()).platformMetadataDirectory());
+			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, ClientStorage.open(GameDirectory.current()).platformCacheDirectory());
 			this.minecraft.execute(() -> {
 				if (closed || referenced == changes) return;
 				changes = referenced;

@@ -17,7 +17,7 @@ import java.util.stream.Stream;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** A validated, per-operation view of one editable overlay and its tombstones. */
 public record ClientOverlaySnapshot(Map<String, UpdatePlan.FileState> files, String digest) {
@@ -27,7 +27,7 @@ public record ClientOverlaySnapshot(Map<String, UpdatePlan.FileState> files, Str
 		if (!HashUtils.isCanonicalSha1(digest)) throw new IllegalArgumentException("Overlay digest is invalid");
 	}
 
-	public static ClientOverlaySnapshot capture(ClientStorage storage, String modpackId, FileMetadataCache cache) throws IOException {
+	public static ClientOverlaySnapshot capture(ClientStorage storage, String modpackId, FileCache cache) throws IOException {
 		Path root = storage.overlayDirectory(modpackId);
 		var overlayState = storage.readOverlayState(modpackId);
 		Map<String, UpdatePlan.FileState> files = new HashMap<>();

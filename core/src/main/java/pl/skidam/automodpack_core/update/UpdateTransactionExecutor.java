@@ -36,13 +36,13 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Validates and applies the one journaled client operation plan. */
 public final class UpdateTransactionExecutor {
 	private final Context context;
 	private final UpdateTransactionValidator validator;
-	private FileMetadataCache fileCache;
+	private FileCache fileCache;
 
 	@FunctionalInterface
 	public interface CommitAction {
@@ -575,12 +575,12 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private interface FileCacheWork<T> {
-		T run(FileMetadataCache cache) throws IOException;
+		T run(FileCache cache) throws IOException;
 	}
 
 	private <T> T withFileCache(FileCacheWork<T> work) throws IOException {
 		if (fileCache != null) return work.run(fileCache);
-		try (FileMetadataCache cache = FileMetadataCache.open(context.storage().fileMetadataDirectory())) {
+		try (FileCache cache = FileCache.open(context.storage().fileCacheDirectory())) {
 			fileCache = cache;
 			try {
 				return work.run(cache);

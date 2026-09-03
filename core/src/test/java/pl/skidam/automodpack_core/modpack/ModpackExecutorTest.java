@@ -157,8 +157,8 @@ class ModpackExecutorTest {
 		try {
 			assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview());
 			assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview());
-			assertTrue(Files.isDirectory(dataRoot.resolve("file-metadata")));
-			assertTrue(Files.isDirectory(dataRoot.resolve("mod-metadata")));
+			assertTrue(Files.isDirectory(dataRoot.resolve("file-cache")));
+			assertTrue(Files.isDirectory(dataRoot.resolve("mod-cache")));
 		} finally {
 			executor.stop();
 			snapshot.restore();

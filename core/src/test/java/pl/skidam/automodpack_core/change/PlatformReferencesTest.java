@@ -15,7 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
-import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 class PlatformReferencesTest {
 	private static final String SHA1 = "1111111111111111111111111111111111111111";
@@ -27,7 +27,7 @@ class PlatformReferencesTest {
 
 	@Test
 	void attachesCachedPagesWhenACatalogueOccurrenceHasOnlyAnAfterHash() throws Exception {
-		try (PlatformMetadataCache cache = PlatformMetadataCache.open(temporaryDirectory)) {
+		try (PlatformCache cache = PlatformCache.open(temporaryDirectory)) {
 			cache.putModrinth(SHA1, new ModrinthAPI("example", null, "https://cdn.modrinth.com/data/example/file.jar", "1", "example.jar", 1, "release", SHA1), MODRINTH_PAGE);
 			cache.putCurseForge(SHA1, new CurseForgeAPI(null, "https://edge.forgecdn.net/file.jar", "1", "example.jar", "1", "release", "1", SHA1, 12, CURSEFORGE_PAGE));
 			ChangeSet referenced = PlatformReferences.withCachedReferences(catalogue(), cache);
@@ -37,7 +37,7 @@ class PlatformReferencesTest {
 
 	@Test
 	void pathLookupSurvivesCatalogueOccurrencesWithANullBeforeHash() throws Exception {
-		try (PlatformMetadataCache cache = PlatformMetadataCache.open(temporaryDirectory)) {
+		try (PlatformCache cache = PlatformCache.open(temporaryDirectory)) {
 			cache.putModrinth(SHA1, new ModrinthAPI("example", null, "https://cdn.modrinth.com/data/example/file.jar", "1", "example.jar", 1, "release", SHA1), MODRINTH_PAGE);
 		}
 		ChangeSet referenced = PlatformReferences.withCachedReferences(catalogue(), temporaryDirectory);

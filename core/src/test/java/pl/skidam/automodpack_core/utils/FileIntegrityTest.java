@@ -11,7 +11,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class FileIntegrityTest {
 	@TempDir
@@ -23,7 +23,7 @@ class FileIntegrityTest {
 		long size = Files.size(file);
 		String hash = HashUtils.getHash(file);
 
-		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+		try (FileCache cache = FileCache.open(temporaryDirectory.resolve("file-cache"))) {
 			assertTrue(FileIntegrity.matches(file, size, hash, cache));
 			assertEquals(hash, FileIntegrity.identityHash(file, cache));
 			assertTrue(FileIntegrity.matches(file, size, hash, cache));

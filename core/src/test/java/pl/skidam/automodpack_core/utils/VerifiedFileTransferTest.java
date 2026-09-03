@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class VerifiedFileTransferTest {
 	@TempDir
@@ -95,7 +95,7 @@ class VerifiedFileTransferTest {
 		Path projection = tempDir.resolve("active/video.mp4");
 		String hash = HashUtils.getHash(object);
 		long size = Files.size(object);
-		try (FileMetadataCache cache = FileMetadataCache.open(tempDir.resolve("file-metadata"))) {
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
 			cache.overwriteCache(object, hash);
 			assertTrue(VerifiedFileTransfer.linkAtomic(object, projection, size, hash, cache));
 			assertTrue(Files.isSameFile(object, projection));

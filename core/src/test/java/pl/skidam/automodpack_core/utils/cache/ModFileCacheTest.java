@@ -26,8 +26,8 @@ class ModFileCacheTest {
 		writeMod(first);
 		Files.copy(first, second);
 
-		try (FileMetadataCache hashCache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"));
-				ModFileCache modCache = ModFileCache.open(temporaryDirectory.resolve("mod-metadata"))) {
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache"));
+				ModFileCache modCache = ModFileCache.open(temporaryDirectory.resolve("mod-cache"))) {
 			FileInspection.Mod firstMod = modCache.getOrComputeMod(first, hashCache);
 			FileInspection.Mod secondMod = modCache.getOrComputeMod(second, hashCache);
 
@@ -47,8 +47,8 @@ class ModFileCacheTest {
 		Files.createDirectories(contentAddressedObject.getParent());
 		Files.copy(source, contentAddressedObject);
 
-		try (FileMetadataCache hashCache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"));
-				ModFileCache modCache = ModFileCache.open(temporaryDirectory.resolve("mod-metadata"))) {
+		try (FileCache hashCache = FileCache.open(temporaryDirectory.resolve("file-cache"));
+				ModFileCache modCache = ModFileCache.open(temporaryDirectory.resolve("mod-cache"))) {
 			FileInspection.Mod mod = modCache.getOrComputeMod(contentAddressedObject, hashCache);
 
 			assertNotNull(mod);

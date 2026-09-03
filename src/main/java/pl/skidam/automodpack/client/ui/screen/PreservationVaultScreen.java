@@ -31,7 +31,7 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
-import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
@@ -225,7 +225,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	}
 
 	private static List<PlatformReferences.Page> cachedPlatformPages(String sha1) {
-		try (PlatformMetadataCache cache = PlatformMetadataCache.open(ClientStorage.open(GameDirectory.current()).platformMetadataDirectory())) {
+		try (PlatformCache cache = PlatformCache.open(ClientStorage.open(GameDirectory.current()).platformCacheDirectory())) {
 			return PlatformReferences.cachedPages(cache, sha1);
 		} catch (IOException | RuntimeException e) {
 			return List.of();

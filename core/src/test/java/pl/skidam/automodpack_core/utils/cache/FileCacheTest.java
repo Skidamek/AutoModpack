@@ -21,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
-class FileMetadataCacheTest {
+class FileCacheTest {
 	@TempDir
 	Path temporaryDirectory;
 
@@ -38,7 +38,7 @@ class FileMetadataCacheTest {
 		assumeTrue(!storedFirstTime.equals(storedSecondTime), "The filesystem does not expose sub-millisecond timestamps");
 		Files.setLastModifiedTime(file, firstTime);
 
-		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+		try (FileCache cache = FileCache.open(temporaryDirectory.resolve("file-cache"))) {
 			String firstHash = cache.getOrComputeHash(file);
 			Files.writeString(file, "two", StandardCharsets.UTF_8);
 			Files.setLastModifiedTime(file, secondTime);
@@ -53,13 +53,13 @@ class FileMetadataCacheTest {
 		Files.writeString(file, "persisted", StandardCharsets.UTF_8);
 		FileTime originalLastModifiedTime = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
 		Files.setLastModifiedTime(file, originalLastModifiedTime);
-		Path cacheDirectory = temporaryDirectory.resolve("file-metadata");
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
 		String expectedHash;
 
-		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
 			expectedHash = cache.getOrComputeHash(file);
 		}
-		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
 			assertEquals(expectedHash, cache.getOrComputeHash(file));
 		}
 	}
@@ -94,7 +94,7 @@ class FileMetadataCacheTest {
 		before = WindowsFileStat.read(file);
 		assumeTrue(before != null, "Windows NTFS stat native is unavailable");
 
-		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+		try (FileCache cache = FileCache.open(temporaryDirectory.resolve("file-cache"))) {
 			String firstHash = cache.getOrComputeHash(file);
 			Files.writeString(file, "other", StandardCharsets.UTF_8);
 			Files.setLastModifiedTime(file, originalLastModifiedTime);
@@ -118,7 +118,7 @@ class FileMetadataCacheTest {
 			return;
 		}
 
-		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+		try (FileCache cache = FileCache.open(temporaryDirectory.resolve("file-cache"))) {
 			String firstHash = cache.getOrComputeHash(file);
 			Files.writeString(file, "other", StandardCharsets.UTF_8);
 			Files.setLastModifiedTime(file, originalLastModifiedTime);
@@ -148,7 +148,7 @@ class FileMetadataCacheTest {
 			return;
 		}
 
-		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+		try (FileCache cache = FileCache.open(temporaryDirectory.resolve("file-cache"))) {
 			String originalHash = cache.getOrComputeHash(object);
 			Files.writeString(projection, "other", StandardCharsets.UTF_8);
 			Files.setLastModifiedTime(projection, originalLastModifiedTime);
@@ -164,10 +164,10 @@ class FileMetadataCacheTest {
 		Files.writeString(file, "first", StandardCharsets.UTF_8);
 		FileTime originalLastModifiedTime = FileTime.from(Instant.ofEpochSecond(1_700_000_000L));
 		Files.setLastModifiedTime(file, originalLastModifiedTime);
-		Path cacheDirectory = temporaryDirectory.resolve("file-metadata");
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
 		String expectedHash;
 
-		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
 			expectedHash = cache.getOrComputeHash(file);
 		}
 		Path record;
@@ -176,7 +176,7 @@ class FileMetadataCacheTest {
 		}
 		FileTime sentinel = FileTime.from(Instant.ofEpochSecond(1_600_000_000L));
 		Files.setLastModifiedTime(record, sentinel);
-		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
 			assertEquals(expectedHash, cache.getOrComputeHash(file));
 			assertEquals(sentinel, Files.getLastModifiedTime(record));
 		}
@@ -186,14 +186,14 @@ class FileMetadataCacheTest {
 	void murmurIsComputedOnceAndReusedForAnUnchangedFile() throws Exception {
 		Path file = temporaryDirectory.resolve("pack.zip");
 		Files.writeString(file, "resource pack", StandardCharsets.UTF_8);
-		Path cacheDirectory = temporaryDirectory.resolve("file-metadata");
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
 		String murmur;
-		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
 			cache.getOrComputeHash(file);
 			murmur = cache.getOrComputeMurmur(file);
 			assertEquals(murmur, cache.getOrComputeMurmur(file));
 		}
-		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
 			assertEquals(murmur, cache.getOrComputeMurmur(file));
 		}
 	}
@@ -203,7 +203,7 @@ class FileMetadataCacheTest {
 		Path object = temporaryDirectory.resolve("object.bin");
 		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
 		String sha1;
-		try (FileMetadataCache cache = FileMetadataCache.open(temporaryDirectory.resolve("file-metadata"))) {
+		try (FileCache cache = FileCache.open(temporaryDirectory.resolve("file-cache"))) {
 			sha1 = cache.getOrComputeHash(object);
 			assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
 			Files.writeString(object, "other-bytes", StandardCharsets.UTF_8);
@@ -215,8 +215,8 @@ class FileMetadataCacheTest {
 	void namedObjectTripwireTrustsChangeTimeBumpsFromOurOwnHardlinks() throws Exception {
 		Path object = temporaryDirectory.resolve("object.bin");
 		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
-		Path cacheDirectory = temporaryDirectory.resolve("file-metadata");
-		try (FileMetadataCache cache = FileMetadataCache.open(cacheDirectory)) {
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
 			String sha1 = cache.getOrComputeHash(object);
 			assertTrue(cache.matchesImmutable(object, Files.size(object), sha1));
 			FileTime recordStamp = recordStamp(cacheDirectory, sha1);
@@ -244,31 +244,31 @@ class FileMetadataCacheTest {
 	void gitRacyMtimeIsUntrustedForWorktreeEvenWhenChangeTimeMatches() {
 		long validatedAt = 1_700_000_000L * 1_000_000_000L;
 		long futureModified = validatedAt + 2 * 1_000_000_000L;
-		FileMetadataCache.FileFingerprint racy = new FileMetadataCache.FileFingerprint(futureModified, 1L, 2L, 4L, "key");
-		FileMetadataCache.CachedFile record = new FileMetadataCache.CachedFile("path", "hash", futureModified, 1L, 2L, 4L, "key", validatedAt);
+		FileCache.FileFingerprint racy = new FileCache.FileFingerprint(futureModified, 1L, 2L, 4L, "key");
+		FileCache.CachedFile record = new FileCache.CachedFile("path", "hash", futureModified, 1L, 2L, 4L, "key", validatedAt);
 
-		assertTrue(FileMetadataCache.statsMatch(record, racy));
-		assertFalse(FileMetadataCache.isCacheValid(record, racy));
+		assertTrue(FileCache.statsMatch(record, racy));
+		assertFalse(FileCache.isCacheValid(record, racy));
 	}
 
 	@Test
 	void worktreeCacheTrustsMtimeOlderThanTheRecord() {
 		long validatedAt = 1_700_000_000L * 1_000_000_000L;
 		long olderModified = validatedAt - 1;
-		FileMetadataCache.FileFingerprint fingerprint = new FileMetadataCache.FileFingerprint(olderModified, 1L, Long.MIN_VALUE, 4L, "key");
-		FileMetadataCache.CachedFile record = new FileMetadataCache.CachedFile("path", "hash", olderModified, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
+		FileCache.FileFingerprint fingerprint = new FileCache.FileFingerprint(olderModified, 1L, Long.MIN_VALUE, 4L, "key");
+		FileCache.CachedFile record = new FileCache.CachedFile("path", "hash", olderModified, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
 
-		assertTrue(FileMetadataCache.statsMatch(record, fingerprint));
-		assertTrue(FileMetadataCache.isCacheValid(record, fingerprint));
+		assertTrue(FileCache.statsMatch(record, fingerprint));
+		assertTrue(FileCache.isCacheValid(record, fingerprint));
 	}
 
 	@Test
 	void immutableTripwireUsesStatMatchEvenWhenWorktreeCacheIsRacy() {
 		long validatedAt = 1_700_000_000L * 1_000_000_000L;
-		FileMetadataCache.FileFingerprint racy = new FileMetadataCache.FileFingerprint(validatedAt, 1L, Long.MIN_VALUE, 4L, "key");
-		FileMetadataCache.CachedFile record = new FileMetadataCache.CachedFile("path", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", validatedAt, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
+		FileCache.FileFingerprint racy = new FileCache.FileFingerprint(validatedAt, 1L, Long.MIN_VALUE, 4L, "key");
+		FileCache.CachedFile record = new FileCache.CachedFile("path", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", validatedAt, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
 
-		assertTrue(FileMetadataCache.statsMatch(record, racy));
-		assertFalse(FileMetadataCache.isCacheValid(record, racy));
+		assertTrue(FileCache.statsMatch(record, racy));
+		assertFalse(FileCache.isCacheValid(record, racy));
 	}
 }

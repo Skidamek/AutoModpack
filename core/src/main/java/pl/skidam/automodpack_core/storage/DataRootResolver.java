@@ -28,16 +28,16 @@ public final class DataRootResolver {
 			return DataRootResolver.objectFile(objectsDirectory(), sha1);
 		}
 
-		public Path fileMetadataDirectory() {
-			return root.resolve("file-metadata").normalize();
+		public Path fileCacheDirectory() {
+			return root.resolve("file-cache").normalize();
 		}
 
-		public Path modMetadataDirectory() {
-			return root.resolve("mod-metadata").normalize();
+		public Path modCacheDirectory() {
+			return root.resolve("mod-cache").normalize();
 		}
 
-		public Path platformMetadataDirectory() {
-			return root.resolve("platform-metadata").normalize();
+		public Path platformCacheDirectory() {
+			return root.resolve("platform-cache").normalize();
 		}
 
 		public Path packsDirectory() {

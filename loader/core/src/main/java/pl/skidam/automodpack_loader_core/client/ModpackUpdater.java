@@ -50,9 +50,9 @@ import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
-import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 import pl.skidam.automodpack_loader_core.DetachedUpdateHelper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.UpdateTransactionSupport;
@@ -81,7 +81,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private final AtomicReference<ConfirmationState> confirmationState = new AtomicReference<>(ConfirmationState.INACTIVE);
 	private final UpdateLoopDetector updateLoopDetector;
 	private final ClientStorage storage;
-	private final PlatformMetadataCache platformMetadataCache;
+	private final PlatformCache platformCache;
 	private final ClientUpdatePlanBuilder planBuilder;
 	private final SourceCatalogue sourceCatalogue;
 	private final RemovalLifecycle removalLifecycle;
@@ -132,7 +132,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (projectionPresent && selectedTarget.manifest().modpackId().equals(active.modpackId)
 				&& Objects.equals(selectedTarget.expectedPriorIntent(), selectedTarget.selection().intent()))
 			throw new IllegalArgumentException("Installed modpack target and group selection are already active");
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			acquireTargetObjects(selectedTarget.flatTarget(), cache, true);
 			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
@@ -167,7 +167,7 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Returns whether the selected installed target needs an authenticated object-transfer session. */
 	public boolean requiresSelectedTargetDownload() throws IOException {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Installed modpack target is unavailable");
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			planBuilder.populateStoreFromCachedLocations(selectedTarget.flatTarget(), cache);
 			return !missingTargetObjects(selectedTarget.flatTarget(), cache).isEmpty();
 		}
@@ -286,20 +286,20 @@ public class ModpackUpdater implements AutoCloseable {
 		this.serverModpackContent = selectedTarget == null ? null : selectedTarget.flatTarget();
 		this.connectionInfo = connectionInfo;
 		this.storage = Objects.requireNonNull(storage, "storage");
-		this.platformMetadataCache = openPlatformMetadataCache(storage);
+		this.platformCache = openPlatformCache(storage);
 		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, MODPACK_LOADER, LOADER);
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
-		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformMetadataCache);
+		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformCache);
 		this.removalLifecycle = new RemovalLifecycle(this.storage, this.planBuilder, changelogs, this.updateLoopDetector, () -> fullDownload);
 		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);
 		this.downloadClient = downloadClient;
 	}
 
-	private static PlatformMetadataCache openPlatformMetadataCache(ClientStorage storage) {
+	private static PlatformCache openPlatformCache(ClientStorage storage) {
 		try {
-			return PlatformMetadataCache.open(storage.platformMetadataDirectory());
+			return PlatformCache.open(storage.platformCacheDirectory());
 		} catch (IOException e) {
-			throw new IllegalStateException("Cannot open platform metadata cache for " + storage.gameDirectory(), e);
+			throw new IllegalStateException("Cannot open platform cache for " + storage.gameDirectory(), e);
 		}
 	}
 
@@ -359,7 +359,7 @@ public class ModpackUpdater implements AutoCloseable {
 		Path loadedMod = THIS_MOD_JAR == null ? null : THIS_MOD_JAR.toAbsolutePath().normalize();
 		Map<String, UpdatePlan.FileState> observed = new TreeMap<>();
 		Set<String> listedPins = PinnedMods.index(clientConfig == null ? List.of() : clientConfig.pinnedModIds);
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
 			for (Path path : stream.toList()) {
 				if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				Path normalized = path.toAbsolutePath().normalize();
@@ -399,7 +399,7 @@ public class ModpackUpdater implements AutoCloseable {
 			firstConnection = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).isEmpty();
 			consentedLocalModFiles = Map.of();
 			if (firstConnection && !applyFirstInstall) {
-				try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+				try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 					acquireTargetObjects(selectedTarget.flatTarget(), cache, false);
 				}
 				LOGGER.info("Launch apply is waiting for first-install review");
@@ -452,13 +452,13 @@ public class ModpackUpdater implements AutoCloseable {
 		return new LinkedHashSet<>(unique.values());
 	}
 
-	private Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingTargetObjects(ModpackJsons.ModpackContentFields target, FileMetadataCache cache) {
+	private Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingTargetObjects(ModpackJsons.ModpackContentFields target, FileCache cache) {
 		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items = target.list == null ? List.of() : target.list;
 		return ModpackUtils.identifyUncachedFiles(uniqueObjects(items), cache, storage);
 	}
 
 	/** Acquires the complete selected target so every caller uses target state, never a stale generation diff, as its download authority. */
-	private int acquireTargetObjects(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, boolean playerFacing) throws Exception {
+	private int acquireTargetObjects(ModpackJsons.ModpackContentFields target, FileCache cache, boolean playerFacing) throws Exception {
 		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items = target.list == null ? List.of() : target.list;
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> targetObjects = uniqueObjects(items);
 		reserveObjects(targetObjects.stream().map(item -> item.sha1).collect(Collectors.toSet()));
@@ -510,7 +510,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return true;
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(false), cache, modCache);
 			ModpackJsons.ModpackContentFields installed = storedTarget();
@@ -672,7 +672,7 @@ public class ModpackUpdater implements AutoCloseable {
 			else LOGGER.info("Downloading from the AutoModpack host without waiting for CurseForge/Modrinth lookup");
 		}
 
-		downloadManager = new DownloadManager(totalBytesToDownload, storage, platformMetadataCache);
+		downloadManager = new DownloadManager(totalBytesToDownload, storage, platformCache);
 		if (playerFacing) ScreenManager.download(downloadManager, getModpackName());
 		downloadManager.attachDownloadClient(downloadClient);
 
@@ -740,7 +740,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private ClientUpdatePlanBuilder.PreparedPlan prepareSelectedPlan(boolean playerFacing) throws Exception {
 		sourceCatalogue.startSourceFetch();
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			requireLiveConnection();
 			acquireTargetObjects(selectedTarget.flatTarget(), cache, playerFacing);
 			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
@@ -856,7 +856,7 @@ public class ModpackUpdater implements AutoCloseable {
 			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest(), prepared.expectedClientConfig());
 			if (execution.replanRequired() && !replanned) {
 				ensureSelectedModpackUnchanged(prepared);
-				try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+				try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 					planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 					prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 				}
@@ -939,7 +939,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 		if (closed.compareAndSet(false, true)) {
 			if (downloadClient != null) downloadClient.close();
-			platformMetadataCache.close();
+			platformCache.close();
 		}
 	}
 

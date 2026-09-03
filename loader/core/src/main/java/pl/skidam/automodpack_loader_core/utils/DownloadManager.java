@@ -24,8 +24,8 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
-import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 public class DownloadManager {
 
@@ -46,7 +46,7 @@ public class DownloadManager {
 
 	private final HttpFileDownloader httpDownloader = new HttpFileDownloader();
 	private DownloadClient downloadClient = null;
-	private final PlatformMetadataCache platformMetadataCache;
+	private final PlatformCache platformCache;
 
 	private volatile boolean cancelled = false;
 
@@ -74,13 +74,13 @@ public class DownloadManager {
 	private final Speedometer speedometer = new Speedometer();
 	private final ClientStorage storage;
 
-	public DownloadManager(long bytesToDownload, ClientStorage storage, PlatformMetadataCache platformMetadataCache) {
+	public DownloadManager(long bytesToDownload, ClientStorage storage, PlatformCache platformCache) {
 		this.totalBytesToDownload.set(bytesToDownload);
 		this.speedometer.setExpectedBytes(bytesToDownload);
 		this.storage = Objects.requireNonNull(storage, "storage");
 		this.downloadExecutor = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS,
 				new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
-		this.platformMetadataCache = Objects.requireNonNull(platformMetadataCache, "platformMetadataCache");
+		this.platformCache = Objects.requireNonNull(platformCache, "platformCache");
 	}
 
 	public void attachDownloadClient(DownloadClient downloadClient) {
@@ -280,7 +280,7 @@ public class DownloadManager {
 		boolean success = false;
 		boolean interrupted = false;
 
-		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			if (FileIntegrity.matchesNamed(storeFile, task.fileSize, hashPathPair.hash(), cache)) {
 				// CACHE HIT
 				totalBytesDownloaded.addAndGet(task.fileSize);
@@ -309,7 +309,7 @@ public class DownloadManager {
 		}
 	}
 
-	private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path storeFile, FileMetadataCache cache) throws InterruptedException {
+	private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path storeFile, FileCache cache) throws InterruptedException {
 		refreshDeadLinkSources(hashPathPair.hash(), task);
 		int numberOfIndexes = task.sources.size();
 		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
@@ -386,7 +386,7 @@ public class DownloadManager {
 	private void markDeadPlatformLink(String sha1, QueuedDownload task) {
 		String normalizedSha1 = sha1.toLowerCase(Locale.ROOT);
 		synchronized (metadataRefetchLock) {
-			platformMetadataCache.evict(normalizedSha1);
+			platformCache.evict(normalizedSha1);
 			if (!refetchedSha1s.add(normalizedSha1)) return;
 			pendingMetadataRefetch.put(normalizedSha1, new DeadLink(task.murmur, task.fileType));
 			task.needsMetadataRefetch = true;
@@ -425,7 +425,7 @@ public class DownloadManager {
 			String sha1 = info.SHA1Hash().toLowerCase(Locale.ROOT);
 			DeadLink deadLink = batch.get(sha1);
 			String mainPageUrl = deadLink == null ? null : ModrinthAPI.getMainPageUrl(info.modrinthID(), deadLink.fileType());
-			platformMetadataCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
+			platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
 			fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
 		}
 		Map<String, String> murmurs = new HashMap<>();
@@ -434,7 +434,7 @@ public class DownloadManager {
 			List<CurseForgeAPI> curseForgeInfos = CurseForgeAPI.getModInfosFromFingerPrints(murmurs);
 			if (curseForgeInfos != null) for (CurseForgeAPI info : curseForgeInfos) {
 				String sha1 = info.sha1Hash().toLowerCase(Locale.ROOT);
-				platformMetadataCache.putCurseForge(info.sha1Hash(), info);
+				platformCache.putCurseForge(info.sha1Hash(), info);
 				fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.CURSEFORGE));
 			}
 		}

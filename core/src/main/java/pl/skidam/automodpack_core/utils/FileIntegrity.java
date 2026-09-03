@@ -5,7 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Whether a regular file is the expected bytes. Callers name the question; this module owns cache vs
@@ -18,7 +18,7 @@ public final class FileIntegrity {
 		return matches(file, expectedSize, expectedSha1, null);
 	}
 
-	public static boolean matches(Path file, long expectedSize, String expectedSha1, FileMetadataCache cache) {
+	public static boolean matches(Path file, long expectedSize, String expectedSha1, FileCache cache) {
 		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
 		try {
 			if (Files.size(file) != expectedSize) return false;
@@ -38,7 +38,7 @@ public final class FileIntegrity {
 	 * Path-keyed identity hash of an existing file. When {@code cache} is present this is a Git-stat
 	 * lookup; when it is {@code null} the current bytes are hashed.
 	 */
-	public static String identityHash(Path file, FileMetadataCache cache) {
+	public static String identityHash(Path file, FileCache cache) {
 		if (cache != null) return cache.getHashOrNull(file);
 		return HashUtils.getHash(file);
 	}
@@ -48,7 +48,7 @@ public final class FileIntegrity {
 	 * Git-stat tripwire, rehashing only when that fingerprint is disturbed. Without a cache, a
 	 * regular file of the advertised size.
 	 */
-	public static boolean matchesNamed(Path file, long expectedSize, String expectedSha1, FileMetadataCache cache) {
+	public static boolean matchesNamed(Path file, long expectedSize, String expectedSha1, FileCache cache) {
 		if (!HashUtils.isSha1(expectedSha1) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
 		try {
 			if (Files.size(file) != expectedSize) return false;

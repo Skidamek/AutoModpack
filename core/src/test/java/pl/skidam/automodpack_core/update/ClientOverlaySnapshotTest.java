@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.storage.TestDataRoot;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class ClientOverlaySnapshotTest {
 	@TempDir
@@ -39,18 +39,18 @@ class ClientOverlaySnapshotTest {
 	}
 
 	@Test
-	void snapshotReusesMetadataCacheAndPreservesDigestSemantics() throws Exception {
+	void snapshotReusesFileCacheAndPreservesDigestSemantics() throws Exception {
 		ClientStorage storage = storage();
 		Path overlay = storage.overlayFile("abcdefg", "config/example.txt");
 		Files.createDirectories(overlay.getParent());
 		Files.writeString(overlay, "overlay", StandardCharsets.UTF_8);
 		storage.writeOverlayState("abcdefg", Set.of("config/deleted.txt"));
 
-		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			ClientOverlaySnapshot first = storage.overlaySnapshot("abcdefg", cache);
-			Map<Path, BasicFileAttributes> metadataBefore = metadataRecords(storage.fileMetadataDirectory());
+			Map<Path, BasicFileAttributes> metadataBefore = metadataRecords(storage.fileCacheDirectory());
 			ClientOverlaySnapshot second = storage.overlaySnapshot("abcdefg", cache);
-			Map<Path, BasicFileAttributes> metadataAfter = metadataRecords(storage.fileMetadataDirectory());
+			Map<Path, BasicFileAttributes> metadataAfter = metadataRecords(storage.fileCacheDirectory());
 
 			assertEquals(first, second);
 			assertEquals(first.digest(), storage.overlayDigest("abcdefg"));
