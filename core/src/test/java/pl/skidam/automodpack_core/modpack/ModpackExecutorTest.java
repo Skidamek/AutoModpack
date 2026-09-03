@@ -47,38 +47,45 @@ class ModpackExecutorTest {
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
 		try {
-			assertInstanceOf(ModpackExecutor.PublishGuardUnsupported.class, executor.publishIfState("0".repeat(40)));
+			assertInstanceOf(ModpackExecutor.PublishGuardUnsupported.class, executor.publishIfContent("0".repeat(40)));
 			ModpackExecutor.PreviewResult preview = executor.preview();
 			ModpackExecutor.PreviewReady ready = assertInstanceOf(ModpackExecutor.PreviewReady.class, preview);
-			assertTrue(Files.notExists(generationRoot.resolve("current.json")));
-			assertTrue(Files.notExists(generationRoot.resolve("records")));
-			assertTrue(Files.notExists(generationRoot.resolve("objects")));
-			assertTrue(Files.notExists(generationRoot.resolve("staging")));
+			assertTrue(Files.notExists(generationRoot.resolve(StoragePaths.SERVER_JOURNAL_FILE.getFileName().toString())));
+			assertTrue(Files.notExists(generationRoot.resolve(StoragePaths.SERVER_PROJECTION_FILE.getFileName().toString())));
+			assertTrue(Files.notExists(generationRoot.resolve(StoragePaths.SERVER_STAGING_DIR.getFileName().toString())));
+			assertTrue(executor.currentDocument().isEmpty());
 
 			ModpackExecutor.PublishResult root = executor.publish();
 			ModpackExecutor.Published publishedRoot = assertInstanceOf(ModpackExecutor.Published.class, root);
-			String rootDigest = publishedRoot.state().candidateStateDigest();
-			var rootRecord = executor.currentRecord().orElseThrow();
-			assertEquals(rootRecord, assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish()).current());
+			assertTrue(publishedRoot.state().parent().isEmpty());
+			String rootToken = publishedRoot.current().contentToken();
+			assertEquals(rootToken, ready.state().contentToken());
+			var rootDocument = executor.currentDocument().orElseThrow();
+			assertEquals(rootDocument, assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish()).current());
+			assertTrue(Files.exists(generationRoot.resolve(StoragePaths.SERVER_JOURNAL_FILE.getFileName().toString())));
+			assertTrue(Files.exists(generationRoot.resolve(StoragePaths.SERVER_PROJECTION_FILE.getFileName().toString())));
 
-			Files.writeString(notes, "pending", StandardCharsets.UTF_8);
-			ModpackExecutor.Published publishedNotes = assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
-			assertEquals("pending", publishedNotes.current().metadata().patchNotes());
-			assertEquals(rootRecord.metadata().generationId(), publishedNotes.current().metadata().parentGenerationId());
-			assertTrue(Files.notExists(notes));
-			assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish());
 			Files.writeString(notes, "pending", StandardCharsets.UTF_8);
 			assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish());
 			assertTrue(Files.exists(notes));
 
 			Files.writeString(source, "two", StandardCharsets.UTF_8);
-			assertInstanceOf(ModpackExecutor.PublishGuardMismatch.class, executor.publishIfState(rootDigest));
+			assertInstanceOf(ModpackExecutor.PublishGuardMismatch.class, executor.publishIfContent(rootToken));
 			assertTrue(Files.exists(notes));
 
-			String nextDigest = assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview()).state().candidateStateDigest();
-			ModpackExecutor.Published changed = assertInstanceOf(ModpackExecutor.Published.class, executor.publishIfState(nextDigest));
-			assertEquals(nextDigest, changed.state().candidateStateDigest());
+			String nextToken = assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview()).state().contentToken();
+			ModpackExecutor.Published changed = assertInstanceOf(ModpackExecutor.Published.class, executor.publishIfContent(nextToken));
+			assertEquals(nextToken, changed.state().contentToken());
+			assertEquals(rootToken, changed.state().parent().orElseThrow().contentToken());
+			assertEquals(nextToken, executor.currentDocument().orElseThrow().contentToken());
 			assertTrue(Files.notExists(notes));
+
+			ModpackExecutor.Reverted reverted = assertInstanceOf(ModpackExecutor.Reverted.class, executor.revert(1, "back to first"));
+			assertEquals(rootToken, reverted.current().contentToken());
+			assertEquals(1, reverted.targetSeq());
+			assertEquals(3, executor.technicalHistory(10).size());
+			assertEquals(rootToken, executor.currentDocument().orElseThrow().contentToken());
+			assertEquals(3, executor.storageReport().journalEntries());
 		} finally {
 			executor.stop();
 			snapshot.restore();
@@ -113,7 +120,7 @@ class ModpackExecutorTest {
 		};
 		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
 		ModpackExecutor executor = new ModpackExecutor(tempDir.resolve("server"), groups, tempDir.resolve("host-generations"),
-				new GenerationStore(tempDir.resolve("host-generations")), scan, creation);
+				new GenerationStore(tempDir.resolve("host-generations"), tempDir.resolve("objects")), scan, creation);
 		var operationExecutor = Executors.newSingleThreadExecutor();
 		try {
 			Future<ModpackExecutor.PublishResult> first = operationExecutor.submit(() -> executor.publish());

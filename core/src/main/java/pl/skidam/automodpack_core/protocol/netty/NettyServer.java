@@ -26,7 +26,6 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
 
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -81,11 +80,6 @@ public class NettyServer {
 	public Optional<Path> getPath(String requestKey) {
 		if (requestKey == null) return Optional.empty();
 		if (requestKey.isEmpty()) return regularPath(paths.get(""));
-		if (requestKey.startsWith(GenerationHistoryIndex.CATALOGUE_REQUEST_PREFIX)) {
-			String stateDigest = requestKey.substring(GenerationHistoryIndex.CATALOGUE_REQUEST_PREFIX.length());
-			if (!HashUtils.isCanonicalSha1(stateDigest)) return Optional.empty();
-			return regularPath(paths.get(GenerationHistoryIndex.catalogueRequestKey(stateDigest)));
-		}
 		if (!HashUtils.isSha1(requestKey)) return Optional.empty();
 
 		return regularPath(paths.get(HashUtils.normalizeSha1(requestKey)));

@@ -75,14 +75,14 @@ final class RestartDecision {
 
 	/** Fingerprint of the applied correction state so two rapid automatic restarts for the same state can be suppressed. */
 	static String stateFingerprint(ClientStorage storage, ApplyResult applyResult) {
-		String generationId;
+		String contentToken;
 		try {
 			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			generationId = state == null ? "none" : state.generationId;
+			contentToken = state == null ? "none" : state.contentToken;
 		} catch (IOException e) {
 			LOGGER.warn("Cannot track rapid modpack restarts because active client state is unavailable", e);
 			return null;
 		}
-		return String.join("\n", storage.activeDirectory().toAbsolutePath().normalize().toString(), generationId, String.join(",", applyResult.reasonIds()));
+		return String.join("\n", storage.activeDirectory().toAbsolutePath().normalize().toString(), contentToken, String.join(",", applyResult.reasonIds()));
 	}
 }

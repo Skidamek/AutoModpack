@@ -6,44 +6,36 @@ import java.util.Set;
 @SuppressWarnings("unused")
 public class GenerationJsons {
 
-	public static class GenerationPointerFields {
-		public int schemaVersion;
-		public String generationId = "";
-	}
-
-	public static class GenerationCheckpointFields {
-		public int schemaVersion;
-		public String boundaryGenerationId = "";
-		public ModpackJsons.CompleteModpackContentFields record = new ModpackJsons.CompleteModpackContentFields();
-		public List<ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields> patchNotesHistory = List.of();
-		public GenerationHistoryIndexFields historyIndex;
-		public List<String> supersededGenerationIds = List.of();
-		public List<String> supersededCatalogueStateDigests = List.of();
-	}
-
-	public static class GenerationHistoryIndexFields {
-		public String modpackId = "";
-		public String currentGenerationId = "";
-		public String compactionBoundaryGenerationId = "";
-		public List<GenerationHistoryIndexEntryFields> entries = List.of();
-	}
-
-	public static class GenerationHistoryIndexEntryFields {
-		public String generationId = "";
-		public String parentGenerationId = "";
+	/** One persisted journal line: the content change a publish made and the policy it served. */
+	public static class JournalEntryFields {
+		public long seq;
+		public String contentToken = "";
+		public String policySha1 = "";
 		public String createdAt = "";
-		public String stateDigest = "";
-		public String rollbackTargetGenerationId = "";
-		public String patchNotes = "";
-		public String patchNotesDigest = "";
-		public int addedFiles;
-		public int modifiedFiles;
-		public int removedFiles;
-		public int metadataOnlyFiles;
-		public int metadataChanges;
-		public String diffDigest = "";
-		public boolean detailsAvailable;
-		public boolean rollbackAvailable;
+		public String notes = "";
+		public long restoreOf = -1;
+		public boolean snapshot;
+		public List<JournalChangeFields> changes = List.of();
+	}
+
+	public static class JournalChangeFields {
+		public String path = "";
+		public String fromSha1 = "";
+		public String toSha1 = "";
+		public long toSize;
+	}
+
+	/** The head document served to clients: content identity, ledger, journal tail, and the policy document. */
+	public static class HeadDocumentFields {
+		public int schemaVersion = 1;
+		public String contentToken = "";
+		public String policySha1 = "";
+		public String createdAt = "";
+		public long journalHead;
+		public boolean journalTruncated;
+		public List<JournalEntryFields> journal = List.of();
+		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
+		public ModpackJsons.CompleteModpackContentFields policy = new ModpackJsons.CompleteModpackContentFields();
 	}
 
 	public static class OwnershipLedgerFields {
@@ -55,8 +47,6 @@ public class GenerationJsons {
 			public String logicalPath = "";
 			public List<ContentFields> historicalHashes = List.of();
 			public Set<String> historicalGroupIds = Set.of();
-			public String firstPublishedGenerationId = "";
-			public String lastPublishedGenerationId = "";
 			public String currentStatus = "";
 		}
 
@@ -71,38 +61,5 @@ public class GenerationJsons {
 				this.size = size;
 			}
 		}
-	}
-
-	public static class OwnershipDeltaFields {
-		public String modpackId = "";
-		public List<ChangeFields> changes = List.of();
-		public String digest = "";
-
-		public static class ChangeFields {
-			public String logicalPath = "";
-			public String kind = "";
-			public OwnershipLedgerFields.ContentFields content;
-			public List<OwnershipLedgerFields.ContentFields> contents = List.of();
-			public Set<String> groupIds = Set.of();
-		}
-	}
-
-	public static class CatalogueSnapshotFields {
-		public String stateDigest = "";
-		public ModpackJsons.CompleteModpackContentFields catalogue = new ModpackJsons.CompleteModpackContentFields();
-	}
-
-	public static class GenerationCommitFields {
-		public int schemaVersion;
-		public String generationId = "";
-		public String parentGenerationId = "";
-		public String modpackId = "";
-		public String createdAt = "";
-		public String stateDigest = "";
-		public String ledgerDigest = "";
-		public String ownershipDeltaDigest = "";
-		public String patchNotes = "";
-		public String patchNotesDigest = "";
-		public String rollbackTargetGenerationId = "";
 	}
 }

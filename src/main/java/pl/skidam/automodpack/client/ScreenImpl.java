@@ -1,10 +1,10 @@
 package pl.skidam.automodpack.client;
 
-import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack.client.ui.screen.*;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
@@ -14,7 +14,6 @@ import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.SessionUpdateState;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
-import pl.skidam.automodpack_loader_core.screen.HistoricalCatalogueLoader;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
@@ -133,7 +132,7 @@ public class ScreenImpl implements ScreenService {
 		Screens.multiplayer();
 	}
 
-	public static void repairSelection(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+	public static void repairSelection(GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
 		executeOnClient(() -> Screens.repairSelection(fields, savedSelection, selectionAction, cancelAction));
 	}
 
@@ -222,7 +221,7 @@ public class ScreenImpl implements ScreenService {
 
 		public static void history(HistoryViewRequest request) {
 			Screen parent = Screens.getScreen();
-			Screens.setScreen(new ContentHistoryScreen(parent, request.historyIndex(), request.availableHistory(), request.modpackName(), request.catalogueLoader(), request.closed()));
+			Screens.setScreen(new ContentHistoryScreen(parent, request));
 		}
 
 		public static void failure(FailureRequest request) {
@@ -254,8 +253,8 @@ public class ScreenImpl implements ScreenService {
 			return new JoinMultiplayerScreen(new TitleScreen());
 		}
 
-		public static void repairSelection(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
-			GroupManifest manifest = GenerationRecord.fromFields(fields).manifest();
+		public static void repairSelection(GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
+			GroupManifest manifest = PackDocument.fromFields(fields).manifest();
 			Screens.setScreen(ModpackSelectionScreen.repair(multiplayerScreen(), manifest, savedSelection, selectionAction, cancelAction));
 		}
 

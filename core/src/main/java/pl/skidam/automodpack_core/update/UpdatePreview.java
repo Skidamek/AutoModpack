@@ -9,8 +9,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupResolution;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
@@ -25,28 +24,28 @@ public final class UpdatePreview {
 	private final ChangeSet changeSet;
 	private final GroupConsequences groupConsequences;
 	private final String patchNotes;
-	private final List<GenerationPatchNoteHistory.Entry> patchNotesHistory;
+	private final List<JournalEntry> journal;
 	private final Mode mode;
 	private final Map<String, String> featureNames;
 
 	private UpdatePreview(UpdatePlan decision, GroupConsequences groupConsequences, String patchNotes,
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, Mode mode, ChangeSet changeSet, Map<String, String> featureNames) {
+			List<JournalEntry> journal, Mode mode, ChangeSet changeSet, Map<String, String> featureNames) {
 		this.decision = Objects.requireNonNull(decision, "reconciliation decision");
 		this.changeSet = Objects.requireNonNull(changeSet, "reconciliation consequences");
 		this.groupConsequences = Objects.requireNonNull(groupConsequences, "group consequences");
-		this.patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
-		this.patchNotesHistory = List.copyOf(Objects.requireNonNull(patchNotesHistory, "patch notes history"));
+		this.patchNotes = patchNotes == null ? "" : patchNotes.replace("\r\n", "\n");
+		this.journal = List.copyOf(Objects.requireNonNull(journal, "journal"));
 		this.mode = Objects.requireNonNull(mode, "mode");
 		this.featureNames = Map.copyOf(new TreeMap<>(featureNames == null ? Map.of() : featureNames));
 	}
 
 	public static UpdatePreview create(UpdatePlan decision, ResolvedSelection selection, Mode mode, String patchNotes,
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory) {
+			List<JournalEntry> journal) {
 		Objects.requireNonNull(decision, "reconciliation decision");
 		GroupConsequences consequences = selection == null
 				? new GroupConsequences(Set.of(), Set.of(), Set.of())
 				: new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups(), selection.groupResolutions());
-		return new UpdatePreview(decision, consequences, patchNotes, patchNotesHistory, mode, decision.consequences(), Map.of());
+		return new UpdatePreview(decision, consequences, patchNotes, journal, mode, decision.consequences(), Map.of());
 	}
 
 	public static UpdatePreview create(UpdatePlan decision, ResolvedSelection selection, Mode mode) {
@@ -67,8 +66,8 @@ public final class UpdatePreview {
 		return groupConsequences;
 	}
 
-	public List<GenerationPatchNoteHistory.Entry> patchNotesHistory() {
-		return patchNotesHistory;
+	public List<JournalEntry> journal() {
+		return journal;
 	}
 
 	public Mode mode() {
@@ -101,11 +100,11 @@ public final class UpdatePreview {
 					.toList();
 			changes.add(new ChangeSet.Change(change.logicalPath(), change.kind(), occurrences));
 		}
-		return new UpdatePreview(decision, groupConsequences, patchNotes, patchNotesHistory, mode, ChangeSet.of(changes, changeSet.effects()), names);
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, ChangeSet.of(changes, changeSet.effects()), names);
 	}
 
 	public UpdatePreview withReferences(ChangeSet.ReferenceProvider provider) {
-		return new UpdatePreview(decision, groupConsequences, patchNotes, patchNotesHistory, mode, changeSet.withReferences(provider), featureNames);
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet.withReferences(provider), featureNames);
 	}
 
 	public long addedBytes() {

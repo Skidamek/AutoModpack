@@ -15,8 +15,8 @@ public final class ChangelogScreen extends ChangeBrowserScreen {
 		super(parent, VersionedText.translatable("automodpack.changelog.title"),
 				VersionedText.translatable("automodpack.changelog.latestNote", latestNote(changelogs)), changelogs.changeSet(), Map.of(),
 				new BrowserAction(VersionedText.translatable("automodpack.patchNotes.all"),
-						screen -> ScreenImpl.setScreen(new PatchNotesHistoryScreen(screen, changelogs.patchNotesHistory(), "")),
-						!changelogs.patchNotesHistory().isEmpty()));
+						screen -> ScreenImpl.setScreen(new PatchNotesHistoryScreen(screen, changelogs.journal(), "")),
+						!changelogs.journal().isEmpty()));
 		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
 	}
 

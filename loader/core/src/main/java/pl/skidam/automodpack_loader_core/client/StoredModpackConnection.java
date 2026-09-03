@@ -1,26 +1,13 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
-import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
-import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -30,19 +17,15 @@ public final class StoredModpackConnection implements AutoCloseable {
 	private final String modpackId;
 	private final ConnectionJsons.ConnectionInfo connection;
 	private final Secrets.Secret secret;
-	private final GenerationRecord advertisedRecord;
-	private final GenerationHistoryIndex advertisedHistoryIndex;
-	private final ClientStorage storage;
+	private final GenerationJsons.HeadDocumentFields advertisedDocument;
 	private DownloadClient client;
 
-	private StoredModpackConnection(String modpackId, ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, GenerationRecord advertisedRecord,
-			GenerationHistoryIndex advertisedHistoryIndex, ClientStorage storage, DownloadClient client) {
+	private StoredModpackConnection(String modpackId, ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, GenerationJsons.HeadDocumentFields advertisedDocument,
+			DownloadClient client) {
 		this.modpackId = modpackId;
 		this.connection = connection;
 		this.secret = secret;
-		this.advertisedRecord = advertisedRecord;
-		this.advertisedHistoryIndex = advertisedHistoryIndex;
-		this.storage = storage;
+		this.advertisedDocument = advertisedDocument;
 		this.client = client;
 	}
 
@@ -59,14 +42,9 @@ public final class StoredModpackConnection implements AutoCloseable {
 			throw new IOException(result.failure() == null ? "Could not fetch the latest modpack generation" : result.failure().getMessage(), result.failure());
 		DownloadClient client = result.client();
 		try {
-			GenerationRecord advertisedRecord = GenerationRecord.fromFields(result.content());
-			if (!modpackId.equals(advertisedRecord.manifest().modpackId())) throw new IOException("Connected modpack identity does not match the installed pack");
-			if (result.content().generationHistory == null) throw new IOException("Server generation history is unavailable");
-			GenerationHistoryIndex historyIndex = GenerationHistoryIndex.fromFields(result.content().generationHistory);
-			if (!modpackId.equals(historyIndex.modpackId())) throw new IOException("Server generation history belongs to another modpack");
-			if (!advertisedRecord.metadata().generationId().equals(historyIndex.currentGenerationId()))
-				throw new IOException("Server generation history does not describe the advertised generation");
-			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, advertisedRecord, historyIndex, storage, client);
+			PackDocument advertised = PackDocument.fromFields(result.content());
+			if (!modpackId.equals(advertised.manifest().modpackId())) throw new IOException("Connected modpack identity does not match the installed pack");
+			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, result.content(), client);
 			client = null;
 			return session;
 		} finally {
@@ -74,74 +52,9 @@ public final class StoredModpackConnection implements AutoCloseable {
 		}
 	}
 
-	/** Returns the complete current-format advertisement validated when this session was opened. */
-	public ModpackJsons.CompleteModpackContentFields advertisedFields() {
-		ModpackJsons.CompleteModpackContentFields fields = advertisedRecord.toFields();
-		fields.generationHistory = advertisedHistoryIndex.toFields();
-		fields.patchNotesHistory = advertisedHistoryIndex.entries().stream().map(entry -> {
-			ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields history = new ModpackJsons.CompleteModpackContentFields.PatchNotesHistoryEntryFields();
-			history.schemaVersion = GenerationMetadata.CURRENT_SCHEMA_VERSION;
-			history.generationId = entry.generationId();
-			history.parentGenerationId = entry.parentGenerationId();
-			history.createdAt = entry.createdAt().toString();
-			history.patchNotes = entry.patchNotes();
-			history.patchNotesDigest = entry.patchNotesDigest();
-			return history;
-		}).toList();
-		GenerationPatchNoteHistory.fromFields(fields);
-		return fields;
-	}
-
-	/** Downloads and validates one historical catalogue through this authenticated session. */
-	public CompletableFuture<CatalogueSnapshot> downloadHistoricalCatalogue(GenerationHistoryIndex.Entry entry) {
-		Objects.requireNonNull(entry, "history entry");
-		DownloadClient currentClient;
-		synchronized (this) {
-			if (client == null) return CompletableFuture.failedFuture(new IOException("Stored modpack transfer session was already consumed"));
-			currentClient = client;
-		}
-		Path destination = storage.helperDirectory().resolve("history-catalogue-" + entry.stateDigest() + ".json").normalize();
-		if (!destination.startsWith(storage.helperDirectory())) return CompletableFuture.failedFuture(new IOException("Historical catalogue path escaped client storage"));
-		if (!entry.detailsAvailable()) return CompletableFuture.failedFuture(new IOException("Historical catalogue details were compacted: " + entry.generationId()));
-		try {
-			Files.createDirectories(destination.toAbsolutePath().normalize().getParent());
-		} catch (IOException e) {
-			return CompletableFuture.failedFuture(e);
-		}
-		return currentClient.downloadHistoricalCatalogue(entry.stateDigest(), destination, (IntConsumer) null).thenApply(path -> readHistoricalCatalogue(path, entry)).handle((snapshot, failure) -> {
-			IOException cleanupFailure = null;
-			try {
-				Files.deleteIfExists(destination);
-			} catch (IOException e) {
-				cleanupFailure = e;
-			}
-			if (failure != null) {
-				if (cleanupFailure != null) failure.addSuppressed(cleanupFailure);
-				throw failure instanceof CompletionException completionException ? completionException : new CompletionException(failure);
-			}
-			if (cleanupFailure != null) throw new CompletionException(cleanupFailure);
-			return snapshot;
-		});
-	}
-
-	private static CatalogueSnapshot readHistoricalCatalogue(Path path, GenerationHistoryIndex.Entry entry) {
-		Throwable failure = null;
-		try {
-			GenerationJsons.CatalogueSnapshotFields catalogueFields = ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), GenerationJsons.CatalogueSnapshotFields.class);
-			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(catalogueFields);
-			if (!snapshot.stateDigest().equals(entry.stateDigest())) throw new IOException("Historical catalogue identity does not match history index");
-			return snapshot;
-		} catch (IOException | RuntimeException e) {
-			failure = e;
-			throw new CompletionException("Historical catalogue is invalid", e);
-		} finally {
-			try {
-				Files.deleteIfExists(path);
-			} catch (IOException cleanupFailure) {
-				if (failure != null) failure.addSuppressed(cleanupFailure);
-				else throw new CompletionException("Historical catalogue temporary file could not be deleted", cleanupFailure);
-			}
-		}
+	/** Returns the complete head document validated when this session was opened. */
+	public GenerationJsons.HeadDocumentFields advertisedFields() {
+		return advertisedDocument;
 	}
 
 	/** Transfers this session's client ownership to an updater. This connection becomes empty. */

@@ -12,7 +12,7 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -35,9 +35,8 @@ public final class UpdateTransaction {
 	public Purpose purpose;
 	public Phase phase;
 	public String modpackId;
-	public String targetGenerationId;
-	public String parentGenerationId;
-	public String stateDigest;
+	public String contentToken;
+	public String policySha1;
 	public String ledgerDigest;
 	public String targetPlatform;
 	public String selectionDigest;
@@ -71,12 +70,12 @@ public final class UpdateTransaction {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(target, "target");
 		if (!plan.modpackId().equals(target.manifest().modpackId())) throw new IllegalArgumentException("Plan and selected target modpack IDs disagree");
-		if (!plan.generationTarget().equals(target.generationTarget())) throw new IllegalArgumentException("Plan and selected target generation identities disagree");
-		if (!plan.generationTarget().equals(GenerationTarget.fromFlat(target.flatTarget())))
+		if (!plan.packTarget().equals(target.packTarget())) throw new IllegalArgumentException("Plan and selected target generation identities disagree");
+		if (!plan.packTarget().equals(PackTarget.fromFlat(target.flatTarget())))
 			throw new IllegalArgumentException("Plan and selected flat target generation identities disagree");
 
 		UpdateTransaction transaction = base(Purpose.MODPACK_UPDATE);
-		fillGeneration(transaction, plan.generationTarget());
+		fillGeneration(transaction, plan.packTarget());
 		transaction.targetPlatform = target.platform().id();
 		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
 		transaction.expectedPriorRequestedGroups = intentValues(target.expectedPriorIntent(), IntentPart.GROUPS);
@@ -89,7 +88,7 @@ public final class UpdateTransaction {
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
 		fillPlan(transaction, plan);
-		transaction.plannedGeneratedCopies = GeneratedCopyState.fromCopies(plan.modpackId(), plan.generationTarget().targetGenerationId(), digest(target.selection().intent()), plan.generatedCopies()).toFields();
+		transaction.plannedGeneratedCopies = GeneratedCopyState.fromCopies(plan.modpackId(), plan.packTarget().contentToken(), digest(target.selection().intent()), plan.generatedCopies()).toFields();
 		return transaction;
 	}
 
@@ -108,7 +107,7 @@ public final class UpdateTransaction {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(platform, "platform");
 		UpdateTransaction transaction = base(purpose);
-		fillGeneration(transaction, plan.generationTarget());
+		fillGeneration(transaction, plan.packTarget());
 		transaction.targetPlatform = platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
 		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
@@ -142,11 +141,10 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	private static void fillGeneration(UpdateTransaction transaction, GenerationTarget target) {
+	private static void fillGeneration(UpdateTransaction transaction, PackTarget target) {
 		transaction.modpackId = target.modpackId();
-		transaction.targetGenerationId = target.targetGenerationId();
-		transaction.parentGenerationId = target.parentGenerationId();
-		transaction.stateDigest = target.stateDigest();
+		transaction.contentToken = target.contentToken();
+		transaction.policySha1 = target.policySha1();
 		transaction.ledgerDigest = target.ledgerDigest();
 	}
 
@@ -191,8 +189,8 @@ public final class UpdateTransaction {
 		};
 	}
 
-	public GenerationTarget generationTarget() {
-		return new GenerationTarget(modpackId, targetGenerationId, parentGenerationId, stateDigest, ledgerDigest);
+	public PackTarget packTarget() {
+		return new PackTarget(modpackId, contentToken, policySha1, ledgerDigest);
 	}
 
 	public ClientPlatform platform() {

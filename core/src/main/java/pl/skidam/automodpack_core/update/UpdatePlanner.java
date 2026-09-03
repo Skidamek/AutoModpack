@@ -26,8 +26,8 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
@@ -111,11 +111,11 @@ public final class UpdatePlanner {
 		Objects.requireNonNull(input);
 		ModpackJsons.ModpackContentFields installed = Objects.requireNonNull(input.installedManifest());
 		ModpackId.requireValid(installed.modpackId);
-		GenerationTarget generationTarget = GenerationTarget.fromFlat(installed);
+		PackTarget packTarget = PackTarget.fromFlat(installed);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(installed.ownershipLedger);
 		if (!installed.modpackId.equals(ledger.modpackId())) throw new IllegalArgumentException("Removal ledger modpack ID does not match installed modpack");
 		if (input.generatedCopies() != null && (!installed.modpackId.equals(input.generatedCopies().modpackId())
-				|| !generationTarget.targetGenerationId().equals(input.generatedCopies().generationId())))
+				|| !packTarget.contentToken().equals(input.generatedCopies().contentToken())))
 			throw new IllegalArgumentException("Removal generated-copy state identity is invalid");
 		if (input.baseline() == null || !installed.modpackId.equals(input.baseline().modpackId) || input.baseline().entries == null)
 			throw new IllegalArgumentException("Removal baseline identity is invalid");
@@ -180,7 +180,7 @@ public final class UpdatePlanner {
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
 		ChangeSet consequences = consequences(ordered, input.files(), installed, ledger, restartReasons, true, input.baseline());
-		return new UpdatePlan(installed.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
+		return new UpdatePlan(installed.modpackId, packTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
 				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(), List.of(), List.of(), List.of(),
 				consequences);
 	}
@@ -189,10 +189,10 @@ public final class UpdatePlanner {
 		Objects.requireNonNull(input);
 		ModpackJsons.ModpackContentFields target = Objects.requireNonNull(input.targetManifest());
 		ModpackId.requireValid(target.modpackId);
-		GenerationTarget generationTarget = GenerationTarget.fromFlat(target);
+		PackTarget packTarget = PackTarget.fromFlat(target);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
 		if (!target.modpackId.equals(ledger.modpackId())) throw new IllegalArgumentException("Target ledger modpack ID does not match target");
-		if (input.installedManifest() != null) GenerationTarget.fromFlat(input.installedManifest());
+		if (input.installedManifest() != null) PackTarget.fromFlat(input.installedManifest());
 		if (target.list == null) throw new IllegalArgumentException("Target manifest list is missing");
 
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = sortedItems(target.list);
@@ -287,7 +287,7 @@ public final class UpdatePlanner {
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
 		ChangeSet consequences = consequences(ordered, input.files(), target, ledger, restartReasons, false, null);
-		return new UpdatePlan(target.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
+		return new UpdatePlan(target.modpackId, packTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
 				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(),
 				baselineCaptures.stream().sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal()).thenComparing(BaselineCapture::relativePath)).toList(),
 				conflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList(), generatedCopies, consequences);

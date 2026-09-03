@@ -42,7 +42,6 @@ import javax.net.ssl.TrustManager;
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
@@ -426,10 +425,6 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	/** Downloads one authenticated historical catalogue advertised by the current generation index. */
-	public CompletableFuture<Path> downloadHistoricalCatalogue(String stateDigest, Path destination, IntConsumer chunkCallback) {
-		String requestKey = GenerationHistoryIndex.catalogueRequestKey(stateDigest);
-		return downloadFile(requestKey.getBytes(StandardCharsets.UTF_8), destination, chunkCallback);
-	}
 
 	/** Copies a protocol frame into a remaining file length without truncating remaining through int. */
 	static int writableFrameBytes(int frameLength, long remaining) {

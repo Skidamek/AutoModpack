@@ -51,7 +51,7 @@ public class Common {
 			long genStart = System.currentTimeMillis();
 			var generation = modpackExecutor.loadLast();
 			if (generation instanceof ModpackExecutor.Loaded loaded) {
-				LOGGER.info("Modpack loaded at generation {}! took {}ms", loaded.current().metadata().generationId(), System.currentTimeMillis() - genStart);
+				LOGGER.info("Modpack loaded at content {}! took {}ms", loaded.current().contentToken(), System.currentTimeMillis() - genStart);
 			} else if (generation instanceof ModpackExecutor.LoadFailed failed) {
 				LOGGER.error("Failed to load modpack", failed.failure());
 			} else {

@@ -19,10 +19,10 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack.client.ui.widget.UnverifiedJarList;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
@@ -93,8 +93,8 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 
 		boolean leftover = firstInstall && updater.firstInstallLocalModCount() > 0;
 		boolean customize = PackConfirmCopy.canCustomize(updater.getSelectedTarget().manifest());
-		boolean notes = firstInstall ? GenerationPatchNoteHistory.containsNotes(updater.getFirstInstallPatchNotes())
-				: laterPreview != null && GenerationPatchNoteHistory.containsNotes(laterPreview.patchNotesHistory());
+		boolean notes = firstInstall ? Changelogs.hasNotes(updater.getFirstInstallPatchNotes())
+				: laterPreview != null && Changelogs.hasNotes(laterPreview.journal());
 
 		List<ActionRow> rows = new ArrayList<>();
 		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
@@ -292,7 +292,7 @@ public final class UnverifiedPackConfirmScreen extends VersionedScreen {
 	}
 
 	private void openPatchNotes() {
-		var history = firstInstall ? updater.getFirstInstallPatchNotes() : laterPreview.patchNotesHistory();
+		var history = firstInstall ? updater.getFirstInstallPatchNotes() : laterPreview.journal();
 		String name = updater.getSelectedTarget().manifest().modpackName();
 		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, history, name));
 	}

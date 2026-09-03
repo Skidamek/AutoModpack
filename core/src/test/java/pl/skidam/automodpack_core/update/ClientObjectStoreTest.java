@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -20,7 +20,8 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -62,11 +63,11 @@ class ClientObjectStoreTest {
 		byte[] bytes = "generation-object".getBytes(StandardCharsets.UTF_8);
 		String referenced = store(storage, bytes);
 		String orphan = store(storage, "orphan");
-		GenerationRecord record = GenerationRecord.create(manifest(referenced, bytes.length), null, Instant.parse("2026-08-08T00:00:00Z"), "notes");
-		new ClientGenerationStore(storage).write(record);
-		storage.writeActiveState(MODPACK_ID, record.metadata().generationId());
+		PackDocument record = TestPacks.document(manifest(referenced, bytes.length));
+		new ClientGenerationStore(storage).write(record, List.of());
+		storage.writeActiveState(MODPACK_ID, record.contentToken());
 
-		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of(record.metadata().generationId()), Set.of());
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of(record.contentToken()), Set.of());
 
 		assertEquals(1, result.deletedObjectCount());
 		assertEquals(bytes.length == 0 ? 0 : "orphan".getBytes(StandardCharsets.UTF_8).length, result.deletedObjectBytes());
@@ -84,8 +85,8 @@ class ClientObjectStoreTest {
 		byte[] bytes = "second-instance-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(second, bytes);
 		String orphan = store(first, "shared-orphan");
-		GenerationRecord record = GenerationRecord.create(manifest(hash, bytes.length), null, Instant.parse("2026-08-08T00:00:00Z"), "notes");
-		new ClientGenerationStore(second).write(record);
+		PackDocument record = TestPacks.document(manifest(hash, bytes.length));
+		new ClientGenerationStore(second).write(record, List.of());
 		ClientObjectStore.publishOwnership(second);
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
@@ -126,19 +127,19 @@ class ClientObjectStoreTest {
 		String activeHash = store(storage, activeBytes);
 		String historicalHash = store(storage, historicalBytes);
 		String orphanHash = store(storage, "orphan");
-		GenerationRecord active = GenerationRecord.create(manifest(MODPACK_ID, activeHash, activeBytes.length), null, Instant.parse("2026-08-08T00:00:00Z"), "active");
-		GenerationRecord historical = GenerationRecord.create(manifest(OTHER_MODPACK_ID, historicalHash, historicalBytes.length), null, Instant.parse("2026-08-07T00:00:00Z"), "historical");
+		PackDocument active = TestPacks.document(manifest(MODPACK_ID, activeHash, activeBytes.length));
+		PackDocument historical = TestPacks.document(manifest(OTHER_MODPACK_ID, historicalHash, historicalBytes.length));
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(active);
-		generations.write(historical);
-		storage.writeActiveState(MODPACK_ID, active.metadata().generationId());
+		generations.write(active, List.of());
+		generations.write(historical, List.of());
+		storage.writeActiveState(MODPACK_ID, active.contentToken());
 
-		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(active.metadata().generationId()), Set.of()));
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(active.contentToken()), Set.of()));
 		assertTrue(Files.exists(storage.objectFile(historicalHash)));
 		assertTrue(Files.exists(storage.objectFile(orphanHash)));
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage,
-				Set.of(active.metadata().generationId(), historical.metadata().generationId()), Set.of());
+				Set.of(active.contentToken(), historical.contentToken()), Set.of());
 
 		assertEquals(1, result.deletedObjectCount());
 		assertTrue(Files.exists(storage.objectFile(activeHash)));

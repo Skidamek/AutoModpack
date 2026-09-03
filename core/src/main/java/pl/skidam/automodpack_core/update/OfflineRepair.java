@@ -90,11 +90,11 @@ public final class OfflineRepair {
 		}
 	}
 
-	public record Prepared(String modpackId, String generationId, String selectionDigest, Request request, List<Finding> findings,
+	public record Prepared(String modpackId, String contentToken, String selectionDigest, Request request, List<Finding> findings,
 			List<EditableResetCandidate> editableResetCandidates, List<String> unownedModPaths, long directlyHashedFileCount, long directlyHashedBytes) {
 		public Prepared {
 			Objects.requireNonNull(modpackId, "modpack ID");
-			generationId = HashUtils.normalizeSha1(generationId);
+			contentToken = HashUtils.normalizeSha1(contentToken);
 			selectionDigest = HashUtils.normalizeSha1(selectionDigest);
 			request = Objects.requireNonNull(request, "repair request");
 			findings = List.copyOf(findings);
@@ -225,7 +225,7 @@ public final class OfflineRepair {
 	private ClientStorageJsons.OfflineRepairJournalFields createJournal(Analysis analysis, Set<String> editableResetPaths, Set<String> unownedModPaths) throws IOException {
 		ClientStorageJsons.OfflineRepairJournalFields journal = new ClientStorageJsons.OfflineRepairJournalFields();
 		journal.modpackId = analysis.prepared().modpackId();
-		journal.generationId = analysis.prepared().generationId();
+		journal.contentToken = analysis.prepared().contentToken();
 		journal.selectionDigest = analysis.prepared().selectionDigest();
 		Map<String, EditableResetCandidate> editable = analysis.prepared().editableResetCandidates().stream()
 				.collect(Collectors.toMap(EditableResetCandidate::logicalPath, candidate -> candidate));
@@ -262,7 +262,7 @@ public final class OfflineRepair {
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Offline repair journal is not a regular file: " + path);
 		ClientStorageJsons.OfflineRepairJournalFields journal = ConfigTools.read(path, ClientStorageJsons.OfflineRepairJournalFields.class)
 				.orElseThrow(() -> new IOException("Offline repair journal is empty: " + path));
-		if (journal.schemaVersion != 1 || !prepared.modpackId().equals(journal.modpackId) || !prepared.generationId().equals(journal.generationId)
+		if (journal.schemaVersion != 1 || !prepared.modpackId().equals(journal.modpackId) || !prepared.contentToken().equals(journal.contentToken)
 				|| !prepared.selectionDigest().equals(journal.selectionDigest) || journal.editableResets == null || journal.unownedMods == null)
 			throw new IOException("Offline repair journal identity is invalid: " + path);
 		List<String> editablePaths = journal.editableResets.stream().map(fields -> UpdatePlanner.normalize(fields.logicalPath)).toList();
@@ -295,7 +295,7 @@ public final class OfflineRepair {
 				}
 				assertPinned(request);
 				if (!fields.absent)
-					PreservationVault.preserve(storage, journal.modpackId, journal.generationId, PreservationVault.Reason.EDITABLE_RESET, Root.GAME_DIR, fields.logicalPath,
+					PreservationVault.preserve(storage, journal.modpackId, journal.contentToken, PreservationVault.Reason.EDITABLE_RESET, Root.GAME_DIR, fields.logicalPath,
 							fields.currentHash, fields.currentSize);
 				FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), live, "Repair path");
 				VerifiedFileTransfer.copyAtomic(object, live, fields.defaultSize, fields.defaultHash, fileCache);
@@ -323,7 +323,7 @@ public final class OfflineRepair {
 			FileTrees.requireNoSymbolicLinkDescendants(storage.modsDirectory(), source, "Repair path");
 			if (!FileIntegrity.matches(source, fields.size, fields.objectHash, fileCache)) throw new IOException("Unowned mod changed after repair was journaled: " + fields.logicalPath);
 			assertPinned(request);
-			PreservationVault.preserveAndRemove(storage, journal.modpackId, journal.generationId, PreservationVault.Reason.STRICT_REPAIR, Root.GAME_DIR, fields.logicalPath,
+			PreservationVault.preserveAndRemove(storage, journal.modpackId, journal.contentToken, PreservationVault.Reason.STRICT_REPAIR, Root.GAME_DIR, fields.logicalPath,
 					fields.objectHash, fields.size);
 			archived++;
 		}
@@ -349,7 +349,7 @@ public final class OfflineRepair {
 		Map<Path, Observation> observations = new HashMap<>();
 		Map<String, EditableResetCandidate> editable = new TreeMap<>();
 		String modpackId = request.activeTarget().manifest().modpackId();
-		String generationId = request.activeTarget().generationTarget().targetGenerationId();
+		String contentToken = request.activeTarget().packTarget().contentToken();
 
 		// The state reader validates editable tombstone identity and canonical paths.
 		storage.readOverlayState(modpackId);
@@ -375,7 +375,7 @@ public final class OfflineRepair {
 		}
 
 		String selectionDigest = UpdateTransaction.digest(request.activeTarget().selection().intent());
-		GeneratedCopyState generated = GeneratedCopyState.read(storage, modpackId, generationId, selectionDigest);
+		GeneratedCopyState generated = GeneratedCopyState.read(storage, modpackId, contentToken, selectionDigest);
 		for (GeneratedCopyState.Entry entry : generated.entries()) {
 			Content content = new Content(entry.sha1(), entry.size());
 			addExpected(expected, new Expected(Place.CAS, entry.logicalPath(), storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
@@ -397,7 +397,7 @@ public final class OfflineRepair {
 				case PROJECTION -> storage.activePath(claim.originalPath());
 			};
 			observe(source, sourceRoot, fileCache, observations);
-			Path savedRoot = storage.restoredClaimDirectory(modpackId, claim.generationId(), claim.claimId());
+			Path savedRoot = storage.restoredClaimDirectory(modpackId, claim.contentToken(), claim.claimId());
 			observe(LogicalPath.resolve(savedRoot, claim.originalPath()), savedRoot, fileCache, observations);
 		}
 
@@ -423,7 +423,7 @@ public final class OfflineRepair {
 		List<EditableResetCandidate> editableCandidates = editable.values().stream().sorted(EDITABLE_ORDER).toList();
 		long bytes = 0;
 		for (Observation observation : observations.values()) if (!observation.unsupported()) bytes = Math.addExact(bytes, observation.size());
-		Prepared prepared = new Prepared(modpackId, generationId, selectionDigest, request, findings, editableCandidates, unownedMods,
+		Prepared prepared = new Prepared(modpackId, contentToken, selectionDigest, request, findings, editableCandidates, unownedMods,
 				observations.values().stream().filter(observation -> !observation.unsupported()).count(), bytes);
 		return new Analysis(prepared, Map.copyOf(expected), Map.copyOf(observations), immutableSources(sources));
 	}
@@ -506,17 +506,17 @@ public final class OfflineRepair {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot repair while an update transaction is active");
 		var state = storage.readActiveState();
 		String modpackId = request.activeTarget().manifest().modpackId();
-		String generationId = request.activeTarget().generationTarget().targetGenerationId();
-		if (state == null || !modpackId.equals(state.modpackId) || !generationId.equals(state.generationId)) throw new IOException("Repair target is no longer the active installed generation");
-		var stored = new ClientGenerationStore(storage).read(generationId).orElseThrow(() -> new IOException("Active client generation record is missing: " + generationId));
-		if (!stored.equals(request.activeTarget().generationRecord())) throw new IOException("Repair target disagrees with the installed generation record");
+		String contentToken = request.activeTarget().packTarget().contentToken();
+		if (state == null || !modpackId.equals(state.modpackId) || !contentToken.equals(state.contentToken)) throw new IOException("Repair target is no longer the active installed generation");
+		var stored = new ClientGenerationStore(storage).read(contentToken).orElseThrow(() -> new IOException("Active client generation record is missing: " + contentToken));
+		if (!stored.equals(request.activeTarget().document())) throw new IOException("Repair target disagrees with the installed generation record");
 		var active = new ClientGenerationStore(storage).readActiveTarget(request.activeTarget().platform()).orElseThrow(() -> new IOException("Active client target is unavailable"));
-		if (!active.generationRecord().equals(request.activeTarget().generationRecord()) || !active.selection().intent().equals(request.activeTarget().selection().intent()))
+		if (!active.document().equals(request.activeTarget().document()) || !active.selection().intent().equals(request.activeTarget().selection().intent()))
 			throw new IOException("Repair selection changed after preparation");
 	}
 
 	private static void requireSamePinnedIdentity(Prepared expected, Prepared actual) throws IOException {
-		if (!expected.modpackId().equals(actual.modpackId()) || !expected.generationId().equals(actual.generationId()) || !expected.selectionDigest().equals(actual.selectionDigest()))
+		if (!expected.modpackId().equals(actual.modpackId()) || !expected.contentToken().equals(actual.contentToken()) || !expected.selectionDigest().equals(actual.selectionDigest()))
 			throw new IOException("Active repair identity changed after preparation");
 	}
 

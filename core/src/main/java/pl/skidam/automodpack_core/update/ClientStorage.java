@@ -173,16 +173,16 @@ public final class ClientStorage {
 		return generatedCopiesDirectory;
 	}
 
-	public Path generatedCopiesFile(String modpackId, String generationId, String selectionDigest) {
+	public Path generatedCopiesFile(String modpackId, String contentToken, String selectionDigest) {
 		Path packRoot = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
-		Path generationRoot = packRoot.resolve(requireDigest(generationId, "generation ID")).normalize();
+		Path generationRoot = packRoot.resolve(requireDigest(contentToken, "generation ID")).normalize();
 		Path file = generationRoot.resolve(requireDigest(selectionDigest, "generated-copy selection digest") + ".json").normalize();
 		if (!file.startsWith(generationRoot)) throw new IllegalArgumentException("Generated-copy state escaped its generation root");
 		return file;
 	}
 
-	public Path generatedCopiesGenerationDirectory(String modpackId, String generationId) {
-		Path root = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve(requireDigest(generationId, "generation ID")).normalize();
+	public Path generatedCopiesGenerationDirectory(String modpackId, String contentToken) {
+		Path root = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve(requireDigest(contentToken, "generation ID")).normalize();
 		if (!root.startsWith(generatedCopiesDirectory)) throw new IllegalArgumentException("Generated-copy state escaped its root");
 		return root;
 	}
@@ -287,8 +287,8 @@ public final class ClientStorage {
 		return preservationPackDirectory(modpackId).resolve("claims.json").normalize();
 	}
 
-	public Path restoredClaimDirectory(String modpackId, String generationId, String claimId) {
-		String generation = generationId == null || generationId.isEmpty() ? "unversioned" : requireDigest(generationId, "generation ID");
+	public Path restoredClaimDirectory(String modpackId, String contentToken, String claimId) {
+		String generation = contentToken == null || contentToken.isEmpty() ? "unversioned" : requireDigest(contentToken, "generation ID");
 		Path root = gameDirectory.resolve(RECOVERED_DIR).resolve(ModpackId.requireValid(modpackId)).resolve(generation).normalize();
 		Path claim = root.resolve(requireDigest(claimId, "preservation claim ID")).normalize();
 		if (!claim.startsWith(root)) throw new IllegalArgumentException("Restored copy path escaped its modpack root");
@@ -303,12 +303,12 @@ public final class ClientStorage {
 		return gamePath(ModpackPathPolicy.MODS_ROOT);
 	}
 
-	public Path generationDirectory(String generationId) {
-		return recordsDirectory.resolve(requireDigest(generationId, "generation ID")).normalize();
+	public Path generationDirectory(String contentToken) {
+		return recordsDirectory.resolve(requireDigest(contentToken, "generation ID")).normalize();
 	}
 
-	public Path generationManifest(String generationId) {
-		return generationDirectory(generationId).resolve("manifest.json");
+	public Path generationManifest(String contentToken) {
+		return generationDirectory(contentToken).resolve("manifest.json");
 	}
 
 	public Path connectionFile(String modpackId) {
@@ -422,15 +422,15 @@ public final class ClientStorage {
 			throw new IOException("Client active state is not a regular file");
 		ClientStorageJsons.ClientGenerationStateFields state = ConfigTools.read(stateFile, ClientStorageJsons.ClientGenerationStateFields.class)
 				.orElseThrow(() -> new IOException("Client active state is empty"));
-		if (!ModpackId.isValid(state.modpackId) || !HashUtils.isSha1(state.generationId) || !"ACTIVE".equals(state.status))
+		if (!ModpackId.isValid(state.modpackId) || !HashUtils.isSha1(state.contentToken) || !"ACTIVE".equals(state.status))
 			throw new IOException("Client active state identity is invalid");
 		return state;
 	}
 
-	public void writeActiveState(String modpackId, String generationId) throws IOException {
+	public void writeActiveState(String modpackId, String contentToken) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = new ClientStorageJsons.ClientGenerationStateFields();
 		state.modpackId = ModpackId.requireValid(modpackId);
-		state.generationId = requireDigest(generationId, "generation ID");
+		state.contentToken = requireDigest(contentToken, "generation ID");
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
 	}

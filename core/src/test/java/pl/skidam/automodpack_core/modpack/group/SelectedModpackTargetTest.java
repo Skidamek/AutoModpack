@@ -3,13 +3,12 @@ package pl.skidam.automodpack_core.modpack.group;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.*;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 
 class SelectedModpackTargetTest {
 	@TempDir
@@ -20,13 +19,12 @@ class SelectedModpackTargetTest {
 		GroupManifest.Group first = group(Set.of());
 		GroupManifest.Group second = new GroupManifest.Group("", "", "", false, true, new TreeSet<>(Set.of("first")), new TreeSet<>(), Set.of(), new TreeMap<>());
 		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("first", first, "second", second)));
-		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "");
 		ClientSelectionStore store = new ClientSelectionStore(temporaryDirectory.resolve("selection.json"));
 		SelectionIntent persisted = new SelectionIntent(Set.of("first", "second"));
 		store.compareAndSet(manifest.modpackId(), null, persisted);
 
 		SelectionResolutionException failure = assertThrows(SelectionResolutionException.class,
-				() -> SelectedModpackTarget.prepare(record.toFields(), store, ClientPlatform.LINUX));
+				() -> SelectedModpackTarget.prepare(TestPacks.head(manifest), store, ClientPlatform.LINUX));
 
 		assertEquals(persisted, failure.resolution().intent());
 		assertEquals(Set.of("first", "second"), failure.resolution().selectedGroups());

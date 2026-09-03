@@ -20,7 +20,7 @@ public class ClientStorageJsons {
 	public static class ClientGeneratedCopiesFields {
 		public int schemaVersion = 1;
 		public String modpackId = "";
-		public String generationId = "";
+		public String contentToken = "";
 		public String selectionDigest = "";
 		public List<EntryFields> entries = List.of();
 
@@ -32,8 +32,9 @@ public class ClientStorageJsons {
 	}
 
 	public static class ClientGenerationStateFields {
+		public int schemaVersion = 1;
 		public String modpackId = "";
-		public String generationId = "";
+		public String contentToken = "";
 		public String status = "ACTIVE";
 	}
 
@@ -49,7 +50,7 @@ public class ClientStorageJsons {
 			public String objectHash = "";
 			public long size = -1;
 			public String modpackId = "";
-			public String generationId = "";
+			public String contentToken = "";
 			public String reason = "";
 			public String preservedAt = "";
 		}
@@ -63,7 +64,7 @@ public class ClientStorageJsons {
 	public static class OfflineRepairJournalFields {
 		public int schemaVersion = 1;
 		public String modpackId = "";
-		public String generationId = "";
+		public String contentToken = "";
 		public String selectionDigest = "";
 		public List<EditableResetFields> editableResets = List.of();
 		public List<UnownedModFields> unownedMods = List.of();

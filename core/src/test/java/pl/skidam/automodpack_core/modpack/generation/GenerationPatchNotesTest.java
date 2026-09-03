@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -29,7 +31,9 @@ class GenerationPatchNotesTest {
 		Path file = tempDir.resolve("host-patch-notes.md");
 		Files.write(file, new byte[]{(byte) 0xc3, (byte) 0x28});
 		assertThrows(IOException.class, () -> GenerationPatchNotes.resolve(null, file));
-		assertThrows(IOException.class, () -> GenerationPatchNotes.resolve(String.valueOf((char) 0xD800), file));
+		assertThrows(IllegalArgumentException.class,
+				() -> new JournalEntry(1, "a".repeat(40), "b".repeat(40), Instant.now(), String.valueOf((char) 0xD800), JournalEntry.NO_RESTORE, false,
+						List.of(JournalEntry.Change.added("config/example.txt", "c".repeat(40), 1))));
 	}
 
 	@Test

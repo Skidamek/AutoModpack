@@ -185,7 +185,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 
 	/** One stats line per fact; the before -> after shape lives here so it cannot drift per locale. */
 	private void drawStats(VersionedMatrices matrices, ClientGenerationStore.CompactionResult compacted, int y, int textWidth) {
-		y = drawWrapped(matrices, statLine("automodpack.storage.records", compacted.generationRecordCountBefore(), compacted.generationRecordCountAfter(), UiFormat.formatSize(compacted.generationRecordBytesBefore()), UiFormat.formatSize(compacted.generationRecordBytesAfter())), y, textWidth, TextColors.WHITE);
+		y = drawWrapped(matrices, statLine("automodpack.storage.records", compacted.recordCountBefore(), compacted.recordCountAfter(), UiFormat.formatSize(compacted.recordBytesBefore()), UiFormat.formatSize(compacted.recordBytesAfter())), y, textWidth, TextColors.WHITE);
 		y = drawWrapped(matrices, statLine("automodpack.storage.objects", compacted.objectCollection().before().objectCount(), compacted.objectCollection().after().objectCount(), UiFormat.formatSize(compacted.objectCollection().before().objectBytes()), UiFormat.formatSize(compacted.objectCollection().after().objectBytes())), y, textWidth, TextColors.WHITE);
 		drawWrapped(matrices, statLine("automodpack.storage.generatedCopies", compacted.generatedCopyCountBefore(), compacted.generatedCopyCountAfter(), UiFormat.formatSize(compacted.generatedCopyBytesBefore()), UiFormat.formatSize(compacted.generatedCopyBytesAfter())), y, textWidth, TextColors.GRAY);
 	}

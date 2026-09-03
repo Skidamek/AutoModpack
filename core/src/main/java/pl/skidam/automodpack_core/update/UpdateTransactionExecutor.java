@@ -19,7 +19,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -105,7 +105,7 @@ public final class UpdateTransactionExecutor {
 			validateSelectionBeforeMutation(transaction);
 			preparePendingReplacement(transaction);
 			if (unpublishedTarget != null)
-				new ClientGenerationStore(context.storage()).write(unpublishedTarget.generationRecord(), unpublishedTarget.patchNotesHistory(), unpublishedTarget.historyIndex());
+				new ClientGenerationStore(context.storage()).write(unpublishedTarget.document(), unpublishedTarget.journal());
 			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
 			ClientObjectStore.publishOwnership(context.storage());
 			return executePersisted(transaction);
@@ -303,11 +303,11 @@ public final class UpdateTransactionExecutor {
 		if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
 			context.beforeManifestAction().run(transaction, target);
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			GenerationTarget generation = transaction.generationTarget();
+			PackTarget generation = transaction.packTarget();
 			GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies).write(context.storage());
-			context.storage().writeActiveState(transaction.modpackId, generation.targetGenerationId());
+			context.storage().writeActiveState(transaction.modpackId, generation.contentToken());
 		} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
-			FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.targetGenerationId));
+			FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.contentToken));
 			context.storage().clearActiveState();
 			Files.deleteIfExists(context.storage().baselineFile(transaction.modpackId));
 		} else {
@@ -383,32 +383,32 @@ public final class UpdateTransactionExecutor {
 	private void preserveBeforeMutation(UpdateTransaction transaction) throws IOException {
 		for (Preservation preservation : transaction.plannedPreservations) {
 			PreservationOrigin origin = preservationOrigin(transaction, preservation);
-			PreservationVault.preserve(context.storage(), origin.modpackId(), origin.generationId(), origin.reason(), preservation.root(),
+			PreservationVault.preserve(context.storage(), origin.modpackId(), origin.contentToken(), origin.reason(), preservation.root(),
 					preservation.relativePath(), preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize());
 		}
 	}
 
 	private void preserveConflicts(UpdateTransaction transaction) throws IOException {
 		for (Conflict conflict : transaction.plannedConflicts)
-			if (conflict.action() == ConflictAction.PRESERVE_LOCAL) PreservationVault.preserveConflict(context.storage(), transaction.targetGenerationId, conflict);
+			if (conflict.action() == ConflictAction.PRESERVE_LOCAL) PreservationVault.preserveConflict(context.storage(), transaction.contentToken, conflict);
 	}
 
 	private PreservationOrigin preservationOrigin(UpdateTransaction transaction, Preservation preservation) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields active = context.storage().readActiveState();
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL)
-			return new PreservationOrigin(transaction.modpackId, active == null ? transaction.targetGenerationId : HashUtils.normalizeSha1(active.generationId), PreservationVault.Reason.MODPACK_REMOVAL);
+			return new PreservationOrigin(transaction.modpackId, active == null ? transaction.contentToken : HashUtils.normalizeSha1(active.contentToken), PreservationVault.Reason.MODPACK_REMOVAL);
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION)
-			return new PreservationOrigin(transaction.modpackId, active == null ? transaction.targetGenerationId : HashUtils.normalizeSha1(active.generationId), PreservationVault.Reason.MODPACK_DEACTIVATION);
+			return new PreservationOrigin(transaction.modpackId, active == null ? transaction.contentToken : HashUtils.normalizeSha1(active.contentToken), PreservationVault.Reason.MODPACK_DEACTIVATION);
 		if (preservation.proof() == PreservationProof.ACTIVE_LEDGER && active != null) {
 			PreservationVault.Reason reason = transaction.modpackId.equals(active.modpackId) ? PreservationVault.Reason.SERVER_REMOVAL : PreservationVault.Reason.MODPACK_DEACTIVATION;
-			return new PreservationOrigin(active.modpackId, HashUtils.normalizeSha1(active.generationId), reason);
+			return new PreservationOrigin(active.modpackId, HashUtils.normalizeSha1(active.contentToken), reason);
 		}
 		if (preservation.proof() == PreservationProof.PLAYER_CONSENT)
-			return new PreservationOrigin(transaction.modpackId, transaction.targetGenerationId, PreservationVault.Reason.PLAYER_CONSENT);
-		return new PreservationOrigin(transaction.modpackId, transaction.targetGenerationId, PreservationVault.Reason.SERVER_REMOVAL);
+			return new PreservationOrigin(transaction.modpackId, transaction.contentToken, PreservationVault.Reason.PLAYER_CONSENT);
+		return new PreservationOrigin(transaction.modpackId, transaction.contentToken, PreservationVault.Reason.SERVER_REMOVAL);
 	}
 
-	private record PreservationOrigin(String modpackId, String generationId, PreservationVault.Reason reason) {}
+	private record PreservationOrigin(String modpackId, String contentToken, PreservationVault.Reason reason) {}
 
 	private void verifyManagedFinalState(UpdateTransaction transaction) throws IOException {
 		for (ProjectedFile projected : transaction.projectedFinalState) {
@@ -520,7 +520,7 @@ public final class UpdateTransactionExecutor {
 			Path source = resolve(capture.root(), capture.relativePath(), transaction);
 			ClientStorageJsons.ClientBaselineFields.EntryFields entry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
 			entry.logicalPath = logicalPath;
-			entry.baselineGenerationId = transaction.parentGenerationId == null ? "" : transaction.parentGenerationId;
+			entry.baselineGenerationId = "";
 			if (capture.absent()) {
 				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Baseline path was expected to be absent: " + source);
 				entry.absent = true;

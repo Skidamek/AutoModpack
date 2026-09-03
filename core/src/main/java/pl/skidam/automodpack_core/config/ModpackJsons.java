@@ -1,13 +1,12 @@
 package pl.skidam.automodpack_core.config;
 
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 public class ModpackJsons {
 
+	/** The immutable policy document of one generation: pack metadata and every group's files and rules. */
 	public static class CompleteModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
@@ -16,31 +15,6 @@ public class ModpackJsons {
 		public String loaderVersion = "";
 		public String mcVersion = "";
 		public Map<String, ModpackGroupFields> groups = Map.of();
-		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
-		public GenerationFields generation;
-		public List<PatchNotesHistoryEntryFields> patchNotesHistory = List.of();
-		public GenerationJsons.GenerationHistoryIndexFields generationHistory;
-
-		public static class GenerationFields {
-			public int schemaVersion;
-			public String generationId = "";
-			public String parentGenerationId = "";
-			public String createdAt = "";
-			public String stateDigest = "";
-			public String ledgerDigest = "";
-			public String patchNotes = "";
-			public String patchNotesDigest = "";
-			public String rollbackTargetGenerationId = "";
-		}
-
-		public static class PatchNotesHistoryEntryFields {
-			public int schemaVersion;
-			public String generationId = "";
-			public String parentGenerationId = "";
-			public String createdAt = "";
-			public String patchNotes = "";
-			public String patchNotesDigest = "";
-		}
 
 		public static class ModpackGroupFields {
 			public String displayName = "";
@@ -83,9 +57,8 @@ public class ModpackJsons {
 		public Set<ModpackContentItem> list;
 		public Set<String> selectedGroups = Set.of();
 		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
-		public String targetGenerationId = "";
-		public String parentGenerationId = "";
-		public String stateDigest = "";
+		public String contentToken = "";
+		public String policySha1 = "";
 
 		public ModpackContentFields(Set<ModpackContentItem> list) {
 			this.list = list;
@@ -114,7 +87,7 @@ public class ModpackJsons {
 
 			@Override
 			public String toString() {
-				return String.format(Locale.ROOT, "ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
+				return String.format(java.util.Locale.ROOT, "ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
 			}
 
 			@Override
@@ -129,7 +102,7 @@ public class ModpackJsons {
 
 			@Override
 			public int hashCode() {
-				return Objects.hash(file, size, type, editable, sha1, murmur);
+				return java.util.Objects.hash(file, size, type, editable, sha1, murmur);
 			}
 		}
 

@@ -14,11 +14,12 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -96,7 +97,7 @@ public final class UpdateTransactionValidator {
 			ModpackId.requireValid(transaction.modpackId);
 			if (selectedTarget != null && transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE)
 				throw new IOException("A supplied update target is only valid for a modpack update transaction");
-			GenerationRecord record = selectedTarget == null ? storedRecord(transaction) : selectedTarget.generationRecord();
+			PackDocument record = selectedTarget == null ? storedRecord(transaction) : selectedTarget.document();
 			target = selectedTarget == null ? resolvedTarget(transaction, record).flatTarget() : selectedTarget.flatTarget();
 			if (selectedTarget != null) validateSelectedTargetMetadata(transaction, selectedTarget);
 			validateGenerationIdentity(transaction, record, target);
@@ -152,7 +153,7 @@ public final class UpdateTransactionValidator {
 	private void validateGeneratedCopies(UpdateTransaction transaction) throws IOException {
 		try {
 			GeneratedCopyState state = GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies);
-			if (!transaction.modpackId.equals(state.modpackId()) || !transaction.targetGenerationId.equals(state.generationId())
+			if (!transaction.modpackId.equals(state.modpackId()) || !transaction.contentToken.equals(state.contentToken())
 					|| !transaction.selectionDigest.equals(state.selectionDigest()))
 				throw new IOException("Generated-copy state identity does not match transaction");
 		} catch (RuntimeException e) {
@@ -160,20 +161,20 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	GenerationRecord storedRecord(UpdateTransaction transaction) throws IOException {
+	PackDocument storedRecord(UpdateTransaction transaction) throws IOException {
 		try {
-			return new ClientGenerationStore(storage).read(transaction.targetGenerationId)
-					.orElseThrow(() -> new IOException("Client generation record is missing: " + transaction.targetGenerationId));
+			return new ClientGenerationStore(storage).read(transaction.contentToken)
+					.orElseThrow(() -> new IOException("Client generation record is missing: " + transaction.contentToken));
 		} catch (RuntimeException e) {
 			throw new IOException("Client generation record is invalid", e);
 		}
 	}
 
-	SelectedModpackTarget resolvedTarget(UpdateTransaction transaction, GenerationRecord record) throws IOException {
+	SelectedModpackTarget resolvedTarget(UpdateTransaction transaction, PackDocument record) throws IOException {
 		try {
 			SelectionIntent expected = transaction.expectedPriorIntent();
-			ModpackJsons.CompleteModpackContentFields fields = new ClientGenerationStore(storage).readFields(transaction.targetGenerationId)
-					.orElseThrow(() -> new IOException("Client generation record is missing: " + transaction.targetGenerationId));
+			GenerationJsons.HeadDocumentFields fields = new ClientGenerationStore(storage).readFields(transaction.contentToken)
+					.orElseThrow(() -> new IOException("Client generation record is missing: " + transaction.contentToken));
 			if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && expected == null)
 				return SelectedModpackTarget.prepareDefault(fields, transaction.platform());
 			return SelectedModpackTarget.prepare(fields, expected, transaction.targetIntent(), transaction.platform());
@@ -182,15 +183,15 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	private void validateGenerationIdentity(UpdateTransaction transaction, GenerationRecord record, ModpackJsons.ModpackContentFields target) throws IOException {
-		GenerationTarget transactionTarget;
+	private void validateGenerationIdentity(UpdateTransaction transaction, PackDocument record, ModpackJsons.ModpackContentFields target) throws IOException {
+		PackTarget transactionTarget;
 		try {
-			transactionTarget = transaction.generationTarget();
+			transactionTarget = transaction.packTarget();
 		} catch (RuntimeException e) {
 			throw new IOException("Transaction generation identity is invalid", e);
 		}
-		GenerationTarget recordTarget = GenerationTarget.from(record);
-		GenerationTarget flatTarget = GenerationTarget.fromFlat(target);
+		PackTarget recordTarget = PackTarget.from(record);
+		PackTarget flatTarget = PackTarget.fromFlat(target);
 		if (!transactionTarget.equals(recordTarget) || !transactionTarget.equals(flatTarget))
 			throw new IOException("Transaction, generation record, and selected target identities disagree");
 		if (!transaction.modpackId.equals(record.manifest().modpackId())) throw new IOException("Generation record belongs to another modpack lineage");
@@ -201,16 +202,16 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	private void validateStoredClientState(UpdateTransaction transaction, GenerationRecord targetRecord) throws IOException {
+	private void validateStoredClientState(UpdateTransaction transaction, PackDocument targetRecord) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return;
 		if (!ModpackId.isValid(state.modpackId)) throw new IOException("Active client state modpack ID is invalid");
-		if (!HashUtils.isSha1(state.generationId))
+		if (!HashUtils.isSha1(state.contentToken))
 			throw new IOException("Active client state identity is invalid");
-		GenerationRecord stateRecord = new ClientGenerationStore(storage).read(state.generationId)
-				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
+		PackDocument stateRecord = new ClientGenerationStore(storage).read(state.contentToken)
+				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.contentToken));
 		if (!state.modpackId.equals(stateRecord.manifest().modpackId())) throw new IOException("Active client state and record belong to different modpacks");
-		if (state.modpackId.equals(transaction.modpackId) && state.generationId.equals(targetRecord.metadata().generationId())) {
+		if (state.modpackId.equals(transaction.modpackId) && state.contentToken.equals(targetRecord.contentToken())) {
 			if (!stateRecord.equals(targetRecord)) throw new IOException("Active client state disagrees with its generation record");
 		}
 	}
@@ -249,7 +250,7 @@ public final class UpdateTransactionValidator {
 	}
 
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
+		if (transaction.modpackId != null || transaction.contentToken != null || transaction.policySha1 != null
 				|| transaction.ledgerDigest != null || transaction.targetPlatform != null || transaction.selectionDigest != null || transaction.overlayDigest != null
 				|| transaction.expectedClientConfig != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.expectedPriorRequestedCategories != null
@@ -392,7 +393,7 @@ public final class UpdateTransactionValidator {
 				boolean replaceProof = installation != null && installation.expectedExistingHash() != null
 						&& preservation.expectedHash().equalsIgnoreCase(installation.expectedExistingHash());
 				if (!deleteProof && !replaceProof) throw new IOException("Player-consent preservation has no matching hash-pinned operation");
-				if (activeState != null && !(activeState.modpackId.equals(transaction.modpackId) && activeState.generationId.equals(transaction.targetGenerationId)
+				if (activeState != null && !(activeState.modpackId.equals(transaction.modpackId) && activeState.contentToken.equals(transaction.contentToken)
 						&& hasPlayerConsentClaim(transaction, preservation, relative)))
 					throw new IOException("Player-consent preservation is only valid on a first install");
 				ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
@@ -419,7 +420,7 @@ public final class UpdateTransactionValidator {
 	private boolean hasPlayerConsentClaim(UpdateTransaction transaction, Preservation preservation, String relative) throws IOException {
 		return PreservationVault.read(storage, transaction.modpackId).claims().stream().anyMatch(claim -> claim.sourceRoot() == Root.GAME_DIR
 				&& claim.originalPath().equals(relative) && claim.objectHash().equalsIgnoreCase(preservation.expectedHash()) && claim.size() == preservation.expectedSize()
-				&& claim.reason() == PreservationVault.Reason.PLAYER_CONSENT && claim.generationId().equals(transaction.targetGenerationId));
+				&& claim.reason() == PreservationVault.Reason.PLAYER_CONSENT && claim.contentToken().equals(transaction.contentToken));
 	}
 
 	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
@@ -482,8 +483,8 @@ public final class UpdateTransactionValidator {
 	private OwnershipLedger cleanupLedger() throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return null;
-		GenerationRecord active = new ClientGenerationStore(storage).read(state.generationId)
-				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.generationId));
+		PackDocument active = new ClientGenerationStore(storage).read(state.contentToken)
+				.orElseThrow(() -> new IOException("Active client generation record is missing: " + state.contentToken));
 		return active.ownershipLedger();
 	}
 
