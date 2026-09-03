@@ -25,7 +25,7 @@ from .supervisor import resource_labels
 from .engine import ClientExited, Context, run_flow
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
-from .generation_identity import CanonicalEncoder, write_strings
+from .generation_identity import content_token, ownership_ledger_digest
 
 
 logger = logging.getLogger(__name__)
@@ -603,7 +603,7 @@ def _v_publish_server_generation(ctx: Context, step):
     index = int(step.get("generation", 1))
     _write_server_generation(ctx, index)
     notes = str(_server_generation(ctx, index).get("patchNotes", "")).strip()
-    previous_id = str(_read_server_json(ctx, "current.json", "server current pointer").get("generationId", ""))
+    previous_token, previous_head = _server_projection_state(ctx)
     command = ["rcon-cli", "automodpack", "generate"]
     if notes:
         command.extend(["notes", notes.replace("\n", " ")])
@@ -613,17 +613,17 @@ def _v_publish_server_generation(ctx: Context, step):
         raise RuntimeError(f"server generation command failed ({result.exit_code}): {output}")
 
     def published_generation():
+        token, head = _server_projection_state(ctx)
+        if not token or (token, head) == (previous_token, previous_head):
+            return None
         try:
-            pointer = _read_server_json(ctx, "current.json", "server current pointer")
-            generation_id = str(pointer.get("generationId", ""))
-            if not generation_id or generation_id == previous_id:
-                return None
-            generation = _read_server_json(ctx, f"commits/{generation_id}.json", "published server generation")
+            journal = _server_journal(ctx)
         except AssertionError:
             return None
-        if str(generation.get("generationId", "")) != generation_id or str(generation.get("patchNotes", "")) != notes:
+        head_entry = next((entry for entry in reversed(journal) if int(entry.get("seq", -1)) == head), None)
+        if head_entry is None or str(head_entry.get("contentToken", "")) != token or str(head_entry.get("notes", "")) != notes:
             return None
-        return generation_id
+        return token
 
     published_id = await_condition(
         published_generation,
@@ -644,6 +644,35 @@ def _read_server_json(ctx: Context, relative: str, description: str) -> dict:
     if not isinstance(value, dict):
         raise AssertionError(f"{description} must be a JSON object: {path}")
     return value
+
+
+def _server_projection_state(ctx: Context) -> tuple[str, int]:
+    """The published (contentToken, journalHead) pair, or ("", -1) before the first publish."""
+    try:
+        projection = _read_server_json(ctx, "current-projection.json", "server current projection")
+    except AssertionError:
+        return "", -1
+    return str(projection.get("contentToken", "")), int(projection.get("journalHead", -1))
+
+
+def _server_journal(ctx: Context) -> list[dict]:
+    path = ctx.server_dir / "automodpack" / "server" / "journal.jsonl"
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise AssertionError(f"server journal is not readable: {path}: {error}") from error
+    entries = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except ValueError as error:
+            raise AssertionError(f"server journal has an unreadable entry: {path}: {error}") from error
+        if not isinstance(entry, dict):
+            raise AssertionError(f"server journal entries must be JSON objects: {path}")
+        entries.append(entry)
+    return entries
 
 
 def _server_data_root_container(ctx: Context) -> Path:
@@ -694,48 +723,21 @@ def _write_server_orphan_object(ctx: Context, object_root: Path) -> str:
 
 @verb("rollback_server_generation")
 def _v_rollback_server_generation(ctx: Context, step):
-    """Select a durable retained ancestor and publish a confirmed real RCON revert."""
-    projection = _read_server_json(ctx, "current-projection.json", "server current projection")
-    pointer = _read_server_json(ctx, "current.json", "server current pointer")
-    current = projection.get("generation")
-    history = projection.get("patchNotesHistory")
-    if not isinstance(current, dict) or not isinstance(history, list) or len(history) < 2:
-        raise AssertionError("server rollback scenario needs durable current generation metadata and history")
-    current_id = str(current.get("generationId", ""))
-    if str(pointer.get("generationId", "")) != current_id:
-        raise AssertionError("server current pointer and projection disagree before rollback")
-    history_by_id = {
-        str(entry.get("generationId", "")): entry
-        for entry in history
-        if isinstance(entry, dict) and entry.get("generationId")
-    }
-    ancestor_ids = []
-    next_id = str(current.get("parentGenerationId", ""))
-    while next_id:
-        if next_id in ancestor_ids:
-            raise AssertionError(f"server generation history contains a parent cycle at {next_id}")
-        ancestor_ids.append(next_id)
-        entry = history_by_id.get(next_id)
-        if entry is None:
-            raise AssertionError(f"server generation history omits retained ancestor {next_id}")
-        next_id = str(entry.get("parentGenerationId", ""))
-    target_id = next((
-        generation_id
-        for generation_id in reversed(ancestor_ids)
-        if (ctx.server_dir / "automodpack" / "server" / "commits" / f"{generation_id}.json").is_file()
-        and isinstance(_read_server_json(ctx, f"commits/{generation_id}.json", "retained generation commit").get("stateDigest"), str)
-    ), None)
-    if target_id is None:
-        raise AssertionError(f"server rollback has no valid retained ancestor: {ancestor_ids}")
-    target_commit = _read_server_json(ctx, f"commits/{target_id}.json", "retained generation commit")
-    state_digest = str(target_commit.get("stateDigest", ""))
-    target_ledger_digest = str(target_commit.get("ledgerDigest", ""))
-    if not re.fullmatch(r"[0-9a-f]{40}", state_digest) or not re.fullmatch(r"[0-9a-f]{40}", target_ledger_digest) or not (ctx.server_dir / "automodpack" / "server" / "catalogues" / f"{state_digest}.json").is_file():
-        raise AssertionError(f"server rollback target metadata is not retained: {target_id}")
+    """Revert through the real RCON command to a journal entry and verify the durable restore."""
+    journal = _server_journal(ctx)
+    if len(journal) < 2:
+        raise AssertionError("server rollback scenario needs at least two journal entries")
+    head_seq = int(journal[-1].get("seq", -1))
+    target_seq = int(step.get("seq", head_seq - 1))
+    target = next((entry for entry in journal if int(entry.get("seq", -1)) == target_seq), None)
+    if target is None:
+        raise AssertionError(f"server journal has no entry {target_seq} to roll back to")
+    target_token = str(target.get("contentToken", ""))
+    target_policy = str(target.get("policySha1", ""))
     notes = str(step.get("notes", "Release gate rollback verification.")).strip()
     if not notes:
         raise AssertionError("server rollback notes must not be empty")
-    command = ["rcon-cli", "automodpack", "generate", "revert", target_id, "confirm", "notes", notes]
+    command = ["rcon-cli", "automodpack", "generate", "revert", str(target_seq), "confirm", "notes", notes]
     result = _container(ctx.srv_name).exec_run(command)
     output = _exec_output(result)
     if result.exit_code != 0 or "unknown command" in output.lower() or "incorrect argument" in output.lower():
@@ -743,53 +745,34 @@ def _v_rollback_server_generation(ctx: Context, step):
 
     def completed_state():
         try:
+            after_journal = _server_journal(ctx)
             after_projection = _read_server_json(ctx, "current-projection.json", "server rollback projection")
-            after_pointer = _read_server_json(ctx, "current.json", "server rollback pointer")
         except AssertionError:
             return None
-        after_current = after_projection.get("generation")
-        after_history = after_projection.get("patchNotesHistory")
-        if not isinstance(after_current, dict) or not isinstance(after_history, list):
+        if len(after_journal) != len(journal) + 1:
             return None
-        new_id = str(after_current.get("generationId", ""))
-        if not new_id or new_id == current_id or str(after_pointer.get("generationId", "")) != new_id:
+        restore = after_journal[-1]
+        if int(restore.get("restoreOf", -2)) != target_seq:
             return None
-        if str(after_current.get("parentGenerationId", "")) != current_id:
+        if str(restore.get("contentToken", "")) != target_token or str(restore.get("policySha1", "")) != target_policy:
             return None
-        if str(after_current.get("rollbackTargetGenerationId", "")) != target_id or str(after_current.get("patchNotes", "")) != notes:
+        if str(after_projection.get("contentToken", "")) != target_token or int(after_projection.get("journalHead", -1)) != int(restore.get("seq", -1)):
             return None
-        after_ledger_digest = str(after_current.get("ledgerDigest", ""))
-        if str(after_current.get("stateDigest", "")) != state_digest or not re.fullmatch(r"[0-9a-f]{40}", after_ledger_digest):
-            return None
-        history_ids = [str(entry.get("generationId", "")) for entry in after_history if isinstance(entry, dict)]
-        expected_history_ids = [str(entry.get("generationId", "")) for entry in history] + [new_id]
-        if history_ids != expected_history_ids:
-            return None
-        current_history = {str(entry.get("generationId", "")): entry for entry in after_history if isinstance(entry, dict)}
-        if target_id not in current_history or current_history[target_id].get("patchNotes") != history_by_id[target_id].get("patchNotes"):
-            return None
-        if current_history.get(new_id, {}).get("patchNotes") != notes:
-            return None
-        commit = _read_server_json(ctx, f"commits/{new_id}.json", "server rollback commit")
-        if str(commit.get("parentGenerationId", "")) != current_id or str(commit.get("rollbackTargetGenerationId", "")) != target_id or str(commit.get("stateDigest", "")) != state_digest or str(commit.get("ledgerDigest", "")) != after_ledger_digest or str(commit.get("patchNotes", "")) != notes:
-            return None
-        return after_pointer, after_projection
+        return restore, after_projection
 
-    after_pointer, after_projection = await_condition(
+    restore, after_projection = await_condition(
         completed_state,
         parse_duration(step.get("timeout"), default=180),
         step.get("poll"),
-        "server rollback did not publish a durable pointer, projection, and patch-note history",
+        "server rollback did not append a durable restore entry and projection",
     )
-    after_current = after_projection["generation"]
     ctx.vars["server_rollback"] = {
-        "targetGenerationId": target_id,
-        "currentGenerationId": str(after_pointer["generationId"]),
-        "rollbackTargetGenerationId": str(after_current["rollbackTargetGenerationId"]),
-        "stateDigest": str(after_current["stateDigest"]),
-        "ledgerDigest": str(after_current["ledgerDigest"]),
-        "patchNotes": str(after_current["patchNotes"]),
-        "historyEntries": len(after_projection["patchNotesHistory"]),
+        "targetSeq": target_seq,
+        "restoreSeq": int(restore["seq"]),
+        "contentToken": str(restore["contentToken"]),
+        "journalHead": int(after_projection["journalHead"]),
+        "notes": str(restore["notes"]),
+        "journalEntries": len(journal) + 1,
         "command": command,
     }
 
@@ -849,32 +832,13 @@ def _v_collect_server_objects(ctx: Context, step):
 
 @verb("compact_server_history")
 def _v_compact_server_history(ctx: Context, step):
-    """Compact the live server lineage and verify its durable receipt and projection."""
-    server_root = ctx.server_dir / "automodpack" / "server"
-    projection_path = server_root / "current-projection.json"
-    checkpoint_path = server_root / "checkpoint.json"
-    before_checkpoint_bytes = checkpoint_path.read_bytes() if checkpoint_path.is_file() else None
-    before_projection_bytes = projection_path.read_bytes()
-    before_projection = json.loads(projection_path.read_text(encoding="utf-8"))
-    before_history = list(before_projection.get("patchNotesHistory") or [])
-    if len(before_history) < 2:
-        raise AssertionError("server compaction scenario needs at least two patch-note history entries")
-    expected_ids = [str(entry.get("generationId", "")) for entry in before_history]
-    expected_notes = [str(entry.get("patchNotes", "")) for entry in before_history]
-    expected_superseded_ids = set(expected_ids[:-1])
-    before_counts = {
-        name: len(list((server_root / name).glob("*.json")))
-        for name in ("catalogues", "commits", "deltas")
-    }
-    before_deletion_paths = {
-        server_root / "commits" / f"{generation_id}.json"
-        for generation_id in expected_superseded_ids
-    } | {
-        server_root / "deltas" / f"{generation_id}.json"
-        for generation_id in expected_superseded_ids
-    }
-    boundary_id = expected_ids[-1]
-    result = _container(ctx.srv_name).exec_run(["rcon-cli", "automodpack", "generate", "storage", "compact", "before", boundary_id, "confirm"])
+    """Compact the live journal under a snapshot entry and verify the durable projection."""
+    journal = _server_journal(ctx)
+    if len(journal) < 2:
+        raise AssertionError("server compaction scenario needs at least two journal entries")
+    boundary_seq = int(step.get("beforeSeq", journal[-1].get("seq", 1)))
+    command = ["rcon-cli", "automodpack", "generate", "storage", "compact", "before", str(boundary_seq), "confirm"]
+    result = _container(ctx.srv_name).exec_run(command)
     output = result.output.decode("utf-8", errors="replace") if result.output else ""
     if result.exit_code != 0:
         raise RuntimeError(f"server history compaction command failed ({result.exit_code}): {output}")
@@ -882,65 +846,38 @@ def _v_compact_server_history(ctx: Context, step):
         raise RuntimeError(f"server history compaction command was rejected: {output}")
 
     def completed_state():
-        if not checkpoint_path.is_file() or not projection_path.is_file():
-            return None
         try:
-            checkpoint_bytes = checkpoint_path.read_bytes()
-            checkpoint = json.loads(checkpoint_bytes)
-            after_projection = json.loads(projection_path.read_text(encoding="utf-8"))
-        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            after_journal = _server_journal(ctx)
+            after_projection = _read_server_json(ctx, "current-projection.json", "server compaction projection")
+        except AssertionError:
             return None
-        if not _completed_compaction_receipt(checkpoint, after_projection, expected_ids, expected_notes):
+        if not _completed_compaction(journal, after_journal, after_projection):
             return None
-        if any(path.exists() for path in before_deletion_paths):
-            return None
-        after_counts = {
-            name: len(list((server_root / name).glob("*.json")))
-            for name in ("catalogues", "commits", "deltas")
-        }
-        if not any(after_counts[name] < before_counts[name] for name in before_counts):
-            return None
-        if checkpoint_bytes == before_checkpoint_bytes and projection_path.read_bytes() == before_projection_bytes:
-            return None
-        return checkpoint, after_projection, after_counts
+        return after_journal, after_projection
 
-    checkpoint, after_projection, after_counts = await_condition(
+    after_journal, _after_projection = await_condition(
         completed_state,
         parse_duration(step.get("timeout"), default=120),
         step.get("poll"),
-        "server generation compaction did not publish a new validated receipt, projection, and deletion state",
+        "server history compaction did not rewrite the journal under a snapshot entry",
     )
-    checkpoint_history = list(checkpoint.get("patchNotesHistory") or [])
-    ctx.vars["server_compaction"] = {"before": before_counts, "after": after_counts, "historyEntries": len(checkpoint_history)}
+    ctx.vars["server_compaction"] = {"removedEntries": len(journal) - len(after_journal), "entriesBefore": len(journal), "entriesAfter": len(after_journal)}
 
 
-def _completed_compaction_receipt(checkpoint, projection, expected_ids, expected_notes):
-    checkpoint_history = list(checkpoint.get("patchNotesHistory") or [])
-    projection_history = list(projection.get("patchNotesHistory") or [])
-    if [str(entry.get("generationId", "")) for entry in checkpoint_history] != expected_ids:
+def _completed_compaction(entries_before: list[dict], entries_after: list[dict], projection: dict) -> bool:
+    """Whether the journal was rewritten as a head snapshot followed by renumbered survivors."""
+    if not entries_after or len(entries_after) >= len(entries_before):
         return False
-    if [str(entry.get("generationId", "")) for entry in projection_history] != expected_ids:
+    snapshot = entries_after[0]
+    if not snapshot.get("snapshot") or int(snapshot.get("seq", 0)) != 1:
         return False
-    if [str(entry.get("patchNotes", "")) for entry in checkpoint_history] != expected_notes:
+    seqs = [int(entry.get("seq", 0)) for entry in entries_after]
+    if seqs != list(range(1, len(seqs) + 1)):
         return False
-    if [str(entry.get("patchNotes", "")) for entry in projection_history] != expected_notes:
+    head_token = str(entries_before[-1].get("contentToken", ""))
+    if str(entries_after[-1].get("contentToken", "")) != head_token or str(projection.get("contentToken", "")) != head_token:
         return False
-    boundary_id = expected_ids[-1]
-    if str(checkpoint.get("boundaryGenerationId", "")) != boundary_id:
-        return False
-    if str(checkpoint.get("record", {}).get("generation", {}).get("generationId", "")) != boundary_id:
-        return False
-    if checkpoint.get("supersededGenerationIds") or checkpoint.get("supersededCatalogueStateDigests"):
-        return False
-    for history in (checkpoint.get("historyIndex", {}), projection.get("generationHistory", {})):
-        entries = list(history.get("entries") or [])
-        if str(history.get("currentGenerationId", "")) != boundary_id or str(history.get("compactionBoundaryGenerationId", "")) != boundary_id:
-            return False
-        if [str(entry.get("generationId", "")) for entry in entries] != expected_ids:
-            return False
-        if any(bool(entry.get("rollbackAvailable")) for entry in entries[:-1]) or not bool(entries[-1].get("rollbackAvailable")):
-            return False
-    return True
+    return int(projection.get("journalHead", -1)) == seqs[-1]
 
 
 @verb("launch_client")
@@ -998,7 +935,7 @@ def _v_seed_bootstrap(ctx: Context, step):
         server_config = json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise RuntimeError(f"live server bootstrap state is not readable: {error}") from error
-    modpack_id = str(projection.get("modpackId", "")).strip()
+    modpack_id = str((projection.get("policy", {}) or {}).get("modpackId", "")).strip()
     if not modpack_id:
         raise RuntimeError(f"live server projection has no modpackId: {projection_path}")
     origin = str(ctx.resolve(step.get("origin", "${server.host}"))).strip()
@@ -1032,7 +969,7 @@ def _published_objects(ctx: Context, only_groups: list[str] | None = None) -> di
         projection = json.loads(projection_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"published projection is not readable: {error}") from error
-    groups = projection.get("groups", {}) or {}
+    groups = (projection.get("policy", {}) or {}).get("groups", {}) or {}
     if only_groups:
         unknown = [group for group in only_groups if group not in groups]
         if unknown:
@@ -1322,70 +1259,92 @@ def _check_canonical_timestamp(created_at: str) -> None:
         raise ValueError(f"staged generation timestamp is not canonical: {created_at!r}")
 
 
-def _staged_generation_id(
-    modpack_id: str,
-    created_at: str,
-    state_digest: str,
-    ledger_digest: str,
-    patch_notes: str = "",
-    parent_generation_id: str = "",
-) -> str:
-    notes_digest = hashlib.sha1(patch_notes.encode("utf-8")).hexdigest()
-    return (
-        CanonicalEncoder()
-        .string("automodpack-generation-v1")
-        .integer(1)
-        .string(modpack_id)
-        .string(parent_generation_id)
-        .string(created_at)
-        .string(state_digest)
-        .string(ledger_digest)
-        .string(notes_digest)
-        .string("")
-        .digest()
-    )
+_STAGED_JOURNAL_TAIL_LIMIT = 25
 
 
-def _staged_ledger_digest(modpack_id: str, entries: list[dict]) -> str:
-    encoder = CanonicalEncoder().string("automodpack-ownership-ledger-v1").string(modpack_id).integer(len(entries))
-    for entry in entries:
-        hashes = sorted(entry["historicalHashes"], key=lambda content: (content["sha1"], int(content["size"])))
-        groups = sorted(entry["historicalGroupIds"])
-        encoder.string(entry["logicalPath"]).integer(len(hashes))
-        for content in hashes:
-            encoder.string(content["sha1"]).long(int(content["size"]))
-        encoder.integer(len(groups))
-        for group in groups:
-            encoder.string(group)
-        encoder.string(entry["currentStatus"])
-    return encoder.digest()
+def _record_tree(record: dict) -> dict[str, tuple[str, int]]:
+    """The served file set (path -> (sha1, size)) described by one head document."""
+    tree = {}
+    for group in ((record.get("policy") or {}).get("groups") or {}).values():
+        if not isinstance(group, dict):
+            continue
+        for path, file in (group.get("files") or {}).items():
+            if isinstance(file, dict) and file.get("sha1"):
+                tree[str(path)] = (str(file["sha1"]).lower(), int(file["size"]))
+    return tree
 
 
-def _staged_state_digest(ctx: Context, modpack_id: str, files: list[dict], modpack_name: str | None = None) -> str:
-    encoder = (
-        CanonicalEncoder()
-        .string("automodpack-state-v1")
-        .string(modpack_id)
-        .string(modpack_name if modpack_name is not None else ctx.modpack_name)
-        .string("")
-        .string(ctx.target.loader)
-        .string(_load_ver(ctx.target))
-        .string(ctx.target.minecraft)
-        .integer(1)
-        .string("main")
-        .string(modpack_name if modpack_name is not None else ctx.modpack_name)
-        .string("")
-        .string("")
-        .boolean(True)
-        .boolean(True)
-    )
-    write_strings(encoder, [])
-    write_strings(encoder, [])
-    encoder.integer(0).integer(len(files))
-    for entry in files:
-        encoder.string(entry["logicalPath"]).long(int(entry["size"])).string(entry["type"])
-        encoder.boolean(entry["editable"]).string(entry["sha1"]).string("")
-    return encoder.digest()
+def _staged_head_document(modpack_id: str, policy: dict, file_map: dict[str, tuple[str, int]], notes: str, created_at: str) -> dict:
+    """The head-document record the client stores for one staged pack with no prior history."""
+    token = content_token(file_map)
+    policy_sha1 = hashlib.sha1(json.dumps(policy, sort_keys=True).encode("utf-8")).hexdigest()
+    ledger_entries = [
+        {"logicalPath": path, "historicalHashes": [{"sha1": file_map[path][0], "size": file_map[path][1]}], "historicalGroupIds": ["main"], "currentStatus": "PRESENT"}
+        for path in sorted(file_map)
+    ]
+    journal = [{
+        "seq": 1,
+        "contentToken": token,
+        "policySha1": policy_sha1,
+        "createdAt": created_at,
+        "notes": notes,
+        "restoreOf": -1,
+        "snapshot": True,
+        "changes": [{"path": path, "toSha1": file_map[path][0], "toSize": file_map[path][1]} for path in sorted(file_map)],
+    }]
+    return {
+        "schemaVersion": 1,
+        "contentToken": token,
+        "policySha1": policy_sha1,
+        "createdAt": created_at,
+        "journalHead": 1,
+        "journalTruncated": False,
+        "journal": journal,
+        "ownershipLedger": {"modpackId": modpack_id, "entries": ledger_entries, "digest": ownership_ledger_digest(modpack_id, ledger_entries)},
+        "policy": policy,
+    }
+
+
+def _latest_staged_record(client_root: Path, modpack_id: str) -> dict | None:
+    """The newest staged record for one modpack, or None when no record exists yet."""
+    def created_at(record: dict):
+        try:
+            return datetime.fromisoformat(str(record.get("createdAt", "")).replace("Z", "+00:00"))
+        except ValueError:
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+    candidates = []
+    for path in (client_root / "records").glob("*/manifest.json"):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            continue
+        if isinstance(record, dict) and (record.get("policy") or {}).get("modpackId") == modpack_id:
+            candidates.append((created_at(record), record))
+    return max(candidates, key=lambda candidate: candidate[0])[1] if candidates else None
+
+
+def _staged_journal_tail(record: dict, previous: dict, notes: str, created_at: str) -> list[dict]:
+    """Continue the previous staged journal with the content diff this record publishes."""
+    previous_journal = [entry for entry in (previous.get("journal") or []) if isinstance(entry, dict)]
+    if not previous_journal:
+        return list(record["journal"])
+    if str(previous.get("contentToken", "")) == str(record["contentToken"]):
+        return previous_journal
+    previous_tree, current_tree = _record_tree(previous), _record_tree(record)
+    changes = []
+    for path in sorted(set(previous_tree) | set(current_tree)):
+        old, new = previous_tree.get(path), current_tree.get(path)
+        if old is None:
+            changes.append({"path": path, "toSha1": new[0], "toSize": new[1]})
+        elif new is None:
+            changes.append({"path": path, "fromSha1": old[0]})
+        elif old != new:
+            changes.append({"path": path, "fromSha1": old[0], "toSha1": new[0], "toSize": new[1]})
+    tail = previous_journal[-_STAGED_JOURNAL_TAIL_LIMIT + 1:]
+    seq = int(tail[-1].get("seq", 0)) + 1 if tail else 1
+    tail.append({"seq": seq, "contentToken": record["contentToken"], "policySha1": record["policySha1"], "createdAt": created_at, "notes": notes, "restoreOf": -1, "snapshot": False, "changes": changes})
+    return tail
 
 
 def _write_staged_generation(
@@ -1397,7 +1356,6 @@ def _write_staged_generation(
     client_root: Path | None = None,
     modpack_name: str | None = None,
     patch_notes: str = "",
-    parent_generation_id: str = "",
     editable_paths: set[str] | frozenset[str] = frozenset(),
 ) -> dict:
     files = []
@@ -1414,30 +1372,10 @@ def _write_staged_generation(
         })
 
     files.sort(key=lambda entry: entry["logicalPath"])
-    ledger_entries = [
-        {
-            "logicalPath": entry["logicalPath"],
-            "historicalHashes": [{"sha1": entry["sha1"], "size": int(entry["size"])}],
-            "historicalGroupIds": ["main"],
-            "firstPublishedGenerationId": "0" * 40,
-            "lastPublishedGenerationId": "0" * 40,
-            "currentStatus": "PRESENT",
-        }
-        for entry in files
-    ]
     modpack_name = modpack_name if modpack_name is not None else ctx.modpack_name
-    state_digest = _staged_state_digest(ctx, modpack_id, files, modpack_name)
-    provisional_ledger_digest = _staged_ledger_digest(modpack_id, ledger_entries)
-    created_at = _canonical_timestamp(datetime.now(timezone.utc))
-    client_root = client_root or root.parent
-    generation_id = _staged_generation_id(modpack_id, created_at, state_digest, provisional_ledger_digest, patch_notes, parent_generation_id)
-    for entry in ledger_entries:
-        entry["firstPublishedGenerationId"] = generation_id
-        entry["lastPublishedGenerationId"] = generation_id
-
-    manifest = {
-        "modpackName": modpack_name,
+    policy = {
         "modpackId": modpack_id,
+        "modpackName": modpack_name,
         "automodpackVersion": "",
         "loader": ctx.target.loader,
         "loaderVersion": _load_ver(ctx.target),
@@ -1464,32 +1402,18 @@ def _write_staged_generation(
                 },
             }
         },
-        "ownershipLedger": {
-            "modpackId": modpack_id,
-            "entries": ledger_entries,
-            "digest": provisional_ledger_digest,
-        },
-        "generation": {
-            "schemaVersion": 1,
-            "generationId": generation_id,
-            "parentGenerationId": parent_generation_id,
-            "createdAt": created_at,
-            "stateDigest": state_digest,
-            "ledgerDigest": provisional_ledger_digest,
-            "patchNotes": patch_notes,
-            "patchNotesDigest": hashlib.sha1(patch_notes.encode("utf-8")).hexdigest(),
-            "rollbackTargetGenerationId": "",
-        },
     }
-    if parent_generation_id:
-        parent_manifest_path = client_root / "records" / parent_generation_id / "manifest.json"
-        parent_manifest = json.loads(parent_manifest_path.read_text(encoding="utf-8"))
-        parent_generation = parent_manifest["generation"]
-        parent_history = parent_manifest.get("patchNotesHistory") or [_staged_patch_note_entry(parent_generation)]
-        manifest["patchNotesHistory"] = [*parent_history, _staged_patch_note_entry(manifest["generation"])]
-    generation_path = client_root / "records" / generation_id / "manifest.json"
+    file_map = {entry["logicalPath"]: (entry["sha1"], int(entry["size"])) for entry in files}
+    created_at = _canonical_timestamp(datetime.now(timezone.utc))
+    client_root = client_root or root.parent
+    record = _staged_head_document(modpack_id, policy, file_map, patch_notes, created_at)
+    previous = _latest_staged_record(client_root, modpack_id)
+    if previous is not None:
+        record["journal"] = _staged_journal_tail(record, previous, patch_notes, created_at)
+        record["journalHead"] = int(record["journal"][-1]["seq"])
+    generation_path = client_root / "records" / record["contentToken"] / "manifest.json"
     generation_path.parent.mkdir(parents=True, exist_ok=True)
-    generation_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    generation_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     _verify_staged_manifest(generation_path, patch_notes)
     objects = data_root / "objects"
     objects.mkdir(parents=True, exist_ok=True)
@@ -1498,60 +1422,40 @@ def _write_staged_generation(
         if not object_path.is_file():
             object_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / entry["logicalPath"], object_path)
-    return {"generationId": generation_id, "stateDigest": state_digest, "ledgerDigest": provisional_ledger_digest}
+    return {"contentToken": record["contentToken"], "policySha1": record["policySha1"]}
 
 
-def _verify_staged_manifest(generation_path: Path, patch_notes: str) -> None:
-    """Re-read a staged generation manifest and prove it is strictly valid before any client can see it.
+def _verify_staged_manifest(record_path: Path, patch_notes: str) -> None:
+    """Re-read a staged generation record and prove it is strictly valid before any client can see it.
 
-    A malformed staged record (non-canonical timestamp, mismatched digests) stays invisible until a client storage
-    validation reads it — potentially minutes and hundreds of steps later, on a random shard. Fail here instead,
-    where the cause is obvious.
+    A malformed staged record (non-canonical timestamp, mismatched content token or ledger digest) stays invisible
+    until a client storage validation reads it — potentially minutes and hundreds of steps later, on a random shard.
+    Fail here instead, where the cause is obvious.
     """
     try:
-        stored = json.loads(generation_path.read_text(encoding="utf-8"))
+        record = json.loads(record_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
-        raise ValueError(f"staged generation manifest is not readable: {generation_path}: {error}") from error
-    generation = stored.get("generation")
-    if not isinstance(generation, dict):
-        raise TypeError(f"staged generation manifest has no generation metadata: {generation_path}")
-    _check_canonical_timestamp(generation.get("createdAt"))
-    notes_digest = hashlib.sha1(str(generation.get("patchNotes", "")).encode("utf-8")).hexdigest()
-    if notes_digest != generation.get("patchNotesDigest"):
-        raise ValueError(f"staged generation patch-notes digest does not match its notes: {generation_path}")
-    if hashlib.sha1(patch_notes.encode("utf-8")).hexdigest() != notes_digest:
-        raise ValueError(f"staged generation patch notes drifted between planning and writing: {generation_path}")
-    recomputed = _staged_generation_id(str(stored.get("modpackId", "")), str(generation.get("createdAt", "")), str(generation.get("stateDigest", "")), str(generation.get("ledgerDigest", "")), str(generation.get("patchNotes", "")), str(generation.get("parentGenerationId", "")))
-    if recomputed != generation.get("generationId"):
-        raise ValueError(f"staged generation ID does not match its metadata: {generation_path}")
-
-
-def _staged_patch_note_entry(generation: dict) -> dict:
-    return {
-        "schemaVersion": generation["schemaVersion"],
-        "generationId": generation["generationId"],
-        "parentGenerationId": generation["parentGenerationId"],
-        "createdAt": generation["createdAt"],
-        "patchNotes": generation["patchNotes"],
-        "patchNotesDigest": generation["patchNotesDigest"],
-    }
-
-
-def _latest_staged_generation_id(client_root: Path, modpack_id: str) -> str:
-    records_root = client_root / "records"
-    candidates = []
-    if not records_root.is_dir():
-        return ""
-    for path in records_root.glob("*/manifest.json"):
-        try:
-            manifest = json.loads(path.read_text(encoding="utf-8"))
-            generation = manifest.get("generation")
-            generation_id = str(generation.get("generationId", "")) if isinstance(generation, dict) else ""
-            if manifest.get("modpackId") == modpack_id and generation_id:
-                candidates.append((str(generation.get("createdAt", "")), generation_id))
-        except (OSError, ValueError, TypeError):
-            continue
-    return max(candidates)[1] if candidates else ""
+        raise ValueError(f"staged generation record is not readable: {record_path}: {error}") from error
+    if not isinstance(record, dict):
+        raise TypeError(f"staged generation record is not an object: {record_path}")
+    policy = record.get("policy")
+    if not isinstance(policy, dict):
+        raise TypeError(f"staged generation record has no policy document: {record_path}")
+    _check_canonical_timestamp(record.get("createdAt"))
+    if content_token(_record_tree(record)) != record.get("contentToken"):
+        raise ValueError(f"staged generation content token does not match its policy files: {record_path}")
+    ledger = record.get("ownershipLedger")
+    if not isinstance(ledger, dict) or str(ledger.get("modpackId", "")) != str(policy.get("modpackId", "")) or ownership_ledger_digest(str(ledger.get("modpackId", "")), list(ledger.get("entries") or [])) != ledger.get("digest"):
+        raise ValueError(f"staged generation ledger digest does not match its entries: {record_path}")
+    journal = list(record.get("journal") or [])
+    head_entry = journal[-1] if journal else None
+    if head_entry is None or int(head_entry.get("seq", 0)) != int(record.get("journalHead", -1)):
+        raise ValueError(f"staged generation journal head does not match its entries: {record_path}")
+    if str(head_entry.get("contentToken", "")) != str(record.get("contentToken", "")):
+        raise ValueError(f"staged generation head entry does not carry the record's content token: {record_path}")
+    _check_canonical_timestamp(head_entry.get("createdAt"))
+    if str(head_entry.get("notes", "")) != patch_notes:
+        raise ValueError(f"staged generation patch notes drifted between planning and writing: {record_path}")
 
 
 @verb("stage_modpack")
@@ -1577,7 +1481,6 @@ def _v_stage_modpack(ctx: Context, step):
     client_root = automodpack / "client"
     data_root = _ensure_client_data_root(game)
     root = client_root / "staging" / modpack_id if record_only else client_root / "active"
-    parent_generation_id = _latest_staged_generation_id(client_root, modpack_id) if record_only else ""
     if root.exists():
         shutil.rmtree(root)
     if not record_only:
@@ -1646,7 +1549,6 @@ def _v_stage_modpack(ctx: Context, step):
         client_root=client_root,
         modpack_name=modpack_name,
         patch_notes=str(step.get("patchNotes", "")),
-        parent_generation_id=parent_generation_id,
         editable_paths=editable_paths,
     )
     if record_only:
@@ -1656,10 +1558,8 @@ def _v_stage_modpack(ctx: Context, step):
     state = {
         "schemaVersion": 1,
         "modpackId": modpack_id,
-        "generationId": generation["generationId"],
-        "platform": "linux",
-        "stateDigest": generation["stateDigest"],
-        "ledgerDigest": generation["ledgerDigest"],
+        "contentToken": generation["contentToken"],
+        "status": "ACTIVE",
     }
     (client_root / "active-state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 

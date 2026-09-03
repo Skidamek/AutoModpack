@@ -41,8 +41,26 @@ class CanonicalEncoder:
         return hashlib.sha1(self.data).hexdigest()
 
 
-def write_strings(encoder: CanonicalEncoder, values):
-    values = sorted(values)
-    encoder.integer(len(values))
-    for value in values:
-        encoder.string(value)
+def content_token(files: dict[str, tuple[str, int]]) -> str:
+    """The canonical content identity of one served file set (Java ContentTree.token)."""
+    encoder = CanonicalEncoder().string("automodpack-content-v1").integer(len(files))
+    for path in sorted(files):
+        sha1, size = files[path]
+        encoder.string(path).string(str(sha1).lower()).long(int(size))
+    return encoder.digest()
+
+
+def ownership_ledger_digest(modpack_id: str, entries: list[dict]) -> str:
+    """The canonical digest of one ownership ledger (Java OwnershipLedger.digest)."""
+    encoder = CanonicalEncoder().string("automodpack-ownership-ledger-v1").string(modpack_id).integer(len(entries))
+    for entry in sorted(entries, key=lambda entry: entry["logicalPath"]):
+        hashes = sorted(entry["historicalHashes"], key=lambda content: (str(content["sha1"]).lower(), int(content["size"])))
+        groups = sorted(entry["historicalGroupIds"])
+        encoder.string(entry["logicalPath"]).integer(len(hashes))
+        for content in hashes:
+            encoder.string(str(content["sha1"]).lower()).long(int(content["size"]))
+        encoder.integer(len(groups))
+        for group in groups:
+            encoder.string(group)
+        encoder.string(entry["currentStatus"])
+    return encoder.digest()

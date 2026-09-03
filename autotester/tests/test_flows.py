@@ -24,10 +24,7 @@ from automodpack_autotester.config import (
 from automodpack_autotester.engine import run_flow, steps_io, steps_ui
 from automodpack_autotester.engine.registry import VERBS
 from automodpack_autotester import runner
-from automodpack_autotester.mod_fixtures import (
-    assert_valid_mod_fixture,
-    valid_mod_jar_bytes,
-)
+from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
 
 from .conftest import FakeBridge
 
@@ -133,7 +130,7 @@ def _seed_bootstrap(ctx, step):
         sha1 = hashlib.sha1(payload).hexdigest()
         files[path] = {"sha1": sha1, "size": str(len(payload))}
     (projection_root / "current-projection.json").write_text(
-        json.dumps({"modpackId": "packaaa", "groups": {"main": {"files": files}}}), encoding="utf-8"
+        json.dumps({"policy": {"modpackId": "packaaa", "groups": {"main": {"files": files}}}}), encoding="utf-8"
     )
 
 
@@ -213,7 +210,7 @@ def _rollback_server_generation(ctx, step):
     ctx.vars["fake_server_generation_rollback"] = {
         "receipt": "fake-only",
         "runtimeAuthority": "Docker runner",
-        "command": ["rcon-cli", "automodpack", "generate", "revert", "<ancestor>", "confirm", "notes", step.get("notes", "")],
+        "command": ["rcon-cli", "automodpack", "generate", "revert", "<seq>", "confirm", "notes", step.get("notes", "")],
         "notes": step.get("notes", ""),
     }
 
@@ -482,7 +479,7 @@ def test_release_gate_flow(make_ctx, flow_verbs):
     assert ctx.vars["fake_server_generation_rollback"] == {
         "receipt": "fake-only",
         "runtimeAuthority": "Docker runner",
-        "command": ["rcon-cli", "automodpack", "generate", "revert", "<ancestor>", "confirm", "notes", "Release gate rollback: restore the retained ancestor."],
+        "command": ["rcon-cli", "automodpack", "generate", "revert", "<seq>", "confirm", "notes", "Release gate rollback: restore the retained ancestor."],
         "notes": "Release gate rollback: restore the retained ancestor.",
     }
     assert ctx.vars["fake_server_object_gc"]["command"] == ["rcon-cli", "automodpack", "generate", "storage", "collect", "confirm"]

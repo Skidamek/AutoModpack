@@ -9,13 +9,14 @@ import hashlib
 import json
 import shutil
 import types
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from automodpack_autotester.engine import Context
 from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
-from automodpack_autotester.runner import cas_object
+from automodpack_autotester.runner import _canonical_timestamp, _staged_head_document, cas_object
 
 
 @pytest.fixture
@@ -702,7 +703,7 @@ class FakeBridge:
                 object_path = cas_object(objects, expected_hash)
                 if object_path.is_file() and hashlib.sha1(object_path.read_bytes()).hexdigest() == expected_hash:
                     continue
-                saved_copy = restored / pack_id / claim["generationId"] / claim["claimId"] / claim["originalPath"]
+                saved_copy = restored / pack_id / claim["contentToken"] / claim["claimId"] / claim["originalPath"]
                 if saved_copy.is_file() and hashlib.sha1(saved_copy.read_bytes()).hexdigest() == expected_hash:
                     object_path.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(saved_copy, object_path)
@@ -891,12 +892,12 @@ class FakeBridge:
         root.mkdir(parents=True, exist_ok=True)
         manifest = root / "claims.json"
         claims = json.loads(manifest.read_text(encoding="utf-8")).get("claims", []) if manifest.is_file() else []
-        generation_id = "a" * 40
-        identity = (f"automodpack-preservation-v1\nmodpack={pack_id}\ngeneration={generation_id}\nreason={reason}\n"
+        content_token = "a" * 40
+        identity = (f"automodpack-preservation-v1\nmodpack={pack_id}\ncontentToken={content_token}\nreason={reason}\n"
                     f"root=GAME_DIR\npath={original_path}\nhash={digest}\nsize={len(payload)}\n")
         claim_id = hashlib.sha1(identity.encode()).hexdigest()
         claims = [claim for claim in claims if claim.get("claimId") != claim_id]
-        claims.append({"claimId": claim_id, "originalPath": original_path, "sourceRoot": "GAME_DIR", "objectHash": digest, "size": len(payload), "modpackId": pack_id, "generationId": generation_id, "reason": reason, "preservedAt": "2026-01-01T00:00:00Z"})
+        claims.append({"claimId": claim_id, "originalPath": original_path, "sourceRoot": "GAME_DIR", "objectHash": digest, "size": len(payload), "modpackId": pack_id, "contentToken": content_token, "reason": reason, "preservedAt": "2026-01-01T00:00:00Z"})
         manifest.write_text(json.dumps({"schemaVersion": 1, "modpackId": pack_id, "claims": sorted(claims, key=lambda claim: claim["claimId"])}), encoding="utf-8")
         return cas_object(objects, digest)
 
@@ -948,7 +949,7 @@ class FakeBridge:
         claim = next((claim for claim in claims if claim.get("originalPath") == self.selected_claim_path), None)
         if claim is None:
             raise AssertionError("fake preservation save-copy requested without an available claim")
-        root = self.ctx.game_dir / "automodpack" / "recovered" / self.selected_claim_pack / claim["generationId"] / claim["claimId"]
+        root = self.ctx.game_dir / "automodpack" / "recovered" / self.selected_claim_pack / claim["contentToken"] / claim["claimId"]
         destination = root / claim["originalPath"]
         destination.parent.mkdir(parents=True, exist_ok=True)
         source = cas_object(self.ctx.game_dir / "automodpack" / "client" / "data" / "objects", claim["objectHash"])
@@ -996,8 +997,7 @@ class FakeBridge:
 
     def _write_manifest(self) -> None:
         groups = self.ctx.scenario.get("topology", {}).get("server", {}).get("automodpack", {}).get("config", {}).get("groups", {})
-        generation_id = "a" * 40 if not self.ctx.vars.get("published_server_generation") else "b" * 40
-        notes = "Initial release: core content and optional client groups." if generation_id[0] == "a" else "Update 2: changed alpha, added delta, and removed gamma."
+        notes = "Initial release: core content and optional client groups." if not self.ctx.vars.get("published_server_generation") else "Update 2: changed alpha, added delta, and removed gamma."
         manifest_groups = {}
         for group_id, declaration in groups.items():
             manifest_groups[group_id] = dict(declaration)
@@ -1021,11 +1021,20 @@ class FakeBridge:
                 object_path.parent.mkdir(parents=True, exist_ok=True)
                 object_path.write_bytes(payload)
         manifest_groups.setdefault("main", {"required": True, "defaultSelected": True})["files"] = active_files
+        policy = {
+            "modpackId": "packaaa",
+            "modpackName": "Pack A",
+            "automodpackVersion": "",
+            "loader": self.ctx.target.loader,
+            "loaderVersion": "",
+            "mcVersion": self.ctx.target.minecraft,
+            "groups": manifest_groups,
+        }
+        file_map = {path: (file["sha1"], int(file["size"])) for path, file in active_files.items()}
+        created_at = _canonical_timestamp(datetime.now(timezone.utc))
+        record = _staged_head_document("packaaa", policy, file_map, notes, created_at)
         client = self.ctx.game_dir / "automodpack" / "client"
-        record = client / "records" / generation_id
-        record.mkdir(parents=True, exist_ok=True)
-        (record / "manifest.json").write_text(json.dumps({
-            "modpackName": "Pack A", "modpackId": "packaaa", "groups": manifest_groups,
-            "generation": {"generationId": generation_id, "patchNotes": notes},
-        }), encoding="utf-8")
-        (client / "active-state.json").write_text(json.dumps({"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}), encoding="utf-8")
+        record_dir = client / "records" / record["contentToken"]
+        record_dir.mkdir(parents=True, exist_ok=True)
+        (record_dir / "manifest.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+        (client / "active-state.json").write_text(json.dumps({"schemaVersion": 1, "modpackId": "packaaa", "contentToken": record["contentToken"], "status": "ACTIVE"}), encoding="utf-8")

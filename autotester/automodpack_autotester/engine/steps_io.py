@@ -86,7 +86,7 @@ def _active_file(ctx, logical_path):
         raise ValueError(f"active logical path must be relative: {logical_path!r}")
     canonical = wanted.as_posix()
     matches = []
-    for group in (manifest.get("groups", {}) or {}).values():
+    for group in ((manifest.get("policy", {}) or {}).get("groups", {}) or {}).values():
         if not isinstance(group, dict):
             continue
         entry = (group.get("files", {}) or {}).get(canonical)
@@ -204,21 +204,30 @@ def verify_mods(ctx, step):
     await_condition(_all, timeout, step.get("poll"), "expected mods missing")
 
 
+def _active_generation_head(manifest: dict) -> dict:
+    """The journal entry at the record's head: the generation that is currently active."""
+    head = int(manifest.get("journalHead", -1))
+    entry = next((entry for entry in (manifest.get("journal") or []) if isinstance(entry, dict) and int(entry.get("seq", -1)) == head), None)
+    if entry is None:
+        raise ValueError("active generation record has no head journal entry")
+    return entry
+
+
 def _read_active_generation(ctx, expected_patch_notes=None):
     state_path = ctx.game_dir / "automodpack" / "client" / "active-state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
     if not isinstance(state, dict):
         raise ValueError("active generation state is not an object")
     modpack_id = state["modpackId"]
-    generation_id = state["generationId"]
-    if state.get("status") != "ACTIVE" or not isinstance(modpack_id, str) or not isinstance(generation_id, str):
+    content_token = state["contentToken"]
+    if state.get("status") != "ACTIVE" or state.get("schemaVersion") != 1 or not isinstance(modpack_id, str) or not isinstance(content_token, str):
         raise ValueError("active generation state is not committed")
-    record_path = ctx.game_dir / "automodpack" / "client" / "records" / generation_id / "manifest.json"
+    record_path = ctx.game_dir / "automodpack" / "client" / "records" / content_token / "manifest.json"
     manifest = json.loads(record_path.read_text(encoding="utf-8"))
-    generation = manifest.get("generation") if isinstance(manifest, dict) else None
-    if not isinstance(generation, dict) or manifest.get("modpackId") != modpack_id or generation.get("generationId") != generation_id:
+    policy = manifest.get("policy") if isinstance(manifest, dict) else None
+    if not isinstance(policy, dict) or str(manifest.get("contentToken", "")) != content_token or policy.get("modpackId") != modpack_id:
         raise ValueError("active generation state does not match its immutable record")
-    if expected_patch_notes is not None and generation.get("patchNotes") != expected_patch_notes:
+    if expected_patch_notes is not None and _active_generation_head(manifest).get("notes") != expected_patch_notes:
         raise ValueError("active generation patch notes are not committed")
     return state, manifest
 
@@ -499,12 +508,13 @@ def assert_generation(ctx, step):
         _state, manifest = _read_active_generation(ctx)
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"active generation metadata is invalid: {error}") from error
+    groups = (manifest.get("policy", {}) or {}).get("groups", {}) or {}
     for group_id, requirements in (step.get("groups", {}) or {}).items():
-        if group_id not in manifest.get("groups", {}):
+        if group_id not in groups:
             raise AssertionError(f"active generation is missing group {group_id!r}")
-        actual = manifest["groups"][group_id]
+        actual = groups[group_id]
         for field, value in (requirements or {}).items():
             if actual.get(field) != value:
                 raise AssertionError(f"group {group_id!r} field {field!r}: expected {value!r}, got {actual.get(field)!r}")
-    if "patchNotes" in step and manifest.get("generation", {}).get("patchNotes") != ctx.resolve(step["patchNotes"]):
+    if "patchNotes" in step and _active_generation_head(manifest).get("notes") != ctx.resolve(step["patchNotes"]):
         raise AssertionError("active generation patch notes do not match the scenario")
