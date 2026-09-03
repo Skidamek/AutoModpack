@@ -97,7 +97,7 @@ final class WindowsFileStat {
 			return true;
 		} catch (Throwable t) {
 			loadError = t.toString();
-			LOGGER.debug("Windows NTFS stat native is unavailable", t);
+			LOGGER.warn("Windows NTFS stat native is unavailable: {}", loadError);
 			return false;
 		}
 	}
