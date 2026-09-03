@@ -20,6 +20,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -197,6 +198,24 @@ public final class ClientStorage {
 
 	public Path activePath(String logicalPath) {
 		return resolveLogical(activeDirectory, logicalPath);
+	}
+
+	/** The one physical root directory of an update-plan root for the given modpack. */
+	public Path root(Root root, String modpackId) {
+		return switch (root) {
+			case PROJECTION -> activeDirectory;
+			case OVERLAY -> overlayDirectory(modpackId);
+			case GAME_DIR -> gameDirectory;
+		};
+	}
+
+	/** The one physical file location of a root-relative logical path for the given modpack. */
+	public Path rootedPath(Root root, String modpackId, String logicalPath) {
+		return switch (root) {
+			case GAME_DIR -> gamePath(logicalPath);
+			case OVERLAY -> overlayFile(modpackId, logicalPath);
+			case PROJECTION -> activePath(logicalPath);
+		};
 	}
 
 	public Path incomingDirectory() {

@@ -6,9 +6,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 
-import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -30,11 +28,11 @@ import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
-import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
 import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_loader_core.client.ClientPendingUpdateRecovery;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
+import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -156,7 +154,7 @@ public class Preload {
 			return;
 		}
 
-		ConnectionJsons.ConnectionInfo storedConnectionInfo = null;
+		StoredModpackConnection.Seeded seeded = null;
 		if (clientConfig.selectedModpackId != null && !clientConfig.selectedModpackId.isBlank()) {
 			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 				LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
@@ -164,27 +162,22 @@ public class Preload {
 				writeConfig(storage.clientConfigFile(), clientConfig);
 			} else {
 				try {
-					storedConnectionInfo = ConnectionStore.getConnection(storage, clientConfig.selectedModpackId);
+					seeded = StoredModpackConnection.seed(storage, clientConfig.selectedModpackId);
 				} catch (IOException e) {
 					LOGGER.error("Failed to load selected modpack connection state", e);
 				}
 			}
 		}
 
-		if (storedConnectionInfo == null || !storedConnectionInfo.isComplete()) {
+		if (seeded == null || !seeded.connection().isComplete()) {
 			if (hasActiveProjection()) loadLocalModpack(null, null);
 			else SelfUpdater.update();
 			return;
 		}
 
-		String expectedFingerprint = CertificateTrustStore.getFingerprint(storedConnectionInfo.origin);
-		ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(storedConnectionInfo.origin, storedConnectionInfo.endpoint,
-				storedConnectionInfo.connectionMode, expectedFingerprint, null);
-		Secrets.Secret secret = SecretsStore.getClientSecret(storage, clientConfig.selectedModpackId, storedConnectionInfo.origin);
-		if (secret == null) {
-			secret = Secrets.anonymousSecret();
-			LOGGER.info("No saved secret for seeded/selected origin {}; using an anonymous preload secret", AddressHelpers.formatAddress(storedConnectionInfo.origin));
-		}
+		ConnectionJsons.ConnectionInfo connectionInfo = seeded.connection();
+		Secrets.Secret secret = seeded.secret();
+		if (seeded.anonymousSecret()) LOGGER.info("No saved secret for seeded/selected origin {}; using an anonymous preload secret", AddressHelpers.formatAddress(connectionInfo.origin));
 
 		// updateSelectedModpackOnLaunch=false loads the current projection and does not contact the
 		// server, so extra jars in mods/ stay put (binary search, pinning experiments). A trusted

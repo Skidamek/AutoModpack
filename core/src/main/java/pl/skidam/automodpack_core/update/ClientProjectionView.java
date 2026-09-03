@@ -20,6 +20,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -128,7 +129,7 @@ public final class ClientProjectionView {
 		for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
 			if (projected == null || projected.root() != UpdatePlan.Root.PROJECTION || !projected.present()) continue;
 			if (!HashUtils.isSha1(projected.expectedHash()) || projected.expectedSize() < 0) throw new IOException("Pending projection file metadata is invalid");
-			files.put(UpdatePlanner.normalize(projected.relativePath()), new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true));
+			files.put(LogicalPath.normalize(projected.relativePath()), new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true));
 		}
 		return new Snapshot(stagedTarget(pending), files, pendingGameStates(pending), pending);
 	}
@@ -143,7 +144,7 @@ public final class ClientProjectionView {
 		if (Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) {
 			try (var paths = Files.walk(active)) {
 				for (Path path : paths.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
-					String relative = UpdatePlanner.normalize(active.relativize(path).toString());
+					String relative = LogicalPath.normalize(active.relativize(path).toString());
 					files.put(relative, new UpdatePlan.FileState(cache.getOrComputeHash(path), Files.size(path), true));
 				}
 			}
@@ -157,7 +158,7 @@ public final class ClientProjectionView {
 		try {
 			for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
 				if (projected == null || projected.root() != UpdatePlan.Root.GAME_DIR) continue;
-				String relative = UpdatePlanner.normalize(projected.relativePath());
+				String relative = LogicalPath.normalize(projected.relativePath());
 				UpdatePlan.FileState state = projected.present()
 						? new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true)
 						: new UpdatePlan.FileState(null, -1, false);
@@ -166,7 +167,7 @@ public final class ClientProjectionView {
 			if (pending.plannedBaselineCaptures != null) {
 				for (UpdatePlan.BaselineCapture capture : pending.plannedBaselineCaptures) {
 					if (capture == null || capture.root() != UpdatePlan.Root.GAME_DIR) continue;
-					String relative = UpdatePlanner.normalize(capture.relativePath());
+					String relative = LogicalPath.normalize(capture.relativePath());
 					UpdatePlan.FileState state = capture.absent()
 							? new UpdatePlan.FileState(null, -1, false)
 							: new UpdatePlan.FileState(capture.expectedHash(), capture.expectedSize(), true);
@@ -240,7 +241,7 @@ public final class ClientProjectionView {
 		/** Returns whether the observed live state is one of the states already owned by a pending transaction. */
 		public boolean matchesPendingGameState(String relativePath, UpdatePlan.FileState observed) {
 			if (pending == null || observed == null) return false;
-			String relative = UpdatePlanner.normalize(relativePath);
+			String relative = LogicalPath.normalize(relativePath);
 			return pendingGameStates.getOrDefault(relative, List.of()).stream().anyMatch(expected -> expected.regularFile() == observed.regularFile()
 					&& expected.size() == observed.size() && Objects.equals(expected.sha1(), observed.sha1()));
 		}
@@ -251,7 +252,7 @@ public final class ClientProjectionView {
 			try {
 				TreeSet<String> paths = new TreeSet<>();
 				for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState)
-					if (projected != null && projected.root() == UpdatePlan.Root.GAME_DIR) paths.add(UpdatePlanner.normalize(projected.relativePath()));
+					if (projected != null && projected.root() == UpdatePlan.Root.GAME_DIR) paths.add(LogicalPath.normalize(projected.relativePath()));
 				return Collections.unmodifiableSet(paths);
 			} catch (RuntimeException e) {
 				throw new IOException("Pending managed live paths are invalid", e);
@@ -279,7 +280,7 @@ public final class ClientProjectionView {
 
 		/** Returns safe read-only candidates without exposing the projection's storage policy to callers. */
 		public List<Path> sourceCandidates(String relativePath) {
-			String relative = UpdatePlanner.normalize(relativePath);
+			String relative = LogicalPath.normalize(relativePath);
 			List<Path> candidates = new ArrayList<>();
 			if (pending != null) candidates.add(resolve(storage.incomingProjectionDirectory(), relative));
 			candidates.add(storage.activePath(relative));
@@ -288,7 +289,7 @@ public final class ClientProjectionView {
 			if (pending != null && pending.projectedFinalState != null) {
 				for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
 					if (projected == null || projected.root() != UpdatePlan.Root.PROJECTION || !projected.present()) continue;
-					if (!relative.equals(UpdatePlanner.normalize(projected.relativePath())) || !HashUtils.isSha1(projected.expectedHash())) continue;
+					if (!relative.equals(LogicalPath.normalize(projected.relativePath())) || !HashUtils.isSha1(projected.expectedHash())) continue;
 					candidates.add(storage.objectFile(projected.expectedHash()));
 				}
 			}

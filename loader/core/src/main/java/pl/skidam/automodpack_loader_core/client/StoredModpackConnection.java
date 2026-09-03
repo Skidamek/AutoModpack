@@ -29,14 +29,24 @@ public final class StoredModpackConnection implements AutoCloseable {
 		this.client = client;
 	}
 
-	public static StoredModpackConnection open(ClientStorage storage, String modpackId, boolean allowAskingUser) throws Exception {
+	/** A stored connection seeded with its exact certificate pin and the client secret for its origin. */
+	public record Seeded(ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, boolean anonymousSecret) {}
+
+	/** Loads the stored connection route and seeds its fingerprint-checked connection and secret; null when no complete connection is stored. */
+	public static Seeded seed(ClientStorage storage, String modpackId) throws IOException {
 		ConnectionJsons.ConnectionInfo stored = ConnectionStore.getConnection(storage, modpackId);
-		if (stored == null || stored.connectionMode == null || stored.origin == null || stored.endpoint == null)
-			throw new IOException("Saved modpack connection is unavailable");
+		if (stored == null || stored.connectionMode == null || stored.origin == null || stored.endpoint == null) return null;
 		ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(stored.origin, stored.endpoint, stored.connectionMode,
 				CertificateTrustStore.getFingerprint(stored.origin), null);
 		Secrets.Secret secret = SecretsStore.getClientSecret(storage, modpackId, stored.origin);
-		if (secret == null) secret = Secrets.anonymousSecret();
+		return new Seeded(connection, secret == null ? Secrets.anonymousSecret() : secret, secret == null);
+	}
+
+	public static StoredModpackConnection open(ClientStorage storage, String modpackId, boolean allowAskingUser) throws Exception {
+		Seeded seeded = seed(storage, modpackId);
+		if (seeded == null) throw new IOException("Saved modpack connection is unavailable");
+		ConnectionJsons.ConnectionInfo connection = seeded.connection();
+		Secrets.Secret secret = seeded.secret();
 		ModpackUtils.ManifestFetchResult result = ModpackUtils.requestServerModpackContent(storage, connection, secret, allowAskingUser);
 		if (!result.successful())
 			throw new IOException(result.failure() == null ? "Could not fetch the latest modpack generation" : result.failure().getMessage(), result.failure());

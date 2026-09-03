@@ -20,6 +20,7 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -132,7 +133,7 @@ final class ClientUpdatePlanBuilder {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(input.target(), installed, selection, projection,
 				previousGeneratedState == null ? List.of() : previousGeneratedState.nestedCopies(), cache, overlaySnapshots);
 		if (input.prepareObjects()) populateStoreFromProjection(input.target(), projection, cache);
-		Set<String> forceCopyServices = getForceCopyMods(input.target(), cache, modCache, projection).stream().map(UpdatePlanner::normalize).collect(Collectors.toSet());
+		Set<String> forceCopyServices = getForceCopyMods(input.target(), cache, modCache, projection).stream().map(LogicalPath::normalize).collect(Collectors.toSet());
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(input.target(), cache, modCache, projection);
 		List<UpdatePlan.ModInfo> standardMods = inspectStandardMods(cache, modCache);
 		List<UpdatePlan.NestedCopy> nestedCopies = input.prepareObjects()
@@ -275,7 +276,7 @@ final class ClientUpdatePlanBuilder {
 		ModpackJsons.ModpackContentFields activeTarget = projection.target();
 		if (activeTarget == null || activeTarget.list == null) return;
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
-		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(UpdatePlanner.normalize(item.file), item));
+		if (target != null && target.list != null) target.list.forEach(item -> targetItems.put(LogicalPath.normalize(item.file), item));
 		boolean sameModpackTarget = target != null && target.modpackId.equals(activeTarget.modpackId);
 		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(activeTarget.modpackId).deletedPaths);
 		for (var item : activeTarget.list) {
@@ -288,7 +289,7 @@ final class ClientUpdatePlanBuilder {
 			if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) {
 				if (projection.matchesPendingGameState(item.file, new UpdatePlan.FileState(null, -1, false))) continue;
 				Files.deleteIfExists(overlay);
-				deletedPaths.add(UpdatePlanner.normalize(item.file));
+				deletedPaths.add(LogicalPath.normalize(item.file));
 				continue;
 			}
 			String hash = cache.getOrComputeHash(live);
@@ -297,14 +298,14 @@ final class ClientUpdatePlanBuilder {
 			if (projection.matchesPendingGameState(item.file, state)) continue;
 			if (item.sha1.equalsIgnoreCase(state.sha1()) && Long.parseLong(item.size) == state.size()) {
 				Files.deleteIfExists(overlay);
-				deletedPaths.remove(UpdatePlanner.normalize(item.file));
+				deletedPaths.remove(LogicalPath.normalize(item.file));
 				continue;
 			}
-			var targetItem = sameModpackTarget ? targetItems.get(UpdatePlanner.normalize(item.file)) : null;
+			var targetItem = sameModpackTarget ? targetItems.get(LogicalPath.normalize(item.file)) : null;
 			if (targetItem != null && !targetItem.sha1.equalsIgnoreCase(item.sha1)) {
 				// The pack owner replaced the file: vault the player's edited bytes and let the plan install the new server version once; edits after that are preserved again.
 				Files.deleteIfExists(overlay);
-				deletedPaths.remove(UpdatePlanner.normalize(item.file));
+				deletedPaths.remove(LogicalPath.normalize(item.file));
 				Path object = storage.objectFile(hash);
 				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash, cache);
 				PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.contentToken, PreservationVault.Reason.EDITABLE_RESET, UpdatePlan.Root.GAME_DIR, item.file, hash, size);
@@ -313,7 +314,7 @@ final class ClientUpdatePlanBuilder {
 			Path object = storage.objectFile(hash);
 			if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash, cache);
 			VerifiedFileTransfer.copyAtomic(object, overlay, size, hash, cache);
-			deletedPaths.remove(UpdatePlanner.normalize(item.file));
+			deletedPaths.remove(LogicalPath.normalize(item.file));
 		}
 		storage.writeOverlayState(activeTarget.modpackId, deletedPaths);
 	}
@@ -336,7 +337,7 @@ final class ClientUpdatePlanBuilder {
 	private void resetDriftedServerFile(FileMetadataCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields activeTarget,
 			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, ModpackJsons.ModpackContentFields.ModpackContentItem item) throws IOException {
 		if (targetItems.isEmpty()) return;
-		String relative = UpdatePlanner.normalize(item.file);
+		String relative = LogicalPath.normalize(item.file);
 		var targetItem = targetItems.get(relative);
 		if (targetItem == null || !targetItem.sha1.equalsIgnoreCase(item.sha1) || ModpackPathPolicy.isActiveMod(relative, item.type)) return;
 		Path live = livePath(item);
@@ -348,7 +349,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private Path livePath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {
-		return storage.gameDirectory().resolve(UpdatePlanner.normalize(item.file));
+		return storage.gameDirectory().resolve(LogicalPath.normalize(item.file));
 	}
 
 	private void populateStoreFromSources(ModpackJsons.ModpackContentFields target, FileMetadataCache cache,
@@ -425,7 +426,7 @@ final class ClientUpdatePlanBuilder {
 	private void putFileState(Map<UpdatePlan.FileKey, UpdatePlan.FileState> files, UpdatePlan.Root root, Path rootPath, Path path,
 			FileMetadataCache cache) throws IOException {
 		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return;
-		String relative = UpdatePlanner.normalize(rootPath.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString());
+		String relative = LogicalPath.normalize(rootPath.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString());
 		String hash = cache.getOrComputeHash(path);
 		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true));
 	}
@@ -442,12 +443,12 @@ final class ClientUpdatePlanBuilder {
 
 	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
-		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type))
+		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type))
 				.sorted(Comparator.comparing(value -> value.file)).toList()) {
 			Path source = resolvedObject(item, projection, cache);
 			if (source == null) continue;
 			FileInspection.Mod mod = modCache.getModOrNull(source, cache);
-			if (mod != null) mods.add(new UpdatePlan.ModInfo(UpdatePlanner.normalize(item.file), item.sha1, Long.parseLong(item.size), mod.IDs(), mod.deps()));
+			if (mod != null) mods.add(new UpdatePlan.ModInfo(LogicalPath.normalize(item.file), item.sha1, Long.parseLong(item.size), mod.IDs(), mod.deps()));
 		}
 		return mods;
 	}
@@ -459,7 +460,7 @@ final class ClientUpdatePlanBuilder {
 			for (Path path : stream.filter(Files::isRegularFile).sorted().toList()) {
 				FileInspection.Mod mod = modCache.getModOrNull(path, cache);
 				if (mod != null) {
-					String relativePath = UpdatePlanner.normalize(storage.gameDirectory().relativize(path.toAbsolutePath().normalize()).toString());
+					String relativePath = LogicalPath.normalize(storage.gameDirectory().relativize(path.toAbsolutePath().normalize()).toString());
 					mods.add(new UpdatePlan.ModInfo(relativePath, mod.hash(), Files.size(path), mod.IDs(), mod.deps()));
 				}
 			}
@@ -471,10 +472,10 @@ final class ClientUpdatePlanBuilder {
 		if (!modpackLoader.discoversNestedConflicts()) return List.of();
 		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
-			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type)).toList()) {
+			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type)).toList()) {
 				Path source = resolvedObject(item, projection, cache);
 				if (source == null) continue;
-				String logicalPath = UpdatePlanner.normalize(item.file);
+				String logicalPath = LogicalPath.normalize(item.file);
 				Path inspectionPath = inspectionDirectory.resolve(logicalPath).normalize();
 				if (!inspectionPath.startsWith(inspectionDirectory)) throw new IOException("Mod inspection path escaped its temporary directory: " + item.file);
 				materializeInspectionCopy(source, inspectionPath, Long.parseLong(item.size), item.sha1, cache);
@@ -489,7 +490,7 @@ final class ClientUpdatePlanBuilder {
 				if (!FileIntegrity.matchesNamed(storeFile, size, mod.hash(), cache)) VerifiedFileTransfer.copyAtomicImmutable(mod.path(), storeFile, size, mod.hash(), cache);
 				Path targetPath = storage.modsDirectory().resolve(mod.path().getFileName()).normalize();
 				if (!targetPath.startsWith(storage.gameDirectory())) throw new IOException("Nested mod target escaped the game directory: " + targetPath);
-				String relativePath = UpdatePlanner.normalize(storage.gameDirectory().relativize(targetPath).toString());
+				String relativePath = LogicalPath.normalize(storage.gameDirectory().relativize(targetPath).toString());
 				if (!targetPaths.add(relativePath)) throw new IOException("Nested mod conflicts share a loader-facing target path: " + relativePath);
 				copies.add(new UpdatePlan.NestedCopy(relativePath, mod.hash(), size, mod.IDs()));
 			}
@@ -514,7 +515,7 @@ final class ClientUpdatePlanBuilder {
 		if (forceCopyServices.isEmpty()) return Set.of();
 		Set<String> forceCopyMods = new HashSet<>();
 		for (ModpackJsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
-			if (!ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(item.file), item.type)) continue;
+			if (!ModpackPathPolicy.isActiveMod(LogicalPath.normalize(item.file), item.type)) continue;
 			Path modPath = resolvedObject(item, projection, cache);
 			if (modPath == null) continue;
 			FileInspection.Mod mod = modCache.getModOrNull(modPath, cache);
