@@ -55,8 +55,6 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private String originFull = "";
 	private String originDisplay = "";
 	private String previousUnverifiedKey = "";
-	private int bodyTop = 42;
-	private List<MutableComponent> bodyLines = List.of();
 
 	/** First-install confirm; every selected jar matched Modrinth or CurseForge unless unverified jars were picked. */
 	public PackConfirmScreen(ModpackUpdater updater) {
@@ -241,7 +239,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		this.addCenteredScrollBody(BODY, 42, bottomY, all);
 	}
 
-	/** The matched layout: one centered run of lines, or a scroll body when they do not fit. */
+	/** The matched layout: one centered scroll body between the pinned title and the action area. */
 	private void layoutMatchedBody(int bottomY) {
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
@@ -254,16 +252,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.computerRisk(), wrapWidth));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
-		int contentHeight = Math.max(LINE, lines.size() * LINE);
-		int available = Math.max(LINE, bottomY - 42);
-		if (contentHeight <= available) {
-			bodyTop = 42 + (available - contentHeight) / 2;
-			bodyLines = lines;
-		} else {
-			bodyTop = 42;
-			bodyLines = List.of();
-			this.addCenteredScrollBody(BODY, 42, bottomY, lines);
-		}
+		this.addCenteredScrollBody(BODY, 42, bottomY, lines);
 	}
 
 	private void appendStatLines(List<MutableComponent> lines, int wrapWidth) {
@@ -379,11 +368,6 @@ public final class PackConfirmScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = updater.getSelectedTarget().manifest().modpackName().isBlank() ? "AutoModpack" : updater.getSelectedTarget().manifest().modpackName();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
-		int y = bodyTop;
-		for (MutableComponent line : bodyLines) {
-			drawCenteredTextWithShadow(matrices, this.font, line, this.width / 2, y, TextColors.WHITE);
-			y += LINE;
-		}
 		// The disabled primary needs its reason on screen: the gate is the risk checkbox (the label carries the countdown).
 		if (!finished && primaryButton != null && !primaryButton.active && !unverifiedPaths.isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.confirm.ackUnlock").withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 40, TextColors.WHITE);

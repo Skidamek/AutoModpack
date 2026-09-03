@@ -32,9 +32,14 @@ public final class FeatureConflictScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.selection.keepCurrent"), button -> ScreenImpl.setScreen(parent)),
-				primaryAction(VersionedText.translatable("automodpack.selection.useFeature", preferredName).withStyle(ChatFormatting.BOLD), button -> confirm())));
+				primaryAction(VersionedText.translatable("automodpack.selection.useFeature", preferredName).withStyle(ChatFormatting.BOLD), button -> confirm()));
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
+		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
+		String description = VersionedText.translatable("automodpack.selection.conflictDescription", preferredName, conflictingNames, preferredName, preferredName).getString();
+		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer) - 4;
+		this.addCenteredScrollBody(PANEL_WIDTH, 42, bottomLimit, wrapParagraph(this.font, description, wrapWidth, ChatFormatting.GRAY));
 	}
 
 	private void confirm() {
@@ -44,13 +49,7 @@ public final class FeatureConflictScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.conflictTitle").withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 44, TextColors.WHITE);
-		String description = VersionedText.translatable("automodpack.selection.conflictDescription", preferredName, conflictingNames, preferredName, preferredName).getString();
-		int y = this.height / 2 - 22;
-		for (String line : wrapToWidth(this.font, description, panelWidth(PANEL_WIDTH), 3)) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-			y += 12;
-		}
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.conflictTitle").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
 	}
 
 	@Override

@@ -27,7 +27,6 @@ public final class PinMismatchScreen extends VersionedScreen {
 	private final String origin;
 	private final String expectedFingerprint;
 	private final String presentedFingerprint;
-	private List<MutableComponent> bodyLines = List.of();
 	private boolean copied;
 
 	public PinMismatchScreen(Screen parent, String origin, String expectedFingerprint, String presentedFingerprint) {
@@ -53,10 +52,12 @@ public final class PinMismatchScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.pinMismatch.do").getString(), wrapWidth));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.pinMismatch.dont").getString(), wrapWidth, ChatFormatting.RED));
-		bodyLines = List.copyOf(lines);
-		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28,
-				actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails())),
-				actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
+		ActionRow copyRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails()));
+		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
+		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, copyRow, footerRow);
+		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, copyRow, footerRow) - 4;
+		// The body starts below the pinned header; the "copied" confirmation shifts it down one line while it shows.
+		addCenteredScrollBody(BODY, 42 + (copied ? LINE : 0), bottomLimit, lines);
 	}
 
 	private List<MutableComponent> wrappedFingerprint(String label, String fingerprint, int wrapWidth) {
@@ -76,11 +77,6 @@ public final class PinMismatchScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.pinMismatch.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.LIGHT_RED);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(origin).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD), this.width / 2, 28, TextColors.WHITE);
 		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, 40, TextColors.WHITE);
-		int y = 42 + (copied ? LINE : 0);
-		for (MutableComponent line : bodyLines) {
-			drawCenteredTextWithShadow(matrices, this.font, line, this.width / 2, y, TextColors.WHITE);
-			y += LINE;
-		}
 	}
 
 	@Override
