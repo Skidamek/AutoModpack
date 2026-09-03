@@ -6,6 +6,7 @@ import java.util.Map;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -39,9 +40,24 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)),
-				primaryAction(VersionedText.translatable("automodpack.groupInspector.browseFiles"), button -> browseFiles())));
+				primaryAction(VersionedText.translatable("automodpack.groupInspector.browseFiles"), button -> browseFiles()));
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
+		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
+		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer) - 4;
+		String description = group.description().isBlank() ? VersionedText.translatable("automodpack.groupInspector.noDescription").getString() : group.description();
+		List<MutableComponent> lines = new ArrayList<>();
+		lines.addAll(wrapParagraph(this.font, description, wrapWidth));
+		lines.add(blankLine());
+		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.selection.category", categoryLabel()).getString(), wrapWidth, ChatFormatting.GRAY));
+		lines.addAll(wrapParagraph(this.font, status(), wrapWidth, ChatFormatting.GRAY));
+		if (!group.requires().isEmpty()) lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.selection.requires", names(group.requires())).getString(), wrapWidth, ChatFormatting.GRAY));
+		if (!group.breaksWith().isEmpty()) lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.selection.conflicts", names(group.breaksWith())).getString(), wrapWidth, ChatFormatting.GRAY));
+		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.groupInspector.platforms", platforms()).getString(), wrapWidth, ChatFormatting.GRAY));
+		lines.add(blankLine());
+		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.selection.files", group.files().size(), UiFormat.formatSize(groupBytes())).getString(), wrapWidth, ChatFormatting.YELLOW));
+		this.addCenteredScrollBody(PANEL_WIDTH, 32, bottomLimit, lines);
 	}
 
 	private void browseFiles() {
@@ -62,29 +78,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		int textWidth = panelWidth(PANEL_WIDTH);
-		int y = 12;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, displayName(), textWidth)).withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
-		y += 17;
-		String description = group.description().isBlank() ? VersionedText.translatable("automodpack.groupInspector.noDescription").getString() : group.description();
-		for (String line : wrapToWidth(this.font, description, textWidth, 4)) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
-			y += 12;
-		}
-		y += 7;
-		y = drawDetail(matrices, VersionedText.translatable("automodpack.selection.category", categoryLabel()).getString(), y, textWidth);
-		y = drawDetail(matrices, status(), y, textWidth);
-		if (!group.requires().isEmpty()) y = drawDetail(matrices, VersionedText.translatable("automodpack.selection.requires", names(group.requires())).getString(), y, textWidth);
-		if (!group.breaksWith().isEmpty()) y = drawDetail(matrices, VersionedText.translatable("automodpack.selection.conflicts", names(group.breaksWith())).getString(), y, textWidth);
-		y = drawDetail(matrices, VersionedText.translatable("automodpack.groupInspector.platforms", platforms()).getString(), y, textWidth);
-		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.translatable("automodpack.selection.files", group.files().size(), UiFormat.formatSize(groupBytes())).withStyle(ChatFormatting.YELLOW),
-				this.width / 2, y + 3, TextColors.WHITE);
-	}
-
-	private int drawDetail(VersionedMatrices matrices, String value, int y, int width) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, value, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-		return y + 13;
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, displayName(), panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
 	}
 
 	private String displayName() {

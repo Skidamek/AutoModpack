@@ -35,8 +35,6 @@ public class SkipVerificationScreen extends VersionedScreen {
 	private Button confirmButton;
 	private int ticksRemaining;
 	private int fieldY;
-	private int bodyTop = 42;
-	private List<MutableComponent> bodyLines = List.of();
 
 	public SkipVerificationScreen(Screen verificationScreen, Runnable validatedCallback) {
 		super(VersionedText.translatable("automodpack.validation.skip.title"));
@@ -75,19 +73,9 @@ public class SkipVerificationScreen extends VersionedScreen {
 		this.confirmButton = buttons.get(1);
 		this.confirmButton.active = false;
 		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
-		int hintHeight = LINE;
-		int pinned = ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + hintHeight;
-		bodyTop = 42;
-		int neededText = Math.max(LINE, before.size() * LINE);
-		int availableText = Math.max(LINE, footerTop - 4 - pinned - ActionAreaLayout.GAP - bodyTop);
-		if (neededText <= availableText) {
-			bodyLines = List.copyOf(before);
-			fieldY = bodyTop + neededText + ActionAreaLayout.SEAM;
-		} else {
-			bodyLines = List.of();
-			this.addCenteredScrollBody(BODY, bodyTop, footerTop - 4 - pinned - ActionAreaLayout.GAP, before);
-			fieldY = footerTop - 4 - pinned;
-		}
+		int pinned = ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + LINE;
+		this.addCenteredScrollBody(BODY, 42, footerTop - 4 - pinned - ActionAreaLayout.GAP, before);
+		fieldY = footerTop - 4 - pinned;
 
 		int fieldLeft = panelLeft(BODY);
 		this.textField = fieldWidget(fieldLeft, fieldY, panelWidth(BODY), VersionedText.literal(REQUIRED_TEXT), VersionedText.translatable("automodpack.learnmore"), 128);
@@ -128,11 +116,6 @@ public class SkipVerificationScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.skip.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.LIGHT_RED);
-		int y = bodyTop;
-		for (MutableComponent line : bodyLines) {
-			drawCenteredTextWithShadow(matrices, this.font, line, this.width / 2, y, TextColors.WHITE);
-			y += LINE;
-		}
 		if (ticksRemaining > 0)
 			drawCenteredTextWithShadow(matrices, this.font,
 					VersionedText.translatable("automodpack.validation.skip.countdown", getRemainingSeconds()).withStyle(ChatFormatting.GRAY), this.width / 2,

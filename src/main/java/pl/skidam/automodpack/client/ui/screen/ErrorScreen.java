@@ -2,12 +2,14 @@ package pl.skidam.automodpack.client.ui.screen;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
@@ -29,6 +31,7 @@ public class ErrorScreen extends VersionedScreen {
 	private Button copyButton;
 	private Button retryButton;
 	private boolean copied;
+	private int categoryY;
 
 	public ErrorScreen(Screen parent, FailureRequest request) {
 		super(VersionedText.translatable("automodpack.error.title"));
@@ -74,6 +77,17 @@ public class ErrorScreen extends VersionedScreen {
 			copyButton = buttons.get(1);
 			backButton = buttons.get(2);
 		}
+
+		// Pinned header: title line at 36, the "copied" confirmation at 62 while it shows, the category right under it.
+		categoryY = 62 + (copied ? 16 : 0);
+		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new)) - 4;
+		int wrapWidth = Math.max(1, this.width - 30);
+		List<MutableComponent> lines = new ArrayList<>();
+		String summary = VersionedText.translatable(request.messageKey(), request.translationArguments()).getString();
+		lines.addAll(wrapParagraph(this.font, summary, wrapWidth, ChatFormatting.GRAY));
+		lines.add(blankLine());
+		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.error.details").getString(), wrapWidth, ChatFormatting.GRAY));
+		this.addScrollBody(wrapWidth, categoryY + 16, bottomLimit, lines, true);
 	}
 
 	private void back() {
@@ -104,26 +118,9 @@ public class ErrorScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font,
 				VersionedText.translatable("automodpack.error.titleLine", VersionedText.translatable("automodpack.error").getString()).withStyle(ChatFormatting.RED),
 				this.width / 2, 36, TextColors.WHITE);
-
-		int y = 62;
-		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
-		y += copied ? 16 : 0;
-		int contentBottom = this.height - 58;
-		String summary = VersionedText.translatable(request.messageKey(), request.translationArguments()).getString();
-		for (String line : wrapToWidth(this.font, summary, Math.max(1, this.width - 30), Math.max(1, (contentBottom - y) / 12))) {
-			if (y >= contentBottom) return;
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line), this.width / 2, y, TextColors.LIGHT_GRAY);
-			y += 12;
-		}
-		y += 8;
+		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, 62, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.category", VersionedText.translatable(request.category().translationKey())).withStyle(ChatFormatting.GRAY),
-				this.width / 2, y, TextColors.WHITE);
-		y += 16;
-		for (String line : wrapToWidth(this.font, VersionedText.translatable("automodpack.error.details").getString(), Math.max(1, this.width - 30), Math.max(1, (contentBottom - y) / 12))) {
-			if (y >= contentBottom) return;
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line), this.width / 2, y, TextColors.GRAY);
-			y += 12;
-		}
+				this.width / 2, categoryY, TextColors.WHITE);
 	}
 
 	@Override

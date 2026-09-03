@@ -1,11 +1,13 @@
 package pl.skidam.automodpack.client.ui.screen;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -13,6 +15,7 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
@@ -25,6 +28,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 /** Provides an explicit, user-confirmed cleanup pass for client generation storage. */
 public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 310;
+	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
@@ -36,6 +40,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private ClientObjectStore.StorageReport verificationReport;
 	private Future<?> work;
 	private int preservedCount;
+	private int statusY;
 
 	public ClientStorageMaintenanceScreen(Screen parent, InstalledModpackController controller) {
 		super(VersionedText.translatable("automodpack.storage.title"));
@@ -48,13 +53,40 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		super.init();
 		preservedCount = controller.preservedClaimCount();
 		int actionY = this.height - 28;
-		List<Button> buttons = addActionArea(PANEL_WIDTH, actionY,
-				actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-						optionalAction(VersionedText.translatable("automodpack.storage.verify"), button -> verify()),
-						primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> compact())),
-				actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent())));
+		ActionRow maintenanceRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+				optionalAction(VersionedText.translatable("automodpack.storage.verify"), button -> verify()),
+				primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> compact()));
+		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent()));
+		List<Button> buttons = addActionArea(PANEL_WIDTH, actionY, maintenanceRow, footerRow);
 		buttons.get(0).active = !busy && !closed;
 		buttons.get(1).active = !busy && !closed;
+
+		// One pinned status line reserved right above the action area, so the busy/complete feedback never moves.
+		statusY = actionAreaTop(PANEL_WIDTH, actionY, maintenanceRow, footerRow) - 2 - LINE;
+		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
+		List<MutableComponent> lines = new ArrayList<>();
+		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.description").getString(), wrapWidth, ChatFormatting.GRAY));
+		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.removes").getString(), wrapWidth, ChatFormatting.YELLOW));
+		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.keeps").getString(), wrapWidth, ChatFormatting.GREEN));
+		lines.addAll(
+				wrapParagraph(this.font, VersionedText.translatable(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount).getString(), wrapWidth, ChatFormatting.GREEN));
+		if (compactionResult != null) {
+			lines.add(blankLine());
+			lines.addAll(wrapParagraph(this.font, statLine("automodpack.storage.records", compactionResult.recordCountBefore(), compactionResult.recordCountAfter(),
+					UiFormat.formatSize(compactionResult.recordBytesBefore()), UiFormat.formatSize(compactionResult.recordBytesAfter())), wrapWidth));
+			lines.addAll(wrapParagraph(this.font, statLine("automodpack.storage.objects", compactionResult.objectCollection().before().objectCount(), compactionResult.objectCollection().after().objectCount(),
+					UiFormat.formatSize(compactionResult.objectCollection().before().objectBytes()), UiFormat.formatSize(compactionResult.objectCollection().after().objectBytes())), wrapWidth));
+			lines.addAll(wrapParagraph(this.font,
+					statLine("automodpack.storage.generatedCopies", compactionResult.generatedCopyCountBefore(), compactionResult.generatedCopyCountAfter(),
+							UiFormat.formatSize(compactionResult.generatedCopyBytesBefore()),
+							UiFormat.formatSize(compactionResult.generatedCopyBytesAfter())),
+					wrapWidth, ChatFormatting.GRAY));
+		} else if (verificationReport != null) {
+			lines.add(blankLine());
+			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
+					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())).getString(), wrapWidth));
+		}
+		this.addCenteredScrollBody(PANEL_WIDTH, 32, statusY - 4, lines);
 	}
 
 	private void verify() {
@@ -144,44 +176,15 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		int textWidth = panelWidth(PANEL_WIDTH);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
-		int y = 32;
-		y = drawWrapped(matrices, VersionedText.translatable("automodpack.storage.description").getString(), y, textWidth, TextColors.LIGHT_GRAY);
-		y = drawWrapped(matrices, VersionedText.translatable("automodpack.storage.removes").getString(), y + 4, textWidth, TextColors.YELLOW);
-		y = drawWrapped(matrices, VersionedText.translatable("automodpack.storage.keeps").getString(), y + 4, textWidth, TextColors.GREEN);
-		y = drawWrapped(matrices, VersionedText.translatable(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount).getString(), y + 4, textWidth, TextColors.GREEN);
 		if (busy) {
 			String message = operation == Operation.VERIFY ? "automodpack.storage.verifying" : "automodpack.storage.running";
-			drawWrapped(matrices, VersionedText.translatable(message).getString(), y + 8, textWidth, TextColors.YELLOW);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(message).withStyle(ChatFormatting.YELLOW), this.width / 2, statusY, TextColors.WHITE);
 		} else if (compactionResult != null) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.complete").withStyle(ChatFormatting.GREEN), this.width / 2, y + 8, TextColors.WHITE);
-			drawStats(matrices, compactionResult, y + 26, textWidth);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.complete").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
 		} else if (verificationReport != null) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.verified").withStyle(ChatFormatting.GREEN), this.width / 2, y + 8, TextColors.WHITE);
-			String receipt = VersionedText.translatable("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
-					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())).getString();
-			drawWrapped(matrices, receipt, y + 26, textWidth, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.verified").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
 		}
-	}
-
-	private int drawWrapped(VersionedMatrices matrices, String text, int y, int width, int color) {
-		for (String line : wrapToWidth(this.font, text, width, 5)) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line), this.width / 2, y, color);
-			y += 12;
-		}
-		return y;
-	}
-
-	/** One stats line per fact; the before -> after shape lives here so it cannot drift per locale. */
-	private void drawStats(VersionedMatrices matrices, ClientGenerationStore.CompactionResult compacted, int y, int textWidth) {
-		y = drawWrapped(matrices,
-				statLine("automodpack.storage.records", compacted.recordCountBefore(), compacted.recordCountAfter(), UiFormat.formatSize(compacted.recordBytesBefore()), UiFormat.formatSize(compacted.recordBytesAfter())),
-				y, textWidth, TextColors.WHITE);
-		y = drawWrapped(matrices, statLine("automodpack.storage.objects", compacted.objectCollection().before().objectCount(), compacted.objectCollection().after().objectCount(),
-				UiFormat.formatSize(compacted.objectCollection().before().objectBytes()), UiFormat.formatSize(compacted.objectCollection().after().objectBytes())), y, textWidth, TextColors.WHITE);
-		drawWrapped(matrices, statLine("automodpack.storage.generatedCopies", compacted.generatedCopyCountBefore(), compacted.generatedCopyCountAfter(), UiFormat.formatSize(compacted.generatedCopyBytesBefore()),
-				UiFormat.formatSize(compacted.generatedCopyBytesAfter())), y, textWidth, TextColors.GRAY);
 	}
 
 	private String statLine(String labelKey, long countBefore, long countAfter, String sizeBefore, String sizeAfter) {

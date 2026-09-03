@@ -28,7 +28,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /** One ObjectSelectionList of already-wrapped text lines for a pinned-title / pinned-footer dialog body. */
 public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget.Entry> {
-	public static final int ROW_HEIGHT = 12;
+	public static final int ROW_HEIGHT = 9;
 	private final int contentWidth;
 	private final boolean center;
 
@@ -139,13 +139,13 @@ public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget
 
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth) {
 			if (center) {
-				VersionedScreen.drawCenteredTextWithShadow(matrices, minecraft.font, line, TextScrollWidget.this.width / 2, y + 1, TextColors.WHITE);
+				VersionedScreen.drawCenteredTextWithShadow(matrices, minecraft.font, line, TextScrollWidget.this.width / 2, y, TextColors.WHITE);
 				return;
 			}
 			int maxWidth = Math.max(1, entryWidth - 4);
 			MutableComponent drawn = line;
 			if (minecraft.font.width(line) > maxWidth) drawn = VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, line.getString(), maxWidth));
-			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + 2, y + 1, TextColors.WHITE);
+			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + 2, y, TextColors.WHITE);
 		}
 
 		/*? if >= 1.21.9 {*/
