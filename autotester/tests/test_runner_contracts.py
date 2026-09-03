@@ -133,7 +133,7 @@ def test_server_history_compaction_uses_registered_boundary_command():
     )
 
     assert (
-        '["rcon-cli", "automodpack", "generate", "storage", "compact", "before", boundary_id, "confirm"]'
+        '["rcon-cli", "automodpack", "generate", "storage", "compact", "before", str(boundary_seq), "confirm"]'
         in source
     )
     assert (
@@ -148,21 +148,44 @@ class _ExecResult:
         self.exit_code = exit_code
 
 
+def _journal_entry(seq, token, notes, *, restore_of=-1, snapshot=False):
+    return {
+        "seq": seq,
+        "contentToken": token,
+        "policySha1": "c" * 40,
+        "createdAt": "2026-09-02T23:45:32Z",
+        "notes": notes,
+        "restoreOf": restore_of,
+        "snapshot": snapshot,
+        "changes": [{"path": "config/a.txt", "toSha1": "a" * 40, "toSize": 3}],
+    }
+
+
+def _write_server_state(server_root, journal, projection):
+    (server_root / "journal.jsonl").write_text(
+        "".join(json.dumps(entry) + "\n" for entry in journal), encoding="utf-8"
+    )
+    (server_root / "current-projection.json").write_text(
+        json.dumps(projection), encoding="utf-8"
+    )
+
+
 def test_publish_server_generation_uses_durable_generation_receipt(make_ctx, monkeypatch):
     ctx = make_ctx()
     server_root = ctx.server_dir / "automodpack" / "server"
-    commits_root = server_root / "commits"
-    commits_root.mkdir(parents=True)
-    previous_id = "a" * 40
-    published_id = "b" * 40
+    server_root.mkdir(parents=True)
     notes = "Update without a loader-specific log receipt."
-    (server_root / "current.json").write_text(json.dumps({"generationId": previous_id}), encoding="utf-8")
+    token = "b" * 40
+    head_entry = _journal_entry(1, token, notes)
 
     class Container:
         def exec_run(self, command):
             assert command == ["rcon-cli", "automodpack", "generate", "notes", notes]
-            (commits_root / f"{published_id}.json").write_text(json.dumps({"generationId": published_id, "patchNotes": notes}), encoding="utf-8")
-            (server_root / "current.json").write_text(json.dumps({"generationId": published_id}), encoding="utf-8")
+            _write_server_state(
+                server_root,
+                [head_entry],
+                {"contentToken": token, "journalHead": 1, "journal": [head_entry]},
+            )
             return _ExecResult()
 
     monkeypatch.setattr(runner, "_write_server_generation", lambda *_: None)
@@ -172,58 +195,48 @@ def test_publish_server_generation_uses_durable_generation_receipt(make_ctx, mon
     runner._v_publish_server_generation(ctx, {"generation": 1})
 
     assert ctx.vars["published_server_generation"] == 1
-    assert ctx.vars["published_server_generation_id"] == published_id
+    assert ctx.vars["published_server_generation_id"] == token
 
 
-def test_completed_compaction_receipt_has_no_pending_deletions():
-    expected_ids = ["a" * 40, "b" * 40]
-    expected_notes = ["initial", "rollback"]
-    history_entries = [
-        {"generationId": expected_ids[0], "rollbackAvailable": False},
-        {"generationId": expected_ids[1], "rollbackAvailable": True},
+def test_completed_compaction_rewrites_the_journal_under_a_head_snapshot():
+    root_token, update_token, rollback_token = "a" * 40, "b" * 40, "c" * 40
+    entries_before = [
+        _journal_entry(1, root_token, "root", snapshot=True),
+        _journal_entry(2, update_token, "update"),
+        _journal_entry(3, rollback_token, "rollback", restore_of=1),
     ]
-    history = {"currentGenerationId": expected_ids[-1], "compactionBoundaryGenerationId": expected_ids[-1], "entries": history_entries}
-    patch_notes = [{"generationId": generation_id, "patchNotes": notes} for generation_id, notes in zip(expected_ids, expected_notes, strict=True)]
-    checkpoint = {
-        "boundaryGenerationId": expected_ids[-1],
-        "record": {"generation": {"generationId": expected_ids[-1]}},
-        "patchNotesHistory": patch_notes,
-        "historyIndex": history,
-        "supersededGenerationIds": [],
-        "supersededCatalogueStateDigests": [],
-    }
-    projection = {"patchNotesHistory": patch_notes, "generationHistory": history}
+    boundary_snapshot = _journal_entry(1, update_token, "update", snapshot=True)
+    survivor = _journal_entry(2, rollback_token, "rollback", restore_of=1)
+    entries_after = [boundary_snapshot, survivor]
+    projection = {"contentToken": rollback_token, "journalHead": 2, "journal": entries_after}
 
-    assert runner._completed_compaction_receipt(checkpoint, projection, expected_ids, expected_notes)
+    assert runner._completed_compaction(entries_before, entries_after, projection)
 
-    checkpoint["supersededGenerationIds"] = [expected_ids[0]]
-    assert not runner._completed_compaction_receipt(checkpoint, projection, expected_ids, expected_notes)
+    assert not runner._completed_compaction(entries_before, entries_before, projection)
+    unrenumbered = [entries_after[0], _journal_entry(3, rollback_token, "rollback", restore_of=1)]
+    assert not runner._completed_compaction(entries_before, unrenumbered, projection)
+    drift = dict(projection, contentToken="d" * 40)
+    assert not runner._completed_compaction(entries_before, entries_after, drift)
 
 
-def test_rollback_server_generation_uses_retained_history_and_durable_receipt(make_ctx, monkeypatch):
+def test_rollback_server_generation_appends_a_durable_restore_entry(make_ctx, monkeypatch):
     ctx = make_ctx()
     server_root = ctx.server_dir / "automodpack" / "server"
     server_root.mkdir(parents=True)
-    target_id = "a" * 40
-    current_id = "b" * 40
-    rollback_id = "c" * 40
-    state_digest = "d" * 40
-    rollback_ledger_digest = "9" * 40
-    rollback_ledger_digest = "9" * 40
-    history = [
-        {"generationId": target_id, "parentGenerationId": "", "patchNotes": "root"},
-        {"generationId": current_id, "parentGenerationId": target_id, "patchNotes": "update"},
+    target_token = "a" * 40
+    current_token = "b" * 40
+    target_seq, current_seq = 1, 2
+    notes = "Release gate rollback verification."
+    journal = [
+        _journal_entry(target_seq, target_token, "root", snapshot=True),
+        _journal_entry(current_seq, current_token, "update"),
     ]
-    projection = {
-        "generation": {"generationId": current_id, "parentGenerationId": target_id, "patchNotes": "update", "rollbackTargetGenerationId": "", "stateDigest": "e" * 40, "ledgerDigest": "f" * 40},
-        "patchNotesHistory": history,
-    }
-    (server_root / "current-projection.json").write_text(json.dumps(projection), encoding="utf-8")
-    (server_root / "current.json").write_text(json.dumps({"generationId": current_id}), encoding="utf-8")
-    (server_root / "commits").mkdir()
-    (server_root / "catalogues").mkdir()
-    (server_root / "commits" / f"{target_id}.json").write_text(json.dumps({"generationId": target_id, "stateDigest": state_digest, "ledgerDigest": "e" * 40}), encoding="utf-8")
-    (server_root / "catalogues" / f"{state_digest}.json").write_text("{}", encoding="utf-8")
+    journal[-1]["policySha1"] = "d" * 40
+    _write_server_state(
+        server_root,
+        journal,
+        {"contentToken": current_token, "journalHead": current_seq, "journal": journal},
+    )
 
     class Container:
         def __init__(self):
@@ -232,26 +245,13 @@ def test_rollback_server_generation_uses_retained_history_and_durable_receipt(ma
         def exec_run(self, command):
             self.commands.append(command)
             if command[0] == "rcon-cli":
-                updated = {
-                    "generation": {
-                        "generationId": rollback_id,
-                        "parentGenerationId": current_id,
-                        "patchNotes": "Release gate rollback verification.",
-                        "rollbackTargetGenerationId": target_id,
-                        "stateDigest": state_digest,
-                        "ledgerDigest": rollback_ledger_digest,
-                    },
-                    "patchNotesHistory": [*history, {"generationId": rollback_id, "parentGenerationId": current_id, "patchNotes": "Release gate rollback verification."}],
-                }
-                (server_root / "current-projection.json").write_text(json.dumps(updated), encoding="utf-8")
-                (server_root / "current.json").write_text(json.dumps({"generationId": rollback_id}), encoding="utf-8")
-                (server_root / "commits" / f"{rollback_id}.json").write_text(json.dumps({
-                    "parentGenerationId": current_id,
-                    "rollbackTargetGenerationId": target_id,
-                    "stateDigest": state_digest,
-                    "ledgerDigest": rollback_ledger_digest,
-                    "patchNotes": "Release gate rollback verification.",
-                }), encoding="utf-8")
+                restore_seq = current_seq + 1
+                restore = _journal_entry(restore_seq, target_token, notes, restore_of=target_seq)
+                _write_server_state(
+                    server_root,
+                    [*journal, restore],
+                    {"contentToken": target_token, "journalHead": restore_seq, "journal": [*journal, restore]},
+                )
             return _ExecResult()
 
     container = Container()
@@ -260,11 +260,12 @@ def test_rollback_server_generation_uses_retained_history_and_durable_receipt(ma
     runner._v_rollback_server_generation(ctx, {})
 
     assert container.commands[-1] == [
-        "rcon-cli", "automodpack", "generate", "revert", target_id, "confirm", "notes", "Release gate rollback verification."
+        "rcon-cli", "automodpack", "generate", "revert", str(target_seq), "confirm", "notes", notes
     ]
-    assert ctx.vars["server_rollback"]["targetGenerationId"] == target_id
-    assert ctx.vars["server_rollback"]["currentGenerationId"] == rollback_id
-    assert ctx.vars["server_rollback"]["ledgerDigest"] == rollback_ledger_digest
+    assert ctx.vars["server_rollback"]["targetSeq"] == target_seq
+    assert ctx.vars["server_rollback"]["restoreSeq"] == current_seq + 1
+    assert ctx.vars["server_rollback"]["contentToken"] == target_token
+    assert ctx.vars["server_rollback"]["journalHead"] == current_seq + 1
 
 
 def test_collect_server_objects_requires_real_transition_receipt(make_ctx, monkeypatch):
@@ -392,21 +393,19 @@ def test_wait_generation_requires_committed_state_and_matching_record(make_ctx):
     with pytest.raises(TimeoutError, match="active generation state was not committed"):
         wait_generation(ctx, {"timeout": "1ms", "poll": "1ms"})
 
-    generation_id = "a" * 40
+    content_token = "a" * 40
     record = (
-        ctx.game_dir / "automodpack/client/records" / generation_id / "manifest.json"
+        ctx.game_dir / "automodpack/client/records" / content_token / "manifest.json"
     )
     record.parent.mkdir(parents=True, exist_ok=True)
     record.write_text(
-        json.dumps(
-            {"modpackId": "packaaa", "generation": {"generationId": generation_id}}
-        ),
+        json.dumps({"contentToken": content_token, "policy": {"modpackId": "packaaa"}}),
         encoding="utf-8",
     )
     state = ctx.game_dir / "automodpack/client/active-state.json"
     state.write_text(
         json.dumps(
-            {"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}
+            {"schemaVersion": 1, "modpackId": "packaaa", "contentToken": content_token, "status": "ACTIVE"}
         ),
         encoding="utf-8",
     )
@@ -416,42 +415,51 @@ def test_wait_generation_requires_committed_state_and_matching_record(make_ctx):
 
 def test_wait_generation_requires_expected_patch_notes(make_ctx):
     ctx = make_ctx()
-    generation_id = "b" * 40
-    record = (
-        ctx.game_dir / "automodpack/client/records" / generation_id / "manifest.json"
-    )
-    record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(
-        json.dumps(
-            {
-                "modpackId": "packaaa",
-                "generation": {"generationId": generation_id, "patchNotes": "stale"},
-            }
-        ),
-        encoding="utf-8",
-    )
-    state = ctx.game_dir / "automodpack/client/active-state.json"
-    state.write_text(
-        json.dumps(
-            {"modpackId": "packaaa", "generationId": generation_id, "status": "ACTIVE"}
-        ),
-        encoding="utf-8",
-    )
+
+    def write_record(notes):
+        content_token = "b" * 40
+        record = (
+            ctx.game_dir / "automodpack/client/records" / content_token / "manifest.json"
+        )
+        record.parent.mkdir(parents=True, exist_ok=True)
+        head_entry = {
+            "seq": 1,
+            "contentToken": content_token,
+            "policySha1": "c" * 40,
+            "createdAt": "2026-09-02T23:45:32Z",
+            "notes": notes,
+            "restoreOf": -1,
+            "snapshot": True,
+            "changes": [],
+        }
+        record.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "contentToken": content_token,
+                    "journalHead": 1,
+                    "journal": [head_entry],
+                    "policy": {"modpackId": "packaaa"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        state = ctx.game_dir / "automodpack/client/active-state.json"
+        state.write_text(
+            json.dumps(
+                {"schemaVersion": 1, "modpackId": "packaaa", "contentToken": content_token, "status": "ACTIVE"}
+            ),
+            encoding="utf-8",
+        )
+
+    write_record("stale")
 
     with pytest.raises(TimeoutError, match="active generation state was not committed"):
         wait_generation(
             ctx, {"patchNotes": "expected", "timeout": "1ms", "poll": "1ms"}
         )
 
-    record.write_text(
-        json.dumps(
-            {
-                "modpackId": "packaaa",
-                "generation": {"generationId": generation_id, "patchNotes": "expected"},
-            }
-        ),
-        encoding="utf-8",
-    )
+    write_record("expected")
     wait_generation(ctx, {"patchNotes": "expected", "timeout": "1s", "poll": "1ms"})
 
 
@@ -617,21 +625,23 @@ def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     ctx = make_ctx()
     payloads = {"a" * 40: b"first", "b" * 40: b"second"}
     projection = {
-        "groups": {
-            "main": {
-                "files": {
-                    "config/a.txt": {
-                        "sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(),
-                        "size": str(len(payloads["a" * 40])),
-                    },
-                    "config/b.txt": {
-                        "sha1": hashlib.sha1(payloads["b" * 40]).hexdigest(),
-                        "size": str(len(payloads["b" * 40])),
-                    },
-                    "config/a-copy.txt": {
-                        "sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(),
-                        "size": str(len(payloads["a" * 40])),
-                    },
+        "policy": {
+            "groups": {
+                "main": {
+                    "files": {
+                        "config/a.txt": {
+                            "sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(),
+                            "size": str(len(payloads["a" * 40])),
+                        },
+                        "config/b.txt": {
+                            "sha1": hashlib.sha1(payloads["b" * 40]).hexdigest(),
+                            "size": str(len(payloads["b" * 40])),
+                        },
+                        "config/a-copy.txt": {
+                            "sha1": hashlib.sha1(payloads["a" * 40]).hexdigest(),
+                            "size": str(len(payloads["a" * 40])),
+                        },
+                    }
                 }
             }
         }
@@ -718,18 +728,15 @@ def test_non_canonical_staged_timestamp_is_rejected():
 
 def test_staged_manifest_receipt_rejects_a_non_canonical_timestamp(tmp_path):
     manifest = {
-        "modpackId": "packbbb",
-        "generation": {
-            "schemaVersion": 1,
-            "generationId": "0" * 40,
-            "parentGenerationId": "",
-            "createdAt": "2026-09-02T23:45:32.800000Z",
-            "stateDigest": "1" * 40,
-            "ledgerDigest": "2" * 40,
-            "patchNotes": "",
-            "patchNotesDigest": hashlib.sha1(b"").hexdigest(),
-            "rollbackTargetGenerationId": "",
-        },
+        "schemaVersion": 1,
+        "contentToken": "0" * 40,
+        "policySha1": "1" * 40,
+        "createdAt": "2026-09-02T23:45:32.800000Z",
+        "journalHead": 1,
+        "journalTruncated": False,
+        "journal": [],
+        "ownershipLedger": {"modpackId": "packbbb", "entries": [], "digest": "2" * 40},
+        "policy": {"modpackId": "packbbb"},
     }
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps(manifest), encoding="utf-8")
