@@ -149,7 +149,7 @@ topology:
           visual:
             displayName: Visuals
             category: visuals
-            syncedFiles: ["/config/amp-navigation-visual.txt"]
+            syncedFiles: ["/config/amp-navigation-visual.txt", "/mods/amp-autotest-navigation-visual.jar"]
 
 serverFiles:
   modpackName: amp-autotest
@@ -163,3 +163,6 @@ serverFiles:
         - { group: extra4, path: config/amp-navigation-extra-4.txt, content: "extra-4\n" }
         - { group: extra5, path: config/amp-navigation-extra-5.txt, content: "extra-5\n" }
         - { group: visual, path: config/amp-navigation-visual.txt, content: "visual\n" }
+        # A metadata-only jar keeps the write confirm unverified, so its honesty lock
+        # and acknowledgement are exercised on every preview.
+        - { group: visual, path: mods/amp-autotest-navigation-visual.jar, fixture: { modId: amp_autotest_navigation_visual, version: "1.0.0-navigation", marker: navigation } }
