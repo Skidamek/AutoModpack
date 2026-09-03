@@ -87,6 +87,11 @@ class ServerHolepunchBridgeTest {
 			}
 
 			@Override
+			public byte[] transportSecret() {
+				return new byte[16];
+			}
+
+			@Override
 			public CompletableFuture<Void> commitTransportUpgrade() {
 				return CompletableFuture.completedFuture(null);
 			}

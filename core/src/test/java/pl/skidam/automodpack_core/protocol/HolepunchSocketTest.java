@@ -81,6 +81,11 @@ class HolepunchSocketTest {
 		}
 
 		@Override
+		public byte[] transportSecret() {
+			return new byte[16];
+		}
+
+		@Override
 		public CompletionStage<Void> commitTransportUpgrade() {
 			return CompletableFuture.completedFuture(null);
 		}

@@ -150,7 +150,7 @@ public class DownloadClient implements AutoCloseable {
 			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
 			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC) performMagicHandshake(plainSocket);
 			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
-			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket, tlsSocket);
+			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
 			tlsSocket.setSoTimeout(0);
 			return new TlsCandidate(tlsSocket, trustManager);
 		} catch (IOException e) {
@@ -159,9 +159,9 @@ public class DownloadClient implements AutoCloseable {
 		}
 	}
 
-	private void awaitTransportUpgrade(HolepunchSocket socket, SSLSocket tlsSocket) throws IOException {
+	private void awaitTransportUpgrade(HolepunchSocket socket) throws IOException {
 		try {
-			socket.enableTlsTrafficCamouflage(tlsSocket.getSession(), true);
+			socket.enableTlsTrafficCamouflage(true);
 			socket.commitTransportUpgrade().toCompletableFuture().get(NETWORK_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();

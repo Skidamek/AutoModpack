@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLKeyException;
-import javax.net.ssl.SSLSession;
 
 import io.netty.buffer.ByteBuf;
 
@@ -34,7 +33,7 @@ public class HolepunchSocket extends Socket {
 	private volatile HolepunchOutputStream out;
 	private volatile boolean closed;
 	private volatile int soTimeoutMillis;
-	private volatile TrafficCamouflage trafficCamouflage;
+	private volatile TlsRecordCamouflage.Pair trafficCamouflage;
 	private final Object writeLock = new Object();
 
 	public HolepunchSocket(HolepunchConnection connection) {
@@ -86,10 +85,10 @@ public class HolepunchSocket extends Socket {
 		return activeConnection.commitTransportUpgrade();
 	}
 
-	void enableTlsTrafficCamouflage(SSLSession session, boolean client) throws SSLKeyException {
-		TlsRecordHeaderCamouflage.Pair tlsRecords = TlsRecordHeaderCamouflage.create(session, client);
-		MinecraftFrameCamouflage.Pair minecraftFrames = MinecraftFrameCamouflage.create(session, client);
-		trafficCamouflage = new TrafficCamouflage(tlsRecords, minecraftFrames);
+	void enableTlsTrafficCamouflage(boolean client) throws SSLKeyException {
+		HolepunchConnection activeConnection = connection;
+		if (activeConnection == null) throw new IllegalStateException("HolepunchSocket is not connected");
+		trafficCamouflage = TlsRecordCamouflage.create(activeConnection.transportSecret(), client);
 	}
 
 	@Override
@@ -160,23 +159,19 @@ public class HolepunchSocket extends Socket {
 	}
 
 	void feedCamouflagedReadData(byte[] data) {
-		TrafficCamouflage camouflage = trafficCamouflage;
+		TlsRecordCamouflage.Pair camouflage = trafficCamouflage;
 		if (camouflage != null && data.length != 0) {
 			try {
 				ByteBuffer input = ByteBuffer.wrap(data);
-				ByteBuffer decodedFrames = ByteBuffer.allocate(data.length);
-				camouflage.minecraftFrames().inbound().decode(input, decodedFrames);
-				if (input.hasRemaining()) throw new IOException("Minecraft frame camouflage did not consume inbound data");
-				decodedFrames.flip();
-				ByteBuffer decodedTls = ByteBuffer.allocate(decodedFrames.remaining());
-				camouflage.tlsRecords().inbound().transform(decodedFrames, decodedTls);
-				if (decodedFrames.hasRemaining()) throw new IOException("TLS camouflage did not consume inbound data");
-				decodedTls.flip();
-				data = new byte[decodedTls.remaining()];
-				decodedTls.get(data);
+				ByteBuffer decoded = ByteBuffer.allocate(data.length);
+				camouflage.inbound().decode(input, decoded);
+				if (input.hasRemaining()) throw new IOException("TLS record camouflage did not consume inbound data");
+				decoded.flip();
+				data = new byte[decoded.remaining()];
+				decoded.get(data);
 			} catch (IOException exception) {
 				close();
-				throw new IllegalStateException("Invalid camouflaged Minecraft/TLS stream", exception);
+				throw new IllegalStateException("Invalid camouflaged TLS record stream", exception);
 			}
 		}
 		in.feed(data);
@@ -298,30 +293,19 @@ public class HolepunchSocket extends Socket {
 			if (activeConnection == null) throw new IOException("HolepunchSocket is not connected");
 			// The camouflage applies exactly to the raw post-handoff stream era: bytes written
 			// before the transport handoff completes stay plain TLS, bytes written after it are
-			// framed and header-masked. isRaw() flips once and never back, so the sender-side
-			// decision matches the receiver's onRead/onRawRead split byte for byte.
-			TrafficCamouflage camouflage = activeConnection.isRaw() ? trafficCamouflage : null;
+			// framed with encrypted record headers. isRaw() flips once and never back, so the
+			// sender-side decision matches the receiver's onRead/onRawRead split byte for byte.
+			TlsRecordCamouflage.Pair camouflage = activeConnection.isRaw() ? trafficCamouflage : null;
 			ByteBuffer outbound = data.duplicate();
 			if (camouflage != null && outbound.hasRemaining()) {
-				ByteBuffer encoded = ByteBuffer.allocate(outbound.remaining());
-				camouflage.tlsRecords().outbound().transform(outbound, encoded);
+				// Headroom receipt: the worst case is minimum-size records, 17 bytes of payload
+				// becoming a 25-byte frame, about fourteen percent.
+				ByteBuffer encoded = ByteBuffer.allocate(outbound.remaining() + outbound.remaining() / 4 + 64);
+				camouflage.outbound().encode(outbound, encoded);
 				encoded.flip();
 				outbound = encoded;
 			}
-			while (outbound.hasRemaining()) {
-				int chunkLength = camouflage == null ? outbound.remaining() : Math.min(outbound.remaining(), MinecraftFrameCamouflage.MAX_FRAME_LENGTH);
-				ByteBuffer chunk = outbound.slice();
-				chunk.limit(chunkLength);
-				ByteBuffer wire = chunk;
-				if (camouflage != null) {
-					ByteBuffer framed = ByteBuffer.allocate(MinecraftFrameCamouflage.HEADER_LENGTH + chunkLength);
-					camouflage.minecraftFrames().outbound().encode(chunk, framed);
-					framed.flip();
-					wire = framed;
-				}
-				writeToConnection(activeConnection, wire);
-				outbound.position(outbound.position() + chunkLength);
-			}
+			writeToConnection(activeConnection, outbound);
 		}
 	}
 
@@ -336,5 +320,4 @@ public class HolepunchSocket extends Socket {
 		}
 	}
 
-	private record TrafficCamouflage(TlsRecordHeaderCamouflage.Pair tlsRecords, MinecraftFrameCamouflage.Pair minecraftFrames) {}
 }
