@@ -22,7 +22,7 @@ import com.google.gson.JsonObject;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 public class FileInspection {
 
@@ -50,7 +50,7 @@ public class FileInspection {
 
 	private record ModMetadata(String modId, String version, Set<String> provides, Set<String> deps, LoaderManagerService.EnvironmentType environment) {}
 
-	public static Mod getMod(Path file, FileMetadataCache cache) {
+	public static Mod getMod(Path file, FileCache cache) {
 		if (isJarInvalid(file)) return null;
 
 		String hash = FileIntegrity.identityHash(file, cache);

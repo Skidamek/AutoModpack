@@ -13,7 +13,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Locale;
 
-/** Low-level digest primitives; path-keyed callers add caching through {@code FileMetadataCache}. */
+/** Low-level digest primitives; path-keyed callers add caching through {@code FileCache}. */
 public final class HashUtils {
 	public static final int SHA1_HEX_LENGTH = 40;
 	private static final String SHA_1 = "SHA-1";
@@ -64,7 +64,7 @@ public final class HashUtils {
 		return value.toLowerCase(Locale.ROOT);
 	}
 
-	/** Full SHA-1 of current bytes. Path-keyed identity goes through {@code FileIntegrity} / {@code FileMetadataCache}. */
+	/** Full SHA-1 of current bytes. Path-keyed identity goes through {@code FileIntegrity} / {@code FileCache}. */
 	public static String getHash(Path path) {
 		try {
 			MessageDigest digest = newSha1Digest();

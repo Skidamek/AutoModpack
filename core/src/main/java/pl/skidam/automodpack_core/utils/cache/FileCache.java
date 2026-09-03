@@ -33,9 +33,9 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * process-wide database open or requiring a database dependency.
  * </p>
  */
-public class FileMetadataCache extends LooseRecordCache<FileMetadataCache.CachedFile> {
+public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
-	private static final SharedCacheRegistry<FileMetadataCache> REGISTRY = new SharedCacheRegistry<>();
+	private static final SharedCacheRegistry<FileCache> REGISTRY = new SharedCacheRegistry<>();
 	private static final long UNAVAILABLE_CHANGE_TIME_NANOS = Long.MIN_VALUE;
 
 	public static final class CachedFile {
@@ -108,12 +108,12 @@ public class FileMetadataCache extends LooseRecordCache<FileMetadataCache.Cached
 
 	private record ComputedHash(String hash, BasicFileAttributes attributes, FileFingerprint fingerprint) {}
 
-	public static FileMetadataCache open(Path path) throws IOException {
-		return REGISTRY.acquire(path, FileMetadataCache::new);
+	public static FileCache open(Path path) throws IOException {
+		return REGISTRY.acquire(path, FileCache::new);
 	}
 
-	private FileMetadataCache(Path recordsDirectory) {
-		super(recordsDirectory, "file metadata");
+	private FileCache(Path recordsDirectory) {
+		super(recordsDirectory, "file cache");
 	}
 
 	/** Applies a Git-style persisted stat cache; explicit integrity repair uses rehash(). */
@@ -363,7 +363,7 @@ public class FileMetadataCache extends LooseRecordCache<FileMetadataCache.Cached
 				}
 			}
 		} catch (IOException e) {
-			LOGGER.debug("Could not clean file metadata cache: {}", recordsDirectory, e);
+			LOGGER.debug("Could not clean file cache: {}", recordsDirectory, e);
 		}
 		hotRecords.entrySet().removeIf(entry -> Files.notExists(Path.of(entry.getKey())));
 	}

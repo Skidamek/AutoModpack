@@ -39,7 +39,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class UpdateTransactionExecutorTest {
 	@TempDir
@@ -263,7 +263,7 @@ class UpdateTransactionExecutorTest {
 		Files.createDirectories(storage.activePath("shaderpacks"));
 		Files.writeString(storage.activePath("shaderpacks/ComplementaryReimagined_r5.8.1.zip.txt"), "#Mon leftover\n", StandardCharsets.UTF_8);
 
-		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			ClientProjectionView.Snapshot view = ClientProjectionView.open(storage).snapshot(cache);
 			assertFalse(ClientProjectionView.publicationStarted(storage, deferred));
 			assertEquals(installed.flatTarget().contentToken, view.target().contentToken);

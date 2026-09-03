@@ -34,7 +34,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class ModpackUtils {
@@ -61,7 +61,7 @@ public class ModpackUtils {
 		var start = System.currentTimeMillis();
 
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
 			for (var serverItem : serverModpackContent.list) {
 				if (verifyActiveItem(serverItem, LogicalPath.normalize(serverItem.file), live) == FileVerification.MISMATCH) filesToUpdate.add(serverItem);
@@ -95,7 +95,7 @@ public class ModpackUtils {
 	public static void reprotectActiveFiles(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
 		if (verificationCannotDecide(serverModpackContent, storage)) return;
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
 			for (var serverItem : serverModpackContent.list) {
 				String relative = LogicalPath.normalize(serverItem.file);
@@ -153,7 +153,7 @@ public class ModpackUtils {
 	}
 
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
-	public static void populateStoreFromCWD(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache, ClientStorage storage) {
+	public static void populateStoreFromCWD(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileCache cache, ClientStorage storage) {
 		for (var entry : filesToUpdate) {
 			Path storeFile = storage.objectFile(entry.sha1);
 			long expectedSize = Long.parseLong(entry.size);
@@ -186,7 +186,7 @@ public class ModpackUtils {
 
 	// Returns the set of files that are missing or corrupt in the store.
 	public static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToCheck,
-			FileMetadataCache cache, ClientStorage storage) {
+			FileCache cache, ClientStorage storage) {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
 			Path storeFile = storage.objectFile(entry.sha1);

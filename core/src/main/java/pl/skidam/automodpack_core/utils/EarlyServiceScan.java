@@ -10,7 +10,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Selects the modpack-folder jars an early-service bootstrapper should host in place: every jar the
@@ -25,7 +25,7 @@ public final class EarlyServiceScan {
 	 * Eligibility is checked before hashing, since it's cheap and most modpack jars never need a hash.
 	 * The standard-mods hash set is computed lazily, only once an eligible jar needs the comparison.
 	 */
-	public static List<Path> eligibleJars(Path modpackMods, Path standardMods, Predicate<Path> eligibleForInPlace, FileMetadataCache cache) throws IOException {
+	public static List<Path> eligibleJars(Path modpackMods, Path standardMods, Predicate<Path> eligibleForInPlace, FileCache cache) throws IOException {
 		List<Path> earlyServiceJars = new ArrayList<>();
 		Set<String> standardModHashes = null;
 		try (Stream<Path> stream = Files.list(modpackMods)) {
@@ -40,7 +40,7 @@ public final class EarlyServiceScan {
 		return earlyServiceJars;
 	}
 
-	private static Set<String> jarHashes(Path dir, FileMetadataCache cache) {
+	private static Set<String> jarHashes(Path dir, FileCache cache) {
 		Set<String> hashes = new HashSet<>();
 		if (dir == null || !Files.isDirectory(dir)) return hashes;
 		try (Stream<Path> stream = Files.list(dir)) {

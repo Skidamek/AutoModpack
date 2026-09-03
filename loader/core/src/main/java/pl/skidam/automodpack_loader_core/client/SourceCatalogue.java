@@ -15,17 +15,17 @@ import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.FetchManager;
-import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 /** Owns the Modrinth/CurseForge source lookup of one updater session and every provenance reference resolved from it. */
 final class SourceCatalogue {
 	private final Supplier<SelectedModpackTarget> selectedTarget;
-	private final PlatformMetadataCache platformMetadataCache;
+	private final PlatformCache platformCache;
 	private volatile FetchManager sourceFetchManager;
 
-	SourceCatalogue(Supplier<SelectedModpackTarget> selectedTarget, PlatformMetadataCache platformMetadataCache) {
+	SourceCatalogue(Supplier<SelectedModpackTarget> selectedTarget, PlatformCache platformCache) {
 		this.selectedTarget = selectedTarget;
-		this.platformMetadataCache = platformMetadataCache;
+		this.platformCache = platformCache;
 	}
 
 	ModpackUpdater.SourceAvailability sourceAvailability() {
@@ -109,7 +109,7 @@ final class SourceCatalogue {
 
 	private FetchManager newSourceFetchManager(List<FetchManager.FetchData> fetchData) {
 		if (fetchData.isEmpty()) return null;
-		FetchManager manager = new FetchManager(fetchData, platformMetadataCache);
+		FetchManager manager = new FetchManager(fetchData, platformCache);
 		manager.fetchAsync();
 		return manager;
 	}

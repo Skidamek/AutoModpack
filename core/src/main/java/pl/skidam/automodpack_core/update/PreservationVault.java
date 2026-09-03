@@ -26,7 +26,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Owns durable user-recoverable claims and the CAS bytes that satisfy them.
@@ -95,7 +95,7 @@ public final class PreservationVault {
 		String claimId = claimId(pack, generation, normalizedReason, normalizedRoot, path, hash, size);
 
 		{
-			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields existing = fields.claims.stream().filter(claim -> claimId.equals(claim.claimId)).findFirst().orElse(null);
 				Path source = storage.rootedPath(normalizedRoot, pack, path);
@@ -161,7 +161,7 @@ public final class PreservationVault {
 	public static Claim preserveAndRemove(ClientStorage storage, String modpackId, String contentToken, Reason reason, Root sourceRoot, String originalPath, String objectHash,
 			long size) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
-			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				Claim claim = preserve(storage, modpackId, contentToken, reason, sourceRoot, originalPath, objectHash, size);
 				Path source = storage.rootedPath(sourceRoot, modpackId, originalPath);
 				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
@@ -222,7 +222,7 @@ public final class PreservationVault {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
 		return ClientStorageMutation.run(storage, () -> {
-			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
 				if (Root.valueOf(claim.sourceRoot) != Root.GAME_DIR) throw new IOException("Only game-directory claims can be restored to their original path");
@@ -240,7 +240,7 @@ public final class PreservationVault {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
 		return ClientStorageMutation.run(storage, () -> {
-			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
 				Path root = storage.restoredClaimDirectory(pack, claim.contentToken, id);
@@ -282,7 +282,7 @@ public final class PreservationVault {
 		throw new IOException("The active modpack still owns " + logicalPath);
 	}
 
-	private static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileMetadataCache cache) throws IOException {
+	private static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileCache cache) throws IOException {
 		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
 		if (!FileIntegrity.matchesNamed(source, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
@@ -387,7 +387,7 @@ public final class PreservationVault {
 		if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation source is not a regular file: " + source);
 	}
 
-	private static void repairObjectFromSource(ClientStorage storage, Path source, Path object, String hash, long size, FileMetadataCache cache) throws IOException {
+	private static void repairObjectFromSource(ClientStorage storage, Path source, Path object, String hash, long size, FileCache cache) throws IOException {
 		Path sourceRoot = source.startsWith(storage.gameDirectory()) ? storage.gameDirectory() : storage.clientDirectory();
 		FileTrees.requireNoSymbolicLinkDescendants(sourceRoot, source, "preservation source");
 		if (!FileIntegrity.matches(source, size, hash, cache)) throw new IOException("Preserved object is corrupt and its source is unavailable: " + hash);

@@ -25,7 +25,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.JarUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 /** Loads an installed modpack projection into the running game without contacting the server. */
@@ -52,7 +52,7 @@ final class ProjectionLoader {
 	void loadModpack() throws Exception {
 
 		if (!Files.exists(storage.activeDirectory())) return;
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			loadModpackMods(cache, modCache);
 		}
 	}
@@ -75,7 +75,7 @@ final class ProjectionLoader {
 
 	// Load the modpack mods that aren't already present in the standard mods
 	// directory, without requiring a restart.
-	private void loadModpackMods(FileMetadataCache cache, ModFileCache modCache) throws Exception {
+	private void loadModpackMods(FileCache cache, ModFileCache modCache) throws Exception {
 		if (!preload) {
 			LOGGER.info("Modpack is already loaded");
 			return;

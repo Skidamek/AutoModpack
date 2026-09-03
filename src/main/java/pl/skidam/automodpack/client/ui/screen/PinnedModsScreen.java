@@ -36,9 +36,9 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
-import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 /** Instance-wide list of live mods/ ids that stay loaded instead of the pack copy. */
 public final class PinnedModsScreen extends VersionedScreen {
@@ -183,7 +183,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 	private static List<PlatformReferences.Page> cachedPlatformPages(Path file) {
 		try {
 			ClientStorage storage = ClientStorage.open(GameDirectory.current());
-			try (FileMetadataCache hashes = FileMetadataCache.open(storage.fileMetadataDirectory()); PlatformMetadataCache cache = PlatformMetadataCache.open(storage.platformMetadataDirectory())) {
+			try (FileCache hashes = FileCache.open(storage.fileCacheDirectory()); PlatformCache cache = PlatformCache.open(storage.platformCacheDirectory())) {
 				String sha1 = hashes.getHashOrNull(file);
 				return sha1 == null ? List.of() : PlatformReferences.cachedPages(cache, sha1);
 			}
@@ -247,7 +247,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			Path modsDirectory = storage.modsDirectory();
 			if (!Files.isDirectory(modsDirectory, LinkOption.NOFOLLOW_LINKS)) return List.of();
-			try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
+			try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
 				for (Path path : stream.sorted().toList()) {
 					if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 					FileInspection.Mod mod = modCache.getModOrNull(path, cache);

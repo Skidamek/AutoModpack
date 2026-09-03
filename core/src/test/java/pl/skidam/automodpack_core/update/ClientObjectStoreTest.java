@@ -42,7 +42,7 @@ class ClientObjectStoreTest {
 		String orphan = store(storage, "orphan");
 		Files.createDirectories(storage.overlayFile(MODPACK_ID, "config/options.txt").getParent());
 		Files.writeString(storage.overlayFile(MODPACK_ID, "config/options.txt"), "referenced", StandardCharsets.UTF_8);
-		Files.writeString(storage.fileMetadataDirectory().resolve("cache.json"), "metadata", StandardCharsets.UTF_8);
+		Files.writeString(storage.fileCacheDirectory().resolve("cache.json"), "metadata", StandardCharsets.UTF_8);
 
 		ClientObjectStore.StorageReport report = ClientObjectStore.measure(storage);
 

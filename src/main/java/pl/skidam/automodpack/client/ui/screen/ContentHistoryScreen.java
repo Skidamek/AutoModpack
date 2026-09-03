@@ -156,7 +156,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	/** Resolves the cached Modrinth/CurseForge page references off the render thread, then opens the shared browser. */
 	private void openBrowserScreen(Component heading, Component description, ChangeSet changes) {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
-			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, platformMetadataDirectory());
+			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, platformCacheDirectory());
 			this.minecraft.execute(() -> {
 				if (closed) return;
 				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, Map.of()));
@@ -164,8 +164,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		});
 	}
 
-	private static Path platformMetadataDirectory() {
-		return ClientStorage.open(GameDirectory.current()).platformMetadataDirectory();
+	private static Path platformCacheDirectory() {
+		return ClientStorage.open(GameDirectory.current()).platformCacheDirectory();
 	}
 
 	private void back() {

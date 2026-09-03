@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
 public class FetchManager {
 
@@ -25,10 +25,10 @@ public class FetchManager {
 	private record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
 	private record Datas(FetchData fetchData, FetchedData fetchedData) {}
 	private final Map<String, Datas> fetchDatas = new HashMap<>();
-	private final PlatformMetadataCache platformMetadataCache;
+	private final PlatformCache platformCache;
 
-	public FetchManager(List<FetchData> fetchDatas, PlatformMetadataCache platformMetadataCache) {
-		this.platformMetadataCache = platformMetadataCache;
+	public FetchManager(List<FetchData> fetchDatas, PlatformCache platformCache) {
+		this.platformCache = platformCache;
 		for (FetchData fetchData : fetchDatas) {
 			this.fetchDatas.put(fetchData.sha1,
 					new Datas(fetchData, new FetchedData(Collections.synchronizedList(new ArrayList<>(2)), Collections.synchronizedList(new ArrayList<>(2)))));
@@ -119,10 +119,10 @@ public class FetchManager {
 	}
 
 	private void fetchBySha1(List<String> sha1s) {
-		Map<String, PlatformMetadataCache.Record> cached = platformMetadataCache.getAll(sha1s);
+		Map<String, PlatformCache.Record> cached = platformCache.getAll(sha1s);
 		List<String> missing = new ArrayList<>();
 		for (String sha1 : sha1s) {
-			PlatformMetadataCache.Record record = cached.get(sha1);
+			PlatformCache.Record record = cached.get(sha1);
 			if (record != null && record.modrinth() != null) applyModrinth(fetchDatas.get(sha1), record.modrinth());
 			else missing.add(sha1);
 		}
@@ -135,17 +135,17 @@ public class FetchManager {
 			Datas datas = fetchDatas.get(info.SHA1Hash());
 			if (datas != null) {
 				String mainPageUrl = ModrinthAPI.getMainPageUrl(info.modrinthID(), datas.fetchData.fileType);
-				platformMetadataCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
+				platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
 				applyModrinth(datas, info.downloadUrl(), mainPageUrl);
 			}
 		}
 	}
 
 	private void fetchByMurmur(Map<String, String> hashes) {
-		Map<String, PlatformMetadataCache.Record> cached = platformMetadataCache.getAll(hashes.keySet());
+		Map<String, PlatformCache.Record> cached = platformCache.getAll(hashes.keySet());
 		Map<String, String> missing = new LinkedHashMap<>();
 		for (Map.Entry<String, String> hash : hashes.entrySet()) {
-			PlatformMetadataCache.Record record = cached.get(hash.getKey());
+			PlatformCache.Record record = cached.get(hash.getKey());
 			if (record != null && record.curseforge() != null) {
 				applyCurseForge(fetchDatas.get(hash.getKey()), record.curseforge().downloadUrl(), record.curseforge().projectPageUrl());
 			} else {
@@ -160,13 +160,13 @@ public class FetchManager {
 		for (CurseForgeAPI info : results) {
 			Datas datas = fetchDatas.get(info.sha1Hash());
 			if (datas != null) {
-				platformMetadataCache.putCurseForge(info.sha1Hash(), info);
+				platformCache.putCurseForge(info.sha1Hash(), info);
 				applyCurseForge(datas, info.downloadUrl(), info.projectPageUrl());
 			}
 		}
 	}
 
-	private void applyModrinth(Datas datas, PlatformMetadataCache.ModrinthEntry entry) {
+	private void applyModrinth(Datas datas, PlatformCache.ModrinthEntry entry) {
 		applyModrinth(datas, entry.downloadUrl(), entry.mainPageUrl());
 	}
 

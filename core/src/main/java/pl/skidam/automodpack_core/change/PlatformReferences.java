@@ -12,31 +12,31 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
-/** Resolves Modrinth and CurseForge project pages for file digests from the shared platform metadata cache. */
+/** Resolves Modrinth and CurseForge project pages for file digests from the shared platform cache. */
 public final class PlatformReferences {
 	private PlatformReferences() {}
 
 	/** Returns the cached project pages of one sha1 digest, Modrinth first. */
-	public static List<Page> cachedPages(PlatformMetadataCache cache, String sha1) {
-		Objects.requireNonNull(cache, "platform metadata cache");
+	public static List<Page> cachedPages(PlatformCache cache, String sha1) {
+		Objects.requireNonNull(cache, "platform cache");
 		if (sha1 == null || sha1.isBlank()) return List.of();
 		return pagesOf(cache.getAll(List.of(sha1)).get(sha1));
 	}
 
 	/** Attaches the cached project pages of every occurrence's file digests as references, opening a short-lived cache instance. */
-	public static ChangeSet withCachedReferences(ChangeSet changes, Path platformMetadataDirectory) {
-		try (PlatformMetadataCache cache = PlatformMetadataCache.open(platformMetadataDirectory)) {
+	public static ChangeSet withCachedReferences(ChangeSet changes, Path platformCacheDirectory) {
+		try (PlatformCache cache = PlatformCache.open(platformCacheDirectory)) {
 			return withCachedReferences(changes, cache);
 		} catch (IOException | RuntimeException e) {
 			return changes;
 		}
 	}
 
-	public static ChangeSet withCachedReferences(ChangeSet changes, PlatformMetadataCache cache) {
+	public static ChangeSet withCachedReferences(ChangeSet changes, PlatformCache cache) {
 		Objects.requireNonNull(changes, "change set");
-		Objects.requireNonNull(cache, "platform metadata cache");
+		Objects.requireNonNull(cache, "platform cache");
 		Set<String> hashes = new LinkedHashSet<>();
 		for (ChangeSet.Change change : changes.changes())
 			for (ChangeSet.Occurrence occurrence : change.occurrences()) {
@@ -59,9 +59,9 @@ public final class PlatformReferences {
 		return changes.withReferences((location, path) -> referencesByPath.getOrDefault(path, List.of()));
 	}
 
-	private static Map<String, List<Page>> cachedPagesBySha1(PlatformMetadataCache cache, Collection<String> sha1s) {
+	private static Map<String, List<Page>> cachedPagesBySha1(PlatformCache cache, Collection<String> sha1s) {
 		Map<String, List<Page>> pages = new LinkedHashMap<>();
-		Map<String, PlatformMetadataCache.Record> records = cache.getAll(sha1s);
+		Map<String, PlatformCache.Record> records = cache.getAll(sha1s);
 		for (String sha1 : sha1s) {
 			List<Page> found = pagesOf(records.get(sha1));
 			if (!found.isEmpty()) pages.put(sha1.toLowerCase(Locale.ROOT), found);
@@ -74,7 +74,7 @@ public final class PlatformReferences {
 		for (Page page : pages) references.add(page.url());
 	}
 
-	private static List<Page> pagesOf(PlatformMetadataCache.Record record) {
+	private static List<Page> pagesOf(PlatformCache.Record record) {
 		if (record == null) return List.of();
 		List<Page> pages = new ArrayList<>();
 		if (record.modrinth() != null && isPresent(record.modrinth().mainPageUrl())) pages.add(new Page("modrinth", record.modrinth().mainPageUrl()));

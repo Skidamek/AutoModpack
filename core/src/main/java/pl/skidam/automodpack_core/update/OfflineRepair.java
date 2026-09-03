@@ -29,7 +29,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Offline integrity inspection and repair for the active, locally installed generation.
@@ -131,7 +131,7 @@ public final class OfflineRepair {
 
 	/** Performs a read-only, cache-bypassing inspection. */
 	public Prepared inspect(Request request) throws IOException {
-		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache fileCache = FileCache.open(storage.fileCacheDirectory())) {
 			return analyze(request, fileCache).prepared();
 		}
 	}
@@ -143,7 +143,7 @@ public final class OfflineRepair {
 
 	private Optional<Receipt> recoverLocked(Request request) throws IOException {
 		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
-		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache fileCache = FileCache.open(storage.fileCacheDirectory())) {
 			Analysis current = analyze(request, fileCache);
 			ClientStorageJsons.OfflineRepairJournalFields journal = readJournal(current.prepared());
 			return Optional.of(executeJournal(current.prepared(), current, journal, fileCache));
@@ -165,7 +165,7 @@ public final class OfflineRepair {
 		Set<String> requestedEditableResets = normalizedSelection(editableResetPaths);
 		Set<String> requestedUnownedMods = normalizedSelection(unownedModPaths);
 		Request request = prepared.request();
-		try (FileMetadataCache fileCache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (FileCache fileCache = FileCache.open(storage.fileCacheDirectory())) {
 			Analysis current = analyze(request, fileCache);
 			requireSamePinnedIdentity(prepared, current.prepared());
 			requireSelections(current.prepared(), requestedEditableResets, requestedUnownedMods);
@@ -176,7 +176,7 @@ public final class OfflineRepair {
 		}
 	}
 
-	private Receipt executeJournal(Prepared prepared, Analysis current, ClientStorageJsons.OfflineRepairJournalFields journal, FileMetadataCache fileCache)
+	private Receipt executeJournal(Prepared prepared, Analysis current, ClientStorageJsons.OfflineRepairJournalFields journal, FileCache fileCache)
 			throws IOException {
 		RepairCounts repaired = repairLocally(current, fileCache);
 		long resetEditable = resetJournalEditable(current.prepared().request(), journal, fileCache);
@@ -189,7 +189,7 @@ public final class OfflineRepair {
 		return new Receipt(current.prepared(), after, repaired.casObjects(), repaired.materializedFiles(), resetEditable, archivedUnowned);
 	}
 
-	private RepairCounts repairLocally(Analysis current, FileMetadataCache fileCache) throws IOException {
+	private RepairCounts repairLocally(Analysis current, FileCache fileCache) throws IOException {
 		Request request = current.prepared().request();
 		long repairedCas = 0;
 		for (Expected expected : current.expected().values().stream().filter(value -> value.place() == Place.CAS).sorted(Expected.ORDER).toList()) {
@@ -278,7 +278,7 @@ public final class OfflineRepair {
 		return journal;
 	}
 
-	private long resetJournalEditable(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, FileMetadataCache fileCache) throws IOException {
+	private long resetJournalEditable(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, FileCache fileCache) throws IOException {
 		if (journal.editableResets.isEmpty()) return 0;
 		TreeSet<String> tombstones = new TreeSet<>(storage.readOverlayState(journal.modpackId).deletedPaths);
 		long reset = 0;
@@ -309,7 +309,7 @@ public final class OfflineRepair {
 		return reset;
 	}
 
-	private long archiveJournalUnowned(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, FileMetadataCache fileCache) throws IOException {
+	private long archiveJournalUnowned(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, FileCache fileCache) throws IOException {
 		long archived = 0;
 		for (var fields : journal.unownedMods) {
 			Path source = storage.gamePath(fields.logicalPath);
@@ -342,7 +342,7 @@ public final class OfflineRepair {
 		if (!Set.copyOf(prepared.unownedModPaths()).containsAll(unowned)) throw new IOException("Unowned-mod selection contains a stale path");
 	}
 
-	private Analysis analyze(Request request, FileMetadataCache fileCache) throws IOException {
+	private Analysis analyze(Request request, FileCache fileCache) throws IOException {
 		Objects.requireNonNull(request, "repair request");
 		assertPinned(request);
 		Map<Path, Expected> expected = new LinkedHashMap<>();
@@ -420,7 +420,7 @@ public final class OfflineRepair {
 		return new Analysis(prepared, Map.copyOf(expected), Map.copyOf(observations), immutableSources(sources));
 	}
 
-	private Map<String, Observation> inspectOverlay(String modpackId, FileMetadataCache fileCache, Map<Path, Observation> observations) throws IOException {
+	private Map<String, Observation> inspectOverlay(String modpackId, FileCache fileCache, Map<Path, Observation> observations) throws IOException {
 		Path root = storage.overlayDirectory(modpackId);
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return Map.of();
 		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client editable overlay root is not a directory: " + root);
@@ -457,7 +457,7 @@ public final class OfflineRepair {
 		}
 	}
 
-	private List<String> inspectMods(Path protectedModPath, Set<String> ownedLiveMods, FileMetadataCache fileCache, Map<Path, Observation> observations) throws IOException {
+	private List<String> inspectMods(Path protectedModPath, Set<String> ownedLiveMods, FileCache fileCache, Map<Path, Observation> observations) throws IOException {
 		Path root = storage.modsDirectory();
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Mods path is not a directory: " + root);
@@ -474,7 +474,7 @@ public final class OfflineRepair {
 		return List.copyOf(unowned);
 	}
 
-	private Observation observe(Path path, Path root, FileMetadataCache fileCache, Map<Path, Observation> observations) throws IOException {
+	private Observation observe(Path path, Path root, FileCache fileCache, Map<Path, Observation> observations) throws IOException {
 		Path normalized = path.toAbsolutePath().normalize();
 		if (observations.containsKey(normalized)) return observations.get(normalized);
 		if (!FileTrees.hasNoSymbolicLinkDescendants(root, normalized)) {
@@ -512,7 +512,7 @@ public final class OfflineRepair {
 			throw new IOException("Active repair identity changed after preparation");
 	}
 
-	private static Path verifiedSource(Collection<Path> candidates, Path target, Content content, FileMetadataCache fileCache) throws IOException {
+	private static Path verifiedSource(Collection<Path> candidates, Path target, Content content, FileCache fileCache) throws IOException {
 		for (Path candidate : candidates) {
 			if (candidate.equals(target) || !Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(candidate)) continue;
 			String hash = fileCache.hash(candidate);

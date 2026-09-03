@@ -11,7 +11,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.ImmutableFilePublisher;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Promotes verified candidate snapshots into the immutable server object directory. */
 public final class ServerObjectStore {
@@ -25,7 +25,7 @@ public final class ServerObjectStore {
 			throw new IllegalArgumentException("Managed object and staging directories must be separate");
 	}
 
-	public NavigableMap<String, Path> promoteAll(NavigableMap<String, StagedObject> objects, FileMetadataCache cache) throws IOException {
+	public NavigableMap<String, Path> promoteAll(NavigableMap<String, StagedObject> objects, FileCache cache) throws IOException {
 		FileTrees.createManagedDirectory(objectsDirectory, "immutable object directory");
 		FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
 		TreeMap<String, Path> promoted = new TreeMap<>();
@@ -38,7 +38,7 @@ public final class ServerObjectStore {
 		return Collections.unmodifiableNavigableMap(promoted);
 	}
 
-	private void promote(StagedObject object, Path destination, FileMetadataCache cache) throws IOException {
+	private void promote(StagedObject object, Path destination, FileCache cache) throws IOException {
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
 			ImmutableFiles.protect(destination);
 			if (FileIntegrity.matchesNamed(destination, object.size(), object.sha1(), cache)) {

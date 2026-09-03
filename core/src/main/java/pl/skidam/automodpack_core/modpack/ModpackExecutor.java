@@ -27,7 +27,7 @@ import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public class ModpackExecutor {
@@ -235,12 +235,12 @@ public class ModpackExecutor {
 		validateConfiguration();
 		prepareDirectories();
 		String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.manifest().modpackId());
-		try (FileMetadataCache fileMetadataCache = FileMetadataCache.open(dataLayout.fileMetadataDirectory());
-				ModFileCache modFileCache = ModFileCache.open(dataLayout.modMetadataDirectory())) {
+		try (FileCache fileCache = FileCache.open(dataLayout.fileCacheDirectory());
+				ModFileCache modFileCache = ModFileCache.open(dataLayout.modCacheDirectory())) {
 			ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
 					serverConfig.syncLoaderVersion ? LOADER_VERSION : null, MC_VERSION, serverRoot, groupRoot, serverConfig.groups,
 					serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(SERVER_STAGING_DIR.getFileName()), creationExecutor,
-					generationStore.objectRoot(), fileMetadataCache, modFileCache, materializeMissingObjects);
+					generationStore.objectRoot(), fileCache, modFileCache, materializeMissingObjects);
 			ModpackCandidate candidate = candidateScan.scan(request);
 			for (ExcludedCandidate exclusion : candidate.exclusions())
 				LOGGER.info("Excluded from the modpack: {}/{} - {} ({})", exclusion.source().groupId(), exclusion.source().logicalPath(),

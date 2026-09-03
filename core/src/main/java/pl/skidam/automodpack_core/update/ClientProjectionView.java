@@ -24,7 +24,7 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Resolves the client projection used for planning and update checks.
@@ -97,7 +97,7 @@ public final class ClientProjectionView {
 	}
 
 	/** Captures the projection observation for one planning pass. */
-	public Snapshot snapshot(FileMetadataCache cache) throws IOException {
+	public Snapshot snapshot(FileCache cache) throws IOException {
 		Objects.requireNonNull(cache, "cache");
 		UpdateTransaction pending = readPending();
 		if (publicationStarted(storage, pending)) return stagedSnapshot(pending);
@@ -105,7 +105,7 @@ public final class ClientProjectionView {
 	}
 
 	/** Returns the committed {@code active/} tree the game loads, independent of any unpublished request. */
-	public Map<String, UpdatePlan.FileState> liveFiles(FileMetadataCache cache) throws IOException {
+	public Map<String, UpdatePlan.FileState> liveFiles(FileCache cache) throws IOException {
 		Objects.requireNonNull(cache, "cache");
 		return readLiveFiles(cache);
 	}
@@ -134,11 +134,11 @@ public final class ClientProjectionView {
 		return new Snapshot(stagedTarget(pending), files, pendingGameStates(pending), pending);
 	}
 
-	private Snapshot liveSnapshot(FileMetadataCache cache, UpdateTransaction pending) throws IOException {
+	private Snapshot liveSnapshot(FileCache cache, UpdateTransaction pending) throws IOException {
 		return new Snapshot(committedTarget(), readLiveFiles(cache), pendingGameStates(pending), pending);
 	}
 
-	private Map<String, UpdatePlan.FileState> readLiveFiles(FileMetadataCache cache) throws IOException {
+	private Map<String, UpdatePlan.FileState> readLiveFiles(FileCache cache) throws IOException {
 		Map<String, UpdatePlan.FileState> files = new LinkedHashMap<>();
 		Path active = storage.activeDirectory();
 		if (Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) {

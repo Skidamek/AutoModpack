@@ -23,7 +23,7 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		super(recordsDirectory, "mod metadata");
 	}
 
-	public FileInspection.Mod getOrComputeMod(Path file, FileMetadataCache cache) throws IOException {
+	public FileInspection.Mod getOrComputeMod(Path file, FileCache cache) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
 		String hash = cache.getOrComputeHash(absPath);
 		if (hash == null) return null;
@@ -45,7 +45,7 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 		}
 	}
 
-	public FileInspection.Mod getModOrNull(Path path, FileMetadataCache cache) {
+	public FileInspection.Mod getModOrNull(Path path, FileCache cache) {
 		try {
 			return getOrComputeMod(path, cache);
 		} catch (IOException e) {

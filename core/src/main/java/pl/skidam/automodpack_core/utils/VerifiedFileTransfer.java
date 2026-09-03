@@ -7,7 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Durable file installation operations that verify size and SHA-1 before publication. */
 public final class VerifiedFileTransfer {
@@ -17,11 +17,11 @@ public final class VerifiedFileTransfer {
 		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, false, null);
 	}
 
-	public static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+	public static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, false, cache);
 	}
 
-	private static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, boolean immutable, FileMetadataCache cache) throws IOException {
+	private static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, boolean immutable, FileCache cache) throws IOException {
 		if (cache != null && immutable && FileIntegrity.matchesNamed(targetFile, expectedSize, expectedSha1, cache) || FileIntegrity.matches(targetFile, expectedSize, expectedSha1, cache)) {
 			if (immutable) ImmutableFiles.protect(targetFile);
 			record(cache, targetFile, expectedSha1);
@@ -47,7 +47,7 @@ public final class VerifiedFileTransfer {
 		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, true, null);
 	}
 
-	public static boolean copyAtomicImmutable(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+	public static boolean copyAtomicImmutable(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, true, cache);
 	}
 
@@ -56,7 +56,7 @@ public final class VerifiedFileTransfer {
 		return copyCreateOnly(sourceFile, targetFile, expectedSize, expectedSha1, null);
 	}
 
-	public static boolean copyCreateOnly(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+	public static boolean copyCreateOnly(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 		boolean published = ImmutableFilePublisher.publishCreateOnlyCopy(sourceFile, targetFile, path -> {
 			if (Files.size(path) != expectedSize) throw new IOException("Immutable copy has different size: " + path);
@@ -70,7 +70,7 @@ public final class VerifiedFileTransfer {
 		return linkAtomic(sourceFile, targetFile, expectedSize, expectedSha1, null);
 	}
 
-	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1, cache)) {
 			ImmutableFiles.protect(targetFile);
 			record(cache, targetFile, expectedSha1);
@@ -109,7 +109,7 @@ public final class VerifiedFileTransfer {
 		promoteAtomic(temporary, targetFile, expectedSize, expectedSha1, null);
 	}
 
-	public static void promoteAtomic(Path temporary, Path targetFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+	public static void promoteAtomic(Path temporary, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		FileTrees.forceFile(temporary);
 		if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1))
 			throw new IOException("Downloaded file failed size/SHA-1 verification: " + temporary);
@@ -144,12 +144,12 @@ public final class VerifiedFileTransfer {
 		}
 	}
 
-	private static void requireValidSource(Path sourceFile, long expectedSize, String expectedSha1, FileMetadataCache cache) throws IOException {
+	private static void requireValidSource(Path sourceFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		if (!FileIntegrity.matches(sourceFile, expectedSize, expectedSha1, cache))
 			throw new IOException("Source file failed size/SHA-1 verification: " + sourceFile);
 	}
 
-	private static void record(FileMetadataCache cache, Path file, String sha1) throws IOException {
+	private static void record(FileCache cache, Path file, String sha1) throws IOException {
 		if (cache == null) return;
 		cache.overwriteCache(file, sha1);
 	}

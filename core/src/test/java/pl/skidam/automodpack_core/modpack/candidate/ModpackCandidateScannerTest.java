@@ -19,7 +19,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class ModpackCandidateScannerTest {
 	@TempDir
@@ -223,7 +223,7 @@ class ModpackCandidateScannerTest {
 			copies.incrementAndGet();
 			return HashUtils.copyAndSha1(sourceFile, staged);
 		});
-		try (FileMetadataCache cache = FileMetadataCache.open(tempDir.resolve("file-metadata"))) {
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
 			StableSourceSnapshotter.Snapshot first = snapshotter.snapshot(source, false, false, tempDir.resolve("staging"), cache, null, tempDir.resolve("objects"), false);
 			StableSourceSnapshotter.Snapshot second = snapshotter.snapshot(source, false, false, tempDir.resolve("staging"), cache, null, tempDir.resolve("objects"), false);
 			assertNotNull(first.file().sha1());
@@ -248,7 +248,7 @@ class ModpackCandidateScannerTest {
 			copies.incrementAndGet();
 			return HashUtils.copyAndSha1(sourceFile, staged);
 		});
-		try (FileMetadataCache cache = FileMetadataCache.open(tempDir.resolve("file-metadata"))) {
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
 			StableSourceSnapshotter.Snapshot first = snapshotter.snapshot(source, false, false, staging, cache, null, objects, true);
 			assertNotNull(first.object());
 			Path object = DataRootResolver.objectFile(objects, first.file().sha1());

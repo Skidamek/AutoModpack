@@ -9,7 +9,7 @@ import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_loader_core_fabric_15.mods.ModpackLoader15;
 import pl.skidam.automodpack_loader_core_fabric_16.mods.ModpackLoader16;
 
@@ -27,7 +27,7 @@ public class ModpackLoader implements ModpackLoaderService {
 	}
 
 	@Override
-	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileMetadataCache cache) {
+	public List<FileInspection.Mod> getModpackNestedConflicts(Path activeProjectionDirectory, FileCache cache) {
 		return INSTANCE.getModpackNestedConflicts(activeProjectionDirectory, cache);
 	}
 

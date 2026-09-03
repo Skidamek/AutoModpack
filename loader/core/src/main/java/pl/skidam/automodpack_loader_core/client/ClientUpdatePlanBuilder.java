@@ -37,7 +37,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 
@@ -118,7 +118,7 @@ final class ClientUpdatePlanBuilder {
 	private record AvailableBaseline(ClientStorageJsons.ClientBaselineFields fields, Set<String> objectHashes) {}
 
 	/** Inspection phase: observes live, overlay and projection state and produces the plan; expects {@link #reconcileEditableState} to have run already. */
-	PreparedPlan buildPlan(Input input, FileMetadataCache cache, ModFileCache modCache) throws Exception {
+	PreparedPlan buildPlan(Input input, FileCache cache, ModFileCache modCache) throws Exception {
 		ClientProjectionView projectionView = ClientProjectionView.open(storage);
 		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
@@ -164,7 +164,7 @@ final class ClientUpdatePlanBuilder {
 		if (installed.modpackId.equals(plannedConfig.selectedModpackId)) plannedConfig = plannedConfig.withSelectedModpackId("");
 		SelectionIntent expectedPriorIntent = new ClientSelectionStore(storage.selectionFile()).get(installed.modpackId).orElse(null);
 
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId, cache);
 			ClientStorageJsons.ClientBaselineFields baseline = availableBaseline.fields();
 			ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
@@ -179,15 +179,15 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	void populateStoreFromLogicalProjection(ModpackJsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
+	void populateStoreFromLogicalProjection(ModpackJsons.ModpackContentFields target, FileCache cache) throws IOException {
 		populateStoreFromProjection(target, ClientProjectionView.open(storage).snapshot(cache), cache);
 	}
 
-	private void populateStoreFromProjection(ModpackJsons.ModpackContentFields target, ClientProjectionView.Snapshot projection, FileMetadataCache cache) throws IOException {
+	private void populateStoreFromProjection(ModpackJsons.ModpackContentFields target, ClientProjectionView.Snapshot projection, FileCache cache) throws IOException {
 		populateStoreFromSources(target, cache, item -> projection.sourceCandidates(item.file));
 	}
 
-	void populateStoreFromCachedLocations(ModpackJsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
+	void populateStoreFromCachedLocations(ModpackJsons.ModpackContentFields target, FileCache cache) throws IOException {
 		ClientProjectionView.Snapshot projection = ClientProjectionView.open(storage).snapshot(cache);
 		populateStoreFromSources(target, cache, item -> {
 			List<Path> candidates = new ArrayList<>(projection.sourceCandidates(item.file));
@@ -197,13 +197,13 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest) throws IOException {
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			ClientProjectionView.Snapshot projection = ClientProjectionView.open(storage).snapshot(cache);
 			preparePlanObjects(plan, targetManifest, projection, cache);
 		}
 	}
 
-	private void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest, ClientProjectionView.Snapshot projection, FileMetadataCache cache) throws IOException {
+	private void preparePlanObjects(UpdatePlan plan, ModpackJsons.ModpackContentFields targetManifest, ClientProjectionView.Snapshot projection, FileCache cache) throws IOException {
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> itemsByHash = targetManifest.list.stream()
 				.collect(Collectors.toMap(item -> item.sha1.toLowerCase(Locale.ROOT), item -> item, (first, second) -> first));
 		for (UpdatePlan.Operation operation : plan.operations()) {
@@ -229,7 +229,7 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private UpdatePlanner.SelectionContext selectionContext(ClientProjectionView.Snapshot projection, FileMetadataCache cache,
+	private UpdatePlanner.SelectionContext selectionContext(ClientProjectionView.Snapshot projection, FileCache cache,
 			Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
 		ModpackJsons.ModpackContentFields previousManifest = projection.target();
 		if (previousManifest == null) return null;
@@ -243,7 +243,7 @@ final class ClientUpdatePlanBuilder {
 		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), baseline.fields(), baseline.objectHashes());
 	}
 
-	private AvailableBaseline readAvailableBaseline(String modpackId, FileMetadataCache cache) throws IOException {
+	private AvailableBaseline readAvailableBaseline(String modpackId, FileCache cache) throws IOException {
 		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(modpackId), ClientStorageJsons.ClientBaselineFields.class).orElseGet(() -> {
 			ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
 			empty.modpackId = modpackId;
@@ -267,12 +267,12 @@ final class ClientUpdatePlanBuilder {
 	 * @param target
 	 *            the modpack the plan will install, used to detect server-side replacements of editable files; {@code null} for removal planning
 	 */
-	void reconcileEditableState(FileMetadataCache cache, ModpackJsons.ModpackContentFields target) throws IOException {
+	void reconcileEditableState(FileCache cache, ModpackJsons.ModpackContentFields target) throws IOException {
 		reconcileEditableState(cache, ClientProjectionView.open(storage).snapshot(cache), target);
 	}
 
 	/** Same reconciliation against a caller-held projection snapshot, for callers whose baseline reads must stay pre-reconciliation. */
-	void reconcileEditableState(FileMetadataCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields target) throws IOException {
+	void reconcileEditableState(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields target) throws IOException {
 		ModpackJsons.ModpackContentFields activeTarget = projection.target();
 		if (activeTarget == null || activeTarget.list == null) return;
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = new HashMap<>();
@@ -320,7 +320,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	/** A drifted file the pack owns: the drifted bytes go to the vault and the live file gets the pack version back, without a review. */
-	private UpdatePlan.FileState resetDriftedFile(FileMetadataCache cache, ModpackJsons.ModpackContentFields activeTarget, ModpackJsons.ModpackContentFields.ModpackContentItem item,
+	private UpdatePlan.FileState resetDriftedFile(FileCache cache, ModpackJsons.ModpackContentFields activeTarget, ModpackJsons.ModpackContentFields.ModpackContentItem item,
 			Path live, UpdatePlan.FileState drift, PreservationVault.Reason reason) throws IOException {
 		long packSize = Long.parseLong(item.size);
 		Path object = storage.objectFile(item.sha1);
@@ -334,7 +334,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	/** Silently resets client-side drift of an unchanged server-provided non-mod file so it never becomes an update prompt; the server changing the file stays a reviewable update. */
-	private void resetDriftedServerFile(FileMetadataCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields activeTarget,
+	private void resetDriftedServerFile(FileCache cache, ClientProjectionView.Snapshot projection, ModpackJsons.ModpackContentFields activeTarget,
 			Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, ModpackJsons.ModpackContentFields.ModpackContentItem item) throws IOException {
 		if (targetItems.isEmpty()) return;
 		String relative = LogicalPath.normalize(item.file);
@@ -352,7 +352,7 @@ final class ClientUpdatePlanBuilder {
 		return storage.gameDirectory().resolve(LogicalPath.normalize(item.file));
 	}
 
-	private void populateStoreFromSources(ModpackJsons.ModpackContentFields target, FileMetadataCache cache,
+	private void populateStoreFromSources(ModpackJsons.ModpackContentFields target, FileCache cache,
 			Function<ModpackJsons.ModpackContentFields.ModpackContentItem, List<Path>> sourceResolver) throws IOException {
 		if (target.list == null) return;
 		for (var item : target.list) {
@@ -363,7 +363,7 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileMetadataCache cache) throws IOException {
+	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileCache cache) throws IOException {
 		if (!FileIntegrity.matches(source, size, sha1, cache)) return false;
 		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, sha1, cache);
 		cache.overwriteCache(object, sha1);
@@ -371,7 +371,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private Map<UpdatePlan.FileKey, UpdatePlan.FileState> inspectFiles(ModpackJsons.ModpackContentFields target, ModpackJsons.ModpackContentFields installed,
-			UpdatePlanner.SelectionContext selection, ClientProjectionView.Snapshot projection, List<UpdatePlan.NestedCopy> previousGeneratedCopies, FileMetadataCache cache,
+			UpdatePlanner.SelectionContext selection, ClientProjectionView.Snapshot projection, List<UpdatePlan.NestedCopy> previousGeneratedCopies, FileCache cache,
 			Map<String, ClientOverlaySnapshot> overlaySnapshots) throws IOException {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = new HashMap<>();
 		for (Map.Entry<String, UpdatePlan.FileState> entry : projection.files().entrySet()) files.put(new UpdatePlan.FileKey(UpdatePlan.Root.PROJECTION, entry.getKey()), entry.getValue());
@@ -424,14 +424,14 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private void putFileState(Map<UpdatePlan.FileKey, UpdatePlan.FileState> files, UpdatePlan.Root root, Path rootPath, Path path,
-			FileMetadataCache cache) throws IOException {
+			FileCache cache) throws IOException {
 		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return;
 		String relative = LogicalPath.normalize(rootPath.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString());
 		String hash = cache.getOrComputeHash(path);
 		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true));
 	}
 
-	private Path resolvedObject(ModpackJsons.ModpackContentFields.ModpackContentItem item, ClientProjectionView.Snapshot projection, FileMetadataCache cache) {
+	private Path resolvedObject(ModpackJsons.ModpackContentFields.ModpackContentItem item, ClientProjectionView.Snapshot projection, FileCache cache) {
 		long size = Long.parseLong(item.size);
 		Path source = storage.objectFile(item.sha1);
 		if (FileIntegrity.matches(source, size, item.sha1, cache)) return source;
@@ -441,7 +441,7 @@ final class ClientUpdatePlanBuilder {
 		return null;
 	}
 
-	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
+	private List<UpdatePlan.ModInfo> inspectTargetMods(ModpackJsons.ModpackContentFields target, FileCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
 		for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type))
 				.sorted(Comparator.comparing(value -> value.file)).toList()) {
@@ -453,7 +453,7 @@ final class ClientUpdatePlanBuilder {
 		return mods;
 	}
 
-	private List<UpdatePlan.ModInfo> inspectStandardMods(FileMetadataCache cache, ModFileCache modCache) throws IOException {
+	private List<UpdatePlan.ModInfo> inspectStandardMods(FileCache cache, ModFileCache modCache) throws IOException {
 		if (!Files.isDirectory(storage.modsDirectory())) return List.of();
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
 		try (Stream<Path> stream = Files.list(storage.modsDirectory())) {
@@ -468,7 +468,7 @@ final class ClientUpdatePlanBuilder {
 		return mods;
 	}
 
-	private List<UpdatePlan.NestedCopy> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileMetadataCache cache, ClientProjectionView.Snapshot projection) throws IOException {
+	private List<UpdatePlan.NestedCopy> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileCache cache, ClientProjectionView.Snapshot projection) throws IOException {
 		if (!modpackLoader.discoversNestedConflicts()) return List.of();
 		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
 		try {
@@ -500,7 +500,7 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private static void materializeInspectionCopy(Path source, Path inspectionPath, long size, String sha1, FileMetadataCache cache) throws IOException {
+	private static void materializeInspectionCopy(Path source, Path inspectionPath, long size, String sha1, FileCache cache) throws IOException {
 		Files.createDirectories(inspectionPath.getParent());
 		try {
 			Files.createLink(inspectionPath, source);
@@ -510,7 +510,7 @@ final class ClientUpdatePlanBuilder {
 		VerifiedFileTransfer.copyAtomic(source, inspectionPath, size, sha1, cache);
 	}
 
-	private Set<String> getForceCopyMods(ModpackJsons.ModpackContentFields modpackContentFields, FileMetadataCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
+	private Set<String> getForceCopyMods(ModpackJsons.ModpackContentFields modpackContentFields, FileCache cache, ModFileCache modCache, ClientProjectionView.Snapshot projection) {
 		Set<String> forceCopyServices = modpackLoader.forceCopyServices();
 		if (forceCopyServices.isEmpty()) return Set.of();
 		Set<String> forceCopyMods = new HashSet<>();

@@ -22,7 +22,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_loader_core.Preload;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 
@@ -59,7 +59,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			if (!Files.isDirectory(activeModsDirectory)) return;
 
 			List<Path> earlyServiceJars;
-			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace, cache);
 			}
 
