@@ -348,7 +348,6 @@
   "automodpack.repair.editableTooltipReset": "Unchekd stashz ur kopi an bringz bak da servr defawlt.\n%s",
   "automodpack.vault.deleteArmed": "klik yeet agen tu toss %s from stashd filez. last chance.",
   "automodpack.vault.selected": "pickd: %s",
-  "automodpack.vault.rowTooltip": "[x] markz da pickd file. stuff below goez on it: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "unverifide",

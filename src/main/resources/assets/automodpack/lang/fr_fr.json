@@ -348,7 +348,6 @@
   "automodpack.repair.editableTooltipReset": "Non coché : votre copie est enregistrée dans Fichiers conservés et la valeur par défaut du serveur est restaurée.\n%s",
   "automodpack.vault.deleteArmed": "Cliquez encore sur Supprimer pour retirer %s de Fichiers conservés",
   "automodpack.vault.selected": "Sélectionné : %s",
-  "automodpack.vault.rowTooltip": "[x] marque le fichier sélectionné. Les actions ci-dessous s'y appliquent : %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "non vérifié",

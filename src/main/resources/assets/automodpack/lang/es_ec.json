@@ -348,7 +348,6 @@
   "automodpack.repair.editableTooltipReset": "Sin marcar guarda tu copia en Archivos conservados y restaura el valor predeterminado del servidor.\n%s",
   "automodpack.vault.deleteArmed": "Haz clic otra vez en Eliminar para quitar %s de Archivos conservados",
   "automodpack.vault.selected": "Seleccionado: %s",
-  "automodpack.vault.rowTooltip": "[x] marca el archivo seleccionado. Las acciones de abajo se aplican a él: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "sin verificar",

@@ -348,7 +348,6 @@
   "automodpack.repair.editableTooltipReset": "Nincs bejelölve: a másolatod a Megőrzött fájlokba kerül, és visszaáll a szerver alapértelmezése.\n%s",
   "automodpack.vault.deleteArmed": "Kattints még egyszer a Törlésre, hogy a(z) %s kikerüljön a Megőrzött fájlokból",
   "automodpack.vault.selected": "Kiválasztva: %s",
-  "automodpack.vault.rowTooltip": "[x] jelöli a kiválasztott fájlt. Az alábbi műveletek rá vonatkoznak: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "nem ellenőrzött",

@@ -168,16 +168,20 @@ class FakeBridge:
             },
             "preservation": {
                 "screenClass": "PreservationVaultScreen",
+                # Vault claims are selection-list rows (ListRow), not buttons; the real
+                # bridge emits them always enabled with the row's narration text.
                 "buttons": [
-                    {"id": 83, "text": "amp-autotest-gamma.cfg", "enabled": True, "visible": self._claim_exists("packaaa", "config/amp-autotest-gamma.cfg")},
-                    {"id": 49, "text": "amp-autotest-conflict.jar", "enabled": True, "visible": self._claim_exists("packbbb", self.ctx.vars.get("same_path_conflict_path", "mods/amp-autotest-conflict.jar"))},
-                    {"id": 107, "text": "pack-shared-editable.txt", "enabled": True, "visible": self._claim_exists("packaaa", "config/pack-shared-editable.txt")},
-                    {"id": 109, "text": "local-unowned.jar", "enabled": True, "visible": self._claim_exists("packaaa", "mods/local-unowned.jar")},
                     {"id": 84, "text": "Restore", "enabled": self._selected_claim_restorable(), "visible": True},
                     {"id": 85, "text": "Save copy", "enabled": bool(self.vault_claim_selected), "visible": True},
                     {"id": 90, "text": "Delete", "enabled": bool(self.vault_claim_selected), "visible": True},
                     *([{"id": 108, "text": self.vault_message, "enabled": False, "visible": True}] if self.vault_message else []),
                     {"id": 86, "text": "Back", "enabled": True, "visible": True},
+                ],
+                "other": [
+                    {"id": 83, "text": "amp-autotest-gamma.cfg", "enabled": True, "visible": self._claim_exists("packaaa", "config/amp-autotest-gamma.cfg"), "type": "ListRow"},
+                    {"id": 49, "text": "amp-autotest-conflict.jar", "enabled": True, "visible": self._claim_exists("packbbb", self.ctx.vars.get("same_path_conflict_path", "mods/amp-autotest-conflict.jar")), "type": "ListRow"},
+                    {"id": 107, "text": "pack-shared-editable.txt", "enabled": True, "visible": self._claim_exists("packaaa", "config/pack-shared-editable.txt"), "type": "ListRow"},
+                    {"id": 109, "text": "local-unowned.jar", "enabled": True, "visible": self._claim_exists("packaaa", "mods/local-unowned.jar"), "type": "ListRow"},
                 ],
                 "textFields": [],
             },

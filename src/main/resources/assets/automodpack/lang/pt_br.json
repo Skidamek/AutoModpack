@@ -348,7 +348,6 @@
   "automodpack.repair.editableTooltipReset": "Desmarcado guarda sua cópia em Arquivos preservados e restaura o padrão do servidor.\n%s",
   "automodpack.vault.deleteArmed": "Clique de novo em Excluir para tirar %s de Arquivos preservados",
   "automodpack.vault.selected": "Selecionado: %s",
-  "automodpack.vault.rowTooltip": "[x] marca o arquivo selecionado. As ações abaixo valem para ele: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "não verificado",

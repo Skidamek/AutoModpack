@@ -358,7 +358,6 @@
   "automodpack.repair.editableTooltipReset": "Без позначки копія потрапить у «Збережені файли», а файл повернеться до серверного.\n%s",
   "automodpack.vault.deleteArmed": "Натисніть «Вилучити» ще раз, щоб прибрати %s із «Збережених файлів»",
   "automodpack.vault.selected": "Вибрано: %s",
-  "automodpack.vault.rowTooltip": "[x] позначає вибраний файл. Дії нижче стосуються його: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "неперевірений",

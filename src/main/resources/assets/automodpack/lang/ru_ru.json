@@ -358,7 +358,6 @@
   "automodpack.repair.editableTooltipReset": "Без галочки копия попадёт в «Сохранённые файлы», а файл вернётся к серверному.\n%s",
   "automodpack.vault.deleteArmed": "Нажмите «Удалить» ещё раз, чтобы убрать %s из «Сохранённых файлов»",
   "automodpack.vault.selected": "Выбрано: %s",
-  "automodpack.vault.rowTooltip": "[x] отмечает выбранный файл. Действия ниже относятся к нему: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "непроверенный",

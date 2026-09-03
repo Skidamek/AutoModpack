@@ -358,7 +358,6 @@
   "automodpack.repair.editableTooltipReset": "Niyzaznaczōne zapisuje twojōm kopijo we Zachowanych plikach i wrōcŏ serwerowe dōmyślne.\n%s",
   "automodpack.vault.deleteArmed": "Kliknij Wyciep jeszcze rŏz, coby wyrzucić %s ze Zachowanych plikōw",
   "automodpack.vault.selected": "Wybrane: %s",
-  "automodpack.vault.rowTooltip": "[x] znaczy wybrany plik. Akcyje niżyj dziołajōm na niego: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "niysprawdzōny",

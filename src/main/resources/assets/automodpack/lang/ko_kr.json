@@ -343,7 +343,6 @@
   "automodpack.repair.editableTooltipReset": "해제하면 사본을 보존된 파일에 두고 서버 기본값으로 되돌립니다.\n%s",
   "automodpack.vault.deleteArmed": "보존된 파일에서 %s을(를) 지우려면 삭제를 한 번 더 누르세요",
   "automodpack.vault.selected": "선택됨: %s",
-  "automodpack.vault.rowTooltip": "[x]는 선택한 파일입니다. 아래 동작이 이 파일에 적용됩니다: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "미확인",
