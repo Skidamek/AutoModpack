@@ -1,14 +1,14 @@
 package pl.skidam.automodpack.client.ui.widget;
 
-import java.util.List;
-
-import net.minecraft.client.gui.components.ObjectSelectionList;
-
-/** Brings a selection list's row into view and reports where it currently sits, so tools can read and click scrolled-out rows. */
+/** Brings a selection list's row into view and reports what tooling can see in it, so scrolled-out rows stay readable and clickable. */
 public interface RowViewport {
+	/** Scrolls the row into view and syncs its hit-test rectangles, so a click computed from the row geometry lands even before the next render. */
 	void revealRow(int index);
 
-	List<? extends ObjectSelectionList.Entry<?>> entries();
+	/** What tooling sees in one row: its text, whether it accepts clicks and, for checkbox rows, its checked state. */
+	RowView rowView(int index);
+
+	int rowCount();
 
 	int rowLeft();
 
@@ -17,4 +17,6 @@ public interface RowViewport {
 	int rowWidth();
 
 	int rowHeight();
+
+	record RowView(String text, boolean enabled, Boolean checked) {}
 }
