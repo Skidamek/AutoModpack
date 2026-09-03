@@ -83,8 +83,14 @@ class FakeBridge:
             "title": {"screenClass": "TitleScreen", "title": "Title Screen", "buttons": [{"id": 6, "text": "Singleplayer", "enabled": True, "visible": True, "key": "menu.singleplayer"}, {"id": 8, "text": "Multiplayer", "enabled": True, "visible": True, "key": "menu.multiplayer"}], "textFields": []},
             "cert": {
                 "screenClass": "CertScreen",
-                "buttons": [{"id": 2, "text": "Verify", "enabled": True, "visible": True, "key": "automodpack.validation.verify"}],
+                "buttons": [{"id": 2, "text": "Verify", "enabled": True, "visible": True, "key": "automodpack.validation.verify"},
+                            {"id": 9, "text": "Skip", "enabled": True, "visible": True, "key": "automodpack.skip"}],
                 "textFields": [{"id": 1, "text": "", "enabled": True, "visible": True}],
+            },
+            "skip_verification": {
+                "screenClass": "SkipVerificationScreen",
+                "buttons": [{"id": 10, "text": "Back", "enabled": True, "visible": True, "key": "automodpack.back"}],
+                "textFields": [],
             },
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "first_connection": {
@@ -112,8 +118,14 @@ class FakeBridge:
                     {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
                     {"id": 31, "text": "Continue", "enabled": True, "visible": True},
                     {"id": 102, "text": "Back", "enabled": True, "visible": True},
+                    {"id": 38, "text": "?", "enabled": True, "visible": True},
                 ],
                 "other": self._group_list_rows(),
+                "textFields": [],
+            },
+            "group_inspector": {
+                "screenClass": "GroupInspectorScreen",
+                "buttons": [{"id": 39, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "feature_conflict": {
@@ -276,6 +288,14 @@ class FakeBridge:
         self.clicks.append(element_id)
         if element_id == 2 and self.fingerprint:
             self.screen = "preparing"
+        elif element_id == 9 and self.screen == "cert":
+            self.screen = "skip_verification"
+        elif element_id == 10 and self.screen == "skip_verification":
+            self.screen = "cert"
+        elif element_id == 38 and self.screen == "groups":
+            self.screen = "group_inspector"
+        elif element_id == 39 and self.screen == "group_inspector":
+            self.screen = "groups"
         elif element_id == 3:
             # Download on the honesty confirm approves the plan and applies it directly.
             # The strict fresh-install reconciliation still opens the later write confirm
