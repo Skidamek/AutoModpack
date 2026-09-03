@@ -563,7 +563,9 @@ def test_client_launch_waits_for_successful_profile_preparation(make_ctx, monkey
 
     runner._await_client_preparation(ctx)
 
-    assert calls == [("wait", "client-prepare", 600.0), ("receipt",), ("remove", "client-prepare")]
+    assert calls[0][0] == "wait" and calls[0][1] == "client-prepare"
+    assert calls[0][2] == pytest.approx(600.0, abs=5.0)
+    assert calls[1:] == [("receipt",), ("remove", "client-prepare")]
 
 
 def test_wait_bridge_retries_only_transient_dependency_download(make_ctx, monkeypatch):
@@ -682,3 +684,137 @@ def test_wait_exit_expect_clean_and_crash(monkeypatch):
 
 
 # ── verb discovery ──────────────────────────────────────────────────────────
+
+
+# ── staged generation timestamps are Java-canonical ─────────────────────────
+# A fixed-width microsecond fraction (e.g. ".800000Z") fails the client's strict
+# Instant round-trip check and crashes the first storage validation that reads the
+# record — a ~10% flake per staged record (1.21.10-neoforge DIRECT, run 33695849021).
+
+
+def test_canonical_timestamp_strips_trailing_zero_fraction():
+    from datetime import datetime, timezone
+
+    noon = datetime(2026, 9, 2, 23, 45, 32, tzinfo=timezone.utc)
+    assert runner._canonical_timestamp(noon) == "2026-09-02T23:45:32Z"
+    assert runner._canonical_timestamp(noon.replace(microsecond=800000)) == "2026-09-02T23:45:32.8Z"
+    assert runner._canonical_timestamp(noon.replace(microsecond=123456)) == "2026-09-02T23:45:32.123456Z"
+    assert runner._canonical_timestamp(noon.replace(microsecond=123000)) == "2026-09-02T23:45:32.123Z"
+
+
+def test_non_canonical_staged_timestamp_is_rejected():
+    runner._check_canonical_timestamp("2026-09-02T23:45:32Z")
+    runner._check_canonical_timestamp("2026-09-02T23:45:32.8Z")
+    runner._check_canonical_timestamp("2026-09-02T23:45:32.123456Z")
+    with pytest.raises(ValueError):
+        runner._check_canonical_timestamp("2026-09-02T23:45:32.800000Z")
+    with pytest.raises(ValueError):
+        runner._check_canonical_timestamp("2026-09-02T23:45:32.000Z")
+
+
+def test_staged_manifest_receipt_rejects_a_non_canonical_timestamp(tmp_path):
+    manifest = {
+        "modpackId": "packbbb",
+        "generation": {
+            "schemaVersion": 1,
+            "generationId": "0" * 40,
+            "parentGenerationId": "",
+            "createdAt": "2026-09-02T23:45:32.800000Z",
+            "stateDigest": "1" * 40,
+            "ledgerDigest": "2" * 40,
+            "patchNotes": "",
+            "patchNotesDigest": hashlib.sha1(b"").hexdigest(),
+            "rollbackTargetGenerationId": "",
+        },
+    }
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="not canonical"):
+        runner._verify_staged_manifest(path, "")
+
+
+# ── prepared-profile verification ───────────────────────────────────────────
+# The HMC installer can exit 0 while leaving installer-produced jars (old Forge
+# *-srg/*-extra outputs) unwritten; launching from such a profile crashes before
+# the bridge comes up and poisons every later shard sharing the per-target cache.
+
+
+def _write_profile(shared_versions, profile, libraries):
+    profile_dir = shared_versions / profile
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    (profile_dir / f"{profile}.json").write_text(json.dumps({"libraries": libraries}), encoding="utf-8")
+
+
+def test_profile_library_paths_require_declared_artifacts_on_linux(tmp_path):
+    profile_json = tmp_path / "p.json"
+    profile_json.write_text(json.dumps({"libraries": [
+        {"name": "a:b:1", "downloads": {"artifact": {"path": "a/b-1.jar"}}},
+        {"name": "c:d:1", "downloads": {"artifact": {"path": "c/d-1.jar"}},
+         "rules": [{"action": "allow", "os": {"name": "windows"}}]},
+        {"name": "e:f:1", "downloads": {"artifact": {"path": "e/f-1.jar"}},
+         "rules": [{"action": "disallow", "os": {"name": "linux"}}]},
+        {"name": "g:h:1"},
+    ]}), encoding="utf-8")
+    assert runner._profile_library_paths(profile_json) == ["a/b-1.jar"]
+
+
+def test_profile_library_paths_unknown_when_unreadable_or_empty(tmp_path):
+    assert runner._profile_library_paths(tmp_path / "missing.json") is None
+    empty = tmp_path / "empty.json"
+    empty.write_text(json.dumps({"libraries": []}), encoding="utf-8")
+    assert runner._profile_library_paths(empty) is None
+
+
+def test_preparation_is_not_trusted_without_its_launch_jars(make_ctx, monkeypatch, tmp_path):
+    ctx = make_ctx()
+    hmc_cache = tmp_path / "hmc"
+    shared_versions = tmp_path / "versions"
+    hmc_cache.mkdir()
+    profile = runner._client_profile_name(ctx.target)
+    _write_profile(shared_versions, profile, [
+        {"name": "net.minecraft:client:1-srg", "downloads": {"artifact": {"path": "net/minecraft/srg.jar"}}},
+    ])
+    monkeypatch.setattr(runner, "_client_profile_receipt", lambda _root: hmc_cache / "prepared-profile.json")
+    (hmc_cache / "prepared-profile.json").write_text(json.dumps(runner._client_profile_identity(ctx)), encoding="utf-8")
+    monkeypatch.setattr(runner, "_docker", types.SimpleNamespace(images=types.SimpleNamespace(get=lambda _image: types.SimpleNamespace(id="img"))))
+
+    assert not runner._client_profile_is_prepared(ctx, hmc_cache, shared_versions)
+    (hmc_cache / "net/minecraft").mkdir(parents=True)
+    (hmc_cache / "net/minecraft/srg.jar").write_bytes(b"")
+    assert runner._client_profile_is_prepared(ctx, hmc_cache, shared_versions)
+
+
+def test_preparation_reinstalls_when_jars_are_missing_after_success(make_ctx, monkeypatch):
+    ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 600}})
+    ctx.vars["client_preparation"] = "client-prepare"
+    calls = []
+    monkeypatch.setattr(runner, "_wait_exited", lambda name, timeout: None)
+    monkeypatch.setattr(runner, "_inspect_container", lambda _name: {"State": {"ExitCode": 0}})
+    monkeypatch.setattr(runner, "_record_prepared_client_profile", lambda _ctx: None)
+    monkeypatch.setattr(runner, "_remove_container", lambda name: calls.append(("remove", name)))
+    relaunches = []
+    monkeypatch.setattr(runner, "_launch_preparation_container", lambda _ctx: relaunches.append(1) or "client-prepare")
+    prepared = iter([False, True])
+    monkeypatch.setattr(runner, "_client_profile_is_prepared", lambda *_args: next(prepared))
+
+    runner._await_client_preparation(ctx)
+
+    assert relaunches == [1]
+    assert ("remove", "client-prepare") in calls
+
+
+def test_preparation_gives_up_after_repeated_failures(make_ctx, monkeypatch):
+    ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 600}})
+    ctx.vars["client_preparation"] = "client-prepare"
+    monkeypatch.setattr(runner, "_wait_exited", lambda name, timeout: None)
+    monkeypatch.setattr(runner, "_inspect_container", lambda _name: {"State": {"ExitCode": 1}})
+    monkeypatch.setattr(runner, "_container_logs", lambda _name: "boom")
+    monkeypatch.setattr(runner, "_record_prepared_client_profile", lambda _ctx: None)
+    monkeypatch.setattr(runner, "_remove_container", lambda _name: None)
+    launches = []
+    monkeypatch.setattr(runner, "_launch_preparation_container", lambda _ctx: launches.append(1) or "client-prepare")
+
+    with pytest.raises(RuntimeError, match="after 3 attempts"):
+        runner._await_client_preparation(ctx)
+
+    assert launches == [1, 1]

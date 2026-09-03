@@ -510,13 +510,68 @@ def _client_profile_receipt(hmc_cache_root: Path) -> Path:
     return hmc_cache_root / "prepared-profile.json"
 
 
+def _profile_library_paths(profile_json: Path) -> list[str] | None:
+    """Return every launch-critical library file the HMC profile declares, or None when unknown.
+
+    The installer can report success while leaving installer-produced jars (old Forge's ``*-srg``/``*-extra``
+    outputs) unwritten; launching from such a profile crashes before the test bridge comes up, and the poisoned
+    per-target cache then fails every later shard the same way. Only ``downloads.artifact`` entries are required:
+    natives self-heal through the launch-time library downloader, and entries without a path cannot be checked.
+    OS rules are honored for linux so a platform-specific entry can never force an endless reinstall.
+    """
+    try:
+        profile = json.loads(profile_json.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    libraries = profile.get("libraries")
+    if not isinstance(libraries, list) or not libraries:
+        return None
+    required = []
+    for library in libraries:
+        if not isinstance(library, dict) or not _library_allowed_on_linux(library.get("rules")):
+            continue
+        downloads = library.get("downloads")
+        artifact = downloads.get("artifact") if isinstance(downloads, dict) else None
+        path = artifact.get("path") if isinstance(artifact, dict) else None
+        if isinstance(path, str) and path and ".." not in Path(path).parts and not Path(path).is_absolute():
+            required.append(path)
+    return required
+
+
+def _library_allowed_on_linux(rules) -> bool:
+    """Mojang rules semantics reduced to one platform: needs a matching allow and no matching disallow."""
+    if not rules:
+        return True
+    allowed = False
+    for rule in rules if isinstance(rules, list) else []:
+        if not isinstance(rule, dict):
+            continue
+        action = str(rule.get("action", "")).lower()
+        operation = rule.get("os") if isinstance(rule.get("os"), dict) else {}
+        name = str(operation.get("name", "")).lower() if operation else ""
+        if name and name != "linux":
+            continue
+        if action == "allow":
+            allowed = True
+        elif action == "disallow":
+            return False
+    return allowed
+
+
 def _client_profile_is_prepared(ctx: Context, hmc_cache_root: Path, shared_versions: Path) -> bool:
     profile = _client_profile_name(ctx.target)
     profile_json = shared_versions / profile / f"{profile}.json"
     try:
-        return profile_json.is_file() and json.loads(_client_profile_receipt(hmc_cache_root).read_text(encoding="utf-8")) == _client_profile_identity(ctx)
+        if not profile_json.is_file() or json.loads(_client_profile_receipt(hmc_cache_root).read_text(encoding="utf-8")) != _client_profile_identity(ctx):
+            return False
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         return False
+    required = _profile_library_paths(profile_json)
+    if required is None:
+        return False
+    # A readable profile with no checkable library paths falls back to the receipt alone (the historical
+    # behavior); when paths are declared, every one of them must exist.
+    return all((hmc_cache_root / path).is_file() for path in required)
 
 
 def _record_prepared_client_profile(ctx: Context) -> None:
@@ -546,27 +601,48 @@ def _v_prepare_client(ctx: Context, _step):
     if _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions):
         return
     _prepare_client_files(ctx)
+    ctx.vars["client_preparation"] = _launch_preparation_container(ctx)
+    ctx.vars["client_preparation_attempts"] = 1
+
+
+def _launch_preparation_container(ctx: Context) -> str:
     name = _client_preparation_name(ctx)
     _remove_container(name)
     _start_client_container(ctx, name, prepare_only=True)
-    ctx.vars["client_preparation"] = name
+    return name
+
+
+_PREPARE_ATTEMPTS = 3
 
 
 def _await_client_preparation(ctx: Context) -> None:
     name = ctx.vars.pop("client_preparation", None)
     if not name:
         return
-    timeout = float(ctx.settings.get("timeouts", {}).get("clientStartSeconds", 600))
+    attempts = int(ctx.vars.pop("client_preparation_attempts", 1) or 1)
+    deadline = time.monotonic() + float(ctx.settings.get("timeouts", {}).get("clientStartSeconds", 600))
     try:
-        _wait_exited(name, timeout)
-        state = _inspect_container(name).get("State", {})
-        if state.get("ExitCode") != 0:
-            tail = "\n".join(_container_logs(name).splitlines()[-80:])
-            raise RuntimeError(f"Client profile preparation failed (code={state.get('ExitCode', -1)})\n--- logs ---\n{tail}")
-        _record_prepared_client_profile(ctx)
-        hmc_cache_root, shared_versions = _client_cache_paths(ctx)
-        if not _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions):
-            raise RuntimeError("Client profile preparation exited successfully without a valid profile receipt")
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"Client profile preparation did not complete within the startup budget (attempt {attempts})")
+            _wait_exited(name, remaining)
+            state = _inspect_container(name).get("State", {})
+            if state.get("ExitCode") == 0:
+                _record_prepared_client_profile(ctx)
+                hmc_cache_root, shared_versions = _client_cache_paths(ctx)
+                if _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions):
+                    return
+                logger.warning("Client profile preparation left launch-critical jars behind for %s; reinstalling (attempt %d)", ctx.target.id, attempts)
+            else:
+                tail = "\n".join(_container_logs(name).splitlines()[-80:])
+                logger.warning("Client profile preparation failed for %s (code=%s, attempt %d)\n--- logs ---\n%s", ctx.target.id, state.get("ExitCode", -1), attempts, tail)
+            if attempts >= _PREPARE_ATTEMPTS:
+                tail = "\n".join(_container_logs(name).splitlines()[-80:])
+                raise RuntimeError(f"Client profile preparation failed after {attempts} attempts (code={state.get('ExitCode', -1)})\n--- logs ---\n{tail}")
+            attempts += 1
+            _remove_container(name)
+            name = _launch_preparation_container(ctx)
     finally:
         _remove_container(name)
 
@@ -1232,6 +1308,33 @@ def _sha1(path: Path) -> str:
         return hashlib.file_digest(f, "sha1").hexdigest()
 
 
+def _canonical_timestamp(moment: datetime) -> str:
+    """Format a timestamp the way java.time.Instant.toString does: minimal fraction digits, never trailing zeros.
+
+    The client rejects any other shape as a non-canonical generation timestamp, so a staged record stamped with a
+    fixed-width fraction (e.g. ``.800000Z``) is strictly invalid and crashes the first storage validation that reads
+    it — a ~10% flake per staged record. Keep this next to the only writer.
+    """
+    if moment.tzinfo is None:
+        raise ValueError("staged generation timestamps must carry a timezone")
+    moment = moment.astimezone(timezone.utc)
+    fraction = f"{moment.microsecond:06d}".rstrip("0")
+    stamp = moment.strftime("%Y-%m-%dT%H:%M:%S")
+    return f"{stamp}.{fraction}Z" if fraction else f"{stamp}Z"
+
+
+def _check_canonical_timestamp(created_at: str) -> None:
+    """Fail fast unless ``created_at`` round-trips through Instant.parse(Instant.toString) semantics."""
+    if not isinstance(created_at, str):
+        raise TypeError(f"staged generation timestamp is not a string: {created_at!r}")
+    try:
+        parsed = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError(f"staged generation timestamp is not parseable: {created_at!r}") from error
+    if _canonical_timestamp(parsed) != created_at:
+        raise ValueError(f"staged generation timestamp is not canonical: {created_at!r}")
+
+
 def _staged_generation_id(
     modpack_id: str,
     created_at: str,
@@ -1338,7 +1441,7 @@ def _write_staged_generation(
     modpack_name = modpack_name if modpack_name is not None else ctx.modpack_name
     state_digest = _staged_state_digest(ctx, modpack_id, files, modpack_name)
     provisional_ledger_digest = _staged_ledger_digest(modpack_id, ledger_entries)
-    created_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    created_at = _canonical_timestamp(datetime.now(timezone.utc))
     client_root = client_root or root.parent
     generation_id = _staged_generation_id(modpack_id, created_at, state_digest, provisional_ledger_digest, patch_notes, parent_generation_id)
     for entry in ledger_entries:
@@ -1400,6 +1503,7 @@ def _write_staged_generation(
     generation_path = client_root / "records" / generation_id / "manifest.json"
     generation_path.parent.mkdir(parents=True, exist_ok=True)
     generation_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    _verify_staged_manifest(generation_path, patch_notes)
     objects = data_root / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     for entry in files:
@@ -1408,6 +1512,31 @@ def _write_staged_generation(
             object_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / entry["logicalPath"], object_path)
     return {"generationId": generation_id, "stateDigest": state_digest, "ledgerDigest": provisional_ledger_digest}
+
+
+def _verify_staged_manifest(generation_path: Path, patch_notes: str) -> None:
+    """Re-read a staged generation manifest and prove it is strictly valid before any client can see it.
+
+    A malformed staged record (non-canonical timestamp, mismatched digests) stays invisible until a client storage
+    validation reads it — potentially minutes and hundreds of steps later, on a random shard. Fail here instead,
+    where the cause is obvious.
+    """
+    try:
+        stored = json.loads(generation_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise ValueError(f"staged generation manifest is not readable: {generation_path}: {error}") from error
+    generation = stored.get("generation")
+    if not isinstance(generation, dict):
+        raise TypeError(f"staged generation manifest has no generation metadata: {generation_path}")
+    _check_canonical_timestamp(generation.get("createdAt"))
+    notes_digest = hashlib.sha1(str(generation.get("patchNotes", "")).encode("utf-8")).hexdigest()
+    if notes_digest != generation.get("patchNotesDigest"):
+        raise ValueError(f"staged generation patch-notes digest does not match its notes: {generation_path}")
+    if hashlib.sha1(patch_notes.encode("utf-8")).hexdigest() != notes_digest:
+        raise ValueError(f"staged generation patch notes drifted between planning and writing: {generation_path}")
+    recomputed = _staged_generation_id(str(stored.get("modpackId", "")), str(generation.get("createdAt", "")), str(generation.get("stateDigest", "")), str(generation.get("ledgerDigest", "")), str(generation.get("patchNotes", "")), str(generation.get("parentGenerationId", "")))
+    if recomputed != generation.get("generationId"):
+        raise ValueError(f"staged generation ID does not match its metadata: {generation_path}")
 
 
 def _staged_patch_note_entry(generation: dict) -> dict:
