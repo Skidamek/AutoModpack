@@ -1,8 +1,10 @@
 /* CRT-free JNI: NTFS ChangeTime and volume+file index via KERNEL32.
  *
- * Rebuild:
- *   x86_64-w64-mingw32-gcc -c -O0 -fno-PIC -fno-ident -o /tmp/pe_reloc.o core/src/main/c/pe_reloc.c
- *   x86_64-w64-mingw32-gcc -shared -s -Os -fno-ident -fPIC -fno-stack-protector -fno-asynchronous-unwind-tables -fno-unwind-tables -nostdlib -Wl,--gc-sections -Wl,--enable-reloc-section -Wl,--dynamicbase -Wl,--high-entropy-va -Wl,-e,DllMain -Wl,-u,win_file_stat_keep -I core/src/main/c -I "$JAVA_HOME/include" -o core/src/main/resources/natives/windows-x86_64/win_file_stat.dll core/src/main/c/windows_file_stat.c /tmp/pe_reloc.o -lkernel32
+ * Rebuild via core/src/main/c/rebuild-windows-natives.sh (needs mingw-w64 and JAVA_HOME).
+ * The output must stay byte-identical on every rebuild: --no-insert-timestamp and the fixed
+ * --image-base pin the PE header, and the output name must remain win_file_stat.dll because
+ * mingw embeds it as the DLL's internal export name. CI rebuilds and compares against the
+ * committed binary, so sources and DLL cannot drift apart silently.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>

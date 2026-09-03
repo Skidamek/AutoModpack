@@ -259,3 +259,23 @@ tasks.register("checkNoFullyQualifiedNames") {
 		}
 	}
 }
+
+// The Windows native ships as a committed binary, so nothing else would notice the C sources drifting away from it (the Java side degrades to null and logs at debug). CI installs mingw-w64 and runs this as a hard gate; a rebuild is deterministic, so a byte difference means exactly "sources and DLL disagree".
+tasks.register("checkWinNatives") {
+	group = "verification"
+	description = "Rebuilds the committed Windows native from source and fails when the DLL differs; needs mingw-w64 and JAVA_HOME."
+	doLast {
+		val dll = file("core/src/main/resources/natives/windows-x86_64/win_file_stat.dll")
+		val committed = dll.readBytes()
+		val javaHome = providers.environmentVariable("JAVA_HOME").orElse(providers.systemProperty("java.home"))
+		val rebuild =
+			providers.exec {
+				commandLine("bash", "core/src/main/c/rebuild-windows-natives.sh")
+				environment("JAVA_HOME", javaHome.get())
+			}
+		rebuild.result.get().assertNormalExitValue()
+		if (!committed.contentEquals(dll.readBytes())) {
+			throw GradleException("The committed win_file_stat.dll did not match its sources in core/src/main/c; a rebuilt copy has been left in place - commit it")
+		}
+	}
+}
