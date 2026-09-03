@@ -5,14 +5,19 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
+import java.util.TreeMap;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import pl.skidam.automodpack_core.config.GenerationJsons;
+
 
 /** The append-only history of one modpack lineage: one entry per content change. */
 public final class Journal {
@@ -65,7 +70,7 @@ public final class Journal {
 		if (entry.seq() != expected) throw new IOException("Journal entry " + entry.seq() + " does not follow " + (expected - 1));
 		String line = COMPACT.toJson(entry.toFields());
 		Files.createDirectories(file.getParent());
-		Files.writeString(file, line + "\n", StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+		Files.writeString(file, line + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
 		List<JournalEntry> updated = new ArrayList<>(entries);
 		updated.add(entry);
 		entries = List.copyOf(updated);
@@ -127,7 +132,7 @@ public final class Journal {
 	}
 
 	private static ContentTree apply(ContentTree tree, JournalEntry.Change change) {
-		java.util.NavigableMap<String, ContentTree.ContentFile> files = new java.util.TreeMap<>(tree.files());
+		NavigableMap<String, ContentTree.ContentFile> files = new TreeMap<>(tree.files());
 		if (change.toSha1() == null) files.remove(change.path());
 		else files.put(change.path(), new ContentTree.ContentFile(change.toSha1(), change.toSize()));
 		return new ContentTree(files);

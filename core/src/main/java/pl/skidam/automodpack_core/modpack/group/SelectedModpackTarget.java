@@ -8,6 +8,8 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
+import java.util.ArrayList;
+
 
 public record SelectedModpackTarget(
 		PackDocument document,
@@ -78,7 +80,7 @@ public record SelectedModpackTarget(
 
 	private static List<JournalEntry> journalTail(GenerationJsons.HeadDocumentFields fields) {
 		if (fields.journal == null) return List.of();
-		List<JournalEntry> entries = new java.util.ArrayList<>();
+		List<JournalEntry> entries = new ArrayList<>();
 		for (GenerationJsons.JournalEntryFields entry : fields.journal) entries.add(JournalEntry.fromFields(entry));
 		return entries;
 	}
