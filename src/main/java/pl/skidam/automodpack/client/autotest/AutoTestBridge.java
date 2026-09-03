@@ -10,6 +10,9 @@ import net.minecraft.client.Screenshot;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+/*? if >=1.20.4 {*/
+import net.minecraft.client.gui.components.Checkbox;
+/*?}*/
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
@@ -473,6 +476,8 @@ public final class AutoTestBridge {
 			o.addProperty("height", e.height());
 			o.addProperty("enabled", e.widget().active);
 			o.addProperty("visible", e.widget().visible);
+			Boolean checked = e.checked();
+			if (checked != null) o.addProperty("checked", checked);
 			o.addProperty("type", e.type());
 			o.addProperty("class", e.widget().getClass().getName());
 			a.add(o);
@@ -634,6 +639,15 @@ public final class AutoTestBridge {
 
 		int height() {
 			return widget.getHeight();
+		}
+
+		/** Selected state of a real checkbox, or null when the widget (or this version) has none. */
+		Boolean checked() {
+			/*? if >=1.20.4 {*/
+			return widget instanceof Checkbox checkbox ? checkbox.selected() : null;
+			/*?} else {*/
+			/*return null;
+			*//*?}*/
 		}
 
 		String type() {

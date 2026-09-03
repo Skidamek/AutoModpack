@@ -10,6 +10,7 @@ A selector is a mapping; all given fields must match (AND):
   class    substring of the element's class name
   enabled  true/false
   visible  true/false (default true: hidden/plain-text placeholders never match)
+  checked  true/false for checkbox elements (absent for plain buttons)
   index    pick the Nth match (default 0; negative counts from the end)
 """
 from __future__ import annotations
@@ -60,12 +61,15 @@ def find_all(gui: dict, selector: dict) -> list:
     klass = selector.get("class")
     enabled = selector.get("enabled")
     visible = selector.get("visible", True)
+    checked = selector.get("checked")
     keys = _keys(selector)
     out = []
     for e in _elements(gui, role):
         if enabled is not None and bool(e.get("enabled", False)) != bool(enabled):
             continue
         if visible is not None and bool(e.get("visible", True)) != bool(visible):
+            continue
+        if checked is not None and bool(e.get("checked", False)) != bool(checked):
             continue
         if keys is not None and str(e.get("key") or "") not in keys:
             continue

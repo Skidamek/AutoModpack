@@ -115,8 +115,8 @@ final class PackConfirmCopy {
 		return manifest.groups().values().stream().anyMatch(group -> !group.required());
 	}
 
-	static Component leftoverLabel(boolean keep, int count) {
-		return VersionedText.translatable(keep ? "automodpack.firstConnect.leftoverKeep" : "automodpack.firstConnect.leftoverArchive", count);
+	static Component leftoverLabel(int count) {
+		return VersionedText.translatable("automodpack.confirm.keepExistingMods", count);
 	}
 
 	static MutableComponent ackLabel() {

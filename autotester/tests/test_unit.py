@@ -146,6 +146,19 @@ def test_selector_enabled_filter():
     assert el is None  # the only "download file" button is disabled
 
 
+def test_selector_checked_filter():
+    gui = {
+        "buttons": [
+            {"id": 1, "text": "Keep 2 existing mod files", "enabled": True, "checked": False},
+            {"id": 2, "text": "Keep 2 existing mod files", "enabled": True, "checked": True},
+        ],
+        "textFields": [],
+    }
+    assert selectors.find_one(gui, {"text": "Keep 2 existing mod files", "checked": True})["id"] == 2
+    assert selectors.find_one(gui, {"text": "Keep 2 existing mod files", "checked": False})["id"] == 1
+    assert selectors.find_one(gui, {"text": "Keep 2 existing mod files"})["id"] == 1  # absent checked = no constraint
+
+
 def test_selector_role_and_class():
     assert selectors.find_one(GUI, {"role": "textfield"})["id"] == 9
     assert selectors.find_one(GUI, {"class": "edit"})["id"] == 9

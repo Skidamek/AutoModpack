@@ -405,11 +405,11 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     for name in ("local-one.jar", "local-two.jar"):
         (ctx.game_dir / "mods" / name).write_bytes(b"local")
     bridge.screen = "first_connection"
-    assert any(button["text"] == "Archive 2 existing mod files" for button in bridge.gui()["buttons"])
+    assert any(button["text"] == "Keep 2 existing mod files" and not button.get("checked") for button in bridge.gui()["buttons"])
     bridge.click(89)
-    assert any(button["text"] == "Keep 2 existing mod files in mods" for button in bridge.gui()["buttons"])
+    assert any(button["text"] == "Keep 2 existing mod files" and button.get("checked") for button in bridge.gui()["buttons"])
     bridge.click(89)
-    assert any(button["text"] == "Archive 2 existing mod files" for button in bridge.gui()["buttons"])
+    assert any(button["text"] == "Keep 2 existing mod files" and not button.get("checked") for button in bridge.gui()["buttons"])
     assert any(button["text"] == "Download" for button in bridge.gui()["buttons"])
 
     # Repair is available only for the active pack. Its destructive choices default to keep.
@@ -424,12 +424,12 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     buttons = bridge.gui()["buttons"]
     # Defaults: unchecked on both rows - each unchecked box is a removal/reset consent.
     assert any(button["text"] == "[ ] Keep changes in config/pack-shared-editable.txt" for button in buttons)
-    assert any(button["text"] == "[ ] Keep 2 extra mod files" for button in buttons)
+    assert any(button["text"] == "Keep 2 existing mod files" and not button.get("checked") for button in buttons)
     bridge.click(95)  # Checking the editable row keeps the player's changes.
     assert any(button["text"] == "[x] Keep changes in config/pack-shared-editable.txt" for button in bridge.gui()["buttons"])
     bridge.click(95)
     bridge.click(97)  # Checking the unowned row opts into keeping them.
-    assert any(button["text"] == "[x] Keep 2 extra mod files" for button in bridge.gui()["buttons"])
+    assert any(button["text"] == "Keep 2 existing mod files" and button.get("checked") for button in bridge.gui()["buttons"])
     bridge.click(100)
     assert bridge.gui()["screenClass"] == "ModpackDetailsScreen"
 
