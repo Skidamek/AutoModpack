@@ -15,9 +15,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 import com.google.gson.Gson;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
+import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -69,7 +71,6 @@ class GenerationStoreTest {
 		assertEquals(1, collection.deletedObjects());
 		assertFalse(Files.exists(orphan));
 	}
-
 
 	@Test
 	void ledgerCheckpointKeepsRemovedPathHistoryAcrossCompactionAndProjectionLoss() throws Exception {
@@ -156,7 +157,7 @@ class GenerationStoreTest {
 	}
 
 	private static String storePolicyObject(Path objects, GroupManifest manifest) throws IOException {
-		byte[] bytes = pl.skidam.automodpack_core.config.ConfigTools.GSON.toJson(manifest.toFields()).getBytes(StandardCharsets.UTF_8);
+		byte[] bytes = ConfigTools.GSON.toJson(manifest.toFields()).getBytes(StandardCharsets.UTF_8);
 		String policySha1 = HashUtils.sha1(bytes);
 		Path object = DataRootResolver.objectFile(objects, policySha1);
 		Files.createDirectories(object.getParent());
@@ -164,17 +165,16 @@ class GenerationStoreTest {
 		return policySha1;
 	}
 
-
 	private ModpackCandidate candidate(Map<String, String> files) throws IOException {
 		Path staging = Files.createDirectories(tempDir.resolve("state").resolve("staging"));
 		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> entries = new TreeMap<>();
-		TreeMap<String, pl.skidam.automodpack_core.modpack.candidate.StagedObject> staged = new TreeMap<>();
+		TreeMap<String, StagedObject> staged = new TreeMap<>();
 		for (var entry : files.entrySet()) {
 			Path stagedPath = Files.createTempFile(staging, "candidate-", ".staged");
 			Files.writeString(stagedPath, entry.getValue(), StandardCharsets.UTF_8);
 			String hash = sha1(entry.getValue());
 			entries.put(entry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(entry.getValue().length()), "config", false, hash, null));
-			staged.put(hash, new pl.skidam.automodpack_core.modpack.candidate.StagedObject(hash, entry.getValue().length(), stagedPath));
+			staged.put(hash, new StagedObject(hash, entry.getValue().length(), stagedPath));
 		}
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
@@ -200,8 +200,8 @@ class GenerationStoreTest {
 		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, stagedObject(staged, hash, content.length()))), new TreeMap<>(), List.of(), List.of());
 	}
 
-	private pl.skidam.automodpack_core.modpack.candidate.StagedObject stagedObject(Path staged, String hash, long size) throws IOException {
-		return new pl.skidam.automodpack_core.modpack.candidate.StagedObject(hash, size, staged);
+	private StagedObject stagedObject(Path staged, String hash, long size) throws IOException {
+		return new StagedObject(hash, size, staged);
 	}
 
 	private static String sha1(String content) {
@@ -210,7 +210,7 @@ class GenerationStoreTest {
 
 	private static final class ConfigToolsRead {
 		static GenerationJsons.HeadDocumentFields read(Path path) throws IOException {
-			return pl.skidam.automodpack_core.config.ConfigTools.read(path, GenerationJsons.HeadDocumentFields.class).orElseThrow();
+			return ConfigTools.read(path, GenerationJsons.HeadDocumentFields.class).orElseThrow();
 		}
 	}
 }

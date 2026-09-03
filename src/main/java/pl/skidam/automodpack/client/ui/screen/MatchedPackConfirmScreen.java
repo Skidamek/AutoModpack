@@ -10,6 +10,9 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+/*? if > 1.19.2 {*/
+import net.minecraft.client.gui.components.Tooltip;
+/*?}*/
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -97,7 +100,7 @@ public final class MatchedPackConfirmScreen extends VersionedScreen {
 		this.addRenderableWidget(checkbox);
 		String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", updater.firstInstallLocalModPaths()), 240, 8));
 		/*? if > 1.19.2 {*/
-		checkbox.setTooltip(net.minecraft.client.gui.components.Tooltip.create(VersionedText.translatable("automodpack.firstConnect.cleanupTooltip", joined)));
+		checkbox.setTooltip(Tooltip.create(VersionedText.translatable("automodpack.firstConnect.cleanupTooltip", joined)));
 		/*?}*/
 	}
 
