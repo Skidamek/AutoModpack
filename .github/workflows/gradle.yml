@@ -42,18 +42,22 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - name: Install mingw-w64
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 25
+      - name: Install mingw-w64
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
+      - name: Compile the native sources to prove they build
+        run: core/src/main/c/rebuild-windows-natives.sh
+      - name: Restore the committed native artifacts
+        run: git checkout -- core/src/main/resources/natives core/src/main/c/natives-receipt.txt
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
-      - name: Verify the committed native matches its sources
+      - name: Verify the committed native matches its receipt
         run: ./gradlew checkWinNatives
 
   autotester-tests:

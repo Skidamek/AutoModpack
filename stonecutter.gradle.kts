@@ -260,22 +260,40 @@ tasks.register("checkNoFullyQualifiedNames") {
 	}
 }
 
-// The Windows native ships as a committed binary, so nothing else would notice the C sources drifting away from it (the Java side degrades to null and logs at debug). CI installs mingw-w64 and runs this as a hard gate; a rebuild is deterministic, so a byte difference means exactly "sources and DLL disagree".
+// The Windows native ships as a committed binary plus a receipt (core/src/main/c/natives-receipt.txt) naming the exact sources and DLL it was built from. Cross-toolchain builds are not byte-identical, so this check validates the receipt with no mingw needed; CI additionally compiles the C with mingw to prove the sources build.
 tasks.register("checkWinNatives") {
 	group = "verification"
-	description = "Rebuilds the committed Windows native from source and fails when the DLL differs; needs mingw-w64 and JAVA_HOME."
+	description = "Fails when the committed Windows native is stale relative to its receipt in core/src/main/c."
 	doLast {
-		val dll = file("core/src/main/resources/natives/windows-x86_64/win_file_stat.dll")
-		val committed = dll.readBytes()
-		val javaHome = providers.environmentVariable("JAVA_HOME").orElse(providers.systemProperty("java.home"))
-		val rebuild =
-			providers.exec {
-				commandLine("bash", "core/src/main/c/rebuild-windows-natives.sh")
-				environment("JAVA_HOME", javaHome.get())
+		val receipt = file("core/src/main/c/natives-receipt.txt")
+		if (!receipt.isFile) {
+			throw GradleException(
+				"Missing $receipt; run core/src/main/c/rebuild-windows-natives.sh (needs mingw-w64 and JAVA_HOME) and commit the refreshed DLL and receipt",
+			)
+		}
+		val digest = java.security.MessageDigest.getInstance("SHA-256")
+
+		fun sha256(file: File): String = digest.digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+		val violations = mutableListOf<String>()
+		for (line in receipt.readLines()) {
+			if (line.isBlank() || line.startsWith("#")) continue
+			val parts = line.split(Regex("\\s+"), limit = 2)
+			if (parts.size != 2) {
+				violations.add("Unreadable receipt line: $line")
+				continue
 			}
-		rebuild.result.get().assertNormalExitValue()
-		if (!committed.contentEquals(dll.readBytes())) {
-			throw GradleException("The committed win_file_stat.dll did not match its sources in core/src/main/c; a rebuilt copy has been left in place - commit it")
+			val named = file(parts[1].removePrefix("*"))
+			if (!named.isFile) {
+				violations.add("The receipt names a missing file: ${parts[1]}")
+				continue
+			}
+			if (sha256(named) != parts[0]) violations.add("${parts[1]} does not match the receipt; the committed native is stale")
+		}
+		if (violations.isNotEmpty()) {
+			throw GradleException(
+				"The committed Windows native is stale relative to core/src/main/c/natives-receipt.txt:\n" + violations.sorted().joinToString("\n") +
+					"\nRun core/src/main/c/rebuild-windows-natives.sh (needs mingw-w64 and JAVA_HOME) and commit the refreshed DLL and receipt",
+			)
 		}
 	}
 }
