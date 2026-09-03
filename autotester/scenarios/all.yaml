@@ -87,17 +87,17 @@ flow:
     file: all-groups-page-one
   - do: click
     name: select the visual category unless its defaults already carry it
-    select: { text: "[ ] Category: Visuals" }
-    when: { element: { text: "[ ] Category: Visuals" } }
+    select: { text: "Category: Visuals", checked: false }
+    when: { element: { text: "Category: Visuals", checked: false } }
   - do: click
     name: select a group with a dependency
-    select: { text: Addon }
+    select: { text: "Addon (" }
   - do: wait_for
     name: show the dependency explanation
-    until: { element: { text: "[+] Visuals" } }
+    until: { element: { text: "Visuals (", checked: true } }
   - do: click
     name: select the conflicting alternative
-    select: { text: Alternative }
+    select: { text: "Alternative (" }
   - do: wait_for
     name: show the conflict explanation
     until:
@@ -114,7 +114,7 @@ flow:
     name: show the unavailable platform group
     until:
       all:
-        - element: { text: "[-] Windows-only", enabled: false }
+        - element: { text: "Windows-only (", enabled: false }
   - do: screenshot
     name: capture unavailable and conflict group states
     file: all-groups-platform

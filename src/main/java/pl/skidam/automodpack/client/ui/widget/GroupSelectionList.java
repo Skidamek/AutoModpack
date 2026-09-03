@@ -11,10 +11,13 @@ import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 
+import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /*? if > 1.19.2 {*/
 import net.minecraft.client.gui.components.Tooltip;
@@ -32,10 +35,10 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 /*import com.mojang.blaze3d.vertex.PoseStack;
 *//*?}*/
 
-/** Scrolling group rows: every row is a widget, so the bridge and screen readers see the whole list. */
+/** Scrolling group rows: every togglable row is a vanilla checkbox, so the bridge and screen readers see the whole list. */
 public final class GroupSelectionList extends ContainerObjectSelectionList<GroupSelectionList.Entry> {
 	private static final int ROW_HEIGHT = 24;
-	public static final int INFO_BUTTON_WIDTH = 48;
+	public static final int INFO_BUTTON_WIDTH = 20;
 	private final int contentWidth;
 
 	public GroupSelectionList(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<Item> items, Consumer<Item> onToggle, Consumer<Item> onInspect) {
@@ -72,53 +75,47 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	}
 
 	public enum Kind {
+		CAPTION,
 		HEADER,
 		GROUP
 	}
 
 	public final class Entry extends ContainerObjectSelectionList.Entry<Entry> {
+		private static final int TEXT_MARGIN = 6;
 		private final Item item;
-		private final Consumer<Item> onToggle;
 		private final AbstractWidget row;
 		private final AbstractWidget infoButton;
 		private final List<AbstractWidget> children;
 
 		private Entry(Item item, Consumer<Item> onToggle, Consumer<Item> onInspect) {
 			this.item = item;
-			this.onToggle = onToggle;
-			// Optional groups stay vanilla checkboxes; headers and locked rows become real
-			// buttons so they are visible to narration, the autotest bridge, and tooltips.
 			int rowWidth = GroupSelectionList.this.getRowWidth();
-			int mainWidth = Math.max(1, item.kind() == Kind.GROUP ? rowWidth - INFO_BUTTON_WIDTH - 4 : rowWidth);
-			if (item.kind() == Kind.GROUP && item.canToggle()) {
+			if (item.kind() == Kind.CAPTION) {
+				// The plain "General" section caption is a label, not a control: there is nothing to toggle.
+				this.row = null;
+				this.infoButton = null;
+			} else {
+				int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM) : rowWidth;
 				AbstractWidget checkbox = VersionedScreen.checkboxWidget(minecraft.font, 0, 0, mainWidth, 20, item.label(), item.selected(), value -> {
 					if (value != item.selected()) onToggle.accept(item);
 				});
+				// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
+				checkbox.active = item.canToggle();
 				if (item.tooltip() != null) {
 					/*? if > 1.19.2 {*/
 					checkbox.setTooltip(Tooltip.create(item.tooltip()));
 					/*?}*/
 				}
 				this.row = checkbox;
-			} else if (item.canToggle()) {
-				Button header = VersionedScreen.buttonWidget(0, 0, mainWidth, 20, item.label(), button -> onToggle.accept(item));
-				if (item.tooltip() != null) VersionedScreen.setTooltip(header, item.tooltip());
-				this.row = header;
-			} else {
-				Button locked = VersionedScreen.buttonWidget(0, 0, mainWidth, 20, item.label(), button -> {});
-				locked.active = false;
-				if (item.tooltip() != null) VersionedScreen.setTooltip(locked, item.tooltip());
-				else VersionedScreen.setTooltip(locked, item.label());
-				this.row = locked;
+				if (item.kind() == Kind.GROUP) {
+					Button inspect = VersionedScreen.buttonWidget(0, 0, INFO_BUTTON_WIDTH, 20, VersionedText.literal("?"), button -> onInspect.accept(item));
+					if (item.tooltip() != null) VersionedScreen.setTooltip(inspect, item.tooltip());
+					this.infoButton = inspect;
+				} else {
+					this.infoButton = null;
+				}
 			}
-			if (item.kind() == Kind.GROUP) {
-				Button inspect = VersionedScreen.buttonWidget(0, 0, INFO_BUTTON_WIDTH, 20, VersionedText.translatable("automodpack.ui.info"), button -> onInspect.accept(item));
-				if (item.tooltip() != null) VersionedScreen.setTooltip(inspect, item.tooltip());
-				this.infoButton = inspect;
-			} else {
-				this.infoButton = null;
-			}
-			this.children = this.infoButton == null ? List.of(this.row) : List.of(this.row, this.infoButton);
+			this.children = this.row == null ? List.of() : this.infoButton == null ? List.of(this.row) : List.of(this.row, this.infoButton);
 		}
 
 		public Item item() {
@@ -153,13 +150,17 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			^//^?} else {^/
 		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
-			/^?}^/
+		/^?}^/
 			versionedRender(versionedMatrices, x, y, entryWidth, mouseX, mouseY, tickDelta);
 		}
 		*//*?}*/
 
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth, int mouseX, int mouseY, float tickDelta) {
-			if (row == null) return;
+			if (row == null) {
+				Component label = item.label();
+				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, label instanceof MutableComponent mutable ? mutable : VersionedText.literal(label.getString()), x + TEXT_MARGIN, y + 7, TextColors.WHITE);
+				return;
+			}
 			/*? if >=1.19.4 {*/
 			row.setX(x);
 			row.setY(y);

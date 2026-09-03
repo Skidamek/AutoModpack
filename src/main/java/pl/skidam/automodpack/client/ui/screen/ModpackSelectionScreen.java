@@ -47,6 +47,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private static final int ROW_WIDTH = 500;
 	private static final int PLATFORM_BUTTON_WIDTH = 90;
+	/** Vanilla checkbox geometry: the box plus the gap before its label. */
+	private static final int CHECKBOX_LABEL_OFFSET = 24;
 
 	private final Screen parent;
 	private final GroupManifest manifest;
@@ -191,9 +193,13 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		List<GroupSelectionList.Item> items = new ArrayList<>();
 		for (Row row : rows) {
 			if (row.groupId() == null) {
-				boolean canToggle = row.categoryId() != null && hasOptionalCategoryGroups(row.categoryId());
+				if (row.categoryId() == null) {
+					items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.CAPTION, "", sectionLabel(row), null, false, false));
+					continue;
+				}
+				boolean canToggle = hasOptionalCategoryGroups(row.categoryId());
 				Component tooltip = canToggle ? VersionedText.translatable("automodpack.selection.categoryTooltip").withStyle(ChatFormatting.GRAY) : null;
-				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, row.categoryId() == null ? "" : row.categoryId(), sectionLabel(row), tooltip, false, canToggle));
+				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, row.categoryId(), sectionLabel(row), tooltip, categoryFullySelected(row.categoryId()), canToggle));
 				continue;
 			}
 			GroupManifest.Group group = groups.get(row.groupId());
@@ -205,6 +211,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void onListToggle(GroupSelectionList.Item item) {
+		if (item.kind() == GroupSelectionList.Kind.CAPTION) return;
 		if (item.kind() == GroupSelectionList.Kind.HEADER) {
 			if (!item.id().isBlank()) toggleCategory(item.id());
 			return;
@@ -380,16 +387,14 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private MutableComponent sectionLabel(Row row) {
 		if (row.categoryId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
 		String title = VersionedText.translatable("automodpack.selection.category", categoryLabel(row.categoryId())).getString();
-		// The glyph names what the next click does: full = exclude all, empty = include all, partial = include the rest.
+		// The checked box names what the next click does: full = exclude all, empty = include all, partial = include the rest.
 		long optional = optionalGroupCount(row.categoryId());
 		long selected = selectedOptionalGroupCount(row.categoryId());
 		boolean allSelected = optional > 0 && selected == optional;
-		boolean noneSelected = selected == 0;
-		String glyph = allSelected ? "[x]" : noneSelected ? "[ ]" : "[-]";
-		String label = glyph + " " + title;
-		if (selected > 0 && !allSelected) label += "  " + VersionedText.translatable("automodpack.selection.categoryPart", selected, optional).getString();
-		return VersionedText.literal(truncateToWidth(this.font, label, panelWidth(ROW_WIDTH) - 12))
-				.withStyle(ChatFormatting.BOLD, allSelected ? ChatFormatting.GREEN : noneSelected ? ChatFormatting.GRAY : ChatFormatting.YELLOW);
+		String label = title;
+		if (selected > 0 && !allSelected) label += " " + VersionedText.translatable("automodpack.selection.categoryPart", selected, optional).getString();
+		return VersionedText.literal(label)
+				.withStyle(ChatFormatting.BOLD, allSelected ? ChatFormatting.GREEN : selected == 0 ? ChatFormatting.GRAY : ChatFormatting.YELLOW);
 	}
 
 	private long optionalGroupCount(String category) {
@@ -457,26 +462,21 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		GroupResolution explanation = resolution.resolution(groupId);
 		String metrics = UiFormat.plural(group.files().size(), "automodpack.selection.metrics", UiFormat.formatSize(groupBytes(group))).getString();
 		String status = statusWord(explanation);
-		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel("[#] ", name, metrics, status), ChatFormatting.GRAY, status);
-		if (explanation != null && explanation.reasons().contains(GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE))
-			return rowLabel(formatRowLabel("[-] ", name, metrics, status), ChatFormatting.RED, status);
-		if (explanation != null && explanation.status() == GroupResolution.Status.UNAVAILABLE)
-			return rowLabel(formatRowLabel("[-] ", name, metrics, status), ChatFormatting.RED, status);
-		if (explanation != null && explanation.status() == GroupResolution.Status.BLOCKED)
-			return rowLabel(formatRowLabel("[-] ", name, metrics, status), ChatFormatting.RED, status);
-		if (explanation != null && explanation.status() == GroupResolution.Status.CONFLICT)
-			return rowLabel(formatRowLabel("[!] ", name, metrics, status), ChatFormatting.RED, status);
-		if (excluded.contains(groupId)) return rowLabel(formatRowLabel("[-] ", name, metrics, status), ChatFormatting.YELLOW, status);
+		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.GRAY, status);
+		if (explanation != null && (explanation.reasons().contains(GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE) || explanation.status() == GroupResolution.Status.UNAVAILABLE
+				|| explanation.status() == GroupResolution.Status.BLOCKED || explanation.status() == GroupResolution.Status.CONFLICT))
+			return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.RED, status);
+		if (excluded.contains(groupId)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.YELLOW, status);
 		if (resolution.selectedGroups().contains(groupId)) {
 			// A dependency lock is the load-bearing fact: the row cannot be unchecked while its dependent needs it.
-			if (resolution.dependencyGroups().contains(groupId)) return rowLabel(formatRowLabel("[+] ", name, metrics, status), ChatFormatting.AQUA, status);
-			if (chosen.contains(groupId)) return rowLabel(formatRowLabel("[x] ", name, metrics, status), ChatFormatting.GREEN, status);
-			return rowLabel(formatRowLabel("[+] ", name, metrics, status), ChatFormatting.AQUA, status);
+			if (resolution.dependencyGroups().contains(groupId)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.AQUA, status);
+			if (chosen.contains(groupId)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.GREEN, status);
+			return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.AQUA, status);
 		}
-		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel("[>] ", name, metrics, status), ChatFormatting.AQUA, status);
+		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.AQUA, status);
 		return group.defaultSelected()
-				? rowLabel(formatRowLabel("[ ] ", name, metrics, status), ChatFormatting.YELLOW, status)
-				: rowLabel(formatRowLabel("[ ] ", name, metrics, status), ChatFormatting.GRAY, status);
+				? rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.YELLOW, status)
+				: rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.GRAY, status);
 	}
 
 	/** The row's state word in the surviving status keys; statuses whose explanation is a full sentence stay hover-only. */
@@ -495,9 +495,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		};
 	}
 
-	private String formatRowLabel(String marker, String name, String metrics, String status) {
+	private String formatRowLabel(String name, String metrics, String status) {
 		int maxWidth = groupLabelWidth();
-		return truncateToWidth(this.font, marker + name + " " + metrics, status.isEmpty() ? maxWidth : Math.max(1, maxWidth - this.font.width(" " + status)));
+		return truncateToWidth(this.font, name + " " + metrics, status.isEmpty() ? maxWidth : Math.max(1, maxWidth - this.font.width(" " + status)));
 	}
 
 	private MutableComponent rowLabel(String text, ChatFormatting color, String status) {
@@ -507,7 +507,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private int groupLabelWidth() {
-		return Math.max(1, panelWidth(ROW_WIDTH) - 28 - GroupSelectionList.INFO_BUTTON_WIDTH - 4);
+		return Math.max(1, panelWidth(ROW_WIDTH) - CHECKBOX_LABEL_OFFSET - GroupSelectionList.INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM - 4);
 	}
 
 	private static boolean isMandatory(GroupManifest manifest, GroupManifest.Group group) {
