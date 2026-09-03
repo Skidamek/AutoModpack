@@ -2,6 +2,9 @@ package pl.skidam.automodpack_core.modpack.generation;
 
 import static pl.skidam.automodpack_core.utils.HashUtils.isCanonicalSha1;
 
+import java.nio.charset.CharacterCodingException;
+import java.nio.CharBuffer;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -121,9 +124,9 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		Objects.requireNonNull(notes, "Patch notes are missing");
 		String normalized = notes.replace("\r\n", "\n").replace('\r', '\n');
 		try {
-			StandardCharsets.UTF_8.newEncoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
-					.onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).encode(java.nio.CharBuffer.wrap(normalized));
-		} catch (java.nio.charset.CharacterCodingException e) {
+			StandardCharsets.UTF_8.newEncoder().onMalformedInput(CodingErrorAction.REPORT)
+					.onUnmappableCharacter(CodingErrorAction.REPORT).encode(CharBuffer.wrap(normalized));
+		} catch (CharacterCodingException e) {
 			throw new IllegalArgumentException("Patch notes are not valid UTF-8", e);
 		}
 		return normalized;
