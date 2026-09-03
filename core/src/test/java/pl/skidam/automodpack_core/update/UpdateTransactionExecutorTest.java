@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -641,8 +642,8 @@ class UpdateTransactionExecutorTest {
 		String currentHash = HashUtils.getHash(current);
 		byte[] replacement = "replacement".getBytes(StandardCharsets.UTF_8);
 		String replacementHash = store(storage, replacement);
-		String currentPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(current).toString());
-		String targetPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(replacementPath).toString());
+		String currentPath = LogicalPath.normalize(storage.gameDirectory().relativize(current).toString());
+		String targetPath = LogicalPath.normalize(storage.gameDirectory().relativize(replacementPath).toString());
 		UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentPath, targetPath, replacementHash, replacement.length, currentHash);
 
 		assertTrue(executor(storage).commit(transaction).success());

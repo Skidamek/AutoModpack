@@ -62,7 +62,7 @@ public final class OfflineRepair {
 		public Request {
 			activeTarget = Objects.requireNonNull(activeTarget, "active target");
 			TreeSet<String> normalizedForceCopyPaths = new TreeSet<>();
-			for (String path : Objects.requireNonNull(forceCopyPaths, "force-copy paths")) normalizedForceCopyPaths.add(UpdatePlanner.normalize(path));
+			for (String path : Objects.requireNonNull(forceCopyPaths, "force-copy paths")) normalizedForceCopyPaths.add(LogicalPath.normalize(path));
 			forceCopyPaths = Set.copyOf(normalizedForceCopyPaths);
 			protectedModPath = protectedModPath == null ? null : protectedModPath.toAbsolutePath().normalize();
 		}
@@ -82,7 +82,7 @@ public final class OfflineRepair {
 
 	public record EditableResetCandidate(String logicalPath, String defaultHash, long defaultSize, String currentHash, long currentSize, boolean absent) {
 		public EditableResetCandidate {
-			logicalPath = UpdatePlanner.normalize(logicalPath);
+			logicalPath = LogicalPath.normalize(logicalPath);
 			defaultHash = HashUtils.normalizeSha1(defaultHash);
 			if (defaultSize < 0 || currentSize < -1) throw new IllegalArgumentException("Editable reset candidate sizes are invalid");
 			if (currentHash != null) currentHash = HashUtils.normalizeSha1(currentHash);
@@ -265,8 +265,8 @@ public final class OfflineRepair {
 		if (journal.schemaVersion != 1 || !prepared.modpackId().equals(journal.modpackId) || !prepared.contentToken().equals(journal.contentToken)
 				|| !prepared.selectionDigest().equals(journal.selectionDigest) || journal.editableResets == null || journal.unownedMods == null)
 			throw new IOException("Offline repair journal identity is invalid: " + path);
-		List<String> editablePaths = journal.editableResets.stream().map(fields -> UpdatePlanner.normalize(fields.logicalPath)).toList();
-		List<String> unownedPaths = journal.unownedMods.stream().map(fields -> UpdatePlanner.normalize(fields.logicalPath)).toList();
+		List<String> editablePaths = journal.editableResets.stream().map(fields -> LogicalPath.normalize(fields.logicalPath)).toList();
+		List<String> unownedPaths = journal.unownedMods.stream().map(fields -> LogicalPath.normalize(fields.logicalPath)).toList();
 		if (!editablePaths.equals(editablePaths.stream().distinct().sorted().toList()) || !unownedPaths.equals(unownedPaths.stream().distinct().sorted().toList()))
 			throw new IOException("Offline repair journal paths are not canonical: " + path);
 		for (var fields : journal.editableResets)
@@ -332,7 +332,7 @@ public final class OfflineRepair {
 
 	private static Set<String> normalizedSelection(Set<String> paths) {
 		TreeSet<String> normalized = new TreeSet<>();
-		for (String path : Objects.requireNonNull(paths, "repair selection")) normalized.add(UpdatePlanner.normalize(path));
+		for (String path : Objects.requireNonNull(paths, "repair selection")) normalized.add(LogicalPath.normalize(path));
 		return Set.copyOf(normalized);
 	}
 
@@ -354,8 +354,8 @@ public final class OfflineRepair {
 		// The state reader validates editable tombstone identity and canonical paths.
 		storage.readOverlayState(modpackId);
 		Map<String, Observation> overlays = inspectOverlay(modpackId, fileCache, observations);
-		for (var item : request.activeTarget().flatTarget().list.stream().sorted(Comparator.comparing(value -> UpdatePlanner.normalize(value.file))).toList()) {
-			String logicalPath = UpdatePlanner.normalize(item.file);
+		for (var item : request.activeTarget().flatTarget().list.stream().sorted(Comparator.comparing(value -> LogicalPath.normalize(value.file))).toList()) {
+			String logicalPath = LogicalPath.normalize(item.file);
 			Content content = new Content(item.sha1, parseSize(item.size));
 			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
 			addExpected(expected, new Expected(Place.PROJECTION, logicalPath, storage.activeDirectory(), storage.activePath(logicalPath), content));
@@ -386,16 +386,8 @@ public final class OfflineRepair {
 		for (PreservationVault.Claim claim : PreservationVault.read(storage, modpackId).claims()) {
 			Content content = new Content(claim.objectHash(), claim.size());
 			addExpected(expected, new Expected(Place.CAS, claim.originalPath(), storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
-			Path sourceRoot = switch (claim.sourceRoot()) {
-				case GAME_DIR -> storage.gameDirectory();
-				case OVERLAY -> storage.overlayDirectory(modpackId);
-				case PROJECTION -> storage.activeDirectory();
-			};
-			Path source = switch (claim.sourceRoot()) {
-				case GAME_DIR -> storage.gamePath(claim.originalPath());
-				case OVERLAY -> storage.overlayFile(modpackId, claim.originalPath());
-				case PROJECTION -> storage.activePath(claim.originalPath());
-			};
+			Path sourceRoot = storage.root(claim.sourceRoot(), modpackId);
+			Path source = storage.rootedPath(claim.sourceRoot(), modpackId, claim.originalPath());
 			observe(source, sourceRoot, fileCache, observations);
 			Path savedRoot = storage.restoredClaimDirectory(modpackId, claim.contentToken(), claim.claimId());
 			observe(LogicalPath.resolve(savedRoot, claim.originalPath()), savedRoot, fileCache, observations);
@@ -437,7 +429,7 @@ public final class OfflineRepair {
 			for (Path path : paths.filter(candidate -> !candidate.equals(root)).sorted().toList()) {
 				if (Files.isSymbolicLink(path)) throw new IOException("Client editable overlay contains a symbolic link: " + path);
 				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
-				String relative = UpdatePlanner.normalize(root.relativize(path).toString());
+				String relative = LogicalPath.normalize(root.relativize(path).toString());
 				Observation observation = observe(path, root, fileCache, observations);
 				if (observation != null) result.put(relative, observation);
 			}
@@ -454,7 +446,7 @@ public final class OfflineRepair {
 		if (baseline.schemaVersion != 1 || !modpackId.equals(baseline.modpackId) || baseline.entries == null) throw new IOException("Client baseline identity is invalid: " + baselineFile);
 		for (var entry : baseline.entries) {
 			if (entry == null || entry.logicalPath == null || entry.objectHash == null) throw new IOException("Client baseline entry is incomplete: " + baselineFile);
-			String logicalPath = UpdatePlanner.normalize(entry.logicalPath);
+			String logicalPath = LogicalPath.normalize(entry.logicalPath);
 			if (!logicalPath.equals(entry.logicalPath)) throw new IOException("Client baseline path is not canonical: " + entry.logicalPath);
 			if (entry.absent) {
 				if (!entry.objectHash.isEmpty() || entry.size != -1) throw new IOException("Absent client baseline contains file metadata: " + logicalPath);
@@ -474,7 +466,7 @@ public final class OfflineRepair {
 			for (Path path : paths.sorted().toList()) {
 				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(path)) continue;
 				Path normalized = path.toAbsolutePath().normalize();
-				String logicalPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(normalized).toString());
+				String logicalPath = LogicalPath.normalize(storage.gameDirectory().relativize(normalized).toString());
 				observe(normalized, storage.gameDirectory(), fileCache, observations);
 				if (!ownedLiveMods.contains(logicalPath) && !normalized.equals(protectedModPath)) unowned.add(logicalPath);
 			}
@@ -564,7 +556,7 @@ public final class OfflineRepair {
 	private record Expected(Place place, String logicalPath, Path root, Path path, Content content) {
 		private static final Comparator<Expected> ORDER = Comparator.comparing((Expected value) -> value.place().ordinal()).thenComparing(Expected::logicalPath);
 		private Expected {
-			logicalPath = UpdatePlanner.normalize(logicalPath);
+			logicalPath = LogicalPath.normalize(logicalPath);
 			root = root.toAbsolutePath().normalize();
 			path = path.toAbsolutePath().normalize();
 			if (!path.startsWith(root)) throw new IllegalArgumentException("Expected repair path escaped its root");

@@ -25,18 +25,11 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
-import pl.skidam.automodpack_core.loader.ModpackLoadSelection;
 import pl.skidam.automodpack_core.loader.PinnedMods;
-import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
-import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
-import pl.skidam.automodpack_core.modpack.group.GroupManifest;
-import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
-import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
-import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
@@ -45,19 +38,17 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.ReviewedUpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
-import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateReviewPolicy;
-import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
@@ -92,10 +83,11 @@ public class ModpackUpdater implements AutoCloseable {
 	private final ClientStorage storage;
 	private final PlatformMetadataCache platformMetadataCache;
 	private final ClientUpdatePlanBuilder planBuilder;
-	private volatile FetchManager sourceFetchManager;
+	private final SourceCatalogue sourceCatalogue;
+	private final RemovalLifecycle removalLifecycle;
+	private final ProjectionLoader projectionLoader;
 	private ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> installedSwitchPlan;
 	private ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewedUpdatePlan;
-	private ReviewedClientPlan<ClientUpdatePlanBuilder.RemovalPreparation> reviewedRemovalPlan;
 	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
 	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
 	private final Set<String> reservedObjectHashes = new TreeSet<>();
@@ -114,9 +106,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public SourceAvailability getSourceAvailability() {
-		FetchManager manager = sourceFetchManager;
-		if (manager == null) return new SourceAvailability(0, 0, true, false);
-		return new SourceAvailability(manager.totalFiles(), manager.resolvedFiles(), manager.isComplete(), manager.isCancelled());
+		return sourceCatalogue.sourceAvailability();
 	}
 
 	/** Direct regular files currently visible in the loader's standard mods directory during first install. */
@@ -147,12 +137,11 @@ public class ModpackUpdater implements AutoCloseable {
 			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 			planBuilder.preparePlanObjects(prepared.plan(), selectedTarget.flatTarget());
-			installedSwitchPlan = ReviewedClientPlan.pending(prepared, prepared.plan());
+			installedSwitchPlan = new ReviewedClientPlan<>(prepared, ReviewedUpdatePlan.pending(prepared.plan()));
 			String installedToken;
 			if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)) installedToken = active.contentToken;
 			else installedToken = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).map(PackDocument::contentToken).orElse("");
-			return UpdatePreview.create(prepared.plan(), selectedTarget.selection(), UpdatePreview.Mode.UPDATE,
-					featuredNotes(selectedTarget, installedToken), updateJournal(selectedTarget, installedToken)).withFeatureManifest(selectedTarget.manifest());
+			return updatePreview(prepared.plan(), selectedTarget, installedToken);
 		}
 	}
 
@@ -160,13 +149,13 @@ public class ModpackUpdater implements AutoCloseable {
 	public void applyInstalledSwitch() throws Exception {
 		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = installedSwitchPlan;
 		if (reviewed == null || selectedTarget == null) throw new IllegalStateException("Installed modpack switch was not prepared");
-		if (!reviewed.isApproved()) reviewed.approve();
+		if (!reviewed.review().isApproved()) reviewed.review().approve();
 		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
 		try {
 			recordChangelogs(prepared, selectedTarget);
 			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
-			restartAfterApply(applyResult);
+			removalLifecycle.restartAfterApply(applyResult);
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Installed modpack switch transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
 			new ReLauncher(UpdateType.SELECT, changelogs).restart(false);
@@ -255,7 +244,7 @@ public class ModpackUpdater implements AutoCloseable {
 	public void reselectAndPreview(SelectionIntent intent) {
 		selectTarget(intent);
 		if (reviewedUpdatePlan != null) {
-			reviewedUpdatePlan.cancel();
+			reviewedUpdatePlan.review().cancel();
 			reviewedUpdatePlan = null;
 		}
 		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
@@ -270,92 +259,17 @@ public class ModpackUpdater implements AutoCloseable {
 	/** First-install review catalogue with Modrinth/CurseForge pages from the completed lookup. */
 	public ChangeSet reviewCatalogue() {
 		if (selectedTarget == null) return ChangeSet.empty();
-		return ChangeSet.catalogue(selectedTarget.manifest(), ChangeSet.Kind.ADDED, selectedTarget.selection().selectedGroups()).withReferences(this::mainPageUrlsForCatalogue);
+		return ChangeSet.catalogue(selectedTarget.manifest(), ChangeSet.Kind.ADDED, selectedTarget.selection().selectedGroups()).withReferences(sourceCatalogue::mainPageUrlsForCatalogue);
 	}
 
-	private List<String> mainPageUrlsForCatalogue(String location, String path) {
-		FetchManager manager = sourceFetchManager;
-		if (manager == null || selectedTarget == null || path == null || path.isBlank()) return List.of();
-		String sha1 = null;
-		var items = selectedTarget.completeTarget().list;
-		if (items != null) for (var item : items) if (path.equals(item.file)) {
-			sha1 = item.sha1;
-			break;
-		}
-		if (sha1 == null || sha1.isBlank()) return List.of();
-		return manager.mainPageUrlsFor(sha1);
-	}
-
-	private void startSourceFetch() throws IOException {
-		if (sourceFetchManager != null) {
-			sourceFetchManager.fetch();
-			return;
-		}
-		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
-		if (selectedTarget != null) {
-			ModpackJsons.ModpackContentFields catalogue = selectedTarget.completeTarget();
-			if (catalogue.list != null)
-				for (var item : catalogue.list)
-					addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
-		}
-		sourceFetchManager = newSourceFetchManager(new ArrayList<>(unique.values()));
-		if (sourceFetchManager != null) sourceFetchManager.fetch();
-	}
-
-	static boolean gatedJar(String path) {
-		return path != null && path.toLowerCase(Locale.ROOT).endsWith(".jar");
-	}
-
-	boolean firstPartyHit(String sha1) {
-		FetchManager manager = sourceFetchManager;
-		if (manager == null || sha1 == null || sha1.isBlank()) return false;
-		return manager.hasSource(sha1);
-	}
-
-	/** Selected flat-target jar paths without a Modrinth/CurseForge hash hit. */
+	/** Selected jar paths of the selected target without a Modrinth/CurseForge hash hit. */
 	public List<String> unverifiedSelectedJarPaths() {
-		if (selectedTarget == null || selectedTarget.flatTarget().list == null) return List.of();
-		List<String> unverified = new ArrayList<>();
-		for (var item : selectedTarget.flatTarget().list) {
-			if (!gatedJar(item.file)) continue;
-			if (!firstPartyHit(item.sha1)) unverified.add(item.file);
-		}
-		return List.copyOf(unverified);
+		return sourceCatalogue.unverifiedSelectedJarPaths(selectedTarget);
 	}
 
 	/** True when the plan would write a gated jar that has no first-party hit. */
 	public boolean planWritesUnverifiedJar(UpdatePlan plan) {
-		if (plan == null) return false;
-		for (UpdatePlan.Operation operation : plan.operations()) {
-			if (operation.operation() != UpdatePlan.OperationType.INSTALL_OBJECT) continue;
-			if (!gatedJar(operation.relativePath())) continue;
-			if (!firstPartyHit(operation.expectedObjectHash())) return true;
-		}
-		return false;
-	}
-
-	private FetchManager sourceFetch(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
-		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
-		for (var item : items) addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
-		List<FetchManager.FetchData> fetchData = new ArrayList<>(unique.values());
-		if (fetchData.isEmpty()) return null;
-		FetchManager current = sourceFetchManager;
-		if (current != null && fetchData.stream().allMatch(item -> current.tracks(item.sha1()))) return current;
-		if (current != null) current.cancel();
-		sourceFetchManager = newSourceFetchManager(fetchData);
-		return sourceFetchManager;
-	}
-
-	private FetchManager newSourceFetchManager(List<FetchManager.FetchData> fetchData) {
-		if (fetchData.isEmpty()) return null;
-		FetchManager manager = new FetchManager(fetchData, platformMetadataCache);
-		manager.fetchAsync();
-		return manager;
-	}
-
-	private static void addSourceFetchData(Map<String, FetchManager.FetchData> unique, String file, String sha1, String murmur, String size, String type) {
-		if (!ModpackContentType.isSourceFetchable(type) || sha1 == null || sha1.isBlank()) return;
-		unique.putIfAbsent(sha1, new FetchManager.FetchData(file, sha1, murmur, size, type));
+		return sourceCatalogue.planWritesUnverifiedJar(plan);
 	}
 
 	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
@@ -375,6 +289,9 @@ public class ModpackUpdater implements AutoCloseable {
 		this.platformMetadataCache = openPlatformMetadataCache(storage);
 		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, MODPACK_LOADER, LOADER);
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
+		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformMetadataCache);
+		this.removalLifecycle = new RemovalLifecycle(this.storage, this.planBuilder, changelogs, this.updateLoopDetector, () -> fullDownload);
+		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);
 		this.downloadClient = downloadClient;
 	}
 
@@ -409,7 +326,7 @@ public class ModpackUpdater implements AutoCloseable {
 				firstConnection = true;
 				fullDownload = true;
 				LOGGER.info("First-time install; scanning existing mods before the review screen");
-				startSourceFetch();
+				sourceCatalogue.startSourceFetch();
 				firstInstallLocalModFiles = storedTarget() == null ? scanFirstInstallLocalMods() : Map.of();
 				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
 				ScreenManager.welcome(this);
@@ -451,7 +368,7 @@ public class ModpackUpdater implements AutoCloseable {
 					FileInspection.Mod inspected = modCache.getModOrNull(normalized, cache);
 					if (inspected != null && PinnedMods.matches(listedPins, inspected.IDs())) continue;
 				}
-				String relative = UpdatePlanner.normalize(storage.gameDirectory().relativize(normalized).toString());
+				String relative = LogicalPath.normalize(storage.gameDirectory().relativize(normalized).toString());
 				String hash = cache.getOrComputeHash(normalized);
 				if (hash == null) throw new IOException("Cannot hash local mod file: " + normalized);
 				observed.put(relative, new UpdatePlan.FileState(hash, Files.size(normalized), true));
@@ -498,8 +415,8 @@ public class ModpackUpdater implements AutoCloseable {
 				LOGGER.info("Launch apply reused the active projection");
 				return;
 			}
-			ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = ReviewedClientPlan.pending(prepared, prepared.plan());
-			reviewed.approve();
+			ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = new ReviewedClientPlan<>(prepared, ReviewedUpdatePlan.pending(prepared.plan()));
+			reviewed.review().approve();
 			recordChangelogs(prepared, selectedTarget);
 			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
 			LOGGER.info("Launch apply completed; restart required: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
@@ -512,7 +429,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (!preload && !abortedByPlayer(e)) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 		} finally {
 			try {
-				if (preload) loadSelectedActiveProjection();
+				if (preload) projectionLoader.loadSelectedActiveProjection();
 			} catch (Exception e) {
 				LOGGER.error("Failed to load the active modpack projection after launch apply", e);
 			}
@@ -522,7 +439,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private void finishLaunchApply(ApplyResult applyResult) {
 		if (!preload) {
-			restartAfterApply(applyResult);
+			removalLifecycle.restartAfterApply(applyResult);
 			return;
 		}
 		if (!applyResult.requiresRestart()) return;
@@ -556,7 +473,7 @@ public class ModpackUpdater implements AutoCloseable {
 		requireLiveConnection();
 		long start = System.currentTimeMillis();
 		totalBytesToDownload = missing.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		FetchManager fetchManager = sourceFetch(missing);
+		FetchManager fetchManager = sourceCatalogue.sourceFetch(missing);
 		try {
 			if (!downloadModpack(missing, start, fetchManager, playerFacing))
 				throw new IOException("One or more selected modpack objects could not be acquired");
@@ -580,20 +497,12 @@ public class ModpackUpdater implements AutoCloseable {
 		ClientObjectStore.publishOwnership(storage, Set.copyOf(reservedObjectHashes));
 	}
 
-	private void loadSelectedActiveProjection() throws Exception {
-		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state == null) return;
-		if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
-			LOGGER.warn("Skipping active modpack load after preload because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
-			return;
-		}
-		if (!clientConfig.selectedModpackId.equals(state.modpackId)) {
-			LOGGER.warn("Skipping active modpack load after preload because active state belongs to {}, but the selected modpack is {}", state.modpackId,
-					clientConfig.selectedModpackId);
-			return;
-		}
-		loadModpack();
+	// Load the already-installed modpack without contacting the server or
+	// reconciling local files against it. Used when update-on-launch is disabled
+	// so the user can freely add/remove mods (e.g. a binary search) without
+	// AutoModpack restoring or deleting them.
+	public void loadModpack() throws Exception {
+		projectionLoader.loadModpack();
 	}
 
 	public boolean requiresUpdateBeforeLogin(ModpackUtils.UpdateCheckResult result) throws Exception {
@@ -611,177 +520,22 @@ public class ModpackUpdater implements AutoCloseable {
 
 	// Build the removal plan without changing the installed files.
 	public UpdatePreview previewRemoval() throws Exception {
-		return previewRemovalLike(UpdatePreview.Mode.REMOVAL);
+		return removalLifecycle.previewRemoval();
 	}
 
 	public UpdatePreview previewDeactivation() throws Exception {
-		return previewRemovalLike(UpdatePreview.Mode.DEACTIVATION);
-	}
-
-	private UpdatePreview previewRemovalLike(UpdatePreview.Mode mode) throws Exception {
-		ClientUpdatePlanBuilder.RemovalPreparation preparation = planBuilder.prepareRemoval();
-		clientConfig = preparation.currentConfig();
-		reviewedRemovalPlan = ReviewedClientPlan.pending(preparation, preparation.plan());
-		return UpdatePreview.create(preparation.plan(), removalSelection(preparation), mode).withFeatureManifest(removalManifest(preparation));
+		return removalLifecycle.previewDeactivation();
 	}
 
 	public record LifecycleApply(boolean success, boolean restartRequired) {}
 
 	public LifecycleApply deactivateModpack() throws Exception {
-		return applyRemovalLike(false);
+		return removalLifecycle.deactivateModpack();
 	}
 
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
 	public LifecycleApply removeModpack() throws Exception {
-		return applyRemovalLike(true);
-	}
-
-	private LifecycleApply applyRemovalLike(boolean remove) throws Exception {
-		ReviewedClientPlan<ClientUpdatePlanBuilder.RemovalPreparation> reviewed = reviewedRemovalPlan;
-		if (reviewed == null) throw new IllegalStateException("Modpack lifecycle action was not prepared");
-		if (!reviewed.isApproved()) reviewed.approve();
-		ClientUpdatePlanBuilder.RemovalPreparation preparation = reviewed.prepared();
-		clientConfig = preparation.currentConfig();
-		UpdatePreview applied = UpdatePreview.create(preparation.plan(), removalSelection(preparation),
-				remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION).withFeatureManifest(removalManifest(preparation));
-		String overlayDigest = storage.overlayDigest(preparation.installed().modpackId);
-		UpdateTransaction transaction;
-		if (remove)
-			transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest, preparation.expectedClientConfig());
-		else
-			transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest, preparation.expectedClientConfig());
-		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
-		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
-		if (execution.success()) {
-			reviewed.complete();
-			clientConfig = preparation.plannedConfig();
-			if (remove) {
-				try {
-					new ClientGenerationStore(storage).forgetModpack(preparation.installed().modpackId);
-				} catch (Exception e) {
-					LOGGER.warn("Modpack removal committed, but retained client state cleanup was deferred and can be retried", e);
-				}
-			}
-			changelogs.replaceWith(applied);
-			ApplyResult applyResult = RestartDecision.applyResult(preparation.plan());
-			changelogs.setRestartReasons(applyResult.reasonDescriptions());
-			if (applyResult.requiresRestart()) restartAfterApply(applyResult);
-			else updateLoopDetector.clear();
-			return new LifecycleApply(true, applyResult.requiresRestart());
-		}
-		return new LifecycleApply(false, false);
-	}
-
-	private static ResolvedSelection removalSelection(ClientUpdatePlanBuilder.RemovalPreparation preparation) {
-		SelectionIntent intent = preparation.expectedPriorIntent();
-		if (intent == null) return null;
-		Set<String> selected = preparation.installed().selectedGroups == null ? Set.of() : preparation.installed().selectedGroups;
-		Set<String> stale = new TreeSet<>(intent.requestedGroups());
-		stale.removeAll(selected);
-		return new ResolvedSelection(intent, new TreeSet<>(selected), new TreeSet<>(stale));
-	}
-
-	private GroupManifest removalManifest(ClientUpdatePlanBuilder.RemovalPreparation preparation) throws IOException {
-		String generationId = preparation.installed().contentToken;
-		return new ClientGenerationStore(storage).read(generationId)
-				.orElseThrow(() -> new IOException("Installed generation record is unavailable: " + generationId)).manifest();
-	}
-
-	// Load the already-installed modpack without contacting the server or
-	// reconciling local files against it. Used when update-on-launch is disabled
-	// so the user can freely add/remove mods (e.g. a binary search) without
-	// AutoModpack restoring or deleting them.
-	public void loadModpack() throws Exception {
-
-		if (!Files.exists(storage.activeDirectory())) return;
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
-			loadModpackMods(cache, modCache);
-		}
-	}
-
-	private void restartAfterApply(ApplyResult applyResult) {
-		// Only the launch-time apply hot-loads projection content; any mid-session apply with content changes
-		// leaves the running process without them until restart, whether or not the player accepts the restart.
-		if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) SessionUpdateState.markAppliedContentNotLoaded();
-		if (!applyResult.requiresRestart()) {
-			updateLoopDetector.clear();
-			// Ask the player to restart instead of silently returning to the game where the next join fails with a mod mismatch.
-			if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) {
-				LOGGER.info("Update applied with {} changed and {} removed files, but they cannot load into the running game; asking the player to restart", changelogs.changedFiles().size(),
-						changelogs.removedFiles().size());
-				ScreenManager.restart(fullDownload ? UpdateType.FULL : UpdateType.UPDATE, changelogs);
-				return;
-			}
-			ScreenManager.completeWithoutRestart();
-			return;
-		}
-		String fingerprint = RestartDecision.stateFingerprint(storage, applyResult);
-		if (updateLoopDetector.evaluateAndRecord(fingerprint) == UpdateLoopDetector.Decision.SUPPRESS) {
-			LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
-			LOGGER.error("Corrections were applied but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
-			LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
-			return;
-		}
-
-		new ReLauncher(RestartDecision.applyRestartType(fullDownload, applyResult.restartReasons()), changelogs).restart(false);
-	}
-
-	// Load the modpack mods that aren't already present in the standard mods
-	// directory, without requiring a restart.
-	private void loadModpackMods(FileMetadataCache cache, ModFileCache modCache) throws Exception {
-		if (!preload) {
-			LOGGER.info("Modpack is already loaded");
-			return;
-		}
-
-		Set<String> liveHashes = new HashSet<>();
-		List<Set<String>> liveJarIds = new ArrayList<>();
-		try (Stream<Path> standardModsStream = Files.list(storage.modsDirectory())) {
-			for (Path path : standardModsStream.filter(JarUtils::isRegularJar).toList()) {
-				String hash = cache.getHashOrNull(path);
-				if (hash != null) liveHashes.add(hash);
-				FileInspection.Mod inspected = modCache.getModOrNull(path, cache);
-				if (inspected != null) liveJarIds.add(inspected.IDs());
-			}
-		} catch (IOException e) {
-			LOGGER.error("Failed to list standard mods directory", e);
-		}
-
-		Set<String> activeModPaths = Optional.ofNullable(storedTarget()).map(target -> target.list.stream()
-				.filter(item -> ModpackPathPolicy.isActiveMod(item.file, item.type)).map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet())).orElseGet(Set::of);
-		List<String> pinnedModIds = clientConfig == null || clientConfig.pinnedModIds == null ? List.of() : clientConfig.pinnedModIds;
-		Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT).toAbsolutePath().normalize();
-		List<ModpackLoadSelection.Jar> projectionJars = new ArrayList<>();
-		if (Files.isDirectory(activeModsDirectory, LinkOption.NOFOLLOW_LINKS)) {
-			try (Stream<Path> activeMods = Files.walk(activeModsDirectory)) {
-				for (Path path : activeMods.filter(JarUtils::isRegularJar).toList()) {
-					String relative = activeModLogicalPath(activeModsDirectory, path);
-					if (relative == null || !activeModPaths.contains(relative)) continue;
-					Path jar = storage.activePath(relative);
-					String hash = cache.getHashOrNull(jar);
-					FileInspection.Mod inspected = modCache.getModOrNull(jar, cache);
-					projectionJars.add(new ModpackLoadSelection.Jar(jar, hash, inspected == null ? Set.of() : inspected.IDs()));
-				}
-			} catch (IOException e) {
-				LOGGER.error("Failed to list modpack mods directory", e);
-			}
-		}
-
-		List<Path> modpackMods = ModpackLoadSelection.select(projectionJars, liveHashes, liveJarIds, pinnedModIds);
-		Set<String> protectedIds = PinnedMods.protectedIds(pinnedModIds, liveJarIds);
-		for (ModpackLoadSelection.Jar jar : projectionJars) {
-			if (modpackMods.contains(jar.path())) continue;
-			if (PinnedMods.protects(protectedIds, jar.ids()))
-				LOGGER.warn("Skipping load of projection mod {} because pinned client mod ids {} are present in the default mods folder", jar.path().getFileName(), jar.ids());
-		}
-
-		MODPACK_LOADER.loadModpack(new ModpackLoadRequest(activeModsDirectory, modpackMods));
-	}
-
-	private static String activeModLogicalPath(Path activeModsDirectory, Path path) {
-		Path normalized = path.toAbsolutePath().normalize();
-		if (!normalized.startsWith(activeModsDirectory) || normalized.equals(activeModsDirectory)) return null;
-		return ModpackPathPolicy.MODS_ROOT + "/" + UpdatePlanner.normalize(activeModsDirectory.relativize(normalized).toString());
+		return removalLifecycle.removeModpack();
 	}
 
 	/** Returns the updater to the confirmation seam once drained work observes the player's cancellation. */
@@ -865,7 +619,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private void startUpdateAfterPreview() {
 		long start = System.currentTimeMillis();
 		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = reviewedUpdatePlan;
-		if (reviewed == null || !reviewed.isApproved()) {
+		if (reviewed == null || !reviewed.review().isApproved()) {
 			LOGGER.warn("Update approval callback arrived without an approved prepared plan");
 			close();
 			return;
@@ -881,7 +635,7 @@ public class ModpackUpdater implements AutoCloseable {
 			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
 			changelogs.setRestartReasons(applyResult.reasonDescriptions());
 			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
-			restartAfterApply(applyResult);
+			removalLifecycle.restartAfterApply(applyResult);
 			return ApplyStatus.APPLIED;
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
@@ -964,7 +718,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	// this is run every time we modpack is updated
 	private ApplyResult applyPreparedPlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, SelectedModpackTarget target) throws Exception {
-		if (!reviewed.isApproved()) throw new IllegalStateException("Update plan has not been approved");
+		if (!reviewed.review().isApproved()) throw new IllegalStateException("Update plan has not been approved");
 		ClientUpdatePlanBuilder.PreparedPlan applied = executePlan(reviewed, target);
 		ApplyResult result = RestartDecision.applyResult(applied.plan());
 		changelogs.setRestartReasons(result.reasonDescriptions());
@@ -974,39 +728,9 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
 		String installedToken = installedToken(target.manifest().modpackId());
-		UpdatePreview applied = UpdatePreview.create(prepared.plan(), target.selection(), UpdatePreview.Mode.UPDATE,
-				featuredNotes(target, installedToken), updateJournal(target, installedToken)).withFeatureManifest(target.manifest());
-		changelogs.replaceWith(applied.withReferences(resolveMainPageReferences(prepared)));
+		UpdatePreview applied = updatePreview(prepared.plan(), target, installedToken);
+		changelogs.replaceWith(applied.withReferences(sourceCatalogue.resolveMainPageReferences(prepared)));
 		LOGGER.info("Prepared update changes: {} changed, {} removed", changelogs.changedFiles().size(), changelogs.removedFiles().size());
-	}
-
-	private ChangeSet.ReferenceProvider resolveMainPageReferences(ClientUpdatePlanBuilder.PreparedPlan prepared) {
-		FetchManager manager = sourceFetchManager;
-		if (manager == null) return (location, path) -> List.of();
-		Map<UpdatePlan.FileKey, String> hashes = new LinkedHashMap<>();
-		for (UpdatePlan.Operation operation : prepared.plan().operations()) {
-			UpdatePlan.FileKey file = new UpdatePlan.FileKey(operation.root(), operation.relativePath());
-			if (operation.operation() == UpdatePlan.OperationType.INSTALL_OBJECT && operation.expectedObjectHash() != null) {
-				hashes.put(file, operation.expectedObjectHash());
-			} else if (operation.operation() == UpdatePlan.OperationType.DELETE) {
-				UpdatePlan.FileState original = prepared.originalFiles().get(file);
-				if (original != null && original.sha1() != null) hashes.put(file, original.sha1());
-			}
-		}
-		Map<UpdatePlan.FileKey, List<String>> resolved = new LinkedHashMap<>();
-		for (var entry : hashes.entrySet()) {
-			List<String> mainPageUrls = manager.mainPageUrlsFor(entry.getValue());
-			if (mainPageUrls.isEmpty()) continue;
-			resolved.put(entry.getKey(), mainPageUrls);
-		}
-		Map<UpdatePlan.FileKey, List<String>> references = Map.copyOf(resolved);
-		return (location, path) -> {
-			try {
-				return references.getOrDefault(new UpdatePlan.FileKey(UpdatePlan.Root.valueOf(location), path), List.of());
-			} catch (IllegalArgumentException e) {
-				return List.of();
-			}
-		};
 	}
 
 	/** Acquires all mutable target inputs before creating the plan that the player reviews. */
@@ -1015,7 +739,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private ClientUpdatePlanBuilder.PreparedPlan prepareSelectedPlan(boolean playerFacing) throws Exception {
-		startSourceFetch();
+		sourceCatalogue.startSourceFetch();
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory()); var modCache = ModFileCache.open(storage.modMetadataDirectory())) {
 			requireLiveConnection();
 			acquireTargetObjects(selectedTarget.flatTarget(), cache, playerFacing);
@@ -1029,37 +753,29 @@ public class ModpackUpdater implements AutoCloseable {
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		ClientUpdatePlanBuilder.PreparedPlan prepared = preparePlanForReview();
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
-		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = ReviewedClientPlan.pending(prepared, prepared.plan());
+		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = new ReviewedClientPlan<>(prepared, ReviewedUpdatePlan.pending(prepared.plan()));
 		reviewedUpdatePlan = reviewed;
 		if (firstConnection && confirmationState.get() == ConfirmationState.PREVIEWING) {
-			reviewed.approve();
+			reviewed.review().approve();
 			if (!confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
-			return switch (applyApprovedPlan(reviewed, System.currentTimeMillis())) {
-				case APPLIED -> PreviewRequestResult.APPLIED;
-				case DEFERRED -> PreviewRequestResult.DEFERRED;
-				case FAILED -> PreviewRequestResult.FAILED;
-			};
+			return previewResult(applyApprovedPlan(reviewed, System.currentTimeMillis()));
 		}
 		if (!requiresPlayerReview(prepared, firstConnection)) {
-			reviewed.approve();
-			return switch (applyApprovedPlan(reviewed, System.currentTimeMillis())) {
-				case APPLIED -> PreviewRequestResult.APPLIED;
-				case DEFERRED -> PreviewRequestResult.DEFERRED;
-				case FAILED -> PreviewRequestResult.FAILED;
-			};
+			reviewed.review().approve();
+			return previewResult(applyApprovedPlan(reviewed, System.currentTimeMillis()));
 		}
 		Runnable continueAction = () -> {
-			if (!reviewed.isApproved()) reviewed.approve();
+			if (!reviewed.review().isApproved()) reviewed.review().approve();
 			if (firstConnection && !confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return;
 			startUpdateAfterPreview();
 		};
 		Runnable cancelAction = firstConnection
 				? () -> {
-					reviewed.cancel();
+					reviewed.review().cancel();
 					confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
 				}
 				: () -> {
-					reviewed.cancel();
+					reviewed.review().cancel();
 					close();
 				};
 		return requestPreparedPlanPreview(prepared, continueAction, cancelAction)
@@ -1092,10 +808,8 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private boolean requestPreparedPlanPreview(ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
-		String installedToken = installedToken(selectedTarget.manifest().modpackId());
-		UpdatePreview preview = UpdatePreview.create(prepared.plan(), selectedTarget.selection(), UpdatePreview.Mode.UPDATE,
-				featuredNotes(selectedTarget, installedToken), updateJournal(selectedTarget, installedToken)).withFeatureManifest(selectedTarget.manifest())
-				.withReferences(resolveMainPageReferences(prepared));
+		UpdatePreview preview = updatePreview(prepared.plan(), selectedTarget, installedToken(selectedTarget.manifest().modpackId()))
+				.withReferences(sourceCatalogue.resolveMainPageReferences(prepared));
 		return ScreenManager.preview(preview, getModpackName(), this,
 				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction);
 	}
@@ -1103,6 +817,11 @@ public class ModpackUpdater implements AutoCloseable {
 	private String installedToken(String modpackId) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		return state != null && modpackId.equals(state.modpackId) ? state.contentToken : "";
+	}
+
+	/** Assembles the player-facing preview of one target advance: journal tail, featured notes, and feature manifest. */
+	private UpdatePreview updatePreview(UpdatePlan plan, SelectedModpackTarget target, String installedToken) throws IOException {
+		return UpdatePreview.create(plan, target.selection(), UpdatePreview.Mode.UPDATE, featuredNotes(target, installedToken), updateJournal(target, installedToken)).withFeatureManifest(target.manifest());
 	}
 
 	/** The journal tail published after the installed state: from the newest entry back to (excluding) the installed token, or the whole tail when it is gone. */
@@ -1118,10 +837,18 @@ public class ModpackUpdater implements AutoCloseable {
 		return range.isEmpty() ? "" : range.get(range.size() - 1).notes();
 	}
 
+	private PreviewRequestResult previewResult(ApplyStatus status) {
+		return switch (status) {
+			case APPLIED -> PreviewRequestResult.APPLIED;
+			case DEFERRED -> PreviewRequestResult.DEFERRED;
+			case FAILED -> PreviewRequestResult.FAILED;
+		};
+	}
+
 	private ClientUpdatePlanBuilder.PreparedPlan executePlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, SelectedModpackTarget target) throws Exception {
 		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
 		// An executing plan is a durable fact; a player cancel during the commit must not cancel it afterwards.
-		reviewed.beginExecution();
+		reviewed.review().beginExecution();
 		boolean replanned = false;
 		while (true) {
 			UpdatePlan plan = prepared.plan();
@@ -1134,7 +861,7 @@ public class ModpackUpdater implements AutoCloseable {
 					prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 				}
 				try {
-					reviewed.requireCompatible(prepared.plan());
+					reviewed.review().requireCompatible(prepared.plan());
 				} catch (IllegalStateException e) {
 					throw new UpdateReplanRequiredException(execution.blockedPath(), "Mutable input changed the reviewed update consequences", e);
 				}
@@ -1147,7 +874,7 @@ public class ModpackUpdater implements AutoCloseable {
 				DetachedUpdateHelper.launch();
 				throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
 			}
-			reviewed.complete();
+			reviewed.review().complete();
 			try {
 				cleanupOverlayState(plan, target.manifest().modpackId());
 			} catch (IOException e) {
@@ -1176,7 +903,7 @@ public class ModpackUpdater implements AutoCloseable {
 		Set<String> deletedPaths = new TreeSet<>(storage.readOverlayState(modpackId).deletedPaths);
 		for (UpdatePlan.Operation operation : plan.operations())
 			if (operation.root() == UpdatePlan.Root.OVERLAY && operation.operation() == UpdatePlan.OperationType.DELETE)
-				deletedPaths.remove(UpdatePlanner.normalize(operation.relativePath()));
+				deletedPaths.remove(LogicalPath.normalize(operation.relativePath()));
 		storage.writeOverlayState(modpackId, deletedPaths);
 	}
 
@@ -1189,8 +916,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void interruptInFlight() {
-		FetchManager sourceFetch = sourceFetchManager;
-		if (sourceFetch != null && !sourceFetch.isComplete()) sourceFetch.cancel();
+		sourceCatalogue.cancelIfRunning();
 		DownloadManager manager = downloadManager;
 		if (manager != null && manager.isRunning()) manager.cancelAllAndShutdown();
 	}
@@ -1200,9 +926,9 @@ public class ModpackUpdater implements AutoCloseable {
 		confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED);
 		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.CANCELLED);
 		interruptInFlight();
-		if (reviewedUpdatePlan != null && reviewedUpdatePlan.isApproved()) reviewedUpdatePlan.cancel();
-		if (reviewedRemovalPlan != null && reviewedRemovalPlan.isApproved()) reviewedRemovalPlan.cancel();
-		if (installedSwitchPlan != null && installedSwitchPlan.isApproved()) installedSwitchPlan.cancel();
+		if (reviewedUpdatePlan != null && reviewedUpdatePlan.review().isApproved()) reviewedUpdatePlan.review().cancel();
+		removalLifecycle.cancelPendingReview();
+		if (installedSwitchPlan != null && installedSwitchPlan.review().isApproved()) installedSwitchPlan.review().cancel();
 		if (!reservedObjectHashes.isEmpty()) {
 			reservedObjectHashes.clear();
 			try {

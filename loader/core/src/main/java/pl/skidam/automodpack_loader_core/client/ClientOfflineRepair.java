@@ -13,12 +13,12 @@ import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.OfflineRepair;
-import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -72,12 +72,12 @@ public final class ClientOfflineRepair {
 		if (services.isEmpty()) return Set.of();
 		TreeSet<String> paths = new TreeSet<>();
 		try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory()); ModFileCache modCache = ModFileCache.open(storage.modMetadataDirectory())) {
-			for (var item : target.flatTarget().list.stream().filter(value -> ModpackPathPolicy.isActiveMod(UpdatePlanner.normalize(value.file), value.type)).toList()) {
+			for (var item : target.flatTarget().list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type)).toList()) {
 				long size = parseSize(item.size);
 				Path source = verifiedSource(item.file, size, item.sha1, cache);
 				if (source == null) continue;
 				FileInspection.Mod mod = modCache.getModOrNull(source, cache);
-				if (mod != null && !Collections.disjoint(mod.services(), services)) paths.add(UpdatePlanner.normalize(item.file));
+				if (mod != null && !Collections.disjoint(mod.services(), services)) paths.add(LogicalPath.normalize(item.file));
 			}
 		}
 		return Set.copyOf(paths);

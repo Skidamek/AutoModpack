@@ -21,6 +21,7 @@ import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -515,19 +516,9 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	static Path root(ClientStorage storage, Root root, String modpackId) throws IOException {
-		return switch (root) {
-			case PROJECTION -> storage.activeDirectory();
-			case OVERLAY -> storage.overlayDirectory(modpackId);
-			case GAME_DIR -> storage.gameDirectory();
-		};
-	}
-
 	Path validateRootAndPath(Root root, String relativePath, String currentModpackId, UpdateTransaction.Purpose purpose) throws IOException {
-		Path constrainedRoot = root(storage, root, currentModpackId).toAbsolutePath().normalize();
-		Path resolved = constrainedRoot.resolve(relativePath).normalize();
-		if (!resolved.startsWith(constrainedRoot)) throw new IOException("Transaction path escapes constrained root");
-		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, resolved, "Transaction target");
+		Path constrainedRoot = storage.root(root, currentModpackId);
+		Path resolved = FileTrees.resolveConfined(constrainedRoot, relativePath, "Transaction target");
 		Path game = storage.gameDirectory();
 		Path automodpack = storage.automodpackDirectory();
 		if (root == Root.GAME_DIR && resolved.startsWith(automodpack)) throw new IOException("GAME_DIR operation uses a narrower root");
@@ -544,7 +535,7 @@ public final class UpdateTransactionValidator {
 
 	static String normalizeManifestPath(String path) throws IOException {
 		try {
-			return UpdatePlanner.normalize(path);
+			return LogicalPath.normalize(path);
 		} catch (IllegalArgumentException e) {
 			throw new IOException("Unsafe manifest path", e);
 		}
@@ -554,7 +545,7 @@ public final class UpdateTransactionValidator {
 		if (relativePath == null || relativePath.startsWith("/") || relativePath.startsWith("\\") || relativePath.matches("^[A-Za-z]:[\\\\/].*"))
 			throw new IOException("Operation path must be relative");
 		try {
-			String normalized = UpdatePlanner.normalize(relativePath);
+			String normalized = LogicalPath.normalize(relativePath);
 			if (!normalized.equals(relativePath.replace('\\', '/'))) throw new IOException("Path is not normalized: " + relativePath);
 			return normalized;
 		} catch (IllegalArgumentException e) {

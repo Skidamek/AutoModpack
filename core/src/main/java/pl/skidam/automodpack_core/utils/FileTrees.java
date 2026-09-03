@@ -79,6 +79,17 @@ public final class FileTrees {
 	}
 
 	/**
+	 * Resolves {@code relativePath} beneath {@code root} and requires the whole walk from the root
+	 * down to the resolved target to stay confined and free of symbolic links. This is the canonical
+	 * rooted resolve for every managed root; do not re-implement it locally.
+	 */
+	public static Path resolveConfined(Path root, String relativePath, String description) throws IOException {
+		Path resolved = root.toAbsolutePath().normalize().resolve(relativePath).normalize();
+		requireNoSymbolicLinkDescendants(root, resolved, description);
+		return resolved;
+	}
+
+	/**
 	 * Requires every component from {@code root} down to and including {@code target} to be real
 	 * directories or a real file, never a symbolic link. This is the canonical confinement check
 	 * for every managed root; do not re-implement it locally.

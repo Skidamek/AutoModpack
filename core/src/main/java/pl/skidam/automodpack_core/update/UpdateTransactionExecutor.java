@@ -356,7 +356,7 @@ public final class UpdateTransactionExecutor {
 				verifyExpectedExisting(operation, target);
 				Files.delete(target);
 			}
-			FileTrees.pruneEmptyAncestors(target, UpdateTransactionValidator.root(context.storage(), operation.root(), transaction.modpackId));
+			FileTrees.pruneEmptyAncestors(target, context.storage().root(operation.root(), transaction.modpackId));
 		}
 	}
 
@@ -571,11 +571,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Path resolve(Root root, String relativePath, UpdateTransaction transaction) throws IOException {
-		Path base = UpdateTransactionValidator.root(context.storage(), root, transaction.modpackId).toAbsolutePath().normalize();
-		Path resolved = base.resolve(UpdateTransactionValidator.normalizeOperationPath(relativePath)).normalize();
-		if (!resolved.startsWith(base)) throw new IOException("Operation escapes constrained root");
-		FileTrees.requireNoSymbolicLinkDescendants(base, resolved, "Operation target");
-		return resolved;
+		return FileTrees.resolveConfined(context.storage().root(root, transaction.modpackId), UpdateTransactionValidator.normalizeOperationPath(relativePath), "Operation target");
 	}
 
 	private interface FileCacheWork<T> {

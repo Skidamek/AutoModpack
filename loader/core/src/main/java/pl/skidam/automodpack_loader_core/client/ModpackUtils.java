@@ -21,6 +21,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -28,7 +29,6 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePlan;
-import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
@@ -64,12 +64,12 @@ public class ModpackUtils {
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
 			for (var serverItem : serverModpackContent.list) {
-				if (verifyActiveItem(serverItem, UpdatePlanner.normalize(serverItem.file), live) == FileVerification.MISMATCH) filesToUpdate.add(serverItem);
+				if (verifyActiveItem(serverItem, LogicalPath.normalize(serverItem.file), live) == FileVerification.MISMATCH) filesToUpdate.add(serverItem);
 			}
 
 			if (filesToUpdate.isEmpty()) {
 				LOGGER.info("Checking for deleted files...");
-				Set<String> serverFileSet = serverModpackContent.list.stream().map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet());
+				Set<String> serverFileSet = serverModpackContent.list.stream().map(item -> LogicalPath.normalize(item.file)).collect(Collectors.toSet());
 				for (String relative : live.keySet()) {
 					if (!serverFileSet.contains(relative)) {
 						LOGGER.info("Found projected file marked for deletion: {}", relative);
@@ -98,7 +98,7 @@ public class ModpackUtils {
 		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
 			for (var serverItem : serverModpackContent.list) {
-				String relative = UpdatePlanner.normalize(serverItem.file);
+				String relative = LogicalPath.normalize(serverItem.file);
 				if (verifyActiveItem(serverItem, relative, live) == FileVerification.MATCH) ImmutableFiles.protect(storage.activePath(relative));
 			}
 		} catch (Exception e) {

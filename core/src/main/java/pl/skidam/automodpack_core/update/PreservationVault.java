@@ -98,7 +98,7 @@ public final class PreservationVault {
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields existing = fields.claims.stream().filter(claim -> claimId.equals(claim.claimId)).findFirst().orElse(null);
-				Path source = source(storage, pack, normalizedRoot, path);
+				Path source = storage.rootedPath(normalizedRoot, pack, path);
 				Path object = object(storage, hash);
 				if (existing != null) {
 					if (!FileIntegrity.matchesNamed(object, size, hash, cache)) repairObjectFromSource(storage, source, object, hash, size, cache);
@@ -135,20 +135,7 @@ public final class PreservationVault {
 
 	/** Preserves and then removes a conflicting local file. Retrying the same conflict is idempotent. */
 	public static Claim preserveConflict(ClientStorage storage, String contentToken, Conflict conflict) throws IOException {
-		return ClientStorageMutation.run(storage, () -> {
-			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-				Claim claim = preserve(storage, conflict.modpackId(), contentToken, Reason.LOCAL_CONFLICT, Root.GAME_DIR, conflict.sourcePath(), conflict.sourceHash(), conflict.sourceSize());
-				Path source = storage.gamePath(conflict.sourcePath());
-				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
-					validateSource(storage, conflict.modpackId(), Root.GAME_DIR, source);
-					if (!FileIntegrity.matches(source, conflict.sourceSize(), conflict.sourceHash(), cache)) throw new IOException("Conflict source changed before removal: " + source);
-					Files.delete(source);
-				}
-				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matchesNamed(object(storage, claim.objectHash()), claim.size(), claim.objectHash(), cache))
-					throw new IOException("Conflict source removal could not be verified: " + source);
-				return claim;
-			}
-		});
+		return preserveAndRemove(storage, conflict.modpackId(), contentToken, Reason.LOCAL_CONFLICT, Root.GAME_DIR, conflict.sourcePath(), conflict.sourceHash(), conflict.sourceSize());
 	}
 
 	/** Replaces the claim for a path with one for new bytes as one vault operation: a claim already matching the new bytes is returned unchanged, superseded claims are released. */
@@ -162,7 +149,7 @@ public final class PreservationVault {
 		return ClientStorageMutation.run(storage, () -> {
 			for (Claim claim : read(storage, pack).claims()) {
 				if (claim.reason() != normalizedReason || claim.sourceRoot() != normalizedRoot) continue;
-				if (!UpdatePlanner.normalize(claim.originalPath()).equals(UpdatePlanner.normalize(originalPath))) continue;
+				if (!LogicalPath.normalize(claim.originalPath()).equals(LogicalPath.normalize(originalPath))) continue;
 				if (claim.objectHash().equalsIgnoreCase(objectHash) && claim.size() == size) return claim;
 				delete(storage, pack, claim.claimId());
 			}
@@ -176,7 +163,7 @@ public final class PreservationVault {
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 				Claim claim = preserve(storage, modpackId, contentToken, reason, sourceRoot, originalPath, objectHash, size);
-				Path source = source(storage, modpackId, sourceRoot, originalPath);
+				Path source = storage.rootedPath(sourceRoot, modpackId, originalPath);
 				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
 					validateSource(storage, modpackId, sourceRoot, source);
 					if (!FileIntegrity.matches(source, size, objectHash, cache)) throw new IOException("Preservation source changed before removal: " + source);
@@ -288,7 +275,7 @@ public final class PreservationVault {
 		boolean generated = GeneratedCopyState.read(storage, modpackId, contentToken, selectionDigest).entries().stream()
 				.anyMatch(entry -> logicalPath.equals(entry.logicalPath()));
 		if (generated) throw new IOException("The active modpack still owns generated file " + logicalPath);
-		boolean projected = activeTarget.flatTarget().list != null && activeTarget.flatTarget().list.stream().anyMatch(item -> logicalPath.equals(UpdatePlanner.normalize(item.file)));
+		boolean projected = activeTarget.flatTarget().list != null && activeTarget.flatTarget().list.stream().anyMatch(item -> logicalPath.equals(LogicalPath.normalize(item.file)));
 		if (!projected) return;
 		OwnershipLedger.Entry ledgerEntry = activeTarget.document().ownershipLedger().entries().get(logicalPath);
 		if (ledgerEntry == null || ledgerEntry.currentStatus() != OwnershipLedger.Status.PRESENT) throw new IOException("Active target and ownership ledger disagree about " + logicalPath);
@@ -394,20 +381,8 @@ public final class PreservationVault {
 				+ "\npath=" + path + "\nhash=" + hash + "\nsize=" + size + "\n");
 	}
 
-	private static Path source(ClientStorage storage, String modpackId, Root root, String path) {
-		return switch (root) {
-			case GAME_DIR -> storage.gamePath(path);
-			case OVERLAY -> storage.overlayFile(modpackId, path);
-			case PROJECTION -> storage.activePath(path);
-		};
-	}
-
 	private static void validateSource(ClientStorage storage, String modpackId, Root root, Path source) throws IOException {
-		Path constrainedRoot = switch (root) {
-			case GAME_DIR -> storage.gameDirectory();
-			case OVERLAY -> storage.overlayDirectory(modpackId);
-			case PROJECTION -> storage.activeDirectory();
-		};
+		Path constrainedRoot = storage.root(root, modpackId);
 		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, source, "preservation source");
 		if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation source is not a regular file: " + source);
 	}
