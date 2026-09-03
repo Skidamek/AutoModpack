@@ -268,7 +268,7 @@ public final class GenerationStore {
 		head.policySha1 = current.policySha1();
 		head.createdAt = current.createdAt().toString();
 		head.journalHead = current.seq();
-		head.journalTruncated = false;
+		head.journalTruncated = journal.length() > JOURNAL_TAIL_LIMIT;
 		head.journal = journalTail();
 		head.ownershipLedger = current.ledger().toFields();
 		head.policy = current.manifest().toFields();
