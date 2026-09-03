@@ -102,13 +102,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		updateControlLabels();
 		List<ActionRow> actionRows = buildActionRows();
 		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
-		int buttonIndex = platformLinks().size();
 		String hash = selectedHash();
-		if (hash != null) {
-			setTooltip(actionButtons.get(buttonIndex), VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
-			buttonIndex++;
-		}
-		if (auxiliaryAction != null) actionButtons.get(buttonIndex).active = auxiliaryAction.active();
+		if (hash != null) setTooltip(actionButtons.get(platformLinks().size()), VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
+		if (auxiliaryAction != null) actionButtons.get(actionButtons.size() - 2).active = auxiliaryAction.active();
 		this.browserBottom = footerTop(actionRows) - this.font.lineHeight - 9;
 		rebuildBrowser();
 	}
@@ -120,24 +116,15 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private List<ActionRow> buildActionRows() {
 		List<ActionRow> actionRows = new ArrayList<>();
 		List<PlatformLink> platforms = platformLinks();
-		if (!platforms.isEmpty()) {
-			ActionDefinition[] platformActions = new ActionDefinition[platforms.size()];
-			for (int index = 0; index < platforms.size(); index++) {
-				PlatformLink platform = platforms.get(index);
-				platformActions[index] = optionalAction(platform.label(), button -> Util.getPlatform().openUri(platform.url()));
-			}
-			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, platformActions));
-		}
 		String hash = selectedHash();
-		if (hash != null) {
-			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-					optionalAction(VersionedText.translatable("automodpack.browser.copyHash"), button -> Minecraft.getInstance().keyboardHandler.setClipboard(hash))));
+		if (!platforms.isEmpty() || hash != null) {
+			List<ActionDefinition> fileActions = new ArrayList<>();
+			for (PlatformLink platform : platforms) fileActions.add(optionalAction(platform.label(), button -> Util.getPlatform().openUri(platform.url())));
+			if (hash != null) fileActions.add(optionalAction(VersionedText.translatable("automodpack.browser.copyHash"), button -> Minecraft.getInstance().keyboardHandler.setClipboard(hash)));
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, fileActions.toArray(ActionDefinition[]::new)));
 		}
-		if (auxiliaryAction != null) {
-			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this))));
-		}
-		actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+		if (auxiliaryAction != null) actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this)), secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+		else actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		return actionRows;
 	}
 
