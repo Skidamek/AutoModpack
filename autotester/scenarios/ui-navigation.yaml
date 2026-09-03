@@ -10,7 +10,7 @@ flow:
   - do: wait_for
     name: wait for the first-connection prompt
     timeout: 90s
-    until: { screen: UnverifiedPackConfirmScreen }
+    until: { screen: PackConfirmScreen }
   - do: click
     name: open group customization
     select: { text: Customize }
@@ -71,7 +71,7 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: PackConfirmScreen
         - element: { text: do not download, enabled: true }
   - do: click
     name: return to group customization
@@ -90,7 +90,7 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: PackConfirmScreen
         - element: { text: download, enabled: false }
   - do: click
     name: return from the second confirm
@@ -105,7 +105,7 @@ flow:
     name: verify first connection is still usable
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: PackConfirmScreen
         - element: { text: do not download, enabled: true }
   - do: click
     name: cancel first connection

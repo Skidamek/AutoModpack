@@ -88,7 +88,7 @@ class FakeBridge:
             },
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "first_connection": {
-                "screenClass": "UnverifiedPackConfirmScreen",
+                "screenClass": "PackConfirmScreen",
                 "buttons": [{"id": 3, "text": "Download", "enabled": self.acknowledged, "visible": True, "key": "automodpack.firstConnect.download"},
                             {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True},
                             {"id": 18, "text": "Customize groups", "enabled": True, "visible": True, "key": "automodpack.confirm.customize"},
@@ -100,7 +100,7 @@ class FakeBridge:
             # The strict fresh-install reconciliation: Download approved the cleanup,
             # but the jar-level review still requires its own acknowledgement.
             "strict_confirm": {
-                "screenClass": "UnverifiedPackConfirmScreen",
+                "screenClass": "PackConfirmScreen",
                 "buttons": [{"id": 5, "text": "Update", "enabled": self.acknowledged, "visible": True, "key": "automodpack.update.apply"},
                             {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
                 "textFields": [],
