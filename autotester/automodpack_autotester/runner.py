@@ -177,7 +177,7 @@ def run_case(
 
         # Client-only (pre-staged) runs never launch a server; full runs do.
         if mode != "client-only":
-            _prepare_server(ctx)
+            server_steps._prepare_server(ctx)
         if net_name != "host":
             _ensure_network(net_name, resource_labels(resource_scope))
 
