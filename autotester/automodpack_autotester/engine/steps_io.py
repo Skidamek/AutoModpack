@@ -433,17 +433,51 @@ def assert_mod_fixture(ctx, step):
 
 @verb("assert_preservation_claim")
 def assert_preservation_claim(ctx, step):
-    """Assert filtered vault claims and verify that their claimed CAS bytes are sound."""
-    manifest, matches = _claim_fields(ctx, step)
+    """Assert filtered vault claims and verify that their claimed CAS bytes are sound.
+
+    Vault mutations (delete, save-copy, restore, repair) run on the client's background executor and surface through
+    a render-thread refresh, so a one-shot read right after a UI wait can observe the pre-mutation file. The
+    expectation is therefore awaited (default 30s, override with ``timeout``); passing states return immediately,
+    so the wait only costs time when the state is actually wrong.
+    """
+    raw_timeout = step.get("timeout")
+    timeout = 30.0 if raw_timeout is None else parse_duration(raw_timeout, default=30.0)
+    if timeout <= 0:
+        error = _preservation_claim_mismatch(ctx, step)
+        if error is not None:
+            raise error
+        return
+    state: dict = {}
+
+    def _pred():
+        error = _preservation_claim_mismatch(ctx, step)
+        if error is None:
+            return True
+        state["error"] = error
+        ctx.assert_client_running()
+        return None
+
+    try:
+        await_condition(_pred, timeout, step.get("poll"), f"preservation claim assertion under {step.get('packId')}")
+    except TimeoutError as timeout_error:
+        raise state.get("error", timeout_error) from timeout_error
+
+
+def _preservation_claim_mismatch(ctx, step):
+    """Return an AssertionError describing the mismatch, or None when the expectation holds."""
+    try:
+        manifest, matches = _claim_fields(ctx, step)
+    except AssertionError as error:
+        return error
     expected_present = step.get("present", True)
     expected_count = step.get("count")
     if expected_count is not None:
         if len(matches) != expected_count:
-            raise AssertionError(f"matching preservation claim count under {manifest} was {len(matches)}, expected {expected_count}")
+            return AssertionError(f"matching preservation claim count under {manifest} was {len(matches)}, expected {expected_count}")
     elif bool(matches) != expected_present:
-        raise AssertionError(f"matching preservation claim presence under {manifest} was {bool(matches)}, expected {expected_present}")
+        return AssertionError(f"matching preservation claim presence under {manifest} was {bool(matches)}, expected {expected_present}")
     if not expected_present or not matches:
-        return
+        return None
     expected_valid = step.get("objectValid", True)
     for claim in matches:
         object_hash = str(claim.get("objectHash", ""))
@@ -454,7 +488,8 @@ def assert_preservation_claim(ctx, step):
             size = -1
         valid = re.fullmatch(r"[0-9a-f]{40}", object_hash) is not None and payload.is_file() and payload.stat().st_size == size and hashlib.sha1(payload.read_bytes()).hexdigest() == object_hash
         if valid != expected_valid:
-            raise AssertionError(f"preservation object {object_hash!r} validity was {valid}, expected {expected_valid}")
+            return AssertionError(f"preservation object {object_hash!r} validity was {valid}, expected {expected_valid}")
+    return None
 
 
 @verb("assert_generation")

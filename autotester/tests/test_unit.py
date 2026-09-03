@@ -678,3 +678,69 @@ def test_fetch_serializes_concurrent_downloads(tmp_path, monkeypatch):
     assert paths[0] == paths[1]
     assert paths[0].read_bytes() == payload
     assert calls == [("https://cdn/fixture.jar", 12)]
+
+
+# ── assert_preservation_claim awaits durable vault state ───────────────────
+# Vault mutations run on the client's background executor, so a one-shot read right
+# after a UI wait can observe the pre-mutation file (1.21.1-fabric MAGIC, run
+# 33695849021). The verb awaits the expectation instead of snapshotting it once.
+
+
+def _write_claims(ctx, claims):
+    import json
+
+    manifest = ctx.game_dir / "automodpack/client/preservation/packaaa/claims.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps({"claims": claims}), encoding="utf-8")
+
+
+def test_preservation_claim_assert_passes_immediately_when_already_met(make_ctx):
+    from automodpack_autotester.engine.steps_io import assert_preservation_claim
+
+    ctx = make_ctx()
+    _write_claims(ctx, [])
+    start = time.monotonic()
+    assert_preservation_claim(ctx, {"packId": "packaaa", "originalPath": "mods/gone.jar", "present": False})
+    assert time.monotonic() - start < 5
+
+
+def test_preservation_claim_assert_awaits_a_delayed_release(make_ctx):
+    from automodpack_autotester.engine.steps_io import assert_preservation_claim
+
+    ctx = make_ctx()
+    _write_claims(ctx, [{"originalPath": "mods/gone.jar", "objectHash": "a" * 40, "size": 1}])
+
+    def release_later():
+        time.sleep(0.3)
+        _write_claims(ctx, [])
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(release_later)
+        assert_preservation_claim(
+            ctx,
+            {"packId": "packaaa", "originalPath": "mods/gone.jar", "present": False, "timeout": "10s", "poll": "10ms"},
+        )
+        future.result()
+
+
+def test_preservation_claim_assert_one_shot_reports_immediately(make_ctx):
+    from automodpack_autotester.engine.steps_io import assert_preservation_claim
+
+    ctx = make_ctx()
+    _write_claims(ctx, [{"originalPath": "mods/gone.jar", "objectHash": "a" * 40, "size": 1}])
+    start = time.monotonic()
+    with pytest.raises(AssertionError, match="was True, expected False"):
+        assert_preservation_claim(ctx, {"packId": "packaaa", "originalPath": "mods/gone.jar", "present": False, "timeout": "0s"})
+    assert time.monotonic() - start < 5
+
+
+def test_preservation_claim_assert_times_out_with_the_last_mismatch(make_ctx):
+    from automodpack_autotester.engine.steps_io import assert_preservation_claim
+
+    ctx = make_ctx()
+    _write_claims(ctx, [{"originalPath": "mods/gone.jar", "objectHash": "a" * 40, "size": 1}])
+    with pytest.raises(AssertionError, match="was True, expected False"):
+        assert_preservation_claim(
+            ctx,
+            {"packId": "packaaa", "originalPath": "mods/gone.jar", "present": False, "timeout": "0.2s", "poll": "10ms"},
+        )

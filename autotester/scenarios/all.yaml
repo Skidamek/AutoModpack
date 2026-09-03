@@ -1021,6 +1021,14 @@ flow:
   - do: assert_client_object
     name: verify update restored the unavailable CAS object
     path: config/amp-autotest-delta.txt
+  # The repair update always ends on the restart screen (mid-session content changes cannot hot-load into the
+  # running game), but the file above can already hold its final content while the apply is still in flight.
+  # Disconnecting first strands the client on the restart screen that lands mid-navigation, so synchronize on
+  # the apply completing before resetting to title.
+  - do: wait_for
+    name: show the post-repair restart screen before resetting to title
+    timeout: 120s
+    until: { screen: RestartScreen }
   - do: disconnect
     name: reset to title before the post-repair verification cycle
   - use: open_multiplayer
@@ -1195,11 +1203,14 @@ flow:
   - do: assert_preload_acquired
     name: verify the fresh client reacquired its selected groups into empty CAS
     groups: [main, visual]
+  # Match the container stream, not the log file: Minecraft rotates logs/latest.log on every launch and on every
+  # midnight rollover, archiving the marker away while the wait is still polling. The container output is
+  # append-only for this fresh client's lifetime, so it cannot lose the line.
   - do: wait_for
     name: verify first install waits for in-game review
     until:
       log:
-        file: logs/latest.log
+        container: client
         matches: 'Launch apply is waiting for first-install review'
   - do: assert_mod_fixture
     name: verify preload left the direct mod untouched before review
