@@ -11,7 +11,8 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from automodpack_autotester import cli, runner
+from automodpack_autotester import cli, client_steps, runner, server_steps, staging_steps
+from automodpack_autotester.config import load_macros
 from automodpack_autotester.engine.steps_io import wait_file, wait_file_content, wait_generation
 from automodpack_autotester.engine.util import ClientExited
 
@@ -128,7 +129,7 @@ def test_interrupted_run_cleans_only_its_docker_resources(monkeypatch):
 
 
 def test_server_history_compaction_uses_registered_boundary_command():
-    source = (Path(__file__).parents[1] / "automodpack_autotester/runner.py").read_text(
+    source = (Path(__file__).parents[1] / "automodpack_autotester/server_steps.py").read_text(
         encoding="utf-8"
     )
 
@@ -188,11 +189,11 @@ def test_publish_server_generation_uses_durable_generation_receipt(make_ctx, mon
             )
             return _ExecResult()
 
-    monkeypatch.setattr(runner, "_write_server_generation", lambda *_: None)
-    monkeypatch.setattr(runner, "_server_generation", lambda *_: {"patchNotes": notes})
-    monkeypatch.setattr(runner, "_container", lambda _name: Container())
+    monkeypatch.setattr(server_steps, "_write_server_generation", lambda *_: None)
+    monkeypatch.setattr(server_steps, "_server_generation", lambda *_: {"patchNotes": notes})
+    monkeypatch.setattr(server_steps, "_container", lambda _name: Container())
 
-    runner._v_publish_server_generation(ctx, {"generation": 1})
+    server_steps._v_publish_server_generation(ctx, {"generation": 1})
 
     assert ctx.vars["published_server_generation"] == 1
     assert ctx.vars["published_server_generation_id"] == token
@@ -210,13 +211,13 @@ def test_completed_compaction_rewrites_the_journal_under_a_head_snapshot():
     entries_after = [boundary_snapshot, survivor]
     projection = {"contentToken": rollback_token, "journalHead": 2, "journal": entries_after}
 
-    assert runner._completed_compaction(entries_before, entries_after, projection)
+    assert server_steps._completed_compaction(entries_before, entries_after, projection)
 
-    assert not runner._completed_compaction(entries_before, entries_before, projection)
+    assert not server_steps._completed_compaction(entries_before, entries_before, projection)
     unrenumbered = [entries_after[0], _journal_entry(3, rollback_token, "rollback", restore_of=1)]
-    assert not runner._completed_compaction(entries_before, unrenumbered, projection)
+    assert not server_steps._completed_compaction(entries_before, unrenumbered, projection)
     drift = dict(projection, contentToken="d" * 40)
-    assert not runner._completed_compaction(entries_before, entries_after, drift)
+    assert not server_steps._completed_compaction(entries_before, entries_after, drift)
 
 
 def test_rollback_server_generation_appends_a_durable_restore_entry(make_ctx, monkeypatch):
@@ -255,9 +256,9 @@ def test_rollback_server_generation_appends_a_durable_restore_entry(make_ctx, mo
             return _ExecResult()
 
     container = Container()
-    monkeypatch.setattr(runner, "_container", lambda _name: container)
+    monkeypatch.setattr(server_steps, "_container", lambda _name: container)
 
-    runner._v_rollback_server_generation(ctx, {})
+    server_steps._v_rollback_server_generation(ctx, {})
 
     assert container.commands[-1] == [
         "rcon-cli", "automodpack", "generate", "revert", str(target_seq), "confirm", "notes", notes
@@ -290,9 +291,9 @@ def test_collect_server_objects_requires_real_transition_receipt(make_ctx, monke
             raise AssertionError(command)
 
     container = Container()
-    monkeypatch.setattr(runner, "_container", lambda _name: container)
+    monkeypatch.setattr(server_steps, "_container", lambda _name: container)
 
-    runner._v_collect_server_objects(ctx, {})
+    server_steps._v_collect_server_objects(ctx, {})
 
     assert container.commands[-1] == ["test", "-e", "/data/automodpack/data/objects/d8/e1759b948add3eb7d6cc6e6532a31f71292ecc"]
     assert ctx.vars["server_object_collection"]["deletedCount"] == 1
@@ -304,7 +305,7 @@ def test_seed_client_options_preserves_existing_settings(tmp_path):
         "narrator:0\nfoo:bar\nskipMultiplayerWarning:false\n", encoding="utf-8"
     )
 
-    runner._seed_client_options(tmp_path)
+    client_steps._seed_client_options(tmp_path)
 
     assert (
         options_path.read_text(encoding="utf-8")
@@ -466,15 +467,15 @@ def test_wait_generation_requires_expected_patch_notes(make_ctx):
 def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeypatch):
     ctx = make_ctx()
     ctx.artifact.write_bytes(b"autotest-artifact")
-    monkeypatch.setattr(runner, "_run_container", lambda **_kwargs: None)
-    monkeypatch.setattr(runner, "_assert_running", lambda _name: None)
-    monkeypatch.setattr(runner, "_jitter_sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(client_steps, "_run_container", lambda **_kwargs: None)
+    monkeypatch.setattr(client_steps, "_assert_running", lambda _name: None)
+    monkeypatch.setattr(client_steps, "_jitter_sleep", lambda *_args, **_kwargs: None)
 
-    runner._launch_client(ctx)
+    client_steps._launch_client(ctx)
     data_root = ctx.game_dir / "automodpack/client/data"
     assert data_root.is_dir()
 
-    runner._v_stage_modpack(
+    staging_steps._v_stage_modpack(
         ctx,
         {
             "recordOnly": True,
@@ -490,7 +491,7 @@ def test_client_data_root_stays_pinned_across_relaunch_staging(make_ctx, monkeyp
 def test_client_start_timeout_is_not_a_process_lifetime(make_ctx):
     ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 600, "clientRunSeconds": 300}})
 
-    assert runner._client_start_timeout(ctx, {}) == 600
+    assert client_steps._client_start_timeout(ctx, {}) == 600
 
 
 def test_client_launcher_does_not_kill_a_healthy_scenario_at_the_startup_deadline():
@@ -507,12 +508,12 @@ def test_client_launcher_does_not_kill_a_healthy_scenario_at_the_startup_deadlin
 
 def test_client_container_caps_java_heap(make_ctx, monkeypatch):
     seen = {}
-    monkeypatch.setattr(runner, "_client_profile_is_prepared", lambda *_args: True)
-    monkeypatch.setattr(runner, "_run_container", lambda **kwargs: seen.update(kwargs))
+    monkeypatch.setattr(client_steps, "_client_profile_is_prepared", lambda *_args: True)
+    monkeypatch.setattr(client_steps, "_run_container", lambda **kwargs: seen.update(kwargs))
     ctx = make_ctx()
     ctx.out_dir.mkdir(parents=True, exist_ok=True)
 
-    runner._start_client_container(ctx, "cli")
+    client_steps._start_client_container(ctx, "cli")
 
     assert seen["env"]["JAVA_TOOL_OPTIONS"] == "-Xmx2G"
 
@@ -552,7 +553,7 @@ def test_client_launcher_uses_canonical_targets_when_the_profile_is_prepared():
 
 
 def test_bootstrap_overlaps_profile_preparation_with_server_startup():
-    steps = runner.load_macros()["boot_with_bootstrap"]
+    steps = load_macros()["boot_with_bootstrap"]
     actions = [step.get("do") or step.get("use") for step in steps]
 
     assert actions.index("launch_server") < actions.index("prepare_client") < actions.index("wait_server")
@@ -563,13 +564,13 @@ def test_client_launch_waits_for_successful_profile_preparation(make_ctx, monkey
     ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 600}})
     ctx.vars["client_preparation"] = "client-prepare"
     calls = []
-    monkeypatch.setattr(runner, "_wait_exited", lambda name, timeout: calls.append(("wait", name, timeout)))
-    monkeypatch.setattr(runner, "_inspect_container", lambda _name: {"State": {"ExitCode": 0}})
-    monkeypatch.setattr(runner, "_record_prepared_client_profile", lambda _ctx: calls.append(("receipt",)))
-    monkeypatch.setattr(runner, "_client_profile_is_prepared", lambda *_args: True)
-    monkeypatch.setattr(runner, "_remove_container", lambda name: calls.append(("remove", name)))
+    monkeypatch.setattr(client_steps, "_wait_exited", lambda name, timeout: calls.append(("wait", name, timeout)))
+    monkeypatch.setattr(client_steps, "_inspect_container", lambda _name: {"State": {"ExitCode": 0}})
+    monkeypatch.setattr(client_steps, "_record_prepared_client_profile", lambda _ctx: calls.append(("receipt",)))
+    monkeypatch.setattr(client_steps, "_client_profile_is_prepared", lambda *_args: True)
+    monkeypatch.setattr(client_steps, "_remove_container", lambda name: calls.append(("remove", name)))
 
-    runner._await_client_preparation(ctx)
+    client_steps._await_client_preparation(ctx)
 
     assert calls[0][0] == "wait" and calls[0][1] == "client-prepare"
     assert calls[0][2] == pytest.approx(600.0, abs=5.0)
@@ -578,7 +579,7 @@ def test_client_launch_waits_for_successful_profile_preparation(make_ctx, monkey
 
 def test_wait_bridge_retries_only_transient_dependency_download(make_ctx, monkeypatch):
     ctx = make_ctx()
-    bridge_state = runner._bridge_state(ctx)
+    bridge_state = client_steps._bridge_state(ctx)
     bridge_state.parent.mkdir(parents=True, exist_ok=True)
     bridge_state.write_text(json.dumps({"status": "ready"}), encoding="utf-8")
     ctx.bridge = types.SimpleNamespace(request=lambda *_args, **_kwargs: None)
@@ -590,33 +591,33 @@ def test_wait_bridge_retries_only_transient_dependency_download(make_ctx, monkey
         if failure:
             raise failure
 
-    monkeypatch.setattr(runner, "_assert_running", assert_running)
-    monkeypatch.setattr(runner, "_container_logs", lambda _name: "[LibraryDownloader]: missing dependency\nHTTP connect timed out")
-    monkeypatch.setattr(runner, "_remove_container", lambda name: launches.append(("remove", name)))
-    monkeypatch.setattr(runner, "_launch_client", lambda launched_ctx: launches.append(("launch", launched_ctx.target.id)))
-    monkeypatch.setattr(runner, "_record_prepared_client_profile", lambda _ctx: None)
-    runner._v_wait_bridge(ctx, {"timeout": "1s"})
+    monkeypatch.setattr(client_steps, "_assert_running", assert_running)
+    monkeypatch.setattr(client_steps, "_container_logs", lambda _name: "[LibraryDownloader]: missing dependency\nHTTP connect timed out")
+    monkeypatch.setattr(client_steps, "_remove_container", lambda name: launches.append(("remove", name)))
+    monkeypatch.setattr(client_steps, "_launch_client", lambda launched_ctx: launches.append(("launch", launched_ctx.target.id)))
+    monkeypatch.setattr(client_steps, "_record_prepared_client_profile", lambda _ctx: None)
+    client_steps._v_wait_bridge(ctx, {"timeout": "1s"})
 
     assert launches == [("remove", ctx.cli_name), ("launch", ctx.target.id), ("remove", ctx.cli_name), ("launch", ctx.target.id)]
-    assert not runner._transient_dependency_download_failure("MixinApplyError\nHTTP connect timed out")
+    assert not client_steps._transient_dependency_download_failure("MixinApplyError\nHTTP connect timed out")
 
 
 def test_connect_screen_classifier_does_not_loop_on_first_connection():
-    assert runner._is_connecting_screen(
+    assert client_steps._is_connecting_screen(
         "net.minecraft.client.gui.screens.ConnectScreen"
     )
-    assert runner._is_connecting_screen("net.minecraft.client.gui.screens.class_412")
-    assert not runner._is_connecting_screen(
+    assert client_steps._is_connecting_screen("net.minecraft.client.gui.screens.class_412")
+    assert not client_steps._is_connecting_screen(
         "pl.skidam.automodpack.client.ui.screen.UnverifiedPackConfirmScreen"
     )
 
 
 def test_connection_failure_screen_is_retried_instead_of_reported_as_connected():
-    assert runner._is_connection_failure_screen("net.minecraft.class_419")
-    assert runner._is_connection_failure_screen(
+    assert client_steps._is_connection_failure_screen("net.minecraft.class_419")
+    assert client_steps._is_connection_failure_screen(
         "net.minecraft.client.gui.screens.DisconnectedScreen"
     )
-    assert not runner._is_connection_failure_screen(
+    assert not client_steps._is_connection_failure_screen(
         "pl.skidam.automodpack.client.ui.screen.UnverifiedPackConfirmScreen"
     )
 
@@ -651,10 +652,10 @@ def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     )
     projection_path.parent.mkdir(parents=True, exist_ok=True)
     projection_path.write_text(json.dumps(projection), encoding="utf-8")
-    objects = runner._ensure_client_data_root(ctx.game_dir) / "objects"
+    objects = client_steps._ensure_client_data_root(ctx.game_dir) / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     for payload in payloads.values():
-        object_path = runner.cas_object(objects, hashlib.sha1(payload).hexdigest())
+        object_path = client_steps.cas_object(objects, hashlib.sha1(payload).hexdigest())
         object_path.parent.mkdir(parents=True, exist_ok=True)
         object_path.write_bytes(payload)
     ctx.logs_provider = lambda _which, _tail=None: ""
@@ -662,7 +663,7 @@ def test_assert_preload_acquired_checks_complete_projection(make_ctx):
     client_log.parent.mkdir(parents=True, exist_ok=True)
     client_log.write_text("Launch apply acquired 2 complete modpack objects in 1ms", encoding="utf-8")
 
-    runner._v_assert_preload_acquired(ctx, {})
+    client_steps._v_assert_preload_acquired(ctx, {})
 
     assert ctx.vars["preloaded_object_count"] == 2
 
@@ -671,26 +672,26 @@ def test_wait_exit_or_alive_tolerates_still_running(monkeypatch):
     def never_exits(name, timeout):
         raise TimeoutError("still running")
 
-    monkeypatch.setattr(runner, "_wait_exited", never_exits)
+    monkeypatch.setattr(client_steps, "_wait_exited", never_exits)
     ctx = types.SimpleNamespace(cli_name="c")
     with pytest.raises(TimeoutError):
-        runner._v_wait_client_exit(ctx, {})  # default: must exit
-    runner._v_wait_client_exit(ctx, {"or_alive": True})  # tolerated
+        client_steps._v_wait_client_exit(ctx, {})  # default: must exit
+    client_steps._v_wait_client_exit(ctx, {"or_alive": True})  # tolerated
 
 
 def test_wait_exit_expect_clean_and_crash(monkeypatch):
-    monkeypatch.setattr(runner, "_wait_exited", lambda name, timeout: None)
+    monkeypatch.setattr(client_steps, "_wait_exited", lambda name, timeout: None)
     ctx = types.SimpleNamespace(cli_name="c")
 
-    monkeypatch.setattr(runner, "_exit_code", lambda name: 0)
-    runner._v_wait_client_exit(ctx, {"expect": "clean"})
+    monkeypatch.setattr(client_steps, "_exit_code", lambda name: 0)
+    client_steps._v_wait_client_exit(ctx, {"expect": "clean"})
     with pytest.raises(AssertionError):
-        runner._v_wait_client_exit(ctx, {"expect": "crash"})
+        client_steps._v_wait_client_exit(ctx, {"expect": "crash"})
 
-    monkeypatch.setattr(runner, "_exit_code", lambda name: 1)
-    runner._v_wait_client_exit(ctx, {"expect": "crash"})
+    monkeypatch.setattr(client_steps, "_exit_code", lambda name: 1)
+    client_steps._v_wait_client_exit(ctx, {"expect": "crash"})
     with pytest.raises(AssertionError):
-        runner._v_wait_client_exit(ctx, {"expect": "clean"})
+        client_steps._v_wait_client_exit(ctx, {"expect": "clean"})
 
 
 # ── verb discovery ──────────────────────────────────────────────────────────
@@ -708,22 +709,22 @@ def test_canonical_timestamp_uses_java_fraction_groups():
     from datetime import datetime, timezone
 
     noon = datetime(2026, 9, 2, 23, 45, 32, tzinfo=timezone.utc)
-    assert runner._canonical_timestamp(noon) == "2026-09-02T23:45:32Z"
-    assert runner._canonical_timestamp(noon.replace(microsecond=800000)) == "2026-09-02T23:45:32.800Z"
-    assert runner._canonical_timestamp(noon.replace(microsecond=123000)) == "2026-09-02T23:45:32.123Z"
-    assert runner._canonical_timestamp(noon.replace(microsecond=123456)) == "2026-09-02T23:45:32.123456Z"
-    assert runner._canonical_timestamp(noon.replace(microsecond=477370)) == "2026-09-02T23:45:32.477370Z"
+    assert staging_steps._canonical_timestamp(noon) == "2026-09-02T23:45:32Z"
+    assert staging_steps._canonical_timestamp(noon.replace(microsecond=800000)) == "2026-09-02T23:45:32.800Z"
+    assert staging_steps._canonical_timestamp(noon.replace(microsecond=123000)) == "2026-09-02T23:45:32.123Z"
+    assert staging_steps._canonical_timestamp(noon.replace(microsecond=123456)) == "2026-09-02T23:45:32.123456Z"
+    assert staging_steps._canonical_timestamp(noon.replace(microsecond=477370)) == "2026-09-02T23:45:32.477370Z"
 
 
 def test_non_canonical_staged_timestamp_is_rejected():
-    runner._check_canonical_timestamp("2026-09-02T23:45:32Z")
-    runner._check_canonical_timestamp("2026-09-02T23:45:32.800Z")
-    runner._check_canonical_timestamp("2026-09-02T23:45:32.123Z")
-    runner._check_canonical_timestamp("2026-09-02T23:45:32.123456Z")
+    staging_steps._check_canonical_timestamp("2026-09-02T23:45:32Z")
+    staging_steps._check_canonical_timestamp("2026-09-02T23:45:32.800Z")
+    staging_steps._check_canonical_timestamp("2026-09-02T23:45:32.123Z")
+    staging_steps._check_canonical_timestamp("2026-09-02T23:45:32.123456Z")
     for bad in ("2026-09-02T23:45:32.800000Z", "2026-09-02T23:45:32.000Z", "2026-09-02T23:45:32.8Z",
                 "2026-09-02T23:45:32.12Z", "2026-09-02T23:45:32.12345Z", "2026-09-02T23:45:32.47737Z"):
         with pytest.raises(ValueError, match="not canonical"):
-            runner._check_canonical_timestamp(bad)
+            staging_steps._check_canonical_timestamp(bad)
 
 
 def test_staged_manifest_receipt_rejects_a_non_canonical_timestamp(tmp_path):
@@ -741,7 +742,7 @@ def test_staged_manifest_receipt_rejects_a_non_canonical_timestamp(tmp_path):
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(ValueError, match="not canonical"):
-        runner._verify_staged_manifest(path, "")
+        staging_steps._verify_staged_manifest(path, "")
 
 
 # ── poisoned HMC cache recovery ─────────────────────────────────────────────
@@ -758,25 +759,25 @@ def test_missing_cache_jars_parsed_from_the_crash_message():
     logs = ("Exception in thread main java.io.UncheckedIOException: java.io.IOException: "
             "Invalid paths argument, contained no existing paths: "
             "[/work/hmc-cache/libraries/a/b.jar, /work/hmc-cache/libraries/c/d.jar]")
-    assert runner._missing_cache_jar_paths(logs) == ["/work/hmc-cache/libraries/a/b.jar", "/work/hmc-cache/libraries/c/d.jar"]
-    assert runner._missing_cache_jar_paths("unrelated crash") is None
-    assert runner._missing_cache_jar_paths("contained no existing paths: oops") == []
+    assert client_steps._missing_cache_jar_paths(logs) == ["/work/hmc-cache/libraries/a/b.jar", "/work/hmc-cache/libraries/c/d.jar"]
+    assert client_steps._missing_cache_jar_paths("unrelated crash") is None
+    assert client_steps._missing_cache_jar_paths("contained no existing paths: oops") == []
 
 
 def test_preparation_retries_a_failed_install_inside_the_budget(make_ctx, monkeypatch):
     ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 600}})
     ctx.vars["client_preparation"] = "client-prepare"
-    monkeypatch.setattr(runner, "_wait_exited", lambda name, timeout: None)
+    monkeypatch.setattr(client_steps, "_wait_exited", lambda name, timeout: None)
     exits = iter([1, 0])
-    monkeypatch.setattr(runner, "_inspect_container", lambda _name: {"State": {"ExitCode": next(exits)}})
-    monkeypatch.setattr(runner, "_container_logs", lambda _name: "boom")
-    monkeypatch.setattr(runner, "_record_prepared_client_profile", lambda _ctx: None)
-    monkeypatch.setattr(runner, "_client_profile_is_prepared", lambda *_args: True)
-    monkeypatch.setattr(runner, "_remove_container", lambda _name: None)
+    monkeypatch.setattr(client_steps, "_inspect_container", lambda _name: {"State": {"ExitCode": next(exits)}})
+    monkeypatch.setattr(client_steps, "_container_logs", lambda _name: "boom")
+    monkeypatch.setattr(client_steps, "_record_prepared_client_profile", lambda _ctx: None)
+    monkeypatch.setattr(client_steps, "_client_profile_is_prepared", lambda *_args: True)
+    monkeypatch.setattr(client_steps, "_remove_container", lambda _name: None)
     relaunches = []
-    monkeypatch.setattr(runner, "_launch_preparation_container", lambda _ctx: relaunches.append(1) or "client-prepare")
+    monkeypatch.setattr(client_steps, "_launch_preparation_container", lambda _ctx: relaunches.append(1) or "client-prepare")
 
-    runner._await_client_preparation(ctx)
+    client_steps._await_client_preparation(ctx)
 
     assert relaunches == [1]
 
@@ -785,16 +786,16 @@ def test_cache_recovery_reinstalls_once_and_proves_the_named_jars(make_ctx, monk
     ctx = make_ctx()
     hmc_cache = tmp_path / "hmc"
     (hmc_cache / "libraries/a").mkdir(parents=True)
-    monkeypatch.setattr(runner, "_client_cache_paths", lambda _ctx: (hmc_cache, tmp_path / "versions"))
-    monkeypatch.setattr(runner, "_client_profile_receipt", lambda _root: hmc_cache / "prepared-profile.json")
-    monkeypatch.setattr(runner, "_launch_preparation_container", lambda _ctx: "prep")
+    monkeypatch.setattr(client_steps, "_client_cache_paths", lambda _ctx: (hmc_cache, tmp_path / "versions"))
+    monkeypatch.setattr(client_steps, "_client_profile_receipt", lambda _root: hmc_cache / "prepared-profile.json")
+    monkeypatch.setattr(client_steps, "_launch_preparation_container", lambda _ctx: "prep")
 
     def fake_await(_ctx):
         (hmc_cache / "libraries/a/b.jar").write_bytes(b"")
         (hmc_cache / "prepared-profile.json").write_text("{}")
 
-    monkeypatch.setattr(runner, "_await_client_preparation", fake_await)
-    runner._recover_client_cache(ctx, ["/work/hmc-cache/libraries/a/b.jar"])
+    monkeypatch.setattr(client_steps, "_await_client_preparation", fake_await)
+    client_steps._recover_client_cache(ctx, ["/work/hmc-cache/libraries/a/b.jar"])
 
     assert ctx.vars["client_preparation"] == "prep"
     assert (hmc_cache / "prepared-profile.json").is_file()
@@ -804,35 +805,35 @@ def test_cache_recovery_fails_fast_when_jars_stay_missing(make_ctx, monkeypatch,
     ctx = make_ctx()
     hmc_cache = tmp_path / "hmc"
     hmc_cache.mkdir()
-    monkeypatch.setattr(runner, "_client_cache_paths", lambda _ctx: (hmc_cache, tmp_path / "versions"))
-    monkeypatch.setattr(runner, "_client_profile_receipt", lambda _root: hmc_cache / "prepared-profile.json")
-    monkeypatch.setattr(runner, "_launch_preparation_container", lambda _ctx: "prep")
-    monkeypatch.setattr(runner, "_await_client_preparation", lambda _ctx: None)
+    monkeypatch.setattr(client_steps, "_client_cache_paths", lambda _ctx: (hmc_cache, tmp_path / "versions"))
+    monkeypatch.setattr(client_steps, "_client_profile_receipt", lambda _root: hmc_cache / "prepared-profile.json")
+    monkeypatch.setattr(client_steps, "_launch_preparation_container", lambda _ctx: "prep")
+    monkeypatch.setattr(client_steps, "_await_client_preparation", lambda _ctx: None)
 
     with pytest.raises(RuntimeError, match="did not produce required jars"):
-        runner._recover_client_cache(ctx, ["/work/hmc-cache/libraries/a/b.jar"])
+        client_steps._recover_client_cache(ctx, ["/work/hmc-cache/libraries/a/b.jar"])
 
 
 def test_preparation_gives_up_after_repeated_failures(make_ctx, monkeypatch):
     ctx = make_ctx(settings={"timeouts": {"clientStartSeconds": 600}})
     ctx.vars["client_preparation"] = "client-prepare"
-    monkeypatch.setattr(runner, "_wait_exited", lambda name, timeout: None)
-    monkeypatch.setattr(runner, "_inspect_container", lambda _name: {"State": {"ExitCode": 1}})
-    monkeypatch.setattr(runner, "_container_logs", lambda _name: "boom")
-    monkeypatch.setattr(runner, "_record_prepared_client_profile", lambda _ctx: None)
-    monkeypatch.setattr(runner, "_remove_container", lambda _name: None)
+    monkeypatch.setattr(client_steps, "_wait_exited", lambda name, timeout: None)
+    monkeypatch.setattr(client_steps, "_inspect_container", lambda _name: {"State": {"ExitCode": 1}})
+    monkeypatch.setattr(client_steps, "_container_logs", lambda _name: "boom")
+    monkeypatch.setattr(client_steps, "_record_prepared_client_profile", lambda _ctx: None)
+    monkeypatch.setattr(client_steps, "_remove_container", lambda _name: None)
     launches = []
-    monkeypatch.setattr(runner, "_launch_preparation_container", lambda _ctx: launches.append(1) or "client-prepare")
+    monkeypatch.setattr(client_steps, "_launch_preparation_container", lambda _ctx: launches.append(1) or "client-prepare")
 
     with pytest.raises(RuntimeError, match="after 3 attempts"):
-        runner._await_client_preparation(ctx)
+        client_steps._await_client_preparation(ctx)
 
     assert launches == [1, 1]
 
 
 def test_wait_bridge_recovers_a_poisoned_cache_once(make_ctx, monkeypatch):
     ctx = make_ctx()
-    bridge_state = runner._bridge_state(ctx)
+    bridge_state = client_steps._bridge_state(ctx)
     bridge_state.parent.mkdir(parents=True, exist_ok=True)
     bridge_state.write_text(json.dumps({"status": "ready"}), encoding="utf-8")
     ctx.bridge = types.SimpleNamespace(request=lambda *_args, **_kwargs: None)
@@ -846,14 +847,14 @@ def test_wait_bridge_recovers_a_poisoned_cache_once(make_ctx, monkeypatch):
             raise RuntimeError("exited")
 
     recovered = []
-    monkeypatch.setattr(runner, "_assert_running", assert_running)
-    monkeypatch.setattr(runner, "_container_logs", lambda _name: crash)
-    monkeypatch.setattr(runner, "_recover_client_cache", lambda _ctx, missing: recovered.append(missing))
-    monkeypatch.setattr(runner, "_remove_container", lambda _name: None)
-    monkeypatch.setattr(runner, "_launch_client", lambda _ctx: None)
-    monkeypatch.setattr(runner, "_record_prepared_client_profile", lambda _ctx: None)
+    monkeypatch.setattr(client_steps, "_assert_running", assert_running)
+    monkeypatch.setattr(client_steps, "_container_logs", lambda _name: crash)
+    monkeypatch.setattr(client_steps, "_recover_client_cache", lambda _ctx, missing: recovered.append(missing))
+    monkeypatch.setattr(client_steps, "_remove_container", lambda _name: None)
+    monkeypatch.setattr(client_steps, "_launch_client", lambda _ctx: None)
+    monkeypatch.setattr(client_steps, "_record_prepared_client_profile", lambda _ctx: None)
 
-    runner._v_wait_bridge(ctx, {"timeout": "30s"})
+    client_steps._v_wait_bridge(ctx, {"timeout": "30s"})
 
     assert recovered == [["/work/hmc-cache/libraries/a/b.jar"]]
     assert ctx.vars["client_cache_recovered"] is True
@@ -864,8 +865,8 @@ def test_wait_bridge_does_not_recover_the_same_crash_twice(make_ctx, monkeypatch
     ctx.vars["client_cache_recovered"] = True
     ctx.bridge = types.SimpleNamespace(request=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("no bridge")))
     crash = "Invalid paths argument, contained no existing paths: [/work/hmc-cache/libraries/a/b.jar]"
-    monkeypatch.setattr(runner, "_assert_running", lambda _name: (_ for _ in ()).throw(RuntimeError("exited")))
-    monkeypatch.setattr(runner, "_container_logs", lambda _name: crash)
+    monkeypatch.setattr(client_steps, "_assert_running", lambda _name: (_ for _ in ()).throw(RuntimeError("exited")))
+    monkeypatch.setattr(client_steps, "_container_logs", lambda _name: crash)
 
     with pytest.raises(TimeoutError, match="Client exited before bridge"):
-        runner._v_wait_bridge(ctx, {"timeout": "1s"})
+        client_steps._v_wait_bridge(ctx, {"timeout": "1s"})

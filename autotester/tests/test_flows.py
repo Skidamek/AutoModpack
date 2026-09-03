@@ -23,10 +23,10 @@ from automodpack_autotester.config import (
 )
 from automodpack_autotester.engine import run_flow, steps_io, steps_ui
 from automodpack_autotester.engine.registry import VERBS
-from automodpack_autotester import runner
+from automodpack_autotester import client_steps
 from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
 
-from .conftest import FakeBridge
+from .fake_bridge import FakeBridge
 
 # ── stub the lifecycle verbs the runner normally provides (need Docker) ────
 
@@ -56,7 +56,7 @@ def _launch_client(ctx, step):
         objects = ctx.game_dir / "automodpack" / "client" / "data" / "objects"
         objects.mkdir(parents=True, exist_ok=True)
         for payload in (b"bootstrap-a\n", b"bootstrap-b\n"):
-            object_path = runner.cas_object(objects, hashlib.sha1(payload).hexdigest())
+            object_path = client_steps.cas_object(objects, hashlib.sha1(payload).hexdigest())
             object_path.parent.mkdir(parents=True, exist_ok=True)
             object_path.write_bytes(payload)
         ctx.vars["fake_preload_logged"] = True
