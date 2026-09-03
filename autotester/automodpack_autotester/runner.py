@@ -510,68 +510,13 @@ def _client_profile_receipt(hmc_cache_root: Path) -> Path:
     return hmc_cache_root / "prepared-profile.json"
 
 
-def _profile_library_paths(profile_json: Path) -> list[str] | None:
-    """Return every launch-critical library file the HMC profile declares, or None when unknown.
-
-    The installer can report success while leaving installer-produced jars (old Forge's ``*-srg``/``*-extra``
-    outputs) unwritten; launching from such a profile crashes before the test bridge comes up, and the poisoned
-    per-target cache then fails every later shard the same way. Only ``downloads.artifact`` entries are required:
-    natives self-heal through the launch-time library downloader, and entries without a path cannot be checked.
-    OS rules are honored for linux so a platform-specific entry can never force an endless reinstall.
-    """
-    try:
-        profile = json.loads(profile_json.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    libraries = profile.get("libraries")
-    if not isinstance(libraries, list) or not libraries:
-        return None
-    required = []
-    for library in libraries:
-        if not isinstance(library, dict) or not _library_allowed_on_linux(library.get("rules")):
-            continue
-        downloads = library.get("downloads")
-        artifact = downloads.get("artifact") if isinstance(downloads, dict) else None
-        path = artifact.get("path") if isinstance(artifact, dict) else None
-        if isinstance(path, str) and path and ".." not in Path(path).parts and not Path(path).is_absolute():
-            required.append(path)
-    return required
-
-
-def _library_allowed_on_linux(rules) -> bool:
-    """Mojang rules semantics reduced to one platform: needs a matching allow and no matching disallow."""
-    if not rules:
-        return True
-    allowed = False
-    for rule in rules if isinstance(rules, list) else []:
-        if not isinstance(rule, dict):
-            continue
-        action = str(rule.get("action", "")).lower()
-        operation = rule.get("os") if isinstance(rule.get("os"), dict) else {}
-        name = str(operation.get("name", "")).lower() if operation else ""
-        if name and name != "linux":
-            continue
-        if action == "allow":
-            allowed = True
-        elif action == "disallow":
-            return False
-    return allowed
-
-
 def _client_profile_is_prepared(ctx: Context, hmc_cache_root: Path, shared_versions: Path) -> bool:
     profile = _client_profile_name(ctx.target)
     profile_json = shared_versions / profile / f"{profile}.json"
     try:
-        if not profile_json.is_file() or json.loads(_client_profile_receipt(hmc_cache_root).read_text(encoding="utf-8")) != _client_profile_identity(ctx):
-            return False
+        return profile_json.is_file() and json.loads(_client_profile_receipt(hmc_cache_root).read_text(encoding="utf-8")) == _client_profile_identity(ctx)
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         return False
-    required = _profile_library_paths(profile_json)
-    if required is None:
-        return False
-    # A readable profile with no checkable library paths falls back to the receipt alone (the historical
-    # behavior); when paths are declared, every one of them must exist.
-    return all((hmc_cache_root / path).is_file() for path in required)
 
 
 def _record_prepared_client_profile(ctx: Context) -> None:
@@ -633,13 +578,11 @@ def _await_client_preparation(ctx: Context) -> None:
                 hmc_cache_root, shared_versions = _client_cache_paths(ctx)
                 if _client_profile_is_prepared(ctx, hmc_cache_root, shared_versions):
                     return
-                logger.warning("Client profile preparation left launch-critical jars behind for %s; reinstalling (attempt %d)", ctx.target.id, attempts)
-            else:
-                tail = "\n".join(_container_logs(name).splitlines()[-80:])
-                logger.warning("Client profile preparation failed for %s (code=%s, attempt %d)\n--- logs ---\n%s", ctx.target.id, state.get("ExitCode", -1), attempts, tail)
+                raise RuntimeError("Client profile preparation exited successfully without a valid profile receipt")
+            tail = "\n".join(_container_logs(name).splitlines()[-80:])
             if attempts >= _PREPARE_ATTEMPTS:
-                tail = "\n".join(_container_logs(name).splitlines()[-80:])
                 raise RuntimeError(f"Client profile preparation failed after {attempts} attempts (code={state.get('ExitCode', -1)})\n--- logs ---\n{tail}")
+            logger.warning("Client profile preparation failed for %s (code=%s, attempt %d); reinstalling\n--- logs ---\n%s", ctx.target.id, state.get("ExitCode", -1), attempts, tail)
             attempts += 1
             _remove_container(name)
             name = _launch_preparation_container(ctx)
@@ -1170,6 +1113,17 @@ def _v_wait_bridge(ctx: Context, step):
             _assert_running(ctx.cli_name)
         except RuntimeError as e:
             logs = _container_logs(ctx.cli_name)
+            missing = _missing_cache_jar_paths(logs)
+            if missing is not None and not ctx.vars.get("client_cache_recovered") and time.monotonic() < deadline:
+                # The installer exited 0 but left installer-produced jars (old Forge's *-srg/*-extra outputs)
+                # unwritten; every launch from this per-target cache crashes the same way. Reinstall once and
+                # prove the exact jars the crash named now exist, so later shards inherit a healed cache.
+                ctx.vars["client_cache_recovered"] = True
+                logger.warning("Client launch crashed on missing cache jars for %s; reinstalling the loader profile once: %s", ctx.target.id, missing or "unparsed")
+                _recover_client_cache(ctx, missing or [])
+                _remove_container(ctx.cli_name)
+                _launch_client(ctx)
+                continue
             if _transient_dependency_download_failure(logs) and time.monotonic() < deadline:
                 # Successful downloads survive in the target cache. Continue cold-cache discovery within the existing startup
                 # budget; unrelated crashes still fail immediately and an unavailable dependency host still reaches the deadline.
@@ -1200,6 +1154,36 @@ def _transient_dependency_download_failure(logs: str) -> bool:
     if "[LibraryDownloader]" not in logs:
         return False
     return any(marker in logs for marker in ("HTTP connect timed out", "Connection reset", "Temporary failure in name resolution"))
+
+
+def _missing_cache_jar_paths(logs: str) -> list[str] | None:
+    """Extract the cache jars a crashed launch named, or None when this is not a missing-jars crash.
+
+    The Forge/NeoForge mod scanner fails with ``Invalid paths argument, contained no existing paths: [...]``
+    when the installer left its produced jars unwritten. The crash names the exact jars, so recovery can prove
+    the reinstall produced them instead of trusting another exit code.
+    """
+    marker = "contained no existing paths:"
+    index = logs.find(marker)
+    if index < 0:
+        return None
+    bracketed = re.search(r"\[(.*?)\]", logs[index + len(marker):index + len(marker) + 4096], re.DOTALL)
+    if bracketed is None:
+        return []
+    return [path.strip() for path in bracketed.group(1).split(",") if path.strip()]
+
+
+def _recover_client_cache(ctx: Context, missing: list[str]) -> None:
+    """Reinstall the loader profile after a launch proved the cache is poisoned."""
+    hmc_cache_root, _shared_versions = _client_cache_paths(ctx)
+    _client_profile_receipt(hmc_cache_root).unlink(missing_ok=True)
+    ctx.vars["client_preparation"] = _launch_preparation_container(ctx)
+    ctx.vars["client_preparation_attempts"] = 1
+    _await_client_preparation(ctx)
+    prefix = "/work/hmc-cache/"
+    still_missing = [path for path in missing if path.startswith(prefix) and not (hmc_cache_root / path[len(prefix):]).is_file()]
+    if still_missing:
+        raise RuntimeError(f"Client profile reinstall did not produce required jars for {ctx.target.id}: {still_missing}")
 
 
 def _client_start_timeout(ctx: Context, step):
@@ -1309,18 +1293,21 @@ def _sha1(path: Path) -> str:
 
 
 def _canonical_timestamp(moment: datetime) -> str:
-    """Format a timestamp the way java.time.Instant.toString does: minimal fraction digits, never trailing zeros.
+    """Format a timestamp the way java.time.Instant.toString does: no fraction, or 3/6/9 digits, never trailing zeros.
 
     The client rejects any other shape as a non-canonical generation timestamp, so a staged record stamped with a
     fixed-width fraction (e.g. ``.800000Z``) is strictly invalid and crashes the first storage validation that reads
-    it — a ~10% flake per staged record. Keep this next to the only writer.
+    it — a ~10% flake per staged record. Verified against jshell: Instant.parse("...32.800000Z").toString() gives
+    "...32.800Z", while minimal forms like "...32.8Z" are equally rejected. Keep this next to the only writer.
     """
     if moment.tzinfo is None:
         raise ValueError("staged generation timestamps must carry a timezone")
     moment = moment.astimezone(timezone.utc)
-    fraction = f"{moment.microsecond:06d}".rstrip("0")
-    stamp = moment.strftime("%Y-%m-%dT%H:%M:%S")
-    return f"{stamp}.{fraction}Z" if fraction else f"{stamp}Z"
+    if moment.microsecond == 0:
+        return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if moment.microsecond % 1000 == 0:
+        return moment.strftime("%Y-%m-%dT%H:%M:%S") + f".{moment.microsecond // 1000:03d}Z"
+    return moment.strftime("%Y-%m-%dT%H:%M:%S") + f".{moment.microsecond:06d}Z"
 
 
 def _check_canonical_timestamp(created_at: str) -> None:
