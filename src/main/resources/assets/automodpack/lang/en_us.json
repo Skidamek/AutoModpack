@@ -348,7 +348,6 @@
   "automodpack.repair.editableTooltipReset": "Unchecked saves your copy in Preserved files and restores the server default.\n%s",
   "automodpack.vault.deleteArmed": "Click Delete again to remove %s from Preserved files",
   "automodpack.vault.selected": "Selected: %s",
-  "automodpack.vault.rowTooltip": "[x] marks the selected file. Actions below apply to it: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "unverified",

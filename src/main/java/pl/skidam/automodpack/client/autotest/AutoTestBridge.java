@@ -8,6 +8,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 /*? if >=1.20.4 {*/
@@ -25,6 +26,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.widget.RowViewport;
 /*? if >= 1.21.10 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -223,8 +225,9 @@ public final class AutoTestBridge {
 			if (has(req, "enable") && req.get("enable").getAsBoolean() && e.widget() instanceof Button) {
 				e.widget().active = true;
 			}
-			x = e.x() + e.width() / 2;
-			y = e.y() + e.height() / 2;
+			int[] point = e.clickPoint();
+			x = point[0];
+			y = point[1];
 		} else {
 			x = optInt(req, "x", -1);
 			y = optInt(req, "y", -1);
@@ -451,7 +454,13 @@ public final class AutoTestBridge {
 		List<GuiElement> result = new ArrayList<>();
 		int id = 0;
 		for (AbstractWidget widget : widgets) {
-			result.add(new GuiElement(id++, widget));
+			result.add(GuiElement.of(id++, widget));
+			// Selection lists expose one element per row so scenarios can target rows by text;
+			// only lists that can reveal a row implement RowViewport (plain text lists do not).
+			if (widget instanceof RowViewport viewport) {
+				int index = 0;
+				for (ObjectSelectionList.Entry<?> entry : viewport.entries()) result.add(GuiElement.ofRow(id++, viewport, index++, entry));
+			}
 		}
 		return new GuiElements(result);
 	}
@@ -474,12 +483,12 @@ public final class AutoTestBridge {
 			o.addProperty("y", e.y());
 			o.addProperty("width", e.width());
 			o.addProperty("height", e.height());
-			o.addProperty("enabled", e.widget().active);
-			o.addProperty("visible", e.widget().visible);
+			o.addProperty("enabled", e.enabled());
+			o.addProperty("visible", e.visible());
 			Boolean checked = e.checked();
 			if (checked != null) o.addProperty("checked", checked);
 			o.addProperty("type", e.type());
-			o.addProperty("class", e.widget().getClass().getName());
+			o.addProperty("class", e.className());
 			a.add(o);
 		}
 		return a;
@@ -608,16 +617,27 @@ public final class AutoTestBridge {
 		}
 	}
 
-	private record GuiElement(int id, AbstractWidget widget) {
+	/** One clickable GUI thing: a regular widget, or one row of a selection list. */
+	private record GuiElement(int id, AbstractWidget widget, RowViewport rows, int rowIndex, ObjectSelectionList.Entry<?> row) {
+		static GuiElement of(int id, AbstractWidget widget) {
+			return new GuiElement(id, widget, null, -1, null);
+		}
+
+		static GuiElement ofRow(int id, RowViewport rows, int rowIndex, ObjectSelectionList.Entry<?> row) {
+			return new GuiElement(id, null, rows, rowIndex, row);
+		}
+
 		String text() {
+			if (row != null) return row.getNarration().getString();
 			return widget instanceof EditBox editBox ? editBox.getValue() : widget.getMessage().getString();
 		}
 
 		String translationKey() {
-			return AutoTestBridge.translationKey(widget.getMessage());
+			return row != null ? "" : AutoTestBridge.translationKey(widget.getMessage());
 		}
 
 		int x() {
+			if (rows != null) return rows.rowLeft();
 			/*? if >= 1.19.4 {*/
 			return widget.getX();
 			/*?} else {*/
@@ -626,6 +646,7 @@ public final class AutoTestBridge {
 		}
 
 		int y() {
+			if (rows != null) return rows.rowTop(rowIndex);
 			/*? if >= 1.19.4 {*/
 			return widget.getY();
 			/*?} else {*/
@@ -634,11 +655,28 @@ public final class AutoTestBridge {
 		}
 
 		int width() {
-			return widget.getWidth();
+			return rows != null ? rows.rowWidth() : widget.getWidth();
 		}
 
 		int height() {
-			return widget.getHeight();
+			return rows != null ? rows.rowHeight() : widget.getHeight();
+		}
+
+		/** Center of the element's current bounds; list rows are scrolled into view first so scrolled-out rows still receive the click. */
+		int[] clickPoint() {
+			if (rows != null) {
+				rows.revealRow(rowIndex);
+				return new int[] { rows.rowLeft() + rows.rowWidth() / 2, rows.rowTop(rowIndex) + rows.rowHeight() / 2 };
+			}
+			return new int[] { x() + width() / 2, y() + height() / 2 };
+		}
+
+		boolean enabled() {
+			return row != null || widget.active;
+		}
+
+		boolean visible() {
+			return row != null || widget.visible;
 		}
 
 		/** Selected state of a real checkbox, or null when the widget (or this version) has none. */
@@ -651,9 +689,14 @@ public final class AutoTestBridge {
 		}
 
 		String type() {
+			if (row != null) return "ListRow";
 			if (widget instanceof Button) return "Button";
 			if (widget instanceof EditBox) return "TextField";
 			return widget.getClass().getSimpleName();
+		}
+
+		String className() {
+			return row != null ? row.getClass().getName() : widget.getClass().getName();
 		}
 	}
 

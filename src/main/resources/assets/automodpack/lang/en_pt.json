@@ -348,7 +348,6 @@
   "automodpack.repair.editableTooltipReset": "Unchecked stashes yer copy and restores the server default.\n%s",
   "automodpack.vault.deleteArmed": "Click Scuttle again to toss %s from stashed files",
   "automodpack.vault.selected": "Picked: %s",
-  "automodpack.vault.rowTooltip": "[x] marks the chosen file. The deeds below apply to it: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "unverified",

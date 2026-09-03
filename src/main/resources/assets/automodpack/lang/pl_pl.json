@@ -358,7 +358,6 @@
   "automodpack.repair.editableTooltipReset": "Odznaczone zapisuje twoją kopię w Zachowanych plikach i przywraca wartość domyślną serwera.\n%s",
   "automodpack.vault.deleteArmed": "Kliknij Usuń ponownie, aby usunąć %s z Zachowanych plików",
   "automodpack.vault.selected": "Wybrano: %s",
-  "automodpack.vault.rowTooltip": "[x] oznacza wybrany plik. Poniższe akcje działają na nim: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "niezweryfikowany",

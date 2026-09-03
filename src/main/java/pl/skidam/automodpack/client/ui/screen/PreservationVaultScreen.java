@@ -7,7 +7,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
@@ -20,10 +19,10 @@ import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
-import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.VaultListWidget;
 import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.storage.GameDirectory;
@@ -40,7 +39,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 /** One browser for every file AutoModpack preserved before a destructive change. */
 public final class PreservationVaultScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 500;
-	private static final int ROW_HEIGHT = 52;
+	private static final int LIST_TOP = 66;
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
@@ -58,8 +57,6 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private boolean closed;
 	private boolean lastResultRestore;
 	private Path lastResult;
-	private int page;
-	private int pageSize = 1;
 	private Future<?> work;
 
 	public PreservationVaultScreen(Screen parent, InstalledModpackController controller, Runnable closedCallback) {
@@ -73,7 +70,6 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		if (!loading && snapshots == null) load();
-		List<PreservationVault.Claim> claims = claims();
 		PreservationVault.Claim selected = selected();
 		boolean deleteArmed = selected != null && selected.claimId().equals(pendingDeleteClaimId);
 		MutableComponent deleteLabel = VersionedText.translatable("automodpack.vault.delete");
@@ -91,29 +87,10 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, disabledAction(VersionedText.literal(confirmation).withStyle(ChatFormatting.GREEN))));
 		}
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
-		pageSize = rowsPerPage(actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
-		int pageCount = Math.max(1, (claims.size() + pageSize - 1) / pageSize);
-		if (pageCount > 1) {
-			actions.add(1, navigationRow(pageCount));
-			pageSize = rowsPerPage(actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
-			pageCount = Math.max(1, (claims.size() + pageSize - 1) / pageSize);
-		}
-		page = Math.max(0, Math.min(pageCount - 1, page));
-		if (pageCount > 1) actions.set(1, navigationRow(pageCount));
-		int start = page * pageSize;
-		int width = panelWidth(PANEL_WIDTH);
-		int x = panelLeft(PANEL_WIDTH);
-		for (int index = start; index < Math.min(claims.size(), start + pageSize); index++) {
-			PreservationVault.Claim claim = claims.get(index);
-			int y = 66 + (index - start) * ROW_HEIGHT;
-			String filename = fileName(claim.originalPath()) + "  " + UiFormat.formatSize(claim.size());
-			Button select = buttonWidget(x, y, width, 20,
-					VersionedText.literal(truncateToWidth(this.font, filename, width - 12)).withStyle(claim.claimId().equals(selectedClaimId) ? ChatFormatting.GREEN : ChatFormatting.WHITE), press -> select(claim));
-			select.active = !busy && !loading;
-			setTooltip(select, VersionedText.translatable("automodpack.vault.rowTooltip", claim.originalPath()));
-			this.addRenderableWidget(select);
-		}
-
+		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)) - 8;
+		VaultListWidget list = new VaultListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), LIST_TOP, listBottom, claims(), packNames, this::select);
+		list.selectClaim(selectedClaimId);
+		this.addRenderableWidget(list);
 		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new));
 		Button restore = actionButtons.get(0);
 		Button saveCopy = actionButtons.get(1);
@@ -123,11 +100,6 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		saveCopy.active = !busy && selected != null;
 		setTooltip(saveCopy, VersionedText.translatable("automodpack.vault.saveCopyMoves"));
 		delete.active = !busy && selected != null;
-		if (pageCount > 1) {
-			actionButtons.get(3).active = !busy && page > 0;
-			renderAsPlainText(actionButtons.get(4));
-			actionButtons.get(5).active = !busy && page + 1 < pageCount;
-		}
 	}
 
 	/** The gate names itself: why Restore is unavailable for this row, or what it will do. */
@@ -185,18 +157,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		return claims().stream().filter(claim -> claim.claimId().equals(selectedClaimId)).findFirst().orElse(null);
 	}
 
-	private static int rowsPerPage(int actionTop) {
-		return Math.max(1, (actionTop - 60) / ROW_HEIGHT);
-	}
-
-	private ActionRow navigationRow(int pageCount) {
-		return actionRow(ActionAreaLayout.RowKind.NAVIGATION,
-				navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1)),
-				disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
-				navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> changePage(1)));
-	}
-
 	private void select(PreservationVault.Claim claim) {
+		if (busy || loading) return;
 		selectedClaimId = claim.claimId();
 		pendingDeleteClaimId = null;
 		restoreFailed = false;
@@ -230,14 +192,6 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		} catch (IOException | RuntimeException e) {
 			return List.of();
 		}
-	}
-
-	private void changePage(int amount) {
-		page = Math.max(0, page + amount);
-		selectedClaimId = null;
-		pendingDeleteClaimId = null;
-		lastResult = null;
-		rebuild();
 	}
 
 	private void restore() {
@@ -349,16 +303,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 							VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.vault.selected", armed.originalPath()).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW),
 							this.width / 2, 52, TextColors.WHITE);
 		}
-		List<PreservationVault.Claim> claims = claims();
-		int start = page * pageSize;
-		for (int index = start; index < Math.min(claims.size(), start + pageSize); index++) {
-			PreservationVault.Claim claim = claims.get(index);
-			int y = 88 + (index - start) * ROW_HEIGHT;
-			String metadata = packNames.getOrDefault(claim.modpackId(), claim.modpackId()) + "  |  " + claim.originalPath() + "  |  " + reason(claim.reason());
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, metadata, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(UiFormat.formatInstant(claim.preservedAt())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 12, TextColors.WHITE);
-		}
-		if (!loading && claims.isEmpty() && lastResult == null)
+		if (!loading && claims().isEmpty() && lastResult == null)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
 	}
 
@@ -367,17 +312,6 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		Path absolute = path.toAbsolutePath().normalize();
 		if (absolute.startsWith(game)) return game.relativize(absolute).toString().replace('\\', '/');
 		return absolute.toString().replace('\\', '/');
-	}
-
-	private static String fileName(String originalPath) {
-		if (originalPath == null || originalPath.isBlank()) return "";
-		Path path = Path.of(originalPath.replace('\\', '/'));
-		Path name = path.getFileName();
-		return name == null ? originalPath : name.toString();
-	}
-
-	private static String reason(PreservationVault.Reason reason) {
-		return VersionedText.translatable("automodpack.vault.reason." + reason.name().toLowerCase(Locale.ROOT)).getString();
 	}
 
 	@Override

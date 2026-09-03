@@ -343,7 +343,6 @@
   "automodpack.repair.editableTooltipReset": "取消勾選會把你的副本放到「保留的檔案」，並還原伺服器預設內容。\n%s",
   "automodpack.vault.deleteArmed": "再點一次「刪除」，即可從「保留的檔案」中移除 %s",
   "automodpack.vault.selected": "已選取：%s",
-  "automodpack.vault.rowTooltip": "[x] 表示選取的檔案。下方操作將套用於它：%s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "未驗證",

@@ -348,7 +348,6 @@
   "automodpack.repair.editableTooltipReset": "Wenn deaktiviert, wird deine Kopie in Gesicherte Dateien gespeichert und der Server-Standard wiederhergestellt.\n%s",
   "automodpack.vault.deleteArmed": "Nochmal Löschen klicken, um %s aus den gesicherten Dateien zu entfernen",
   "automodpack.vault.selected": "Ausgewählt: %s",
-  "automodpack.vault.rowTooltip": "[x] markiert die ausgewählte Datei. Die Aktionen darunter gelten für sie: %s",
   "automodpack.browser.modrinth": "Modrinth",
   "automodpack.browser.curseforge": "CurseForge",
   "automodpack.browser.unverifiedShort": "unbestätigt",
