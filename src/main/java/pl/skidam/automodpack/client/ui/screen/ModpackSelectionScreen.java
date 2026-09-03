@@ -180,7 +180,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.saveButton = actionButtons.get(2);
 		this.saveButton.active = canSave();
 		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.translatable("automodpack.selection.noChanges"));
-		int listTop = 64;
+		int listTop = 80;
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - 8;
 		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(ROW_WIDTH), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
 		Button platformButton = buttonWidget(panelLeft(ROW_WIDTH) + panelWidth(ROW_WIDTH) - PLATFORM_BUTTON_WIDTH, 24, PLATFORM_BUTTON_WIDTH, 20,
@@ -608,10 +608,16 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			MutableComponent description = managerEntry && !isActiveModpack()
 					? VersionedText.translatable("automodpack.packManager.switchDescription")
 					: VersionedText.translatable("automodpack.selection.description");
-			drawCenteredTextWithShadow(matrices, this.font, description.withStyle(ChatFormatting.GRAY),
-					this.width / 2, 22, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", effectivePlatform().id(), resolution.selectedGroups().size())
-					.withStyle(platformOverride == null ? ChatFormatting.GRAY : ChatFormatting.YELLOW), this.width / 2, 33, TextColors.WHITE);
+			// The header stack shares the rail with the platform button (y 24..44), so the description
+			// wraps inside the space left of it and the summary waits until that zone ends.
+			int railLeft = panelLeft(ROW_WIDTH);
+			int railWidth = panelWidth(ROW_WIDTH);
+			List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - PLATFORM_BUTTON_WIDTH - 8);
+			if (descriptionLines.size() > 2) descriptionLines = descriptionLines.subList(0, 2);
+			for (int index = 0; index < descriptionLines.size(); index++)
+				drawTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), railLeft, 22 + index * 11, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", effectivePlatform().id(), resolution.selectedGroups().size())
+					.withStyle(platformOverride == null ? ChatFormatting.GRAY : ChatFormatting.YELLOW), railLeft, 44, TextColors.WHITE);
 			// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
 			if (!resolutionError.isEmpty()) {
 				drawWrappedStatus(matrices, VersionedText.literal(resolutionError).withStyle(ChatFormatting.RED));
@@ -630,10 +636,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 	}
 
-	/** Draws one status line centered below the summary; two wrapped lines fit between the header stack and the first row. */
+	/** Draws one status line centered below the header stack; two wrapped lines fit between it and the first row. */
 	private void drawWrappedStatus(VersionedMatrices matrices, MutableComponent text) {
 		List<String> lines = wrapToWidth(this.font, text.getString(), panelWidth(ROW_WIDTH), 2);
-		int firstY = lines.size() > 1 ? 44 : 49;
+		int firstY = lines.size() > 1 ? 55 : 60;
 		for (String line : lines) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(text.getStyle()), this.width / 2, firstY, TextColors.WHITE);
 			firstY += 11;

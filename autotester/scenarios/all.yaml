@@ -277,6 +277,9 @@ flow:
       all:
         - screen: ModpackDetailsScreen
         - element: { text: Activate, enabled: true }
+  - do: screenshot
+    name: capture the installed pack details
+    file: all-pack-details
   - do: click
     name: review the A to B cached switch
     select: { text: Activate }
@@ -368,6 +371,9 @@ flow:
       all:
         - screen: OfflineRepairScreen
         - element: { text: "Keep 1 existing mod files", enabled: true }
+  - do: screenshot
+    name: capture the offline repair review
+    file: all-offline-repair
   - do: click
     name: cancel the healthy repair review
     select: { text: Back }
@@ -386,6 +392,9 @@ flow:
       all:
         - screen: InstalledModpacksScreen
         - element: { text: Preserved files }
+  - do: screenshot
+    name: capture the installed pack list
+    file: all-installed-packs
   - do: click
     name: open the owned conflict in preserved files from the pack list
     select: { text: Preserved files }
@@ -399,6 +408,9 @@ flow:
     name: show the unsafe restore as a recoverable error
     timeout: 30s
     until: { screen: ErrorScreen }
+  - do: screenshot
+    name: capture the recoverable error screen
+    file: all-error-recoverable
   - do: click
     name: copy the unsafe restore diagnostics
     select: { text: Copy details }

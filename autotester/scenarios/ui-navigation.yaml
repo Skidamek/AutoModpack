@@ -34,6 +34,24 @@ flow:
     name: capture explicit child selection
     file: ui-navigation-explicit-child
   - do: click
+    name: open the group inspector from the row help button
+    select: { text: "?" }
+  - do: wait_for
+    name: wait for the group inspector
+    until: { screen: GroupInspectorScreen }
+  - do: screenshot
+    name: capture the group inspector
+    file: ui-navigation-group-inspector
+  - do: click
+    name: return from the group inspector
+    select: { text: Back }
+  - do: wait_for
+    name: verify group customization is still usable after the inspector
+    until:
+      all:
+        - screen: ModpackSelectionScreen
+        - element: { text: continue, enabled: true }
+  - do: click
     name: turn the whole category off through its header
     select: { text: "Category: Visuals", checked: true }
   - do: wait_for
@@ -114,6 +132,9 @@ flow:
     name: verify cancellation returns to multiplayer
     timeout: 20s
     until: { screen: Play Multiplayer }
+  - do: screenshot
+    name: capture the multiplayer screen with the modpack button
+    file: ui-navigation-multiplayer
   - do: quit
     name: quit the client
 

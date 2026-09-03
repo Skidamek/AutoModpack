@@ -465,11 +465,27 @@ public final class AutoTestBridge {
 
 	private static void collectAttachedWidgets(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets) {
 		if (listener instanceof AbstractWidget widget) widgets.add(widget);
-		// Row viewport lists are emitted as one element per row, so their child widgets
-		// are not collected separately.
-		if (listener instanceof RowViewport) return;
+		// Row viewport lists are emitted as one element per row carrying the row's text and
+		// checkbox state; buttons inside rows (a row's help control) stay individually addressable.
+		if (listener instanceof RowViewport) {
+			if (!(listener instanceof ContainerEventHandler container)) return;
+			for (GuiEventListener child : container.children()) collectRowButtons(child, widgets);
+			return;
+		}
 		if (listener instanceof Screen || !(listener instanceof ContainerEventHandler container)) return;
 		for (GuiEventListener child : container.children()) collectAttachedWidgets(child, widgets);
+	}
+
+	private static void collectRowButtons(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets) {
+		if (listener instanceof ContainerEventHandler container) {
+			for (GuiEventListener child : container.children()) collectRowButtons(child, widgets);
+			return;
+		}
+		if (!(listener instanceof AbstractWidget widget)) return;
+		/*? if >=1.20.4 {*/
+		if (listener instanceof Checkbox) return;
+		/*?}*/
+		widgets.add(widget);
 	}
 
 	private static JsonArray elementsJson(List<GuiElement> elements) {

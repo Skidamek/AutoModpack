@@ -67,6 +67,24 @@ accept_certificate:
   - do: screenshot
     name: capture the shortened certificate fingerprint
     file: certificate-verification
+  - do: click
+    name: open the skip-verification disclosure
+    select: { key: automodpack.skip }
+  - do: wait_for
+    name: wait for the skip-verification screen
+    timeout: 20s
+    until: { screen: SkipVerificationScreen }
+  - do: screenshot
+    name: capture the skip-verification disclosure
+    file: skip-verification
+  - do: click
+    name: return from the skip disclosure to the fingerprint check
+    select: { key: automodpack.back }
+  - do: wait_for
+    name: wait for the fingerprint check again
+    timeout: 20s
+    until:
+      element: { key: automodpack.validation.verify, enabled: true }
   - do: type
     name: enter the fingerprint
     select: { role: textfield }
@@ -117,6 +135,10 @@ download_modpack:
   - do: click
     name: accept first connection
     select: { key: automodpack.firstConnect.download }
+  - do: screenshot
+    name: capture the download progress
+    file: download-progress
+    skip_if: { screen_not: DownloadScreen }
   - do: wait_file
     name: wait for the modpack marker file
     path: "${active_dir}/${marker}"
