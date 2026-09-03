@@ -7,10 +7,10 @@ import java.util.Objects;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -79,13 +79,13 @@ public final class ClientPendingUpdateRecovery {
 
 	private static SelectedModpackTarget targetFor(ClientStorage storage, UpdateTransaction pending, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) throws IOException {
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		GenerationRecord pendingRecord = generations.read(pending.targetGenerationId)
-				.orElseThrow(() -> new IOException("Pending target generation is missing: " + pending.targetGenerationId));
+		PackDocument pendingRecord = generations.read(pending.contentToken)
+				.orElseThrow(() -> new IOException("Pending target generation is missing: " + pending.contentToken));
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		boolean configStillDescribesThePendingInput = active == null
 				? currentConfig.selectedModpackId == null || currentConfig.selectedModpackId.isBlank()
 				: Objects.equals(currentConfig.selectedModpackId, active.modpackId);
-		GenerationRecord record;
+		PackDocument record;
 		if (configStillDescribesThePendingInput || pending.modpackId.equals(currentConfig.selectedModpackId))
 			record = newer(pendingRecord, newest(generations, pending.modpackId));
 		else {
@@ -94,7 +94,8 @@ public final class ClientPendingUpdateRecovery {
 			record = newest(generations, currentConfig.selectedModpackId);
 			if (record == null) throw new IOException("Selected modpack generation is not installed: " + currentConfig.selectedModpackId);
 		}
-		ModpackJsons.CompleteModpackContentFields fields = record.toFields();
+		GenerationJsons.HeadDocumentFields fields = generations.readFields(record.contentToken())
+				.orElseThrow(() -> new IOException("Client generation record is missing: " + record.contentToken()));
 		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
 		SelectionIntent storedIntent = selections.get(record.manifest().modpackId()).orElse(null);
 		if (record.manifest().modpackId().equals(pending.modpackId) && Objects.equals(storedIntent, pending.expectedPriorIntent()))
@@ -103,15 +104,15 @@ public final class ClientPendingUpdateRecovery {
 		return SelectedModpackTarget.prepare(fields, storedIntent, storedIntent, pending.platform());
 	}
 
-	private static GenerationRecord newest(ClientGenerationStore generations, String modpackId) throws IOException {
+	private static PackDocument newest(ClientGenerationStore generations, String modpackId) throws IOException {
 		if (!ModpackId.isValid(modpackId)) return null;
 		return generations.installedRecords().stream().filter(candidate -> modpackId.equals(candidate.manifest().modpackId()))
-				.max(Comparator.comparing((GenerationRecord candidate) -> candidate.metadata().createdAt()).thenComparing(candidate -> candidate.metadata().generationId())).orElse(null);
+				.max(Comparator.comparing(PackDocument::createdAt).thenComparing(PackDocument::contentToken)).orElse(null);
 	}
 
-	private static GenerationRecord newer(GenerationRecord first, GenerationRecord second) {
+	private static PackDocument newer(PackDocument first, PackDocument second) {
 		if (second == null) return first;
 		if (first == null) return second;
-		return Comparator.comparing((GenerationRecord candidate) -> candidate.metadata().createdAt()).thenComparing(candidate -> candidate.metadata().generationId()).compare(first, second) >= 0 ? first : second;
+		return Comparator.comparing(PackDocument::createdAt).thenComparing(PackDocument::contentToken).compare(first, second) >= 0 ? first : second;
 	}
 }

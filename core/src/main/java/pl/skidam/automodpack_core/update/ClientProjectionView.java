@@ -16,6 +16,7 @@ import java.util.TreeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -122,7 +123,7 @@ public final class ClientProjectionView {
 	}
 
 	private Snapshot stagedSnapshot(UpdateTransaction pending) throws IOException {
-		if (pending.targetGenerationId == null) throw new IOException("Pending projection target generation is missing");
+		if (pending.contentToken == null) throw new IOException("Pending projection target generation is missing");
 		Map<String, UpdatePlan.FileState> files = new LinkedHashMap<>();
 		for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
 			if (projected == null || projected.root() != UpdatePlan.Root.PROJECTION || !projected.present()) continue;
@@ -184,9 +185,9 @@ public final class ClientProjectionView {
 
 	private ModpackJsons.ModpackContentFields stagedTarget(UpdateTransaction pending) throws IOException {
 		if (!isProjectionTransaction(pending)) return null;
-		if (pending.targetGenerationId == null) throw new IOException("Pending projection target generation is missing");
-		ModpackJsons.CompleteModpackContentFields fields = new ClientGenerationStore(storage).readFields(pending.targetGenerationId)
-				.orElseThrow(() -> new IOException("Staged client generation record is missing: " + pending.targetGenerationId));
+		if (pending.contentToken == null) throw new IOException("Pending projection target generation is missing");
+		GenerationJsons.HeadDocumentFields fields = new ClientGenerationStore(storage).readFields(pending.contentToken)
+				.orElseThrow(() -> new IOException("Staged client generation record is missing: " + pending.contentToken));
 		try {
 			SelectionIntent intent = pending.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE ? pending.targetIntent() : pending.expectedPriorIntent();
 			return SelectedModpackTarget.prepare(fields, pending.expectedPriorIntent(), intent, pending.platform()).flatTarget();
@@ -270,7 +271,7 @@ public final class ClientProjectionView {
 			SelectionIntent intent = new ClientSelectionStore(storage.selectionFile()).get(target.modpackId).orElse(null);
 			if (intent == null) return null;
 			try {
-				return GeneratedCopyState.read(storage, target.modpackId, target.targetGenerationId, UpdateTransaction.digest(intent));
+				return GeneratedCopyState.read(storage, target.modpackId, target.contentToken, UpdateTransaction.digest(intent));
 			} catch (RuntimeException e) {
 				throw new IOException("Generated-copy state is invalid", e);
 			}

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -82,10 +82,9 @@ class ReviewedUpdatePlanTest {
 		UpdatePlan plan = plan(List.of(operation("mods/a.jar", OBJECT_HASH)));
 		UpdateTransaction transaction = new UpdateTransaction();
 		transaction.modpackId = plan.modpackId();
-		transaction.targetGenerationId = plan.generationTarget().targetGenerationId();
-		transaction.parentGenerationId = plan.generationTarget().parentGenerationId();
-		transaction.stateDigest = plan.generationTarget().stateDigest();
-		transaction.ledgerDigest = plan.generationTarget().ledgerDigest();
+		transaction.contentToken = plan.packTarget().contentToken();
+		transaction.policySha1 = plan.packTarget().policySha1();
+		transaction.ledgerDigest = plan.packTarget().ledgerDigest();
 		transaction.operations = plan.operations();
 		transaction.projectedFinalState = plan.projectedFinalState();
 		transaction.plannedClientConfig = plan.plannedClientConfig();
@@ -105,7 +104,7 @@ class ReviewedUpdatePlanTest {
 	}
 
 	private static UpdatePlan plan(List<Operation> operations, ChangeSet consequences) {
-		return new UpdatePlan("packaa1", new GenerationTarget("packaa1", "a".repeat(40), "", "b".repeat(40), "c".repeat(40)), operations, List.of(),
+		return new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), "c".repeat(40)), operations, List.of(),
 				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), consequences);
 	}
 

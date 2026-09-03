@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.modpack.group;
 import java.util.*;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 
 public final class SelectedTreeComposer {
 	private SelectedTreeComposer() {}
@@ -12,15 +12,15 @@ public final class SelectedTreeComposer {
 		return compose(manifest, selection, null);
 	}
 
-	public static ModpackJsons.ModpackContentFields compose(GroupManifest manifest, ResolvedSelection selection, GenerationTarget generationTarget) {
-		return compose(manifest, selection.selectedGroups(), generationTarget, true);
+	public static ModpackJsons.ModpackContentFields compose(GroupManifest manifest, ResolvedSelection selection, PackTarget packTarget) {
+		return compose(manifest, selection.selectedGroups(), packTarget, true);
 	}
 
-	public static ModpackJsons.ModpackContentFields composeAll(GroupManifest manifest, GenerationTarget generationTarget) {
-		return compose(manifest, new TreeSet<>(manifest.groups().keySet()), generationTarget, false);
+	public static ModpackJsons.ModpackContentFields composeAll(GroupManifest manifest, PackTarget packTarget) {
+		return compose(manifest, new TreeSet<>(manifest.groups().keySet()), packTarget, false);
 	}
 
-	private static ModpackJsons.ModpackContentFields compose(GroupManifest manifest, Collection<String> groupIds, GenerationTarget generationTarget, boolean resolvePaths) {
+	private static ModpackJsons.ModpackContentFields compose(GroupManifest manifest, Collection<String> groupIds, PackTarget packTarget, boolean resolvePaths) {
 		Map<String, GroupManifest.GroupFile> files = new TreeMap<>();
 		for (String groupId : groupIds) {
 			GroupManifest.Group group = manifest.groups().get(groupId);
@@ -42,13 +42,12 @@ public final class SelectedTreeComposer {
 		target.loaderVersion = manifest.loaderVersion();
 		target.mcVersion = manifest.mcVersion();
 		target.selectedGroups = new LinkedHashSet<>(groupIds);
-		if (generationTarget != null) {
-			if (!manifest.modpackId().equals(generationTarget.modpackId()))
+		if (packTarget != null) {
+			if (!manifest.modpackId().equals(packTarget.modpackId()))
 				throw new IllegalArgumentException("Selected target generation identity does not match catalogue modpack ID");
-			target.targetGenerationId = generationTarget.targetGenerationId();
-			target.parentGenerationId = generationTarget.parentGenerationId();
-			target.stateDigest = generationTarget.stateDigest();
-			target.ownershipLedger.digest = generationTarget.ledgerDigest();
+			target.contentToken = packTarget.contentToken();
+			target.policySha1 = packTarget.policySha1();
+			target.ownershipLedger.digest = packTarget.ledgerDigest();
 		}
 		return target;
 	}

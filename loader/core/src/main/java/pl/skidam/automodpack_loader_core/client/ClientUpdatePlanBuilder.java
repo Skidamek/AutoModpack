@@ -23,7 +23,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientOverlaySnapshot;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -105,7 +104,7 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	record RemovalPreparation(UpdatePlan plan, ModpackJsons.CompleteModpackContentFields completeFields, ModpackJsons.ModpackContentFields installed,
+	record RemovalPreparation(UpdatePlan plan, ModpackJsons.ModpackContentFields installed,
 			ClientStorageJsons.ClientBaselineFields baseline, SelectionIntent expectedPriorIntent, ClientConfigJsons.ClientConfigFieldsV3 currentConfig,
 			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files,
 			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
@@ -157,8 +156,6 @@ final class ClientUpdatePlanBuilder {
 		ModpackJsons.ModpackContentFields installed = projectionView.target();
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState == null || installed == null) throw new IOException("Active modpack generation state is missing");
-		ModpackJsons.CompleteModpackContentFields completeFields = new ClientGenerationStore(storage).read(installed.targetGenerationId)
-				.orElseThrow(() -> new IOException("Active client generation record is missing")).toFields();
 		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = projectionView.logicalConfig(expectedClientConfig, expectedClientConfig);
@@ -177,7 +174,7 @@ final class ClientUpdatePlanBuilder {
 					generatedCopies == null ? List.of() : generatedCopies.nestedCopies(), cache,
 					Map.of(installed.modpackId, storage.overlaySnapshot(installed.modpackId, cache)));
 			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaseline.objectHashes(), generatedCopies, plannedConfig));
-			return new RemovalPreparation(plan, completeFields, installed, baseline, expectedPriorIntent, currentConfig, plannedConfig, files, expectedClientConfig);
+			return new RemovalPreparation(plan, installed, baseline, expectedPriorIntent, currentConfig, plannedConfig, files, expectedClientConfig);
 		}
 	}
 
@@ -310,7 +307,7 @@ final class ClientUpdatePlanBuilder {
 				deletedPaths.remove(UpdatePlanner.normalize(item.file));
 				Path object = storage.objectFile(hash);
 				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(live, object, size, hash, cache);
-				PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.targetGenerationId, PreservationVault.Reason.EDITABLE_RESET, UpdatePlan.Root.GAME_DIR, item.file, hash, size);
+				PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.contentToken, PreservationVault.Reason.EDITABLE_RESET, UpdatePlan.Root.GAME_DIR, item.file, hash, size);
 				continue;
 			}
 			Path object = storage.objectFile(hash);
@@ -330,7 +327,7 @@ final class ClientUpdatePlanBuilder {
 			LOGGER.warn("Pack version is unavailable locally; keeping the drifted file in place: {}", item.file);
 			return null;
 		}
-		PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.targetGenerationId, reason, UpdatePlan.Root.GAME_DIR, item.file, drift.sha1(), drift.size());
+		PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.contentToken, reason, UpdatePlan.Root.GAME_DIR, item.file, drift.sha1(), drift.size());
 		VerifiedFileTransfer.copyAtomic(object, live, packSize, item.sha1, cache);
 		return new UpdatePlan.FileState(cache.rehash(live), Files.size(live), true);
 	}
@@ -422,7 +419,7 @@ final class ClientUpdatePlanBuilder {
 	private GeneratedCopyState readGeneratedCopyState(ModpackJsons.ModpackContentFields manifest, SelectionIntent intent) throws IOException {
 		String digest = UpdateTransaction.digest(intent);
 		if (digest.isEmpty()) throw new IOException("Cannot read generated-copy state without a selected group intent");
-		return GeneratedCopyState.read(storage, manifest.modpackId, manifest.targetGenerationId, digest);
+		return GeneratedCopyState.read(storage, manifest.modpackId, manifest.contentToken, digest);
 	}
 
 	private void putFileState(Map<UpdatePlan.FileKey, UpdatePlan.FileState> files, UpdatePlan.Root root, Path rootPath, Path path,

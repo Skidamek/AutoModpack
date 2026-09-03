@@ -12,7 +12,7 @@ import java.util.Set;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.NestedCopy;
@@ -88,12 +88,12 @@ public final class ReviewedUpdatePlan {
 	}
 
 	/** The complete execution meaning of one update, normalized so plans and durable transactions digest identically. */
-	private record ExecutionTuple(String modpackId, GenerationTarget generation, List<Operation> operations, List<ProjectedFile> projected,
+	private record ExecutionTuple(String modpackId, PackTarget generation, List<Operation> operations, List<ProjectedFile> projected,
 			ClientConfigJsons.ClientConfigFieldsV3 config, List<String> restartReasons, List<Preservation> preservations, List<BaselineCapture> baselines,
 			List<Conflict> conflicts, List<NestedCopy> nestedCopies, String consequencesDigest) {}
 
 	private static ExecutionTuple tuple(UpdatePlan plan) {
-		return new ExecutionTuple(plan.modpackId(), plan.generationTarget(), safe(plan.operations()), safe(plan.projectedFinalState()), plan.plannedClientConfig(),
+		return new ExecutionTuple(plan.modpackId(), plan.packTarget(), safe(plan.operations()), safe(plan.projectedFinalState()), plan.plannedClientConfig(),
 				plan.restartReasons().stream().map(Enum::name).sorted().toList(), safe(plan.preservations()), safe(plan.baselineCaptures()), safe(plan.conflicts()),
 				safe(plan.generatedCopies()), consequencesDigest(plan.consequences()));
 	}
@@ -102,7 +102,7 @@ public final class ReviewedUpdatePlan {
 		List<NestedCopy> nestedCopies = transaction.plannedGeneratedCopies == null
 				? List.of()
 				: safe(transaction.plannedGeneratedCopies.entries).stream().map(entry -> new NestedCopy(entry.logicalPath, entry.sha1, entry.size, Set.of())).toList();
-		return new ExecutionTuple(transaction.modpackId, transaction.generationTarget(), safe(transaction.operations), safe(transaction.projectedFinalState),
+		return new ExecutionTuple(transaction.modpackId, transaction.packTarget(), safe(transaction.operations), safe(transaction.projectedFinalState),
 				transaction.plannedClientConfig, safe(transaction.restartReasons).stream().map(Enum::name).sorted().toList(), safe(transaction.plannedPreservations),
 				safe(transaction.plannedBaselineCaptures), safe(transaction.plannedConflicts), nestedCopies, transaction.plannedConsequencesDigest);
 	}
@@ -239,11 +239,10 @@ public final class ReviewedUpdatePlan {
 		return digest(digest);
 	}
 
-	private static void generation(MessageDigest digest, GenerationTarget generation) {
+	private static void generation(MessageDigest digest, PackTarget generation) {
 		value(digest, "generationModpack", generation.modpackId());
-		value(digest, "generationId", generation.targetGenerationId());
-		value(digest, "parentGenerationId", generation.parentGenerationId());
-		value(digest, "stateDigest", generation.stateDigest());
+		value(digest, "contentToken", generation.contentToken());
+		value(digest, "policySha1", generation.policySha1());
 		value(digest, "ledgerDigest", generation.ledgerDigest());
 	}
 

@@ -9,12 +9,12 @@ import java.util.Objects;
 import java.util.Set;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 
 public class Changelogs {
 	private String latestPatchNotes = "";
-	private List<GenerationPatchNoteHistory.Entry> patchNotesHistory = List.of();
+	private List<JournalEntry> journal = List.of();
 	private List<String> restartReasons = List.of();
 	private ChangeSet changeSet = ChangeSet.empty();
 
@@ -42,7 +42,7 @@ public class Changelogs {
 
 	public void clear() {
 		latestPatchNotes = "";
-		patchNotesHistory = List.of();
+		journal = List.of();
 		restartReasons = List.of();
 		changeSet = ChangeSet.empty();
 	}
@@ -50,7 +50,7 @@ public class Changelogs {
 	public void replaceWith(UpdatePreview preview) {
 		Objects.requireNonNull(preview, "preview");
 		latestPatchNotes = preview.latestPatchNotes();
-		patchNotesHistory = preview.patchNotesHistory();
+		journal = preview.journal();
 		changeSet = preview.changeSet();
 	}
 
@@ -58,8 +58,13 @@ public class Changelogs {
 		return latestPatchNotes;
 	}
 
-	public List<GenerationPatchNoteHistory.Entry> patchNotesHistory() {
-		return patchNotesHistory;
+	public List<JournalEntry> journal() {
+		return journal;
+	}
+
+	/** True when any journal entry in the tail carries patch notes worth showing. */
+	public static boolean hasNotes(List<JournalEntry> journal) {
+		return journal.stream().anyMatch(entry -> !entry.notes().isBlank());
 	}
 
 	public List<String> restartReasons() {

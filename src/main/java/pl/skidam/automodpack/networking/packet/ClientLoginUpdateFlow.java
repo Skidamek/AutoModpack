@@ -15,8 +15,9 @@ import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -49,10 +50,10 @@ final class ClientLoginUpdateFlow {
 
 			DownloadClient downloadClient = manifestResult.client();
 			ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
-			GenerationRecord record;
+			PackDocument record;
 			SelectionIntent savedSelection;
 			try {
-				record = GenerationRecord.fromFields(manifestResult.content());
+				record = PackDocument.fromFields(manifestResult.content());
 				savedSelection = selections.get(record.manifest().modpackId()).orElse(null);
 			} catch (RuntimeException e) {
 				downloadClient.close();
@@ -130,9 +131,9 @@ final class ClientLoginUpdateFlow {
 		ScreenManager.failure(FailureRequest.of(failure, messageKey, category, FailureDestination.MULTIPLAYER, null));
 	}
 
-	private static boolean canRepair(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent savedSelection) {
+	private static boolean canRepair(GenerationJsons.HeadDocumentFields fields, SelectionIntent savedSelection) {
 		try {
-			GenerationRecord record = GenerationRecord.fromFields(fields);
+			PackDocument record = PackDocument.fromFields(fields);
 			SelectedModpackTarget.prepareDefault(fields, ClientPlatform.effective(savedSelection));
 			return true;
 		} catch (RuntimeException ignored) {

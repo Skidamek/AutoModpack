@@ -18,12 +18,12 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** The validated client-owned projection of nested copies for one pack generation and group selection. */
-public record GeneratedCopyState(String modpackId, String generationId, String selectionDigest, List<Entry> entries) {
+public record GeneratedCopyState(String modpackId, String contentToken, String selectionDigest, List<Entry> entries) {
 	private static final Comparator<Entry> ENTRY_ORDER = Comparator.comparing(Entry::logicalPath);
 
 	public GeneratedCopyState {
 		modpackId = ModpackId.requireValid(modpackId);
-		generationId = requireDigest(generationId, "generation ID");
+		contentToken = requireDigest(contentToken, "generation ID");
 		selectionDigest = requireDigest(selectionDigest, "generated-copy selection digest");
 		List<Entry> sorted = new ArrayList<>(Objects.requireNonNull(entries, "generated-copy entries"));
 		sorted.sort(ENTRY_ORDER);
@@ -33,20 +33,20 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 		entries = List.copyOf(sorted);
 	}
 
-	public static GeneratedCopyState fromCopies(String modpackId, String generationId, String selectionDigest, List<UpdatePlan.NestedCopy> copies) {
-		return new GeneratedCopyState(modpackId, generationId, selectionDigest,
+	public static GeneratedCopyState fromCopies(String modpackId, String contentToken, String selectionDigest, List<UpdatePlan.NestedCopy> copies) {
+		return new GeneratedCopyState(modpackId, contentToken, selectionDigest,
 				copies.stream().map(copy -> new Entry(copy.relativePath(), copy.sha1(), copy.size())).toList());
 	}
 
-	public static GeneratedCopyState read(ClientStorage storage, String modpackId, String generationId, String selectionDigest) throws IOException {
-		Path path = storage.generatedCopiesFile(modpackId, generationId, selectionDigest);
-		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return new GeneratedCopyState(modpackId, generationId, selectionDigest, List.of());
+	public static GeneratedCopyState read(ClientStorage storage, String modpackId, String contentToken, String selectionDigest) throws IOException {
+		Path path = storage.generatedCopiesFile(modpackId, contentToken, selectionDigest);
+		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return new GeneratedCopyState(modpackId, contentToken, selectionDigest, List.of());
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Generated-copy state is not a regular file: " + path);
 		try {
 			ClientStorageJsons.ClientGeneratedCopiesFields fields = ConfigTools.read(path, ClientStorageJsons.ClientGeneratedCopiesFields.class)
 					.orElseThrow(() -> new IOException("Generated-copy state is empty: " + path));
 			GeneratedCopyState state = fromFields(fields);
-			if (!state.modpackId().equals(ModpackId.requireValid(modpackId)) || !state.generationId().equals(requireDigest(generationId, "generation ID"))
+			if (!state.modpackId().equals(ModpackId.requireValid(modpackId)) || !state.contentToken().equals(requireDigest(contentToken, "generation ID"))
 					|| !state.selectionDigest().equals(requireDigest(selectionDigest, "generated-copy selection digest")))
 				throw new IOException("Generated-copy state identity is invalid: " + path);
 			return state;
@@ -57,19 +57,19 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 
 	public void write(ClientStorage storage) throws IOException {
 		ClientStorageJsons.ClientGeneratedCopiesFields fields = toFields();
-		Path path = storage.generatedCopiesFile(modpackId, generationId, selectionDigest);
+		Path path = storage.generatedCopiesFile(modpackId, contentToken, selectionDigest);
 		Files.createDirectories(path.getParent());
 		ConfigTools.writeAtomic(path, fields);
 	}
 
 	public void delete(ClientStorage storage) throws IOException {
-		Files.deleteIfExists(storage.generatedCopiesFile(modpackId, generationId, selectionDigest));
+		Files.deleteIfExists(storage.generatedCopiesFile(modpackId, contentToken, selectionDigest));
 	}
 
 	public ClientStorageJsons.ClientGeneratedCopiesFields toFields() {
 		ClientStorageJsons.ClientGeneratedCopiesFields fields = new ClientStorageJsons.ClientGeneratedCopiesFields();
 		fields.modpackId = modpackId;
-		fields.generationId = generationId;
+		fields.contentToken = contentToken;
 		fields.selectionDigest = selectionDigest;
 		fields.entries = entries.stream().map(entry -> {
 			ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields value = new ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields();
@@ -88,7 +88,7 @@ public record GeneratedCopyState(String modpackId, String generationId, String s
 			if (value == null) throw new IllegalArgumentException("Generated-copy state contains a null entry");
 			entries.add(new Entry(value.logicalPath, value.sha1, value.size));
 		}
-		return new GeneratedCopyState(fields.modpackId, fields.generationId, fields.selectionDigest, entries);
+		return new GeneratedCopyState(fields.modpackId, fields.contentToken, fields.selectionDigest, entries);
 	}
 
 	public List<UpdatePlan.NestedCopy> nestedCopies() {

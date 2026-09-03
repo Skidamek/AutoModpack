@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +19,8 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
@@ -142,7 +142,7 @@ class OfflineRepairTest {
 		OfflineRepair.EditableResetCandidate candidate = prepared.editableResetCandidates().get(0);
 		ClientStorageJsons.OfflineRepairJournalFields journal = new ClientStorageJsons.OfflineRepairJournalFields();
 		journal.modpackId = prepared.modpackId();
-		journal.generationId = prepared.generationId();
+		journal.contentToken = prepared.contentToken();
 		journal.selectionDigest = prepared.selectionDigest();
 		ClientStorageJsons.OfflineRepairJournalFields.EditableResetFields reset = new ClientStorageJsons.OfflineRepairJournalFields.EditableResetFields();
 		reset.logicalPath = candidate.logicalPath();
@@ -202,7 +202,7 @@ class OfflineRepairTest {
 		byte[] preservedBytes = "preserved".getBytes(StandardCharsets.UTF_8);
 		String preservedHash = HashUtils.sha1(preservedBytes);
 		Path preservedSource = write(storage.gamePath("config/removed.json"), preservedBytes);
-		PreservationVault.preserve(storage, target.manifest().modpackId(), target.generationTarget().targetGenerationId(), PreservationVault.Reason.SERVER_REMOVAL, Root.GAME_DIR,
+		PreservationVault.preserve(storage, target.manifest().modpackId(), target.packTarget().contentToken(), PreservationVault.Reason.SERVER_REMOVAL, Root.GAME_DIR,
 				"config/removed.json", preservedHash, preservedBytes.length);
 		write(storage.objectFile(preservedHash), "corrupt".getBytes(StandardCharsets.UTF_8));
 		OfflineRepair repair = new OfflineRepair(storage);
@@ -238,11 +238,11 @@ class OfflineRepairTest {
 		for (FileSpec spec : specs) files.put(spec.path(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(spec.size()), spec.type(), spec.editable(), spec.hash(), "0"));
 		group.files = files;
 		fields.groups = Map.of("main", group);
-		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
-		new ClientGenerationStore(storage).write(record);
-		new ClientSelectionStore(storage.selectionFile()).compareAndSet(record.manifest().modpackId(), null, target.selection().intent());
-		storage.writeActiveState(record.manifest().modpackId(), record.metadata().generationId());
+		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(TestPacks.head(document.manifest()), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		new ClientGenerationStore(storage).write(document, List.of());
+		new ClientSelectionStore(storage.selectionFile()).compareAndSet(document.manifest().modpackId(), null, target.selection().intent());
+		storage.writeActiveState(document.manifest().modpackId(), document.contentToken());
 		return target;
 	}
 

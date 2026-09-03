@@ -18,7 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -122,7 +123,7 @@ class PreservationVaultTest {
 		Files.delete(source);
 		installActiveRecord(storage, "mods/server.jar");
 		var active = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElseThrow();
-		new GeneratedCopyState(MODPACK_ID, active.generationTarget().targetGenerationId(), UpdateTransaction.digest(active.selection().intent()),
+		new GeneratedCopyState(MODPACK_ID, active.packTarget().contentToken(), UpdateTransaction.digest(active.selection().intent()),
 				List.of(new GeneratedCopyState.Entry("mods/generated.jar", hash, 10))).write(storage);
 
 		assertThrows(IOException.class, () -> PreservationVault.restoreOriginal(storage, MODPACK_ID, claim.claimId()));
@@ -146,7 +147,7 @@ class PreservationVaultTest {
 	@Test
 	void discoversPreservationOnlyPackAfterItsGenerationRecordsAreForgotten() throws Exception {
 		ClientStorage storage = storage();
-		GenerationRecord installed = installActiveRecord(storage, "mods/server.jar");
+		PackDocument installed = installActiveRecord(storage, "mods/server.jar");
 		storage.clearActiveState();
 		Path source = Files.writeString(storage.gamePath("config/local.txt"), "local", StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(source);
@@ -155,10 +156,10 @@ class PreservationVaultTest {
 
 		new ClientGenerationStore(storage).forgetModpack(MODPACK_ID);
 
-		assertTrue(new ClientGenerationStore(storage).read(installed.metadata().generationId()).isEmpty());
+		assertTrue(new ClientGenerationStore(storage).read(installed.contentToken()).isEmpty());
 		assertEquals(List.of(MODPACK_ID), PreservationVault.modpackIds(storage));
 		assertEquals(List.of(MODPACK_ID), PreservationVault.snapshots(storage).stream().map(PreservationVault.Snapshot::modpackId).toList());
-		assertEquals(GENERATION_ID, PreservationVault.read(storage, MODPACK_ID).claims().get(0).generationId(),
+		assertEquals(GENERATION_ID, PreservationVault.read(storage, MODPACK_ID).claims().get(0).contentToken(),
 				"discovery must not manufacture a replacement generation identity");
 		assertEquals(claim.claimId(), PreservationVault.read(storage, MODPACK_ID).claims().get(0).claimId());
 	}
@@ -170,7 +171,7 @@ class PreservationVaultTest {
 		return storage;
 	}
 
-	private GenerationRecord installActiveRecord(ClientStorage storage, String path) throws Exception {
+	private PackDocument installActiveRecord(ClientStorage storage, String path) throws Exception {
 		byte[] bytes = "active-mod".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(Files.write(storage.gamePath(path), bytes));
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
@@ -185,9 +186,9 @@ class PreservationVaultTest {
 		file.murmur = "0";
 		group.files = Map.of(path, file);
 		fields.groups = Map.of("main", group);
-		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
-		new ClientGenerationStore(storage).write(record);
-		storage.writeActiveState(record.manifest().modpackId(), record.metadata().generationId());
-		return record;
+		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
+		new ClientGenerationStore(storage).write(document, List.of());
+		storage.writeActiveState(document.manifest().modpackId(), document.contentToken());
+		return document;
 	}
 }

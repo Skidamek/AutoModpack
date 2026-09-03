@@ -17,7 +17,7 @@ import java.util.stream.Stream;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
@@ -195,16 +195,16 @@ public final class ClientObjectStore {
 		ExpectedSizes retained = new ExpectedSizes();
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 		List<String> generationIds = generationIds(storage);
-		Map<String, GenerationRecord> records = new TreeMap<>();
-		for (String generationId : generationIds) {
-			if (!HashUtils.isCanonicalSha1(generationId)) throw new IOException("Client generation directory is not canonical: " + generationId);
-			GenerationRecord record;
+		Map<String, PackDocument> records = new TreeMap<>();
+		for (String contentToken : generationIds) {
+			if (!HashUtils.isCanonicalSha1(contentToken)) throw new IOException("Client generation directory is not canonical: " + contentToken);
+			PackDocument record;
 			try {
-				record = generations.read(generationId).orElseThrow(() -> new IOException("Client generation record is missing: " + generationId));
+				record = generations.read(contentToken).orElseThrow(() -> new IOException("Client generation record is missing: " + contentToken));
 			} catch (RuntimeException e) {
-				throw new IOException("Client generation record is invalid: " + generationId, e);
+				throw new IOException("Client generation record is invalid: " + contentToken, e);
 			}
-			records.put(generationId, record);
+			records.put(contentToken, record);
 		}
 		TreeSet<String> selected = new TreeSet<>();
 		if (retainedGenerationIds == null) selected.addAll(records.keySet());
@@ -215,14 +215,14 @@ public final class ClientObjectStore {
 		}
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		if (activeState != null) {
-			GenerationRecord active = records.get(activeState.generationId);
-			if (active == null) throw new IOException("Active client generation record is missing: " + activeState.generationId);
+			PackDocument active = records.get(activeState.contentToken);
+			if (active == null) throw new IOException("Active client generation record is missing: " + activeState.contentToken);
 			if (!active.manifest().modpackId().equals(activeState.modpackId)) throw new IOException("Active client generation identity is inconsistent");
-			selected.add(activeState.generationId);
+			selected.add(activeState.contentToken);
 		}
-		for (String generationId : selected) {
-			GenerationRecord record = records.get(generationId);
-			if (record == null) throw new IOException("Retained client generation is not installed: " + generationId);
+		for (String contentToken : selected) {
+			PackDocument record = records.get(contentToken);
+			if (record == null) throw new IOException("Retained client generation is not installed: " + contentToken);
 			addRecordReferences(retained, record);
 		}
 		collectBaselines(storage, retained);
@@ -235,7 +235,7 @@ public final class ClientObjectStore {
 		return retained;
 	}
 
-	private static void addRecordReferences(ExpectedSizes retained, GenerationRecord record) throws IOException {
+	private static void addRecordReferences(ExpectedSizes retained, PackDocument record) throws IOException {
 		// A generation record is the complete selectable catalogue. Clients acquire only their
 		// resolved selection, so absent objects from unselected groups are valid. Cached catalogue
 		// objects remain pinned for later offline selection changes.
@@ -284,9 +284,9 @@ public final class ClientObjectStore {
 			Path generationDirectory = path.getParent();
 			Path packDirectory = generationDirectory.getParent();
 			String modpackId = packDirectory.getFileName().toString();
-			String generationId = generationDirectory.getFileName().toString();
+			String contentToken = generationDirectory.getFileName().toString();
 			String selectionDigest = path.getFileName().toString().substring(0, HashUtils.SHA1_HEX_LENGTH);
-			GeneratedCopyState state = GeneratedCopyState.read(storage, modpackId, generationId, selectionDigest);
+			GeneratedCopyState state = GeneratedCopyState.read(storage, modpackId, contentToken, selectionDigest);
 			for (GeneratedCopyState.Entry entry : state.entries()) retained.optional(entry.sha1(), entry.size(), "generated-copy state");
 		}
 	}
@@ -449,9 +449,9 @@ public final class ClientObjectStore {
 					for (Path generation : generations.sorted().toList()) {
 						FileTrees.requireNoSymbolicLink(generation, "client generated-copy state");
 						if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
-						String generationId = generation.getFileName().toString();
-						if (!HashUtils.isCanonicalSha1(generationId))
-							throw new IOException("Client generated-copy directory is not canonical: " + generationId);
+						String contentToken = generation.getFileName().toString();
+						if (!HashUtils.isCanonicalSha1(contentToken))
+							throw new IOException("Client generated-copy directory is not canonical: " + contentToken);
 						try (Stream<Path> states = Files.list(generation)) {
 							for (Path state : states.sorted().toList()) {
 								FileTrees.requireNoSymbolicLink(state, "client generated-copy state");

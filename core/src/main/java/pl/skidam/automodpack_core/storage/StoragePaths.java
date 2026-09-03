@@ -37,13 +37,8 @@ public final class StoragePaths {
 	public static final Path LOCAL_DATA_DIR = AUTOMODPACK_DIR.resolve("data");
 
 	public static final Path SERVER_DIR = AUTOMODPACK_DIR.resolve("server");
-	public static final Path SERVER_CURRENT_FILE = SERVER_DIR.resolve("current.json");
-	public static final Path SERVER_CURRENT_PROJECTION_FILE = SERVER_DIR.resolve("current-projection.json");
-	public static final Path SERVER_GENERATION_CHECKPOINT_FILE = SERVER_DIR.resolve("checkpoint.json");
-	public static final Path SERVER_PUBLICATION_LOCK_FILE = SERVER_DIR.resolve(".publication.lock");
-	public static final Path SERVER_CATALOGUES_DIR = SERVER_DIR.resolve("catalogues");
-	public static final Path SERVER_COMMITS_DIR = SERVER_DIR.resolve("commits");
-	public static final Path SERVER_DELTAS_DIR = SERVER_DIR.resolve("deltas");
+	public static final Path SERVER_PROJECTION_FILE = SERVER_DIR.resolve("current-projection.json");
+	public static final Path SERVER_JOURNAL_FILE = SERVER_DIR.resolve("journal.jsonl");
 	public static final Path SERVER_STAGING_DIR = SERVER_DIR.resolve("staging");
 	public static final Path PATCH_NOTES_FILE = AUTOMODPACK_DIR.resolve("patch-notes.md");
 

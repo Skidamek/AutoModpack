@@ -3,87 +3,83 @@ package pl.skidam.automodpack_core.modpack.group;
 import java.util.List;
 import java.util.Objects;
 
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 
 public record SelectedModpackTarget(
-		GenerationRecord generationRecord,
+		PackDocument document,
 		SelectionIntent expectedPriorIntent,
 		ResolvedSelection selection,
 		ClientPlatform platform,
 		ModpackJsons.ModpackContentFields flatTarget,
-		List<GenerationPatchNoteHistory.Entry> patchNotesHistory,
-		GenerationHistoryIndex historyIndex) {
+		List<JournalEntry> journal) {
 	public SelectedModpackTarget {
-		generationRecord = Objects.requireNonNull(generationRecord);
+		document = Objects.requireNonNull(document);
 		selection = Objects.requireNonNull(selection);
 		platform = Objects.requireNonNull(platform);
 		flatTarget = Objects.requireNonNull(flatTarget);
-		patchNotesHistory = List.copyOf(Objects.requireNonNull(patchNotesHistory));
-		if (!GenerationTarget.from(generationRecord).equals(GenerationTarget.fromFlat(flatTarget)))
-			throw new IllegalArgumentException("Selected flat target generation identity does not match complete generation record");
+		journal = List.copyOf(Objects.requireNonNull(journal));
+		if (!PackTarget.from(document).equals(PackTarget.fromFlat(flatTarget)))
+			throw new IllegalArgumentException("Selected flat target identity does not match the pack document");
 	}
 
 	public GroupManifest manifest() {
-		return generationRecord.manifest();
+		return document.manifest();
 	}
 
-	public ModpackJsons.CompleteModpackContentFields completeFields() {
-		ModpackJsons.CompleteModpackContentFields fields = generationRecord.toFields();
-		GenerationPatchNoteHistory.writeFields(fields, patchNotesHistory);
-		if (historyIndex != null) fields.generationHistory = historyIndex.toFields();
-		return fields;
+	public PackDocument document() {
+		return document;
 	}
 
-	/** Returns the complete catalogue flattened for preloading, without changing the selected projection. */
+	/** Returns the complete policy document flattened for preloading, without changing the selected projection. */
 	public ModpackJsons.ModpackContentFields completeTarget() {
-		return SelectedTreeComposer.composeAll(manifest(), GenerationTarget.from(generationRecord));
+		return SelectedTreeComposer.composeAll(manifest(), PackTarget.from(document));
 	}
 
-	public GenerationTarget generationTarget() {
-		return GenerationTarget.from(generationRecord);
+	public PackTarget packTarget() {
+		return PackTarget.from(document);
 	}
 
-	public static SelectedModpackTarget prepare(ModpackJsons.CompleteModpackContentFields fields, ClientSelectionStore store, ClientPlatform platform) {
-		GenerationRecord record = GenerationRecord.fromFields(fields);
-		List<GenerationPatchNoteHistory.Entry> patchNotesHistory = GenerationPatchNoteHistory.fromFields(fields);
-		GenerationHistoryIndex historyIndex = fields.generationHistory == null ? null : GenerationHistoryIndex.fromFields(fields.generationHistory);
-		SelectionIntent existing = store.get(record.manifest().modpackId()).orElse(null);
-		if (existing == null) return prepareResolved(record, null, GroupSelectionResolver.resolveDefault(record.manifest(), platform), platform, patchNotesHistory, historyIndex);
-		return prepare(record, existing, existing, platform, patchNotesHistory, historyIndex);
+	public static SelectedModpackTarget prepare(GenerationJsons.HeadDocumentFields fields, ClientSelectionStore store, ClientPlatform platform) {
+		PackDocument document = PackDocument.fromFields(fields);
+		List<JournalEntry> journal = journalTail(fields);
+		SelectionIntent existing = store.get(document.manifest().modpackId()).orElse(null);
+		if (existing == null) return prepareResolved(document, null, GroupSelectionResolver.resolveDefault(document.manifest(), platform), platform, journal);
+		return prepare(document, existing, existing, platform, journal);
 	}
 
-	public static SelectedModpackTarget prepareDefault(ModpackJsons.CompleteModpackContentFields fields, ClientPlatform platform) {
-		GenerationRecord record = GenerationRecord.fromFields(fields);
-		GenerationHistoryIndex historyIndex = fields.generationHistory == null ? null : GenerationHistoryIndex.fromFields(fields.generationHistory);
-		return prepareResolved(record, null, GroupSelectionResolver.resolveDefault(record.manifest(), platform), platform, GenerationPatchNoteHistory.fromFields(fields), historyIndex);
+	public static SelectedModpackTarget prepareDefault(GenerationJsons.HeadDocumentFields fields, ClientPlatform platform) {
+		PackDocument document = PackDocument.fromFields(fields);
+		return prepareResolved(document, null, GroupSelectionResolver.resolveDefault(document.manifest(), platform), platform, journalTail(fields));
 	}
 
-	public static SelectedModpackTarget prepare(ModpackJsons.CompleteModpackContentFields fields, SelectionIntent expectedPriorIntent, SelectionIntent intent,
+	public static SelectedModpackTarget prepare(GenerationJsons.HeadDocumentFields fields, SelectionIntent expectedPriorIntent, SelectionIntent intent,
 			ClientPlatform platform) {
-		GenerationHistoryIndex historyIndex = fields.generationHistory == null ? null : GenerationHistoryIndex.fromFields(fields.generationHistory);
-		return prepare(GenerationRecord.fromFields(fields), expectedPriorIntent, intent, platform, GenerationPatchNoteHistory.fromFields(fields), historyIndex);
+		return prepare(PackDocument.fromFields(fields), expectedPriorIntent, intent, platform, journalTail(fields));
 	}
 
-	private static SelectedModpackTarget prepare(GenerationRecord record, SelectionIntent expectedPriorIntent, SelectionIntent intent, ClientPlatform platform) {
-		return prepare(record, expectedPriorIntent, intent, platform, GenerationPatchNoteHistory.forRecord(record), null);
-	}
-
-	private static SelectedModpackTarget prepare(GenerationRecord record, SelectionIntent expectedPriorIntent, SelectionIntent intent, ClientPlatform platform,
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, GenerationHistoryIndex historyIndex) {
-		GroupManifest manifest = record.manifest();
+	private static SelectedModpackTarget prepare(PackDocument document, SelectionIntent expectedPriorIntent, SelectionIntent intent, ClientPlatform platform,
+			List<JournalEntry> journal) {
+		GroupManifest manifest = document.manifest();
 		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, intent, platform);
-		return prepareResolved(record, expectedPriorIntent, resolved, platform, patchNotesHistory, historyIndex);
+		return prepareResolved(document, expectedPriorIntent, resolved, platform, journal);
 	}
 
-	private static SelectedModpackTarget prepareResolved(GenerationRecord record, SelectionIntent expectedPriorIntent, ResolvedSelection resolved, ClientPlatform platform,
-			List<GenerationPatchNoteHistory.Entry> patchNotesHistory, GenerationHistoryIndex historyIndex) {
-		GroupManifest manifest = record.manifest();
-		ModpackJsons.ModpackContentFields flatTarget = SelectedTreeComposer.compose(manifest, resolved, GenerationTarget.from(record));
-		flatTarget.ownershipLedger = record.ownershipLedger().toFields();
-		return new SelectedModpackTarget(record, expectedPriorIntent, resolved, platform, flatTarget, patchNotesHistory, historyIndex);
+	private static SelectedModpackTarget prepareResolved(PackDocument document, SelectionIntent expectedPriorIntent, ResolvedSelection resolved, ClientPlatform platform,
+			List<JournalEntry> journal) {
+		GroupManifest manifest = document.manifest();
+		ModpackJsons.ModpackContentFields flatTarget = SelectedTreeComposer.compose(manifest, resolved, PackTarget.from(document));
+		flatTarget.ownershipLedger = document.ownershipLedger().toFields();
+		return new SelectedModpackTarget(document, expectedPriorIntent, resolved, platform, flatTarget, journal);
+	}
+
+	private static List<JournalEntry> journalTail(GenerationJsons.HeadDocumentFields fields) {
+		if (fields.journal == null) return List.of();
+		List<JournalEntry> entries = new java.util.ArrayList<>();
+		for (GenerationJsons.JournalEntryFields entry : fields.journal) entries.add(JournalEntry.fromFields(entry));
+		return entries;
 	}
 }

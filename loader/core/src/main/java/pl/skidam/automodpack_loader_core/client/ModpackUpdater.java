@@ -23,14 +23,15 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoadSelection;
 import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
-import pl.skidam.automodpack_core.modpack.generation.GenerationUpdateRange;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
@@ -108,8 +109,8 @@ public class ModpackUpdater implements AutoCloseable {
 		return Objects.requireNonNull(selectedTarget, "Selected modpack target is unavailable");
 	}
 
-	public List<GenerationPatchNoteHistory.Entry> getFirstInstallPatchNotes() {
-		return List.of(GenerationPatchNoteHistory.Entry.fromMetadata(getSelectedTarget().generationRecord().metadata()));
+	public List<JournalEntry> getFirstInstallPatchNotes() {
+		return getSelectedTarget().journal();
 	}
 
 	public SourceAvailability getSourceAvailability() {
@@ -147,14 +148,11 @@ public class ModpackUpdater implements AutoCloseable {
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 			planBuilder.preparePlanObjects(prepared.plan(), selectedTarget.flatTarget());
 			installedSwitchPlan = ReviewedClientPlan.pending(prepared, prepared.plan());
-			String installedGenerationId;
-			if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)) installedGenerationId = active.generationId;
-			else
-				installedGenerationId = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId())
-						.map(record -> record.metadata().generationId()).orElse("");
-			GenerationUpdateRange updateRange = updateRange(selectedTarget, installedGenerationId);
+			String installedToken;
+			if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)) installedToken = active.contentToken;
+			else installedToken = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).map(PackDocument::contentToken).orElse("");
 			return UpdatePreview.create(prepared.plan(), selectedTarget.selection(), UpdatePreview.Mode.UPDATE,
-					featuredNotes(updateRange), updateRange.generations()).withFeatureManifest(selectedTarget.manifest());
+					featuredNotes(selectedTarget, installedToken), updateJournal(selectedTarget, installedToken)).withFeatureManifest(selectedTarget.manifest());
 		}
 	}
 
@@ -193,9 +191,22 @@ public class ModpackUpdater implements AutoCloseable {
 	private void selectTarget(SelectionIntent intent) {
 		Objects.requireNonNull(intent, "intent");
 		SelectedModpackTarget current = getSelectedTarget();
-		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(current.completeFields(), current.expectedPriorIntent(), intent, current.platform());
+		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(headFields(current), current.expectedPriorIntent(), intent, current.platform());
 		selectedTarget = replacement;
 		serverModpackContent = replacement.flatTarget();
+	}
+
+	/** Rebuilds the head document the selected target was prepared from, so a new group selection can resolve against it. */
+	private static GenerationJsons.HeadDocumentFields headFields(SelectedModpackTarget target) {
+		PackDocument document = target.document();
+		GenerationJsons.HeadDocumentFields fields = new GenerationJsons.HeadDocumentFields();
+		fields.contentToken = document.contentToken();
+		fields.policySha1 = document.policySha1();
+		fields.createdAt = document.createdAt().toString();
+		fields.journal = target.journal().stream().map(JournalEntry::toFields).toList();
+		fields.ownershipLedger = document.ownershipLedger().toFields();
+		fields.policy = document.manifest().toFields();
+		return fields;
 	}
 
 	public ConfirmationState getConfirmationState() {
@@ -671,7 +682,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private GroupManifest removalManifest(ClientUpdatePlanBuilder.RemovalPreparation preparation) throws IOException {
-		String generationId = preparation.installed().targetGenerationId;
+		String generationId = preparation.installed().contentToken;
 		return new ClientGenerationStore(storage).read(generationId)
 				.orElseThrow(() -> new IOException("Installed generation record is unavailable: " + generationId)).manifest();
 	}
@@ -962,9 +973,9 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
-		GenerationUpdateRange updateRange = updateRange(target, installedGenerationId(target.manifest().modpackId()));
+		String installedToken = installedToken(target.manifest().modpackId());
 		UpdatePreview applied = UpdatePreview.create(prepared.plan(), target.selection(), UpdatePreview.Mode.UPDATE,
-				featuredNotes(updateRange), updateRange.generations()).withFeatureManifest(target.manifest());
+				featuredNotes(target, installedToken), updateJournal(target, installedToken)).withFeatureManifest(target.manifest());
 		changelogs.replaceWith(applied.withReferences(resolveMainPageReferences(prepared)));
 		LOGGER.info("Prepared update changes: {} changed, {} removed", changelogs.changedFiles().size(), changelogs.removedFiles().size());
 	}
@@ -1064,14 +1075,14 @@ public class ModpackUpdater implements AutoCloseable {
 	private boolean requiresPlayerReview(ClientUpdatePlanBuilder.PreparedPlan prepared, boolean firstInstall) throws IOException {
 		if (!firstInstall && !hasPlanImpact(prepared) && storedTarget() != null) return false;
 		ModpackJsons.ModpackContentFields installed = storedTarget();
-		GenerationTarget installedTarget = installed == null ? null : GenerationTarget.fromFlat(installed);
-		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared));
+		PackTarget installedTarget = installed == null ? null : PackTarget.fromFlat(installed);
+		return UpdateReviewPolicy.requiresPlayerReview(firstInstall, installedTarget, prepared.plan().packTarget(), hasPlanImpact(prepared));
 	}
 
 	/** Login reconciliation must also advance a newly advertised generation, even when its files are unchanged. */
 	private boolean requiresReconciliation(ClientUpdatePlanBuilder.PreparedPlan prepared, ModpackJsons.ModpackContentFields installed) throws IOException {
-		GenerationTarget installedTarget = installed == null ? null : GenerationTarget.fromFlat(installed);
-		return UpdateReviewPolicy.requiresPlayerReview(false, installedTarget, prepared.plan().generationTarget(), hasPlanImpact(prepared));
+		PackTarget installedTarget = installed == null ? null : PackTarget.fromFlat(installed);
+		return UpdateReviewPolicy.requiresPlayerReview(false, installedTarget, prepared.plan().packTarget(), hasPlanImpact(prepared));
 	}
 
 	private boolean hasPlanImpact(ClientUpdatePlanBuilder.PreparedPlan prepared) throws IOException {
@@ -1081,24 +1092,30 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private boolean requestPreparedPlanPreview(ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
-		GenerationUpdateRange updateRange = updateRange(selectedTarget, installedGenerationId(selectedTarget.manifest().modpackId()));
+		String installedToken = installedToken(selectedTarget.manifest().modpackId());
 		UpdatePreview preview = UpdatePreview.create(prepared.plan(), selectedTarget.selection(), UpdatePreview.Mode.UPDATE,
-				featuredNotes(updateRange), updateRange.generations()).withFeatureManifest(selectedTarget.manifest()).withReferences(resolveMainPageReferences(prepared));
+				featuredNotes(selectedTarget, installedToken), updateJournal(selectedTarget, installedToken)).withFeatureManifest(selectedTarget.manifest())
+				.withReferences(resolveMainPageReferences(prepared));
 		return ScreenManager.preview(preview, getModpackName(), this,
 				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction);
 	}
 
-	private String installedGenerationId(String modpackId) throws IOException {
+	private String installedToken(String modpackId) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		return state != null && modpackId.equals(state.modpackId) ? state.generationId : "";
+		return state != null && modpackId.equals(state.modpackId) ? state.contentToken : "";
 	}
 
-	private static GenerationUpdateRange updateRange(SelectedModpackTarget target, String installedGenerationId) {
-		return GenerationUpdateRange.between(target.patchNotesHistory(), installedGenerationId, target.generationRecord().metadata().generationId());
+	/** The journal tail published after the installed state: from the newest entry back to (excluding) the installed token, or the whole tail when it is gone. */
+	private static List<JournalEntry> updateJournal(SelectedModpackTarget target, String installedToken) {
+		List<JournalEntry> journal = target.journal();
+		for (int index = journal.size() - 1; index >= 0; index--)
+			if (journal.get(index).contentToken().equals(installedToken)) return journal.subList(index + 1, journal.size());
+		return journal;
 	}
 
-	private static String featuredNotes(GenerationUpdateRange updateRange) {
-		return updateRange.featuredNotes().map(GenerationPatchNoteHistory.Entry::patchNotes).orElse("");
+	private static String featuredNotes(SelectedModpackTarget target, String installedToken) {
+		List<JournalEntry> range = updateJournal(target, installedToken);
+		return range.isEmpty() ? "" : range.get(range.size() - 1).notes();
 	}
 
 	private ClientUpdatePlanBuilder.PreparedPlan executePlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, SelectedModpackTarget target) throws Exception {

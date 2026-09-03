@@ -285,7 +285,7 @@ class UpdatePlannerTest {
 				new FileKey(Root.GAME_DIR, "mods/nested.jar"), new FileState(OLD_HASH, 8, true),
 				new FileKey(Root.GAME_DIR, "mods/nested-edited.jar"), new FileState(OTHER_HASH, 8, true),
 				new FileKey(Root.GAME_DIR, "mods/local.jar"), new FileState(TARGET_HASH, 9, true));
-		GeneratedCopyState generated = new GeneratedCopyState(installed.modpackId, installed.targetGenerationId, "3".repeat(40), List.of(
+		GeneratedCopyState generated = new GeneratedCopyState(installed.modpackId, installed.contentToken, "3".repeat(40), List.of(
 				new GeneratedCopyState.Entry("mods/nested.jar", OLD_HASH, 8), new GeneratedCopyState.Entry("mods/nested-edited.jar", OLD_HASH, 8)));
 
 		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, Set.of(), generated, new ClientConfigJsons.ClientConfigFieldsV3()));
@@ -435,16 +435,14 @@ class UpdatePlannerTest {
 		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(Set.of(
 				editableItem("config/settings.json", TARGET_HASH, 7, "config")));
 		target.modpackId = "abc1234";
-		target.targetGenerationId = "1".repeat(40);
-		target.parentGenerationId = "";
-		target.stateDigest = "2".repeat(40);
+		target.contentToken = "1".repeat(40);
+		target.policySha1 = "2".repeat(40);
 		target.ownershipLedger = ledger(entry("config/settings.json", TARGET_HASH, 7, OwnershipLedger.Status.PRESENT));
 		ModpackJsons.ModpackContentFields previous = new ModpackJsons.ModpackContentFields(Set.of(
 				editableItem("config/settings.json", OLD_HASH, 6, "config")));
 		previous.modpackId = "old1234";
-		previous.targetGenerationId = "3".repeat(40);
-		previous.parentGenerationId = "";
-		previous.stateDigest = "4".repeat(40);
+		previous.contentToken = "3".repeat(40);
+		previous.policySha1 = "4".repeat(40);
 		previous.ownershipLedger = ledgerFor("old1234", entry("config/settings.json", OLD_HASH, 6, OwnershipLedger.Status.PRESENT));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(editedTargetHash, 7, true),
 				new FileKey(Root.PROJECTION, "config/settings.json"), new FileState(editedTargetHash, 7, true));
@@ -474,9 +472,8 @@ class UpdatePlannerTest {
 			GenerationJsons.OwnershipLedgerFields ownershipLedger) {
 		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(new LinkedHashSet<>(items.values()));
 		target.modpackId = "abc1234";
-		target.targetGenerationId = "1".repeat(40);
-		target.parentGenerationId = "";
-		target.stateDigest = "2".repeat(40);
+		target.contentToken = "1".repeat(40);
+		target.policySha1 = "2".repeat(40);
 		target.ownershipLedger = ownershipLedger;
 		return target;
 	}
@@ -493,15 +490,14 @@ class UpdatePlannerTest {
 			OwnershipLedger.Entry... entries) {
 		ModpackJsons.ModpackContentFields target = new ModpackJsons.ModpackContentFields(new LinkedHashSet<>(items.values()));
 		target.modpackId = modpackId;
-		target.targetGenerationId = "1".repeat(40);
-		target.parentGenerationId = "";
-		target.stateDigest = "2".repeat(40);
+		target.contentToken = "1".repeat(40);
+		target.policySha1 = "2".repeat(40);
 		target.ownershipLedger = ledgerFor(modpackId, entries);
 		return target;
 	}
 
 	private static OwnershipLedger.Entry entryFor(String modpackId, String path, String hash, long size) {
-		return new OwnershipLedger.Entry(path, Set.of(new OwnershipLedger.Content(hash, size)), Set.of("main"), "a".repeat(40), "b".repeat(40), OwnershipLedger.Status.PRESENT);
+		return entry(path, hash, size, OwnershipLedger.Status.PRESENT);
 	}
 
 	private static ModInfo mod(String path, String hash, String id) {
@@ -537,6 +533,8 @@ class UpdatePlannerTest {
 	}
 
 	private static OwnershipLedger.Entry entry(String path, String hash, long size, OwnershipLedger.Status status) {
-		return new OwnershipLedger.Entry(path, Set.of(new OwnershipLedger.Content(hash, size)), Set.of("main"), "a".repeat(40), "b".repeat(40), status);
+		NavigableSet<OwnershipLedger.Content> hashes = new TreeSet<>(Comparator.comparing(OwnershipLedger.Content::sha1).thenComparingLong(OwnershipLedger.Content::size));
+		hashes.add(new OwnershipLedger.Content(hash, size));
+		return new OwnershipLedger.Entry(path, hashes, new TreeSet<>(Set.of("main")), status);
 	}
 }

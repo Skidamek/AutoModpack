@@ -3,7 +3,6 @@ package pl.skidam.automodpack.client.ui.screen;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
@@ -15,8 +14,7 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 public final class PatchNotesHistoryScreen extends VersionedScreen {
@@ -32,22 +30,14 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 	private Button nextButton;
 	private int page;
 
-	public PatchNotesHistoryScreen(Screen parent, List<GenerationPatchNoteHistory.Entry> history, String modpackName) {
+	public PatchNotesHistoryScreen(Screen parent, List<JournalEntry> history, String modpackName) {
 		this(parent, history, modpackName, () -> {});
 	}
 
-	public PatchNotesHistoryScreen(Screen parent, List<GenerationPatchNoteHistory.Entry> history, String modpackName, Runnable closedCallback) {
-		this(parent, displayEntries(history), modpackName, closedCallback, true);
-	}
-
-	static PatchNotesHistoryScreen fromIndex(Screen parent, GenerationHistoryIndex index, String modpackName) {
-		return new PatchNotesHistoryScreen(parent, index.entries().stream().map(entry -> new DisplayEntry(entry.createdAt(), entry.patchNotes())).collect(Collectors.toList()), modpackName, () -> {}, true);
-	}
-
-	private PatchNotesHistoryScreen(Screen parent, List<DisplayEntry> history, String modpackName, Runnable closedCallback, boolean displayEntries) {
+	public PatchNotesHistoryScreen(Screen parent, List<JournalEntry> history, String modpackName, Runnable closedCallback) {
 		super(VersionedText.translatable("automodpack.patchNotes.title"));
 		this.parent = parent;
-		this.history = List.copyOf(history);
+		this.history = history == null ? List.of() : history.stream().map(entry -> new DisplayEntry(entry.createdAt(), entry.notes())).toList();
 		this.modpackName = modpackName == null ? "" : modpackName;
 		this.closedCallback = closedCallback == null ? () -> {} : closedCallback;
 	}
@@ -101,10 +91,6 @@ public final class PatchNotesHistoryScreen extends VersionedScreen {
 		}
 		if (lines.isEmpty()) lines.add(VersionedText.translatable("automodpack.patchNotes.empty").getString());
 		return lines;
-	}
-
-	private static List<DisplayEntry> displayEntries(List<GenerationPatchNoteHistory.Entry> history) {
-		return history == null ? List.of() : history.stream().map(entry -> new DisplayEntry(entry.createdAt(), entry.patchNotes())).toList();
 	}
 
 	private void updateNavigation() {

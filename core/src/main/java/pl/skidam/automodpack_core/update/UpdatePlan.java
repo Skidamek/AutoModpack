@@ -12,14 +12,14 @@ import java.util.TreeSet;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Immutable prepared reconciliation decision: executable intent and its canonical user-visible consequences. */
 public record UpdatePlan(
 		String modpackId,
-		GenerationTarget generationTarget,
+		PackTarget packTarget,
 		List<Operation> operations,
 		List<ProjectedFile> projectedFinalState,
 		ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig,
@@ -31,7 +31,7 @@ public record UpdatePlan(
 		ChangeSet consequences) {
 
 	public UpdatePlan {
-		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
+		packTarget = Objects.requireNonNull(packTarget, "packTarget");
 		operations = List.copyOf(operations);
 		projectedFinalState = List.copyOf(projectedFinalState);
 		restartReasons = stableSet(restartReasons);
@@ -45,7 +45,7 @@ public record UpdatePlan(
 	public UpdatePlan withRestartReason(RestartReason reason) {
 		LinkedHashSet<RestartReason> reasons = new LinkedHashSet<>(restartReasons);
 		if (!reasons.add(Objects.requireNonNull(reason, "restart reason"))) return this;
-		return new UpdatePlan(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, reasons, preservations, baselineCaptures, conflicts,
+		return new UpdatePlan(modpackId, packTarget, operations, projectedFinalState, plannedClientConfig, reasons, preservations, baselineCaptures, conflicts,
 				generatedCopies, consequences.withEffects(List.of(new ChangeSet.Effect("restart", reason.name()))));
 	}
 

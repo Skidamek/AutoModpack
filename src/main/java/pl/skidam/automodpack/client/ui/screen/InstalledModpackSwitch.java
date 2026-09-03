@@ -4,7 +4,7 @@ import java.io.IOException;
 
 import net.minecraft.client.Minecraft;
 
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -23,12 +23,12 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 final class InstalledModpackSwitch {
 	private InstalledModpackSwitch() {}
 
-	static void start(ClientStorage storage, GenerationRecord record, SelectionIntent expectedSelection, SelectionIntent targetSelection,
+	static void start(ClientStorage storage, PackDocument record, SelectionIntent expectedSelection, SelectionIntent targetSelection,
 			String modpackName, Runnable release) {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			ModpackUpdater updater = null;
 			try {
-				var fields = new ClientGenerationStore(storage).readFields(record.metadata().generationId())
+				var fields = new ClientGenerationStore(storage).readFields(record.contentToken())
 						.orElseThrow(() -> new IOException("Installed modpack generation record is missing"));
 				SelectedModpackTarget target = SelectedModpackTarget.prepare(fields, expectedSelection, targetSelection, ClientPlatform.effective(targetSelection));
 				updater = updater(storage, target);

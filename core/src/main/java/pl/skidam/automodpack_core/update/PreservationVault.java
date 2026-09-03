@@ -55,7 +55,7 @@ public final class PreservationVault {
 		LOCAL_DRIFT
 	}
 
-	public record Claim(String claimId, String originalPath, Root sourceRoot, String objectHash, long size, String modpackId, String generationId, Reason reason,
+	public record Claim(String claimId, String originalPath, Root sourceRoot, String objectHash, long size, String modpackId, String contentToken, Reason reason,
 			Instant preservedAt) {
 		public Claim {
 			Objects.requireNonNull(sourceRoot, "source root");
@@ -71,21 +71,21 @@ public final class PreservationVault {
 		}
 	}
 
-	public static Claim preserve(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size)
+	public static Claim preserve(ClientStorage storage, String modpackId, String contentToken, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size)
 			throws IOException {
-		return preserve(storage, modpackId, generationId, reason, sourceRoot, originalPath, objectHash, size, Instant.now());
+		return preserve(storage, modpackId, contentToken, reason, sourceRoot, originalPath, objectHash, size, Instant.now());
 	}
 
-	static Claim preserve(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size,
+	static Claim preserve(ClientStorage storage, String modpackId, String contentToken, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size,
 			Instant preservedAt) throws IOException {
 		Objects.requireNonNull(storage, "storage");
-		return ClientStorageMutation.run(storage, () -> preserveLocked(storage, modpackId, generationId, reason, sourceRoot, originalPath, objectHash, size, preservedAt));
+		return ClientStorageMutation.run(storage, () -> preserveLocked(storage, modpackId, contentToken, reason, sourceRoot, originalPath, objectHash, size, preservedAt));
 	}
 
-	private static Claim preserveLocked(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size,
+	private static Claim preserveLocked(ClientStorage storage, String modpackId, String contentToken, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size,
 			Instant preservedAt) throws IOException {
 		String pack = ModpackId.requireValid(modpackId);
-		String generation = requireOptionalHash(generationId, "preservation generation ID");
+		String generation = requireOptionalHash(contentToken, "preservation generation ID");
 		Reason normalizedReason = Objects.requireNonNull(reason, "preservation reason");
 		Root normalizedRoot = requireRestorableRoot(sourceRoot);
 		String path = requirePath(originalPath);
@@ -121,7 +121,7 @@ public final class PreservationVault {
 				claim.objectHash = hash;
 				claim.size = size;
 				claim.modpackId = pack;
-				claim.generationId = generation;
+				claim.contentToken = generation;
 				claim.reason = normalizedReason.name();
 				claim.preservedAt = time.toString();
 				fields.claims = new ArrayList<>(fields.claims);
@@ -134,10 +134,10 @@ public final class PreservationVault {
 	}
 
 	/** Preserves and then removes a conflicting local file. Retrying the same conflict is idempotent. */
-	public static Claim preserveConflict(ClientStorage storage, String generationId, Conflict conflict) throws IOException {
+	public static Claim preserveConflict(ClientStorage storage, String contentToken, Conflict conflict) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-				Claim claim = preserve(storage, conflict.modpackId(), generationId, Reason.LOCAL_CONFLICT, Root.GAME_DIR, conflict.sourcePath(), conflict.sourceHash(), conflict.sourceSize());
+				Claim claim = preserve(storage, conflict.modpackId(), contentToken, Reason.LOCAL_CONFLICT, Root.GAME_DIR, conflict.sourcePath(), conflict.sourceHash(), conflict.sourceSize());
 				Path source = storage.gamePath(conflict.sourcePath());
 				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
 					validateSource(storage, conflict.modpackId(), Root.GAME_DIR, source);
@@ -152,7 +152,7 @@ public final class PreservationVault {
 	}
 
 	/** Replaces the claim for a path with one for new bytes as one vault operation: a claim already matching the new bytes is returned unchanged, superseded claims are released. */
-	public static Claim replaceClaim(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size)
+	public static Claim replaceClaim(ClientStorage storage, String modpackId, String contentToken, Reason reason, Root sourceRoot, String originalPath, String objectHash, long size)
 			throws IOException {
 		Objects.requireNonNull(storage, "storage");
 		String pack = ModpackId.requireValid(modpackId);
@@ -166,16 +166,16 @@ public final class PreservationVault {
 				if (claim.objectHash().equalsIgnoreCase(objectHash) && claim.size() == size) return claim;
 				delete(storage, pack, claim.claimId());
 			}
-			return preserve(storage, pack, generationId, normalizedReason, normalizedRoot, originalPath, objectHash, size);
+			return preserve(storage, pack, contentToken, normalizedReason, normalizedRoot, originalPath, objectHash, size);
 		});
 	}
 
 	/** Preserves and removes a regular file as one idempotent vault operation. */
-	public static Claim preserveAndRemove(ClientStorage storage, String modpackId, String generationId, Reason reason, Root sourceRoot, String originalPath, String objectHash,
+	public static Claim preserveAndRemove(ClientStorage storage, String modpackId, String contentToken, Reason reason, Root sourceRoot, String originalPath, String objectHash,
 			long size) throws IOException {
 		return ClientStorageMutation.run(storage, () -> {
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-				Claim claim = preserve(storage, modpackId, generationId, reason, sourceRoot, originalPath, objectHash, size);
+				Claim claim = preserve(storage, modpackId, contentToken, reason, sourceRoot, originalPath, objectHash, size);
 				Path source = source(storage, modpackId, sourceRoot, originalPath);
 				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
 					validateSource(storage, modpackId, sourceRoot, source);
@@ -256,7 +256,7 @@ public final class PreservationVault {
 			try (FileMetadataCache cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
-				Path root = storage.restoredClaimDirectory(pack, claim.generationId, id);
+				Path root = storage.restoredClaimDirectory(pack, claim.contentToken, id);
 				Path destination = LogicalPath.resolve(root, claim.originalPath);
 				copyWithoutOverwrite(storage.gameDirectory(), object(storage, claim.objectHash), destination, claim.size, claim.objectHash, cache);
 				releaseClaim(storage, pack, fields, id);
@@ -283,14 +283,14 @@ public final class PreservationVault {
 		SelectedModpackTarget activeTarget = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current())
 				.orElseThrow(() -> new IOException("The active generation target is missing"));
 		if (!modpackId.equals(activeTarget.manifest().modpackId())) throw new IOException("Active generation belongs to another modpack");
-		String generationId = activeTarget.generationTarget().targetGenerationId();
+		String contentToken = activeTarget.packTarget().contentToken();
 		String selectionDigest = UpdateTransaction.digest(activeTarget.selection().intent());
-		boolean generated = GeneratedCopyState.read(storage, modpackId, generationId, selectionDigest).entries().stream()
+		boolean generated = GeneratedCopyState.read(storage, modpackId, contentToken, selectionDigest).entries().stream()
 				.anyMatch(entry -> logicalPath.equals(entry.logicalPath()));
 		if (generated) throw new IOException("The active modpack still owns generated file " + logicalPath);
 		boolean projected = activeTarget.flatTarget().list != null && activeTarget.flatTarget().list.stream().anyMatch(item -> logicalPath.equals(UpdatePlanner.normalize(item.file)));
 		if (!projected) return;
-		OwnershipLedger.Entry ledgerEntry = activeTarget.generationRecord().ownershipLedger().entries().get(logicalPath);
+		OwnershipLedger.Entry ledgerEntry = activeTarget.document().ownershipLedger().entries().get(logicalPath);
 		if (ledgerEntry == null || ledgerEntry.currentStatus() != OwnershipLedger.Status.PRESENT) throw new IOException("Active target and ownership ledger disagree about " + logicalPath);
 		throw new IOException("The active modpack still owns " + logicalPath);
 	}
@@ -344,7 +344,7 @@ public final class PreservationVault {
 		for (ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim : fields.claims) {
 			Claim parsed = toClaim(claim);
 			if (!modpackId.equals(parsed.modpackId()) || !ids.add(parsed.claimId())) throw new IOException("Preservation manifest contains duplicate or foreign claims");
-			String expectedId = claimId(parsed.modpackId(), parsed.generationId(), parsed.reason(), parsed.sourceRoot(), parsed.originalPath(), parsed.objectHash(), parsed.size());
+			String expectedId = claimId(parsed.modpackId(), parsed.contentToken(), parsed.reason(), parsed.sourceRoot(), parsed.originalPath(), parsed.objectHash(), parsed.size());
 			if (!expectedId.equals(parsed.claimId())) throw new IOException("Preservation claim identity is invalid");
 		}
 		List<ClientStorageJsons.ClientPreservationVaultFields.ClaimFields> sorted = new ArrayList<>(fields.claims);
@@ -379,7 +379,7 @@ public final class PreservationVault {
 		String hash = requireHash(fields.objectHash, "preservation object hash");
 		if (fields.size < 0) throw new IOException("Preservation claim size is invalid");
 		String pack = ModpackId.requireValid(fields.modpackId);
-		String generation = requireOptionalHash(fields.generationId, "preservation generation ID");
+		String generation = requireOptionalHash(fields.contentToken, "preservation generation ID");
 		Instant time;
 		try {
 			time = requireInstant(Instant.parse(fields.preservedAt));
@@ -389,8 +389,8 @@ public final class PreservationVault {
 		return new Claim(id, path, root, hash, fields.size, pack, generation, reason, time);
 	}
 
-	private static String claimId(String modpackId, String generationId, Reason reason, Root sourceRoot, String path, String hash, long size) {
-		return HashUtils.sha1("automodpack-preservation-v1\nmodpack=" + modpackId + "\ngeneration=" + generationId + "\nreason=" + reason.name() + "\nroot=" + sourceRoot.name()
+	private static String claimId(String modpackId, String contentToken, Reason reason, Root sourceRoot, String path, String hash, long size) {
+		return HashUtils.sha1("automodpack-preservation-v1\nmodpack=" + modpackId + "\ngeneration=" + contentToken + "\nreason=" + reason.name() + "\nroot=" + sourceRoot.name()
 				+ "\npath=" + path + "\nhash=" + hash + "\nsize=" + size + "\n");
 	}
 

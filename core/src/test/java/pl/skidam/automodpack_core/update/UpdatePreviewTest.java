@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -145,14 +147,15 @@ class UpdatePreviewTest {
 			if (value instanceof OwnershipLedger.Entry entry) ledgerEntries.put(entry.logicalPath(), entry);
 		}
 		target.modpackId = "abc1234";
-		target.targetGenerationId = "1".repeat(40);
-		target.parentGenerationId = "";
-		target.stateDigest = "2".repeat(40);
+		target.contentToken = "1".repeat(40);
+		target.policySha1 = "2".repeat(40);
 		target.ownershipLedger = new OwnershipLedger("abc1234", ledgerEntries).toFields();
 		return target;
 	}
 
 	private static OwnershipLedger.Entry entry(String path, String hash, long size, OwnershipLedger.Status status) {
-		return new OwnershipLedger.Entry(path, Set.of(new OwnershipLedger.Content(hash, size)), Set.of("main"), "a".repeat(40), "b".repeat(40), status);
+		NavigableSet<OwnershipLedger.Content> hashes = new TreeSet<>(Comparator.comparing(OwnershipLedger.Content::sha1).thenComparingLong(OwnershipLedger.Content::size));
+		hashes.add(new OwnershipLedger.Content(hash, size));
+		return new OwnershipLedger.Entry(path, hashes, new TreeSet<>(Set.of("main")), status);
 	}
 }

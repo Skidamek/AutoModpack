@@ -3,20 +3,16 @@ package pl.skidam.automodpack_core.utils;
 import java.nio.file.Path;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 
 public class ModpackContentTools {
-	public static GenerationRecord readGenerationRecord(Path path) {
-		return ConfigTools.read(path, ModpackJsons.CompleteModpackContentFields.class).map(GenerationRecord::fromFields).orElse(null);
+	public static GenerationJsons.HeadDocumentFields readHeadDocument(Path path) {
+		return ConfigTools.read(path, GenerationJsons.HeadDocumentFields.class).orElse(null);
 	}
 
-	public static ModpackJsons.CompleteModpackContentFields readCompleteFields(Path path) {
-		ModpackJsons.CompleteModpackContentFields fields = ConfigTools.read(path, ModpackJsons.CompleteModpackContentFields.class).orElse(null);
-		if (fields == null) return null;
-		GenerationRecord.fromFields(fields);
-		GenerationPatchNoteHistory.fromFields(fields);
-		return fields;
+	public static PackDocument readPackDocument(Path path) {
+		GenerationJsons.HeadDocumentFields fields = readHeadDocument(path);
+		return fields == null ? null : PackDocument.fromFields(fields);
 	}
 }

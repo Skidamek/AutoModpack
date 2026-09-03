@@ -17,9 +17,10 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -45,7 +46,7 @@ public class ModpackUtils {
 		SUCCESS, OPERATION_FAILED, CONNECTION_FAILED
 	}
 
-	public record ManifestFetchResult(ManifestFetchState state, ModpackJsons.CompleteModpackContentFields content, DownloadClient client, Throwable failure) {
+	public record ManifestFetchResult(ManifestFetchState state, GenerationJsons.HeadDocumentFields content, DownloadClient client, Throwable failure) {
 		public boolean successful() {
 			return state == ManifestFetchState.SUCCESS;
 		}
@@ -118,13 +119,13 @@ public class ModpackUtils {
 		}
 
 		try {
-			GenerationRecord active = new ClientGenerationStore(storage).read(state.generationId).orElse(null);
-			if (active != null && !serverModpackContent.stateDigest.isBlank() && !serverModpackContent.stateDigest.equals(active.metadata().stateDigest())) {
-				LOGGER.info("Server generation content differs from the installed generation; skipping the per-file verification");
+			PackDocument active = new ClientGenerationStore(storage).read(state.contentToken).orElse(null);
+			if (active != null && !serverModpackContent.contentToken.isBlank() && !serverModpackContent.contentToken.equals(active.contentToken())) {
+				LOGGER.info("Server modpack content differs from the installed modpack; skipping the per-file verification");
 				return true;
 			}
 		} catch (IOException | RuntimeException e) {
-			LOGGER.debug("Cannot compare the installed generation digest", e);
+			LOGGER.debug("Cannot compare the installed modpack content token", e);
 		}
 		return false;
 	}
@@ -255,7 +256,7 @@ public class ModpackUtils {
 				});
 	}
 
-	private static CompletableFuture<Optional<ModpackJsons.CompleteModpackContentFields>> fetchModpackContentAsync(ClientStorage storage, DownloadClient client,
+	private static CompletableFuture<Optional<GenerationJsons.HeadDocumentFields>> fetchModpackContentAsync(ClientStorage storage, DownloadClient client,
 			Function<DownloadClient, CompletableFuture<Path>> operation) {
 		CompletableFuture<Path> operationFuture;
 		try {
@@ -265,7 +266,7 @@ public class ModpackUtils {
 		}
 
 		return operationFuture.thenApplyAsync(path -> {
-			ModpackJsons.CompleteModpackContentFields content = ModpackContentTools.readCompleteFields(path);
+			GenerationJsons.HeadDocumentFields content = ModpackContentTools.readHeadDocument(path);
 			return Optional.ofNullable(content);
 		}, DownloadClient.NET_EXECUTOR).whenComplete((content, error) -> {
 			try {

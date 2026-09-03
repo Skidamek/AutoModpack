@@ -34,7 +34,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
@@ -63,7 +63,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final boolean openedFromManager;
 	private final boolean showManagement;
 	private final boolean activeModpack;
-	private final GenerationRecord localRecord;
+	private final PackDocument localRecord;
 	private final ClientPlatform detectedPlatform;
 	private ClientPlatform platformOverride;
 
@@ -93,23 +93,23 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return new ModpackSelectionScreen(parent, manifest, savedSelection, savedSelection, selectionAction, cancelAction, null, false, false, null);
 	}
 
-	public static ModpackSelectionScreen forInstalledRecord(Screen parent, GenerationRecord record, boolean managerEntry) {
+	public static ModpackSelectionScreen forInstalledRecord(Screen parent, PackDocument record, boolean managerEntry) {
 		return forInstalledRecord(parent, record, managerEntry, true);
 	}
 
-	static ModpackSelectionScreen forInstalledRecord(Screen parent, GenerationRecord record, boolean managerEntry, boolean showManagement) {
+	static ModpackSelectionScreen forInstalledRecord(Screen parent, PackDocument record, boolean managerEntry, boolean showManagement) {
 		return new ModpackSelectionScreen(parent, record.manifest(), null, null, null, () -> {}, null, managerEntry, true, showManagement, record);
 	}
 
 	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, SelectionIntent expectedSelection, SelectionIntent initialSelection,
 			Consumer<SelectionIntent> selectionAction, Runnable cancelAction, ModpackUpdater pendingUpdater, boolean managerEntry, boolean openedFromManager,
-			GenerationRecord localRecord) {
+			PackDocument localRecord) {
 		this(parent, manifest, expectedSelection, initialSelection, selectionAction, cancelAction, pendingUpdater, managerEntry, openedFromManager, true, localRecord);
 	}
 
 	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, SelectionIntent expectedSelection, SelectionIntent initialSelection,
 			Consumer<SelectionIntent> selectionAction, Runnable cancelAction, ModpackUpdater pendingUpdater, boolean managerEntry, boolean openedFromManager,
-			boolean showManagement, GenerationRecord localRecord) {
+			boolean showManagement, PackDocument localRecord) {
 		super(VersionedText.translatable("automodpack.selection.title"));
 		this.parent = parent;
 		this.manifest = Objects.requireNonNull(manifest);

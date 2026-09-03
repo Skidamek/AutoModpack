@@ -17,10 +17,10 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
@@ -66,7 +66,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	private List<ActionRow> buildRows() {
 		List<ActionRow> rows = new ArrayList<>();
-		if (GenerationPatchNoteHistory.containsNotes(preview.patchNotesHistory()))
+		if (Changelogs.hasNotes(preview.journal()))
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
 		if (canCustomize()) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
@@ -144,7 +144,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private void openPatchNotes() {
-		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, preview.patchNotesHistory(), modpackName));
+		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, preview.journal(), modpackName));
 	}
 
 	@Override

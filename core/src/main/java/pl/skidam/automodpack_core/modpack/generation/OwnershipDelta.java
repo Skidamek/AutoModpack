@@ -2,10 +2,10 @@ package pl.skidam.automodpack_core.modpack.generation;
 
 import java.util.*;
 
-import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Path-level changes used to materialize one cumulative ownership ledger. */
 public record OwnershipDelta(String modpackId, NavigableMap<String, Change> changes, String digest) {
@@ -88,46 +88,6 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 		return contents;
 	}
 
-	public GenerationJsons.OwnershipDeltaFields toFields() {
-		GenerationJsons.OwnershipDeltaFields fields = new GenerationJsons.OwnershipDeltaFields();
-		fields.modpackId = modpackId;
-		fields.digest = digest;
-		fields.changes = new ArrayList<>();
-		for (Change change : changes.values()) {
-			GenerationJsons.OwnershipDeltaFields.ChangeFields serialized = new GenerationJsons.OwnershipDeltaFields.ChangeFields();
-			serialized.logicalPath = change.logicalPath();
-			serialized.kind = change.kind().name();
-			serialized.content = contentFields(change.content());
-			serialized.contents = change.contents().stream().map(OwnershipDelta::contentFields).toList();
-			serialized.groupIds = new TreeSet<>(change.groupIds());
-			fields.changes.add(serialized);
-		}
-		return fields;
-	}
-
-	public static OwnershipDelta fromFields(GenerationJsons.OwnershipDeltaFields fields) {
-		if (fields == null || fields.changes == null) throw new IllegalArgumentException("Ownership delta is missing");
-		Map<String, Change> changes = new TreeMap<>();
-		for (GenerationJsons.OwnershipDeltaFields.ChangeFields serialized : fields.changes) {
-			if (serialized == null || serialized.content == null || serialized.contents == null) throw new IllegalArgumentException("Ownership delta change is incomplete");
-			OwnershipLedger.Content content = content(serialized.content);
-			TreeSet<OwnershipLedger.Content> contents = new TreeSet<>(CONTENT_ORDER);
-			for (GenerationJsons.OwnershipLedgerFields.ContentFields value : serialized.contents) {
-				if (value == null) throw new IllegalArgumentException("Ownership delta content is incomplete");
-				contents.add(content(value));
-			}
-			Kind kind;
-			try {
-				kind = Kind.valueOf(serialized.kind);
-			} catch (RuntimeException e) {
-				throw new IllegalArgumentException("Invalid ownership delta kind", e);
-			}
-			Change change = new Change(serialized.logicalPath, kind, content, contents, new TreeSet<>(serialized.groupIds));
-			if (changes.put(change.logicalPath(), change) != null) throw new IllegalArgumentException("Duplicate ownership delta path: " + change.logicalPath());
-		}
-		return new OwnershipDelta(fields.modpackId, new TreeMap<>(changes), fields.digest);
-	}
-
 	public static String digest(String modpackId, Map<String, Change> changes) {
 		ModpackId.requireValid(modpackId);
 		TreeMap<String, Change> sorted = new TreeMap<>();
@@ -140,7 +100,7 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 			encoder.integer(change.groupIds().size());
 			for (String groupId : change.groupIds()) encoder.string(groupId);
 		}
-		return GenerationIdentity.sha1Bytes(encoder.bytes());
+		return HashUtils.sha1(encoder.bytes());
 	}
 
 	private record Current(NavigableSet<OwnershipLedger.Content> contents, NavigableSet<String> groups) {
@@ -175,11 +135,4 @@ public record OwnershipDelta(String modpackId, NavigableMap<String, Change> chan
 		return values == null ? new TreeMap<>() : new TreeMap<>(values);
 	}
 
-	private static GenerationJsons.OwnershipLedgerFields.ContentFields contentFields(OwnershipLedger.Content content) {
-		return new GenerationJsons.OwnershipLedgerFields.ContentFields(content.sha1(), content.size());
-	}
-
-	private static OwnershipLedger.Content content(GenerationJsons.OwnershipLedgerFields.ContentFields fields) {
-		return new OwnershipLedger.Content(fields.sha1, fields.size);
-	}
 }
