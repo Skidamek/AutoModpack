@@ -67,7 +67,7 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: PackConfirmScreen
         - no_element: { text: verify }
   - do: click
     name: open advanced group selection
@@ -129,7 +129,7 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: PackConfirmScreen
         - element: { text: View all patch notes, enabled: true }
   - do: wait_for
     name: wait for the unverified ack checkbox after the lock
@@ -285,7 +285,7 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: PackConfirmScreen
         - element: { key: automodpack.confirm.ack, enabled: true }
   - do: screenshot
     name: capture A to B switch review
@@ -457,7 +457,7 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: PackConfirmScreen
         - element: { key: automodpack.confirm.ack, enabled: true }
   - do: screenshot
     name: capture B to A switch review
@@ -723,7 +723,7 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: UnverifiedPackConfirmScreen
+        - screen: PackConfirmScreen
         - element: { key: automodpack.confirm.ack, enabled: true }
   - do: click
     name: acknowledge unverified risk for the return to Pack A
@@ -1213,7 +1213,7 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: [MatchedPackConfirmScreen, UnverifiedPackConfirmScreen]
+        - screen: PackConfirmScreen
         - element: { key: automodpack.confirm.keepExistingMods, enabled: true }
   - do: screenshot
     name: capture first-install cleanup with its safe default
@@ -1231,7 +1231,7 @@ flow:
     name: return to the same first-install consent state
     until:
       all:
-        - screen: [MatchedPackConfirmScreen, UnverifiedPackConfirmScreen]
+        - screen: PackConfirmScreen
         - element: { key: automodpack.confirm.keepExistingMods, enabled: true }
   - do: click
     name: opt into keeping existing mods
@@ -1274,7 +1274,7 @@ flow:
             - screen: UpdatePreviewScreen
             - element: { key: automodpack.update.apply, enabled: true }
         - all:
-            - screen: UnverifiedPackConfirmScreen
+            - screen: PackConfirmScreen
             - element: { key: automodpack.confirm.ack, enabled: true }
   - do: click
     name: acknowledge later unverified risk

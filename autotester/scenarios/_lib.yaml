@@ -79,7 +79,7 @@ accept_certificate:
     timeout: 20s
     until:
       all:
-        - screen: [PreparingScreen, MatchedPackConfirmScreen, UnverifiedPackConfirmScreen, UpdatePreviewScreen, DownloadScreen, FetchScreen, RestartScreen]
+        - screen: [PreparingScreen, PackConfirmScreen, UpdatePreviewScreen, DownloadScreen, FetchScreen, RestartScreen]
         - screen_not: DisconnectedScreen
   - do: wait_for
     name: wait for the certificate to be accepted
@@ -95,7 +95,7 @@ download_modpack:
     name: wait for the first-connection prompt
     timeout: 90s
     until:
-      screen: [MatchedPackConfirmScreen, UnverifiedPackConfirmScreen]
+      screen: PackConfirmScreen
   - do: screenshot
     name: capture the first-connection prompt
     file: first-connect
@@ -104,11 +104,11 @@ download_modpack:
     timeout: 20s
     until:
       element: { key: automodpack.confirm.ack, enabled: true }
-    when: { screen: UnverifiedPackConfirmScreen }
+    when: { element: { key: automodpack.confirm.ack } }
   - do: click
     name: acknowledge unverified risk
     select: { key: automodpack.confirm.ack }
-    when: { screen: UnverifiedPackConfirmScreen }
+    when: { element: { key: automodpack.confirm.ack } }
   - do: wait_for
     name: wait for download to unlock
     timeout: 20s

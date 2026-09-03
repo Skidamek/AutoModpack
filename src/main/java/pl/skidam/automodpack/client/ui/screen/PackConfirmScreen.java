@@ -346,7 +346,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 		super.tick();
 		if (ticksRemaining > 0) {
 			ticksRemaining--;
-			if (ticksRemaining == 0) {
+			// Matched installs have no ack box; the countdown only gates unverified risk.
+			if (ticksRemaining == 0 && ackCheckbox != null) {
 				ackCheckbox.setMessage(ackMessage());
 				ackCheckbox.active = ticksRemaining <= 0;
 			}
