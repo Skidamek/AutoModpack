@@ -8,7 +8,6 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
-import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 /*? if >=1.20.4 {*/
@@ -455,11 +454,10 @@ public final class AutoTestBridge {
 		int id = 0;
 		for (AbstractWidget widget : widgets) {
 			result.add(GuiElement.of(id++, widget));
-			// Selection lists expose one element per row so scenarios can target rows by text;
-			// only lists that can reveal a row implement RowViewport (plain text lists do not).
+			// Scrollable lists are represented by one clickable element per row; the row's
+			// text, enabled and checked state covers the controls inside it.
 			if (widget instanceof RowViewport viewport) {
-				int index = 0;
-				for (ObjectSelectionList.Entry<?> entry : viewport.entries()) result.add(GuiElement.ofRow(id++, viewport, index++, entry));
+				for (int index = 0; index < viewport.rowCount(); index++) result.add(GuiElement.ofRow(id++, viewport, index));
 			}
 		}
 		return new GuiElements(result);
@@ -467,6 +465,9 @@ public final class AutoTestBridge {
 
 	private static void collectAttachedWidgets(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets) {
 		if (listener instanceof AbstractWidget widget) widgets.add(widget);
+		// Row viewport lists are emitted as one element per row, so their child widgets
+		// are not collected separately.
+		if (listener instanceof RowViewport) return;
 		if (listener instanceof Screen || !(listener instanceof ContainerEventHandler container)) return;
 		for (GuiEventListener child : container.children()) collectAttachedWidgets(child, widgets);
 	}
@@ -617,23 +618,24 @@ public final class AutoTestBridge {
 		}
 	}
 
-	/** One clickable GUI thing: a regular widget, or one row of a selection list. */
-	private record GuiElement(int id, AbstractWidget widget, RowViewport rows, int rowIndex, ObjectSelectionList.Entry<?> row) {
+	/** One clickable GUI thing: a regular widget, or one row of a scrollable list. */
+	private record GuiElement(int id, AbstractWidget widget, RowViewport rows, int rowIndex, String rowText, boolean rowEnabled, Boolean rowChecked) {
 		static GuiElement of(int id, AbstractWidget widget) {
-			return new GuiElement(id, widget, null, -1, null);
+			return new GuiElement(id, widget, null, -1, "", false, null);
 		}
 
-		static GuiElement ofRow(int id, RowViewport rows, int rowIndex, ObjectSelectionList.Entry<?> row) {
-			return new GuiElement(id, null, rows, rowIndex, row);
+		static GuiElement ofRow(int id, RowViewport rows, int rowIndex) {
+			RowViewport.RowView view = rows.rowView(rowIndex);
+			return new GuiElement(id, null, rows, rowIndex, view.text(), view.enabled(), view.checked());
 		}
 
 		String text() {
-			if (row != null) return row.getNarration().getString();
+			if (rows != null) return rowText;
 			return widget instanceof EditBox editBox ? editBox.getValue() : widget.getMessage().getString();
 		}
 
 		String translationKey() {
-			return row != null ? "" : AutoTestBridge.translationKey(widget.getMessage());
+			return rows != null ? "" : AutoTestBridge.translationKey(widget.getMessage());
 		}
 
 		int x() {
@@ -672,15 +674,16 @@ public final class AutoTestBridge {
 		}
 
 		boolean enabled() {
-			return row != null || widget.active;
+			return rows != null ? rowEnabled : widget.active;
 		}
 
 		boolean visible() {
-			return row != null || widget.visible;
+			return rows != null || widget.visible;
 		}
 
-		/** Selected state of a real checkbox, or null when the widget (or this version) has none. */
+		/** Selected state of a real checkbox or checkbox-like row, or null when there is none. */
 		Boolean checked() {
+			if (rows != null) return rowChecked;
 			/*? if >=1.20.4 {*/
 			return widget instanceof Checkbox checkbox ? checkbox.selected() : null;
 			/*?} else {*/
@@ -689,14 +692,14 @@ public final class AutoTestBridge {
 		}
 
 		String type() {
-			if (row != null) return "ListRow";
+			if (rows != null) return "ListRow";
 			if (widget instanceof Button) return "Button";
 			if (widget instanceof EditBox) return "TextField";
 			return widget.getClass().getSimpleName();
 		}
 
 		String className() {
-			return row != null ? row.getClass().getName() : widget.getClass().getName();
+			return rows != null ? rows.getClass().getName() : widget.getClass().getName();
 		}
 	}
 

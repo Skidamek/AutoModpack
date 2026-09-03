@@ -77,17 +77,24 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 	}
 
 	@Override
-	public List<? extends ObjectSelectionList.Entry<?>> entries() {
-		return this.children();
+	public void revealRow(int index) {
+		Entry entry = this.children().get(index);
+		/*? if >=1.21.9 {*/
+		this.scrollToEntry(entry);
+		/*?} else {*/
+		/*this.ensureVisible(entry);
+		*//*?}*/
+		entry.layoutEntry(this.getRowLeft(), this.getRowTop(index), this.getRowWidth());
 	}
 
 	@Override
-	public void revealRow(int index) {
-		/*? if >=1.21.9 {*/
-		this.scrollToEntry(this.children().get(index));
-		/*?} else {*/
-		/*this.ensureVisible(this.children().get(index));
-		*//*?}*/
+	public RowView rowView(int index) {
+		return new RowView(this.children().get(index).getNarration().getString(), true, null);
+	}
+
+	@Override
+	public int rowCount() {
+		return this.children().size();
 	}
 
 	@Override
@@ -125,6 +132,16 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 
 		public PreservationVault.Claim claim() {
 			return claim;
+		}
+
+		/** Pins the row's hit-test rectangle to its live position, so tooling can click a row that has not rendered yet. */
+		private void layoutEntry(int x, int y, int width) {
+			/*? if >=1.21.9 {*/
+			this.setX(x);
+			this.setY(y);
+			this.setWidth(width);
+			this.setHeight(ROW_HEIGHT);
+			/*?}*/
 		}
 
 		@Override

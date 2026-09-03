@@ -36,7 +36,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 /** Scrolling group rows: every togglable row is a vanilla checkbox, so the bridge and screen readers see the whole list. */
-public final class GroupSelectionList extends ContainerObjectSelectionList<GroupSelectionList.Entry> {
+public final class GroupSelectionList extends ContainerObjectSelectionList<GroupSelectionList.Entry> implements RowViewport {
 	private static final int ROW_HEIGHT = 24;
 	public static final int INFO_BUTTON_WIDTH = 20;
 	private final int contentWidth;
@@ -64,6 +64,48 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	@Override
 	public int getRowWidth() {
 		return this.contentWidth;
+	}
+
+	@Override
+	public void revealRow(int index) {
+		Entry entry = this.children().get(index);
+		/*? if >=1.21.9 {*/
+		this.scrollToEntry(entry);
+		/*?} else {*/
+		/*this.ensureVisible(entry);
+		*//*?}*/
+		entry.layoutRow(this.getRowLeft(), this.getRowTop(index), this.getRowWidth());
+	}
+
+	@Override
+	public RowView rowView(int index) {
+		Item item = this.children().get(index).item();
+		return new RowView(item.label().getString(), item.canToggle(), item.kind() == Kind.CAPTION ? null : item.selected());
+	}
+
+	@Override
+	public int rowCount() {
+		return this.children().size();
+	}
+
+	@Override
+	public int rowLeft() {
+		return this.getRowLeft();
+	}
+
+	@Override
+	public int rowTop(int index) {
+		return this.getRowTop(index);
+	}
+
+	@Override
+	public int rowWidth() {
+		return this.contentWidth;
+	}
+
+	@Override
+	public int rowHeight() {
+		return ROW_HEIGHT;
 	}
 
 	public record Item(Kind kind, String id, Component label, Component tooltip, boolean selected, boolean canToggle) {
@@ -99,6 +141,8 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 				AbstractWidget checkbox = VersionedScreen.checkboxWidget(minecraft.font, 0, 0, mainWidth, 20, item.label(), item.selected(), value -> {
 					if (value != item.selected()) onToggle.accept(item);
 				});
+				// Vanilla sizes a checkbox to its label; stretch it across the row so the whole row toggles like a list row should.
+				resizeWidget(checkbox, mainWidth);
 				// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
 				checkbox.active = item.canToggle();
 				if (item.tooltip() != null) {
@@ -135,11 +179,13 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		/*? if >= 26.1 {*/
 		@Override
 		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+			layoutRow(this.getX(), this.getY(), this.getWidth());
 			versionedRender(new VersionedMatrices(guiGraphics), this.getContentX(), this.getContentY(), this.getContentWidth(), mouseX, mouseY, tickDelta);
 		}
 		/*?} elif >= 1.21.9 {*/
 		/*@Override
 		public void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+			layoutRow(this.getX(), this.getY(), GroupSelectionList.this.getRowWidth());
 			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), GroupSelectionList.this.getRowWidth(), mouseX, mouseY, tickDelta);
 		}
 		*//*?} else {*/
@@ -151,6 +197,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
 		/^?}^/
+			layoutRow(x, y, entryWidth);
 			versionedRender(versionedMatrices, x, y, entryWidth, mouseX, mouseY, tickDelta);
 		}
 		*//*?}*/
@@ -160,23 +207,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 				Component label = item.label();
 				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, label instanceof MutableComponent mutable ? mutable : VersionedText.literal(label.getString()), x + TEXT_MARGIN, y + 7, TextColors.WHITE);
 				return;
-			}
-			/*? if >=1.19.4 {*/
-			row.setX(x);
-			row.setY(y);
-			/*?} else {*/
-			/*row.x = x;
-			row.y = y;
-			*//*?}*/
-			if (infoButton != null) {
-				int infoX = x + GroupSelectionList.this.getRowWidth() - INFO_BUTTON_WIDTH;
-				/*? if >=1.19.4 {*/
-				infoButton.setX(infoX);
-				infoButton.setY(y);
-				/*?} else {*/
-				/*infoButton.x = infoX;
-				infoButton.y = y;
-				*//*?}*/
 			}
 			/*? if >=26.1 {*/
 			row.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
@@ -188,6 +218,37 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			/*row.render(matrices.getContext(), mouseX, mouseY, tickDelta);
 			if (infoButton != null) infoButton.render(matrices.getContext(), mouseX, mouseY, tickDelta);
 			*//*?}*/
+		}
+
+		/** Places the row and its controls at the given origin; also used at reveal time so a just-scrolled row is clickable before the next render. */
+		private void layoutRow(int x, int y, int entryWidth) {
+			/*? if >=1.21.9 {*/
+			this.setX(x);
+			this.setY(y);
+			this.setWidth(entryWidth);
+			this.setHeight(ROW_HEIGHT);
+			/*?}*/
+			if (row == null) return;
+			positionWidget(row, x, y);
+			if (infoButton != null) positionWidget(infoButton, x + GroupSelectionList.this.getRowWidth() - INFO_BUTTON_WIDTH, y);
+		}
+
+		private static void positionWidget(AbstractWidget widget, int x, int y) {
+			/*? if >=1.19.4 {*/
+			widget.setX(x);
+			widget.setY(y);
+			/*?} else {*/
+			/*widget.x = x;
+			widget.y = y;
+			*//*?}*/
+		}
+
+		private static void resizeWidget(AbstractWidget widget, int width) {
+			// Older versions fall back to a full-width button in checkboxWidget; only real
+			// checkboxes self-size to their label and need the stretch.
+			/*? if >=1.20.4 {*/
+			widget.setWidth(width);
+			/*?}*/
 		}
 
 		/*? if >= 1.21.9 {*/

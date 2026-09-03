@@ -256,14 +256,14 @@ class FakeBridge:
         """
         visuals_checked = self.visuals_selected and not self.visuals_excluded
         return [
-            {"id": 27, "text": "Core (5 files, 90 B)", "enabled": False, "visible": True, "checked": True, "type": "Checkbox"},
-            {"id": 49, "text": "Category: Visuals", "enabled": True, "visible": True, "checked": visuals_checked, "type": "Checkbox"},
-            {"id": 29, "text": "Visuals (1 file, 15 B)", "enabled": True, "visible": True, "checked": visuals_checked, "type": "Checkbox"},
-            {"id": 36, "text": "Category: Extras", "enabled": True, "visible": True, "checked": False, "type": "Checkbox"},
-            {"id": 33, "text": "Addon (1 file, 11 B)", "enabled": True, "visible": True, "checked": False, "type": "Checkbox"},
-            {"id": 34, "text": "Alternative (1 file, 15 B)", "enabled": True, "visible": True, "checked": self.alternative_selected, "type": "Checkbox"},
-            {"id": 35, "text": "Category: Platform", "enabled": True, "visible": True, "checked": False, "type": "Checkbox"},
-            {"id": 38, "text": "Windows-only (1 file, 11 B)", "enabled": False, "visible": True, "checked": False, "type": "Checkbox"},
+            {"id": 27, "text": "Core (5 files, 90 B)", "enabled": False, "visible": True, "checked": True, "type": "ListRow"},
+            {"id": 49, "text": "Category: Visuals", "enabled": True, "visible": True, "checked": visuals_checked, "type": "ListRow"},
+            {"id": 29, "text": "Visuals (1 file, 15 B)", "enabled": True, "visible": True, "checked": visuals_checked, "type": "ListRow"},
+            {"id": 36, "text": "Category: Extras", "enabled": True, "visible": True, "checked": False, "type": "ListRow"},
+            {"id": 33, "text": "Addon (1 file, 11 B)", "enabled": True, "visible": True, "checked": False, "type": "ListRow"},
+            {"id": 34, "text": "Alternative (1 file, 15 B)", "enabled": True, "visible": True, "checked": self.alternative_selected, "type": "ListRow"},
+            {"id": 35, "text": "Category: Platform", "enabled": True, "visible": True, "checked": False, "type": "ListRow"},
+            {"id": 38, "text": "Windows-only (1 file, 11 B)", "enabled": False, "visible": True, "checked": False, "type": "ListRow"},
         ]
 
     def text(self, element_id: int, value: str, timeout: float = 30, **payload) -> dict:

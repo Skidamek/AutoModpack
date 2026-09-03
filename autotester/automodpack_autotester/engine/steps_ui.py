@@ -62,6 +62,7 @@ def _gui_diagnostic(gui):
                     "text": str(element.get("text")),
                     "key": element.get("key"),
                     "enabled": bool(element.get("enabled", False)),
+                    **({"checked": bool(element["checked"])} if "checked" in element else {}),
                 })
     return f"current screen: {gui.get('screenClass')!r}; title: {gui.get('title')!r}; visible elements: {visible!r}"
 
