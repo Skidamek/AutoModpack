@@ -15,8 +15,8 @@ import javax.net.ssl.SSLKeyException;
  * Carries TLS records in a vanilla-shaped frame envelope with the record header encrypted.
  *
  * <p>
- * Each TLS record becomes one Minecraft-shaped frame: a plain three-byte VarInt21 length, exactly
- * the clear length prefix vanilla frames carry, followed by the record whose five-byte header is
+ * Each TLS record becomes one Minecraft-shaped frame: a plain canonical VarInt length, byte for
+ * byte the length prefix vanilla itself writes, followed by the record whose five-byte header is
  * XORed with an AES-ECB keystream block keyed by a secret derived from the holepunch transport
  * secret and sampled from the last sixteen bytes of the record payload, QUIC header protection
  * style. The record payload stays exactly as TLS produced it, so TLS remains the only
@@ -40,6 +40,7 @@ final class TlsRecordCamouflage {
 	private int headerBytes;
 	private int recordBytes;
 	private int frameHeaderBytes;
+	private boolean frameHeaderComplete;
 
 	private TlsRecordCamouflage(byte[] maskKey) throws GeneralSecurityException {
 		maskCipher = Cipher.getInstance("AES/ECB/NoPadding");
@@ -90,16 +91,22 @@ final class TlsRecordCamouflage {
 	/** Takes masked frames in any chunking and emits plaintext TLS records. */
 	synchronized void decode(ByteBuffer input, ByteBuffer output) throws IOException {
 		while (input.hasRemaining()) {
-			if (frameHeaderBytes < FRAME_HEADER_LENGTH) {
-				frameHeader[frameHeaderBytes++] = input.get();
+			if (!frameHeaderComplete) {
 				if (frameHeaderBytes == FRAME_HEADER_LENGTH) {
-					int frameLength = (frameHeader[0] & 0x7f) | ((frameHeader[1] & 0x7f) << 7) | ((frameHeader[2] & 0x7f) << 14);
-					if (frameLength < TLS_HEADER_LENGTH + 1 || frameLength > TLS_HEADER_LENGTH + MAX_RECORD_LENGTH) {
-						throw new IOException("TLS record frame is out of range: " + frameLength);
-					}
-					record = new byte[frameLength];
-					recordBytes = 0;
+					throw new IOException("TLS record frame length VarInt is too long");
 				}
+				byte next = input.get();
+				frameHeader[frameHeaderBytes++] = next;
+				if ((next & 0x80) != 0) {
+					continue;
+				}
+				int frameLength = readFrameHeader();
+				if (frameLength < TLS_HEADER_LENGTH + 1 || frameLength > TLS_HEADER_LENGTH + MAX_RECORD_LENGTH) {
+					throw new IOException("TLS record frame is out of range: " + frameLength);
+				}
+				record = new byte[frameLength];
+				recordBytes = 0;
+				frameHeaderComplete = true;
 				continue;
 			}
 			int copied = Math.min(input.remaining(), record.length - recordBytes);
@@ -111,14 +118,28 @@ final class TlsRecordCamouflage {
 		}
 	}
 
+	private int readFrameHeader() {
+		int length = 0;
+		for (int index = 0; index < frameHeaderBytes; index++) {
+			length |= (frameHeader[index] & 0x7f) << (index * 7);
+		}
+		return length;
+	}
+
 	private void emitFrame(ByteBuffer output) throws IOException {
-		if (output.remaining() < FRAME_HEADER_LENGTH + record.length) {
+		int headerLength = frameHeaderLength(record.length);
+		if (output.remaining() < headerLength + record.length) {
 			throw new IOException("TLS record camouflage output buffer is too small");
 		}
-		int frameLength = record.length;
-		output.put((byte) ((frameLength & 0x7f) | 0x80));
-		output.put((byte) (((frameLength >>> 7) & 0x7f) | 0x80));
-		output.put((byte) (frameLength >>> 14));
+		int value = record.length;
+		while (true) {
+			if ((value & ~0x7f) == 0) {
+				output.put((byte) value);
+				break;
+			}
+			output.put((byte) ((value & 0x7f) | 0x80));
+			value >>>= 7;
+		}
 		byte[] mask = mask(sample());
 		for (int index = 0; index < TLS_HEADER_LENGTH; index++) {
 			output.put((byte) (record[index] ^ mask[index]));
@@ -178,11 +199,16 @@ final class TlsRecordCamouflage {
 		return ((header[3] & 0xff) << 8) | (header[4] & 0xff);
 	}
 
+	private static int frameHeaderLength(int frameLength) {
+		return frameLength >>> 14 != 0 ? 3 : frameLength >>> 7 != 0 ? 2 : 1;
+	}
+
 	private void reset() {
 		record = null;
 		headerBytes = 0;
 		recordBytes = 0;
 		frameHeaderBytes = 0;
+		frameHeaderComplete = false;
 	}
 
 	record Pair(TlsRecordCamouflage outbound, TlsRecordCamouflage inbound) {}

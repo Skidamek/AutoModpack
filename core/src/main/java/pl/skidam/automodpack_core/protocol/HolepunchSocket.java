@@ -299,7 +299,7 @@ public class HolepunchSocket extends Socket {
 			ByteBuffer outbound = data.duplicate();
 			if (camouflage != null && outbound.hasRemaining()) {
 				// Headroom receipt: the worst case is minimum-size records, 17 bytes of payload
-				// becoming a 25-byte frame, about fourteen percent.
+				// becoming a 23-byte frame, about five percent.
 				ByteBuffer encoded = ByteBuffer.allocate(outbound.remaining() + outbound.remaining() / 4 + 64);
 				camouflage.outbound().encode(outbound, encoded);
 				encoded.flip();
