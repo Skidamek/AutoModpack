@@ -135,6 +135,11 @@ download_modpack:
   - do: click
     name: accept first connection
     select: { key: automodpack.firstConnect.download }
+  - do: wait_for
+    name: catch the download screen while the pack transfers
+    timeout: 60s
+    until: { screen: DownloadScreen }
+    skip_if: { screen_not: [PackConfirmScreen, DownloadScreen] }
   - do: screenshot
     name: capture the download progress
     file: download-progress

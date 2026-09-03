@@ -93,6 +93,7 @@ class FakeBridge:
                 "textFields": [],
             },
             "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
+            "download": {"screenClass": "DownloadScreen", "buttons": [], "textFields": []},
             "first_connection": {
                 "screenClass": "PackConfirmScreen",
                 "buttons": [{"id": 3, "text": "Download", "enabled": self.acknowledged, "visible": True, "key": "automodpack.firstConnect.download"},
@@ -255,6 +256,8 @@ class FakeBridge:
         snapshot = snapshots[self.screen]
         if self.screen == "preparing":
             self.screen = "first_connection"
+        elif self.screen == "download":
+            self.screen = "restart"
         return snapshot
 
     # --- actions ----------------------------------------------------------
@@ -573,7 +576,7 @@ class FakeBridge:
             self.pending_pack = None
         self._write_modpack()
         self._restore_editable_overlay(self.selected_pack)
-        self.screen = "restart"
+        self.screen = "download"
 
     def _remove_active_pack(self) -> None:
         self.pack_removed = True
