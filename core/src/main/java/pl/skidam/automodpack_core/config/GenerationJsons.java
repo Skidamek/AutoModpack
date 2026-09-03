@@ -27,7 +27,6 @@ public class GenerationJsons {
 
 	/** The head document served to clients: content identity, ledger, journal tail, and the policy document. */
 	public static class HeadDocumentFields {
-		public int schemaVersion = 1;
 		public String contentToken = "";
 		public String policySha1 = "";
 		public String createdAt = "";

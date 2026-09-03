@@ -64,11 +64,41 @@ public final class GenerationStore {
 		if (current != null) return Optional.of(current);
 		journal = Journal.open(journalFile);
 		if (journal.isEmpty()) return Optional.empty();
-		JournalEntry head = journal.head();
-		Current loaded = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), null, journal.treeAt(head.seq()));
-		loaded = new Current(loaded.seq(), loaded.contentToken(), loaded.policySha1(), loaded.createdAt(), loaded.manifest(), replayLedger(head.seq()), loaded.tree());
-		current = loaded;
+		current = loadFromProjection();
+		if (current == null) {
+			JournalEntry head = journal.head();
+			Current loaded = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), null, journal.treeAt(head.seq()));
+			loaded = new Current(loaded.seq(), loaded.contentToken(), loaded.policySha1(), loaded.createdAt(), loaded.manifest(), replayLedger(head.seq()), loaded.tree());
+			current = loaded;
+			writeProjection(current);
+		}
 		return Optional.of(current);
+	}
+
+	/**
+	 * Rebuilds the current state from the projection view when it still matches the journal head:
+	 * the view carries the folded ledger, so the common boot never replays the journal.
+	 */
+	private Current loadFromProjection() throws IOException {
+		if (!Files.exists(projectionFile)) return null;
+		GenerationJsons.HeadDocumentFields fields;
+		try {
+			fields = ConfigTools.read(projectionFile, GenerationJsons.HeadDocumentFields.class).orElse(null);
+		} catch (RuntimeException e) {
+			return null;
+		}
+		if (fields == null || fields.policy == null || fields.ownershipLedger == null) return null;
+		JournalEntry head = journal.head();
+		if (fields.journalHead != head.seq() || !fields.contentToken.equals(head.contentToken()) || !fields.policySha1.equals(head.policySha1())) return null;
+		GroupManifest manifest;
+		try {
+			manifest = GroupManifestValidator.validate(fields.policy);
+		} catch (RuntimeException e) {
+			return null;
+		}
+		ContentTree tree = ContentTree.fromManifest(manifest);
+		if (!tree.token().equals(head.contentToken())) return null;
+		return new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), manifest, OwnershipLedger.fromFields(fields.ownershipLedger), tree);
 	}
 
 	/** Publishes one candidate: promotes its objects, stores its policy document, and appends a journal entry. */

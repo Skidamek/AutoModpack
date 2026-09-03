@@ -1293,7 +1293,6 @@ def _staged_head_document(modpack_id: str, policy: dict, file_map: dict[str, tup
         "changes": [{"path": path, "toSha1": file_map[path][0], "toSize": file_map[path][1]} for path in sorted(file_map)],
     }]
     return {
-        "schemaVersion": 1,
         "contentToken": token,
         "policySha1": policy_sha1,
         "createdAt": created_at,
@@ -1556,7 +1555,6 @@ def _v_stage_modpack(ctx: Context, step):
         ctx.vars["staged_pack_id"] = modpack_id
         return
     state = {
-        "schemaVersion": 1,
         "modpackId": modpack_id,
         "contentToken": generation["contentToken"],
         "status": "ACTIVE",
