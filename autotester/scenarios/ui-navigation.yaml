@@ -19,47 +19,47 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: "[ ] Visuals" }
-        - element: { text: "[ ] Category: Visuals" }
+        - element: { text: "Visuals (", checked: false }
+        - element: { text: "Category: Visuals", checked: false }
   - do: click
     name: select only the child group
-    select: { text: "[ ] Visuals" }
+    select: { text: "Visuals (", checked: false }
   - do: wait_for
     name: show the category header reflecting its selected child
     until:
       all:
-        - element: { text: "[x] Visuals" }
-        - element: { text: "[x] Category: Visuals" }
+        - element: { text: "Visuals (", checked: true }
+        - element: { text: "Category: Visuals", checked: true }
   - do: screenshot
-    name: capture explicit child selection without pagination
+    name: capture explicit child selection
     file: ui-navigation-explicit-child
   - do: click
     name: turn the whole category off through its header
-    select: { text: "[x] Category: Visuals" }
+    select: { text: "Category: Visuals", checked: true }
   - do: wait_for
     name: show the header exclusion reaching the child
     until:
       all:
-        - element: { text: "[ ] Category: Visuals" }
-        - element: { text: "[-] Visuals" }
+        - element: { text: "Category: Visuals", checked: false }
+        - element: { text: "Visuals (", checked: false }
   - do: click
     name: select the category explicitly
-    select: { text: "[ ] Category: Visuals" }
+    select: { text: "Category: Visuals", checked: false }
   - do: wait_for
     name: show the category carrying its child again
     until:
       all:
-        - element: { text: "[x] Category: Visuals" }
-        - element: { text: "[+] Visuals" }
+        - element: { text: "Category: Visuals", checked: true }
+        - element: { text: "Visuals (", checked: true }
   - do: click
     name: restore defaults before checking a named dependency
     select: { text: Defaults }
   - do: click
     name: select a group that requires Visuals
-    select: { text: Extra Five }
+    select: { text: "Extra Five (" }
   - do: wait_for
     name: name the group that requires Visuals
-    until: { element: { text: "[+] Visuals" } }
+    until: { element: { text: "Visuals (", checked: true } }
   - do: screenshot
     name: capture the named dependency selection
     file: ui-navigation-named-dependency

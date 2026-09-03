@@ -44,16 +44,16 @@ flow:
     until:
       all:
         - screen: ModpackSelectionScreen
-        - element: { text: "[ ] Optional Feature" }
+        - element: { text: "Optional Feature (", checked: false }
         - element: { text: Save, enabled: false }
   - do: click
     name: select the never-cached optional group
-    select: { text: Optional Feature }
+    select: { text: "Optional Feature (" }
   - do: wait_for
     name: enable save for the changed selection
     until:
       all:
-        - element: { text: "[x] Optional Feature" }
+        - element: { text: "Optional Feature (", checked: true }
         - element: { text: Save, enabled: true }
   - do: click
     name: save the changed installed selection

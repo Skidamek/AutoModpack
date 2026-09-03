@@ -108,7 +108,12 @@ class FakeBridge:
             },
             "groups": {
                 "screenClass": "ModpackSelectionScreen",
-                "buttons": self._group_list_buttons(),
+                "buttons": [
+                    {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
+                    {"id": 31, "text": "Continue", "enabled": True, "visible": True},
+                    {"id": 102, "text": "Back", "enabled": True, "visible": True},
+                ],
+                "other": self._group_list_rows(),
                 "textFields": [],
             },
             "feature_conflict": {
@@ -241,36 +246,24 @@ class FakeBridge:
         return snapshot
 
     # --- actions ----------------------------------------------------------
-    def _group_list_buttons(self) -> list[dict]:
+    def _group_list_rows(self) -> list[dict]:
         """Rows of the checkbox group list, mirroring ModpackSelectionScreen.listItems().
 
-        Glyphs follow the real screen: [#] mandatory, [x] chosen, [+] selected through
-        default or dependency, [-] excluded or unsupported, [ ] unselected. Category
-        headers mirror their optional child groups.
+        Every row is a vanilla checkbox: optional groups and their category headers are
+        enabled, locked rows are disabled. State lives in `checked`, never in the text,
+        and status words are omitted the same way the real labels drop them when a
+        row's state is the checkbox itself.
         """
-        dependency_visuals = self.dependency and self.visuals_selected
-        if self.visuals_excluded:
-            visuals_row = "[-] Visuals (1 file, 15 B)"
-        elif dependency_visuals:
-            visuals_row = "[+] Visuals (1 file, 15 B)"
-        elif self.visuals_selected:
-            visuals_row = "[x] Visuals (1 file, 15 B)" if self.chosen_visuals else "[+] Visuals (1 file, 15 B)"
-        else:
-            visuals_row = "[ ] Visuals (1 file, 15 B)"
-        category_state = "[x]" if self.visuals_selected and not self.visuals_excluded else "[ ]"
-        alternative_row = ("[x] Alternative (1 file, 15 B)" if self.alternative_selected else "[ ] Alternative (1 file, 15 B)")
+        visuals_checked = self.visuals_selected and not self.visuals_excluded
         return [
-            {"id": 27, "text": "Core (5 files, 90 B)", "enabled": False, "visible": True},
-            {"id": 49, "text": f"{category_state} Category: Visuals", "enabled": True, "visible": True},
-            {"id": 29, "text": visuals_row, "enabled": True, "visible": True},
-            {"id": 36, "text": "[ ] Category: Extras", "enabled": True, "visible": True},
-            {"id": 33, "text": "[ ] Addon (1 file, 11 B)", "enabled": True, "visible": True},
-            {"id": 34, "text": alternative_row, "enabled": True, "visible": True},
-            {"id": 35, "text": "Category: Platform", "enabled": True, "visible": True},
-            {"id": 38, "text": "[-] Windows-only (1 file, 11 B)", "enabled": False, "visible": True},
-            {"id": 37, "text": "Defaults", "enabled": True, "visible": True},
-            {"id": 31, "text": "Continue", "enabled": True, "visible": True},
-            {"id": 102, "text": "Back", "enabled": True, "visible": True},
+            {"id": 27, "text": "Core (5 files, 90 B)", "enabled": False, "visible": True, "checked": True, "type": "Checkbox"},
+            {"id": 49, "text": "Category: Visuals", "enabled": True, "visible": True, "checked": visuals_checked, "type": "Checkbox"},
+            {"id": 29, "text": "Visuals (1 file, 15 B)", "enabled": True, "visible": True, "checked": visuals_checked, "type": "Checkbox"},
+            {"id": 36, "text": "Category: Extras", "enabled": True, "visible": True, "checked": False, "type": "Checkbox"},
+            {"id": 33, "text": "Addon (1 file, 11 B)", "enabled": True, "visible": True, "checked": False, "type": "Checkbox"},
+            {"id": 34, "text": "Alternative (1 file, 15 B)", "enabled": True, "visible": True, "checked": self.alternative_selected, "type": "Checkbox"},
+            {"id": 35, "text": "Category: Platform", "enabled": True, "visible": True, "checked": False, "type": "Checkbox"},
+            {"id": 38, "text": "Windows-only (1 file, 11 B)", "enabled": False, "visible": True, "checked": False, "type": "Checkbox"},
         ]
 
     def text(self, element_id: int, value: str, timeout: float = 30, **payload) -> dict:
