@@ -2,8 +2,8 @@ package pl.skidam.automodpack_core.modpack.generation;
 
 import static pl.skidam.automodpack_core.utils.HashUtils.isCanonicalSha1;
 
-import java.nio.charset.CharacterCodingException;
 import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
