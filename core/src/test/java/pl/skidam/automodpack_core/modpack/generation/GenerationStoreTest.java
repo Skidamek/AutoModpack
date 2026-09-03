@@ -70,6 +70,26 @@ class GenerationStoreTest {
 		assertFalse(Files.exists(orphan));
 	}
 
+
+	@Test
+	void ledgerCheckpointKeepsRemovedPathHistoryAcrossCompactionAndProjectionLoss() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		Path state = tempDir.resolve("state");
+		GenerationStore store = new GenerationStore(state, objects);
+		store.publish(candidate(Map.of("config/a.txt", "A", "config/b.txt", "B")), "First");
+		store.publish(candidate(Map.of("config/a.txt", "A2")), "Second");
+		store.compact(1);
+		Files.delete(state.resolve("current-projection.json"));
+
+		// The projection is gone and the journal lost generation 1 to the snapshot: the folded
+		// ledger must still remember b.txt as a pack tombstone, not as a foreign file.
+		GenerationStore.Current current = new GenerationStore(state, objects).loadCurrent().orElseThrow();
+		OwnershipLedger.Entry removed = current.ledger().entries().get("config/b.txt");
+		assertNotNull(removed);
+		assertEquals(OwnershipLedger.Status.TOMBSTONE, removed.currentStatus());
+		assertTrue(removed.historicalHashes().stream().anyMatch(content -> content.size() == 1));
+	}
+
 	@Test
 	void contentTokenIgnoresPolicyOnlyChanges() throws Exception {
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), tempDir.resolve("objects"));
@@ -142,6 +162,27 @@ class GenerationStoreTest {
 		Files.createDirectories(object.getParent());
 		Files.write(object, bytes);
 		return policySha1;
+	}
+
+
+	private ModpackCandidate candidate(Map<String, String> files) throws IOException {
+		Path staging = Files.createDirectories(tempDir.resolve("state").resolve("staging"));
+		Map<String, ModpackJsons.CompleteModpackContentFields.GroupFileFields> entries = new TreeMap<>();
+		TreeMap<String, pl.skidam.automodpack_core.modpack.candidate.StagedObject> staged = new TreeMap<>();
+		for (var entry : files.entrySet()) {
+			Path stagedPath = Files.createTempFile(staging, "candidate-", ".staged");
+			Files.writeString(stagedPath, entry.getValue(), StandardCharsets.UTF_8);
+			String hash = sha1(entry.getValue());
+			entries.put(entry.getKey(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(entry.getValue().length()), "config", false, hash, null));
+			staged.put(hash, new pl.skidam.automodpack_core.modpack.candidate.StagedObject(hash, entry.getValue().length(), stagedPath));
+		}
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.description = "multi";
+		group.files = entries;
+		fields.groups = new TreeMap<>(Map.of("main", group));
+		return new ModpackCandidate(GroupManifestValidator.validate(fields), staged, new TreeMap<>(), List.of(), List.of());
 	}
 
 	private ModpackCandidate candidate(String description, String content) throws IOException {
