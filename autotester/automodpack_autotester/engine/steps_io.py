@@ -220,7 +220,7 @@ def _read_active_generation(ctx, expected_patch_notes=None):
         raise ValueError("active generation state is not an object")
     modpack_id = state["modpackId"]
     content_token = state["contentToken"]
-    if state.get("status") != "ACTIVE" or state.get("schemaVersion") != 1 or not isinstance(modpack_id, str) or not isinstance(content_token, str):
+    if state.get("status") != "ACTIVE" or not isinstance(modpack_id, str) or not isinstance(content_token, str):
         raise ValueError("active generation state is not committed")
     record_path = ctx.game_dir / "automodpack" / "client" / "records" / content_token / "manifest.json"
     manifest = json.loads(record_path.read_text(encoding="utf-8"))

@@ -32,7 +32,6 @@ public class ClientStorageJsons {
 	}
 
 	public static class ClientGenerationStateFields {
-		public int schemaVersion = 1;
 		public String modpackId = "";
 		public String contentToken = "";
 		public String status = "ACTIVE";
