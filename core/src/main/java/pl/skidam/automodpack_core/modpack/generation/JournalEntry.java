@@ -45,9 +45,11 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		int changed = 0;
 		int removed = 0;
 		for (Change change : changes) {
-			if (change.fromSha1() == null) added++;
-			else if (change.toSha1() == null) removed++;
-			else changed++;
+			switch (change.kind()) {
+				case ADDED -> added++;
+				case CHANGED -> changed++;
+				case REMOVED -> removed++;
+			}
 		}
 		return new Summary(added, changed, removed);
 	}
@@ -86,11 +88,22 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 	}
 
 	public record Change(String path, String fromSha1, String toSha1, long toSize) {
+		public enum Kind {
+			ADDED, CHANGED, REMOVED
+		}
+
 		public Change {
 			Objects.requireNonNull(path, "path");
 			if (fromSha1 != null && !isCanonicalSha1(fromSha1)) throw new IllegalArgumentException("Invalid change source for " + path);
 			if (toSha1 == null && toSize != 0) throw new IllegalArgumentException("A removed path cannot carry a size: " + path);
 			if (toSha1 != null && !isCanonicalSha1(toSha1)) throw new IllegalArgumentException("Invalid change target for " + path);
+		}
+
+		/** Absent source hash means the path is new, absent target hash means it is gone, both present means its content changed. */
+		public Kind kind() {
+			if (fromSha1 == null) return Kind.ADDED;
+			if (toSha1 == null) return Kind.REMOVED;
+			return Kind.CHANGED;
 		}
 
 		public static Change added(String path, String toSha1, long toSize) {
