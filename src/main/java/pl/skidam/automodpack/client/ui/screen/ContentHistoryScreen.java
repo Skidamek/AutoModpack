@@ -1,8 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.TextColors;
-import pl.skidam.automodpack.client.ui.UiFormat;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,18 +13,20 @@ import net.minecraft.network.chat.Component;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.ChangeSummary;
+import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
+import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 
 /**
  * Shows the journal timeline of one installed pack. Every journal entry already carries its own
@@ -126,15 +125,6 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		rebuild();
 	}
 
-	private void rebuild() {
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
-	}
-
 	private boolean isCurrent(JournalEntry entry) {
 		return entry.seq() == currentSeq;
 	}
@@ -154,7 +144,11 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		List<ChangeSet.Change> changes = new ArrayList<>(entry.changes().size());
 		for (JournalEntry.Change change : entry.changes())
 			changes.add(new ChangeSet.Change(change.path(),
-					change.fromSha1() == null ? ChangeSet.Kind.ADDED : change.toSha1() == null ? ChangeSet.Kind.REMOVED : ChangeSet.Kind.MODIFIED,
+					switch (change.kind()) {
+						case ADDED -> ChangeSet.Kind.ADDED;
+						case CHANGED -> ChangeSet.Kind.MODIFIED;
+						case REMOVED -> ChangeSet.Kind.REMOVED;
+					},
 					List.of(new ChangeSet.Occurrence("journal", change.path(), change.toSize(), change.fromSha1(), change.toSha1()))));
 		return ChangeSet.of(changes);
 	}
@@ -197,7 +191,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			String note = entry.notes().isBlank() ? VersionedText.translatable("automodpack.history.noPatchNotes").getString() : firstLine(entry.notes());
 			JournalEntry.Summary summary = entry.summary();
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, status, rowWidth - 12)).withStyle(ChatFormatting.GREEN), left + 6, y + 4, TextColors.WHITE);
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", note).getString(), rowWidth - 12)).withStyle(ChatFormatting.WHITE), left + 6, y + 31,
+			drawTextWithShadow(matrices, this.font,
+					VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.history.patchNotes", note).getString(), rowWidth - 12)).withStyle(ChatFormatting.WHITE), left + 6, y + 31,
 					TextColors.WHITE);
 			String diffText = ChangeSummary.diffLine(summary.added(), summary.changed(), summary.removed(), 0, 0);
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, diffText, rowWidth - 12)).withStyle(ChatFormatting.GRAY), left + 6, y + 42, TextColors.WHITE);

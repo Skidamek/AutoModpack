@@ -16,7 +16,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 
-/** Shared copy and catalogue helpers for matched / unverified confirm screens. */
+/** Shared copy and catalogue helpers for the pack confirm screen. */
 final class PackConfirmCopy {
 	private PackConfirmCopy() {}
 

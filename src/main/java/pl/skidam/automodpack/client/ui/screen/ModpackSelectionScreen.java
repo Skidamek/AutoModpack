@@ -1,8 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.TextColors;
-import pl.skidam.automodpack.client.ui.UiFormat;
-
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import java.io.IOException;
@@ -22,11 +19,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.GroupSelectionList;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupResolution;
@@ -34,12 +33,13 @@ import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
-import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+
 /**
  * Lets the player pick which optional groups of a modpack they want. Changes only take effect on the next launch, because mods are loaded during preload.
  */
@@ -138,7 +138,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.chosenCategories.addAll(initial.requestedCategories());
 		this.excluded.addAll(initial.excludedGroups());
 		try {
-		this.resolution = this.expectedSelection == null && initialSelection == null
+			this.resolution = this.expectedSelection == null && initialSelection == null
 					? GroupSelectionResolver.resolveDefault(manifest, effectivePlatform())
 					: GroupSelectionResolver.resolve(manifest, initial, effectivePlatform());
 		} catch (SelectionResolutionException e) {
@@ -198,7 +198,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			}
 			GroupManifest.Group group = groups.get(row.groupId());
 			boolean togglable = group != null && canToggle(row.groupId(), group);
-			items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.GROUP, row.groupId(), rowLabel(row.groupId(), group), rowTooltip(row.groupId(), group), resolution.selectedGroups().contains(row.groupId()), togglable));
+			items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.GROUP, row.groupId(), rowLabel(row.groupId(), group), rowTooltip(row.groupId(), group), resolution.selectedGroups().contains(row.groupId()),
+					togglable));
 		}
 		return List.copyOf(items);
 	}
@@ -241,7 +242,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		GroupResolution explanation = resolution.resolution(groupId);
 		if (explanation == null) return group.supports(effectivePlatform());
 		if (explanation.selected() && (resolution.requiredGroups().contains(groupId) || resolution.forcedGroups().contains(groupId)
-				|| resolution.dependencyGroups().contains(groupId))) return false;
+				|| resolution.dependencyGroups().contains(groupId)))
+			return false;
 		return group.supports(effectivePlatform()) || excluded.contains(groupId);
 	}
 
@@ -283,7 +285,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		} catch (SelectionResolutionException exception) {
 			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, effectivePlatform(), exception.resolution()).orElse(null);
 			if (replacement != null) {
-				ScreenImpl.setScreen(new FeatureConflictScreen(this, preferredName, names(replacement.conflictingGroups()), () -> applySelectionChange(replacement.intent().withPlatform(override()), Set.of(), preferredName)));
+				ScreenImpl.setScreen(
+						new FeatureConflictScreen(this, preferredName, names(replacement.conflictingGroups()), () -> applySelectionChange(replacement.intent().withPlatform(override()), Set.of(), preferredName)));
 				return;
 			}
 			resolutionError = preferredGroups.isEmpty()
@@ -319,15 +322,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		resolution = GroupSelectionResolver.resolveDefault(manifest, effectivePlatform());
 		resolutionError = "";
 		rebuild();
-	}
-
-	private void rebuild() {
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
 	}
 
 	private boolean isActiveModpack() {
@@ -395,7 +389,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		String label = glyph + " " + title;
 		if (selected > 0 && !allSelected) label += "  " + VersionedText.translatable("automodpack.selection.categoryPart", selected, optional).getString();
 		return VersionedText.literal(truncateToWidth(this.font, label, panelWidth(ROW_WIDTH) - 12))
-			.withStyle(ChatFormatting.BOLD, allSelected ? ChatFormatting.GREEN : noneSelected ? ChatFormatting.GRAY : ChatFormatting.YELLOW);
+				.withStyle(ChatFormatting.BOLD, allSelected ? ChatFormatting.GREEN : noneSelected ? ChatFormatting.GRAY : ChatFormatting.YELLOW);
 	}
 
 	private long optionalGroupCount(String category) {
@@ -490,8 +484,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (explanation == null) return "";
 		return switch (explanation.status()) {
 			case SELECTED -> explanation.reasons().contains(GroupResolution.Reason.REQUIRED) || explanation.reasons().contains(GroupResolution.Reason.FORCED)
-					|| explanation.reasons().contains(GroupResolution.Reason.DEPENDENCY) || explanation.reasons().contains(GroupResolution.Reason.DEFAULT_SELECTED) ? ""
-					: VersionedText.translatable("automodpack.selection.status.selected").getString();
+					|| explanation.reasons().contains(GroupResolution.Reason.DEPENDENCY) || explanation.reasons().contains(GroupResolution.Reason.DEFAULT_SELECTED)
+							? ""
+							: VersionedText.translatable("automodpack.selection.status.selected").getString();
 			case AVAILABLE -> VersionedText.translatable("automodpack.selection.status.available").getString();
 			case BLOCKED -> explanation.relatedGroups().isEmpty() ? VersionedText.translatable("automodpack.selection.status.dependencyUnavailable").getString() : "";
 			case EXCLUDED -> VersionedText.translatable("automodpack.selection.status.excluded").getString();
@@ -573,7 +568,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private boolean canSave() {
-		return resolutionError.isEmpty() && (selectionAction != null || managerEntry && !activeModpack || !initialSelection.equals(currentIntent()) || !Objects.equals(initialSelection.platform(), currentIntent().platform()));
+		return resolutionError.isEmpty()
+				&& (selectionAction != null || managerEntry && !activeModpack || !initialSelection.equals(currentIntent()) || !Objects.equals(initialSelection.platform(), currentIntent().platform()));
 	}
 
 	private static String categoryLabel(String category) {
@@ -627,7 +623,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 						? "automodpack.selection.sourcesCancelled"
 						: !availability.complete()
 								? "automodpack.selection.sourcesResolving"
-								: "automodpack.selection.sourcesResolved", availability.resolvedFiles(), availability.totalFiles()).getString();
+								: "automodpack.selection.sourcesResolved",
+						availability.resolvedFiles(), availability.totalFiles()).getString();
 				drawWrappedStatus(matrices, VersionedText.literal(sourceStatus).withStyle(ChatFormatting.GRAY));
 			}
 		}

@@ -100,6 +100,16 @@ public class VersionedScreen extends Screen {
 	// This method is to be override by the child classes
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
 
+	/** Re-runs init so every widget reflects the current fields; for when one change reshapes the whole screen. */
+	protected void rebuild() {
+		/*? if >=1.19.2 {*/
+		this.rebuildWidgets();
+		/*?} else {*/
+		/*
+		this.init(this.minecraft, this.width, this.height);
+		*//*?}*/
+	}
+
 
 	/*? if >=1.20 {*/
 	public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {

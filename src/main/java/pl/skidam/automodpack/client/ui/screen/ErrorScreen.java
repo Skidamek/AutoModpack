@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.TextColors;
-
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
@@ -10,16 +10,14 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.util.Util;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
+import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 
 public class ErrorScreen extends VersionedScreen {
@@ -99,15 +97,6 @@ public class ErrorScreen extends VersionedScreen {
 		Minecraft.getInstance().keyboardHandler.setClipboard(request.diagnosticText());
 		copied = true;
 		rebuild();
-	}
-
-	private void rebuild() {
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
 	}
 
 	@Override

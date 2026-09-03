@@ -26,7 +26,6 @@ import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -35,6 +34,7 @@ import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
@@ -89,20 +89,21 @@ public final class PinnedModsScreen extends VersionedScreen {
 			pageSize = Math.max(1, (actionAreaTop(FOOTER_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)) - 8 - listTop) / ROW_HEIGHT);
 		}
 		final int pageCount = Math.max(1, (int) Math.ceil((double) Math.max(rows.size(), 1) / pageSize));
-		if (showPagination) actions.set(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION,
-				navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
-					if (page > 0) {
-						page--;
-						rebuild();
-					}
-				}),
-				disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
-				navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
-					if (page < pageCount - 1) {
-						page++;
-						rebuild();
-					}
-				})));
+		if (showPagination)
+			actions.set(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+					navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
+						if (page > 0) {
+							page--;
+							rebuild();
+						}
+					}),
+					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
+					navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
+						if (page < pageCount - 1) {
+							page++;
+							rebuild();
+						}
+					})));
 		if (page >= pageCount) page = pageCount - 1;
 		int start = page * pageSize;
 		for (int index = start; index < Math.min(rows.size(), start + pageSize); index++) {
@@ -203,15 +204,6 @@ public final class PinnedModsScreen extends VersionedScreen {
 
 	private List<String> currentPins() {
 		return new ArrayList<>(PinnedMods.normalize(clientConfig == null ? List.of() : clientConfig.pinnedModIds));
-	}
-
-	private void rebuild() {
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
 	}
 
 	@Override

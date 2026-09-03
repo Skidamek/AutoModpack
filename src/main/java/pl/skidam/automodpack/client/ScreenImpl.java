@@ -194,8 +194,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void welcome(ModpackUpdater modpackUpdater) {
-			if (modpackUpdater.unverifiedSelectedJarPaths().isEmpty()) Screens.setScreen(new MatchedPackConfirmScreen(modpackUpdater));
-			else Screens.setScreen(new UnverifiedPackConfirmScreen(modpackUpdater));
+			Screens.setScreen(new PackConfirmScreen(modpackUpdater));
 		}
 
 		public static void preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
@@ -204,7 +203,7 @@ public class ScreenImpl implements ScreenService {
 			parent = previewParent(parent);
 			interactiveParent = null;
 			if (updater != null && preview.mode() == UpdatePreview.Mode.UPDATE && updater.planWritesUnverifiedJar(preview.plan())) {
-				Screens.setScreen(new UnverifiedPackConfirmScreen(parent, updater, preview, continueAction, cancelAction));
+				Screens.setScreen(new PackConfirmScreen(parent, updater, preview, continueAction, cancelAction));
 				return;
 			}
 			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, updater, continueAction, cancelAction));
