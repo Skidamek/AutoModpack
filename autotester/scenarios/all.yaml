@@ -367,7 +367,7 @@ flow:
     until:
       all:
         - screen: OfflineRepairScreen
-        - element: { text: "[ ] Keep 1 extra mod files", enabled: true }
+        - element: { text: "Keep 1 existing mod files", enabled: true }
   - do: click
     name: cancel the healthy repair review
     select: { text: Back }
@@ -902,7 +902,7 @@ flow:
       all:
         - screen: OfflineRepairScreen
         - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 extra mod files", enabled: true }
+        - element: { text: "Keep 2 existing mod files", enabled: true }
         - element: { text: Repair, enabled: true }
         - element: { text: Update and finish repair, enabled: true }
   - do: screenshot
@@ -913,7 +913,7 @@ flow:
     until:
       all:
         - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 extra mod files", enabled: true }
+        - element: { text: "Keep 2 existing mod files", enabled: true }
         - element: { text: Keep all editable changes, enabled: true }
   - do: click
     name: opt into keeping the edited file
@@ -929,13 +929,13 @@ flow:
     until: { element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true } }
   - do: click
     name: opt into keeping the unowned mods
-    select: { text: "[ ] Keep 2 extra mod files" }
+    select: { text: "Keep 2 existing mod files" }
   - do: wait_for
     name: show the keep choice checked on the unowned row
-    until: { element: { text: "[x] Keep 2 extra mod files", enabled: true } }
+    until: { element: { text: "Keep 2 existing mod files", enabled: true, checked: true } }
   - do: click
     name: return to removal consent before leaving
-    select: { text: "[x] Keep 2 extra mod files" }
+    select: { text: "Keep 2 existing mod files", checked: true }
   - do: click
     name: cancel repair after exercising every choice
     select: { text: Back }
@@ -954,13 +954,13 @@ flow:
     until:
       all:
         - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 extra mod files", enabled: true }
+        - element: { text: "Keep 2 existing mod files", enabled: true }
   - do: wait_for
     name: hold both rows at removal consent while keeping is one click away
     until:
       all:
         - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 extra mod files", enabled: true }
+        - element: { text: "Keep 2 existing mod files", enabled: true }
         - element: { text: Repair, enabled: true }
   - do: click
     name: repair every locally available byte before updating
@@ -1224,7 +1224,7 @@ flow:
     until:
       all:
         - screen: [MatchedPackConfirmScreen, UnverifiedPackConfirmScreen]
-        - element: { key: automodpack.firstConnect.leftoverArchive, enabled: true }
+        - element: { key: automodpack.confirm.keepExistingMods, enabled: true }
   - do: screenshot
     name: capture first-install cleanup with its safe default
     file: all-first-install-cleanup-default
@@ -1242,19 +1242,19 @@ flow:
     until:
       all:
         - screen: [MatchedPackConfirmScreen, UnverifiedPackConfirmScreen]
-        - element: { key: automodpack.firstConnect.leftoverArchive, enabled: true }
+        - element: { key: automodpack.confirm.keepExistingMods, enabled: true }
   - do: click
     name: opt into keeping existing mods
-    select: { key: automodpack.firstConnect.leftoverArchive }
+    select: { key: automodpack.confirm.keepExistingMods }
   - do: wait_for
     name: show checked keep state after opting in
-    until: { element: { key: automodpack.firstConnect.leftoverKeep, enabled: true } }
+    until: { element: { key: automodpack.confirm.keepExistingMods, enabled: true, checked: true } }
   - do: screenshot
     name: capture first-install cleanup keep state
     file: all-first-install-cleanup-consent
   - do: click
     name: return to the default removal consent before continuing
-    select: { key: automodpack.firstConnect.leftoverKeep }
+    select: { key: automodpack.confirm.keepExistingMods }
   - do: wait_for
     name: wait for the unverified ack checkbox or an already trusted download
     timeout: 30s

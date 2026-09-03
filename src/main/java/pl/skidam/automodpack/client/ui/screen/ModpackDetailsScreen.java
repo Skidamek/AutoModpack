@@ -47,7 +47,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		List<Action> actions = new ArrayList<>();
 		actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
-		actions.add(new Action("automodpack.selection.button", this::openFeatures));
+		actions.add(new Action("automodpack.management.groups", this::openFeatures));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
 		actions.add(new Action("automodpack.patchNotes.button", this::openPatchNotes));
 		actions.add(new Action("automodpack.management.history", this::openHistory));
@@ -181,6 +181,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		y += 14;
 		y += 12;
 		y += 12;
+		y += 12;
 		if (pack.connectionAvailable()) y += 12;
 		y += 12;
 		return y + ActionAreaLayout.GAP;
@@ -215,6 +216,10 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		y += 14;
 		String version = VersionedText.translatable("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion()).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, version, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		y += 12;
+		String modpackId = VersionedText.translatable("automodpack.packDetails.id", pack.modpackId()).getString();
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, modpackId, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		showHoverTooltip(matrices, VersionedText.literal(pack.modpackId()), this.width / 2 - this.font.width(modpackId) / 2, y, this.font.width(modpackId), mouseX, mouseY);
 		y += 12;
 		String contents = VersionedText.translatable("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
 				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes())).getString();

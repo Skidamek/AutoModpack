@@ -110,7 +110,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			int y = listTop + (index - start) * ROW_HEIGHT;
 			InstalledModpackController.Pack entry = entries.get(index);
 			Button row = buttonWidget(x, y, rowWidth, 28, rowLabel(entry, rowWidth), press -> clickPack(entry));
-			setTooltip(row, VersionedText.literal(entry.modpackId()));
 			this.addRenderableWidget(row);
 		}
 		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new));

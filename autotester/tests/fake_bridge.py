@@ -92,7 +92,7 @@ class FakeBridge:
                 "buttons": [{"id": 3, "text": "Download", "enabled": self.acknowledged, "visible": True, "key": "automodpack.firstConnect.download"},
                             {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True},
                             {"id": 18, "text": "Customize groups", "enabled": True, "visible": True, "key": "automodpack.confirm.customize"},
-                            *([{"id": 89, "text": (f"Keep {len(self._first_install_local_mods())} existing mod files in mods" if self.first_install_archive_existing else f"Archive {len(self._first_install_local_mods())} existing mod files"), "enabled": True, "visible": True, "key": ("automodpack.firstConnect.leftoverKeep" if self.first_install_archive_existing else "automodpack.firstConnect.leftoverArchive")}] if self._first_install_local_mods() else []),
+                            *([{"id": 89, "text": f"Keep {len(self._first_install_local_mods())} existing mod files", "enabled": True, "visible": True, "checked": self.first_install_archive_existing, "key": "automodpack.confirm.keepExistingMods"}] if self._first_install_local_mods() else []),
                             {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
                 "textFields": [],
                 "other": [{"id": 90, "text": "I understand the risk and trust this server.", "enabled": True, "visible": True, "key": "automodpack.confirm.ack"}],
@@ -597,7 +597,7 @@ class FakeBridge:
     def _repair_buttons(self) -> list[dict]:
         buttons: list[dict] = []
         if not self.repair_applied:
-            buttons.append({"id": 97, "text": (f"[x] Keep {len(self._repair_unowned_mods())} extra mod files" if self.repair_keep_unowned else f"[ ] Keep {len(self._repair_unowned_mods())} extra mod files"), "enabled": True, "visible": bool(self._repair_unowned_mods()), "key": ("automodpack.repair.keepUnownedChecked" if self.repair_keep_unowned else "automodpack.repair.keepUnowned")})
+            buttons.append({"id": 97, "text": f"Keep {len(self._repair_unowned_mods())} existing mod files", "enabled": True, "visible": bool(self._repair_unowned_mods()), "checked": self.repair_keep_unowned, "key": "automodpack.confirm.keepExistingMods"})
             buttons.append({"id": 95, "text": "[ ] Keep changes in config/pack-shared-editable.txt" if self.repair_editable_reset else "[x] Keep changes in config/pack-shared-editable.txt", "enabled": True, "visible": True})
             if self.repair_editable_reset:
                 buttons.append({"id": 96, "text": "Keep all editable changes", "enabled": True, "visible": True})

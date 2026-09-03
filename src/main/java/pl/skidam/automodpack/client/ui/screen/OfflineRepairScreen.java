@@ -8,9 +8,13 @@ import java.util.TreeSet;
 import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+/*? if > 1.19.2 {*/
+import net.minecraft.client.gui.components.Tooltip;
+/*?}*/
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -67,11 +71,16 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		int x = panelLeft(PANEL_WIDTH);
 		int listTop = prepared.requiresUpdate() ? 94 : 82;
 		if (!prepared.unownedModPaths().isEmpty()) {
-			Button archive = buttonWidget(x, listTop, width, 20, VersionedText.translatable(keepUnownedMods ? "automodpack.repair.keepUnownedChecked" : "automodpack.repair.keepUnowned",
-					prepared.unownedModPaths().size()), press -> toggleUnowned());
-			archive.active = !busy;
-			setTooltip(archive, unownedTooltip());
-			this.addRenderableWidget(archive);
+			String files = String.join("\n", wrapToWidth(this.font, String.join(", ", prepared.unownedModPaths()), 240, 8));
+			AbstractWidget keep = checkboxWidget(this.font, x, listTop, width, ActionAreaLayout.BUTTON_HEIGHT, VersionedText.translatable("automodpack.confirm.keepExistingMods", prepared.unownedModPaths().size()), keepUnownedMods, value -> {
+				keepUnownedMods = value;
+				rebuild();
+			});
+			keep.active = !busy;
+			/*? if > 1.19.2 {*/
+			keep.setTooltip(Tooltip.create(VersionedText.translatable("automodpack.confirm.leftoverTooltip", files)));
+			/*?}*/
+			this.addRenderableWidget(keep);
 			listTop += 28;
 		}
 
@@ -154,17 +163,6 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	private void keepAllEditable() {
 		selectedEditablePaths.clear();
 		rebuild();
-	}
-
-	private void toggleUnowned() {
-		keepUnownedMods = !keepUnownedMods;
-		rebuild();
-	}
-
-	/** Names the exact files the unowned-mods choice applies to, plus what each state does with them. */
-	private Component unownedTooltip() {
-		String files = String.join("\n", wrapToWidth(this.font, String.join(", ", prepared.unownedModPaths()), 240, 8));
-		return VersionedText.translatable(keepUnownedMods ? "automodpack.repair.unownedTooltipKeep" : "automodpack.repair.unownedTooltipRemove", files);
 	}
 
 	/** Same help for an editable row: unchecked consents to reset, checked keeps the player's changes. */

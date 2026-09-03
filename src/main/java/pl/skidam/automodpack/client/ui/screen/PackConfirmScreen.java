@@ -147,16 +147,17 @@ public final class PackConfirmScreen extends VersionedScreen {
 		/*int x = placeholder.x;
 		int y = placeholder.y;
 		*//*?}*/
-		Component label = PackConfirmCopy.leftoverLabel(keepExistingMods, updater.firstInstallLocalModCount());
+		Component label = PackConfirmCopy.leftoverLabel(updater.firstInstallLocalModCount());
 		AbstractWidget checkbox = checkboxWidget(this.font, x, y, placeholder.getWidth(), ActionAreaLayout.BUTTON_HEIGHT, label, keepExistingMods, value -> {
 			keepExistingMods = value;
 			updater.setFirstInstallLocalModCleanup(!keepExistingMods);
+			// The checkbox label is constant now; the rebuild only refreshes the existing-mods summary line.
 			rebuild();
 		});
 		this.addRenderableWidget(checkbox);
 		String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", updater.firstInstallLocalModPaths()), 240, 8));
 		/*? if > 1.19.2 {*/
-		checkbox.setTooltip(Tooltip.create(VersionedText.translatable("automodpack.firstConnect.cleanupTooltip", joined)));
+		checkbox.setTooltip(Tooltip.create(VersionedText.translatable("automodpack.confirm.leftoverTooltip", joined)));
 		/*?}*/
 	}
 
