@@ -21,7 +21,6 @@ import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -31,6 +30,7 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.cache.PlatformMetadataCache;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
@@ -107,7 +107,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			PreservationVault.Claim claim = claims.get(index);
 			int y = 66 + (index - start) * ROW_HEIGHT;
 			String filename = fileName(claim.originalPath()) + "  " + UiFormat.formatSize(claim.size());
-			Button select = buttonWidget(x, y, width, 20, VersionedText.literal(truncateToWidth(this.font, filename, width - 12)).withStyle(claim.claimId().equals(selectedClaimId) ? ChatFormatting.GREEN : ChatFormatting.WHITE), press -> select(claim));
+			Button select = buttonWidget(x, y, width, 20,
+					VersionedText.literal(truncateToWidth(this.font, filename, width - 12)).withStyle(claim.claimId().equals(selectedClaimId) ? ChatFormatting.GREEN : ChatFormatting.WHITE), press -> select(claim));
 			select.active = !busy && !loading;
 			setTooltip(select, VersionedText.translatable("automodpack.vault.rowTooltip", claim.originalPath()));
 			this.addRenderableWidget(select);
@@ -312,15 +313,6 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		if (current != null && !current.isDone()) current.cancel(true);
 	}
 
-	private void rebuild() {
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
-	}
-
 	@Override
 	public void removed() {
 		if (presentingFailure) {
@@ -339,7 +331,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.title").withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
-		String description = loading ? VersionedText.translatable("automodpack.vault.loading").getString()
+		String description = loading
+				? VersionedText.translatable("automodpack.vault.loading").getString()
 				: VersionedText.translatable("automodpack.vault.description", claims().size()).getString();
 		List<String> descriptionLines = wrapToWidth(this.font, description, this.width - 28, 2);
 		for (int index = 0; index < descriptionLines.size(); index++)
@@ -348,8 +341,13 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		else if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
 		else {
 			PreservationVault.Claim armed = selected();
-			if (armed != null && armed.claimId().equals(pendingDeleteClaimId)) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.deleteArmed", armed.originalPath()).withStyle(ChatFormatting.RED), this.width / 2, 52, TextColors.WHITE);
-			else if (armed != null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.vault.selected", armed.originalPath()).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, 52, TextColors.WHITE);
+			if (armed != null && armed.claimId().equals(pendingDeleteClaimId))
+				drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.deleteArmed", armed.originalPath()).withStyle(ChatFormatting.RED), this.width / 2, 52, TextColors.WHITE);
+			else
+				if (armed != null)
+					drawCenteredTextWithShadow(matrices, this.font,
+							VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable("automodpack.vault.selected", armed.originalPath()).getString(), this.width - 20)).withStyle(ChatFormatting.YELLOW),
+							this.width / 2, 52, TextColors.WHITE);
 		}
 		List<PreservationVault.Claim> claims = claims();
 		int start = page * pageSize;
@@ -360,7 +358,8 @@ public final class PreservationVaultScreen extends VersionedScreen {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, metadata, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(UiFormat.formatInstant(claim.preservedAt())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 12, TextColors.WHITE);
 		}
-		if (!loading && claims.isEmpty() && lastResult == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
+		if (!loading && claims.isEmpty() && lastResult == null)
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.vault.empty").withStyle(ChatFormatting.GRAY), this.width / 2, 88, TextColors.WHITE);
 	}
 
 	private static String displayPath(Path path) {

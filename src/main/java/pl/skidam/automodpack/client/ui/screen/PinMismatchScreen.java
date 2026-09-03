@@ -71,15 +71,6 @@ public final class PinMismatchScreen extends VersionedScreen {
 		rebuild();
 	}
 
-	private void rebuild() {
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
-	}
-
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.pinMismatch.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.LIGHT_RED);

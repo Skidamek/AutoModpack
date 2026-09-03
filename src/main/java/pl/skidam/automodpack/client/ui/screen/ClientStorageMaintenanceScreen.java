@@ -1,8 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.TextColors;
-import pl.skidam.automodpack.client.ui.UiFormat;
-
 import java.util.List;
 import java.util.concurrent.Future;
 
@@ -11,13 +8,15 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
@@ -129,15 +128,6 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		if (currentWork != null && !currentWork.isDone()) currentWork.cancel(false);
 	}
 
-	private void rebuild() {
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
-	}
-
 	@Override
 	public void removed() {
 		if (presentingFailure) {
@@ -185,9 +175,13 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 
 	/** One stats line per fact; the before -> after shape lives here so it cannot drift per locale. */
 	private void drawStats(VersionedMatrices matrices, ClientGenerationStore.CompactionResult compacted, int y, int textWidth) {
-		y = drawWrapped(matrices, statLine("automodpack.storage.records", compacted.recordCountBefore(), compacted.recordCountAfter(), UiFormat.formatSize(compacted.recordBytesBefore()), UiFormat.formatSize(compacted.recordBytesAfter())), y, textWidth, TextColors.WHITE);
-		y = drawWrapped(matrices, statLine("automodpack.storage.objects", compacted.objectCollection().before().objectCount(), compacted.objectCollection().after().objectCount(), UiFormat.formatSize(compacted.objectCollection().before().objectBytes()), UiFormat.formatSize(compacted.objectCollection().after().objectBytes())), y, textWidth, TextColors.WHITE);
-		drawWrapped(matrices, statLine("automodpack.storage.generatedCopies", compacted.generatedCopyCountBefore(), compacted.generatedCopyCountAfter(), UiFormat.formatSize(compacted.generatedCopyBytesBefore()), UiFormat.formatSize(compacted.generatedCopyBytesAfter())), y, textWidth, TextColors.GRAY);
+		y = drawWrapped(matrices,
+				statLine("automodpack.storage.records", compacted.recordCountBefore(), compacted.recordCountAfter(), UiFormat.formatSize(compacted.recordBytesBefore()), UiFormat.formatSize(compacted.recordBytesAfter())),
+				y, textWidth, TextColors.WHITE);
+		y = drawWrapped(matrices, statLine("automodpack.storage.objects", compacted.objectCollection().before().objectCount(), compacted.objectCollection().after().objectCount(),
+				UiFormat.formatSize(compacted.objectCollection().before().objectBytes()), UiFormat.formatSize(compacted.objectCollection().after().objectBytes())), y, textWidth, TextColors.WHITE);
+		drawWrapped(matrices, statLine("automodpack.storage.generatedCopies", compacted.generatedCopyCountBefore(), compacted.generatedCopyCountAfter(), UiFormat.formatSize(compacted.generatedCopyBytesBefore()),
+				UiFormat.formatSize(compacted.generatedCopyBytesAfter())), y, textWidth, TextColors.GRAY);
 	}
 
 	private String statLine(String labelKey, long countBefore, long countAfter, String sizeBefore, String sizeAfter) {
@@ -199,5 +193,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		return handleBackOnEscape(this::closeToParent);
 	}
 
-	private enum Operation { VERIFY, COMPACT }
+	private enum Operation {
+		VERIFY, COMPACT
+	}
 }

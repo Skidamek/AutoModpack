@@ -1,17 +1,16 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.TextColors;
-
 import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -62,10 +61,13 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		int x = panelLeft(PANEL_WIDTH);
 		int listTop = 68;
 		int actionY = this.height - 28;
-		MutableComponent preservedLabel = preservedCount > 0 ? VersionedText.translatable("automodpack.management.preservedFilesCount", preservedCount) : VersionedText.translatable("automodpack.management.preservedFiles");
+		MutableComponent preservedLabel = preservedCount > 0
+				? VersionedText.translatable("automodpack.management.preservedFilesCount", preservedCount)
+				: VersionedText.translatable("automodpack.management.preservedFiles");
 		ActionRow management = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(preservedLabel, press -> controller.openPreservedFiles(this, () -> {
 					refreshEntries();
+					pendingPack = null;
 					rebuild();
 				})),
 				optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
@@ -85,20 +87,23 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
 		}
 		int pageCount = Math.max(1, (int) Math.ceil((double) Math.max(totalEntries, 1) / rowsPerPage));
-		if (showPagination) rows.set(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION,
-				navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
-					if (page > 0) {
-						page--;
-						rebuild();
-					}
-				}),
-				disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
-				navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
-					if (page < pageCount - 1) {
-						page++;
-						rebuild();
-					}
-				})));
+		if (showPagination)
+			rows.set(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION,
+					navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
+						if (page > 0) {
+							page--;
+							pendingPack = null;
+							rebuild();
+						}
+					}),
+					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
+					navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
+						if (page < pageCount - 1) {
+							page++;
+							pendingPack = null;
+							rebuild();
+						}
+					})));
 		if (page >= pageCount) page = pageCount - 1;
 		int start = page * rowsPerPage;
 		for (int index = start; index < Math.min(totalEntries, start + rowsPerPage); index++) {
@@ -147,16 +152,6 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		return VersionedText.literal(truncateToWidth(this.font, entry.name() + " · " + source, width - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
 	}
 
-	private void rebuild() {
-		pendingPack = null;
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
-	}
-
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packManager.title").withStyle(ChatFormatting.BOLD), this.width / 2, 16, TextColors.WHITE);
@@ -174,7 +169,8 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			String active = entries.stream().filter(InstalledModpackController.Pack::active).findFirst()
 					.map(entry -> VersionedText.translatable("automodpack.packManager.active", entry.name()).getString())
 					.orElse(VersionedText.translatable("automodpack.packManager.noActive").getString());
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, active, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, descriptionLines.size() > 1 ? 50 : 44, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, active, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2,
+					descriptionLines.size() > 1 ? 50 : 44, TextColors.WHITE);
 		}
 	}
 

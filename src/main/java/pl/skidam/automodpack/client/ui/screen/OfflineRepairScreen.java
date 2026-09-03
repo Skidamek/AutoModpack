@@ -15,12 +15,12 @@ import net.minecraft.network.chat.Component;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.OfflineRepair;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
@@ -80,8 +80,9 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		boolean canUpdate = needsUpdate && updateAction != null;
 		List<ActionRow> actions = new ArrayList<>();
 		boolean showKeepAll = !candidates.isEmpty() && !selectedEditablePaths.isEmpty();
-		if (showKeepAll) actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
-				optionalAction(VersionedText.translatable("automodpack.repair.keepAllEditable"), press -> keepAllEditable())));
+		if (showKeepAll)
+			actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY,
+					optionalAction(VersionedText.translatable("automodpack.repair.keepAllEditable"), press -> keepAllEditable())));
 		List<ActionDefinition> primaryActions = new ArrayList<>();
 		primaryActions.add(primaryAction(VersionedText.translatable("automodpack.repair.apply"), press -> apply()));
 		if (canUpdate) primaryActions.add(optionalAction(VersionedText.translatable("automodpack.repair.updateAndFinish"), press -> updateAndFinish()));
@@ -107,7 +108,9 @@ public final class OfflineRepairScreen extends VersionedScreen {
 			// while it consents and checked once the player's changes are kept.
 			boolean resetConsent = selectedEditablePaths.contains(candidate.logicalPath());
 			Button choice = buttonWidget(x, listTop + (index - start) * ROW_HEIGHT, width, 20,
-					VersionedText.literal(truncateToWidth(this.font, VersionedText.translatable(resetConsent ? "automodpack.repair.editableKeep" : "automodpack.repair.editableKeepChecked", candidate.logicalPath()).getString(), width - 12)), press -> toggleEditable(candidate.logicalPath()));
+					VersionedText.literal(truncateToWidth(this.font,
+							VersionedText.translatable(resetConsent ? "automodpack.repair.editableKeep" : "automodpack.repair.editableKeepChecked", candidate.logicalPath()).getString(), width - 12)),
+					press -> toggleEditable(candidate.logicalPath()));
 			choice.active = !busy;
 			setTooltip(choice, editableTooltip(resetConsent, candidate.logicalPath()));
 			this.addRenderableWidget(choice);
@@ -244,15 +247,6 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		if (current != null && !current.isDone()) current.cancel(true);
 	}
 
-	private void rebuild() {
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
-	}
-
 	@Override
 	public void removed() {
 		if (presentingFailure) {
@@ -275,22 +269,27 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		long missing = prepared.findings().stream().filter(finding -> finding.condition() == OfflineRepair.Condition.MISSING).count();
 		long damaged = prepared.findings().stream().filter(finding -> finding.condition() != OfflineRepair.Condition.MISSING).count();
 		long repairable = prepared.findings().stream().filter(OfflineRepair.Finding::locallyRepairable).count();
-		String state = prepared.findings().isEmpty() ? VersionedText.translatable("automodpack.repair.healthy").getString()
+		String state = prepared.findings().isEmpty()
+				? VersionedText.translatable("automodpack.repair.healthy").getString()
 				: VersionedText.translatable("automodpack.repair.findings", missing, damaged, repairable).getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, this.width - 20)).withStyle(prepared.findings().isEmpty() ? ChatFormatting.GREEN : ChatFormatting.YELLOW), this.width / 2, 30, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, this.width - 20)).withStyle(prepared.findings().isEmpty() ? ChatFormatting.GREEN : ChatFormatting.YELLOW),
+				this.width / 2, 30, TextColors.WHITE);
 		String hashed = VersionedText.translatable("automodpack.repair.hashed", prepared.directlyHashedFileCount(), UiFormat.formatSize(prepared.directlyHashedBytes())).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, hashed, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 42, TextColors.WHITE);
 		if (!prepared.unownedModPaths().isEmpty()) {
 			String unownedState = VersionedText.translatable(keepUnownedMods ? "automodpack.repair.unownedKept" : "automodpack.repair.unownedArchived", prepared.unownedModPaths().size()).getString();
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, unownedState, this.width - 20)).withStyle(keepUnownedMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY), this.width / 2, 54, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, unownedState, this.width - 20)).withStyle(keepUnownedMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY),
+					this.width / 2, 54, TextColors.WHITE);
 		} else {
 			String choices = VersionedText.translatable("automodpack.repair.choices", selectedEditablePaths.size(), prepared.editableResetCandidates().size()).getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, choices, this.width - 20)).withStyle(ChatFormatting.AQUA), this.width / 2, 54, TextColors.WHITE);
 		}
 		if (busy) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.repair.working").withStyle(ChatFormatting.YELLOW), this.width / 2, 66, TextColors.WHITE);
 		else if (receipt != null) {
-			String result = VersionedText.translatable("automodpack.repair.receipt", receipt.repairedCasObjects(), receipt.repairedMaterializedFiles(), receipt.resetEditableFiles(), receipt.archivedUnownedMods()).getString();
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, result, this.width - 20)).withStyle(receipt.complete() ? ChatFormatting.GREEN : ChatFormatting.YELLOW), this.width / 2, 66, TextColors.WHITE);
+			String result = VersionedText.translatable("automodpack.repair.receipt", receipt.repairedCasObjects(), receipt.repairedMaterializedFiles(), receipt.resetEditableFiles(), receipt.archivedUnownedMods())
+					.getString();
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, result, this.width - 20)).withStyle(receipt.complete() ? ChatFormatting.GREEN : ChatFormatting.YELLOW),
+					this.width / 2, 66, TextColors.WHITE);
 		} else if (prepared.requiresUpdate()) {
 			String updateMessage = VersionedText.translatable(updateAction == null ? "automodpack.repair.updateNeededOffline" : "automodpack.repair.updateNeeded").getString();
 			List<String> lines = wrapToWidth(this.font, updateMessage, this.width - 28, 2);

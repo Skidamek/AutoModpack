@@ -173,15 +173,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		rebuild();
 	}
 
-	private void rebuild() {
-		/*? if >=1.19.2 {*/
-		this.rebuildWidgets();
-		/*?} else {*/
-		/*
-		this.init(this.minecraft, this.width, this.height);
-		*//*?}*/
-	}
-
 	private void toggleFolder(String path) {
 		if (!collapsedFolders.remove(path)) collapsedFolders.add(path);
 		rebuildBrowser();
