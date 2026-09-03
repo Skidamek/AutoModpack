@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.modpack.group;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -8,8 +9,6 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
-import java.util.ArrayList;
-
 
 public record SelectedModpackTarget(
 		PackDocument document,
