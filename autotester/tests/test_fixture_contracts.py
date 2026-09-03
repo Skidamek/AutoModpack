@@ -10,7 +10,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from automodpack_autotester import runner
+from automodpack_autotester import client_steps, server_steps, staging_steps
 from automodpack_autotester.config import (
     load_scenarios,
     load_targets,
@@ -47,7 +47,7 @@ def test_release_fixture_uses_server_config_and_declared_group_directories(make_
         scenario_files=server_files.files,
     )
     ctx.artifact.write_bytes(b"autotest-artifact")
-    runner._prepare_server(ctx)
+    server_steps._prepare_server(ctx)
 
     config_path = ctx.server_dir / "automodpack" / "server-config.json"
     assert config_path.is_file()
@@ -106,7 +106,7 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
         "marker": "published",
     }
     (ctx.game_dir / "mods/old.jar").write_bytes(valid_mod_jar_bytes(fixture))
-    runner._v_reset_client_generation(ctx, {})
+    client_steps._v_reset_client_generation(ctx, {})
 
     assert not (client / "records").exists()
     assert not (client / "active").exists()
@@ -117,7 +117,7 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     assert not (client / "preservation").exists()
     assert_valid_mod_fixture((ctx.game_dir / "mods/old.jar").read_bytes(), fixture)
     assert (client / "data/known-hosts.json").read_text(encoding="utf-8") == '{"hosts": {}}'
-    runner._v_reset_isolated_client_objects(ctx, {})
+    client_steps._v_reset_isolated_client_objects(ctx, {})
     assert not (client / "data/objects").exists()
     assert (
         client / "data/packs/packaaa/connection.json"
@@ -125,7 +125,7 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     assert (
         ctx.game_dir / "automodpack/client-config.json"
     ).read_text(encoding="utf-8") == '{"selectedModpackId": "packaaa"}'
-    runner._v_reset_isolated_client_objects(ctx, {})
+    client_steps._v_reset_isolated_client_objects(ctx, {})
     assert not (client / "data/objects").exists()
 
 
@@ -198,7 +198,7 @@ def test_active_object_mutation_and_assertion_use_installed_manifest(make_ctx):
     file = root / "config/owned.txt"
     file.parent.mkdir(parents=True)
     file.write_text("server bytes\n", encoding="utf-8")
-    generation = runner._write_staged_generation(ctx, root, "fixture7", ctx.game_dir / "automodpack/client/data", client_root=ctx.game_dir / "automodpack/client")
+    generation = staging_steps._write_staged_generation(ctx, root, "fixture7", ctx.game_dir / "automodpack/client/data", client_root=ctx.game_dir / "automodpack/client")
     (ctx.game_dir / "automodpack/client/active-state.json").write_text(json.dumps({"schemaVersion": 1, "modpackId": "fixture7", "contentToken": generation["contentToken"], "status": "ACTIVE"}), encoding="utf-8")
 
     assert_client_object(ctx, {"path": "config/owned.txt"})
@@ -213,7 +213,7 @@ def test_preservation_claim_filters_do_not_rely_on_corrupt_object_bytes(make_ctx
     object_hash = hashlib.sha1(payload).hexdigest()
     objects = ctx.game_dir / "automodpack/client/data/objects"
     objects.mkdir(parents=True)
-    object_path = runner.cas_object(objects, object_hash)
+    object_path = client_steps.cas_object(objects, object_hash)
     object_path.parent.mkdir(parents=True, exist_ok=True)
     object_path.write_bytes(payload)
     claims = ctx.game_dir / f"automodpack/client/preservation/{pack_id}/claims.json"
@@ -294,7 +294,7 @@ def test_staged_generation_uses_actual_file_metadata(make_ctx):
     mod.write_bytes(b"fixture")
 
     data_root = root.parent / "data"
-    generation = runner._write_staged_generation(ctx, root, "fixture7", data_root)
+    generation = staging_steps._write_staged_generation(ctx, root, "fixture7", data_root)
 
     manifest = json.loads(
         (
@@ -316,7 +316,7 @@ def test_staged_generation_preserves_explicit_editable_file_metadata(make_ctx):
     path.write_text("server default\n", encoding="utf-8")
 
     data_root = root.parent / "data"
-    generation = runner._write_staged_generation(
+    generation = staging_steps._write_staged_generation(
         ctx, root, "fixture8", data_root, editable_paths={"config/editable.txt"}
     )
 
@@ -340,7 +340,7 @@ def test_record_only_staging_does_not_replace_active_state(make_ctx):
     active_state.parent.mkdir(parents=True, exist_ok=True)
     active_state.write_text('{"modpackId":"packaaa"}', encoding="utf-8")
 
-    runner._v_stage_modpack(
+    staging_steps._v_stage_modpack(
         ctx,
         {
             "recordOnly": True,
@@ -366,7 +366,7 @@ def test_record_only_staging_does_not_replace_active_state(make_ctx):
 def test_offline_staging_does_not_create_connection_state_by_default(make_ctx):
     ctx = make_ctx()
 
-    runner._v_stage_modpack(
+    staging_steps._v_stage_modpack(
         ctx,
         {
             "packId": "packaaa",
@@ -388,7 +388,7 @@ def test_offline_staging_does_not_create_connection_state_by_default(make_ctx):
 def test_offline_update_fallback_writes_the_production_connection_record(make_ctx):
     ctx = make_ctx(server_host="127.0.0.1")
 
-    runner._v_stage_modpack(
+    staging_steps._v_stage_modpack(
         ctx,
         {
             "packId": "packaaa",
@@ -418,7 +418,7 @@ def test_offline_update_fallback_writes_the_production_connection_record(make_ct
 
 def test_record_only_staging_links_same_pack_history(make_ctx):
     ctx = make_ctx(modpack_name="Pack B", marker_rel=Path("config/marker.json"))
-    runner._v_stage_modpack(
+    staging_steps._v_stage_modpack(
         ctx,
         {
             "recordOnly": True,
@@ -428,7 +428,7 @@ def test_record_only_staging_links_same_pack_history(make_ctx):
             "files": [{"path": "config/b.txt", "content": "b"}],
         },
     )
-    runner._v_stage_modpack(
+    staging_steps._v_stage_modpack(
         ctx,
         {
             "recordOnly": True,
@@ -464,7 +464,7 @@ def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     }
 
     assert valid_mod_jar_bytes(local) != valid_mod_jar_bytes(server)
-    runner._v_stage_modpack(
+    staging_steps._v_stage_modpack(
         ctx,
         {
             "recordOnly": True,
@@ -479,13 +479,13 @@ def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
     assert len(records) == 1
     manifest = json.loads(records[0].read_text(encoding="utf-8"))
     metadata = manifest["policy"]["groups"]["main"]["files"]["mods/amp-autotest-conflict.jar"]
-    object_path = runner.cas_object(ctx.game_dir / "automodpack/client/data/objects", metadata["sha1"])
+    object_path = client_steps.cas_object(ctx.game_dir / "automodpack/client/data/objects", metadata["sha1"])
     assert_valid_mod_fixture(object_path.read_bytes(), server, ctx.target.minecraft)
 
 
 def test_record_only_content_token_matches_its_policy_files(make_ctx):
     ctx = make_ctx(modpack_name="Pack B", marker_rel=Path("config/marker.json"))
-    runner._v_stage_modpack(
+    staging_steps._v_stage_modpack(
         ctx,
         {
             "recordOnly": True,
@@ -524,7 +524,7 @@ def test_seed_bootstrap_writes_live_fields(make_ctx):
     ctx.server_host = "amp-server"
     ctx.vars["fingerprint"] = "01:23:45"
 
-    runner._v_seed_bootstrap(ctx, {})
+    server_steps._v_seed_bootstrap(ctx, {})
 
     assert json.loads(
         (ctx.game_dir / "automodpack" / "automodpack-bootstrap.json").read_text(encoding="utf-8")

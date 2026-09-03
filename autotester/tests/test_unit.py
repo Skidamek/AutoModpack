@@ -356,7 +356,7 @@ def test_condition_log_captures_variable(make_ctx):
 
 def test_screenshot_verb_records_artifact(make_ctx):
     from automodpack_autotester.engine.steps_ui import screenshot
-    from .conftest import FakeBridge
+    from .fake_bridge import FakeBridge
 
     ctx = make_ctx()
     ctx.bridge = FakeBridge(ctx)
@@ -369,7 +369,7 @@ def test_screenshot_verb_records_artifact(make_ctx):
 
 def test_screenshot_verb_captures_the_currently_rendered_screen(make_ctx):
     from automodpack_autotester.engine.steps_ui import screenshot
-    from .conftest import FakeBridge
+    from .fake_bridge import FakeBridge
 
     ctx = make_ctx()
     ctx.bridge = FakeBridge(ctx)
