@@ -581,9 +581,11 @@ public class Commands {
 		int changed = 0;
 		int removed = 0;
 		for (JournalEntry.Change change : newest.values()) {
-			if (change.fromSha1() == null) added++;
-			else if (change.toSha1() == null) removed++;
-			else changed++;
+			switch (change.kind()) {
+				case ADDED -> added++;
+				case CHANGED -> changed++;
+				case REMOVED -> removed++;
+			}
 		}
 		return "+" + added + " added, " + changed + " changed, " + removed + " removed";
 	}
