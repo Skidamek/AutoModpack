@@ -1,0 +1,242 @@
+id: rollback-history
+description: |
+  Rolling the active pack back to an older generation from the content history:
+  the restore affordance appears only for locally kept generations, the restore
+  previews the revert through the normal reviewed update, the swap applies it
+  offline, the pack declares itself detached, and the next join still warns
+  before any sync.
+renderClient: true
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
+  - do: publish_server_generation
+    name: publish a changed generation with new patch notes
+    generation: 1
+  - do: disconnect
+    name: leave the game for the published update
+  - do: connect
+    name: connect to the published generation
+  - do: wait_for
+    name: show the published generation review
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: accept the published generation
+    select: { text: Update }
+  - do: wait_file_content
+    name: wait for the changed file
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
+    timeout: 300s
+  - do: wait_generation
+    name: wait for the committed head generation
+    patchNotes: "Update 2: changed alpha and added delta."
+    timeout: 300s
+  - do: wait_for
+    name: wait for the post-update restart
+    timeout: 60s
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart onto the head generation
+    select: { text: "Yes, close the game" }
+    timeout: 20s
+  - do: wait_client_exit
+    name: wait for the head restart to exit
+  - do: launch_client
+    name: relaunch the head client without the server
+  - do: wait_bridge
+    name: wait for the offline bridge
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: click
+    name: open the pack details
+    select: { text: amp-autotest }
+  - do: wait_for
+    name: show the history action on the pack details
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { text: History, enabled: true }
+  - do: click
+    name: open the content history
+    select: { text: History }
+  - do: wait_for
+    name: show the content history with both generations
+    timeout: 20s
+    until: { screen: ContentHistoryScreen }
+  - do: screenshot
+    name: capture the content history before the rollback
+    file: rollback-history-list
+  - do: click
+    name: open the current generation entry
+    select: { text: "Update 2: changed alpha and added delta." }
+  - do: wait_for
+    name: show the current entry without a restore affordance
+    timeout: 20s
+    until: { screen: ChangeBrowserScreen }
+  - do: assert
+    name: verify the active generation offers no restore
+    that: { no_element: { key: automodpack.history.restore, enabled: true } }
+  - do: click
+    name: return to the content history
+    select: { text: Back }
+  - do: wait_for
+    name: show the content history again
+    timeout: 20s
+    until: { screen: ContentHistoryScreen }
+  - do: click
+    name: open the older generation entry
+    select: { text: "Initial release: core content and a guest mod." }
+  - do: wait_for
+    name: show the older entry with its restore affordance
+    timeout: 20s
+    until:
+      all:
+        - screen: ChangeBrowserScreen
+        - element: { key: automodpack.history.restore, enabled: true }
+  - do: screenshot
+    name: capture the restorable entry detail
+    file: rollback-entry-detail
+  - do: click
+    name: restore the older generation
+    select: { key: automodpack.history.restore }
+  - do: wait_for
+    name: show the rollback write confirm for the restored host-only jar
+    timeout: 90s
+    until:
+      all:
+        - screen: PackConfirmScreen
+        - element: { key: automodpack.confirm.ack, enabled: true }
+  - do: screenshot
+    name: capture the rollback unverified write confirm
+    file: rollback-unverified
+  - do: click
+    name: acknowledge the restored host-only jar
+    select: { key: automodpack.confirm.ack }
+  - do: wait_for
+    name: wait for the rollback apply to unlock
+    timeout: 20s
+    until:
+      all:
+        - screen: PackConfirmScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: review the revert files
+    select: { text: Review files }
+  - do: wait_for
+    name: show the revert file review
+    timeout: 20s
+    until: { screen: ChangeBrowserScreen }
+  - do: screenshot
+    name: capture the revert file review
+    file: rollback-review
+  - do: click
+    name: return to the rollback confirm
+    select: { text: Back }
+  - do: wait_for
+    name: show the rollback confirm again
+    timeout: 20s
+    until:
+      all:
+        - screen: PackConfirmScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: apply the rollback through the reviewed swap
+    select: { text: Update }
+  - do: wait_file_content
+    name: wait for the reverted file in the projection
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha\n"
+    timeout: 300s
+  - do: wait_generation
+    name: wait for the committed older generation
+    patchNotes: "Initial release: core content and a guest mod."
+    timeout: 300s
+  - do: wait_for
+    name: wait for the post-rollback restart
+    timeout: 60s
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart onto the rolled back generation
+    select: { text: "Yes, close the game" }
+    timeout: 20s
+  - do: wait_client_exit
+    name: wait for the rollback restart to exit
+  - do: launch_client
+    name: relaunch the rolled back client
+  - do: wait_for
+    name: verify preload boots the rolled back pack without server sync
+    timeout: 60s
+    until:
+      log:
+        container: client
+        matches: 'Selected modpack is detached; booting the local pack without server sync'
+  - do: wait_bridge
+    name: wait for the rolled back client bridge
+  - do: connect
+    name: join the server while detached after the rollback
+  - do: wait_for
+    name: show the detached join prompt after the rollback
+    timeout: 90s
+    until:
+      all:
+        - screen: DetachedJoinPromptScreen
+        - element: { key: automodpack.detached.continueJoin, enabled: true }
+        - element: { key: automodpack.detached.syncNow, enabled: true }
+  - do: screenshot
+    name: capture the detached join prompt after the rollback
+    file: rollback-detached-prompt
+  - do: click
+    name: keep playing the rolled back state
+    select: { key: automodpack.detached.continueJoin }
+  - do: wait_join
+    name: verify the join completed in-session
+  - do: assert_file_content
+    name: verify the projection kept the older generation content
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha\n"
+  - do: assert_file_content
+    name: verify the live game directory kept the older generation content
+    path: "config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha\n"
+  - do: assert
+    name: verify the newer generation file stayed removed
+    that: { file_gone: "${active_dir}/config/amp-autotest-delta.txt" }
+  - do: assert
+    name: verify the removed mod came back from the local store
+    that: { file: "${active_dir}/mods/amp-autotest-guest.jar" }
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    modrinth:
+      projects:
+        - ferrite-core?
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  generations:
+    - patchNotes: "Initial release: core content and a guest mod."
+      files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
+        - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { path: mods/amp-autotest-guest.jar, fixture: { modId: amp_autotest_guest, version: "1.0.0-published", marker: guest } }
+    - patchNotes: "Update 2: changed alpha and added delta."
+      files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v2\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":43}' }
+        - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { path: config/amp-autotest-delta.txt, content: "delta-v2\n" }

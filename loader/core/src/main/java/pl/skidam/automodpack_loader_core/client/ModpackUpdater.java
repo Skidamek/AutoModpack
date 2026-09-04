@@ -136,8 +136,9 @@ public class ModpackUpdater implements AutoCloseable {
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		boolean projectionPresent = active != null && Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS);
 		if (projectionPresent && selectedTarget.manifest().modpackId().equals(active.modpackId)
+				&& selectedTarget.document().contentToken().equals(active.contentToken)
 				&& Objects.equals(selectedTarget.expectedPriorIntent(), selectedTarget.selection().intent()))
-			throw new IllegalArgumentException("Installed modpack target and group selection are already active");
+			throw new IllegalArgumentException("Installed modpack target generation and group selection are already active");
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			acquireTargetObjects(selectedTarget.flatTarget(), cache, true);
 			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
@@ -168,6 +169,16 @@ public class ModpackUpdater implements AutoCloseable {
 		} finally {
 			close();
 		}
+	}
+
+	/**
+	 * Applies the last prepared switch as a rollback to an older generation: detachment is declared before the commit so
+	 * the published active state keeps the flag, making the rollback itself the declaration of local sovereignty.
+	 */
+	public void applyGenerationRollback() throws Exception {
+		if (selectedTarget == null) throw new IllegalStateException("Generation rollback was not prepared");
+		storage.setDetached(selectedTarget.manifest().modpackId(), true);
+		applyInstalledSwitch();
 	}
 
 	/** Returns whether the selected installed target needs an authenticated object-transfer session. */
