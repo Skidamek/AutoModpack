@@ -30,7 +30,6 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "conflict-preservation",
     "preservation-vault",
     "storage-maintenance",
-    "server-history-compaction",
     "server-generation-rollback",
     "server-object-gc",
     "fresh-generation-deletion",

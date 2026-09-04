@@ -11,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -64,7 +63,7 @@ class ClientObjectStoreTest {
 		String referenced = store(storage, bytes);
 		String orphan = store(storage, "orphan");
 		PackDocument record = TestPacks.document(manifest(referenced, bytes.length));
-		new ClientGenerationStore(storage).write(record, List.of());
+		new ClientGenerationStore(storage).write(record);
 		storage.writeActiveState(MODPACK_ID, record.contentToken());
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of(record.contentToken()), Set.of());
@@ -86,7 +85,7 @@ class ClientObjectStoreTest {
 		String hash = store(second, bytes);
 		String orphan = store(first, "shared-orphan");
 		PackDocument record = TestPacks.document(manifest(hash, bytes.length));
-		new ClientGenerationStore(second).write(record, List.of());
+		new ClientGenerationStore(second).write(record);
 		ClientObjectStore.publishOwnership(second);
 
 		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
@@ -130,8 +129,8 @@ class ClientObjectStoreTest {
 		PackDocument active = TestPacks.document(manifest(MODPACK_ID, activeHash, activeBytes.length));
 		PackDocument historical = TestPacks.document(manifest(OTHER_MODPACK_ID, historicalHash, historicalBytes.length));
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(active, List.of());
-		generations.write(historical, List.of());
+		generations.write(active);
+		generations.write(historical);
 		storage.writeActiveState(MODPACK_ID, active.contentToken());
 
 		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(active.contentToken()), Set.of()));

@@ -79,7 +79,7 @@ public class NettyServer {
 
 	public Optional<Path> getPath(String requestKey) {
 		if (requestKey == null) return Optional.empty();
-		if (requestKey.isEmpty()) return regularPath(paths.get(""));
+		if (requestKey.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || requestKey.equals(GenerationHosting.JOURNAL_KEY)) return regularPath(paths.get(requestKey));
 		if (!HashUtils.isSha1(requestKey)) return Optional.empty();
 
 		return regularPath(paths.get(HashUtils.normalizeSha1(requestKey)));

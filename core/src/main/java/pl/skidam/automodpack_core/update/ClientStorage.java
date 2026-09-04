@@ -62,6 +62,8 @@ public final class ClientStorage {
 	private final Path helperDirectory;
 	private final Path helperLeaseFile;
 	private final Path preservationDirectory;
+	private final Path historyDirectory;
+	private final Path journalTempFile;
 	private final Path bootstrapFile;
 	private final Path fileCacheDirectory;
 	private final Path modCacheDirectory;
@@ -97,6 +99,8 @@ public final class ClientStorage {
 		this.helperDirectory = this.gameDirectory.resolve(CLIENT_HELPER_DIR).normalize();
 		this.helperLeaseFile = this.gameDirectory.resolve(CLIENT_HELPER_LEASE_FILE).normalize();
 		this.preservationDirectory = this.gameDirectory.resolve(CLIENT_PRESERVATION_DIR).normalize();
+		this.historyDirectory = this.gameDirectory.resolve(CLIENT_HISTORY_DIR).normalize();
+		this.journalTempFile = this.gameDirectory.resolve(CLIENT_JOURNAL_TEMP_FILE).normalize();
 		this.bootstrapFile = this.gameDirectory.resolve(BOOTSTRAP_FILE).normalize();
 		this.fileCacheDirectory = dataLayout.fileCacheDirectory();
 		this.modCacheDirectory = dataLayout.modCacheDirectory();
@@ -298,6 +302,19 @@ public final class ClientStorage {
 		return preservationDirectory;
 	}
 
+	public Path historyPackDirectory(String modpackId) {
+		return historyDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
+	}
+
+	/** The per-pack replica of the server journal file; a pure server artifact the client only swaps atomically. */
+	public Path historyJournalFile(String modpackId) {
+		return historyPackDirectory(modpackId).resolve(SERVER_JOURNAL_FILE.getFileName().toString()).normalize();
+	}
+
+	public Path journalTempFile() {
+		return journalTempFile;
+	}
+
 	public Path preservationPackDirectory(String modpackId) {
 		return preservationDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
 	}
@@ -433,6 +450,7 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(backupDirectory, "client projection backup root");
 		FileTrees.createManagedDirectory(helperDirectory, "client update helper");
 		FileTrees.createManagedDirectory(preservationDirectory, "client preservation root");
+		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
 	}
 
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
@@ -462,8 +480,8 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
-				stateFile, transactionFile, repairJournalFile, compactionJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory, helperLeaseFile,
-				incomingProjectionDirectory(), backupProjectionDirectory());
+				historyDirectory, stateFile, transactionFile, repairJournalFile, compactionJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile,
+				journalTempFile, helperDirectory, helperLeaseFile, incomingProjectionDirectory(), backupProjectionDirectory());
 		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}
 

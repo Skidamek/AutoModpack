@@ -137,14 +137,6 @@ public class ModpackExecutor {
 		return generationStore.measureStorage();
 	}
 
-	public GenerationStore.CompactionSummary compactHistoryBefore(long boundarySeq) throws IOException {
-		OperationLease operation = acquire(true);
-		if (operation == null) throw new IOException("Another modpack operation is already in progress");
-		try (operation) {
-			return generationStore.compact(boundarySeq);
-		}
-	}
-
 	public GenerationStore.CollectionSummary collectUnreachableObjects() throws IOException {
 		OperationLease operation = acquire(true);
 		if (operation == null) throw new IOException("Another modpack operation is already in progress");

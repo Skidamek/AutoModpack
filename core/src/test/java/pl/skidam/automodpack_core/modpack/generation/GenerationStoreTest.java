@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class GenerationStoreTest {
 	Path tempDir;
 
 	@Test
-	void publishesRestoresCompactsAndCollects() throws Exception {
+	void publishesRestoresAndCollectsHeadUnreachableObjects() throws Exception {
 		Path objects = tempDir.resolve("objects");
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects);
 		assertTrue(store.loadCurrent().isEmpty());
@@ -56,33 +57,49 @@ class GenerationStoreTest {
 				&& sha1("content-two").equals(change.fromSha1()) && sha1("content-one").equals(change.toSha1())));
 		assertEquals(root.entry().contentToken(), store.loadCurrent().orElseThrow().contentToken());
 
-		// Compaction collapses the prefix into a snapshot and replay still verifies tokens.
-		GenerationStore.CompactionSummary compaction = store.compact(2);
-		assertEquals(1, compaction.removedEntries());
-		assertEquals(3, compaction.entriesBefore());
-		assertEquals(2, compaction.entriesAfter());
-		assertEquals(restored.entry().contentToken(), store.loadCurrent().orElseThrow().contentToken());
-
-		// Objects unreachable from any retained journal entry are collectable.
+		// Only the head generation's content objects stay reachable; every other content object is collectable.
+		// Policy documents are never collected: the journal's metadata shadow keeps every generation foldable.
 		Files.createDirectories(objects.resolve("ff"));
 		Path orphan = objects.resolve("ff").resolve(sha1("orphan").substring(2));
 		Files.write(orphan, "orphan".getBytes(StandardCharsets.UTF_8));
 		GenerationStore.CollectionSummary collection = store.collectUnreachable();
-		assertEquals(1, collection.deletedObjects());
+		assertEquals(2, collection.deletedObjects());
 		assertFalse(Files.exists(orphan));
+		assertFalse(Files.exists(DataRootResolver.objectFile(objects, sha1("content-two"))));
+		assertTrue(Files.exists(DataRootResolver.objectFile(objects, sha1("content-one"))));
+		assertTrue(Files.exists(DataRootResolver.objectFile(objects, second.entry().policySha1())));
+
+		// The head hosting map carries only the head document, the journal, the head policy, and the head tree.
+		TreeMap<String, Path> hosted = new TreeMap<>(store.hosting().asMap());
+		assertEquals(Set.of(GenerationHosting.HEAD_DOCUMENT_KEY, GenerationHosting.JOURNAL_KEY, sha1("content-one"), current.policySha1()), hosted.keySet());
+		for (Path hostedFile : hosted.values()) assertTrue(Files.isRegularFile(hostedFile));
+		assertEquals(3, Journal.open(tempDir.resolve("state").resolve("journal.jsonl")).length());
 	}
 
 	@Test
-	void ledgerCheckpointKeepsRemovedPathHistoryAcrossCompactionAndProjectionLoss() throws Exception {
+	void collectThenRestoreFailsLoudlyAboutTheCollectedObjects() throws Exception {
+		Path objects = tempDir.resolve("objects");
+		GenerationStore store = new GenerationStore(tempDir.resolve("state"), objects);
+		store.publish(candidate("one", "content-one"), "First");
+		store.publish(candidate("two", "content-two"), "Second");
+		store.publishRestore(1, "Back to first");
+		store.publish(candidate("two", "content-two"), "Second again");
+		store.collectUnreachable();
+
+		IOException failure = assertThrows(IOException.class, () -> store.publishRestore(1, "No bytes left"));
+		assertTrue(failure.getMessage().contains("no longer stored"));
+	}
+
+	@Test
+	void journalReplayFromRootKeepsRemovedPathHistoryWithoutProjection() throws Exception {
 		Path objects = tempDir.resolve("objects");
 		Path state = tempDir.resolve("state");
 		GenerationStore store = new GenerationStore(state, objects);
 		store.publish(candidate(Map.of("config/a.txt", "A", "config/b.txt", "B")), "First");
 		store.publish(candidate(Map.of("config/a.txt", "A2")), "Second");
-		store.compact(1);
 		Files.delete(state.resolve("current-projection.json"));
 
-		// The projection is gone and the journal lost generation 1 to the snapshot: the folded
+		// The projection is gone: the slow path replays the journal from the root and the folded
 		// ledger must still remember b.txt as a pack tombstone, not as a foreign file.
 		GenerationStore.Current current = new GenerationStore(state, objects).loadCurrent().orElseThrow();
 		OwnershipLedger.Entry removed = current.ledger().entries().get("config/b.txt");
@@ -127,7 +144,7 @@ class GenerationStoreTest {
 	}
 
 	@Test
-	void headDocumentCarriesPolicyLedgerAndTail() throws Exception {
+	void headDocumentCarriesIdentityPolicyAndLedger() throws Exception {
 		GenerationStore store = new GenerationStore(tempDir.resolve("state"), tempDir.resolve("objects"));
 		store.publish(candidate("one", "content-one"), "First");
 		store.publish(candidate("two", "content-two"), "Second");
@@ -135,8 +152,6 @@ class GenerationStoreTest {
 		Path projection = tempDir.resolve("state").resolve("current-projection.json");
 		GenerationJsons.HeadDocumentFields fields = ConfigToolsRead.read(projection);
 		assertEquals(2, fields.journalHead);
-		assertEquals(2, fields.journal.size());
-		assertEquals("Second", fields.journal.get(1).notes);
 		assertEquals(sha1("content-two"), fileEntry(fields).sha1);
 		assertEquals("abc1234", fields.policy.modpackId);
 		assertNotNull(fields.ownershipLedger.digest);

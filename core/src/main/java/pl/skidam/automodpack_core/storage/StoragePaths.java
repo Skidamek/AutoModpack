@@ -23,6 +23,7 @@ public final class StoragePaths {
 	public static final Path CLIENT_BACKUP_DIR = CLIENT_DIR.resolve("backup");
 	public static final Path CLIENT_BACKUP_PROJECTION_DIR = CLIENT_BACKUP_DIR.resolve("projection");
 	public static final Path CLIENT_PRESERVATION_DIR = CLIENT_DIR.resolve("preservation");
+	public static final Path CLIENT_HISTORY_DIR = CLIENT_DIR.resolve("history");
 	public static final Path RECOVERED_DIR = AUTOMODPACK_DIR.resolve("recovered");
 	public static final Path CLIENT_ACTIVE_STATE_FILE = CLIENT_DIR.resolve("active-state.json");
 	public static final Path CLIENT_SELECTION_FILE = CLIENT_DIR.resolve("selections.json");
@@ -32,6 +33,7 @@ public final class StoragePaths {
 	public static final Path CLIENT_COMPACTION_FILE = CLIENT_DIR.resolve("compaction.json");
 	public static final Path CLIENT_MUTATION_LOCK_FILE = CLIENT_DIR.resolve("mutation.lock");
 	public static final Path CLIENT_CONTENT_TEMP_FILE = CLIENT_DIR.resolve("incoming-manifest.json.temp");
+	public static final Path CLIENT_JOURNAL_TEMP_FILE = CLIENT_DIR.resolve("incoming-journal.jsonl.temp");
 	public static final Path CLIENT_HELPER_DIR = CLIENT_DIR.resolve("helper");
 	public static final Path CLIENT_HELPER_LEASE_FILE = CLIENT_HELPER_DIR.resolve("running.lock");
 	public static final Path LOCAL_DATA_DIR = AUTOMODPACK_DIR.resolve("data");
@@ -39,7 +41,6 @@ public final class StoragePaths {
 	public static final Path SERVER_DIR = AUTOMODPACK_DIR.resolve("server");
 	public static final Path SERVER_PROJECTION_FILE = SERVER_DIR.resolve("current-projection.json");
 	public static final Path SERVER_JOURNAL_FILE = SERVER_DIR.resolve("journal.jsonl");
-	public static final Path SERVER_LEDGER_FILE = SERVER_DIR.resolve("ledger.json");
 	public static final Path SERVER_STAGING_DIR = SERVER_DIR.resolve("staging");
 	public static final Path PATCH_NOTES_FILE = AUTOMODPACK_DIR.resolve("patch-notes.md");
 

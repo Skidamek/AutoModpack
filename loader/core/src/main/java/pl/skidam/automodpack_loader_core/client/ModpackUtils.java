@@ -4,11 +4,13 @@ import static pl.skidam.automodpack_core.Constants.*;
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -20,6 +22,7 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
@@ -28,6 +31,7 @@ import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
@@ -243,16 +247,51 @@ public class ModpackUtils {
 		}
 
 		return createDownloadClient(connectionInfo, secret.secretBytes(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
-				.thenCompose(client -> fetchModpackContentAsync(storage, client, current -> current.downloadFile(new byte[0], storage.modpackContentTempFile(), null)).handle((content, error) -> {
-					if (error != null || content.isEmpty()) {
-						client.close();
-						Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : DownloadClient.unwrap(error);
-						return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
-					}
-					return new ManifestFetchResult(ManifestFetchState.SUCCESS, content.get(), client, null);
-				})).exceptionally(error -> {
+				.thenCompose(client -> fetchModpackContentAsync(storage, client, current -> current.downloadFile(new byte[0], storage.modpackContentTempFile(), null))
+						.thenCompose(content -> syncJournalMirror(storage, client, content.orElse(null))).handle((content, error) -> {
+							if (error != null || content.isEmpty()) {
+								client.close();
+								Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : DownloadClient.unwrap(error);
+								return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
+							}
+							return new ManifestFetchResult(ManifestFetchState.SUCCESS, content.get(), client, null);
+						}))
+				.exceptionally(error -> {
 					Throwable cause = DownloadClient.unwrap(error);
 					return new ManifestFetchResult(connectionFailedState, null, null, cause);
+				});
+	}
+
+	/**
+	 * After a successful head fetch, the pack's journal mirror must vouch for the head content token; when it is
+	 * stale, missing, or unreadable, the whole journal file is fetched under the reserved key and swapped in whole.
+	 */
+	private static CompletableFuture<Optional<GenerationJsons.HeadDocumentFields>> syncJournalMirror(ClientStorage storage, DownloadClient client,
+			GenerationJsons.HeadDocumentFields content) {
+		if (content == null) return CompletableFuture.completedFuture(Optional.empty());
+		JournalMirror mirror = new JournalMirror(storage);
+		String modpackId;
+		try {
+			modpackId = ModpackId.requireValid(content.policy.modpackId);
+		} catch (RuntimeException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(Optional.of(content));
+		LOGGER.info("Journal mirror is stale for modpack {}; fetching the full journal from the server", modpackId);
+		return client.downloadFile(GenerationHosting.JOURNAL_KEY.getBytes(StandardCharsets.UTF_8), storage.journalTempFile(), null)
+				.thenApplyAsync(path -> {
+					try {
+						mirror.replaceFrom(modpackId, path);
+					} catch (IOException e) {
+						throw new CompletionException(e);
+					}
+					return Optional.of(content);
+				}, DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
+					try {
+						Files.deleteIfExists(storage.journalTempFile());
+					} catch (IOException e) {
+						LOGGER.warn("Failed to remove the temporary journal download", e);
+					}
 				});
 	}
 

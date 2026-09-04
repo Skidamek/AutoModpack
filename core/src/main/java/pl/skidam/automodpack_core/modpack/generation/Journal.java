@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
@@ -74,38 +73,6 @@ public final class Journal {
 		entries = List.copyOf(updated);
 		return entry;
 	}
-
-	/** Rewrites the journal with a single snapshot entry for the boundary state followed by every later entry. */
-	public synchronized CompactionResult compact(long boundarySeq) throws IOException {
-		JournalEntry boundary = entryAt(boundarySeq);
-		int index = entries.indexOf(boundary);
-		List<JournalEntry> retained = new ArrayList<>(entries.subList(index, entries.size()));
-		int removed = entries.size() - retained.size();
-		if (removed == 0) return new CompactionResult(0, entries.size(), entries.size());
-
-		ContentTree boundaryTree = treeAt(boundarySeq);
-		List<JournalEntry.Change> snapshotChanges = new ArrayList<>();
-		for (var file : boundaryTree.files().entrySet()) snapshotChanges.add(JournalEntry.Change.added(file.getKey(), file.getValue().sha1(), file.getValue().size()));
-		JournalEntry snapshot = new JournalEntry(1, boundary.contentToken(), boundary.policySha1(), boundary.createdAt(), boundary.notes(), boundary.restoreOf(), true, snapshotChanges);
-		List<JournalEntry> rewritten = new ArrayList<>();
-		rewritten.add(snapshot);
-		for (int i = 1; i < retained.size(); i++) rewritten.add(retained.get(i).withSeq(i + 1));
-
-		Path temporary = file.resolveSibling(file.getFileName() + ".compact");
-		Files.createDirectories(file.getParent());
-		try (var writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) {
-			for (JournalEntry entry : rewritten) {
-				writer.write(COMPACT.toJson(entry.toFields()));
-				writer.write("\n");
-			}
-		}
-		Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-		int before = entries.size();
-		entries = List.copyOf(rewritten);
-		return new CompactionResult(removed, before, entries.size());
-	}
-
-	public record CompactionResult(long removedEntries, long entriesBefore, long entriesAfter) {}
 
 	/** Rebuilds the served file set as of the given entry by folding changes from the last snapshot. */
 	public ContentTree treeAt(long seq) {

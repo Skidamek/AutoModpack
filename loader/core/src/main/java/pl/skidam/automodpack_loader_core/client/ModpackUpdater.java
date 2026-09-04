@@ -38,6 +38,7 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.ReviewedUpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -102,7 +103,13 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public List<JournalEntry> getFirstInstallPatchNotes() {
-		return getSelectedTarget().journal();
+		try {
+			return new JournalMirror(storage).entries(getSelectedTarget().manifest().modpackId());
+		} catch (IOException e) {
+			// The mirror was verified at the head fetch moments ago; an unreadable mirror only hides the history entry.
+			LOGGER.warn("Journal mirror is unreadable; first-install history is unavailable", e);
+			return List.of();
+		}
 	}
 
 	public SourceAvailability getSourceAvailability() {
@@ -192,7 +199,6 @@ public class ModpackUpdater implements AutoCloseable {
 		fields.contentToken = document.contentToken();
 		fields.policySha1 = document.policySha1();
 		fields.createdAt = document.createdAt().toString();
-		fields.journal = target.journal().stream().map(JournalEntry::toFields).toList();
 		fields.ownershipLedger = document.ownershipLedger().toFields();
 		fields.policy = document.manifest().toFields();
 		return fields;
@@ -821,19 +827,20 @@ public class ModpackUpdater implements AutoCloseable {
 
 	/** Assembles the player-facing preview of one target advance: journal tail, featured notes, and feature manifest. */
 	private UpdatePreview updatePreview(UpdatePlan plan, SelectedModpackTarget target, String installedToken) throws IOException {
-		return UpdatePreview.create(plan, target.selection(), UpdatePreview.Mode.UPDATE, featuredNotes(target, installedToken), updateJournal(target, installedToken)).withFeatureManifest(target.manifest());
+		List<JournalEntry> journal = new JournalMirror(storage).entries(target.manifest().modpackId());
+		return UpdatePreview.create(plan, target.selection(), UpdatePreview.Mode.UPDATE, featuredNotes(journal, installedToken), updateJournal(journal, installedToken))
+				.withFeatureManifest(target.manifest());
 	}
 
-	/** The journal tail published after the installed state: from the newest entry back to (excluding) the installed token, or the whole tail when it is gone. */
-	private static List<JournalEntry> updateJournal(SelectedModpackTarget target, String installedToken) {
-		List<JournalEntry> journal = target.journal();
+	/** The journal entries published after the installed state: after the installed token, or the whole journal when it is gone. */
+	private static List<JournalEntry> updateJournal(List<JournalEntry> journal, String installedToken) {
 		for (int index = journal.size() - 1; index >= 0; index--)
 			if (journal.get(index).contentToken().equals(installedToken)) return journal.subList(index + 1, journal.size());
 		return journal;
 	}
 
-	private static String featuredNotes(SelectedModpackTarget target, String installedToken) {
-		List<JournalEntry> range = updateJournal(target, installedToken);
+	private static String featuredNotes(List<JournalEntry> journal, String installedToken) {
+		List<JournalEntry> range = updateJournal(journal, installedToken);
 		return range.isEmpty() ? "" : range.get(range.size() - 1).notes();
 	}
 

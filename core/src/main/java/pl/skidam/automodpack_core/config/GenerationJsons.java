@@ -25,22 +25,14 @@ public class GenerationJsons {
 		public long toSize;
 	}
 
-	/** The head document served to clients: content identity, ledger, journal tail, and the policy document. */
+	/** The head document served to clients: content identity, ledger, and the policy document. */
 	public static class HeadDocumentFields {
 		public String contentToken = "";
 		public String policySha1 = "";
 		public String createdAt = "";
 		public long journalHead;
-		public boolean journalTruncated;
-		public List<JournalEntryFields> journal = List.of();
 		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
 		public ModpackJsons.CompleteModpackContentFields policy = new ModpackJsons.CompleteModpackContentFields();
-	}
-
-	public static class LedgerCheckpointFields {
-		public long seq;
-		public String contentToken = "";
-		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
 	}
 
 	public static class OwnershipLedgerFields {

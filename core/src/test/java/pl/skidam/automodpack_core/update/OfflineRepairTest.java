@@ -240,7 +240,7 @@ class OfflineRepairTest {
 		fields.groups = Map.of("main", group);
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
 		SelectedModpackTarget target = SelectedModpackTarget.prepare(TestPacks.head(document.manifest()), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
-		new ClientGenerationStore(storage).write(document, List.of());
+		new ClientGenerationStore(storage).write(document);
 		new ClientSelectionStore(storage.selectionFile()).compareAndSet(document.manifest().modpackId(), null, target.selection().intent());
 		storage.writeActiveState(document.manifest().modpackId(), document.contentToken());
 		return target;
