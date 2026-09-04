@@ -17,6 +17,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
@@ -54,7 +55,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		int actionY = this.height - 28;
 		ActionRow maintenanceRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(VersionedText.translatable("automodpack.storage.verify"), button -> verify()),
-				primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> collect()));
+				primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> compact()));
 		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent()));
 		List<Button> buttons = addActionArea(PANEL_WIDTH, actionY, maintenanceRow, footerRow);
 		buttons.get(0).active = !busy && !closed;
@@ -69,6 +70,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.keeps").getString(), wrapWidth, ChatFormatting.GREEN));
 		lines.addAll(
 				wrapParagraph(this.font, VersionedText.translatable(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount).getString(), wrapWidth, ChatFormatting.GREEN));
+		for (ClientGenerationStore.CompactionReceipt receipt : controller.compactionReceipts())
+			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.compacted", receipt.boundarySeq()).getString(), wrapWidth, ChatFormatting.GREEN));
 		if (collectionResult != null) {
 			lines.add(blankLine());
 			lines.addAll(wrapParagraph(this.font, statLine("automodpack.storage.objects", collectionResult.before().objectCount(), collectionResult.after().objectCount(),
@@ -94,13 +97,13 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		});
 	}
 
-	private void collect() {
+	private void compact() {
 		if (busy || closed) return;
-		begin(Operation.COLLECT);
+		begin(Operation.COMPACT);
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
-				ClientObjectStore.CollectionResult collected = controller.collectStorage();
-				this.minecraft.execute(() -> finish(collected));
+				ClientGenerationStore.CompactionResult result = controller.compactStorage();
+				this.minecraft.execute(() -> finish(result.collection()));
 			} catch (Exception exception) {
 				this.minecraft.execute(() -> fail(exception));
 			}
@@ -189,6 +192,6 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	}
 
 	private enum Operation {
-		VERIFY, COLLECT
+		VERIFY, COMPACT
 	}
 }

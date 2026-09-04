@@ -304,6 +304,11 @@ public final class ClientStorage {
 		return historyPackDirectory(modpackId).resolve(SERVER_JOURNAL_FILE.getFileName().toString()).normalize();
 	}
 
+	/** The per-pack receipt of the last manual history compaction; informational state for the storage UI. */
+	public Path historyCompactionReceiptFile(String modpackId) {
+		return historyPackDirectory(modpackId).resolve("compaction.json").normalize();
+	}
+
 	public Path journalTempFile() {
 		return journalTempFile;
 	}

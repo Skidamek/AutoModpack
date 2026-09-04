@@ -146,8 +146,21 @@ final class InstalledModpackController {
 		return ClientObjectStore.validate(storage);
 	}
 
-	ClientObjectStore.CollectionResult collectStorage() throws IOException {
-		return ClientObjectStore.collectUnreachableObjects(storage, Set.of());
+	ClientGenerationStore.CompactionResult compactStorage() throws IOException {
+		return new ClientGenerationStore(storage).compact();
+	}
+
+	/** The stored compaction boundary markers of every installed pack; display state only, so failures degrade to none. */
+	List<ClientGenerationStore.CompactionReceipt> compactionReceipts() {
+		try {
+			ClientGenerationStore generations = new ClientGenerationStore(storage);
+			List<ClientGenerationStore.CompactionReceipt> receipts = new ArrayList<>();
+			for (String modpackId : generations.installedPackIds()) generations.compactionReceipt(modpackId).ifPresent(receipts::add);
+			return receipts;
+		} catch (IOException | RuntimeException e) {
+			discoveryFailure = e;
+			return List.of();
+		}
 	}
 
 	List<PreservationVault.Snapshot> preservedFiles() throws IOException {

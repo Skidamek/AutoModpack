@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.update;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -248,6 +249,103 @@ class ClientGenerationStoreTest {
 		storage.writeActiveState(SECOND_PACK, second.contentToken(), second.ownershipLedger().toFields());
 		assertFalse(generations.isDetached(FIRST_PACK));
 		assertFalse(generations.isDetached(SECOND_PACK));
+	}
+
+	@Test
+	void compactionKeepsActiveNewestAndPoliciesAndTrimsOnlyOlderGenerations() throws Exception {
+		ClientStorage storage = storage();
+		String firstHash = store(storage, "first-object");
+		String secondHash = store(storage, "second-object");
+		String thirdHash = store(storage, "third-object");
+		String orphanHash = store(storage, "orphan");
+		PackDocument first = document(FIRST_PACK, firstHash, Files.size(storage.objectFile(firstHash)), Instant.parse("2026-01-01T00:00:00Z"));
+		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), Instant.parse("2026-01-02T00:00:00Z"), first);
+		PackDocument third = document(FIRST_PACK, thirdHash, Files.size(storage.objectFile(thirdHash)), Instant.parse("2026-01-03T00:00:00Z"), second);
+		TestPacks.stageGeneration(storage, first);
+		TestPacks.stageGeneration(storage, second);
+		TestPacks.stageGeneration(storage, third);
+		storage.writeActiveState(FIRST_PACK, first.contentToken(), first.ownershipLedger().toFields());
+		Files.createDirectories(storage.overlayFile(FIRST_PACK, "config/options.txt").getParent());
+		Files.writeString(storage.overlayFile(FIRST_PACK, "config/options.txt"), "overlay-object", StandardCharsets.UTF_8);
+		String overlayHash = HashUtils.sha1("overlay-object".getBytes(StandardCharsets.UTF_8));
+		byte[] overlayObject = "overlay-object".getBytes(StandardCharsets.UTF_8);
+		ClientObjectStore.storeObject(storage, overlayHash, overlayObject);
+		String selectionDigest = HashUtils.sha1("selection".getBytes(StandardCharsets.UTF_8));
+		new GeneratedCopyState(FIRST_PACK, second.contentToken(), selectionDigest, List.of(new GeneratedCopyState.Entry("mods/trimmed.jar", secondHash, Files.size(storage.objectFile(secondHash))))).write(storage);
+		new GeneratedCopyState(FIRST_PACK, third.contentToken(), selectionDigest, List.of(new GeneratedCopyState.Entry("mods/kept.jar", thirdHash, Files.size(storage.objectFile(thirdHash))))).write(storage);
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		List<JournalEntry> entries = new JournalMirror(storage).entries(FIRST_PACK);
+		byte[] mirrorBefore = Files.readAllBytes(storage.historyJournalFile(FIRST_PACK));
+		for (JournalEntry entry : entries) assertTrue(generations.locallyRestorable(FIRST_PACK, entry));
+
+		ClientGenerationStore.CompactionResult result = generations.compact();
+
+		assertTrue(Files.exists(storage.objectFile(firstHash)), "the active generation's content stays");
+		assertTrue(Files.exists(storage.objectFile(thirdHash)), "the newest generation's content stays");
+		assertTrue(Files.exists(storage.objectFile(first.policySha1())) && Files.exists(storage.objectFile(second.policySha1())) && Files.exists(storage.objectFile(third.policySha1())),
+				"every policy document stays");
+		assertTrue(Files.exists(storage.objectFile(overlayHash)), "overlay pins stay");
+		assertTrue(Files.exists(storage.generatedCopiesFile(FIRST_PACK, third.contentToken(), selectionDigest)), "kept generations keep their generated-copy state");
+		assertFalse(Files.exists(storage.generatedCopiesFile(FIRST_PACK, second.contentToken(), selectionDigest)), "trimmed generations lose their generated-copy state");
+		assertFalse(Files.exists(storage.objectFile(secondHash)), "a trimmed generation's content is reclaimed");
+		assertFalse(Files.exists(storage.objectFile(orphanHash)), "unreferenced objects are reclaimed too");
+		assertEquals(2, result.collection().deletedObjectCount());
+		assertEquals("second-object".getBytes(StandardCharsets.UTF_8).length + "orphan".getBytes(StandardCharsets.UTF_8).length, result.collection().deletedObjectBytes());
+		assertArrayEquals(mirrorBefore, Files.readAllBytes(storage.historyJournalFile(FIRST_PACK)), "the mirror file is byte-identical");
+		assertEquals(first.contentToken(), storage.readActiveState().contentToken);
+		assertTrue(Files.exists(storage.overlayFile(FIRST_PACK, "config/options.txt")));
+		assertTrue(generations.locallyRestorable(FIRST_PACK, entries.get(0)));
+		assertFalse(generations.locallyRestorable(FIRST_PACK, entries.get(1)), "a trimmed generation is no longer restorable");
+		assertTrue(generations.locallyRestorable(FIRST_PACK, entries.get(2)));
+		ClientGenerationStore.CompactionReceipt receipt = generations.compactionReceipt(FIRST_PACK).orElseThrow();
+		assertEquals(FIRST_PACK, receipt.modpackId());
+		assertEquals(entries.get(2).seq(), receipt.boundarySeq());
+		assertEquals(2, receipt.reclaimedObjectCount());
+		assertEquals(result.collection().deletedObjectBytes(), receipt.reclaimedObjectBytes());
+	}
+
+	@Test
+	void compactionRefusesWhileAnUpdateTransactionIsActive() throws Exception {
+		ClientStorage storage = storage();
+		String hash = store(storage, "first-object");
+		PackDocument first = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), TestPacks.CREATED);
+		String secondHash = store(storage, "second-object");
+		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), TestPacks.CREATED.plusSeconds(1), first);
+		TestPacks.stageGeneration(storage, first);
+		TestPacks.stageGeneration(storage, second);
+		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		Files.writeString(storage.transactionFile(), "{}", StandardCharsets.UTF_8);
+
+		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).compact());
+
+		assertTrue(Files.exists(storage.objectFile(hash)), "nothing is reclaimed by a refused compaction");
+		assertTrue(new ClientGenerationStore(storage).compactionReceipt(FIRST_PACK).isEmpty());
+	}
+
+	@Test
+	void compactionReceiptSurvivesUntilOverwrittenAndLeavesWithThePack() throws Exception {
+		ClientStorage storage = storage();
+		String firstHash = store(storage, "first-object");
+		String secondHash = store(storage, "second-object");
+		PackDocument first = document(FIRST_PACK, firstHash, Files.size(storage.objectFile(firstHash)), TestPacks.CREATED);
+		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), TestPacks.CREATED.plusSeconds(1), first);
+		TestPacks.stageGeneration(storage, first);
+		TestPacks.stageGeneration(storage, second);
+		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+
+		ClientGenerationStore.CompactionReceipt receipt = generations.compact().receipts().get(0);
+		assertEquals(1, receipt.reclaimedObjectCount(), "the inactive generation's content is reclaimed");
+		assertEquals(receipt, generations.compactionReceipt(FIRST_PACK).orElseThrow());
+
+		ClientGenerationStore.CompactionReceipt overwritten = generations.compact().receipts().get(0);
+		assertEquals(0, overwritten.reclaimedObjectCount(), "a second compaction has nothing left to reclaim");
+		assertEquals(receipt.boundarySeq(), overwritten.boundarySeq());
+		assertEquals(overwritten, generations.compactionReceipt(FIRST_PACK).orElseThrow());
+
+		storage.clearActiveState();
+		generations.forgetModpack(FIRST_PACK);
+		assertTrue(generations.compactionReceipt(FIRST_PACK).isEmpty(), "the receipt is deleted with the pack");
 	}
 
 	private ClientStorage storage() throws Exception {
