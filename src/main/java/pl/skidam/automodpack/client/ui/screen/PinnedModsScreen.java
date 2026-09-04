@@ -18,7 +18,6 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
@@ -29,6 +28,7 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -45,6 +45,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 500;
 	private static final int FOOTER_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 	private static final int ROW_HEIGHT = 22;
+	private static final int LIST_TOP = 90;
 
 	private final Screen parent;
 	private final List<LiveMod> liveMods;
@@ -53,7 +54,6 @@ public final class PinnedModsScreen extends VersionedScreen {
 	private String typedId = "";
 	private String selectedKey;
 	private boolean closed;
-	private int page;
 
 	public PinnedModsScreen(Screen parent) {
 		super(VersionedText.translatable("automodpack.pinnedMods.title"));
@@ -77,48 +77,19 @@ public final class PinnedModsScreen extends VersionedScreen {
 		Row selected = selected(rows);
 		List<PlatformReferences.Page> platformPages = selected == null ? List.of() : platformPagesByRowKey.getOrDefault(key(selected), List.of());
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
-		int listTop = 90;
 		List<ActionRow> actions = new ArrayList<>();
 		if (!platformPages.isEmpty()) actions.add(platformRow(platformPages));
 		actions.add(footer);
-		int pageSize = Math.max(1, (actionAreaTop(FOOTER_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)) - 8 - listTop) / ROW_HEIGHT);
-		boolean showPagination = rows.size() > pageSize;
-		if (showPagination) {
-			actions.add(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION, navigationAction(VersionedText.literal(""), press -> {}),
-					disabledNavigationAction(VersionedText.literal("")), navigationAction(VersionedText.literal(""), press -> {})));
-			pageSize = Math.max(1, (actionAreaTop(FOOTER_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new)) - 8 - listTop) / ROW_HEIGHT);
+		ActionRow[] actionRows = actions.toArray(ActionRow[]::new);
+		addActionArea(FOOTER_WIDTH, this.height - 28, actionRows);
+		int listBottom = actionAreaTop(FOOTER_WIDTH, this.height - 28, actionRows) - 8;
+		int rowWidth = Math.max(1, width - 8);
+		List<RowListWidget.Row> listRows = new ArrayList<>(rows.size());
+		for (Row row : rows) {
+			listRows.add(new RowListWidget.Row(List.of(rowLabel(row, rowWidth)), VersionedText.translatable(row.present ? "automodpack.pinnedMods.liveTooltip" : "automodpack.pinnedMods.missingTooltip")));
 		}
-		final int pageCount = Math.max(1, (int) Math.ceil((double) Math.max(rows.size(), 1) / pageSize));
-		if (showPagination)
-			actions.set(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION,
-					navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
-						if (page > 0) {
-							page--;
-							rebuild();
-						}
-					}),
-					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
-					navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
-						if (page < pageCount - 1) {
-							page++;
-							rebuild();
-						}
-					})));
-		if (page >= pageCount) page = pageCount - 1;
-		int start = page * pageSize;
-		for (int index = start; index < Math.min(rows.size(), start + pageSize); index++) {
-			Row row = rows.get(index);
-			int y = listTop + (index - start) * ROW_HEIGHT;
-			Button button = buttonWidget(x, y, width, 20, rowLabel(row, width), press -> toggle(row));
-			setTooltip(button, VersionedText.translatable(row.present ? "automodpack.pinnedMods.liveTooltip" : "automodpack.pinnedMods.missingTooltip"));
-			this.addRenderableWidget(button);
-		}
-
-		List<Button> actionButtons = addActionArea(FOOTER_WIDTH, this.height - 28, actions.toArray(ActionRow[]::new));
-		if (pageCount > 1) {
-			actionButtons.get(0).active = page > 0;
-			actionButtons.get(2).active = page < pageCount - 1;
-		}
+		RowListWidget list = new RowListWidget(this.minecraft, this.width, this.height, width, LIST_TOP, listBottom, ROW_HEIGHT, listRows, index -> toggle(rows.get(index)), this::showComponentTooltip);
+		this.addRenderableWidget(list);
 	}
 
 	private List<Row> rows() {

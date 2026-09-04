@@ -18,15 +18,13 @@ public final class ActionAreaLayout {
 
 	public enum RowKind {
 		AUXILIARY,
-		NAVIGATION,
 		FOOTER
 	}
 
 	public enum Role {
 		SECONDARY,
 		OPTIONAL,
-		PRIMARY,
-		NAVIGATION
+		PRIMARY
 	}
 
 	public record Action(String id, Role role) {

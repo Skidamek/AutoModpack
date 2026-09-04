@@ -49,7 +49,6 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
 		actions.add(new Action("automodpack.management.groups", this::openFeatures));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
-		actions.add(new Action("automodpack.patchNotes.button", this::openPatchNotes));
 		actions.add(new Action("automodpack.management.history", this::openHistory));
 		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.translatable("automodpack.management.deactivateTooltip")));
 		actions.add(new Action("automodpack.management.remove", this::remove, VersionedText.translatable("automodpack.management.removeTooltip")));
@@ -127,11 +126,6 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		if (busy) return;
 		markBusy();
 		controller.openHistory(pack, this::released);
-	}
-
-	private void openPatchNotes() {
-		if (busy) return;
-		controller.openPatchNotes(this, pack, this::released);
 	}
 
 	private void openFiles() {

@@ -25,7 +25,6 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
-import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -249,18 +248,6 @@ final class InstalledModpackController {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
 				GenerationHistoryController.open(storage, historyContentToken(pack), pack.name(), released);
-			} catch (Exception e) {
-				releaseOnClient(released);
-				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
-			}
-		});
-	}
-
-	void openPatchNotes(Screen parent, Pack pack, Runnable released) {
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			try {
-				List<JournalEntry> notes = new ClientGenerationStore(storage).journal(historyContentToken(pack));
-				releaseOnClient(() -> ScreenImpl.setScreen(new PatchNotesHistoryScreen(parent, notes, pack.name(), released)));
 			} catch (Exception e) {
 				releaseOnClient(released);
 				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);

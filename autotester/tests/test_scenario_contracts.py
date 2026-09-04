@@ -181,16 +181,16 @@ def test_release_gate_runs_server_maintenance_after_client_removal_and_in_order(
 
 def test_release_gate_exercises_content_history_from_management_settings():
     flow = load_scenarios()["all"]["flow"]
-    history = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "click" and step.get("select", {}).get("text") == "History")
-    content_wait = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and (step.get("until", {}).get("screen") == "ContentHistoryScreen" or any(condition.get("screen") == "ContentHistoryScreen" for condition in step.get("until", {}).get("all", []))))
+    history = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "click" and "generation history" in step.get("name", ""))
+    content_wait = next(index for index, step in enumerate(flow) if index > history and isinstance(step, dict) and step.get("do") == "wait_for" and (step.get("until", {}).get("screen") == "ContentHistoryScreen" or any(condition.get("screen") == "ContentHistoryScreen" for condition in step.get("until", {}).get("all", []))))
     screenshot = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "screenshot" and step.get("file") == "all-content-history")
-    all_notes = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "click" and step.get("select", {}).get("text") == "Patch notes" and index > screenshot)
-    notes_wait = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and (step.get("until", {}).get("screen") == "PatchNotesHistoryScreen" or any(condition.get("screen") == "PatchNotesHistoryScreen" for condition in step.get("until", {}).get("all", []))) and index > all_notes)
-    return_content = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and step.get("until", {}).get("screen") == "ContentHistoryScreen" and index > notes_wait)
+    entry_click = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "click" and "Pack B v2 removes" in step.get("select", {}).get("text", "") and index > screenshot)
+    detail_wait = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and (step.get("until", {}).get("screen") == "ChangeBrowserScreen" or any(condition.get("screen") == "ChangeBrowserScreen" for condition in step.get("until", {}).get("all", []))) and index > entry_click)
+    return_content = next(index for index, step in enumerate(flow) if isinstance(step, dict) and step.get("do") == "wait_for" and step.get("until", {}).get("screen") == "ContentHistoryScreen" and index > detail_wait)
 
-    assert history < content_wait < screenshot < all_notes < notes_wait < return_content
+    assert history < content_wait < screenshot < entry_click < detail_wait < return_content
     assert flow[content_wait]["until"].get("screen") == "ContentHistoryScreen"
-    assert flow[notes_wait]["until"].get("screen") == "PatchNotesHistoryScreen"
+    assert flow[detail_wait]["until"].get("screen") == "ChangeBrowserScreen"
 
 
 def test_canonical_encoder_has_java_parity_vector():

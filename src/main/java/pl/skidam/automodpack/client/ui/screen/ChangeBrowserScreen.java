@@ -21,6 +21,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
@@ -40,9 +41,11 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 public class ChangeBrowserScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 600;
 	private static final int GAP = 6;
+	private static final int LINE_STEP = 10;
 	private final Screen parent;
 	private final Component heading;
 	private final Component description;
+	private final List<MutableComponent> preamble;
 	private ChangeSet changes;
 	private final Map<String, String> featureNames;
 	private final BrowserAction auxiliaryAction;
@@ -65,10 +68,16 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	}
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction) {
+		this(parent, heading, description, changes, featureNames, auxiliaryAction, List.of());
+	}
+
+	/** The preamble is a pre-wrapped text block (for example an entry's full patch notes) drawn between the description and the browser. */
+	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble) {
 		super(heading);
 		this.parent = parent;
 		this.heading = Objects.requireNonNull(heading, "browser heading");
 		this.description = Objects.requireNonNull(description, "browser description");
+		this.preamble = preamble == null ? List.of() : List.copyOf(preamble);
 		this.changes = Objects.requireNonNull(changes, "browser changes");
 		this.featureNames = Map.copyOf(featureNames == null ? Map.of() : featureNames);
 		this.auxiliaryAction = auxiliaryAction;
@@ -80,13 +89,15 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		resolveCachedReferences();
 		int panelLeft = panelLeft(PANEL_WIDTH);
 		int panelWidth = panelWidth(PANEL_WIDTH);
+		int preambleHeight = preamble.isEmpty() ? 0 : preamble.size() * LINE_STEP + 6;
 		boolean narrow = panelWidth < 500;
 		int searchWidth = narrow ? panelWidth : 280;
-		int controlsY = narrow ? 59 : 35;
+		int searchY = 35 + preambleHeight;
+		int controlsY = (narrow ? 59 : 35) + preambleHeight;
 		int controlsLeft = narrow ? panelLeft : panelLeft + searchWidth + GAP;
 		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * 2 : searchWidth + GAP * 3)) / 2);
-		this.browserTop = narrow ? 83 : 59;
-		this.searchField = fieldWidget(panelLeft, 35, searchWidth, VersionedText.translatable("automodpack.browser.search"), null, Integer.MAX_VALUE);
+		this.browserTop = (narrow ? 83 : 59) + preambleHeight;
+		this.searchField = fieldWidget(panelLeft, searchY, searchWidth, VersionedText.translatable("automodpack.browser.search"), null, Integer.MAX_VALUE);
 		this.searchField.setValue(search);
 		String searchHint = VersionedText.translatable("automodpack.browser.search").getString();
 		this.searchField.setSuggestion(search.isEmpty() ? searchHint : "");
@@ -262,6 +273,11 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int contentWidth = panelWidth(PANEL_WIDTH);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, heading.getString(), contentWidth)).withStyle(ChatFormatting.BOLD), this.width / 2, 8, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, description.getString(), contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, 21, TextColors.WHITE);
+		int preambleY = 34;
+		for (MutableComponent line : preamble) {
+			drawCenteredTextWithShadow(matrices, this.font, line, this.width / 2, preambleY, TextColors.WHITE);
+			preambleY += LINE_STEP;
+		}
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE,
 				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature)));
 		String summary = UiFormat.plural(projection.total().fileCount(), "automodpack.browser.summary", UiFormat.formatSize(projection.total().byteCount())).getString();

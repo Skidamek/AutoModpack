@@ -22,6 +22,7 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -50,7 +51,6 @@ public final class OfflineRepairScreen extends VersionedScreen {
 	private boolean busy;
 	private boolean presentingFailure;
 	private boolean closed;
-	private int page;
 	private Future<?> work;
 
 	public OfflineRepairScreen(Screen parent, String modpackName, ClientOfflineRepair repair, OfflineRepair.Prepared prepared, Runnable updateAction, Runnable closedCallback) {
@@ -97,62 +97,27 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		if (canUpdate) primaryActions.add(optionalAction(VersionedText.translatable("automodpack.repair.updateAndFinish"), press -> updateAndFinish()));
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryActions.toArray(ActionDefinition[]::new)));
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
-		int pageSize = rowsPerPage(listTop, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
-		int pageCount = pageCount(candidates.size(), pageSize);
-		if (pageCount > 1) {
-			int navigationIndex = showKeepAll ? 1 : 0;
-			actions.add(navigationIndex, navigationRow(pageCount));
-			pageSize = rowsPerPage(listTop, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new)));
-			pageCount = pageCount(candidates.size(), pageSize);
-		}
-		page = Math.max(0, Math.min(pageCount - 1, page));
-		if (pageCount > 1) {
-			int navigationIndex = showKeepAll ? 1 : 0;
-			actions.set(navigationIndex, navigationRow(pageCount));
-		}
-		int start = page * pageSize;
-		for (int index = start; index < Math.min(candidates.size(), start + pageSize); index++) {
-			OfflineRepair.EditableResetCandidate candidate = candidates.get(index);
+		ActionRow[] actionRows = actions.toArray(ActionRow[]::new);
+		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
+		int actionIndex = 0;
+		if (showKeepAll) actionButtons.get(actionIndex++).active = !busy;
+		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();
+		if (canUpdate) actionButtons.get(actionIndex).active = !busy;
+		if (candidates.isEmpty()) return;
+		List<RowListWidget.Row> listRows = new ArrayList<>(candidates.size());
+		for (OfflineRepair.EditableResetCandidate candidate : candidates) {
 			// Membership in selectedEditablePaths is the reset consent, so the row renders unchecked
 			// while it consents and checked once the player's changes are kept.
 			boolean resetConsent = selectedEditablePaths.contains(candidate.logicalPath());
-			Button choice = buttonWidget(x, listTop + (index - start) * ROW_HEIGHT, width, 20,
-					VersionedText.literal(truncateToWidth(this.font,
-							VersionedText.translatable(resetConsent ? "automodpack.repair.editableKeep" : "automodpack.repair.editableKeepChecked", candidate.logicalPath()).getString(), width - 12)),
-					press -> toggleEditable(candidate.logicalPath()));
-			choice.active = !busy;
-			setTooltip(choice, editableTooltip(resetConsent, candidate.logicalPath()));
-			this.addRenderableWidget(choice);
+			listRows.add(new RowListWidget.Row(List.of(VersionedText.literal(truncateToWidth(this.font,
+					VersionedText.translatable(resetConsent ? "automodpack.repair.editableKeep" : "automodpack.repair.editableKeepChecked", candidate.logicalPath()).getString(), width - 12))),
+					editableTooltip(resetConsent, candidate.logicalPath())));
 		}
-		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new));
-		int actionIndex = 0;
-		if (showKeepAll) actionButtons.get(actionIndex++).active = !busy;
-		if (pageCount > 1) {
-			actionButtons.get(actionIndex++).active = !busy && page > 0;
-			actionIndex++;
-			actionButtons.get(actionIndex++).active = !busy && page + 1 < pageCount;
-		}
-		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();
-		if (canUpdate) actionButtons.get(actionIndex).active = !busy;
-	}
-
-	private boolean hasRepairWork() {
-		return prepared.findings().stream().anyMatch(OfflineRepair.Finding::locallyRepairable) || !selectedEditablePaths.isEmpty() || !keepUnownedMods && !prepared.unownedModPaths().isEmpty();
-	}
-
-	private int rowsPerPage(int listTop, int actionTop) {
-		return Math.max(1, (actionTop - listTop - actionRowGap()) / ROW_HEIGHT);
-	}
-
-	private ActionRow navigationRow(int pageCount) {
-		return actionRow(ActionAreaLayout.RowKind.NAVIGATION,
-				navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> changePage(-1)),
-				disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
-				navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> changePage(1)));
-	}
-
-	private static int pageCount(int size, int pageSize) {
-		return Math.max(1, (size + pageSize - 1) / pageSize);
+		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows) - 8;
+		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), listTop, listBottom, ROW_HEIGHT, listRows,
+				index -> {
+					if (!busy) toggleEditable(candidates.get(index).logicalPath());
+				}, this::showComponentTooltip));
 	}
 
 	private void toggleEditable(String path) {
@@ -170,9 +135,8 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		return VersionedText.translatable(resetConsent ? "automodpack.repair.editableTooltipReset" : "automodpack.repair.editableTooltipKeep", path);
 	}
 
-	private void changePage(int amount) {
-		page = Math.max(0, page + amount);
-		rebuild();
+	private boolean hasRepairWork() {
+		return prepared.findings().stream().anyMatch(OfflineRepair.Finding::locallyRepairable) || !selectedEditablePaths.isEmpty() || !keepUnownedMods && !prepared.unownedModPaths().isEmpty();
 	}
 
 	private void apply() {
@@ -210,7 +174,6 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		selectedEditablePaths.retainAll(remaining);
 		keepUnownedMods = false;
 		busy = false;
-		page = 0;
 		rebuild();
 	}
 

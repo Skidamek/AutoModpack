@@ -90,8 +90,6 @@ public class VersionedScreen extends Screen {
 		// Render the rest of our screen
 		versionedRender(matrices, mouseX, mouseY, delta);
 
-		for (PlainTextSlot slot : plainTextSlots) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(slot.text()), this.width / 2, slot.y() + 6, TextColors.WHITE);
-
 		/*? if <1.20.6 {*/
 		/*super.render(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?}*/
@@ -163,15 +161,6 @@ public class VersionedScreen extends Screen {
 		return action(message, onPress, ActionAreaLayout.Role.PRIMARY, true);
 	}
 
-	protected final ActionDefinition navigationAction(Component message, Button.OnPress onPress) {
-		return action(message, onPress, ActionAreaLayout.Role.NAVIGATION, true);
-	}
-
-	protected final ActionDefinition disabledNavigationAction(Component message) {
-		return action(message, button -> {}, ActionAreaLayout.Role.NAVIGATION, false);
-	}
-
-	/** A visible but inert row, for status lines that must read as output rather than an offered action. */
 	protected final ActionDefinition disabledAction(Component message) {
 		return action(message, button -> {}, ActionAreaLayout.Role.OPTIONAL, false);
 	}
@@ -240,6 +229,11 @@ public class VersionedScreen extends Screen {
 	/** Shows the tooltip while the pointer stays inside the given text bounds, matching vanilla hover-on-text behavior. */
 	protected final void showHoverTooltip(VersionedMatrices matrices, Component tooltip, int x, int y, int width, int mouseX, int mouseY) {
 		if (mouseX < x || mouseX >= x + width || mouseY < y || mouseY >= y + this.font.lineHeight) return;
+		showComponentTooltip(matrices, tooltip, mouseX, mouseY);
+	}
+
+	/** Shows the tooltip wherever the pointer currently is; row lists call this only while a tooltip-carrying row is hovered. */
+	protected final void showComponentTooltip(VersionedMatrices matrices, Component tooltip, int mouseX, int mouseY) {
 		/*? if >=1.21.8 {*/
 		matrices.getContext().setComponentTooltipForNextFrame(this.font, List.of(tooltip), mouseX, mouseY);
 		/*?} elif >=1.20 {*/
@@ -404,29 +398,6 @@ public class VersionedScreen extends Screen {
 
 	protected final boolean isEnterKey(int keyCode) {
 		return keyCode == 257 || keyCode == 335;
-	}
-
-	private record PlainTextSlot(String text, int y) {}
-
-	private final List<PlainTextSlot> plainTextSlots = new ArrayList<>();
-
-	/**
-	 * Draws the slot's label as plain centered text instead of a disabled button, so page counters
-	 * and non-togglable section headers never read as dead clickable widgets. The slots this is
-	 * used for sit centered on the screen, matching how vanilla centers button text.
-	 */
-	protected final void renderAsPlainText(Button button) {
-		button.visible = false;
-		/*? if >=1.19.4 {*/
-		plainTextSlots.add(new PlainTextSlot(button.getMessage().getString(), button.getY()));
-		/*?} else {*/
-		/*plainTextSlots.add(new PlainTextSlot(button.getMessage().getString(), button.y));
-		*//*?}*/
-	}
-
-	@Override
-	protected void init() {
-		plainTextSlots.clear();
 	}
 
 	/*? if >= 1.20.2 {*/

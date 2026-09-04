@@ -97,7 +97,7 @@ class FakeBridge:
             "first_connection": {
                 "screenClass": "PackConfirmScreen",
                 "buttons": [{"id": 3, "text": "Download", "enabled": self.acknowledged, "visible": True, "key": "automodpack.firstConnect.download"},
-                            {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True},
+                            {"id": 17, "text": "History", "enabled": True, "visible": True},
                             {"id": 18, "text": "Customize groups", "enabled": True, "visible": True, "key": "automodpack.confirm.customize"},
                             *([{"id": 89, "text": f"Keep {len(self._first_install_local_mods())} existing mod files", "enabled": True, "visible": True, "checked": self.first_install_archive_existing, "key": "automodpack.confirm.keepExistingMods"}] if self._first_install_local_mods() else []),
                             {"id": 26, "text": "Do not download", "enabled": True, "visible": True}],
@@ -138,7 +138,7 @@ class FakeBridge:
             "preview": {
                 "screenClass": "UpdatePreviewScreen",
                 "buttons": [{"id": 5, "text": "Update", "enabled": True, "visible": True, "key": "automodpack.update.apply"},
-                            {"id": 17, "text": "View all patch notes", "enabled": True, "visible": True},
+                            {"id": 17, "text": "History", "enabled": True, "visible": True},
                             {"id": 104, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -222,32 +222,23 @@ class FakeBridge:
                             {"id": 88, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
-            "patch_history": {
-                "screenClass": "PatchNotesHistoryScreen",
-                "buttons": [{"id": 14, "text": "Back", "enabled": True, "visible": True}],
-                "textFields": [],
-            },
             "content_history": {
                 "screenClass": "ContentHistoryScreen",
-                "buttons": [{"id": 60, "text": "Generation 1", "enabled": True, "visible": True},
-                            {"id": 61, "text": "Cached Pack B fixture.", "enabled": False, "visible": True},
-                            {"id": 62, "text": "Generation 2", "enabled": True, "visible": True},
-                            {"id": 63, "text": "Pack B v2 removes the incompatible mod.", "enabled": False, "visible": True},
-                            {"id": 58, "text": "Back", "enabled": True, "visible": True},
-                            {"id": 59, "text": "Patch notes", "enabled": True, "visible": True},
-                            {"id": 66, "text": "Files", "enabled": True, "visible": True}],
+                # Journal entries are scrolling vanilla list rows; a row click opens the entry's detail browser.
+                "buttons": [{"id": 58, "text": "Back", "enabled": True, "visible": True}],
+                "other": [{"id": 60, "text": "Generation 1", "enabled": True, "visible": True, "type": "ListRow"},
+                          {"id": 61, "text": "Cached Pack B fixture.", "enabled": True, "visible": True, "type": "ListRow"},
+                          {"id": 62, "text": "Pack B v2 removes the incompatible mod.", "enabled": True, "visible": True, "type": "ListRow"}],
                 "textFields": [],
             },
-            "content_patch_history": {
-                "screenClass": "PatchNotesHistoryScreen",
-                "buttons": [{"id": 64, "text": "Cached Pack B fixture.", "enabled": False, "visible": True},
-                            {"id": 65, "text": "Pack B v2 removes the incompatible mod.", "enabled": False, "visible": True},
-                            {"id": 14, "text": "Back", "enabled": True, "visible": True}],
+            "entry_detail": {
+                "screenClass": "ChangeBrowserScreen",
+                "buttons": [{"id": 67, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "changelog": {
                 "screenClass": "ChangelogScreen",
-                "buttons": [{"id": 15, "text": "View all patch notes", "enabled": True, "visible": True},
+                "buttons": [{"id": 15, "text": "History", "enabled": True, "visible": True},
                             {"id": 16, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
@@ -439,22 +430,25 @@ class FakeBridge:
         elif element_id == 14:
             self.screen = self.history_parent
         elif element_id == 17:
-            self.history_parent = self.screen  # patch notes return to whichever screen opened them
-            self.screen = "patch_history"
+            self.history_parent = self.screen
+            self.screen = "content_history"
         elif element_id == 104:
             self.screen = self.settings_parent if self.screen == "preview" and self.settings_parent == "details" else "groups"
         elif element_id == 15:
             self.history_parent = "changelog"
-            self.screen = "patch_history"
+            self.screen = "content_history"
         elif element_id == 57:
+            self.history_parent = "details"
             self.screen = "content_history"
         elif element_id == 73:
+            self.history_parent = self.screen
             self.screen = "content_history"
         elif element_id == 58:
-            self.screen = "details"
-        elif element_id == 59:
-            self.history_parent = "content_history"
-            self.screen = "content_patch_history"
+            self.screen = self.history_parent if self.history_parent else "details"
+        elif element_id == 62 and self.screen == "content_history":
+            self.screen = "entry_detail"
+        elif element_id == 67 and self.screen == "entry_detail":
+            self.screen = "content_history"
         elif element_id == 16:
             self.screen = "restart"
         elif element_id == 42:
