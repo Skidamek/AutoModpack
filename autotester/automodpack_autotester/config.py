@@ -26,6 +26,7 @@ REPO_ROOT = ROOT.parent
 # game files are deliberately outside this set.
 CLIENT_GENERATION_STATE_PATHS = (
     "records",
+    "history",
     "overlays",
     "baselines",
     "generated-copies",

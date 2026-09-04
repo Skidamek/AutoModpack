@@ -31,10 +31,6 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		if (snapshot && seq != 1) throw new IllegalArgumentException("Only the first journal entry can be a snapshot");
 	}
 
-	public JournalEntry withSeq(long newSeq) {
-		return new JournalEntry(newSeq, contentToken, policySha1, createdAt, notes, restoreOf, snapshot, changes);
-	}
-
 	/** The per-entry change list kept server-side; summaries ride the wire instead. */
 	public List<Change> treeChanges() {
 		return changes;

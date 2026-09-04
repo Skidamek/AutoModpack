@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_JOURNAL_FILE;
-import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_LEDGER_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_PROJECTION_FILE;
 
 import java.io.IOException;
@@ -17,7 +16,6 @@ import java.util.Optional;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
@@ -34,12 +32,10 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * content changes. The journal is the only truth; the projection document is a rebuilt view.
  */
 public final class GenerationStore {
-	private static final int JOURNAL_TAIL_LIMIT = 25;
 
 	private final Path root;
 	private final Path journalFile;
 	private final Path projectionFile;
-	private final Path ledgerFile;
 	private final ServerObjectStore objectStore;
 	private final Path objectsDirectory;
 
@@ -50,7 +46,6 @@ public final class GenerationStore {
 		this.root = root.toAbsolutePath().normalize();
 		this.journalFile = this.root.resolve(SERVER_JOURNAL_FILE.getFileName().toString());
 		this.projectionFile = this.root.resolve(SERVER_PROJECTION_FILE.getFileName().toString());
-		this.ledgerFile = this.root.resolve(SERVER_LEDGER_FILE.getFileName().toString());
 		this.objectsDirectory = objectsDirectory.toAbsolutePath().normalize();
 		this.objectStore = new ServerObjectStore(this.objectsDirectory, this.root.resolve("staging"));
 	}
@@ -71,9 +66,7 @@ public final class GenerationStore {
 		current = loadFromProjection();
 		if (current == null) {
 			JournalEntry head = journal.head();
-			Current loaded = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), null, journal.treeAt(head.seq()));
-			loaded = new Current(loaded.seq(), loaded.contentToken(), loaded.policySha1(), loaded.createdAt(), loaded.manifest(), replayLedger(head.seq()), loaded.tree());
-			current = loaded;
+			current = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), replayLedger(head.seq()), journal.treeAt(head.seq()));
 			writeProjection(current);
 		}
 		return Optional.of(current);
@@ -142,6 +135,7 @@ public final class GenerationStore {
 		if (targetSeq == current.seq()) throw new IllegalArgumentException("Generation " + targetSeq + " is already the current generation");
 		JournalEntry target = journal.entryAt(targetSeq);
 		ContentTree targetTree = journal.treeAt(targetSeq);
+		requireStoredObjects(targetTree);
 		GroupManifest manifest = loadPolicy(target.policySha1());
 		OwnershipLedger ledger = OwnershipLedger.materialize(current.ledger(), manifest);
 
@@ -163,45 +157,33 @@ public final class GenerationStore {
 		return entries.subList(from, entries.size());
 	}
 
-	/** The hosting map: the head document plus every immutable object in the store. */
+	/**
+	 * The hosting map: the head document under the reserved empty key, the journal file under the reserved journal
+	 * key, and exactly the objects the head generation serves. Everything else stays on disk until an explicit collect.
+	 */
 	public GenerationHosting hosting() throws IOException {
+		return hosting(loadCurrent().orElseThrow(() -> new IOException("No modpack generation is published")));
+	}
+
+	private GenerationHosting hosting(Current current) {
 		Map<String, Path> paths = new TreeMap<>();
-		paths.put("", projectionFile);
-		try (var stream = Files.walk(objectsDirectory)) {
-			stream.filter(Files::isRegularFile).forEach(file -> {
-				String sha1 = DataRootResolver.objectHash(objectsDirectory, file);
-				if (sha1 != null) paths.put(sha1, file);
-			});
-		}
+		paths.put(GenerationHosting.HEAD_DOCUMENT_KEY, projectionFile);
+		paths.put(GenerationHosting.JOURNAL_KEY, journalFile);
+		paths.put(current.policySha1(), DataRootResolver.objectFile(objectsDirectory, current.policySha1()));
+		for (ContentTree.ContentFile file : current.tree().files().values()) paths.put(file.sha1(), DataRootResolver.objectFile(objectsDirectory, file.sha1()));
 		return new GenerationHosting(paths);
 	}
 
-	/** Compacts the journal prefix into a snapshot entry; later entries are kept verbatim. */
-	public CompactionSummary compact(long boundarySeq) throws IOException {
-		loadCurrent();
-		Journal.CompactionResult result = journal.compact(boundarySeq);
-		// Renumbering shifts the head's sequence: the cached state and the projection must follow it.
-		current = new Current(journal.head().seq(), current.contentToken(), current.policySha1(), current.createdAt(), current.manifest(), current.ledger(), current.tree());
-		// Compaction erases the folded history from the journal, so the ledger fold is checkpointed
-		// here; a replay from a lost projection must not lose tombstones and historical hashes.
-		writeLedgerCheckpoint(current);
-		writeProjection(current);
-		return new CompactionSummary(result.removedEntries(), result.entriesBefore(), result.entriesAfter());
-	}
-
-	public record CompactionSummary(long removedEntries, long entriesBefore, long entriesAfter) {}
-
-	/** Deletes object files that no journal entry references anymore. */
+	/**
+	 * Deletes content objects the current head generation no longer serves; collected objects make their generations
+	 * unrestorable. Policy documents are never collected: they are the journal's metadata shadow, and the ledger
+	 * replay plus any generation's manifest folding stay possible for the whole history.
+	 */
 	public CollectionSummary collectUnreachable() throws IOException {
-		loadCurrent();
+		Current current = loadCurrent().orElse(null);
 		TreeSet<String> reachable = new TreeSet<>();
-		for (JournalEntry entry : journal.entries()) {
-			reachable.add(entry.policySha1());
-			for (JournalEntry.Change change : entry.changes()) {
-				if (change.fromSha1() != null) reachable.add(change.fromSha1());
-				if (change.toSha1() != null) reachable.add(change.toSha1());
-			}
-		}
+		for (JournalEntry entry : journal.entries()) reachable.add(entry.policySha1());
+		if (current != null) for (ContentTree.ContentFile file : current.tree().files().values()) reachable.add(file.sha1());
 		long beforeBytes = 0;
 		long beforeCount = 0;
 		long deletedBytes = 0;
@@ -243,6 +225,15 @@ public final class GenerationStore {
 
 	public record StorageReport(long journalEntries, long journalBytes, long objectCount, long objectBytes) {}
 
+	/** Fails loudly before a restore commits when the target generation's bytes were already collected from disk. */
+	private void requireStoredObjects(ContentTree tree) throws IOException {
+		for (ContentTree.ContentFile file : tree.files().values()) {
+			Path object = DataRootResolver.objectFile(objectsDirectory, file.sha1());
+			if (!Files.isRegularFile(object))
+				throw new IOException("Generation object " + file.sha1() + " is no longer stored; a collect removed it, so this generation cannot be restored");
+		}
+	}
+
 	private GroupManifest loadPolicy(String policySha1) throws IOException {
 		Path object = DataRootResolver.objectFile(objectsDirectory, policySha1);
 		FileTrees.requireRegularFile(object, "policy document");
@@ -259,43 +250,15 @@ public final class GenerationStore {
 		Files.move(temporary, object, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
 	}
 
+	/** Replays the journal from its root: every entry's policy document folds into the cumulative ownership ledger. */
 	private OwnershipLedger replayLedger(long seq) throws IOException {
 		OwnershipLedger ledger = null;
-		Long seededAt = null;
-		GenerationJsons.LedgerCheckpointFields checkpoint = readLedgerCheckpoint();
-		if (checkpoint != null) {
-			seededAt = checkpoint.seq;
-			ledger = OwnershipLedger.fromFields(checkpoint.ownershipLedger);
-		}
 		for (JournalEntry entry : journal.entries()) {
-			if (seededAt != null && entry.seq() <= seededAt) continue;
 			GroupManifest manifest = loadPolicy(entry.policySha1());
 			ledger = OwnershipLedger.materialize(ledger == null ? OwnershipLedger.empty(manifest.modpackId()) : ledger, manifest);
 			if (entry.seq() == seq) break;
 		}
 		return ledger;
-	}
-
-	private GenerationJsons.LedgerCheckpointFields readLedgerCheckpoint() throws IOException {
-		if (!Files.exists(ledgerFile)) return null;
-		try {
-			GenerationJsons.LedgerCheckpointFields checkpoint = ConfigTools.read(ledgerFile, GenerationJsons.LedgerCheckpointFields.class).orElse(null);
-			if (checkpoint == null || checkpoint.seq < 1 || !HashUtils.isCanonicalSha1(checkpoint.contentToken) || checkpoint.ownershipLedger == null) return null;
-			if (checkpoint.seq > journal.head().seq()) return null;
-			if (!journal.entryAt(checkpoint.seq).contentToken().equals(checkpoint.contentToken)) return null;
-			return checkpoint;
-		} catch (RuntimeException e) {
-			Constants.LOGGER.warn("Ledger fold checkpoint is unusable; rebuilding the ledger from the journal", e);
-			return null;
-		}
-	}
-
-	private void writeLedgerCheckpoint(Current current) throws IOException {
-		GenerationJsons.LedgerCheckpointFields checkpoint = new GenerationJsons.LedgerCheckpointFields();
-		checkpoint.seq = current.seq();
-		checkpoint.contentToken = current.contentToken();
-		checkpoint.ownershipLedger = current.ledger().toFields();
-		ConfigTools.writeAtomic(ledgerFile, checkpoint);
 	}
 
 	private void writeProjection(Current current) throws IOException {
@@ -304,19 +267,9 @@ public final class GenerationStore {
 		head.policySha1 = current.policySha1();
 		head.createdAt = current.createdAt().toString();
 		head.journalHead = current.seq();
-		head.journalTruncated = journal.length() > JOURNAL_TAIL_LIMIT;
-		head.journal = journalTail();
 		head.ownershipLedger = current.ledger().toFields();
 		head.policy = current.manifest().toFields();
 		ConfigTools.writeAtomic(projectionFile, head);
-	}
-
-	private List<GenerationJsons.JournalEntryFields> journalTail() {
-		List<JournalEntry> entries = journal.entries();
-		int from = Math.max(0, entries.size() - JOURNAL_TAIL_LIMIT);
-		List<GenerationJsons.JournalEntryFields> tail = new ArrayList<>();
-		for (JournalEntry entry : entries.subList(from, entries.size())) tail.add(entry.toFields());
-		return tail;
 	}
 
 	private static List<JournalEntry.Change> diffTrees(ContentTree before, ContentTree after) {

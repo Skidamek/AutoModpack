@@ -406,56 +406,6 @@ def _v_collect_server_objects(ctx: Context, step):
     }
 
 
-@verb("compact_server_history")
-def _v_compact_server_history(ctx: Context, step):
-    """Compact the live journal under a snapshot entry and verify the durable projection."""
-    journal = _server_journal(ctx)
-    if len(journal) < 2:
-        raise AssertionError("server compaction scenario needs at least two journal entries")
-    boundary_seq = int(step.get("beforeSeq", journal[-1].get("seq", 1)))
-    command = ["rcon-cli", "automodpack", "generate", "storage", "compact", "before", str(boundary_seq), "confirm"]
-    result = _container(ctx.srv_name).exec_run(command)
-    output = result.output.decode("utf-8", errors="replace") if result.output else ""
-    if result.exit_code != 0:
-        raise RuntimeError(f"server history compaction command failed ({result.exit_code}): {output}")
-    if "incorrect argument for command" in output.lower() or "unknown command" in output.lower():
-        raise RuntimeError(f"server history compaction command was rejected: {output}")
-
-    def completed_state():
-        try:
-            after_journal = _server_journal(ctx)
-            after_projection = _read_server_json(ctx, "current-projection.json", "server compaction projection")
-        except AssertionError:
-            return None
-        if not _completed_compaction(journal, after_journal, after_projection):
-            return None
-        return after_journal, after_projection
-
-    after_journal, _after_projection = await_condition(
-        completed_state,
-        parse_duration(step.get("timeout"), default=120),
-        step.get("poll"),
-        "server history compaction did not rewrite the journal under a snapshot entry",
-    )
-    ctx.vars["server_compaction"] = {"removedEntries": len(journal) - len(after_journal), "entriesBefore": len(journal), "entriesAfter": len(after_journal)}
-
-
-def _completed_compaction(entries_before: list[dict], entries_after: list[dict], projection: dict) -> bool:
-    """Whether the journal was rewritten as a head snapshot followed by renumbered survivors."""
-    if not entries_after or len(entries_after) >= len(entries_before):
-        return False
-    snapshot = entries_after[0]
-    if not snapshot.get("snapshot") or int(snapshot.get("seq", 0)) != 1:
-        return False
-    seqs = [int(entry.get("seq", 0)) for entry in entries_after]
-    if seqs != list(range(1, len(seqs) + 1)):
-        return False
-    head_token = str(entries_before[-1].get("contentToken", ""))
-    if str(entries_after[-1].get("contentToken", "")) != head_token or str(projection.get("contentToken", "")) != head_token:
-        return False
-    return int(projection.get("journalHead", -1)) == seqs[-1]
-
-
 @verb("seed_bootstrap")
 def _v_seed_bootstrap(ctx: Context, step):
     """Write a real game-root bootstrap file from the live server state."""

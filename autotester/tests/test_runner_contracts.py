@@ -128,21 +128,6 @@ def test_interrupted_run_cleans_only_its_docker_resources(monkeypatch):
 # ── validation ─────────────────────────────────────────────────────────────
 
 
-def test_server_history_compaction_uses_registered_boundary_command():
-    source = (Path(__file__).parents[1] / "automodpack_autotester/server_steps.py").read_text(
-        encoding="utf-8"
-    )
-
-    assert (
-        '["rcon-cli", "automodpack", "generate", "storage", "compact", "before", str(boundary_seq), "confirm"]'
-        in source
-    )
-    assert (
-        '["rcon-cli", "automodpack", "generate", "history", "storage", "compact", "confirm"]'
-        not in source
-    )
-
-
 class _ExecResult:
     def __init__(self, output=b"", exit_code=0):
         self.output = output
@@ -197,27 +182,6 @@ def test_publish_server_generation_uses_durable_generation_receipt(make_ctx, mon
 
     assert ctx.vars["published_server_generation"] == 1
     assert ctx.vars["published_server_generation_id"] == token
-
-
-def test_completed_compaction_rewrites_the_journal_under_a_head_snapshot():
-    root_token, update_token, rollback_token = "a" * 40, "b" * 40, "c" * 40
-    entries_before = [
-        _journal_entry(1, root_token, "root", snapshot=True),
-        _journal_entry(2, update_token, "update"),
-        _journal_entry(3, rollback_token, "rollback", restore_of=1),
-    ]
-    boundary_snapshot = _journal_entry(1, update_token, "update", snapshot=True)
-    survivor = _journal_entry(2, rollback_token, "rollback", restore_of=1)
-    entries_after = [boundary_snapshot, survivor]
-    projection = {"contentToken": rollback_token, "journalHead": 2, "journal": entries_after}
-
-    assert server_steps._completed_compaction(entries_before, entries_after, projection)
-
-    assert not server_steps._completed_compaction(entries_before, entries_before, projection)
-    unrenumbered = [entries_after[0], _journal_entry(3, rollback_token, "rollback", restore_of=1)]
-    assert not server_steps._completed_compaction(entries_before, unrenumbered, projection)
-    drift = dict(projection, contentToken="d" * 40)
-    assert not server_steps._completed_compaction(entries_before, entries_after, drift)
 
 
 def test_rollback_server_generation_appends_a_durable_restore_entry(make_ctx, monkeypatch):
@@ -423,7 +387,17 @@ def test_wait_generation_requires_expected_patch_notes(make_ctx):
             ctx.game_dir / "automodpack/client/records" / content_token / "manifest.json"
         )
         record.parent.mkdir(parents=True, exist_ok=True)
-        head_entry = {
+        record.write_text(
+            json.dumps(
+                {"schemaVersion": 1, "contentToken": content_token, "policy": {"modpackId": "packaaa"}}
+            ),
+            encoding="utf-8",
+        )
+        mirror = (
+            ctx.game_dir / "automodpack/client/history/packaaa/journal.jsonl"
+        )
+        mirror.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
             "seq": 1,
             "contentToken": content_token,
             "policySha1": "c" * 40,
@@ -433,18 +407,7 @@ def test_wait_generation_requires_expected_patch_notes(make_ctx):
             "snapshot": True,
             "changes": [],
         }
-        record.write_text(
-            json.dumps(
-                {
-                    "schemaVersion": 1,
-                    "contentToken": content_token,
-                    "journalHead": 1,
-                    "journal": [head_entry],
-                    "policy": {"modpackId": "packaaa"},
-                }
-            ),
-            encoding="utf-8",
-        )
+        mirror.write_text(json.dumps(entry) + "\n", encoding="utf-8")
         state = ctx.game_dir / "automodpack/client/active-state.json"
         state.write_text(
             json.dumps(
@@ -733,16 +696,13 @@ def test_staged_manifest_receipt_rejects_a_non_canonical_timestamp(tmp_path):
         "contentToken": "0" * 40,
         "policySha1": "1" * 40,
         "createdAt": "2026-09-02T23:45:32.800000Z",
-        "journalHead": 1,
-        "journalTruncated": False,
-        "journal": [],
         "ownershipLedger": {"modpackId": "packbbb", "entries": [], "digest": "2" * 40},
         "policy": {"modpackId": "packbbb"},
     }
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(ValueError, match="not canonical"):
-        staging_steps._verify_staged_manifest(path, "")
+        staging_steps._verify_staged_generation(path, tmp_path / "journal.jsonl", "")
 
 
 # ── poisoned HMC cache recovery ─────────────────────────────────────────────

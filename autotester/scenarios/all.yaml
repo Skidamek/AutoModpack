@@ -2,8 +2,8 @@ id: all
 description: |
   The release gate: exercise secure bootstrap authentication, advanced group
   review, patch-note history, cached pack switching, and a published
-  changed/removed generation, server rollback, history compaction, and server
-  object collection in one flow. The focused scenarios remain
+  changed/removed generation, server rollback, and server object collection in
+  one flow. The focused scenarios remain
   available for faster diagnosis; this is the default confidence path.
 renderClient: true
 
@@ -32,7 +32,6 @@ releaseGate:
     - conflict-preservation
     - preservation-vault
     - storage-maintenance
-    - server-history-compaction
     - server-generation-rollback
     - server-object-gc
     - fresh-generation-deletion
@@ -1396,14 +1395,10 @@ flow:
     packId: "${bootstrap_modpack_id}"
     reason: PLAYER_CONSENT
     count: 2
-  # Rollback must precede compaction so the runner can select and verify a
-  # durable ancestor. Both server-maintenance steps run after client assertions.
+  # The server-maintenance steps run after the client assertions.
   - do: rollback_server_generation
     name: roll back through the real RCON command to a retained server ancestor
     notes: "Release gate rollback: restore the retained ancestor."
-    timeout: 180s
-  - do: compact_server_history
-    name: compact the rolled-back server lineage and verify retained patch notes
     timeout: 180s
   - do: collect_server_objects
     name: collect a valid orphan from the mounted server object store through RCON

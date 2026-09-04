@@ -53,9 +53,6 @@ def _check_canonical_timestamp(created_at: str) -> None:
         raise ValueError(f"staged generation timestamp is not canonical: {created_at!r}")
 
 
-_STAGED_JOURNAL_TAIL_LIMIT = 25
-
-
 def _record_tree(record: dict) -> dict[str, tuple[str, int]]:
     """The served file set (path -> (sha1, size)) described by one head document."""
     tree = {}
@@ -68,76 +65,74 @@ def _record_tree(record: dict) -> dict[str, tuple[str, int]]:
     return tree
 
 
-def _staged_head_document(modpack_id: str, policy: dict, file_map: dict[str, tuple[str, int]], notes: str, created_at: str) -> dict:
-    """The head-document record the client stores for one staged pack with no prior history."""
+def _staged_head_document(modpack_id: str, policy: dict, file_map: dict[str, tuple[str, int]], created_at: str) -> dict:
+    """The slim head-document record the client stores for one staged pack: identity, ledger, and policy only."""
     token = content_token(file_map)
     policy_sha1 = hashlib.sha1(json.dumps(policy, sort_keys=True).encode("utf-8")).hexdigest()
     ledger_entries = [
         {"logicalPath": path, "historicalHashes": [{"sha1": file_map[path][0], "size": file_map[path][1]}], "historicalGroupIds": ["main"], "currentStatus": "PRESENT"}
         for path in sorted(file_map)
     ]
-    journal = [{
-        "seq": 1,
-        "contentToken": token,
-        "policySha1": policy_sha1,
-        "createdAt": created_at,
-        "notes": notes,
-        "restoreOf": -1,
-        "snapshot": True,
-        "changes": [{"path": path, "toSha1": file_map[path][0], "toSize": file_map[path][1]} for path in sorted(file_map)],
-    }]
     return {
         "contentToken": token,
         "policySha1": policy_sha1,
         "createdAt": created_at,
-        "journalHead": 1,
-        "journalTruncated": False,
-        "journal": journal,
         "ownershipLedger": {"modpackId": modpack_id, "entries": ledger_entries, "digest": ownership_ledger_digest(modpack_id, ledger_entries)},
         "policy": policy,
     }
 
 
-def _latest_staged_record(client_root: Path, modpack_id: str) -> dict | None:
-    """The newest staged record for one modpack, or None when no record exists yet."""
-    def created_at(record: dict):
-        try:
-            return datetime.fromisoformat(str(record.get("createdAt", "")).replace("Z", "+00:00"))
-        except ValueError:
-            return datetime.min.replace(tzinfo=timezone.utc)
-
-    candidates = []
-    for path in (client_root / "records").glob("*/manifest.json"):
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, TypeError):
-            continue
-        if isinstance(record, dict) and (record.get("policy") or {}).get("modpackId") == modpack_id:
-            candidates.append((created_at(record), record))
-    return max(candidates, key=lambda candidate: candidate[0])[1] if candidates else None
+def _mirror_entries(mirror_path: Path) -> list[dict]:
+    """The parsed journal mirror lines, or an empty list when the mirror does not exist yet."""
+    if not mirror_path.is_file():
+        return []
+    entries = []
+    for line in mirror_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            entries.append(json.loads(line))
+    return entries
 
 
-def _staged_journal_tail(record: dict, previous: dict, notes: str, created_at: str) -> list[dict]:
-    """Continue the previous staged journal with the content diff this record publishes."""
-    previous_journal = [entry for entry in (previous.get("journal") or []) if isinstance(entry, dict)]
-    if not previous_journal:
-        return list(record["journal"])
-    if str(previous.get("contentToken", "")) == str(record["contentToken"]):
-        return previous_journal
-    previous_tree, current_tree = _record_tree(previous), _record_tree(record)
-    changes = []
-    for path in sorted(set(previous_tree) | set(current_tree)):
-        old, new = previous_tree.get(path), current_tree.get(path)
-        if old is None:
-            changes.append({"path": path, "toSha1": new[0], "toSize": new[1]})
-        elif new is None:
-            changes.append({"path": path, "fromSha1": old[0]})
-        elif old != new:
-            changes.append({"path": path, "fromSha1": old[0], "toSha1": new[0], "toSize": new[1]})
-    tail = previous_journal[-_STAGED_JOURNAL_TAIL_LIMIT + 1:]
-    seq = int(tail[-1].get("seq", 0)) + 1 if tail else 1
-    tail.append({"seq": seq, "contentToken": record["contentToken"], "policySha1": record["policySha1"], "createdAt": created_at, "notes": notes, "restoreOf": -1, "snapshot": False, "changes": changes})
-    return tail
+def _append_staged_mirror(client_root: Path, modpack_id: str, record: dict, notes: str, created_at: str) -> list[dict]:
+    """Append the record's journal entry to the pack's mirror, the client's replica of the server journal."""
+    mirror_path = client_root / "history" / modpack_id / "journal.jsonl"
+    entries = _mirror_entries(mirror_path)
+    last = entries[-1] if entries else None
+    if last is not None and str(last.get("contentToken", "")) == str(record.get("contentToken", "")):
+        return entries
+    previous_tree = {}
+    if last is not None:
+        previous = client_root / "records" / str(last.get("contentToken", "")) / "manifest.json"
+        previous_tree = _record_tree(json.loads(previous.read_text(encoding="utf-8")))
+    current_tree = _record_tree(record)
+    if last is None:
+        changes = [{"path": path, "toSha1": current_tree[path][0], "toSize": current_tree[path][1]} for path in sorted(current_tree)]
+    else:
+        changes = []
+        for path in sorted(set(previous_tree) | set(current_tree)):
+            old, new = previous_tree.get(path), current_tree.get(path)
+            if old is None:
+                changes.append({"path": path, "toSha1": new[0], "toSize": new[1]})
+            elif new is None:
+                changes.append({"path": path, "fromSha1": old[0]})
+            elif old != new:
+                changes.append({"path": path, "fromSha1": old[0], "toSha1": new[0], "toSize": new[1]})
+    entry = {
+        "seq": int(last.get("seq", 0)) + 1 if last else 1,
+        "contentToken": record["contentToken"],
+        "policySha1": record["policySha1"],
+        "createdAt": created_at,
+        "notes": notes,
+        "restoreOf": -1,
+        "snapshot": last is None,
+        "changes": changes,
+    }
+    mirror_path.parent.mkdir(parents=True, exist_ok=True)
+    with mirror_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry) + "\n")
+    entries.append(entry)
+    return entries
 
 
 def _write_staged_generation(
@@ -199,15 +194,12 @@ def _write_staged_generation(
     file_map = {entry["logicalPath"]: (entry["sha1"], int(entry["size"])) for entry in files}
     created_at = _canonical_timestamp(datetime.now(timezone.utc))
     client_root = client_root or root.parent
-    record = _staged_head_document(modpack_id, policy, file_map, patch_notes, created_at)
-    previous = _latest_staged_record(client_root, modpack_id)
-    if previous is not None:
-        record["journal"] = _staged_journal_tail(record, previous, patch_notes, created_at)
-        record["journalHead"] = int(record["journal"][-1]["seq"])
+    record = _staged_head_document(modpack_id, policy, file_map, created_at)
     generation_path = client_root / "records" / record["contentToken"] / "manifest.json"
     generation_path.parent.mkdir(parents=True, exist_ok=True)
     generation_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    _verify_staged_manifest(generation_path, patch_notes)
+    mirror_entries = _append_staged_mirror(client_root, modpack_id, record, patch_notes, created_at)
+    _verify_staged_generation(generation_path, client_root / "history" / modpack_id / "journal.jsonl", patch_notes)
     objects = data_root / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     for entry in files:
@@ -215,11 +207,11 @@ def _write_staged_generation(
         if not object_path.is_file():
             object_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / entry["logicalPath"], object_path)
-    return {"contentToken": record["contentToken"], "policySha1": record["policySha1"]}
+    return {"contentToken": record["contentToken"], "policySha1": record["policySha1"], "mirrorEntries": len(mirror_entries)}
 
 
-def _verify_staged_manifest(record_path: Path, patch_notes: str) -> None:
-    """Re-read a staged generation record and prove it is strictly valid before any client can see it.
+def _verify_staged_generation(record_path: Path, mirror_path: Path, patch_notes: str) -> None:
+    """Re-read a staged generation record and its mirror line and prove both are strictly valid before any client can see them.
 
     A malformed staged record (non-canonical timestamp, mismatched content token or ledger digest) stays invisible
     until a client storage validation reads it — potentially minutes and hundreds of steps later, on a random shard.
@@ -240,15 +232,15 @@ def _verify_staged_manifest(record_path: Path, patch_notes: str) -> None:
     ledger = record.get("ownershipLedger")
     if not isinstance(ledger, dict) or str(ledger.get("modpackId", "")) != str(policy.get("modpackId", "")) or ownership_ledger_digest(str(ledger.get("modpackId", "")), list(ledger.get("entries") or [])) != ledger.get("digest"):
         raise ValueError(f"staged generation ledger digest does not match its entries: {record_path}")
-    journal = list(record.get("journal") or [])
-    head_entry = journal[-1] if journal else None
-    if head_entry is None or int(head_entry.get("seq", 0)) != int(record.get("journalHead", -1)):
-        raise ValueError(f"staged generation journal head does not match its entries: {record_path}")
-    if str(head_entry.get("contentToken", "")) != str(record.get("contentToken", "")):
-        raise ValueError(f"staged generation head entry does not carry the record's content token: {record_path}")
+    entries = _mirror_entries(mirror_path)
+    head_entry = entries[-1] if entries else None
+    if head_entry is None:
+        raise ValueError(f"staged generation mirror has no journal entry: {mirror_path}")
     _check_canonical_timestamp(head_entry.get("createdAt"))
+    if str(head_entry.get("contentToken", "")) != str(record.get("contentToken", "")):
+        raise ValueError(f"staged generation mirror entry does not carry the record's content token: {mirror_path}")
     if str(head_entry.get("notes", "")) != patch_notes:
-        raise ValueError(f"staged generation patch notes drifted between planning and writing: {record_path}")
+        raise ValueError(f"staged generation patch notes drifted between planning and writing: {mirror_path}")
 
 
 @verb("stage_modpack")

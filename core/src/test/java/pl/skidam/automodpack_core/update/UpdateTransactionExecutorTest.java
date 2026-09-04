@@ -172,7 +172,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, newPlan, newTarget);
-		new ClientGenerationStore(storage).write(newRecord, List.of());
+		new ClientGenerationStore(storage).write(newRecord);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 		Files.move(storage.activeDirectory(), storage.backupProjectionDirectory());
 		Files.createDirectories(storage.activeDirectory().resolve("mods"));
@@ -198,7 +198,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, plan, target);
-		new ClientGenerationStore(storage).write(target.document(), target.journal());
+		new ClientGenerationStore(storage).write(target.document());
 		Path live = storage.gameDirectory().resolve("config/replanned.json");
 		byte[] newerBytes = "newer-player-file".getBytes(StandardCharsets.UTF_8);
 		Files.createDirectories(live.getParent());
@@ -226,7 +226,7 @@ class UpdateTransactionExecutorTest {
 		ClientConfigJsons.ClientConfigFieldsV3 expected = new ClientConfigJsons.ClientConfigFieldsV3();
 		ConfigTools.writeAtomic(storage.clientConfigFile(), expected);
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
-		new ClientGenerationStore(storage).write(target.document(), target.journal());
+		new ClientGenerationStore(storage).write(target.document());
 		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(expected);
 		newer.playMusic = false;
 		ConfigTools.writeAtomic(storage.clientConfigFile(), newer);
@@ -258,7 +258,7 @@ class UpdateTransactionExecutorTest {
 		UpdateTransaction deferred = createTransaction(storage, deferredPlan, deferredTarget);
 		deferred.phase = UpdateTransaction.Phase.DEFERRED;
 		deferred.resultStatus = UpdateTransaction.Status.DEFERRED_LOCKED;
-		new ClientGenerationStore(storage).write(deferredTarget.document(), deferredTarget.journal());
+		new ClientGenerationStore(storage).write(deferredTarget.document());
 		ConfigTools.writeAtomic(storage.transactionFile(), deferred);
 		Files.createDirectories(storage.activePath("shaderpacks"));
 		Files.writeString(storage.activePath("shaderpacks/ComplementaryReimagined_r5.8.1.zip.txt"), "#Mon leftover\n", StandardCharsets.UTF_8);
@@ -306,7 +306,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/pending-selection.jar", true, hash, bytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, plan, target);
 		transaction.plannedClientConfig.syncLoaderVersion = false;
-		new ClientGenerationStore(storage).write(record, List.of());
+		new ClientGenerationStore(storage).write(record);
 		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
 		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(current);
 		current.playMusic = false;
@@ -438,8 +438,8 @@ class UpdateTransactionExecutorTest {
 		PackDocument first = PackDocument.create(firstManifest, TestPacks.policySha1(firstManifest), Instant.parse("2026-01-01T00:00:00Z"), null);
 		PackDocument second = PackDocument.create(secondManifest, TestPacks.policySha1(secondManifest), Instant.parse("2026-01-02T00:00:00Z"), first.ownershipLedger());
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(first, List.of());
-		generations.write(second, List.of());
+		generations.write(first);
+		generations.write(second);
 		String malformedId = "0".repeat(40);
 		Files.createDirectories(storage.generationDirectory(malformedId));
 		Files.writeString(storage.generationManifest(malformedId), "{}", StandardCharsets.UTF_8);

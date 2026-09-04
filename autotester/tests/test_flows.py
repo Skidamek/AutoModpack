@@ -197,14 +197,6 @@ def _publish_server_generation(ctx, step):
         ctx.bridge.update_available = True
 
 
-def _compact_server_history(ctx, step):
-    """Record an explicit fake receipt; Docker remains runtime authority."""
-    ctx.vars["fake_server_history_compacted"] = {
-        "receipt": "fake-only",
-        "runtimeAuthority": "Docker runner",
-    }
-
-
 def _rollback_server_generation(ctx, step):
     """Record a fake receipt; Docker remains runtime authority for rollback."""
     ctx.vars["fake_server_generation_rollback"] = {
@@ -289,7 +281,6 @@ _FAKE_VERBS = {
 	"reset_isolated_client_objects": _reset_isolated_client_objects,
     "stage_modpack": _stage_modpack,
     "publish_server_generation": _publish_server_generation,
-    "compact_server_history": _compact_server_history,
     "rollback_server_generation": _rollback_server_generation,
     "collect_server_objects": _collect_server_objects,
     "wait_join": _wait_join,
@@ -472,10 +463,6 @@ def test_release_gate_flow(make_ctx, flow_verbs):
 
     assert all(r["ok"] for r in results), [r for r in results if not r["ok"]]
     assert ctx.bridge.exited
-    assert ctx.vars.get("fake_server_history_compacted") == {
-        "receipt": "fake-only",
-        "runtimeAuthority": "Docker runner",
-    }
     assert ctx.vars["fake_server_generation_rollback"] == {
         "receipt": "fake-only",
         "runtimeAuthority": "Docker runner",

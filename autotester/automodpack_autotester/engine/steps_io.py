@@ -204,13 +204,18 @@ def verify_mods(ctx, step):
     await_condition(_all, timeout, step.get("poll"), "expected mods missing")
 
 
-def _active_generation_head(manifest: dict) -> dict:
-    """The journal entry at the record's head: the generation that is currently active."""
-    head = int(manifest.get("journalHead", -1))
-    entry = next((entry for entry in (manifest.get("journal") or []) if isinstance(entry, dict) and int(entry.get("seq", -1)) == head), None)
-    if entry is None:
-        raise ValueError("active generation record has no head journal entry")
-    return entry
+def _active_generation_notes(ctx, modpack_id, content_token):
+    """The patch notes of one generation's journal entry, read from the client's journal mirror."""
+    mirror_path = ctx.game_dir / "automodpack" / "client" / "history" / modpack_id / "journal.jsonl"
+    with mirror_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            entry = json.loads(line)
+            if isinstance(entry, dict) and str(entry.get("contentToken", "")) == content_token:
+                return str(entry.get("notes", ""))
+    raise ValueError(f"journal mirror has no entry for the active generation {content_token!r}")
 
 
 def _read_active_generation(ctx, expected_patch_notes=None):
@@ -227,7 +232,7 @@ def _read_active_generation(ctx, expected_patch_notes=None):
     policy = manifest.get("policy") if isinstance(manifest, dict) else None
     if not isinstance(policy, dict) or str(manifest.get("contentToken", "")) != content_token or policy.get("modpackId") != modpack_id:
         raise ValueError("active generation state does not match its immutable record")
-    if expected_patch_notes is not None and _active_generation_head(manifest).get("notes") != expected_patch_notes:
+    if expected_patch_notes is not None and _active_generation_notes(ctx, modpack_id, content_token) != expected_patch_notes:
         raise ValueError("active generation patch notes are not committed")
     return state, manifest
 
@@ -505,7 +510,9 @@ def _preservation_claim_mismatch(ctx, step):
 def assert_generation(ctx, step):
     """Assert installed generation metadata without coupling scenarios to Java internals."""
     try:
-        _state, manifest = _read_active_generation(ctx)
+        state, manifest = _read_active_generation(ctx)
+        if "patchNotes" in step:
+            notes = _active_generation_notes(ctx, state["modpackId"], state["contentToken"])
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"active generation metadata is invalid: {error}") from error
     groups = (manifest.get("policy", {}) or {}).get("groups", {}) or {}
@@ -516,5 +523,5 @@ def assert_generation(ctx, step):
         for field, value in (requirements or {}).items():
             if actual.get(field) != value:
                 raise AssertionError(f"group {group_id!r} field {field!r}: expected {value!r}, got {actual.get(field)!r}")
-    if "patchNotes" in step and _active_generation_head(manifest).get("notes") != ctx.resolve(step["patchNotes"]):
+    if "patchNotes" in step and notes != ctx.resolve(step["patchNotes"]):
         raise AssertionError("active generation patch notes do not match the scenario")

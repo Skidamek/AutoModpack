@@ -104,8 +104,7 @@ public final class UpdateTransactionExecutor {
 			validator.validate(transaction, unpublishedTarget, true, cache);
 			validateSelectionBeforeMutation(transaction);
 			preparePendingReplacement(transaction);
-			if (unpublishedTarget != null)
-				new ClientGenerationStore(context.storage()).write(unpublishedTarget.document(), unpublishedTarget.journal());
+			if (unpublishedTarget != null) new ClientGenerationStore(context.storage()).write(unpublishedTarget.document());
 			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
 			ClientObjectStore.publishOwnership(context.storage());
 			return executePersisted(transaction);

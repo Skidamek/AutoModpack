@@ -16,7 +16,7 @@ from pathlib import Path
 from automodpack_autotester.engine import Context
 from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
 from automodpack_autotester.client_steps import cas_object
-from automodpack_autotester.staging_steps import _canonical_timestamp, _staged_head_document
+from automodpack_autotester.staging_steps import _append_staged_mirror, _canonical_timestamp, _staged_head_document
 
 
 class FakeBridge:
@@ -1005,9 +1005,10 @@ class FakeBridge:
         }
         file_map = {path: (file["sha1"], int(file["size"])) for path, file in active_files.items()}
         created_at = _canonical_timestamp(datetime.now(timezone.utc))
-        record = _staged_head_document("packaaa", policy, file_map, notes, created_at)
+        record = _staged_head_document("packaaa", policy, file_map, created_at)
         client = self.ctx.game_dir / "automodpack" / "client"
         record_dir = client / "records" / record["contentToken"]
         record_dir.mkdir(parents=True, exist_ok=True)
         (record_dir / "manifest.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+        _append_staged_mirror(client, "packaaa", record, notes, created_at)
         (client / "active-state.json").write_text(json.dumps({"schemaVersion": 1, "modpackId": "packaaa", "contentToken": record["contentToken"], "status": "ACTIVE"}), encoding="utf-8")

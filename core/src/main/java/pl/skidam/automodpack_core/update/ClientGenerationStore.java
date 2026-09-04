@@ -20,7 +20,6 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -78,39 +77,32 @@ public final class ClientGenerationStore {
 		this.storage = Objects.requireNonNull(storage);
 	}
 
-	/** Persists one downloaded pack document with its journal tail. */
-	public void write(PackDocument document, List<JournalEntry> journal) throws IOException {
+	/** Persists one downloaded pack document as a generation record. */
+	public void write(PackDocument document) throws IOException {
 		ClientStorageMutation.run(storage, () -> {
-			writeLocked(document, journal);
+			writeLocked(document);
 			return null;
 		});
 	}
 
-	private void writeLocked(PackDocument document, List<JournalEntry> journal) throws IOException {
+	private void writeLocked(PackDocument document) throws IOException {
 		Objects.requireNonNull(document, "document");
-		Objects.requireNonNull(journal, "journal");
 		Path path = storage.generationManifest(document.contentToken());
 		if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
 			HeadDocumentSnapshot existing = readSnapshot(path).orElseThrow(() -> new IOException("Stored client generation is invalid: " + path));
 			if (!existing.document().equals(document)) throw new IOException("Client generation record already exists with different content: " + path);
-			if (!existing.journal().equals(journal)) {
-				ConfigTools.writeAtomic(path, toFields(document, journal));
-				verify(path, document, journal);
-			}
 			return;
 		}
 		Files.createDirectories(path.getParent());
-		ConfigTools.writeAtomic(path, toFields(document, journal));
-		verify(path, document, journal);
+		ConfigTools.writeAtomic(path, toFields(document));
+		verify(path, document);
 	}
 
-	private static GenerationJsons.HeadDocumentFields toFields(PackDocument document, List<JournalEntry> journal) {
+	private static GenerationJsons.HeadDocumentFields toFields(PackDocument document) {
 		GenerationJsons.HeadDocumentFields fields = new GenerationJsons.HeadDocumentFields();
 		fields.contentToken = document.contentToken();
 		fields.policySha1 = document.policySha1();
 		fields.createdAt = document.createdAt().toString();
-		fields.journalHead = journal.isEmpty() ? 0 : journal.get(journal.size() - 1).seq();
-		fields.journal = journal.stream().map(JournalEntry::toFields).toList();
 		fields.ownershipLedger = document.ownershipLedger().toFields();
 		fields.policy = document.manifest().toFields();
 		return fields;
@@ -122,10 +114,6 @@ public final class ClientGenerationStore {
 
 	public Optional<HeadDocumentSnapshot> readSnapshot(String contentToken) throws IOException {
 		return readSnapshot(storage.generationManifest(contentToken));
-	}
-
-	public List<JournalEntry> journal(String contentToken) throws IOException {
-		return readSnapshot(storage.generationManifest(contentToken)).map(HeadDocumentSnapshot::journal).orElse(List.of());
 	}
 
 	public Optional<GenerationJsons.HeadDocumentFields> readFields(String contentToken) throws IOException {
@@ -270,6 +258,7 @@ public final class ClientGenerationStore {
 		FileTrees.delete(storage.generatedCopiesPackDirectory(normalizedModpackId));
 		storage.clearOverlay(normalizedModpackId);
 		FileTrees.delete(storage.baselineFile(normalizedModpackId).getParent());
+		FileTrees.delete(storage.historyPackDirectory(normalizedModpackId));
 		FileTrees.delete(storage.connectionDirectory(normalizedModpackId));
 		ClientObjectStore.collectUnreachableObjects(storage, Set.copyOf(tokens()), Set.of());
 	}
@@ -344,7 +333,7 @@ public final class ClientGenerationStore {
 				|| candidate.createdAt().equals(current.createdAt()) && candidate.contentToken().compareTo(current.contentToken()) > 0;
 	}
 
-	private record HeadDocumentSnapshot(PackDocument document, List<JournalEntry> journal, GenerationJsons.HeadDocumentFields fields) {}
+	private record HeadDocumentSnapshot(PackDocument document, GenerationJsons.HeadDocumentFields fields) {}
 
 	private static Optional<HeadDocumentSnapshot> readSnapshot(Path path) throws IOException {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
@@ -353,18 +342,14 @@ public final class ClientGenerationStore {
 			GenerationJsons.HeadDocumentFields fields = ConfigTools.read(path, GenerationJsons.HeadDocumentFields.class).orElse(null);
 			if (fields == null) return Optional.empty();
 			PackDocument document = PackDocument.fromFields(fields);
-			List<JournalEntry> journal = new ArrayList<>();
-			for (GenerationJsons.JournalEntryFields entry : fields.journal == null ? List.<GenerationJsons.JournalEntryFields>of() : fields.journal)
-				journal.add(JournalEntry.fromFields(entry));
-			return Optional.of(new HeadDocumentSnapshot(document, List.copyOf(journal), fields));
+			return Optional.of(new HeadDocumentSnapshot(document, fields));
 		} catch (RuntimeException e) {
 			throw new IOException("Client generation manifest is invalid: " + path, e);
 		}
 	}
 
-	private static void verify(Path path, PackDocument document, List<JournalEntry> journal) throws IOException {
+	private static void verify(Path path, PackDocument document) throws IOException {
 		HeadDocumentSnapshot stored = readSnapshot(path).orElseThrow(() -> new IOException("Stored client generation could not be verified: " + path));
 		if (!stored.document().equals(document)) throw new IOException("Stored client generation verification failed: " + path);
-		if (!stored.journal().equals(journal)) throw new IOException("Stored client journal verification failed: " + path);
 	}
 }

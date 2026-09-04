@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -36,12 +37,15 @@ class NettyServerObjectResolutionTest {
 		Path projection = tempDir.resolve("host-generations").resolve("current-projection.json");
 
 		assertEquals(DataRootResolver.objectFile(store.objectRoot(), firstHash), server.getPath(firstHash.toUpperCase(Locale.ROOT)).orElseThrow());
+		assertEquals(projection, server.getPath(GenerationHosting.HEAD_DOCUMENT_KEY).orElseThrow());
+		assertEquals(tempDir.resolve("host-generations").resolve("journal.jsonl"), server.getPath(GenerationHosting.JOURNAL_KEY).orElseThrow());
 
 		GenerationStore.Publication second = publish(store, "second");
 		server.replacePaths(second.hostingPaths());
 
 		assertEquals(DataRootResolver.objectFile(store.objectRoot(), hash(second)), server.getPath(hash(second)).orElseThrow());
-		assertEquals(DataRootResolver.objectFile(store.objectRoot(), firstHash), server.getPath(firstHash).orElseThrow());
+		// The hosting split unpublishes the previous generation's bytes the moment the head moves.
+		assertTrue(server.getPath(firstHash).isEmpty());
 		assertTrue(Files.exists(projection));
 	}
 

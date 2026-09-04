@@ -64,10 +64,6 @@ public class Commands {
 										.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::revertGeneration)))));
 		var generateStorageNode = literal("storage")
 				.executes(Commands::generationStorage)
-				.then(literal("compact")
-						.then(literal("before")
-								.then(argument("seq", StringArgumentType.word())
-										.then(literal("confirm").executes(Commands::generationStorageCompact)))))
 				.then(literal("collect")
 						.then(literal("confirm").executes(Commands::generationStorageCollect)));
 		var generateNode = literal("generate")
@@ -428,7 +424,7 @@ public class Commands {
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-content <content-token> [notes <text...>]", ChatFormatting.YELLOW, false);
 			send(context, "/automodpack generate revert <seq> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
-			send(context, "/automodpack generate history/storage [compact before <seq> confirm|collect confirm]", ChatFormatting.YELLOW, false);
+			send(context, "/automodpack generate history/storage [collect confirm]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
@@ -636,23 +632,6 @@ public class Commands {
 				send(context, "Failed to collect modpack objects: " + e.getMessage(), ChatFormatting.RED, false);
 			}
 			return Command.SINGLE_SUCCESS;
-		}
-
-		private static int generationStorageCompact(CommandContext<CommandSourceStack> context) {
-			String boundary = StringArgumentType.getString(context, "seq");
-			Util.backgroundExecutor().execute(() -> {
-				try {
-					GenerationStore.CompactionSummary result = modpackExecutor.compactHistoryBefore(Long.parseLong(boundary));
-					send(context, "Journal entries compacted before the retained boundary", ChatFormatting.GREEN, false);
-					send(context, "Boundary", ChatFormatting.WHITE, "#" + boundary, ChatFormatting.YELLOW, false);
-					send(context, "Removed entries", ChatFormatting.WHITE, result.removedEntries() + " of " + result.entriesBefore() + ", " + result.entriesAfter() + " remain", ChatFormatting.YELLOW, false);
-				} catch (NumberFormatException e) {
-					send(context, "Invalid journal sequence: " + boundary, ChatFormatting.RED, false);
-				} catch (IOException e) {
-					send(context, "Failed to compact the modpack journal: " + e.getMessage(), ChatFormatting.RED, false);
-				}
-			});
-		return Command.SINGLE_SUCCESS;
 		}
 
 		private static String optionalArgument(CommandContext<CommandSourceStack> context, String name) {

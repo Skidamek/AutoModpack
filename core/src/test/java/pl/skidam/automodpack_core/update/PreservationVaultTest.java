@@ -187,7 +187,7 @@ class PreservationVaultTest {
 		group.files = Map.of(path, file);
 		fields.groups = Map.of("main", group);
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
-		new ClientGenerationStore(storage).write(document, List.of());
+		new ClientGenerationStore(storage).write(document);
 		storage.writeActiveState(document.manifest().modpackId(), document.contentToken());
 		return document;
 	}

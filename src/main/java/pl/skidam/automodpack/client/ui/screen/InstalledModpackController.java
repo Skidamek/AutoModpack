@@ -247,7 +247,7 @@ final class InstalledModpackController {
 	void openHistory(Pack pack, Runnable released) {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
-				GenerationHistoryController.open(storage, historyContentToken(pack), pack.name(), released);
+				GenerationHistoryController.open(storage, pack.modpackId(), pack.name(), released);
 			} catch (Exception e) {
 				releaseOnClient(released);
 				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
@@ -328,15 +328,6 @@ final class InstalledModpackController {
 			releaseOnClient(released);
 			failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
 		}
-	}
-
-	private String historyContentToken(Pack pack) throws IOException {
-		if (pack.active()) {
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null || !pack.modpackId().equals(state.modpackId)) throw new IOException("Active modpack state is unavailable");
-			return state.contentToken;
-		}
-		return pack.record().contentToken();
 	}
 
 	private String activeModpackId() {

@@ -23,7 +23,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -54,7 +53,7 @@ class ClientGenerationStoreTest {
 		PackDocument newest = document(FIRST_PACK, newestHash, Files.size(storage.objectFile(newestHash)), Instant.parse("2026-01-03T00:00:00Z"), middle);
 		PackDocument other = document(SECOND_PACK, otherHash, Files.size(storage.objectFile(otherHash)), FIRST_CREATED, null);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		for (PackDocument record : List.of(first, middle, newest, other)) generations.write(record, List.of());
+		for (PackDocument record : List.of(first, middle, newest, other)) generations.write(record);
 		storage.writeActiveState(FIRST_PACK, first.contentToken());
 
 		ClientGenerationStore.CompactionResult result = generations.compact();
@@ -77,8 +76,8 @@ class ClientGenerationStoreTest {
 		PackDocument old = document(FIRST_PACK, oldHash, oldContent.getBytes(StandardCharsets.UTF_8).length, FIRST_CREATED, null);
 		PackDocument current = document(FIRST_PACK, currentHash, currentContent.getBytes(StandardCharsets.UTF_8).length, SECOND_CREATED, old);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(old, List.of());
-		generations.write(current, List.of());
+		generations.write(old);
+		generations.write(current);
 		storage.writeActiveState(FIRST_PACK, current.contentToken());
 
 		ClientGenerationStore.CompactionResult result = generations.compact();
@@ -108,7 +107,7 @@ class ClientGenerationStoreTest {
 		PackDocument record = TestPacks.document(new GroupManifest(FIRST_PACK, "Test", "", "", "", "",
 				new TreeMap<>(Map.of("main", selectedGroup, "optional", optionalGroup))));
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(record, List.of());
+		generations.write(record);
 		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of()));
 		storage.writeActiveState(FIRST_PACK, record.contentToken());
 		storage.clearActiveState();
@@ -131,8 +130,8 @@ class ClientGenerationStoreTest {
 		PackDocument old = document(FIRST_PACK, oldRecordHash, Files.size(storage.objectFile(oldRecordHash)), FIRST_CREATED, null);
 		PackDocument newest = document(FIRST_PACK, newestRecordHash, Files.size(storage.objectFile(newestRecordHash)), SECOND_CREATED, old);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(old, List.of());
-		generations.write(newest, List.of());
+		generations.write(old);
+		generations.write(newest);
 		storage.writeActiveState(FIRST_PACK, newest.contentToken());
 		new GeneratedCopyState(FIRST_PACK, old.contentToken(), SELECTION_DIGEST,
 				List.of(new GeneratedCopyState.Entry("mods/old-generated.jar", oldGeneratedHash, Files.size(storage.objectFile(oldGeneratedHash))))).write(storage);
@@ -157,8 +156,8 @@ class ClientGenerationStoreTest {
 		PackDocument old = document(FIRST_PACK, oldRecordHash, Files.size(storage.objectFile(oldRecordHash)), FIRST_CREATED, null);
 		PackDocument newest = document(FIRST_PACK, newestRecordHash, Files.size(storage.objectFile(newestRecordHash)), SECOND_CREATED, old);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(old, List.of());
-		generations.write(newest, List.of());
+		generations.write(old);
+		generations.write(newest);
 		storage.writeActiveState(FIRST_PACK, newest.contentToken());
 		new GeneratedCopyState(FIRST_PACK, old.contentToken(), SELECTION_DIGEST,
 				List.of(new GeneratedCopyState.Entry("mods/generated.jar", generatedHash, Files.size(storage.objectFile(generatedHash))))).write(storage);
@@ -181,7 +180,7 @@ class ClientGenerationStoreTest {
 		String hash = store(storage, "valid-object");
 		PackDocument valid = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), FIRST_CREATED, null);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(valid, List.of());
+		generations.write(valid);
 		storage.writeActiveState(FIRST_PACK, valid.contentToken());
 		Path local = Files.writeString(storage.gamePath("mods/local.jar"), "local", StandardCharsets.UTF_8);
 		String malformedId = "0".repeat(40);
@@ -197,21 +196,17 @@ class ClientGenerationStoreTest {
 	}
 
 	@Test
-	void rewritingTheSameRecordReplacesTheStoredJournalTail() throws Exception {
+	void rewritingTheSameRecordKeepsOneDeterministicRecord() throws Exception {
 		ClientStorage storage = storage();
 		String hash = store(storage, "generation-object");
 		PackDocument document = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), FIRST_CREATED, null);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		List<JournalEntry> singleEntry = List.of(snapshotEntry(1, document));
-		List<JournalEntry> twoEntries = List.of(snapshotEntry(1, document), contentEntry(2, document, hash));
 
-		generations.write(document, singleEntry);
-		generations.write(document, twoEntries);
+		generations.write(document);
+		generations.write(document);
 
-		assertEquals(twoEntries, generations.journal(document.contentToken()));
 		assertEquals(document, generations.read(document.contentToken()).orElseThrow());
-		assertDoesNotThrow(() -> generations.write(document, twoEntries));
-		assertEquals(twoEntries, generations.journal(document.contentToken()));
+		assertDoesNotThrow(() -> generations.write(document));
 	}
 
 	@Test
@@ -221,13 +216,11 @@ class ClientGenerationStoreTest {
 		PackDocument stored = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), FIRST_CREATED, null);
 		PackDocument conflicting = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), SECOND_CREATED, null);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		List<JournalEntry> journal = List.of(snapshotEntry(1, stored));
-		generations.write(stored, journal);
+		generations.write(stored);
 
-		assertThrows(IOException.class, () -> generations.write(conflicting, journal));
+		assertThrows(IOException.class, () -> generations.write(conflicting));
 
 		assertEquals(stored, generations.read(stored.contentToken()).orElseThrow());
-		assertEquals(journal, generations.journal(stored.contentToken()));
 	}
 
 	@Test
@@ -236,7 +229,7 @@ class ClientGenerationStoreTest {
 		String hash = store(storage, "valid-object");
 		PackDocument valid = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), FIRST_CREATED, null);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(valid, List.of());
+		generations.write(valid);
 		storage.writeActiveState(FIRST_PACK, valid.contentToken());
 		Path malformed = storage.generatedCopiesFile(FIRST_PACK, valid.contentToken(), SELECTION_DIGEST);
 		Files.createDirectories(malformed.getParent());
@@ -254,7 +247,7 @@ class ClientGenerationStoreTest {
 		String hash = store(storage, "valid-object");
 		PackDocument valid = document(FIRST_PACK, hash, Files.size(storage.objectFile(hash)), FIRST_CREATED, null);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(valid, List.of());
+		generations.write(valid);
 		storage.writeActiveState(FIRST_PACK, valid.contentToken());
 		Files.writeString(storage.transactionFile(), "active", StandardCharsets.UTF_8);
 
@@ -273,8 +266,8 @@ class ClientGenerationStoreTest {
 		PackDocument first = document(FIRST_PACK, firstHash, Files.size(storage.objectFile(firstHash)), FIRST_CREATED, null);
 		PackDocument second = document(SECOND_PACK, secondHash, Files.size(storage.objectFile(secondHash)), FIRST_CREATED, null);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(first, List.of());
-		generations.write(second, List.of());
+		generations.write(first);
+		generations.write(second);
 		new ClientSelectionStore(storage.selectionFile()).compareAndSet(FIRST_PACK, null, new SelectionIntent(Set.of("main")));
 		storage.writeActiveState(SECOND_PACK, second.contentToken());
 		Path overlay = storage.overlayFile(FIRST_PACK, "config/options.txt");
@@ -282,6 +275,12 @@ class ClientGenerationStoreTest {
 		Files.writeString(overlay, "edit", StandardCharsets.UTF_8);
 		Files.createDirectories(storage.connectionDirectory(FIRST_PACK));
 		Files.writeString(storage.connectionDirectory(FIRST_PACK).resolve("connection.json"), "{}", StandardCharsets.UTF_8);
+		Path firstMirror = storage.historyJournalFile(FIRST_PACK);
+		Files.createDirectories(firstMirror.getParent());
+		Files.writeString(firstMirror, "{}", StandardCharsets.UTF_8);
+		Path secondMirror = storage.historyJournalFile(SECOND_PACK);
+		Files.createDirectories(secondMirror.getParent());
+		Files.writeString(secondMirror, "{}", StandardCharsets.UTF_8);
 
 		generations.forgetModpack(FIRST_PACK);
 
@@ -289,6 +288,8 @@ class ClientGenerationStoreTest {
 		assertEquals(second, generations.read(second.contentToken()).orElseThrow());
 		assertFalse(Files.exists(storage.overlayDirectory(FIRST_PACK)));
 		assertFalse(Files.exists(storage.connectionDirectory(FIRST_PACK)));
+		assertFalse(Files.exists(firstMirror));
+		assertTrue(Files.exists(secondMirror));
 		assertFalse(Files.exists(storage.objectFile(firstHash)));
 		assertTrue(Files.exists(storage.objectFile(secondHash)));
 		assertTrue(new ClientSelectionStore(storage.selectionFile()).get(FIRST_PACK).isEmpty());
@@ -303,8 +304,8 @@ class ClientGenerationStoreTest {
 		PackDocument old = document(FIRST_PACK, oldHash, Files.size(storage.objectFile(oldHash)), FIRST_CREATED, null);
 		PackDocument newest = document(FIRST_PACK, newestHash, Files.size(storage.objectFile(newestHash)), SECOND_CREATED, old);
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(old, List.of());
-		generations.write(newest, List.of());
+		generations.write(old);
+		generations.write(newest);
 		storage.writeActiveState(FIRST_PACK, newest.contentToken());
 
 		Path overlay = storage.overlayFile(FIRST_PACK, "config/options.txt");
@@ -347,15 +348,6 @@ class ClientGenerationStoreTest {
 				new TreeMap<>(Map.of("mods/test.jar", file)));
 		GroupManifest manifest = new GroupManifest(modpackId, "Test", "", "", "", "", new TreeMap<>(Map.of("main", group)));
 		return PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, parent == null ? null : parent.ownershipLedger());
-	}
-
-	private static JournalEntry snapshotEntry(long seq, PackDocument document) {
-		return new JournalEntry(seq, document.contentToken(), document.policySha1(), TestPacks.CREATED, "snapshot", JournalEntry.NO_RESTORE, true, List.of());
-	}
-
-	private static JournalEntry contentEntry(long seq, PackDocument document, String hash) {
-		return new JournalEntry(seq, document.contentToken(), document.policySha1(), TestPacks.CREATED, "content", JournalEntry.NO_RESTORE, false,
-				List.of(new JournalEntry.Change("mods/next.jar", "b".repeat(40), hash, 1)));
 	}
 
 	private static String store(ClientStorage storage, String content) throws IOException {

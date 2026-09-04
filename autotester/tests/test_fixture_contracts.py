@@ -443,10 +443,9 @@ def test_record_only_staging_links_same_pack_history(make_ctx):
         json.loads(path.read_text(encoding="utf-8"))
         for path in (ctx.game_dir / "automodpack/client/records").glob("*/manifest.json")
     ]
-    records.sort(key=lambda record: record["journalHead"])
-    assert [entry["notes"] for entry in records[1]["journal"]] == ["Pack B root.", "Pack B update."]
-    assert records[1]["journalHead"] == records[1]["journal"][-1]["seq"]
-    assert records[1]["journal"][-1]["contentToken"] == records[1]["contentToken"]
+    mirror = staging_steps._mirror_entries(ctx.game_dir / "automodpack/client/history/packbbb/journal.jsonl")
+    assert [entry["notes"] for entry in mirror] == ["Pack B root.", "Pack B update."]
+    assert mirror[-1]["contentToken"] in [record["contentToken"] for record in records]
     assert records[0]["contentToken"] != records[1]["contentToken"]
 
 
