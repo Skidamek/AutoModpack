@@ -36,6 +36,8 @@ public class ClientStorageJsons {
 		public String contentToken = "";
 		public String status = "ACTIVE";
 		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
+		/** Local sovereignty: while true nothing syncs the pack until the player attaches or the head catches up. */
+		public boolean detached = false;
 	}
 
 	public static class ClientPreservationVaultFields {

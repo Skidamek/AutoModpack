@@ -90,6 +90,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
 	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
 	private final Set<String> reservedObjectHashes = new TreeSet<>();
+	private boolean attaching;
 	public record SourceAvailability(int totalFiles, int resolvedFiles, boolean complete, boolean cancelled) {}
 
 	private String getModpackName() {
@@ -298,6 +299,15 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Trusted bootstrap install: apply the selected pack on this launch without a review screen. */
 	public void applyTrustedInstall() {
 		applySelectedTargetWithoutReview(true);
+	}
+
+	/**
+	 * Explicit attach of a detached pack: the player asked to sync to the server head, so the normal reviewed update
+	 * runs and its commit dissolves the detachment. A declined or failed attach leaves the flag untouched.
+	 */
+	public void attachAndSync() {
+		attaching = true;
+		processModpackUpdate(true);
 	}
 
 	/** When {@code showWaitingScreen} is false a player-facing screen already owns the wait and shows its own busy state. */
@@ -768,6 +778,7 @@ public class ModpackUpdater implements AutoCloseable {
 				}
 				: () -> {
 					reviewed.review().cancel();
+					detachOnDeclinedUpdate();
 					close();
 				};
 		return requestPreparedPlanPreview(prepared, continueAction, cancelAction)
@@ -809,6 +820,18 @@ public class ModpackUpdater implements AutoCloseable {
 	private String installedToken(String modpackId) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		return state != null && modpackId.equals(state.modpackId) ? state.contentToken : "";
+	}
+
+	/**
+	 * Declining a reviewed advance of the active generation is local sovereignty: the pack stops syncing until the
+	 * player attaches again. Declines without an active generation, or of the already-active generation, change nothing.
+	 */
+	private void detachOnDeclinedUpdate() {
+		try {
+			new ClientGenerationStore(storage).detachOnDeclinedAdvance(selectedTarget.manifest().modpackId(), selectedTarget.document().contentToken());
+		} catch (IOException e) {
+			LOGGER.warn("The declined update could not be recorded as detachment", e);
+		}
 	}
 
 	/** Assembles the player-facing preview of one target advance: journal tail, featured notes, and feature manifest. */
@@ -878,6 +901,13 @@ public class ModpackUpdater implements AutoCloseable {
 					ConnectionStore.saveConnection(storage, target.manifest().modpackId(), connectionInfo);
 				} catch (IOException e) {
 					throw new IOException("Modpack generation committed but connection state could not be saved", e);
+				}
+			}
+			if (attaching) {
+				try {
+					storage.setDetached(target.manifest().modpackId(), false);
+				} catch (IOException e) {
+					throw new IOException("Modpack generation committed but detachment could not be cleared", e);
 				}
 			}
 			clientConfig = plan.plannedClientConfig();

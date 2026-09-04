@@ -1,0 +1,151 @@
+id: detached-join
+description: |
+  Declining a reviewed update detaches the installed pack: the next launch boots
+  the local pack without any server sync, every join warns but allows while the
+  head generation differs, and Sync now runs the reviewed update and re-attaches.
+renderClient: true
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
+  - do: publish_server_generation
+    name: publish a changed generation with new patch notes
+    generation: 1
+  - do: disconnect
+    name: leave the game for the published update
+  - do: connect
+    name: connect to the published generation
+  - do: wait_for
+    name: show the published generation review
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: decline the published generation
+    select: { text: Back }
+  - do: wait_for
+    name: return to the server list after declining
+    timeout: 20s
+    until: { screen: Play Multiplayer }
+  - do: quit
+    name: stop the client so the next launch hits the detached preload
+  - do: wait_client_exit
+    name: wait for the declined client to exit
+  - do: launch_client
+    name: relaunch the detached client
+  - do: wait_bridge
+    name: wait for the detached client preload
+  - do: wait_for
+    name: verify preload booted the local pack without server sync
+    timeout: 60s
+    until:
+      log:
+        container: client
+        matches: 'Selected modpack is detached; booting the local pack without server sync'
+  - do: connect
+    name: join the server while detached
+  - do: wait_for
+    name: show the detached join prompt
+    timeout: 90s
+    until:
+      all:
+        - screen: DetachedJoinPromptScreen
+        - element: { key: automodpack.detached.continueJoin, enabled: true }
+        - element: { key: automodpack.detached.syncNow, enabled: true }
+  - do: screenshot
+    name: capture the detached join prompt
+    file: detached-join-prompt
+  - do: click
+    name: keep playing the local state
+    select: { key: automodpack.detached.continueJoin }
+  - do: wait_join
+    name: verify the join completed in-session
+  - do: assert_file_content
+    name: verify the declined generation never touched the local pack
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha\n"
+  - do: assert_file_content
+    name: verify the locally kept state still runs its own generation content
+    path: "${active_dir}/config/amp-autotest-gamma.cfg"
+    content: "alpha=true\nbeta=false\n"
+  - do: disconnect
+    name: leave the game before the explicit attach
+  - do: connect
+    name: join once more for the sync
+  - do: wait_for
+    name: show the detached join prompt again
+    timeout: 90s
+    until: { screen: DetachedJoinPromptScreen }
+  - do: click
+    name: attach by syncing to the server head
+    select: { key: automodpack.detached.syncNow }
+  - do: wait_for
+    name: show the reviewed update for the head generation
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: accept the sync to the head generation
+    select: { text: Update }
+  - do: wait_file_content
+    name: wait for the changed file
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
+    timeout: 300s
+  - do: wait_generation
+    name: wait for the committed head generation
+    patchNotes: "Update 2: changed alpha, added delta, and removed the guest mod."
+    timeout: 300s
+  - do: wait_for
+    name: wait for the post-sync restart
+    timeout: 60s
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart after the attach
+    select: { text: "Yes, close the game" }
+    timeout: 20s
+  - do: wait_client_exit
+    name: wait for the post-sync restart
+  - use: rejoin
+  - do: assert_file_content
+    name: verify the attached pack runs the head generation
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
+  - do: assert
+    name: verify the removed guest mod is gone after the attach
+    that: { file_gone: "${active_dir}/mods/amp-autotest-guest.jar" }
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    modrinth:
+      projects:
+        - ferrite-core?
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  generations:
+    - patchNotes: "Initial release: core content and a guest mod."
+      files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
+        - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { path: mods/amp-autotest-guest.jar, fixture: { modId: amp_autotest_guest, version: "1.0.0-published", marker: guest } }
+    - patchNotes: "Update 2: changed alpha, added delta, and removed the guest mod."
+      files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v2\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":43}' }
+        - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { path: config/amp-autotest-delta.txt, content: "delta-v2\n" }

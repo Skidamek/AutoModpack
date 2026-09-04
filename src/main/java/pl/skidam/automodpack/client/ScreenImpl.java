@@ -104,6 +104,11 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
+	public void detachedJoin(String modpackName, Runnable continueJoin, Runnable syncNow) {
+		executeOnClient(() -> Screens.detachedJoin(modpackName, continueJoin, syncNow));
+	}
+
+	@Override
 	public void waiting() {
 		executeOnClient(() -> Screens.waiting(null));
 	}
@@ -263,6 +268,10 @@ public class ScreenImpl implements ScreenService {
 
 		public static void originChange(String modpackName, String previousOrigin, String newOrigin, Runnable allowed, Runnable refused) {
 			Screens.setScreen(new OriginChangeConfirmScreen(modpackName, previousOrigin, newOrigin, allowed, refused));
+		}
+
+		public static void detachedJoin(String modpackName, Runnable continueJoin, Runnable syncNow) {
+			Screens.setScreen(new DetachedJoinPromptScreen(Screens.getScreen(), modpackName, continueJoin, syncNow));
 		}
 
 		public static void waiting(Runnable onCancel) {

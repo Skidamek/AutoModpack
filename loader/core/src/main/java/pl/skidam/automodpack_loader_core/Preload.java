@@ -191,6 +191,17 @@ public class Preload {
 			return;
 		}
 
+		// A detached pack holds local sovereignty: launch boots it as-is, fetching nothing, applying nothing, protecting nothing.
+		if (!trustedBootstrapApply && isDetachedFromServer()) {
+			LOGGER.info("Selected modpack is detached; booting the local pack without server sync");
+			if (hasActiveProjection()) {
+				loadLocalModpack(connectionInfo, secret);
+			} else {
+				SelfUpdater.update();
+			}
+			return;
+		}
+
 		var manifestResult = ModpackUtils.requestServerModpackContent(storage, connectionInfo, secret, false);
 		SelectedModpackTarget selectedTarget = loadStoredTarget();
 		DownloadClient downloadClient = null;
@@ -255,6 +266,16 @@ public class Preload {
 			return true;
 		} catch (IOException e) {
 			LOGGER.warn("Cannot read active client projection state", e);
+			return false;
+		}
+	}
+
+	/** An unreadable state is not detachment; the normal launch path then hits its own loud failure for the corrupt state. */
+	private boolean isDetachedFromServer() {
+		try {
+			return new ClientGenerationStore(storage).isDetached(clientConfig.selectedModpackId);
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Cannot read the detached flag of the selected modpack", e);
 			return false;
 		}
 	}
