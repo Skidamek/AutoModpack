@@ -22,6 +22,7 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -87,6 +88,56 @@ class ClientGenerationStoreTest {
 		PackDocument newest = new ClientGenerationStore(storage).newestDocument(FIRST_PACK);
 		assertEquals(second.contentToken(), newest.contentToken());
 		assertEquals(second.ownershipLedger(), newest.ownershipLedger());
+	}
+
+	@Test
+	void rebuildsARollbackTargetDocumentFromItsMirrorEntry() throws Exception {
+		ClientStorage storage = storage();
+		String firstHash = store(storage, "first-object");
+		PackDocument first = document(FIRST_PACK, firstHash, Files.size(storage.objectFile(firstHash)), Instant.parse("2026-01-01T00:00:00Z"));
+		String secondHash = store(storage, "second-object");
+		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), Instant.parse("2026-01-02T00:00:00Z"), first);
+		TestPacks.stageGeneration(storage, first);
+		TestPacks.stageGeneration(storage, second);
+		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		List<JournalEntry> entries = new JournalMirror(storage).entries(FIRST_PACK);
+
+		PackDocument rollback = generations.document(FIRST_PACK, entries.get(0));
+		PackDocument active = generations.document(FIRST_PACK, entries.get(1));
+
+		assertEquals(first.contentToken(), rollback.contentToken());
+		assertEquals(first.createdAt(), rollback.createdAt());
+		assertEquals(first.ownershipLedger(), rollback.ownershipLedger(), "the replay of a fully witnessed history is the generation's own ledger");
+		assertEquals(second.contentToken(), active.contentToken());
+		assertEquals(second.ownershipLedger(), active.ownershipLedger(), "the active generation keeps its exact ledger");
+	}
+
+	@Test
+	void marksARollbackTargetRestorableOnlyWhenEveryTreeObjectIsAvailableLocally() throws Exception {
+		ClientStorage storage = storage();
+		String firstHash = store(storage, "first-object");
+		PackDocument first = document(FIRST_PACK, firstHash, Files.size(storage.objectFile(firstHash)), Instant.parse("2026-01-01T00:00:00Z"));
+		String secondHash = store(storage, "second-object");
+		PackDocument second = document(FIRST_PACK, secondHash, Files.size(storage.objectFile(secondHash)), Instant.parse("2026-01-02T00:00:00Z"), first);
+		TestPacks.stageGeneration(storage, first);
+		TestPacks.stageGeneration(storage, second);
+		storage.writeActiveState(FIRST_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		List<JournalEntry> entries = new JournalMirror(storage).entries(FIRST_PACK);
+
+		assertTrue(generations.locallyRestorable(FIRST_PACK, entries.get(0)));
+		assertTrue(generations.locallyRestorable(FIRST_PACK, entries.get(1)));
+
+		Files.delete(storage.objectFile(firstHash));
+		assertFalse(generations.locallyRestorable(FIRST_PACK, entries.get(0)), "a missing object with no live copy is not restorable");
+
+		Files.createDirectories(storage.gamePath("mods/test.jar").getParent());
+		Files.writeString(storage.gamePath("mods/test.jar"), "first-object", StandardCharsets.UTF_8);
+		assertTrue(generations.locallyRestorable(FIRST_PACK, entries.get(0)), "the acquisition chain absorbs the object from its live path");
+
+		Files.delete(storage.objectFile(first.policySha1()));
+		assertFalse(generations.locallyRestorable(FIRST_PACK, entries.get(0)), "a generation whose policy object is gone cannot be restored");
 	}
 
 	@Test

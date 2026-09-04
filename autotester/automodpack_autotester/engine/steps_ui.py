@@ -106,6 +106,10 @@ def screenshot(ctx, step):
         raise RuntimeError("bridge not ready (run wait_bridge first)")
     name = str(ctx.resolve(step.get("file") or "screen"))
     response = ctx.bridge.screenshot(name)
+    if response.get("skipped"):
+        # The client reports this when the captured screen closed before a frame
+        # could settle; there is nothing left to capture, so the step moves on.
+        return
     path = ctx.game_dir / str(response["path"])
     if not path.is_file():
         raise RuntimeError(f"client reported screenshot but did not create {path}")

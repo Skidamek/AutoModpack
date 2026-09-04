@@ -298,8 +298,14 @@ public final class AutoTestBridge {
 		PendingScreenshot pending = PENDING_SCREENSHOT.get();
 		if (pending == null) return;
 		RenderedFrameState state = RenderedFrameState.capture();
-		if (!pending.observe(state)) return;
+		PendingScreenshot.Observation observation = pending.observe(state);
+		if (observation == PendingScreenshot.Observation.WAIT) return;
 		if (!PENDING_SCREENSHOT.compareAndSet(pending, null)) return;
+		if (observation == PendingScreenshot.Observation.TARGET_GONE) {
+			LOGGER.info("AutoModpack autotest screenshot {} skipped: {}", pending.path().getFileName(), state.describeFor(pending.targetScreen()));
+			pending.captured().complete(pending.skippedResponse(state).toString());
+			return;
+		}
 		try {
 			Minecraft minecraft = Minecraft.getInstance();
 			/*? if >=26.2 {*/
@@ -323,17 +329,30 @@ public final class AutoTestBridge {
 		private volatile RenderedFrameState lastState;
 		private RenderedFrameState previousState;
 
+		private enum Observation {
+			WAIT, SETTLED, TARGET_GONE
+		}
+
 		private PendingScreenshot(CompletableFuture<String> captured, Path path, Screen targetScreen) {
 			this.captured = captured;
 			this.path = path;
 			this.targetScreen = targetScreen;
 		}
 
-		private boolean observe(RenderedFrameState state) {
+		private Observation observe(RenderedFrameState state) {
+			RenderedFrameState previous = previousState;
 			lastState = state;
-			boolean settled = state.isSettledAfter(previousState, targetScreen);
 			previousState = state;
-			return settled;
+			// A replaced target screen can never settle; two consecutive frames of another screen prove it is gone.
+			if (previous != null && state.screen() != targetScreen && previous.screen() != targetScreen) return Observation.TARGET_GONE;
+			return state.isSettledAfter(previous, targetScreen) ? Observation.SETTLED : Observation.WAIT;
+		}
+
+		private JsonObject skippedResponse(RenderedFrameState state) {
+			JsonObject response = base();
+			response.addProperty("skipped", true);
+			response.addProperty("reason", state.describeFor(targetScreen));
+			return response;
 		}
 
 		private void logTimeout() {
@@ -347,6 +366,10 @@ public final class AutoTestBridge {
 
 		private Path path() {
 			return path;
+		}
+
+		private Screen targetScreen() {
+			return targetScreen;
 		}
 	}
 

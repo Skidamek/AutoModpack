@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.ContentTree;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
@@ -24,8 +25,10 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Reconstructs pack generations offline: the journal mirror supplies a generation's identity, the client CAS its
@@ -97,11 +100,39 @@ public final class ClientGenerationStore {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		List<JournalEntry> entries = new JournalMirror(storage).entries(normalizedModpackId);
 		if (entries.isEmpty()) throw new IOException("Installed modpack journal mirror is missing: " + normalizedModpackId);
-		JournalEntry newest = entries.get(entries.size() - 1);
+		return document(normalizedModpackId, entries.get(entries.size() - 1));
+	}
+
+	/** One mirror generation's document: the entry's policy from the CAS, and the exact active-state ledger when that generation is active, else the mirror replay. */
+	public PackDocument document(String modpackId, JournalEntry entry) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		if (state != null && state.modpackId.equals(normalizedModpackId) && state.contentToken.equals(newest.contentToken()))
-			return document(newest, OwnershipLedger.fromFields(state.ownershipLedger));
-		return document(newest, replayedLedger(normalizedModpackId, newest));
+		if (state != null && state.modpackId.equals(normalizedModpackId) && state.contentToken.equals(entry.contentToken()))
+			return document(entry, OwnershipLedger.fromFields(state.ownershipLedger));
+		return document(entry, replayedLedger(normalizedModpackId, entry));
+	}
+
+	/**
+	 * Whether one mirror generation can be restored without the server: its policy document sits in the client CAS and every
+	 * object of its folded tree is in the CAS or still materialized at its live path. The server hosts only head objects, so
+	 * for a non-head generation the client's own bytes are the only source; the plan-time acquisition stays the final judge.
+	 */
+	public boolean locallyRestorable(String modpackId, JournalEntry entry) throws IOException {
+		ModpackId.requireValid(modpackId);
+		GroupManifest manifest;
+		try {
+			manifest = policyDocument(entry.policySha1());
+		} catch (IOException unavailable) {
+			return false;
+		}
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			for (var file : ContentTree.fromManifest(manifest).files().entrySet()) {
+				if (FileIntegrity.matchesNamed(storage.objectFile(file.getValue().sha1()), file.getValue().size(), file.getValue().sha1(), cache)) continue;
+				if (FileIntegrity.matches(storage.gamePath(file.getKey()), file.getValue().size(), file.getValue().sha1(), cache)) continue;
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/** One cached policy document from the client CAS; policy objects are never collected, so witnessed generations stay foldable. */

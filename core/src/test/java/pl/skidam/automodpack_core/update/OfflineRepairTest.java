@@ -19,6 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -214,6 +215,33 @@ class OfflineRepairTest {
 		assertTrue(receipt.complete());
 		assertTrue(FileIntegrity.matches(storage.objectFile(preservedHash), preservedBytes.length, preservedHash));
 		assertTrue(FileIntegrity.matches(preservedSource, preservedBytes.length, preservedHash));
+	}
+
+	@Test
+	void repairsTheActiveDetachedGenerationByteExactWhileSyncStaysGated() throws Exception {
+		ClientStorage storage = storage();
+		byte[] expectedBytes = "detached-generation".getBytes(StandardCharsets.UTF_8);
+		String hash = HashUtils.sha1(expectedBytes);
+		SelectedModpackTarget target = install(storage, new FileSpec("config/settings.json", "config", false, hash, expectedBytes.length));
+		storage.setDetached(target.manifest().modpackId(), true);
+		write(storage.objectFile(hash), expectedBytes);
+		write(storage.activePath("config/settings.json"), expectedBytes);
+		write(storage.gamePath("config/settings.json"), "damaged-live".getBytes(StandardCharsets.UTF_8));
+		List<JournalEntry> journalBefore = new JournalMirror(storage).entries(target.manifest().modpackId());
+		// The repair request is built the way ClientOfflineRepair builds it: the mirror + CAS + active-state reconstruction.
+		SelectedModpackTarget active = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElseThrow();
+		OfflineRepair repair = new OfflineRepair(storage);
+
+		OfflineRepair.Prepared prepared = repair.inspect(new OfflineRepair.Request(active, Set.of(), null));
+		OfflineRepair.Receipt receipt = repair.apply(prepared);
+
+		assertEquals(target.document().contentToken(), prepared.contentToken(), "the repair target is the active detached generation");
+		assertTrue(receipt.complete());
+		assertTrue(FileIntegrity.matches(storage.gamePath("config/settings.json"), expectedBytes.length, hash));
+		assertTrue(FileIntegrity.matches(storage.activePath("config/settings.json"), expectedBytes.length, hash));
+		assertTrue(storage.isDetached(target.manifest().modpackId()), "repair keeps the pack detached");
+		assertEquals(target.document().contentToken(), storage.readActiveState().contentToken);
+		assertEquals(journalBefore, new JournalMirror(storage).entries(target.manifest().modpackId()), "repair never rewrites the mirror");
 	}
 
 	private ClientStorage storage() throws Exception {

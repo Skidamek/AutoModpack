@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
@@ -46,6 +48,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private final long currentSeq;
 	private final String modpackName;
 	private final Runnable closedCallback;
+	private final Set<Long> restorableSeqs;
+	private final Consumer<JournalEntry> restore;
 	private boolean closed;
 
 	public ContentHistoryScreen(Screen parent, HistoryViewRequest request) {
@@ -57,6 +61,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		this.currentSeq = request.currentSeq();
 		this.modpackName = request.modpackName();
 		this.closedCallback = request.closed();
+		this.restorableSeqs = request.restorableSeqs();
+		this.restore = request.restore();
 	}
 
 	@Override
@@ -68,7 +74,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			int width = panelWidth(PANEL_WIDTH);
 			List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
 			for (int index = 0; index < entries.size(); index++) rows.add(row(entries.get(index), width - TEXT_MARGIN * 2));
-			this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, width, LIST_TOP, listBottom, ROW_HEIGHT, rows, this::openEntry, null));
+			this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, width, LIST_TOP, listBottom, ROW_HEIGHT, rows, this::openEntry, this::showComponentTooltip));
 		}
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
 	}
@@ -82,6 +88,11 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			MutableComponent badge = VersionedText.literal(VersionedText.translatable("automodpack.history.current").getString() + " · ").withStyle(ChatFormatting.GREEN);
 			badge.append(VersionedText.literal(truncateToWidth(this.font, updated, width - this.font.width(badge))).withStyle(ChatFormatting.GRAY));
 			header = badge;
+		} else if (restore != null && !restorableSeqs.contains(entry.seq())) {
+			String badge = " · " + VersionedText.translatable("automodpack.history.notRestorable").getString();
+			MutableComponent marked = VersionedText.literal(truncateToWidth(this.font, updated, width - this.font.width(badge))).withStyle(ChatFormatting.GRAY);
+			marked.append(VersionedText.literal(badge).withStyle(ChatFormatting.DARK_GRAY));
+			header = marked;
 		}
 		lines.add(header);
 		if (entry.notes().isBlank()) {
@@ -92,6 +103,8 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		JournalEntry.Summary summary = entry.summary();
 		String diff = ChangeSummary.diffLine(summary.added(), summary.changed(), summary.removed(), 0, 0);
 		lines.add(VersionedText.literal(truncateToWidth(this.font, diff, width)).withStyle(ChatFormatting.GRAY));
+		if (restore != null && !restorableSeqs.contains(entry.seq()) && !isCurrent(entry))
+			return new RowListWidget.Row(lines, VersionedText.translatable("automodpack.history.notRestorableTooltip"));
 		return new RowListWidget.Row(lines);
 	}
 
@@ -105,7 +118,10 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		List<MutableComponent> notes = new ArrayList<>();
 		for (String line : wrapToWidth(this.font, entry.notes(), panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2, DETAIL_NOTES_LINES))
 			notes.add(VersionedText.literal(line).withStyle(ChatFormatting.WHITE));
-		openBrowserScreen(heading, VersionedText.translatable("automodpack.history.detailsDescription"), notes, changeSet(entry));
+		ChangeBrowserScreen.BrowserAction restoreAction = restorableSeqs.contains(entry.seq()) && restore != null
+				? new ChangeBrowserScreen.BrowserAction(VersionedText.translatable("automodpack.history.restore"), screen -> restore.accept(entry), true)
+				: null;
+		openBrowserScreen(heading, VersionedText.translatable("automodpack.history.detailsDescription"), notes, changeSet(entry), restoreAction);
 	}
 
 	/** Turns one journal entry's recorded changes into the shared logical change model. */
@@ -123,12 +139,12 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	}
 
 	/** Resolves the cached Modrinth/CurseForge page references off the render thread, then opens the shared browser. */
-	private void openBrowserScreen(Component heading, Component description, List<MutableComponent> notes, ChangeSet changes) {
+	private void openBrowserScreen(Component heading, Component description, List<MutableComponent> notes, ChangeSet changes, ChangeBrowserScreen.BrowserAction restoreAction) {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, platformCacheDirectory());
 			this.minecraft.execute(() -> {
 				if (closed) return;
-				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, Map.of(), null, notes));
+				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, Map.of(), restoreAction, notes));
 			});
 		});
 	}
