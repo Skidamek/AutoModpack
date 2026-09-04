@@ -197,6 +197,7 @@
   "automodpack.detached.title": "Modpack nicht synchronisiert",
   "automodpack.detached.localState": "Du spielst einen lokal verwahrten Stand von %s. Du hast entschieden, das neuere Modpack dieses Servers nicht zu übernehmen, daher bleiben deine aktuellen Dateien unverändert.",
   "automodpack.detached.risk": "Der Server erwartet möglicherweise andere Dateien: Der Beitritt kann fehlschlagen oder das Spiel kann abstürzen.",
+  "automodpack.detached.sameGeneration": "Der Server nutzt die Generation, die du behalten hast. Deine geänderten Dateien bleiben genau so, wie sie sind, und der Server kann sie erst aktualisieren, wenn du synchronisierst.",
   "automodpack.detached.syncAnytime": "Du kannst dich jederzeit mit dem aktuellen Modpack des Servers synchronisieren.",
   "automodpack.detached.syncNow": "Jetzt synchronisieren",
   "automodpack.detached.continueJoin": "Fortfahren",
@@ -265,6 +266,8 @@
   "automodpack.management.update": "Aktualisieren",
   "automodpack.management.repair": "Reparieren",
   "automodpack.management.upToDate": "Aktuell",
+  "automodpack.management.resumeSyncing": "Synchronisierung fortsetzen",
+  "automodpack.management.stopSyncing": "Synchronisierung stoppen",
   "automodpack.management.deactivate": "Deaktivieren",
   "automodpack.management.activate": "Aktivieren",
   "automodpack.management.preservedFiles": "Gesicherte Dateien",
@@ -360,5 +363,7 @@
   "automodpack.vault.restoreManagedFiles": "Wiederherstellen legt Spieldateien zurück. Modpack-Dateien kommen mit dem nächsten Update.",
   "automodpack.vault.restoreApplies": "Legt %s wieder an seinen Platz.",
   "automodpack.management.deactivateTooltip": "Schaltet das Modpack aus. Die Dateien bleiben, damit du es wieder aktivieren kannst.",
+  "automodpack.management.stopSyncingTooltip": "Behält jede Datei genau bei, wie sie ist, und wendet keine Server-Updates an, bis du fortsetzt.",
+  "automodpack.management.resumeSyncingTooltip": "Synchronisiert dieses Modpack mit der aktuellen Generation des Servers.",
   "automodpack.management.removeTooltip": "Löscht das Modpack und seine Dateien. Gesicherte Dateien bleiben."
 }

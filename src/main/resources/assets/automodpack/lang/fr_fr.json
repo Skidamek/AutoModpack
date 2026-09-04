@@ -197,6 +197,7 @@
   "automodpack.detached.title": "Modpack non synchronisé",
   "automodpack.detached.localState": "Vous jouez sur un état local conservé de %s. Vous avez choisi de ne pas appliquer le modpack plus récent de ce serveur, vos fichiers actuels sont donc conservés tels quels.",
   "automodpack.detached.risk": "Le serveur peut attendre des fichiers différents : la connexion peut échouer ou le jeu peut planter.",
+  "automodpack.detached.sameGeneration": "Le serveur utilise la génération que vous avez conservée. Les fichiers que vous avez modifiés restent exactement tels quels, et le serveur ne peut pas les mettre à jour tant que vous n'avez pas synchronisé.",
   "automodpack.detached.syncAnytime": "Vous pouvez vous synchroniser avec le modpack actuel du serveur à tout moment.",
   "automodpack.detached.syncNow": "Synchroniser",
   "automodpack.detached.continueJoin": "Continuer",
@@ -265,6 +266,8 @@
   "automodpack.management.update": "Mettre à jour",
   "automodpack.management.repair": "Réparer",
   "automodpack.management.upToDate": "À jour",
+  "automodpack.management.resumeSyncing": "Reprendre la synchronisation",
+  "automodpack.management.stopSyncing": "Arrêter la synchronisation",
   "automodpack.management.deactivate": "Désactiver",
   "automodpack.management.activate": "Activer",
   "automodpack.management.preservedFiles": "Fichiers conservés",
@@ -360,5 +363,7 @@
   "automodpack.vault.restoreManagedFiles": "La restauration remet les fichiers du jeu. Les fichiers du modpack reviennent à la prochaine mise à jour.",
   "automodpack.vault.restoreApplies": "Remet %s à sa place.",
   "automodpack.management.deactivateTooltip": "Désactive le modpack. Ses fichiers restent, vous pouvez le réactiver.",
+  "automodpack.management.stopSyncingTooltip": "Conserve chaque fichier exactement tel quel et cesse d'appliquer les mises à jour du serveur jusqu'à la reprise.",
+  "automodpack.management.resumeSyncingTooltip": "Synchronise ce modpack avec la génération actuelle du serveur.",
   "automodpack.management.removeTooltip": "Supprime le modpack et ses fichiers. Les fichiers conservés restent."
 }

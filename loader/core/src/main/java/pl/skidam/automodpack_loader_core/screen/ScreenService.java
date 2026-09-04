@@ -34,10 +34,12 @@ public interface ScreenService {
 	}
 
 	/**
-	 * Warn-but-allow prompt for a pack running detached from its server; exactly one of the runnables runs. The default
-	 * continues the join headlessly, keeping the local sovereignty the detached state promises.
+	 * Warn-but-allow prompt for a pack running detached from its server; exactly one of the runnables runs. The prompt
+	 * shows on every detached join, and {@code headMatchesActive} only picks the body paragraph: equal tokens say
+	 * nothing about locally changed files. The default continues the join headlessly, keeping the local sovereignty
+	 * the detached state promises.
 	 */
-	default void detachedJoin(String modpackName, Runnable continueJoin, Runnable syncNow) {
+	default void detachedJoin(String modpackName, boolean headMatchesActive, Runnable continueJoin, Runnable syncNow) {
 		continueJoin.run();
 	}
 

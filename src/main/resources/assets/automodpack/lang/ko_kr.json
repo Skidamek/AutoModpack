@@ -194,6 +194,7 @@
   "automodpack.detached.title": "모드팩이 동기화되지 않았습니다",
   "automodpack.detached.localState": "%s의 로컬 저장 상태로 플레이하고 있습니다. 이 서버의 최신 모드팩 적용을 거부했으므로 현재 파일이 그대로 유지됩니다.",
   "automodpack.detached.risk": "서버가 다른 파일을 요구할 수 있습니다. 접속에 실패하거나 게임이 충돌할 수 있습니다.",
+  "automodpack.detached.sameGeneration": "서버는 당신이 유지한 세대에 있습니다. 변경한 파일은 그대로 유지되며, 동기화할 때까지 서버가 업데이트할 수 없습니다.",
   "automodpack.detached.syncAnytime": "언제든지 서버의 현재 모드팩과 동기화할 수 있습니다.",
   "automodpack.detached.syncNow": "지금 동기화",
   "automodpack.detached.continueJoin": "계속",
@@ -261,6 +262,8 @@
   "automodpack.management.update": "업데이트",
   "automodpack.management.repair": "복구",
   "automodpack.management.upToDate": "최신",
+  "automodpack.management.resumeSyncing": "동기화 재개",
+  "automodpack.management.stopSyncing": "동기화 중지",
   "automodpack.management.deactivate": "비활성화",
   "automodpack.management.activate": "활성화",
   "automodpack.management.preservedFiles": "보존된 파일",
@@ -355,5 +358,7 @@
   "automodpack.vault.restoreManagedFiles": "복원은 게임 파일을 되돌립니다. 모드팩 파일은 다음 업데이트와 함께 돌아옵니다.",
   "automodpack.vault.restoreApplies": "%s을(를) 원래 자리에 되돌립니다.",
   "automodpack.management.deactivateTooltip": "모드팩을 끕니다. 파일은 남으니 다시 활성화할 수 있습니다.",
+  "automodpack.management.stopSyncingTooltip": "모든 파일을 그대로 유지하며, 재개할 때까지 서버 업데이트를 적용하지 않습니다.",
+  "automodpack.management.resumeSyncingTooltip": "이 모드팩을 서버의 현재 세대와 동기화합니다.",
   "automodpack.management.removeTooltip": "모드팩과 그 파일을 삭제합니다. 보존된 파일은 남습니다."
 }

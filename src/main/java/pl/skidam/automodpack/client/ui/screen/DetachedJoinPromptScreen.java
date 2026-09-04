@@ -19,14 +19,16 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 	private static final int BODY = 420;
 	private final Screen parent;
 	private final String modpackName;
+	private final boolean headMatchesActive;
 	private final Runnable continueJoin;
 	private final Runnable syncNow;
 	private boolean finished;
 
-	public DetachedJoinPromptScreen(Screen parent, String modpackName, Runnable continueJoin, Runnable syncNow) {
+	public DetachedJoinPromptScreen(Screen parent, String modpackName, boolean headMatchesActive, Runnable continueJoin, Runnable syncNow) {
 		super(VersionedText.translatable("automodpack.detached.title"));
 		this.parent = parent;
 		this.modpackName = modpackName == null ? "" : modpackName;
+		this.headMatchesActive = headMatchesActive;
 		this.continueJoin = continueJoin;
 		this.syncNow = syncNow;
 	}
@@ -38,7 +40,9 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 		List<MutableComponent> lines = new ArrayList<>();
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.detached.localState", modpackName).getString(), wrapWidth));
 		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.detached.risk").getString(), wrapWidth, ChatFormatting.RED));
+		lines.addAll(headMatchesActive
+				? wrapParagraph(this.font, VersionedText.translatable("automodpack.detached.sameGeneration").getString(), wrapWidth)
+				: wrapParagraph(this.font, VersionedText.translatable("automodpack.detached.risk").getString(), wrapWidth, ChatFormatting.RED));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.detached.syncAnytime").getString(), wrapWidth));
 		ActionRow auxiliary = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.detached.syncNow"), button -> syncToServer()));

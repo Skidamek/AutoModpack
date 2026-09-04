@@ -197,6 +197,7 @@
   "automodpack.detached.title": "Modpack not synced",
   "automodpack.detached.localState": "You are playing a locally kept state of %s. You chose not to apply this server's newer modpack, so your current files are kept as they are.",
   "automodpack.detached.risk": "The server may expect different files: joining may fail or the game may crash.",
+  "automodpack.detached.sameGeneration": "The server is on the generation you kept. The files you changed stay exactly as they are, and the server cannot update them until you sync.",
   "automodpack.detached.syncAnytime": "You can sync to the server's current modpack at any time.",
   "automodpack.detached.syncNow": "Sync now",
   "automodpack.detached.continueJoin": "Continue",
@@ -265,6 +266,8 @@
   "automodpack.management.update": "Update",
   "automodpack.management.repair": "Repair",
   "automodpack.management.upToDate": "Up to date",
+  "automodpack.management.resumeSyncing": "Resume syncing",
+  "automodpack.management.stopSyncing": "Stop syncing",
   "automodpack.management.deactivate": "Deactivate",
   "automodpack.management.activate": "Activate",
   "automodpack.management.preservedFiles": "Preserved files",
@@ -360,5 +363,7 @@
   "automodpack.vault.restoreManagedFiles": "Restore puts game files back. Modpack files come back with the next update.",
   "automodpack.vault.restoreApplies": "Puts %s back where it was.",
   "automodpack.management.deactivateTooltip": "Turns the modpack off. Its files stay, so you can activate it again.",
+  "automodpack.management.stopSyncingTooltip": "Keeps every file exactly as it is and stops applying server updates until you resume.",
+  "automodpack.management.resumeSyncingTooltip": "Syncs this pack to the server's current generation.",
   "automodpack.management.removeTooltip": "Deletes the modpack and its files. Preserved files stay."
 }
