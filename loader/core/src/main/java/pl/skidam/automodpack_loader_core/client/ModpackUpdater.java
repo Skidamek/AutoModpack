@@ -23,11 +23,9 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
-import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
-import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -147,7 +145,7 @@ public class ModpackUpdater implements AutoCloseable {
 			installedSwitchPlan = new ReviewedClientPlan<>(prepared, ReviewedUpdatePlan.pending(prepared.plan()));
 			String installedToken;
 			if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)) installedToken = active.contentToken;
-			else installedToken = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).map(PackDocument::contentToken).orElse("");
+			else installedToken = new JournalMirror(storage).lastEntryToken(selectedTarget.manifest().modpackId()).orElse("");
 			return updatePreview(prepared.plan(), selectedTarget, installedToken);
 		}
 	}
@@ -187,21 +185,9 @@ public class ModpackUpdater implements AutoCloseable {
 	private void selectTarget(SelectionIntent intent) {
 		Objects.requireNonNull(intent, "intent");
 		SelectedModpackTarget current = getSelectedTarget();
-		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(headFields(current), current.expectedPriorIntent(), intent, current.platform());
+		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(current.document(), current.expectedPriorIntent(), intent, current.platform());
 		selectedTarget = replacement;
 		serverModpackContent = replacement.flatTarget();
-	}
-
-	/** Rebuilds the head document the selected target was prepared from, so a new group selection can resolve against it. */
-	private static GenerationJsons.HeadDocumentFields headFields(SelectedModpackTarget target) {
-		PackDocument document = target.document();
-		GenerationJsons.HeadDocumentFields fields = new GenerationJsons.HeadDocumentFields();
-		fields.contentToken = document.contentToken();
-		fields.policySha1 = document.policySha1();
-		fields.createdAt = document.createdAt().toString();
-		fields.ownershipLedger = document.ownershipLedger().toFields();
-		fields.policy = document.manifest().toFields();
-		return fields;
 	}
 
 	public ConfirmationState getConfirmationState() {
@@ -328,7 +314,7 @@ public class ModpackUpdater implements AutoCloseable {
 			if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
 			// Handle a modpack installed for the first time: the local-mod consent and group defaults only apply here
-			if (new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).isEmpty()) {
+			if (!new ClientGenerationStore(storage).hasLocalState(selectedTarget.manifest().modpackId())) {
 				firstConnection = true;
 				fullDownload = true;
 				LOGGER.info("First-time install; scanning existing mods before the review screen");
@@ -402,7 +388,7 @@ public class ModpackUpdater implements AutoCloseable {
 				return;
 			}
 			requireLiveConnection();
-			firstConnection = new ClientGenerationStore(storage).installedRecord(selectedTarget.manifest().modpackId()).isEmpty();
+			firstConnection = !new ClientGenerationStore(storage).hasLocalState(selectedTarget.manifest().modpackId());
 			consentedLocalModFiles = Map.of();
 			if (firstConnection && !applyFirstInstall) {
 				try (var cache = FileCache.open(storage.fileCacheDirectory())) {

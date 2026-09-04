@@ -18,17 +18,17 @@ import java.util.stream.Collectors;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
-import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
+import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.JournalMirror;
@@ -112,26 +112,18 @@ public class ModpackUtils {
 
 	// True when the per-file scan cannot decide anything and every file must be treated as an update: without an active projection nothing can match, and differing content digests can never pass the per-file scan
 	private static boolean verificationCannotDecide(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
-		Path activeDirectory = storage.activeDirectory();
-		ClientStorageJsons.ClientGenerationStateFields state;
 		try {
-			state = storage.readActiveState();
-			if (state == null || !Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) return true;
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return true;
+			if (!serverModpackContent.contentToken.isBlank() && !serverModpackContent.contentToken.equals(state.contentToken)) {
+				LOGGER.info("Server modpack content differs from the installed modpack; skipping the per-file verification");
+				return true;
+			}
+			return false;
 		} catch (IOException e) {
 			LOGGER.warn("Cannot read active client generation state", e);
 			return true;
 		}
-
-		try {
-			PackDocument active = new ClientGenerationStore(storage).read(state.contentToken).orElse(null);
-			if (active != null && !serverModpackContent.contentToken.isBlank() && !serverModpackContent.contentToken.equals(active.contentToken())) {
-				LOGGER.info("Server modpack content differs from the installed modpack; skipping the per-file verification");
-				return true;
-			}
-		} catch (IOException | RuntimeException e) {
-			LOGGER.debug("Cannot compare the installed modpack content token", e);
-		}
-		return false;
 	}
 
 	private enum FileVerification {
@@ -263,17 +255,21 @@ public class ModpackUtils {
 	}
 
 	/**
-	 * After a successful head fetch, the pack's journal mirror must vouch for the head content token; when it is
-	 * stale, missing, or unreadable, the whole journal file is fetched under the reserved key and swapped in whole.
+	 * After a successful head fetch the pack's durable history artifacts must vouch for it: the head policy document
+	 * is stored in the client CAS under its own hash (the mirror's entries name it), and the journal mirror must
+	 * vouch for the head content token; when it is stale, missing, or unreadable, the whole journal file is fetched
+	 * under the reserved key and swapped in whole.
 	 */
 	private static CompletableFuture<Optional<GenerationJsons.HeadDocumentFields>> syncJournalMirror(ClientStorage storage, DownloadClient client,
 			GenerationJsons.HeadDocumentFields content) {
 		if (content == null) return CompletableFuture.completedFuture(Optional.empty());
-		JournalMirror mirror = new JournalMirror(storage);
 		String modpackId;
+		JournalMirror mirror = new JournalMirror(storage);
 		try {
 			modpackId = ModpackId.requireValid(content.policy.modpackId);
-		} catch (RuntimeException e) {
+			byte[] policyBytes = ConfigTools.GSON.toJson(content.policy).getBytes(StandardCharsets.UTF_8);
+			ClientObjectStore.storeObject(storage, content.policySha1, policyBytes);
+		} catch (RuntimeException | IOException e) {
 			return CompletableFuture.failedFuture(e);
 		}
 		if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(Optional.of(content));

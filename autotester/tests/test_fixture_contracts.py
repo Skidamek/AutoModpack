@@ -81,8 +81,8 @@ def test_release_fixture_uses_server_config_and_declared_group_directories(make_
 def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     ctx = make_ctx()
     client = ctx.game_dir / "automodpack/client"
-    (client / "records/old").mkdir(parents=True)
-    (client / "records/old/manifest.json").write_text("{}", encoding="utf-8")
+    (client / "history/packaaa").mkdir(parents=True)
+    (client / "history/packaaa/journal.jsonl").write_text("{}\n", encoding="utf-8")
     (client / "active/config").mkdir(parents=True)
     (client / "active/config/old.txt").write_text("old", encoding="utf-8")
     (client / "baselines/packaaa").mkdir(parents=True)
@@ -108,7 +108,7 @@ def test_reset_client_generation_preserves_ordinary_mods(make_ctx):
     (ctx.game_dir / "mods/old.jar").write_bytes(valid_mod_jar_bytes(fixture))
     client_steps._v_reset_client_generation(ctx, {})
 
-    assert not (client / "records").exists()
+    assert not (client / "history").exists()
     assert not (client / "active").exists()
     assert not (client / "baselines").exists()
     assert not (client / "overlays").exists()
@@ -199,7 +199,10 @@ def test_active_object_mutation_and_assertion_use_installed_manifest(make_ctx):
     file.parent.mkdir(parents=True)
     file.write_text("server bytes\n", encoding="utf-8")
     generation = staging_steps._write_staged_generation(ctx, root, "fixture7", ctx.game_dir / "automodpack/client/data", client_root=ctx.game_dir / "automodpack/client")
-    (ctx.game_dir / "automodpack/client/active-state.json").write_text(json.dumps({"schemaVersion": 1, "modpackId": "fixture7", "contentToken": generation["contentToken"], "status": "ACTIVE"}), encoding="utf-8")
+    (ctx.game_dir / "automodpack/client/active-state.json").write_text(
+        json.dumps({"modpackId": "fixture7", "contentToken": generation["contentToken"], "status": "ACTIVE", "ownershipLedger": generation["ledger"]}),
+        encoding="utf-8",
+    )
 
     assert_client_object(ctx, {"path": "config/owned.txt"})
     mutate_active_object(ctx, {"path": "config/owned.txt", "action": "corrupt"})
@@ -296,12 +299,10 @@ def test_staged_generation_uses_actual_file_metadata(make_ctx):
     data_root = root.parent / "data"
     generation = staging_steps._write_staged_generation(ctx, root, "fixture7", data_root)
 
-    manifest = json.loads(
-        (
-            root.parent / "records" / generation["contentToken"] / "manifest.json"
-        ).read_text(encoding="utf-8")
+    policy = json.loads(
+        client_steps.cas_object(data_root / "objects", generation["policySha1"]).read_text(encoding="utf-8")
     )
-    by_path = manifest["policy"]["groups"]["main"]["files"]
+    by_path = policy["groups"]["main"]["files"]
     assert by_path["mods/fixture.jar"]["size"] == str(len(b"fixture"))
     assert by_path["mods/fixture.jar"]["sha1"] == hashlib.sha1(b"fixture").hexdigest()
     assert by_path["mods/fixture.jar"]["editable"] is False
@@ -320,13 +321,11 @@ def test_staged_generation_preserves_explicit_editable_file_metadata(make_ctx):
         ctx, root, "fixture8", data_root, editable_paths={"config/editable.txt"}
     )
 
-    manifest = json.loads(
-        (
-            root.parent / "records" / generation["contentToken"] / "manifest.json"
-        ).read_text(encoding="utf-8")
+    policy = json.loads(
+        client_steps.cas_object(data_root / "objects", generation["policySha1"]).read_text(encoding="utf-8")
     )
     assert (
-        manifest["policy"]["groups"]["main"]["files"]["config/editable.txt"]["editable"] is True
+        policy["groups"]["main"]["files"]["config/editable.txt"]["editable"] is True
     )
 
 
@@ -351,11 +350,12 @@ def test_record_only_staging_does_not_replace_active_state(make_ctx):
     )
 
     assert json.loads(active_state.read_text(encoding="utf-8"))["modpackId"] == "packaaa"
-    records = list(
-        (ctx.game_dir / "automodpack/client/records").glob("*/manifest.json")
+    mirror = staging_steps._mirror_entries(ctx.game_dir / "automodpack/client/history/packbbb/journal.jsonl")
+    assert len(mirror) == 1
+    policy = json.loads(
+        client_steps.cas_object(ctx.game_dir / "automodpack/client/data/objects", mirror[0]["policySha1"]).read_text(encoding="utf-8")
     )
-    assert len(records) == 1
-    assert json.loads(records[0].read_text(encoding="utf-8"))["policy"]["modpackName"] == "Pack B"
+    assert policy["modpackName"] == "Pack B"
     assert not (ctx.game_dir / "automodpack/client-config.json").exists()
     assert not (
         ctx.game_dir
@@ -439,14 +439,14 @@ def test_record_only_staging_links_same_pack_history(make_ctx):
         },
     )
 
-    records = [
-        json.loads(path.read_text(encoding="utf-8"))
-        for path in (ctx.game_dir / "automodpack/client/records").glob("*/manifest.json")
-    ]
     mirror = staging_steps._mirror_entries(ctx.game_dir / "automodpack/client/history/packbbb/journal.jsonl")
     assert [entry["notes"] for entry in mirror] == ["Pack B root.", "Pack B update."]
-    assert mirror[-1]["contentToken"] in [record["contentToken"] for record in records]
-    assert records[0]["contentToken"] != records[1]["contentToken"]
+    assert mirror[0]["contentToken"] != mirror[-1]["contentToken"]
+    assert staging_steps._mirror_tree(mirror[:-1]) == staging_steps._mirror_tree([mirror[0]])
+    assert staging_steps._mirror_tree(mirror)["config/b.txt"] == (
+        hashlib.sha1(b"b2").hexdigest(),
+        len("b2"),
+    )
 
 
 def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
@@ -472,12 +472,12 @@ def test_record_only_stages_a_valid_cross_loader_mod_fixture(make_ctx):
         },
     )
 
-    records = list(
-        (ctx.game_dir / "automodpack/client/records").glob("*/manifest.json")
+    mirror = staging_steps._mirror_entries(ctx.game_dir / "automodpack/client/history/packbbb/journal.jsonl")
+    assert len(mirror) == 1
+    policy = json.loads(
+        client_steps.cas_object(ctx.game_dir / "automodpack/client/data/objects", mirror[0]["policySha1"]).read_text(encoding="utf-8")
     )
-    assert len(records) == 1
-    manifest = json.loads(records[0].read_text(encoding="utf-8"))
-    metadata = manifest["policy"]["groups"]["main"]["files"]["mods/amp-autotest-conflict.jar"]
+    metadata = policy["groups"]["main"]["files"]["mods/amp-autotest-conflict.jar"]
     object_path = client_steps.cas_object(ctx.game_dir / "automodpack/client/data/objects", metadata["sha1"])
     assert_valid_mod_fixture(object_path.read_bytes(), server, ctx.target.minecraft)
 
@@ -494,17 +494,17 @@ def test_record_only_content_token_matches_its_policy_files(make_ctx):
         },
     )
 
-    manifest_path = next(
-        (ctx.game_dir / "automodpack/client/records").glob("*/manifest.json")
+    mirror = staging_steps._mirror_entries(ctx.game_dir / "automodpack/client/history/packbbb/journal.jsonl")
+    policy = json.loads(
+        client_steps.cas_object(ctx.game_dir / "automodpack/client/data/objects", mirror[0]["policySha1"]).read_text(encoding="utf-8")
     )
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     file_map = {}
-    for group in manifest["policy"]["groups"].values():
+    for group in policy["groups"].values():
         for logical_path, file in group["files"].items():
             file_map[logical_path] = (file["sha1"], int(file["size"]))
 
-    assert manifest["contentToken"] == content_token(file_map)
-    assert manifest_path.parent.name == content_token(file_map)
+    assert mirror[0]["contentToken"] == content_token(file_map)
+    assert hashlib.sha1(staging_steps._policy_bytes(policy)).hexdigest() == mirror[0]["policySha1"]
 
 
 # ── bootstrap fixture ───────────────────────────────────────────────────────

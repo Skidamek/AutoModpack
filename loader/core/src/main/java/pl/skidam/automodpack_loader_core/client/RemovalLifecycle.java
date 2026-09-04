@@ -75,9 +75,11 @@ final class RemovalLifecycle {
 		String overlayDigest = storage.overlayDigest(preparation.installed().modpackId);
 		UpdateTransaction transaction;
 		if (remove)
-			transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest, preparation.expectedClientConfig());
+			transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), preparation.installed().ownershipLedger,
+					overlayDigest, preparation.expectedClientConfig());
 		else
-			transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest, preparation.expectedClientConfig());
+			transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), preparation.installed().ownershipLedger,
+					overlayDigest, preparation.expectedClientConfig());
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
 		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
 		if (execution.success()) {
@@ -114,9 +116,7 @@ final class RemovalLifecycle {
 	}
 
 	private GroupManifest removalManifest(ClientUpdatePlanBuilder.RemovalPreparation preparation) throws IOException {
-		String generationId = preparation.installed().contentToken;
-		return new ClientGenerationStore(storage).read(generationId)
-				.orElseThrow(() -> new IOException("Installed generation record is unavailable: " + generationId)).manifest();
+		return new ClientGenerationStore(storage).policyDocument(preparation.installed().policySha1);
 	}
 
 	void restartAfterApply(ApplyResult applyResult) {

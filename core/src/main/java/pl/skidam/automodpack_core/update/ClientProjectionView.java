@@ -16,8 +16,8 @@ import java.util.TreeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -187,11 +187,12 @@ public final class ClientProjectionView {
 	private ModpackJsons.ModpackContentFields stagedTarget(UpdateTransaction pending) throws IOException {
 		if (!isProjectionTransaction(pending)) return null;
 		if (pending.contentToken == null) throw new IOException("Pending projection target generation is missing");
-		GenerationJsons.HeadDocumentFields fields = new ClientGenerationStore(storage).readFields(pending.contentToken)
-				.orElseThrow(() -> new IOException("Staged client generation record is missing: " + pending.contentToken));
 		try {
+			PackDocument document = new ClientGenerationStore(storage).document(pending);
 			SelectionIntent intent = pending.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE ? pending.targetIntent() : pending.expectedPriorIntent();
-			return SelectedModpackTarget.prepare(fields, pending.expectedPriorIntent(), intent, pending.platform()).flatTarget();
+			return SelectedModpackTarget.prepare(document, pending.expectedPriorIntent(), intent, pending.platform()).flatTarget();
+		} catch (IOException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			throw new IOException("Staged client projection target is invalid", e);
 		}

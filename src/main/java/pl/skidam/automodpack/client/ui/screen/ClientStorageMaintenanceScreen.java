@@ -17,7 +17,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
@@ -25,7 +24,7 @@ import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
-/** Provides an explicit, user-confirmed cleanup pass for client generation storage. */
+/** Provides an explicit, user-confirmed cleanup pass for client local storage. */
 public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 310;
 	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
@@ -36,7 +35,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private boolean closed;
 	private boolean presentingFailure;
 	private Operation operation;
-	private ClientGenerationStore.CompactionResult compactionResult;
+	private ClientObjectStore.CollectionResult collectionResult;
 	private ClientObjectStore.StorageReport verificationReport;
 	private Future<?> work;
 	private int preservedCount;
@@ -55,7 +54,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		int actionY = this.height - 28;
 		ActionRow maintenanceRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(VersionedText.translatable("automodpack.storage.verify"), button -> verify()),
-				primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> compact()));
+				primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> collect()));
 		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent()));
 		List<Button> buttons = addActionArea(PANEL_WIDTH, actionY, maintenanceRow, footerRow);
 		buttons.get(0).active = !busy && !closed;
@@ -70,17 +69,10 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.keeps").getString(), wrapWidth, ChatFormatting.GREEN));
 		lines.addAll(
 				wrapParagraph(this.font, VersionedText.translatable(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount).getString(), wrapWidth, ChatFormatting.GREEN));
-		if (compactionResult != null) {
+		if (collectionResult != null) {
 			lines.add(blankLine());
-			lines.addAll(wrapParagraph(this.font, statLine("automodpack.storage.records", compactionResult.recordCountBefore(), compactionResult.recordCountAfter(),
-					UiFormat.formatSize(compactionResult.recordBytesBefore()), UiFormat.formatSize(compactionResult.recordBytesAfter())), wrapWidth));
-			lines.addAll(wrapParagraph(this.font, statLine("automodpack.storage.objects", compactionResult.objectCollection().before().objectCount(), compactionResult.objectCollection().after().objectCount(),
-					UiFormat.formatSize(compactionResult.objectCollection().before().objectBytes()), UiFormat.formatSize(compactionResult.objectCollection().after().objectBytes())), wrapWidth));
-			lines.addAll(wrapParagraph(this.font,
-					statLine("automodpack.storage.generatedCopies", compactionResult.generatedCopyCountBefore(), compactionResult.generatedCopyCountAfter(),
-							UiFormat.formatSize(compactionResult.generatedCopyBytesBefore()),
-							UiFormat.formatSize(compactionResult.generatedCopyBytesAfter())),
-					wrapWidth, ChatFormatting.GRAY));
+			lines.addAll(wrapParagraph(this.font, statLine("automodpack.storage.objects", collectionResult.before().objectCount(), collectionResult.after().objectCount(),
+					UiFormat.formatSize(collectionResult.before().objectBytes()), UiFormat.formatSize(collectionResult.after().objectBytes())), wrapWidth));
 		} else if (verificationReport != null) {
 			lines.add(blankLine());
 			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
@@ -102,13 +94,13 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		});
 	}
 
-	private void compact() {
+	private void collect() {
 		if (busy || closed) return;
-		begin(Operation.COMPACT);
+		begin(Operation.COLLECT);
 		work = DownloadClient.NET_EXECUTOR.submit(() -> {
 			try {
-				ClientGenerationStore.CompactionResult compacted = controller.compactStorage();
-				this.minecraft.execute(() -> finish(compacted));
+				ClientObjectStore.CollectionResult collected = controller.collectStorage();
+				this.minecraft.execute(() -> finish(collected));
 			} catch (Exception exception) {
 				this.minecraft.execute(() -> fail(exception));
 			}
@@ -118,14 +110,14 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private void begin(Operation nextOperation) {
 		busy = true;
 		operation = nextOperation;
-		compactionResult = null;
+		collectionResult = null;
 		verificationReport = null;
 		rebuild();
 	}
 
-	private void finish(ClientGenerationStore.CompactionResult compacted) {
+	private void finish(ClientObjectStore.CollectionResult collected) {
 		if (closed) return;
-		compactionResult = compacted;
+		collectionResult = collected;
 		operation = null;
 		busy = false;
 		rebuild();
@@ -180,7 +172,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		if (busy) {
 			String message = operation == Operation.VERIFY ? "automodpack.storage.verifying" : "automodpack.storage.running";
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(message).withStyle(ChatFormatting.YELLOW), this.width / 2, statusY, TextColors.WHITE);
-		} else if (compactionResult != null) {
+		} else if (collectionResult != null) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.complete").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
 		} else if (verificationReport != null) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.verified").withStyle(ChatFormatting.GREEN), this.width / 2, statusY, TextColors.WHITE);
@@ -197,6 +189,6 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	}
 
 	private enum Operation {
-		VERIFY, COMPACT
+		VERIFY, COLLECT
 	}
 }

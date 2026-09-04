@@ -104,7 +104,6 @@ public final class UpdateTransactionExecutor {
 			validator.validate(transaction, unpublishedTarget, true, cache);
 			validateSelectionBeforeMutation(transaction);
 			preparePendingReplacement(transaction);
-			if (unpublishedTarget != null) new ClientGenerationStore(context.storage()).write(unpublishedTarget.document());
 			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
 			ClientObjectStore.publishOwnership(context.storage());
 			return executePersisted(transaction);
@@ -296,15 +295,15 @@ public final class UpdateTransactionExecutor {
 
 	/** The durable finalization: planned config, pack state, active-state pointer, and the before-manifest hook. */
 	private void finalizeModpackState(UpdateTransaction transaction, boolean preserveNewerSelection) throws IOException {
-		ModpackJsons.ModpackContentFields target = validator.resolvedTarget(transaction, validator.storedRecord(transaction)).flatTarget();
+		SelectedModpackTarget resolved = validator.resolvedTarget(transaction, validator.targetDocument(transaction));
 		if (transaction.plannedClientConfig != null && !preserveNewerSelection)
 			ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
 		if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
-			context.beforeManifestAction().run(transaction, target);
+			context.beforeManifestAction().run(transaction, resolved.flatTarget());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			PackTarget generation = transaction.packTarget();
 			GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies).write(context.storage());
-			context.storage().writeActiveState(transaction.modpackId, generation.contentToken());
+			context.storage().writeActiveState(transaction.modpackId, generation.contentToken(), resolved.document().ownershipLedger().toFields());
 		} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.contentToken));
 			context.storage().clearActiveState();

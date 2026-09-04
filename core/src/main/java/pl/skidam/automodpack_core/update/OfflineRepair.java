@@ -500,8 +500,6 @@ public final class OfflineRepair {
 		String modpackId = request.activeTarget().manifest().modpackId();
 		String contentToken = request.activeTarget().packTarget().contentToken();
 		if (state == null || !modpackId.equals(state.modpackId) || !contentToken.equals(state.contentToken)) throw new IOException("Repair target is no longer the active installed generation");
-		var stored = new ClientGenerationStore(storage).read(contentToken).orElseThrow(() -> new IOException("Active client generation record is missing: " + contentToken));
-		if (!stored.equals(request.activeTarget().document())) throw new IOException("Repair target disagrees with the installed generation record");
 		var active = new ClientGenerationStore(storage).readActiveTarget(request.activeTarget().platform()).orElseThrow(() -> new IOException("Active client target is unavailable"));
 		if (!active.document().equals(request.activeTarget().document()) || !active.selection().intent().equals(request.activeTarget().selection().intent()))
 			throw new IOException("Repair selection changed after preparation");

@@ -156,7 +156,7 @@ class PreservationVaultTest {
 
 		new ClientGenerationStore(storage).forgetModpack(MODPACK_ID);
 
-		assertTrue(new ClientGenerationStore(storage).read(installed.contentToken()).isEmpty());
+		assertFalse(new ClientGenerationStore(storage).installedPackIds().contains(MODPACK_ID), "The mirror is gone with the forgotten pack");
 		assertEquals(List.of(MODPACK_ID), PreservationVault.modpackIds(storage));
 		assertEquals(List.of(MODPACK_ID), PreservationVault.snapshots(storage).stream().map(PreservationVault.Snapshot::modpackId).toList());
 		assertEquals(GENERATION_ID, PreservationVault.read(storage, MODPACK_ID).claims().get(0).contentToken(),
@@ -187,8 +187,8 @@ class PreservationVaultTest {
 		group.files = Map.of(path, file);
 		fields.groups = Map.of("main", group);
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
-		new ClientGenerationStore(storage).write(document);
-		storage.writeActiveState(document.manifest().modpackId(), document.contentToken());
+		TestPacks.stageGeneration(storage, document);
+		storage.writeActiveState(document.manifest().modpackId(), document.contentToken(), document.ownershipLedger().toFields());
 		return document;
 	}
 }

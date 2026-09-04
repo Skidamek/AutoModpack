@@ -29,7 +29,11 @@ public final class JournalMirror {
 		Path file = storage.historyJournalFile(modpackId);
 		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client journal mirror is not a regular file: " + file);
-		return Journal.open(file).entries();
+		try {
+			return Journal.open(file).entries();
+		} catch (RuntimeException e) {
+			throw new IOException("Client journal mirror is invalid: " + file, e);
+		}
 	}
 
 	/** The content token of the mirror's last entry, or empty when the mirror is missing or empty. */

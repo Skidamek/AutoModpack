@@ -204,8 +204,8 @@ def verify_mods(ctx, step):
     await_condition(_all, timeout, step.get("poll"), "expected mods missing")
 
 
-def _active_generation_notes(ctx, modpack_id, content_token):
-    """The patch notes of one generation's journal entry, read from the client's journal mirror."""
+def _mirror_entry(ctx, modpack_id, content_token):
+    """One generation's journal entry, read from the client's journal mirror."""
     mirror_path = ctx.game_dir / "automodpack" / "client" / "history" / modpack_id / "journal.jsonl"
     with mirror_path.open(encoding="utf-8") as handle:
         for line in handle:
@@ -214,8 +214,13 @@ def _active_generation_notes(ctx, modpack_id, content_token):
                 continue
             entry = json.loads(line)
             if isinstance(entry, dict) and str(entry.get("contentToken", "")) == content_token:
-                return str(entry.get("notes", ""))
+                return entry
     raise ValueError(f"journal mirror has no entry for the active generation {content_token!r}")
+
+
+def _active_generation_notes(ctx, modpack_id, content_token):
+    """The patch notes of one generation's journal entry, read from the client's journal mirror."""
+    return str(_mirror_entry(ctx, modpack_id, content_token).get("notes", ""))
 
 
 def _read_active_generation(ctx, expected_patch_notes=None):
@@ -227,11 +232,13 @@ def _read_active_generation(ctx, expected_patch_notes=None):
     content_token = state["contentToken"]
     if state.get("status") != "ACTIVE" or not isinstance(modpack_id, str) or not isinstance(content_token, str):
         raise ValueError("active generation state is not committed")
-    record_path = ctx.game_dir / "automodpack" / "client" / "records" / content_token / "manifest.json"
-    manifest = json.loads(record_path.read_text(encoding="utf-8"))
-    policy = manifest.get("policy") if isinstance(manifest, dict) else None
-    if not isinstance(policy, dict) or str(manifest.get("contentToken", "")) != content_token or policy.get("modpackId") != modpack_id:
-        raise ValueError("active generation state does not match its immutable record")
+    entry = _mirror_entry(ctx, modpack_id, content_token)
+    policy_sha1 = str(entry.get("policySha1", ""))
+    policy_path = _object_path(ctx, policy_sha1)
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    manifest = {"contentToken": content_token, "policySha1": policy_sha1, "createdAt": entry.get("createdAt"), "policy": policy}
+    if not isinstance(policy, dict) or policy.get("modpackId") != modpack_id or state.get("ownershipLedger", {}).get("modpackId") != modpack_id:
+        raise ValueError("active generation state does not match its mirror and policy document")
     if expected_patch_notes is not None and _active_generation_notes(ctx, modpack_id, content_token) != expected_patch_notes:
         raise ValueError("active generation patch notes are not committed")
     return state, manifest
@@ -239,7 +246,7 @@ def _read_active_generation(ctx, expected_patch_notes=None):
 
 @verb("wait_generation")
 def wait_generation(ctx, step):
-    """Wait until active-state.json and its immutable generation record are committed."""
+    """Wait until active-state.json, its mirror entry, and its policy document are committed."""
     timeout = parse_duration(step.get("timeout"), default=300)
     expected_patch_notes = str(ctx.resolve(step["patchNotes"])) if "patchNotes" in step else None
 

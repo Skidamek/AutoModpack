@@ -13,7 +13,6 @@ import java.nio.file.Path;
 public final class StoragePaths {
 	public static final Path AUTOMODPACK_DIR = Path.of("automodpack");
 	public static final Path CLIENT_DIR = AUTOMODPACK_DIR.resolve("client");
-	public static final Path CLIENT_RECORDS_DIR = CLIENT_DIR.resolve("records");
 	public static final Path CLIENT_OVERLAYS_DIR = CLIENT_DIR.resolve("overlays");
 	public static final Path CLIENT_BASELINES_DIR = CLIENT_DIR.resolve("baselines");
 	public static final Path CLIENT_GENERATED_COPIES_DIR = CLIENT_DIR.resolve("generated-copies");
@@ -30,7 +29,6 @@ public final class StoragePaths {
 	public static final Path CLIENT_RESTART_LOOP_STATE_FILE = CLIENT_DIR.resolve("restart-state.json");
 	public static final Path CLIENT_TRANSACTION_FILE = CLIENT_DIR.resolve("update-transaction.json");
 	public static final Path CLIENT_REPAIR_FILE = CLIENT_DIR.resolve("repair.json");
-	public static final Path CLIENT_COMPACTION_FILE = CLIENT_DIR.resolve("compaction.json");
 	public static final Path CLIENT_MUTATION_LOCK_FILE = CLIENT_DIR.resolve("mutation.lock");
 	public static final Path CLIENT_CONTENT_TEMP_FILE = CLIENT_DIR.resolve("incoming-manifest.json.temp");
 	public static final Path CLIENT_JOURNAL_TEMP_FILE = CLIENT_DIR.resolve("incoming-journal.jsonl.temp");
