@@ -4,11 +4,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -25,6 +27,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -173,6 +176,117 @@ public final class ClientGenerationStore {
 		FileTrees.delete(storage.connectionDirectory(normalizedModpackId));
 		ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 	}
+
+	/** The boundary marker of one pack's last manual compaction; purely informational state for the storage UI. */
+	public record CompactionReceipt(String modpackId, long boundarySeq, Instant compactedAt, long reclaimedObjectCount, long reclaimedObjectBytes) {
+		public CompactionReceipt {
+			modpackId = ModpackId.requireValid(modpackId);
+			compactedAt = Objects.requireNonNull(compactedAt, "compactedAt");
+			if (boundarySeq < 1 || reclaimedObjectCount < 0 || reclaimedObjectBytes < 0) throw new IllegalArgumentException("Client compaction receipt values are invalid");
+		}
+	}
+
+	/** The receipt of one explicitly requested compaction pass: the shared object collection plus every pack's new boundary marker. */
+	public record CompactionResult(ClientObjectStore.CollectionResult collection, List<CompactionReceipt> receipts) {
+		public CompactionResult {
+			collection = Objects.requireNonNull(collection, "collection");
+			receipts = List.copyOf(receipts);
+		}
+	}
+
+	/**
+	 * Manually compacts the local history per decision 11: per pack it keeps the active and the newest generation's
+	 * content objects plus every mirror entry's policy document, and deletes the content objects only older generations
+	 * still name, together with the trimmed generations' generated-copy state. The mirror, the active state, overlays,
+	 * baselines, preservation claims, and restored copies are never touched, so the history UI's live restorable checks
+	 * stay the only truth about what can still be restored. Refuses while an update transaction is active, and writes
+	 * each pack's boundary marker after the objects are reclaimed.
+	 */
+	public CompactionResult compact() throws IOException {
+		return ClientStorageMutation.run(storage, this::compactLocked);
+	}
+
+	private CompactionResult compactLocked() throws IOException {
+		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot compact client history while an update transaction is active: " + storage.transactionFile());
+		ExpectedSizes kept = new ExpectedSizes();
+		List<KeptPack> keptPacks = new ArrayList<>();
+		for (String modpackId : installedPackIds()) {
+			List<JournalEntry> entries = new JournalMirror(storage).entries(modpackId);
+			if (entries.isEmpty()) continue;
+			for (JournalEntry entry : entries) kept.optional(entry.policySha1(), -1, "kept policy document");
+			JournalEntry newest = entries.get(entries.size() - 1);
+			retainGenerationContent(newest, kept);
+			Set<String> keptTokens = new TreeSet<>(Set.of(newest.contentToken()));
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state != null && state.modpackId.equals(modpackId)) {
+				JournalEntry active = mirrorEntry(modpackId, state.contentToken);
+				retainGenerationContent(active, kept);
+				keptTokens.add(active.contentToken());
+			}
+			removeGeneratedCopies(modpackId, keptTokens);
+			keptPacks.add(new KeptPack(modpackId, newest.seq()));
+		}
+		ClientObjectStore.collectNonHistoryReferences(storage, kept);
+		ClientObjectStore.CollectionResult collection = ClientObjectStore.collectUnreachableObjects(storage, kept);
+		List<CompactionReceipt> receipts = new ArrayList<>();
+		for (KeptPack pack : keptPacks) receipts.add(writeCompactionReceipt(pack.modpackId(), pack.boundarySeq(), collection));
+		return new CompactionResult(collection, receipts);
+	}
+
+	/** The content objects of one kept generation: every file of its folded policy tree. */
+	private void retainGenerationContent(JournalEntry entry, ExpectedSizes kept) throws IOException {
+		for (var file : ContentTree.fromManifest(policyDocument(entry.policySha1())).files().entrySet())
+			kept.optional(file.getValue().sha1(), file.getValue().size(), "kept generation content");
+	}
+
+	/** Deletes the generated-copy state of trimmed generations; it pins objects and only serves generations the compaction no longer keeps. */
+	private void removeGeneratedCopies(String modpackId, Set<String> keptTokens) throws IOException {
+		Path packRoot = storage.generatedCopiesPackDirectory(modpackId);
+		if (!Files.exists(packRoot, LinkOption.NOFOLLOW_LINKS)) return;
+		FileTrees.requireDirectory(packRoot, "client generated-copy state");
+		try (Stream<Path> generations = Files.list(packRoot)) {
+			for (Path generation : generations.sorted().toList()) {
+				FileTrees.requireNoSymbolicLink(generation, "client generated-copy state");
+				if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
+				String token = generation.getFileName().toString();
+				if (!HashUtils.isCanonicalSha1(token)) throw new IOException("Client generated-copy directory is not canonical: " + token);
+				if (!keptTokens.contains(token)) FileTrees.delete(generation);
+			}
+		}
+	}
+
+	private CompactionReceipt writeCompactionReceipt(String modpackId, long boundarySeq, ClientObjectStore.CollectionResult collection) throws IOException {
+		CompactionReceipt receipt = new CompactionReceipt(modpackId, boundarySeq, Instant.now(), collection.deletedObjectCount(), collection.deletedObjectBytes());
+		ClientStorageJsons.ClientCompactionReceiptFields fields = new ClientStorageJsons.ClientCompactionReceiptFields();
+		fields.modpackId = receipt.modpackId();
+		fields.boundarySeq = receipt.boundarySeq();
+		fields.compactedAt = receipt.compactedAt().toString();
+		fields.reclaimedObjectCount = receipt.reclaimedObjectCount();
+		fields.reclaimedObjectBytes = receipt.reclaimedObjectBytes();
+		ConfigTools.writeAtomic(storage.historyCompactionReceiptFile(modpackId), fields);
+		return receipt;
+	}
+
+	/** The stored boundary marker of one pack's last manual compaction, or empty when the pack was never compacted. */
+	public Optional<CompactionReceipt> compactionReceipt(String modpackId) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		Path file = storage.historyCompactionReceiptFile(normalizedModpackId);
+		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client compaction receipt is not a regular file: " + file);
+		ClientStorageJsons.ClientCompactionReceiptFields fields = ConfigTools.read(file, ClientStorageJsons.ClientCompactionReceiptFields.class)
+				.orElseThrow(() -> new IOException("Client compaction receipt is empty: " + file));
+		if (!normalizedModpackId.equals(fields.modpackId) || fields.boundarySeq < 1 || fields.reclaimedObjectCount < 0 || fields.reclaimedObjectBytes < 0 || fields.compactedAt == null)
+			throw new IOException("Client compaction receipt identity is invalid: " + file);
+		Instant compactedAt;
+		try {
+			compactedAt = Instant.parse(fields.compactedAt);
+		} catch (RuntimeException e) {
+			throw new IOException("Client compaction receipt instant is invalid: " + file, e);
+		}
+		return Optional.of(new CompactionReceipt(normalizedModpackId, fields.boundarySeq, compactedAt, fields.reclaimedObjectCount, fields.reclaimedObjectBytes));
+	}
+
+	private record KeptPack(String modpackId, long boundarySeq) {}
 
 	/** Whether the active pack runs detached: local sovereignty, no forced rewrites, syncing only on an explicit attach. */
 	public boolean isDetached(String modpackId) throws IOException {

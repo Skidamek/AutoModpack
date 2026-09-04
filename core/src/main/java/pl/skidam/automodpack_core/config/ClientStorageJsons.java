@@ -63,6 +63,17 @@ public class ClientStorageJsons {
 		public List<String> deletedPaths = List.of();
 	}
 
+	/** The informational boundary marker of one pack's last manual history compaction; never a correctness input. */
+	public static class ClientCompactionReceiptFields {
+		public String modpackId = "";
+		/** The mirror's newest generation seq at compaction time; generations it doesn't keep are no longer locally restorable. */
+		public long boundarySeq = -1;
+		public String compactedAt = "";
+		/** The compaction pass's reclaimed objects; the object store is shared, so this is the pass total, not a per-pack attribution. */
+		public long reclaimedObjectCount = 0;
+		public long reclaimedObjectBytes = 0;
+	}
+
 	public static class OfflineRepairJournalFields {
 		public int schemaVersion = 1;
 		public String modpackId = "";

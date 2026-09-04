@@ -152,8 +152,8 @@ public final class ClientObjectStore {
 
 	/**
 	 * Explicitly collects canonical, valid CAS objects that no journal mirror entry, per-pack durable state, or
-	 * pending transaction references. Decision 10 of the detached-history spec: every byte the mirror can reach stays
-	 * until the manual client compaction of a later slice, so only genuinely orphaned objects are deleted here.
+	 * pending transaction references. Decision 10 of the detached-history spec: every byte the mirror can reach stays;
+	 * trimming history bytes is the separate manual compaction, so only genuinely orphaned objects are deleted here.
 	 * Shared collection is serialized with durable receipts from every known game instance.
 	 */
 	public static CollectionResult collectUnreachableObjects(ClientStorage storage, Set<String> pinnedObjectHashes) throws IOException {
@@ -161,6 +161,11 @@ public final class ClientObjectStore {
 		Objects.requireNonNull(pinnedObjectHashes, "pinnedObjectHashes");
 		ExpectedSizes references = collectReferences(storage);
 		for (String hash : canonicalPins(pinnedObjectHashes, "pinned object")) references.optional(hash, -1, "explicit pin");
+		return collectUnreachableObjects(storage, references);
+	}
+
+	/** Runs one deletion pass against an explicit reference set; the manual compaction supplies its reduced keep set here. */
+	static CollectionResult collectUnreachableObjects(ClientStorage storage, ExpectedSizes references) throws IOException {
 		return SharedObjectOwnership.withGlobalReferences(storage.dataLocation(), "client", references.hashes(), globallyReferenced -> {
 			StorageReport before = measure(storage, references, true);
 			ObjectStoreMaintenance.DeletionReceipt deletion = ObjectStoreMaintenance.deleteUnreachable(storage.objectsDirectory(), globallyReferenced);
@@ -202,6 +207,12 @@ public final class ClientObjectStore {
 				}
 			}
 		}
+		collectNonHistoryReferences(storage, retained);
+		return retained;
+	}
+
+	/** Adds every durable client pin outside the mirror's history: overlays, baselines, generated copies, preservation, the pending transaction, and repair state. */
+	static void collectNonHistoryReferences(ClientStorage storage, ExpectedSizes retained) throws IOException {
 		collectBaselines(storage, retained);
 		collectOverlays(storage, retained);
 		collectGeneratedCopies(storage, retained);
@@ -209,7 +220,6 @@ public final class ClientObjectStore {
 		collectTransaction(storage, retained);
 		collectRepair(storage, retained);
 		validateActiveProjection(storage);
-		return retained;
 	}
 
 	private static void collectBaselines(ClientStorage storage, ExpectedSizes retained) throws IOException {
