@@ -197,6 +197,7 @@
   "automodpack.detached.title": "pǝɔuʎs ʇou ʞɔɐdpoW",
   "automodpack.detached.localState": "˙ǝɹɐ ʎǝɥʇ sɐ ʇdǝʞ ǝɹɐ sǝlᴉɟ ʇuǝɹɹnɔ ɹnoʎ os 'ʞɔɐdpoɯ ɹǝʍǝu s,ɹǝʌɹǝs sᴉɥʇ ʎlddɐ oʇ ʇou ǝsoɥɔ no⅄ ˙%s ɟo ǝʇɐʇs ʇdǝʞ ʎllɐɔol ɐ ƃuᴉʎɐld ǝɹɐ no⅄",
   "automodpack.detached.risk": "˙ɥsɐɹɔ ʎɐɯ ǝɯɐƃ ǝɥʇ ɹo lᴉɐɟ ʎɐɯ ƃuᴉuᴉoɾ :sǝlᴉɟ ʇuǝɹǝɟɟᴉp ʇɔǝdxǝ ʎɐɯ ɹǝʌɹǝs ǝɥ⊥",
+  "automodpack.detached.sameGeneration": "˙ɔuʎs noʎ ןᴉʇun ɯǝɥʇ ǝʇɐpdn ʇouuɐɔ ɹǝʌɹǝs ǝɥʇ puɐ 'ǝɹɐ ʎǝɥʇ sɐ ʎןʇɔɐxǝ ʎɐʇs pǝƃuɐɥɔ noʎ sǝןᴉɟ ǝɥ⊥ ˙ʇdǝʞ noʎ uoᴉʇɐɹǝuǝƃ ǝɥʇ uo sᴉ ɹǝʌɹǝs ǝɥ⊥",
   "automodpack.detached.syncAnytime": "˙ǝɯᴉʇ ʎuɐ ʇɐ ʞɔɐdpoɯ ʇuǝɹɹnɔ s,ɹǝʌɹǝs ǝɥʇ oʇ ɔuʎs uɐɔ no⅄",
   "automodpack.detached.syncNow": "ʍou ɔuʎS",
   "automodpack.detached.continueJoin": "ǝnuᴉʇuoƆ",
@@ -265,6 +266,8 @@
   "automodpack.management.update": "ǝʇɐpd∩",
   "automodpack.management.repair": "ɹᴉɐdǝᴚ",
   "automodpack.management.upToDate": "ǝʇɐp oʇ d∩",
+  "automodpack.management.resumeSyncing": "ƃuᴉɔuʎs ǝɯnsǝᴚ",
+  "automodpack.management.stopSyncing": "ƃuᴉɔuʎs doʇS",
   "automodpack.management.deactivate": "ǝʇɐʌᴉʇɔɐǝp",
   "automodpack.management.activate": "ǝʇɐʌᴉʇɔ∀",
   "automodpack.management.preservedFiles": "sǝןᴉɟ pǝʌɹǝsǝɹԀ",
@@ -360,5 +363,7 @@
   "automodpack.vault.restoreManagedFiles": "˙ǝʇɐpdn ʇxǝu ǝɥʇ ɥʇᴉʍ ʞɔɐq ǝɯoɔ sǝןᴉɟ ʞɔɐdpoW ˙ʞɔɐq sǝןᴉɟ ǝɯɐƃ sʇnd ǝɹoʇsǝᴚ",
   "automodpack.vault.restoreApplies": "˙sɐʍ ʇᴉ ǝɹǝɥʍ ʞɔɐq %s sʇnԀ",
   "automodpack.management.deactivateTooltip": "˙uᴉɐƃɐ ʇᴉ ǝʇɐʌᴉʇɔɐ uɐɔ noʎ os 'ʎɐʇs sǝןᴉɟ sʇI ˙ɟɟo ʞɔɐdpoɯ ǝɥʇ suɹn⊥",
+  "automodpack.management.stopSyncingTooltip": "˙ǝɯnsǝɹ noʎ ןᴉʇun sǝʇɐpdn ɹǝʌɹǝs ƃuᴉʎןddɐ sdoʇs puɐ sᴉ ʇᴉ sɐ ʎןʇɔɐxǝ ǝןᴉɟ ʎɹǝʌǝ sdǝǝʞ",
+  "automodpack.management.resumeSyncingTooltip": "˙uoᴉʇɐɹǝuǝƃ ʇuǝɹɹnɔ sɹǝʌɹǝs ǝɥʇ oʇ ʞɔɐd sᴉɥʇ sɔuʎS",
   "automodpack.management.removeTooltip": "˙ʎɐʇs sǝןᴉɟ pǝʌɹǝsǝɹԀ ˙sǝןᴉɟ sʇᴉ puɐ ʞɔɐdpoɯ ǝɥʇ sǝʇǝןǝp"
 }

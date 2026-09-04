@@ -203,6 +203,7 @@
   "automodpack.detached.title": "Modpack niysynchronizowany",
   "automodpack.detached.localState": "Grasz na lokalnie zachowanym sztandzie %s. Niy postanowiyłes zastosować nowszego modpacka tygo serwera, twoje teraźniejsze zbiory ôstały bez zmian.",
   "automodpack.detached.risk": "Serwer może ôczekiwać inkszych zbiorōw: dolaczynie może sie niy udać albo gra może sie zawiesić.",
+  "automodpack.detached.sameGeneration": "Serwer je na generacyji, kôrōm zachowałeś. Zmienione zbory ôstają dokładnie takie, jakie sōm, a serwer niy może ich zaktualizować, až sie zsynchronizujesz.",
   "automodpack.detached.syncAnytime": "Za każdym razem możesz sie zsynchronizować z aktualnym modpackym serwera.",
   "automodpack.detached.syncNow": "Zsynchronizuj teroz",
   "automodpack.detached.continueJoin": "Kontynuuj",
@@ -273,6 +274,8 @@
   "automodpack.management.update": "Aktualizuj",
   "automodpack.management.repair": "Napraw",
   "automodpack.management.upToDate": "Aktualne",
+  "automodpack.management.resumeSyncing": "Wznów synchronizacyję",
+  "automodpack.management.stopSyncing": "Zahaj synchronizacyję",
   "automodpack.management.deactivate": "Wyłōncz",
   "automodpack.management.activate": "Włōncz",
   "automodpack.management.preservedFiles": "Zachowane pliki",
@@ -370,5 +373,7 @@
   "automodpack.vault.restoreManagedFiles": "Prziwrōcanie dŏ pliki gry nazŏd. Pliki modpaka wrōcōm ze nastympnōm aktualizacyjōm.",
   "automodpack.vault.restoreApplies": "Dŏ %s nazŏd na jego plac.",
   "automodpack.management.deactivateTooltip": "Wyłōnczo modpak. Jego pliki ôstawiōm, więc możesz go znowu włōnczyć.",
+  "automodpack.management.stopSyncingTooltip": "Zachowuje kożdy zbiôr dokładnie taki, jaki je, i przestaje stosować aktualizacyje serwera do wznowienia.",
+  "automodpack.management.resumeSyncingTooltip": "Synchronizuje ten modpack z aktualnōm generacyjōm serwera.",
   "automodpack.management.removeTooltip": "Wyciepuje modpak i jego pliki. Zachowane pliki ôstawiōm."
 }

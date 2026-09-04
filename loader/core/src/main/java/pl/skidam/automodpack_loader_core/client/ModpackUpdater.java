@@ -90,6 +90,11 @@ public class ModpackUpdater implements AutoCloseable {
 	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
 	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
 	private final Set<String> reservedObjectHashes = new TreeSet<>();
+	/**
+	 * The attaching intent of an explicitly requested sync. Detachment ends only through this intent: an applied plan
+	 * clears the flag inside the commit, and a requested sync that finds nothing to apply clears it on its early exit.
+	 * Detachment is declared by explicit entry points; nothing else ever clears it.
+	 */
 	private boolean attaching;
 	public record SourceAvailability(int totalFiles, int resolvedFiles, boolean complete, boolean cancelled) {}
 
@@ -317,8 +322,22 @@ public class ModpackUpdater implements AutoCloseable {
 	 * runs and its commit dissolves the detachment. A declined or failed attach leaves the flag untouched.
 	 */
 	public void attachAndSync() {
-		attaching = true;
+		requestAttach();
 		processModpackUpdate(true);
+	}
+
+	/** Declares the attaching intent of an explicitly requested sync; an attached pack simply stays attached. */
+	public void requestAttach() {
+		attaching = true;
+	}
+
+	/**
+	 * Ends an explicitly requested sync that found nothing to apply; the commit is the sync's other exit. The clear is
+	 * a no-op for a pack that was never detached, so every explicitly requested sync ends attached without branching.
+	 */
+	public void finishAttachWithoutChanges() throws IOException {
+		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
+		storage.setDetached(selectedTarget.manifest().modpackId(), false);
 	}
 
 	/** When {@code showWaitingScreen} is false a player-facing screen already owns the wait and shows its own busy state. */
@@ -914,6 +933,7 @@ public class ModpackUpdater implements AutoCloseable {
 					throw new IOException("Modpack generation committed but connection state could not be saved", e);
 				}
 			}
+			// One of the two attach exits: an explicitly requested sync ends attached at its commit.
 			if (attaching) {
 				try {
 					storage.setDetached(target.manifest().modpackId(), false);

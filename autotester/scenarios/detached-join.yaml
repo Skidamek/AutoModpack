@@ -3,6 +3,9 @@ description: |
   Declining a reviewed update detaches the installed pack: the next launch boots
   the local pack without any server sync, every join warns but allows while the
   head generation differs, and Sync now runs the reviewed update and re-attaches.
+  Stopping the sync from the pack details detaches too, so the prompt keeps
+  appearing even with the head back on the kept generation, and resuming the
+  sync from the details attaches again without another prompt.
 renderClient: true
 
 flow:
@@ -121,6 +124,108 @@ flow:
   - do: assert
     name: verify the removed guest mod is gone after the attach
     that: { file_gone: "${active_dir}/mods/amp-autotest-guest.jar" }
+  - do: disconnect
+    name: leave the game to open the pack manager
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: click
+    name: open the pack details
+    select: { text: amp-autotest }
+  - do: wait_for
+    name: show the attached pack offering stop syncing
+    timeout: 20s
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { key: automodpack.management.stopSyncing, enabled: true }
+  - do: screenshot
+    name: capture the attached pack details
+    file: detached-attached-details
+  - do: click
+    name: declare local sovereignty without touching any file
+    select: { key: automodpack.management.stopSyncing }
+  - do: wait_for
+    name: show the action flipping to resume syncing
+    timeout: 20s
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { key: automodpack.management.resumeSyncing, enabled: true }
+  - do: click
+    name: return to the installed pack list
+    select: { text: Back }
+  - do: wait_for
+    name: wait for the installed pack list
+    timeout: 20s
+    until: { screen: InstalledModpacksScreen }
+  - do: click
+    name: return to the server list
+    select: { text: Back }
+  - do: wait_for
+    name: wait for the multiplayer screen
+    timeout: 20s
+    until: { screen: Play Multiplayer }
+  - do: connect
+    name: join while detached with the head on the kept generation
+  - do: wait_for
+    name: show the detached join prompt even though the head matches the kept generation
+    timeout: 90s
+    until:
+      all:
+        - screen: DetachedJoinPromptScreen
+        - element: { key: automodpack.detached.continueJoin, enabled: true }
+        - element: { text: "generation you kept" }
+        - no_element: { text: "expect different files" }
+  - do: screenshot
+    name: capture the same-generation detached join prompt
+    file: detached-join-same-generation
+  - do: click
+    name: keep playing the local state
+    select: { key: automodpack.detached.continueJoin }
+  - do: wait_join
+    name: verify the join completed in-session
+  - do: disconnect
+    name: leave the game to resume syncing
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: click
+    name: open the pack details again
+    select: { text: amp-autotest }
+  - do: wait_for
+    name: show the detached pack offering resume syncing
+    timeout: 20s
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { key: automodpack.management.resumeSyncing, enabled: true }
+  - do: click
+    name: attach by resuming the sync
+    select: { key: automodpack.management.resumeSyncing }
+  - do: wait_for
+    name: show the pack attached again with nothing to apply
+    timeout: 60s
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { key: automodpack.management.stopSyncing, enabled: true }
+  - do: click
+    name: return to the installed pack list
+    select: { text: Back }
+  - do: wait_for
+    name: wait for the installed pack list after the attach
+    timeout: 20s
+    until: { screen: InstalledModpacksScreen }
+  - do: click
+    name: return to the server list
+    select: { text: Back }
+  - do: wait_for
+    name: wait for the multiplayer screen after the attach
+    timeout: 20s
+    until: { screen: Play Multiplayer }
+  - do: connect
+    name: join the attached pack without any prompt
+  - do: wait_join
+    name: verify the join completed without the detached prompt
   - do: quit
     name: quit the client
 

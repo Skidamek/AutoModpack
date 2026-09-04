@@ -201,7 +201,7 @@ class ClientGenerationStoreTest {
 	}
 
 	@Test
-	void decliningAnAdvanceDetachesUntilTheHeadCatchesUpWithTheActiveGeneration() throws Exception {
+	void decliningAnAdvanceDetachesUntilAnExplicitAttach() throws Exception {
 		ClientStorage storage = storage();
 		String activeHash = store(storage, "active-object");
 		String newerHash = store(storage, "newer-object");
@@ -211,16 +211,17 @@ class ClientGenerationStoreTest {
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
 
 		generations.detachOnDeclinedAdvance(FIRST_PACK, active.contentToken());
-		assertFalse(generations.isDetached(FIRST_PACK));
+		assertFalse(generations.isDetached(FIRST_PACK), "declining the already-active generation cannot detach");
 
 		generations.detachOnDeclinedAdvance(FIRST_PACK, newerHash);
 		assertTrue(generations.isDetached(FIRST_PACK));
 
-		generations.observeHeadToken(FIRST_PACK, newerHash);
-		assertTrue(generations.isDetached(FIRST_PACK));
+		assertTrue(generations.headMatchesActive(FIRST_PACK, active.contentToken()));
+		assertTrue(generations.isDetached(FIRST_PACK), "the head reaching the kept generation never dissolves detachment on its own");
+		assertFalse(generations.headMatchesActive(FIRST_PACK, newerHash));
 
-		generations.observeHeadToken(FIRST_PACK, active.contentToken());
-		assertFalse(generations.isDetached(FIRST_PACK));
+		storage.setDetached(FIRST_PACK, false);
+		assertFalse(generations.isDetached(FIRST_PACK), "only an explicit attach ends detachment");
 	}
 
 	@Test

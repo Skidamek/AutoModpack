@@ -197,6 +197,7 @@
   "automodpack.detached.title": "modpack not synxd",
   "automodpack.detached.localState": "u iz playin a lokal kept state of %s. u said no to teh servr nu modpack, so ur filez stay az dey iz.",
   "automodpack.detached.risk": "servr mite wan diffrint filez: joinin mite fail or da game mite go crash.",
+  "automodpack.detached.sameGeneration": "teh servr is on da generation u kept. filez u changed stayz exactly as dey r, and teh servr cant update dem til u sync.",
   "automodpack.detached.syncAnytime": "u can sync to da servr modpack enytime.",
   "automodpack.detached.syncNow": "sync nao",
   "automodpack.detached.continueJoin": "go on",
@@ -265,6 +266,8 @@
   "automodpack.management.update": "updayt",
   "automodpack.management.repair": "fix",
   "automodpack.management.upToDate": "all shiny",
+  "automodpack.management.resumeSyncing": "resum syncin",
+  "automodpack.management.stopSyncing": "stop syncin",
   "automodpack.management.deactivate": "turn off",
   "automodpack.management.activate": "turn on",
   "automodpack.management.preservedFiles": "stashd filez",
@@ -360,5 +363,7 @@
   "automodpack.vault.restoreManagedFiles": "restorin putz game filez bak. modpak filez come bak wif nex updayt.",
   "automodpack.vault.restoreApplies": "putz %s bak ware it wuz.",
   "automodpack.management.deactivateTooltip": "turnz da modpak off. filez stay so u can turn it on agen. magic.",
+  "automodpack.management.stopSyncingTooltip": "keepz ebery file exactly as it iz and stopz applyin servr updates til u resum.",
+  "automodpack.management.resumeSyncingTooltip": "syncs dis pack to da servr current generation.",
   "automodpack.management.removeTooltip": "yeetz da modpak an its filez. stashd filez stay. phew."
 }

@@ -203,6 +203,7 @@
   "automodpack.detached.title": "Modpack niesynchronizowany",
   "automodpack.detached.localState": "Grasz na lokalnie zachowanym stanie %s. Nie zdecydowałeś się na zastosowanie nowszego modpacka tego serwera, więc twoje obecne pliki pozostały bez zmian.",
   "automodpack.detached.risk": "Serwer może oczekiwać innych plików: dołączenie może się nie udać albo gra może się zawiesić.",
+  "automodpack.detached.sameGeneration": "Serwer znajduje się na generacji, którą zachowałeś. Zmienione przez ciebie pliki pozostają dokładnie takie, jakie są, a serwer nie może ich zaktualizować, dopóki się nie zsynchronizujesz.",
   "automodpack.detached.syncAnytime": "Możesz w każdej chwili zsynchronizować się z aktualnym modpackiem serwera.",
   "automodpack.detached.syncNow": "Synchronizuj teraz",
   "automodpack.detached.continueJoin": "Kontynuuj",
@@ -273,6 +274,8 @@
   "automodpack.management.update": "Aktualizuj",
   "automodpack.management.repair": "Napraw",
   "automodpack.management.upToDate": "Aktualny",
+  "automodpack.management.resumeSyncing": "Wznów synchronizację",
+  "automodpack.management.stopSyncing": "Zatrzymaj synchronizację",
   "automodpack.management.deactivate": "Dezaktywuj",
   "automodpack.management.activate": "Aktywuj",
   "automodpack.management.preservedFiles": "Zachowane pliki",
@@ -370,5 +373,7 @@
   "automodpack.vault.restoreManagedFiles": "Przywracanie odkłada pliki gry. Pliki modpacka wrócą z następną aktualizacją.",
   "automodpack.vault.restoreApplies": "Odkłada %s z powrotem na swoje miejsce.",
   "automodpack.management.deactivateTooltip": "Wyłącza modpack. Jego pliki zostają, więc możesz go ponownie włączyć.",
+  "automodpack.management.stopSyncingTooltip": "Zachowuje każdy plik dokładnie taki, jaki jest, i przestaje stosować aktualizacje serwera do wznowienia.",
+  "automodpack.management.resumeSyncingTooltip": "Synchronizuje ten modpack z aktualną generacją serwera.",
   "automodpack.management.removeTooltip": "Usuwa modpack i jego pliki. Zachowane pliki zostają."
 }

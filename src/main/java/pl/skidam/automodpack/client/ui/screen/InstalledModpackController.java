@@ -92,7 +92,7 @@ final class InstalledModpackController {
 	}
 
 	Pack pack(PackDocument record) {
-		return pack(record, record.manifest().modpackId().equals(activeModpackId()), connection(record.manifest().modpackId()));
+		return pack(record, record.manifest().modpackId().equals(activeModpackId()), detached(record.manifest().modpackId()), connection(record.manifest().modpackId()));
 	}
 
 	void switchSelection(PackDocument record, SelectionIntent expected, SelectionIntent target, String modpackName, Runnable released) {
@@ -117,10 +117,10 @@ final class InstalledModpackController {
 				}
 				ConnectionJsons.ConnectionInfo connection = connection(modpackId);
 				String connectionOrigin = connectionOrigin(connection);
-				pending.add(new Pending(record, modpackId.equals(activeId), connection, displayName(record, connectionOrigin)));
+				pending.add(new Pending(record, modpackId.equals(activeId), detached(modpackId), connection, displayName(record, connectionOrigin)));
 			}
 			pending.sort(Comparator.comparing(Pending::displayName, String.CASE_INSENSITIVE_ORDER));
-			return pending.stream().map(entry -> pack(entry.record(), entry.active(), entry.connection())).toList();
+			return pending.stream().map(entry -> pack(entry.record(), entry.active(), entry.detached(), entry.connection())).toList();
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return List.of();
@@ -196,9 +196,12 @@ final class InstalledModpackController {
 							: SelectedModpackTarget.prepare(advertised, savedSelection, savedSelection, ClientPlatform.effective(savedSelection));
 					updater = connection.newUpdater(target, storage);
 				}
+				// An explicitly requested sync ends attached whatever it had to do; for an attached pack both clears are no-ops.
+				updater.requestAttach();
 				ModpackUtils.UpdateCheckResult updateResult = ModpackUtils.isUpdate(target.flatTarget(), storage);
 				ModpackUtils.reprotectActiveFiles(target.flatTarget(), storage);
 				if (!updater.requiresUpdateBeforeLogin(updateResult)) {
+					updater.finishAttachWithoutChanges();
 					updater.close();
 					releaseOnClient(() -> completed.accept(true));
 					return;
@@ -209,6 +212,19 @@ final class InstalledModpackController {
 				if (updater != null) updater.close();
 				releaseOnClient(() -> completed.accept(false));
 				failure(e, "automodpack.error.update", FailureCategory.UPDATE);
+			}
+		});
+	}
+
+	/** Declares local sovereignty for the active pack: a pure local statement that stops every sync until the player explicitly syncs again. */
+	void stopSyncing(Pack pack, Runnable completed) {
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			try {
+				storage.setDetached(pack.modpackId(), true);
+				releaseOnClient(completed);
+			} catch (Exception e) {
+				releaseOnClient(completed);
+				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
 			}
 		});
 	}
@@ -350,6 +366,15 @@ final class InstalledModpackController {
 		}
 	}
 
+	private boolean detached(String modpackId) {
+		try {
+			return storage.isDetached(modpackId);
+		} catch (IOException | RuntimeException e) {
+			discoveryFailure = e;
+			return false;
+		}
+	}
+
 	private String activeModpackId() {
 		try {
 			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
@@ -398,14 +423,14 @@ final class InstalledModpackController {
 		ScreenManager.failure(FailureRequest.of(cause, messageKey, category, FailureDestination.CURRENT_SCREEN, null));
 	}
 
-	private static Pack pack(PackDocument record, boolean active, ConnectionJsons.ConnectionInfo connection) {
+	private static Pack pack(PackDocument record, boolean active, boolean detached, ConnectionJsons.ConnectionInfo connection) {
 		ChangeBrowserProjection.Aggregate aggregate = ChangeBrowserProjection.project(ChangeSet.catalogue(record.manifest()), ChangeBrowserProjection.Mode.LIST).total();
-		return new Pack(record, active, connectionOrigin(connection), connectionDetail(connection), Math.toIntExact(aggregate.fileCount()), aggregate.byteCount());
+		return new Pack(record, active, detached, connectionOrigin(connection), connectionDetail(connection), Math.toIntExact(aggregate.fileCount()), aggregate.byteCount());
 	}
 
-	private record Pending(PackDocument record, boolean active, ConnectionJsons.ConnectionInfo connection, String displayName) {}
+	private record Pending(PackDocument record, boolean active, boolean detached, ConnectionJsons.ConnectionInfo connection, String displayName) {}
 
-	record Pack(PackDocument record, boolean active, String connectionOrigin, String connectionDetail, int fileCount, long fileBytes) {
+	record Pack(PackDocument record, boolean active, boolean detached, String connectionOrigin, String connectionDetail, int fileCount, long fileBytes) {
 		boolean connectionAvailable() {
 			return connectionOrigin != null;
 		}

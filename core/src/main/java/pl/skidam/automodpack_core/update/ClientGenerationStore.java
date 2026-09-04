@@ -303,10 +303,14 @@ public final class ClientGenerationStore {
 		storage.setDetached(modpackId, true);
 	}
 
-	/** The head catching up with the active generation dissolves detachment silently; anything else leaves the flag alone. */
-	public void observeHeadToken(String modpackId, String headToken) throws IOException {
+	/**
+	 * Whether the server head is the generation the active state already points at. Token equality says nothing about
+	 * content: a detached pack may have edited any file of its generation, so this only informs the join prompt and
+	 * never moves the flag. Detachment ends only by an explicit attach.
+	 */
+	public boolean headMatchesActive(String modpackId, String headToken) throws IOException {
 		String activeToken = activeToken(modpackId);
-		if (activeToken != null && activeToken.equals(HashUtils.normalizeSha1(headToken))) storage.setDetached(modpackId, false);
+		return activeToken != null && activeToken.equals(HashUtils.normalizeSha1(headToken));
 	}
 
 	private String activeToken(String modpackId) throws IOException {

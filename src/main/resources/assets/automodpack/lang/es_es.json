@@ -197,6 +197,7 @@
   "automodpack.detached.title": "Modpack no sincronizado",
   "automodpack.detached.localState": "Estás jugando un estado local guardado de %s. Elegiste no aplicar el modpack más reciente de este servidor, así que tus archivos actuales se mantienen como están.",
   "automodpack.detached.risk": "El servidor puede esperar archivos distintos: entrar puede fallar o el juego puede bloquearse.",
+  "automodpack.detached.sameGeneration": "El servidor está en la generación que conservaste. Los archivos que cambiaste se mantienen exactamente como están, y el servidor no puede actualizarlos hasta que sincronices.",
   "automodpack.detached.syncAnytime": "Puedes sincronizar con el modpack actual del servidor en cualquier momento.",
   "automodpack.detached.syncNow": "Sincronizar ahora",
   "automodpack.detached.continueJoin": "Continuar",
@@ -265,6 +266,8 @@
   "automodpack.management.update": "Actualizar",
   "automodpack.management.repair": "Reparar",
   "automodpack.management.upToDate": "Actualizado",
+  "automodpack.management.resumeSyncing": "Reanudar sincronización",
+  "automodpack.management.stopSyncing": "Dejar de sincronizar",
   "automodpack.management.deactivate": "Desactivar",
   "automodpack.management.activate": "Activar",
   "automodpack.management.preservedFiles": "Ficheros conservados",
@@ -360,5 +363,7 @@
   "automodpack.vault.restoreManagedFiles": "Restaurar devuelve ficheros del juego. Los ficheros del modpack vuelven con la próxima actualización.",
   "automodpack.vault.restoreApplies": "Devuelve %s a su sitio.",
   "automodpack.management.deactivateTooltip": "Apaga el modpack. Sus ficheros se quedan, así que puedes activarlo otra vez.",
+  "automodpack.management.stopSyncingTooltip": "Mantiene cada archivo exactamente como está y deja de aplicar actualizaciones del servidor hasta que reanudes.",
+  "automodpack.management.resumeSyncingTooltip": "Sincroniza este modpack con la generación actual del servidor.",
   "automodpack.management.removeTooltip": "Borra el modpack y sus ficheros. Ficheros conservados se quedan."
 }

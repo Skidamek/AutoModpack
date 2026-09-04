@@ -197,6 +197,7 @@
   "automodpack.detached.title": "Modpack nincs szinkronizálva",
   "automodpack.detached.localState": "A(z) %s helyben tárolt állapotát játszod. Úgy döntöttél, hogy nem alkalmazod a szerver újabb modpackjét, így a jelenlegi fájljaid változatlanok maradtak.",
   "automodpack.detached.risk": "A szerver eltérő fájlokat várhat: a csatlakozás meghiúsulhat, vagy a játék összeomolhat.",
+  "automodpack.detached.sameGeneration": "A szerver azon a generáción van, amelyet megtartottál. A módosított fájljaid pontosan úgy maradnak, ahogy vannak, és a szerver nem tudja frissíteni őket, amíg szinkronizálsz.",
   "automodpack.detached.syncAnytime": "Bármikor szinkronizálhatsz a szerver jelenlegi modpackjével.",
   "automodpack.detached.syncNow": "Szinkronizálás most",
   "automodpack.detached.continueJoin": "Folytatás",
@@ -265,6 +266,8 @@
   "automodpack.management.update": "Frissítés",
   "automodpack.management.repair": "Javítás",
   "automodpack.management.upToDate": "Naprakész",
+  "automodpack.management.resumeSyncing": "Szinkronizálás folytatása",
+  "automodpack.management.stopSyncing": "Szinkronizálás leállítása",
   "automodpack.management.deactivate": "Kikapcsolás",
   "automodpack.management.activate": "Aktiválás",
   "automodpack.management.preservedFiles": "Megőrzött fájlok",
@@ -360,5 +363,7 @@
   "automodpack.vault.restoreManagedFiles": "A visszaállítás játékfájlokat tesz vissza. A modpack fájljai a következő frissítéssel térnek vissza.",
   "automodpack.vault.restoreApplies": "A(z) %s visszakerül a helyére.",
   "automodpack.management.deactivateTooltip": "Kikapcsolja a modpacket. A fájljai megmaradnak, így újra aktiválhatod.",
+  "automodpack.management.stopSyncingTooltip": "Minden fájlt pontosan úgy tart meg, ahogy van, és a folytatásig nem alkalmaz szerverfrissítéseket.",
+  "automodpack.management.resumeSyncingTooltip": "Szinkronizálja ezt a modpackot a szerver jelenlegi generációjával.",
   "automodpack.management.removeTooltip": "Törli a modpacket és a fájljait. A megőrzött fájlok megmaradnak."
 }

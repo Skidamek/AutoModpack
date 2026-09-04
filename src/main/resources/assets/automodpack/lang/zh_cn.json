@@ -194,6 +194,7 @@
   "automodpack.detached.title": "模组包未同步",
   "automodpack.detached.localState": "你正在游玩 %s 的本地保留版本。你选择不应用此服务器的较新模组包，因此当前文件保持原样。",
   "automodpack.detached.risk": "服务器可能要求不同的文件：加入可能失败，或游戏可能崩溃。",
+  "automodpack.detached.sameGeneration": "服务器正处于你保留的世代。你更改过的文件将完全保持原样，在你同步之前服务器无法更新它们。",
   "automodpack.detached.syncAnytime": "你可以随时与服务器当前的模组包同步。",
   "automodpack.detached.syncNow": "立即同步",
   "automodpack.detached.continueJoin": "继续",
@@ -261,6 +262,8 @@
   "automodpack.management.update": "更新",
   "automodpack.management.repair": "修复",
   "automodpack.management.upToDate": "已是最新",
+  "automodpack.management.resumeSyncing": "恢复同步",
+  "automodpack.management.stopSyncing": "停止同步",
   "automodpack.management.deactivate": "停用",
   "automodpack.management.activate": "启用",
   "automodpack.management.preservedFiles": "保留的文件",
@@ -355,5 +358,7 @@
   "automodpack.vault.restoreManagedFiles": "恢复会放回游戏文件。整合包文件会随下次更新一起回来。",
   "automodpack.vault.restoreApplies": "将 %s 放回原处。",
   "automodpack.management.deactivateTooltip": "关闭此整合包。文件会留下，所以你可以再次启用。",
+  "automodpack.management.stopSyncingTooltip": "让所有文件完全保持原样，并在你恢复之前停止应用服务器更新。",
+  "automodpack.management.resumeSyncingTooltip": "将此模组包同步到服务器当前的世代。",
   "automodpack.management.removeTooltip": "删除此整合包及其文件。保留的文件仍会留下。"
 }

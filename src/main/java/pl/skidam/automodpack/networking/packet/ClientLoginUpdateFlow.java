@@ -162,10 +162,10 @@ final class ClientLoginUpdateFlow {
 		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient);
 		try {
 			ClientGenerationStore generations = new ClientGenerationStore(storage);
-			generations.observeHeadToken(serverModpackContent.modpackId, serverModpackContent.contentToken);
 			if (generations.isDetached(serverModpackContent.modpackId)) {
+				boolean headMatchesActive = generations.headMatchesActive(serverModpackContent.modpackId, serverModpackContent.contentToken);
 				LOGGER.info("Modpack {} runs detached from the server head; asking the player before any sync", serverModpackContent.modpackId);
-				return detachedJoin(handler, updater, selectedTarget, alreadyDisconnected);
+				return detachedJoin(handler, updater, selectedTarget, alreadyDisconnected, headMatchesActive);
 			}
 			ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, storage);
 			ModpackUtils.reprotectActiveFiles(serverModpackContent, storage);
@@ -193,10 +193,11 @@ final class ClientLoginUpdateFlow {
 	/**
 	 * The detached join prompt: warn but allow, shown during the login phase before any disconnect. Nothing syncs here.
 	 * Continue completes the login query so the vanilla join proceeds in-session with the local pack untouched; sync now
-	 * disconnects and runs the reviewed update whose commit attaches the pack.
+	 * disconnects and runs the reviewed update whose commit attaches the pack. The prompt shows on every detached join;
+	 * {@code headMatchesActive} only picks the body, because equal tokens say nothing about locally changed files.
 	 */
 	private static CompletableFuture<LoginUpdateResponse> detachedJoin(ClientHandshakePacketListenerImpl handler, ModpackUpdater updater, SelectedModpackTarget selectedTarget,
-			boolean alreadyDisconnected) {
+			boolean alreadyDisconnected, boolean headMatchesActive) {
 		CompletableFuture<LoginUpdateResponse> answered = new CompletableFuture<>();
 		String modpackName = selectedTarget.manifest().modpackName();
 		if (modpackName.isBlank()) modpackName = selectedTarget.flatTarget().modpackId;
@@ -213,7 +214,7 @@ final class ClientLoginUpdateFlow {
 			updater.attachAndSync();
 			answered.complete(LoginUpdateResponse.UPDATE_REQUIRED);
 		});
-		ScreenManager.detachedJoin(modpackName, continueJoin, syncNow);
+		ScreenManager.detachedJoin(modpackName, headMatchesActive, continueJoin, syncNow);
 		return answered;
 	}
 

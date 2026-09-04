@@ -47,6 +47,11 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		List<Action> actions = new ArrayList<>();
 		actions.add(new Action(pack.active() ? "automodpack.management.update" : "automodpack.management.activate", this::primaryAction));
 		if (pack.active()) actions.add(new Action("automodpack.management.repair", this::repair));
+		// One action whose label is the sync state itself: stop syncing declares local sovereignty, resume syncing is the explicit attach.
+		if (pack.active())
+			actions.add(pack.detached()
+					? new Action("automodpack.management.resumeSyncing", this::resumeSyncing, VersionedText.translatable("automodpack.management.resumeSyncingTooltip"))
+					: new Action("automodpack.management.stopSyncing", this::stopSyncing, VersionedText.translatable("automodpack.management.stopSyncingTooltip")));
 		actions.add(new Action("automodpack.management.groups", this::openFeatures));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
 		actions.add(new Action("automodpack.management.history", this::openHistory));
@@ -143,6 +148,20 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		if (busy) return;
 		markBusy();
 		controller.deactivate(pack, this::released, this::reopenOrList);
+	}
+
+	/** Stop syncing is a pure local declaration: nothing is touched, the state just flips. */
+	private void stopSyncing() {
+		if (busy) return;
+		markBusy();
+		controller.stopSyncing(pack, this::reopenOrList);
+	}
+
+	/** Resume syncing is an explicit attach: the normal update flow runs and ends attached whatever it had to do. */
+	private void resumeSyncing() {
+		if (busy) return;
+		markBusy();
+		controller.update(pack, completed -> reopenOrList());
 	}
 
 	private void returnToList() {

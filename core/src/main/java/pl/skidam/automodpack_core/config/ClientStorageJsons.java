@@ -36,7 +36,12 @@ public class ClientStorageJsons {
 		public String contentToken = "";
 		public String status = "ACTIVE";
 		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
-		/** Local sovereignty: while true nothing syncs the pack until the player attaches or the head catches up. */
+		/**
+		 * Local sovereignty of the active pack. Exactly two transition kinds exist, both explicit: declared true by
+		 * declining a reviewed update, rolling back to an older generation, or the details screen's stop-syncing
+		 * action; cleared false only by an attaching sync (the updater's commit, or its nothing-to-apply exit).
+		 * Head equality alone never moves the flag.
+		 */
 		public boolean detached = false;
 	}
 

@@ -203,6 +203,7 @@
   "automodpack.detached.title": "Модпак не синхронизирован",
   "automodpack.detached.localState": "Вы играете на локально сохранённой версии %s. Вы решили не применять новый модпак этого сервера, поэтому ваши текущие файлы остались без изменений.",
   "automodpack.detached.risk": "Сервер может ожидать другие файлы: вход может не удаться или игра может вылететь.",
+  "automodpack.detached.sameGeneration": "Сервер находится на поколении, которое вы сохранили. Изменённые вами файлы остаются ровно такими, как есть, и сервер не сможет обновить их, пока вы не синхронизируетесь.",
   "automodpack.detached.syncAnytime": "Вы можете в любой момент синхронизироваться с актуальным модпаком сервера.",
   "automodpack.detached.syncNow": "Синхронизировать",
   "automodpack.detached.continueJoin": "Продолжить",
@@ -273,6 +274,8 @@
   "automodpack.management.update": "Обновить",
   "automodpack.management.repair": "Исправить",
   "automodpack.management.upToDate": "Актуален",
+  "automodpack.management.resumeSyncing": "Возобновить синхронизацию",
+  "automodpack.management.stopSyncing": "Остановить синхронизацию",
   "automodpack.management.deactivate": "Отключить",
   "automodpack.management.activate": "Включить",
   "automodpack.management.preservedFiles": "Сохранённые файлы",
@@ -370,5 +373,7 @@
   "automodpack.vault.restoreManagedFiles": "Возврат кладёт игровые файлы на место. Файлы модпака вернутся со следующим обновлением.",
   "automodpack.vault.restoreApplies": "Кладёт %s туда, где он был.",
   "automodpack.management.deactivateTooltip": "Выключает модпак. Его файлы остаются, его можно включить снова.",
+  "automodpack.management.stopSyncingTooltip": "Оставляет каждый файл ровно таким, как он есть, и прекращает применять обновления сервера до возобновления.",
+  "automodpack.management.resumeSyncingTooltip": "Синхронизирует этот модпак с актуальным поколением сервера.",
   "automodpack.management.removeTooltip": "Удаляет модпак и его файлы. Сохранённые файлы остаются."
 }

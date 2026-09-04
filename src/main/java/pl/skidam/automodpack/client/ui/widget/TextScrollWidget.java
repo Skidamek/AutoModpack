@@ -27,7 +27,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 /** One ObjectSelectionList of already-wrapped text lines for a pinned-title / pinned-footer dialog body. */
-public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget.Entry> {
+public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget.Entry> implements RowViewport {
 	public static final int ROW_HEIGHT = 9;
 	private final int contentWidth;
 	private final boolean center;
@@ -59,6 +59,47 @@ public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget
 
 	protected int getScrollbarPosition() {
 		return Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
+	}
+
+	@Override
+	public void revealRow(int index) {
+		Entry entry = this.children().get(index);
+		/*? if >=1.21.9 {*/
+		this.scrollToEntry(entry);
+		/*?} else {*/
+		/*this.ensureVisible(entry);
+		*//*?}*/
+	}
+
+	@Override
+	public RowView rowView(int index) {
+		// Text rows are never interactive: enabled stays false, so click-style selectors cannot land on a body line.
+		return new RowView(this.children().get(index).line().getString(), false, null);
+	}
+
+	@Override
+	public int rowCount() {
+		return this.children().size();
+	}
+
+	@Override
+	public int rowLeft() {
+		return this.getRowLeft();
+	}
+
+	@Override
+	public int rowTop(int index) {
+		return this.getRowTop(index);
+	}
+
+	@Override
+	public int rowWidth() {
+		return this.contentWidth;
+	}
+
+	@Override
+	public int rowHeight() {
+		return ROW_HEIGHT;
 	}
 
 	@Override
@@ -107,6 +148,10 @@ public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget
 
 		private Entry(MutableComponent line) {
 			this.line = line;
+		}
+
+		Component line() {
+			return line;
 		}
 
 		@Override
