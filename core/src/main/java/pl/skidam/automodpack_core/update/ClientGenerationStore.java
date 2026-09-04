@@ -143,6 +143,32 @@ public final class ClientGenerationStore {
 		ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 	}
 
+	/** Whether the active pack runs detached: local sovereignty, no forced rewrites, syncing only on an explicit attach. */
+	public boolean isDetached(String modpackId) throws IOException {
+		return storage.isDetached(modpackId);
+	}
+
+	/**
+	 * Declining a reviewed advance detaches the active pack: the player refused the server's generation, so nothing
+	 * syncs until they attach. A decline without an active state, or of the already-active generation, cannot detach.
+	 */
+	public void detachOnDeclinedAdvance(String modpackId, String offeredToken) throws IOException {
+		String activeToken = activeToken(modpackId);
+		if (activeToken == null || activeToken.equals(HashUtils.normalizeSha1(offeredToken))) return;
+		storage.setDetached(modpackId, true);
+	}
+
+	/** The head catching up with the active generation dissolves detachment silently; anything else leaves the flag alone. */
+	public void observeHeadToken(String modpackId, String headToken) throws IOException {
+		String activeToken = activeToken(modpackId);
+		if (activeToken != null && activeToken.equals(HashUtils.normalizeSha1(headToken))) storage.setDetached(modpackId, false);
+	}
+
+	private String activeToken(String modpackId) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+		return state != null && state.modpackId.equals(ModpackId.requireValid(modpackId)) ? state.contentToken : null;
+	}
+
 	private PackDocument document(JournalEntry entry, OwnershipLedger ledger) throws IOException {
 		try {
 			return new PackDocument(policyDocument(entry.policySha1()), entry.contentToken(), entry.policySha1(), entry.createdAt(), ledger);

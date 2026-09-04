@@ -33,6 +33,14 @@ public interface ScreenService {
 		refused.run();
 	}
 
+	/**
+	 * Warn-but-allow prompt for a pack running detached from its server; exactly one of the runnables runs. The default
+	 * continues the join headlessly, keeping the local sovereignty the detached state promises.
+	 */
+	default void detachedJoin(String modpackName, Runnable continueJoin, Runnable syncNow) {
+		continueJoin.run();
+	}
+
 	void waiting();
 
 	/** Shows the preparing screen; {@code onCancel} runs when the player backs out with Esc. */

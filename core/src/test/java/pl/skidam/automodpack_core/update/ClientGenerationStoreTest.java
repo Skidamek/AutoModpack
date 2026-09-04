@@ -148,6 +148,57 @@ class ClientGenerationStoreTest {
 		assertEquals(second, new ClientGenerationStore(storage).newestDocument(SECOND_PACK));
 	}
 
+	@Test
+	void decliningAnAdvanceDetachesUntilTheHeadCatchesUpWithTheActiveGeneration() throws Exception {
+		ClientStorage storage = storage();
+		String activeHash = store(storage, "active-object");
+		String newerHash = store(storage, "newer-object");
+		PackDocument active = document(FIRST_PACK, activeHash, Files.size(storage.objectFile(activeHash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, active);
+		storage.writeActiveState(FIRST_PACK, active.contentToken(), active.ownershipLedger().toFields());
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+
+		generations.detachOnDeclinedAdvance(FIRST_PACK, active.contentToken());
+		assertFalse(generations.isDetached(FIRST_PACK));
+
+		generations.detachOnDeclinedAdvance(FIRST_PACK, newerHash);
+		assertTrue(generations.isDetached(FIRST_PACK));
+
+		generations.observeHeadToken(FIRST_PACK, newerHash);
+		assertTrue(generations.isDetached(FIRST_PACK));
+
+		generations.observeHeadToken(FIRST_PACK, active.contentToken());
+		assertFalse(generations.isDetached(FIRST_PACK));
+	}
+
+	@Test
+	void detachmentSurvivesRepublishingTheSamePackAndNeverLeavesTheActiveState() throws Exception {
+		ClientStorage storage = storage();
+		String firstHash = store(storage, "first-object");
+		String secondHash = store(storage, "second-object");
+		PackDocument first = document(FIRST_PACK, firstHash, Files.size(storage.objectFile(firstHash)), TestPacks.CREATED);
+		PackDocument second = document(SECOND_PACK, secondHash, Files.size(storage.objectFile(secondHash)), TestPacks.CREATED);
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+
+		generations.detachOnDeclinedAdvance(FIRST_PACK, firstHash);
+		assertFalse(generations.isDetached(FIRST_PACK), "a pack without an active state cannot detach");
+
+		TestPacks.stageGeneration(storage, first);
+		storage.writeActiveState(FIRST_PACK, first.contentToken(), first.ownershipLedger().toFields());
+		generations.detachOnDeclinedAdvance(FIRST_PACK, secondHash);
+		assertTrue(generations.isDetached(FIRST_PACK));
+
+		storage.writeActiveState(FIRST_PACK, first.contentToken(), first.ownershipLedger().toFields());
+		assertTrue(generations.isDetached(FIRST_PACK), "committing the same pack preserves its sovereignty");
+
+		generations.detachOnDeclinedAdvance(SECOND_PACK, firstHash);
+		assertFalse(generations.isDetached(SECOND_PACK), "the flag belongs to the active pack only");
+
+		storage.writeActiveState(SECOND_PACK, second.contentToken(), second.ownershipLedger().toFields());
+		assertFalse(generations.isDetached(FIRST_PACK));
+		assertFalse(generations.isDetached(SECOND_PACK));
+	}
+
 	private ClientStorage storage() throws Exception {
 		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());

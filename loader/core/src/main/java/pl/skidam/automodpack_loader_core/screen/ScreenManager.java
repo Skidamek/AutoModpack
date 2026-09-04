@@ -67,6 +67,10 @@ public final class ScreenManager {
 		instance.originChange(modpackName, previousOrigin, newOrigin, allowed, refused);
 	}
 
+	public static void detachedJoin(String modpackName, Runnable continueJoin, Runnable syncNow) {
+		instance.detachedJoin(modpackName, continueJoin, syncNow);
+	}
+
 	public static void waiting() {
 		instance.waiting();
 	}

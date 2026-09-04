@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -100,6 +101,10 @@ public class ModpackUtils {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
 		if (verificationCannotDecide(serverModpackContent, storage)) return;
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
+			if (new ClientGenerationStore(storage).isDetached(serverModpackContent.modpackId)) {
+				LOGGER.info("Modpack is detached; its active files stay editable");
+				return;
+			}
 			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
 			for (var serverItem : serverModpackContent.list) {
 				String relative = LogicalPath.normalize(serverItem.file);

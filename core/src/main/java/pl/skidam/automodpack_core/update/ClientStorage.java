@@ -459,12 +459,42 @@ public final class ClientStorage {
 		state.modpackId = ModpackId.requireValid(modpackId);
 		state.contentToken = requireDigest(contentToken, "generation ID");
 		state.ownershipLedger = Objects.requireNonNull(ownershipLedger, "ownership ledger");
+		state.detached = currentDetachmentFor(state.modpackId);
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
 	}
 
+	/**
+	 * The persistent detachment flag of the active pack: commits republish the same pack's sovereignty, so only an
+	 * explicit attach or a cleared state may end it. An unreadable state carries no live flag; the fresh write repairs it.
+	 */
+	private boolean currentDetachmentFor(String modpackId) {
+		try {
+			ClientStorageJsons.ClientGenerationStateFields current = readActiveState();
+			return current != null && current.modpackId.equals(modpackId) && current.detached;
+		} catch (IOException e) {
+			return false;
+		}
+	}
+
 	public void clearActiveState() throws IOException {
 		Files.deleteIfExists(stateFile);
+	}
+
+	/** Whether the active pack runs detached: local sovereignty over server enforcement. Packs without the active state never are. */
+	public boolean isDetached(String modpackId) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = readActiveState();
+		return state != null && state.modpackId.equals(ModpackId.requireValid(modpackId)) && state.detached;
+	}
+
+	/** Sets the active pack's detachment flag; a no-op for packs without the active state, since the flag lives there. */
+	public void setDetached(String modpackId, boolean detached) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		ClientStorageJsons.ClientGenerationStateFields state = readActiveState();
+		if (state == null || !state.modpackId.equals(normalizedModpackId) || state.detached == detached) return;
+		state.detached = detached;
+		Files.createDirectories(stateFile.getParent());
+		ConfigTools.writeAtomic(stateFile, state);
 	}
 
 	private void validateLayout() {
