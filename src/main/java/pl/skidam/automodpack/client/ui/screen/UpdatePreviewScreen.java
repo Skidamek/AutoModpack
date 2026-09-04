@@ -25,6 +25,7 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
+import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** A concise confirmation screen. Detailed file changes open in the shared browser. */
@@ -67,7 +68,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private List<ActionRow> buildRows() {
 		List<ActionRow> rows = new ArrayList<>();
 		if (Changelogs.hasNotes(preview.journal()))
-			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
+			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.history"), button -> openHistory())));
 		if (canCustomize()) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> cancel()),
@@ -143,8 +144,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(reviewKey(mode)), changes, preview.featureNames()));
 	}
 
-	private void openPatchNotes() {
-		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, preview.journal(), modpackName));
+	private void openHistory() {
+		// The journal is the server's timeline, so no entry of a pending preview is installed yet.
+		ScreenImpl.setScreen(new ContentHistoryScreen(this, new HistoryViewRequest(preview.journal(), -1, modpackName, () -> {})));
 	}
 
 	@Override

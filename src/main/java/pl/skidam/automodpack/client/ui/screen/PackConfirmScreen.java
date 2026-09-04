@@ -30,6 +30,7 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
+import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Confirm before an update starts; the unverified-jar list and typed-ack gate appear only when unverified jars were selected. */
@@ -105,7 +106,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 				: laterPreview != null && Changelogs.hasNotes(laterPreview.journal());
 
 		List<ActionRow> rows = new ArrayList<>();
-		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.patchNotes.all"), button -> openPatchNotes())));
+		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.history"), button -> openHistory())));
 		if (leftover) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
 		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		if (unverified) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
@@ -323,10 +324,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.update.reviewUpdate"), laterPreview.changeSet(), laterPreview.featureNames()));
 	}
 
-	private void openPatchNotes() {
+	private void openHistory() {
 		var history = firstInstall ? updater.getFirstInstallPatchNotes() : laterPreview.journal();
 		String name = updater.getSelectedTarget().manifest().modpackName();
-		ScreenImpl.setScreen(new PatchNotesHistoryScreen(this, history, name));
+		// The journal is the server's timeline, so no entry of a pending preview is installed yet.
+		ScreenImpl.setScreen(new ContentHistoryScreen(this, new HistoryViewRequest(history, -1, name, () -> {})));
 	}
 
 	private void cancel() {

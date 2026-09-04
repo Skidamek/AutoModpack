@@ -7,13 +7,13 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
@@ -24,17 +24,14 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public final class InstalledModpacksScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 500;
 	private static final int ROW_HEIGHT = 34;
-	// Vanilla Select World (WorldListEntry) double-click window.
-	private static final long DOUBLE_CLICK_MILLIS = 250L;
+	private static final int TEXT_MARGIN = 6;
+	private static final int LIST_TOP = 68;
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
 	private List<InstalledModpackController.Pack> entries;
 	private int preservedCount;
-	private int page;
 	private boolean discoveryFailureShown;
-	private InstalledModpackController.Pack pendingPack;
-	private long pendingAt;
 
 	public InstalledModpacksScreen(Screen parent) {
 		super(VersionedText.translatable("automodpack.packManager.title"));
@@ -57,98 +54,37 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 			ScreenManager.failure(FailureRequest.of(controller.discoveryFailure(), "automodpack.error.storage", FailureCategory.STORAGE,
 					FailureDestination.CURRENT_SCREEN, null));
 		}
-		int rowWidth = panelWidth(PANEL_WIDTH);
-		int x = panelLeft(PANEL_WIDTH);
-		int listTop = 68;
-		int actionY = this.height - 28;
 		MutableComponent preservedLabel = preservedCount > 0
 				? VersionedText.translatable("automodpack.management.preservedFilesCount", preservedCount)
 				: VersionedText.translatable("automodpack.management.preservedFiles");
 		ActionRow management = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(preservedLabel, press -> controller.openPreservedFiles(this, () -> {
 					refreshEntries();
-					pendingPack = null;
 					rebuild();
 				})),
 				optionalAction(VersionedText.translatable("automodpack.packManager.localStorage"), press -> ScreenImpl.setScreen(new ClientStorageMaintenanceScreen(this, controller))),
 				optionalAction(VersionedText.translatable("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
-		List<ActionRow> rows = new ArrayList<>();
-		rows.add(management);
-		rows.add(footer);
-		int totalEntries = entries.size();
-		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new)) - 8;
-		int rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
-		boolean showPagination = totalEntries > rowsPerPage;
-		if (showPagination) {
-			rows.add(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION, navigationAction(VersionedText.literal(""), press -> {}),
-					disabledNavigationAction(VersionedText.literal("")), navigationAction(VersionedText.literal(""), press -> {})));
-			listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new)) - 8;
-			rowsPerPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
+		ActionRow[] actionRows = {management, footer};
+		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
+		if (preservedCount == 0) setTooltip(actionButtons.get(0), VersionedText.translatable("automodpack.vault.empty"));
+		if (entries.isEmpty()) return;
+		int rowWidth = panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2;
+		List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
+		for (InstalledModpackController.Pack entry : entries) {
+			String source = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal").getString();
+			// State is carried by color, not bracket markers: green = active pack, white = installed pack.
+			rows.add(new RowListWidget.Row(List.of(
+					VersionedText.literal(truncateToWidth(this.font, entry.name(), rowWidth)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE),
+					VersionedText.literal(truncateToWidth(this.font, source, rowWidth)).withStyle(ChatFormatting.GRAY))));
 		}
-		int pageCount = Math.max(1, (int) Math.ceil((double) Math.max(totalEntries, 1) / rowsPerPage));
-		if (showPagination)
-			rows.set(0, actionRow(ActionAreaLayout.RowKind.NAVIGATION,
-					navigationAction(VersionedText.translatable("automodpack.ui.previous"), press -> {
-						if (page > 0) {
-							page--;
-							pendingPack = null;
-							rebuild();
-						}
-					}),
-					disabledNavigationAction(VersionedText.translatable("automodpack.ui.page", page + 1, pageCount)),
-					navigationAction(VersionedText.translatable("automodpack.ui.next"), press -> {
-						if (page < pageCount - 1) {
-							page++;
-							pendingPack = null;
-							rebuild();
-						}
-					})));
-		if (page >= pageCount) page = pageCount - 1;
-		int start = page * rowsPerPage;
-		for (int index = start; index < Math.min(totalEntries, start + rowsPerPage); index++) {
-			int y = listTop + (index - start) * ROW_HEIGHT;
-			InstalledModpackController.Pack entry = entries.get(index);
-			Button row = buttonWidget(x, y, rowWidth, 28, rowLabel(entry, rowWidth), press -> clickPack(entry));
-			this.addRenderableWidget(row);
-		}
-		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, rows.toArray(ActionRow[]::new));
-		if (preservedCount == 0) setTooltip(actionButtons.get(showPagination ? 3 : 0), VersionedText.translatable("automodpack.vault.empty"));
-		if (pageCount > 1) {
-			actionButtons.get(0).active = page > 0;
-			actionButtons.get(2).active = page < pageCount - 1;
-		}
-	}
-
-	private void clickPack(InstalledModpackController.Pack entry) {
-		long now = Util.getMillis();
-		if (pendingPack != null && pendingPack.modpackId().equals(entry.modpackId()) && now - pendingAt < DOUBLE_CLICK_MILLIS) {
-			pendingPack = null;
-			open(entry);
-			return;
-		}
-		pendingPack = entry;
-		pendingAt = now;
-	}
-
-	@Override
-	public void tick() {
-		super.tick();
-		if (pendingPack == null || Util.getMillis() - pendingAt < DOUBLE_CLICK_MILLIS) return;
-		InstalledModpackController.Pack entry = pendingPack;
-		pendingPack = null;
-		open(entry);
+		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows) - 8;
+		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), LIST_TOP, listBottom, ROW_HEIGHT, rows,
+				index -> open(entries.get(index)), null));
 	}
 
 	private void open(InstalledModpackController.Pack entry) {
-		pendingPack = null;
 		ScreenImpl.setScreen(new ModpackDetailsScreen(this, controller, entry));
-	}
-
-	private MutableComponent rowLabel(InstalledModpackController.Pack entry, int width) {
-		// State is carried by color, not bracket markers: green = active pack, white = installed pack.
-		String source = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal").getString();
-		return VersionedText.literal(truncateToWidth(this.font, entry.name() + " · " + source, width - 12)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE);
 	}
 
 	@Override

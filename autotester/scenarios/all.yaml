@@ -130,7 +130,7 @@ flow:
     until:
       all:
         - screen: PackConfirmScreen
-        - element: { text: View all patch notes, enabled: true }
+        - element: { text: History, enabled: true }
   - do: wait_for
     name: wait for the unverified ack checkbox after the lock
     timeout: 20s
@@ -148,13 +148,13 @@ flow:
     name: capture first review with latest patch notes
     file: all-first-review
   - do: click
-    name: open connected generation patch-note history from review
-    select: { text: View all patch notes }
+    name: open the connected content history from review
+    select: { text: History }
   - do: wait_for
-    name: show patch-note history from review
-    until: { screen: PatchNotesHistoryScreen }
+    name: show the connected content history with attached patch notes
+    until: { screen: ContentHistoryScreen }
   - do: screenshot
-    name: capture connected patch-note history
+    name: capture the connected content history
     file: all-first-patch-history
   - do: click
     name: return to first review
@@ -197,17 +197,20 @@ flow:
     name: capture connected generation history
     file: all-connected-history
   - do: click
-    name: open all connected patch notes
-    select: { text: View all patch notes }
+    name: open the connected content history from the changelog
+    select: { text: History }
   - do: wait_for
-    name: show all connected patch notes
-    until: { screen: PatchNotesHistoryScreen }
+    name: show the connected content history
+    until: { screen: ContentHistoryScreen }
   - do: screenshot
-    name: capture all connected patch notes
+    name: capture the connected content history
     file: all-connected-patch-history
   - do: click
     name: return to connected changelog
     select: { text: Back }
+  - do: wait_for
+    name: show the changelog after returning from history
+    until: { screen: ChangelogScreen }
   - do: click
     name: return to completed update
     select: { text: Back }
@@ -591,16 +594,19 @@ flow:
     name: capture Pack B generation history
     file: all-content-history
   - do: click
-    name: open all Pack B patch notes from content history
-    select: { text: Patch notes }
+    name: open the newest Pack B entry from content history
+    select: { text: Pack B v2 removes the incompatible mod }
   - do: wait_for
-    name: show all Pack B patch notes
-    until: { screen: PatchNotesHistoryScreen }
+    name: show the newest Pack B entry detail browser
+    until: { screen: ChangeBrowserScreen }
+  - do: screenshot
+    name: capture the Pack B entry detail
+    file: all-content-history-detail
   - do: click
-    name: return to Pack B content history
+    name: return to Pack B content history from the entry detail
     select: { text: Back }
   - do: wait_for
-    name: return to Pack B content history after all notes
+    name: return to Pack B content history after the entry detail
     until: { screen: ContentHistoryScreen }
   - do: click
     name: leave Pack B content history
@@ -776,18 +782,18 @@ flow:
       all:
         - screen: UpdatePreviewScreen
         - element: { text: Update, enabled: true }
-        - element: { text: View all patch notes, enabled: true }
+        - element: { text: History, enabled: true }
   - do: screenshot
     name: capture changed and removed generation review
     file: all-generation-update
   - do: click
-    name: open latest update patch-note history
-    select: { text: View all patch notes }
+    name: open the content history from the update review
+    select: { text: History }
   - do: wait_for
-    name: show latest and previous patch notes
-    until: { screen: PatchNotesHistoryScreen }
+    name: show the content history with latest and previous patch notes
+    until: { screen: ContentHistoryScreen }
   - do: screenshot
-    name: capture latest and previous patch notes
+    name: capture the content history with latest and previous patch notes
     file: all-generation-patch-history
   - do: click
     name: return to changed and removed review
