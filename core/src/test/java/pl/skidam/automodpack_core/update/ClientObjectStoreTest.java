@@ -29,7 +29,6 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 class ClientObjectStoreTest {
 	private static final String MODPACK_ID = "abc1234";
-	private static final String OTHER_MODPACK_ID = "def5678";
 
 	@TempDir
 	Path temporaryDirectory;
@@ -57,22 +56,22 @@ class ClientObjectStoreTest {
 	}
 
 	@Test
-	void retainsActiveGenerationAndDeletesOnlyVerifiedUnreachableObjects() throws Exception {
+	void collectionKeepsMirrorReferencedBytesAndDeletesOnlyOrphans() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "generation-object".getBytes(StandardCharsets.UTF_8);
 		String referenced = store(storage, bytes);
 		String orphan = store(storage, "orphan");
 		PackDocument record = TestPacks.document(manifest(referenced, bytes.length));
-		new ClientGenerationStore(storage).write(record);
-		storage.writeActiveState(MODPACK_ID, record.contentToken());
+		TestPacks.stageGeneration(storage, record);
+		storage.writeActiveState(MODPACK_ID, record.contentToken(), record.ownershipLedger().toFields());
 
-		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of(record.contentToken()), Set.of());
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 
 		assertEquals(1, result.deletedObjectCount());
-		assertEquals(bytes.length == 0 ? 0 : "orphan".getBytes(StandardCharsets.UTF_8).length, result.deletedObjectBytes());
+		assertEquals("orphan".getBytes(StandardCharsets.UTF_8).length, result.deletedObjectBytes());
 		assertTrue(Files.exists(storage.objectFile(referenced)));
 		assertFalse(Files.exists(storage.objectFile(orphan)));
-		assertEquals(1, result.after().validReferencedObjectCount());
+		assertEquals(2, result.after().validReferencedObjectCount(), "The generation object and its policy document stay referenced");
 		assertTrue(result.after().objectBytes() < result.before().objectBytes());
 	}
 
@@ -85,10 +84,10 @@ class ClientObjectStoreTest {
 		String hash = store(second, bytes);
 		String orphan = store(first, "shared-orphan");
 		PackDocument record = TestPacks.document(manifest(hash, bytes.length));
-		new ClientGenerationStore(second).write(record);
+		TestPacks.stageGeneration(second, record);
 		ClientObjectStore.publishOwnership(second);
 
-		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of());
 
 		assertEquals(1, result.deletedObjectCount());
 		assertTrue(Files.exists(first.objectFile(hash)));
@@ -112,49 +111,43 @@ class ClientObjectStoreTest {
 		ClientObjectStore.publishOwnership(removed, Set.of(hash));
 		FileTrees.delete(removed.gameDirectory());
 
-		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of(), Set.of());
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(first, Set.of());
 
 		assertEquals(0, result.deletedObjectCount());
 		assertTrue(Files.exists(first.objectFile(hash)));
 	}
 
 	@Test
-	void pinsCachedObjectsReferencedByInstalledGenerationCatalogues() throws Exception {
+	void historicalAndReplacedObjectsSurviveWhileTheMirrorNamesThem() throws Exception {
 		ClientStorage storage = storage();
 		byte[] activeBytes = "active-object".getBytes(StandardCharsets.UTF_8);
 		byte[] historicalBytes = "historical-object".getBytes(StandardCharsets.UTF_8);
 		String activeHash = store(storage, activeBytes);
 		String historicalHash = store(storage, historicalBytes);
 		String orphanHash = store(storage, "orphan");
-		PackDocument active = TestPacks.document(manifest(MODPACK_ID, activeHash, activeBytes.length));
-		PackDocument historical = TestPacks.document(manifest(OTHER_MODPACK_ID, historicalHash, historicalBytes.length));
-		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(active);
-		generations.write(historical);
-		storage.writeActiveState(MODPACK_ID, active.contentToken());
+		PackDocument historical = TestPacks.document(manifest(MODPACK_ID, historicalHash, historicalBytes.length));
+		PackDocument active = TestPacks.document(manifest(MODPACK_ID, activeHash, activeBytes.length), historical.ownershipLedger(), TestPacks.CREATED.plusSeconds(1));
+		TestPacks.stageGeneration(storage, historical);
+		TestPacks.stageGeneration(storage, active);
+		storage.writeActiveState(MODPACK_ID, active.contentToken(), active.ownershipLedger().toFields());
 
-		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(active.contentToken()), Set.of()));
-		assertTrue(Files.exists(storage.objectFile(historicalHash)));
-		assertTrue(Files.exists(storage.objectFile(orphanHash)));
-
-		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage,
-				Set.of(active.contentToken(), historical.contentToken()), Set.of());
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 
 		assertEquals(1, result.deletedObjectCount());
 		assertTrue(Files.exists(storage.objectFile(activeHash)));
-		assertTrue(Files.exists(storage.objectFile(historicalHash)));
+		assertTrue(Files.exists(storage.objectFile(historicalHash)), "The mirror's older entry still names the replaced object");
+		assertTrue(Files.exists(storage.objectFile(active.policySha1())));
 		assertFalse(Files.exists(storage.objectFile(orphanHash)));
 	}
 
 	@Test
-	void refusesCollectionWhenGenerationMetadataIsMalformed() throws Exception {
+	void refusesCollectionWhenTheMirrorIsMalformed() throws Exception {
 		ClientStorage storage = storage();
 		String orphan = store(storage, "orphan");
-		String malformed = "0".repeat(40);
-		Files.createDirectories(storage.generationDirectory(malformed));
-		Files.writeString(storage.generationManifest(malformed), "{}", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.historyJournalFile(MODPACK_ID).getParent());
+		Files.writeString(storage.historyJournalFile(MODPACK_ID), "{not a journal", StandardCharsets.UTF_8);
 
-		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of()));
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of()));
 		assertTrue(Files.exists(storage.objectFile(orphan)));
 	}
 
@@ -166,7 +159,7 @@ class ClientObjectStoreTest {
 		Files.createSymbolicLink(storage.objectsDirectory().resolve("not-an-object"), target);
 
 		assertThrows(IOException.class, () -> ClientObjectStore.measure(storage));
-		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of()));
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of()));
 		assertTrue(Files.exists(target));
 	}
 
@@ -175,7 +168,7 @@ class ClientObjectStoreTest {
 		assertEquals("0123456789abcdef0123456789abcdef01234567", ClientObjectStore.normalizeHash("0123456789ABCDEF0123456789ABCDEF01234567"));
 		assertThrows(IllegalArgumentException.class, () -> ClientObjectStore.normalizeHash("not-a-sha1"));
 		ClientStorage storage = storage();
-		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of("not-a-sha1")));
+		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of("not-a-sha1")));
 	}
 
 	@Test
@@ -188,11 +181,11 @@ class ClientObjectStoreTest {
 		PreservationVault.Claim claim = PreservationVault.preserve(storage, MODPACK_ID, "a".repeat(40), PreservationVault.Reason.SERVER_REMOVAL, Root.GAME_DIR,
 				"config/removed.txt", hash, Files.size(source));
 
-		ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of());
+		ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 		assertTrue(Files.exists(storage.objectFile(hash)));
 
 		PreservationVault.delete(storage, MODPACK_ID, claim.claimId());
-		ClientObjectStore.collectUnreachableObjects(storage, Set.of(), Set.of());
+		ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 		assertFalse(Files.exists(storage.objectFile(hash)));
 	}
 

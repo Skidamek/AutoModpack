@@ -7,7 +7,6 @@ import java.util.Objects;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
@@ -67,11 +66,11 @@ public final class ClientPendingUpdateRecovery {
 		String overlayDigest = storage.overlayDigest(preparation.installed().modpackId);
 		UpdateTransaction transaction;
 		if (pending.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL)
-			transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest,
-					preparation.expectedClientConfig());
+			transaction = UpdateTransaction.createRemoval(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), preparation.installed().ownershipLedger,
+					overlayDigest, preparation.expectedClientConfig());
 		else
-			transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), overlayDigest,
-					preparation.expectedClientConfig());
+			transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), preparation.installed().ownershipLedger,
+					overlayDigest, preparation.expectedClientConfig());
 		if (!ReviewedUpdatePlan.isCompatible(pending, preparation.plan()))
 			throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending removal consequences; a new review is required");
 		return UpdateTransactionSupport.executor().commit(transaction);
@@ -79,35 +78,31 @@ public final class ClientPendingUpdateRecovery {
 
 	private static SelectedModpackTarget targetFor(ClientStorage storage, UpdateTransaction pending, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) throws IOException {
 		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		PackDocument pendingRecord = generations.read(pending.contentToken)
-				.orElseThrow(() -> new IOException("Pending target generation is missing: " + pending.contentToken));
+		PackDocument pendingDocument = generations.document(pending);
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		boolean configStillDescribesThePendingInput = active == null
 				? currentConfig.selectedModpackId == null || currentConfig.selectedModpackId.isBlank()
 				: Objects.equals(currentConfig.selectedModpackId, active.modpackId);
 		PackDocument record;
 		if (configStillDescribesThePendingInput || pending.modpackId.equals(currentConfig.selectedModpackId))
-			record = newer(pendingRecord, newest(generations, pending.modpackId));
+			record = newer(pendingDocument, newest(generations, pending.modpackId));
 		else {
 			if (!ModpackId.isValid(currentConfig.selectedModpackId))
 				throw new IOException("Selected modpack changed to an invalid or empty ID while replanning the pending update");
 			record = newest(generations, currentConfig.selectedModpackId);
 			if (record == null) throw new IOException("Selected modpack generation is not installed: " + currentConfig.selectedModpackId);
 		}
-		GenerationJsons.HeadDocumentFields fields = generations.readFields(record.contentToken())
-				.orElseThrow(() -> new IOException("Client generation record is missing: " + record.contentToken()));
 		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
 		SelectionIntent storedIntent = selections.get(record.manifest().modpackId()).orElse(null);
 		if (record.manifest().modpackId().equals(pending.modpackId) && Objects.equals(storedIntent, pending.expectedPriorIntent()))
-			return SelectedModpackTarget.prepare(fields, storedIntent, pending.targetIntent(), pending.platform());
-		if (storedIntent == null) return SelectedModpackTarget.prepareDefault(fields, pending.platform());
-		return SelectedModpackTarget.prepare(fields, storedIntent, storedIntent, pending.platform());
+			return SelectedModpackTarget.prepare(record, storedIntent, pending.targetIntent(), pending.platform());
+		if (storedIntent == null) return SelectedModpackTarget.prepareDefault(record, pending.platform());
+		return SelectedModpackTarget.prepare(record, storedIntent, storedIntent, pending.platform());
 	}
 
 	private static PackDocument newest(ClientGenerationStore generations, String modpackId) throws IOException {
 		if (!ModpackId.isValid(modpackId)) return null;
-		return generations.installedRecords().stream().filter(candidate -> modpackId.equals(candidate.manifest().modpackId()))
-				.max(Comparator.comparing(PackDocument::createdAt).thenComparing(PackDocument::contentToken)).orElse(null);
+		return generations.newestDocument(modpackId);
 	}
 
 	private static PackDocument newer(PackDocument first, PackDocument second) {

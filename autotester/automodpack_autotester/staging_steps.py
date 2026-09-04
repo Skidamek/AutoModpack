@@ -1,4 +1,4 @@
-"""Staged-modpack authoring: the client-side generation records, manifests, and CAS seeding."""
+"""Staged-modpack authoring: the client-side mirror history, policy documents, and CAS seeding."""
 from __future__ import annotations
 
 import hashlib
@@ -26,7 +26,7 @@ def _sha1(path: Path) -> str:
 def _canonical_timestamp(moment: datetime) -> str:
     """Format a timestamp the way java.time.Instant.toString does: no fraction, or 3/6/9 digits, never trailing zeros.
 
-    The client rejects any other shape as a non-canonical generation timestamp, so a staged record stamped with a
+    The client rejects any other shape as a non-canonical generation timestamp, so a staged generation stamped with a
     fixed-width fraction (e.g. ``.800000Z``) is strictly invalid and crashes the first storage validation that reads
     it — a ~10% flake per staged record. Verified against jshell: Instant.parse("...32.800000Z").toString() gives
     "...32.800Z", while minimal forms like "...32.8Z" are equally rejected. Keep this next to the only writer.
@@ -53,10 +53,15 @@ def _check_canonical_timestamp(created_at: str) -> None:
         raise ValueError(f"staged generation timestamp is not canonical: {created_at!r}")
 
 
-def _record_tree(record: dict) -> dict[str, tuple[str, int]]:
-    """The served file set (path -> (sha1, size)) described by one head document."""
+def _policy_bytes(policy: dict) -> bytes:
+    """The exact policy document bytes the client stores in its CAS: deterministic key-sorted JSON."""
+    return json.dumps(policy, sort_keys=True).encode("utf-8")
+
+
+def _policy_tree(policy: dict) -> dict[str, tuple[str, int]]:
+    """The served file set (path -> (sha1, size)) described by one policy document."""
     tree = {}
-    for group in ((record.get("policy") or {}).get("groups") or {}).values():
+    for group in (policy.get("groups") or {}).values():
         if not isinstance(group, dict):
             continue
         for path, file in (group.get("files") or {}).items():
@@ -65,21 +70,13 @@ def _record_tree(record: dict) -> dict[str, tuple[str, int]]:
     return tree
 
 
-def _staged_head_document(modpack_id: str, policy: dict, file_map: dict[str, tuple[str, int]], created_at: str) -> dict:
-    """The slim head-document record the client stores for one staged pack: identity, ledger, and policy only."""
-    token = content_token(file_map)
-    policy_sha1 = hashlib.sha1(json.dumps(policy, sort_keys=True).encode("utf-8")).hexdigest()
+def _staged_ledger(modpack_id: str, file_map: dict[str, tuple[str, int]]) -> dict:
+    """The ownership ledger of a staged pack: one PRESENT entry per served path, as a first publish materializes it."""
     ledger_entries = [
         {"logicalPath": path, "historicalHashes": [{"sha1": file_map[path][0], "size": file_map[path][1]}], "historicalGroupIds": ["main"], "currentStatus": "PRESENT"}
         for path in sorted(file_map)
     ]
-    return {
-        "contentToken": token,
-        "policySha1": policy_sha1,
-        "createdAt": created_at,
-        "ownershipLedger": {"modpackId": modpack_id, "entries": ledger_entries, "digest": ownership_ledger_digest(modpack_id, ledger_entries)},
-        "policy": policy,
-    }
+    return {"modpackId": modpack_id, "entries": ledger_entries, "digest": ownership_ledger_digest(modpack_id, ledger_entries)}
 
 
 def _mirror_entries(mirror_path: Path) -> list[dict]:
@@ -94,34 +91,41 @@ def _mirror_entries(mirror_path: Path) -> list[dict]:
     return entries
 
 
-def _append_staged_mirror(client_root: Path, modpack_id: str, record: dict, notes: str, created_at: str) -> list[dict]:
-    """Append the record's journal entry to the pack's mirror, the client's replica of the server journal."""
+def _mirror_tree(entries: list[dict]) -> dict[str, tuple[str, int]]:
+    """The served file set described by folding the staged mirror entries, snapshot-aware like the Java replay."""
+    tree: dict[str, tuple[str, int]] = {}
+    for entry in entries:
+        if entry.get("snapshot"):
+            tree = {}
+        for change in entry.get("changes") or []:
+            if change.get("toSha1"):
+                tree[str(change["path"])] = (str(change["toSha1"]).lower(), int(change.get("toSize") or 0))
+            else:
+                tree.pop(str(change["path"]), None)
+    return tree
+
+
+def _append_staged_mirror(client_root: Path, modpack_id: str, token: str, policy_sha1: str, file_map: dict[str, tuple[str, int]], notes: str, created_at: str) -> list[dict]:
+    """Append the generation's journal entry to the pack's mirror, the client's replica of the server journal."""
     mirror_path = client_root / "history" / modpack_id / "journal.jsonl"
     entries = _mirror_entries(mirror_path)
     last = entries[-1] if entries else None
-    if last is not None and str(last.get("contentToken", "")) == str(record.get("contentToken", "")):
+    if last is not None and str(last.get("contentToken", "")) == token:
         return entries
-    previous_tree = {}
-    if last is not None:
-        previous = client_root / "records" / str(last.get("contentToken", "")) / "manifest.json"
-        previous_tree = _record_tree(json.loads(previous.read_text(encoding="utf-8")))
-    current_tree = _record_tree(record)
-    if last is None:
-        changes = [{"path": path, "toSha1": current_tree[path][0], "toSize": current_tree[path][1]} for path in sorted(current_tree)]
-    else:
-        changes = []
-        for path in sorted(set(previous_tree) | set(current_tree)):
-            old, new = previous_tree.get(path), current_tree.get(path)
-            if old is None:
-                changes.append({"path": path, "toSha1": new[0], "toSize": new[1]})
-            elif new is None:
-                changes.append({"path": path, "fromSha1": old[0]})
-            elif old != new:
-                changes.append({"path": path, "fromSha1": old[0], "toSha1": new[0], "toSize": new[1]})
+    previous_tree = _mirror_tree(entries)
+    changes = []
+    for path in sorted(set(previous_tree) | set(file_map)):
+        old, new = previous_tree.get(path), file_map.get(path)
+        if old is None:
+            changes.append({"path": path, "toSha1": new[0], "toSize": new[1]})
+        elif new is None:
+            changes.append({"path": path, "fromSha1": old[0]})
+        elif old != new:
+            changes.append({"path": path, "fromSha1": old[0], "toSha1": new[0], "toSize": new[1]})
     entry = {
         "seq": int(last.get("seq", 0)) + 1 if last else 1,
-        "contentToken": record["contentToken"],
-        "policySha1": record["policySha1"],
+        "contentToken": token,
+        "policySha1": policy_sha1,
         "createdAt": created_at,
         "notes": notes,
         "restoreOf": -1,
@@ -194,51 +198,54 @@ def _write_staged_generation(
     file_map = {entry["logicalPath"]: (entry["sha1"], int(entry["size"])) for entry in files}
     created_at = _canonical_timestamp(datetime.now(timezone.utc))
     client_root = client_root or root.parent
-    record = _staged_head_document(modpack_id, policy, file_map, created_at)
-    generation_path = client_root / "records" / record["contentToken"] / "manifest.json"
-    generation_path.parent.mkdir(parents=True, exist_ok=True)
-    generation_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    mirror_entries = _append_staged_mirror(client_root, modpack_id, record, patch_notes, created_at)
-    _verify_staged_generation(generation_path, client_root / "history" / modpack_id / "journal.jsonl", patch_notes)
+    policy_sha1 = hashlib.sha1(_policy_bytes(policy)).hexdigest()
+    token = content_token(file_map)
+    ledger = _staged_ledger(modpack_id, file_map)
     objects = data_root / "objects"
     objects.mkdir(parents=True, exist_ok=True)
+    policy_object = cas_object(objects, policy_sha1)
+    if not policy_object.is_file():
+        policy_object.parent.mkdir(parents=True, exist_ok=True)
+        policy_object.write_bytes(_policy_bytes(policy))
     for entry in files:
         object_path = cas_object(objects, entry["sha1"])
         if not object_path.is_file():
             object_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / entry["logicalPath"], object_path)
-    return {"contentToken": record["contentToken"], "policySha1": record["policySha1"], "mirrorEntries": len(mirror_entries)}
+    mirror_entries = _append_staged_mirror(client_root, modpack_id, token, policy_sha1, file_map, patch_notes, created_at)
+    _verify_staged_generation(policy_object, token, policy_sha1, created_at, ledger, client_root / "history" / modpack_id / "journal.jsonl", patch_notes)
+    return {"contentToken": token, "policySha1": policy_sha1, "ledger": ledger, "mirrorEntries": len(mirror_entries)}
 
 
-def _verify_staged_generation(record_path: Path, mirror_path: Path, patch_notes: str) -> None:
-    """Re-read a staged generation record and its mirror line and prove both are strictly valid before any client can see them.
+def _verify_staged_generation(policy_object: Path, token: str, policy_sha1: str, created_at: str, ledger: dict, mirror_path: Path, patch_notes: str) -> None:
+    """Re-read a staged generation's policy object and its mirror line and prove both are strictly valid before any client can see them.
 
-    A malformed staged record (non-canonical timestamp, mismatched content token or ledger digest) stays invisible
-    until a client storage validation reads it — potentially minutes and hundreds of steps later, on a random shard.
-    Fail here instead, where the cause is obvious.
+    A malformed staged generation (non-canonical timestamp, mismatched content token, or ledger digest drift) stays
+    invisible until a client storage validation reads it — potentially minutes and hundreds of steps later, on a
+    random shard. Fail here instead, where the cause is obvious.
     """
     try:
-        record = json.loads(record_path.read_text(encoding="utf-8"))
+        stored_policy = json.loads(policy_object.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
-        raise ValueError(f"staged generation record is not readable: {record_path}: {error}") from error
-    if not isinstance(record, dict):
-        raise TypeError(f"staged generation record is not an object: {record_path}")
-    policy = record.get("policy")
-    if not isinstance(policy, dict):
-        raise TypeError(f"staged generation record has no policy document: {record_path}")
-    _check_canonical_timestamp(record.get("createdAt"))
-    if content_token(_record_tree(record)) != record.get("contentToken"):
-        raise ValueError(f"staged generation content token does not match its policy files: {record_path}")
-    ledger = record.get("ownershipLedger")
-    if not isinstance(ledger, dict) or str(ledger.get("modpackId", "")) != str(policy.get("modpackId", "")) or ownership_ledger_digest(str(ledger.get("modpackId", "")), list(ledger.get("entries") or [])) != ledger.get("digest"):
-        raise ValueError(f"staged generation ledger digest does not match its entries: {record_path}")
+        raise ValueError(f"staged generation policy document is not readable: {policy_object}: {error}") from error
+    if not isinstance(stored_policy, dict):
+        raise TypeError(f"staged generation policy document is not an object: {policy_object}")
+    _check_canonical_timestamp(created_at)
+    if hashlib.sha1(policy_object.read_bytes()).hexdigest() != policy_sha1:
+        raise ValueError(f"staged generation policy object does not match its hash: {policy_object}")
+    if content_token(_policy_tree(stored_policy)) != token:
+        raise ValueError(f"staged generation content token does not match its policy files: {policy_object}")
+    if not isinstance(ledger, dict) or str(ledger.get("modpackId", "")) != str(stored_policy.get("modpackId", "")) or ownership_ledger_digest(str(ledger.get("modpackId", "")), list(ledger.get("entries") or [])) != ledger.get("digest"):
+        raise ValueError(f"staged generation ledger digest does not match its entries: {policy_object}")
     entries = _mirror_entries(mirror_path)
     head_entry = entries[-1] if entries else None
     if head_entry is None:
         raise ValueError(f"staged generation mirror has no journal entry: {mirror_path}")
     _check_canonical_timestamp(head_entry.get("createdAt"))
-    if str(head_entry.get("contentToken", "")) != str(record.get("contentToken", "")):
-        raise ValueError(f"staged generation mirror entry does not carry the record's content token: {mirror_path}")
+    if str(head_entry.get("contentToken", "")) != token:
+        raise ValueError(f"staged generation mirror entry does not carry the generation's content token: {mirror_path}")
+    if str(head_entry.get("policySha1", "")) != policy_sha1:
+        raise ValueError(f"staged generation mirror entry does not carry the generation's policy hash: {mirror_path}")
     if str(head_entry.get("notes", "")) != patch_notes:
         raise ValueError(f"staged generation patch notes drifted between planning and writing: {mirror_path}")
 
@@ -247,8 +254,8 @@ def _verify_staged_generation(record_path: Path, mirror_path: Path, patch_notes:
 def _v_stage_modpack(ctx: Context, step):
     """Pre-stage a modpack into the client game dir for offline / client-only runs.
 
-    Lays down the fixed active projection plus its immutable generation record and
-    writes a client config that selects it with ``updateSelectedModpackOnLaunch=false``,
+    Lays down the fixed active projection plus its mirror history, CAS policy document, and active-state pointer,
+    and writes a client config that selects it with ``updateSelectedModpackOnLaunch=false``,
     so the client loads the staged generation on boot without contacting a server.
     Run this before ``launch_client`` in a ``mode: client-only`` scenario.
 
@@ -344,6 +351,7 @@ def _v_stage_modpack(ctx: Context, step):
         "modpackId": modpack_id,
         "contentToken": generation["contentToken"],
         "status": "ACTIVE",
+        "ownershipLedger": generation["ledger"],
     }
     (client_root / "active-state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 

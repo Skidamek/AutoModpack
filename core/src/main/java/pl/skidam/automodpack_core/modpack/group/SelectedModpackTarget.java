@@ -40,14 +40,20 @@ public record SelectedModpackTarget(
 	}
 
 	public static SelectedModpackTarget prepare(GenerationJsons.HeadDocumentFields fields, ClientSelectionStore store, ClientPlatform platform) {
-		PackDocument document = PackDocument.fromFields(fields);
+		return prepare(PackDocument.fromFields(fields), store, platform);
+	}
+
+	public static SelectedModpackTarget prepare(PackDocument document, ClientSelectionStore store, ClientPlatform platform) {
 		SelectionIntent existing = store.get(document.manifest().modpackId()).orElse(null);
 		if (existing == null) return prepareResolved(document, null, GroupSelectionResolver.resolveDefault(document.manifest(), platform), platform);
 		return prepare(document, existing, existing, platform);
 	}
 
 	public static SelectedModpackTarget prepareDefault(GenerationJsons.HeadDocumentFields fields, ClientPlatform platform) {
-		PackDocument document = PackDocument.fromFields(fields);
+		return prepareDefault(PackDocument.fromFields(fields), platform);
+	}
+
+	public static SelectedModpackTarget prepareDefault(PackDocument document, ClientPlatform platform) {
 		return prepareResolved(document, null, GroupSelectionResolver.resolveDefault(document.manifest(), platform), platform);
 	}
 
@@ -56,7 +62,7 @@ public record SelectedModpackTarget(
 		return prepare(PackDocument.fromFields(fields), expectedPriorIntent, intent, platform);
 	}
 
-	private static SelectedModpackTarget prepare(PackDocument document, SelectionIntent expectedPriorIntent, SelectionIntent intent, ClientPlatform platform) {
+	public static SelectedModpackTarget prepare(PackDocument document, SelectionIntent expectedPriorIntent, SelectionIntent intent, ClientPlatform platform) {
 		GroupManifest manifest = document.manifest();
 		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, intent, platform);
 		return prepareResolved(document, expectedPriorIntent, resolved, platform);

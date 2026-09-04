@@ -4,20 +4,19 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalDouble;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
@@ -31,6 +30,27 @@ public final class ClientObjectStore {
 
 	private ClientObjectStore() {}
 
+	/**
+	 * Stores one immutable byte sequence in the client CAS under its content hash, keeping any already valid object.
+	 * Used for the policy documents every fetched head carries: the mirror's entries name them, so offline generation
+	 * reconstruction stays possible after records retired.
+	 */
+	public static void storeObject(ClientStorage storage, String sha1, byte[] bytes) throws IOException {
+		String hash = HashUtils.normalizeSha1(sha1);
+		if (!HashUtils.sha1(bytes).equals(hash)) throw new IOException("Object bytes do not match their content hash: " + hash);
+		Path object = storage.objectFile(hash);
+		if (FileIntegrity.matches(object, bytes.length, hash)) return;
+		Path temporary = Files.createTempFile(storage.incomingDirectory(), ".object-", ".tmp");
+		try {
+			Files.write(temporary, bytes);
+			Files.createDirectories(object.getParent());
+			Files.move(temporary, object, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
+		if (!FileIntegrity.matches(object, bytes.length, hash)) throw new IOException("Stored client object failed verification: " + hash);
+	}
+
 	/** A deterministic receipt for client CAS and adjacent durable state. */
 	public record StorageReport(
 			long objectCount,
@@ -41,8 +61,6 @@ public final class ClientObjectStore {
 			long validReferencedObjectBytes,
 			long missingReferencedObjectCount,
 			long invalidReferencedObjectCount,
-			long generationRecordCount,
-			long generationRecordBytes,
 			long activeFileCount,
 			long activeBytes,
 			long metadataFileCount,
@@ -59,7 +77,7 @@ public final class ClientObjectStore {
 			long backupBytes) {
 		public StorageReport {
 			if (List.of(objectCount, objectBytes, referencedObjectCount, referencedObjectBytes, validReferencedObjectCount, validReferencedObjectBytes,
-					missingReferencedObjectCount, invalidReferencedObjectCount, generationRecordCount, generationRecordBytes, metadataFileCount, metadataBytes,
+					missingReferencedObjectCount, invalidReferencedObjectCount, metadataFileCount, metadataBytes,
 					overlayFileCount, overlayBytes, baselineFileCount, baselineBytes, preservationFileCount, preservationBytes,
 					incomingFileCount, incomingBytes, backupFileCount, backupBytes).stream().anyMatch(value -> value < 0))
 				throw new IllegalArgumentException("Client storage report values cannot be negative");
@@ -84,40 +102,10 @@ public final class ClientObjectStore {
 		}
 	}
 
-	/** A deterministic measurement of validated generated-copy state files. */
-	public record GeneratedCopyReport(long count, long bytes) {
-		public GeneratedCopyReport {
-			if (count < 0 || bytes < 0) throw new IllegalArgumentException("Generated-copy totals cannot be negative");
-		}
-	}
-
 	/** Measures all client state without deleting or writing anything. */
 	public static StorageReport measure(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
-		ExpectedSizes references = collectReferences(storage, null);
-		return measure(storage, references);
-	}
-
-	/**
-	 * Explicitly collects canonical, valid CAS objects not referenced by the selected client state.
-	 * Generation records and preservation claims are never deleted by this method. Because this
-	 * tranche does not prune records atomically, the supplied generation set must contain every
-	 * installed record; the active generation is retained and validated as well. Shared collection
-	 * is serialized with durable receipts from every known game instance.
-	 */
-	public static CollectionResult collectUnreachableObjects(ClientStorage storage, Set<String> retainedGenerationIds, Set<String> pinnedObjectHashes) throws IOException {
-		Objects.requireNonNull(storage, "storage");
-		Objects.requireNonNull(retainedGenerationIds, "retainedGenerationIds");
-		Objects.requireNonNull(pinnedObjectHashes, "pinnedObjectHashes");
-		Set<String> requestedGenerations = canonicalPins(retainedGenerationIds, "retained generation");
-		ExpectedSizes references = collectReferences(storage, requestedGenerations);
-		for (String hash : canonicalPins(pinnedObjectHashes, "pinned object")) references.optional(hash, -1, "explicit pin");
-		return SharedObjectOwnership.withGlobalReferences(storage.dataLocation(), "client", references.hashes(), globallyReferenced -> {
-			StorageReport before = measure(storage, references, true);
-			ObjectStoreMaintenance.DeletionReceipt deletion = ObjectStoreMaintenance.deleteUnreachable(storage.objectsDirectory(), globallyReferenced);
-			StorageReport after = measure(storage, references, true);
-			return new CollectionResult(before, after, deletion.deletedCount(), deletion.deletedBytes());
-		});
+		return measure(storage, collectReferences(storage));
 	}
 
 	/** Publishes a conservative durable receipt before or after client state changes. */
@@ -129,7 +117,7 @@ public final class ClientObjectStore {
 	public static void publishOwnership(ClientStorage storage, Set<String> temporaryObjectHashes) throws IOException {
 		Objects.requireNonNull(storage, "storage");
 		Objects.requireNonNull(temporaryObjectHashes, "temporary object hashes");
-		ExpectedSizes references = collectReferences(storage, null);
+		ExpectedSizes references = collectReferences(storage);
 		for (String hash : canonicalPins(temporaryObjectHashes, "temporary object")) references.optional(hash, -1, "in-flight acquisition");
 		SharedObjectOwnership.publish(storage.dataLocation(), "client", references.hashes());
 	}
@@ -137,13 +125,13 @@ public final class ClientObjectStore {
 	/** Returns every CAS hash referenced by validated client state, excluding historical ownership metadata. */
 	public static Set<String> referencedHashes(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
-		return collectReferences(storage, null).hashes();
+		return collectReferences(storage).hashes();
 	}
 
 	/** Returns only referenced hashes whose verified object is physically present in this client CAS. */
 	public static Set<String> existingReferencedHashes(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
-		ExpectedSizes references = collectReferences(storage, null);
+		ExpectedSizes references = collectReferences(storage);
 		TreeSet<String> existing = new TreeSet<>();
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			for (var entry : references.sizes().entrySet()) {
@@ -159,16 +147,26 @@ public final class ClientObjectStore {
 	/** Validates all durable client state and all required CAS references without mutating storage. */
 	public static StorageReport validate(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
-		ExpectedSizes references = collectReferences(storage, null);
-		return measure(storage, references, true);
+		return measure(storage, collectReferences(storage), true);
 	}
 
-	/** Measures generated-copy state after validating its pack, generation, and selection identities. */
-	public static GeneratedCopyReport measureGeneratedCopies(ClientStorage storage) throws IOException {
+	/**
+	 * Explicitly collects canonical, valid CAS objects that no journal mirror entry, per-pack durable state, or
+	 * pending transaction references. Decision 10 of the detached-history spec: every byte the mirror can reach stays
+	 * until the manual client compaction of a later slice, so only genuinely orphaned objects are deleted here.
+	 * Shared collection is serialized with durable receipts from every known game instance.
+	 */
+	public static CollectionResult collectUnreachableObjects(ClientStorage storage, Set<String> pinnedObjectHashes) throws IOException {
 		Objects.requireNonNull(storage, "storage");
-		ObjectStoreMaintenance.FileTotals totals = new ObjectStoreMaintenance.FileTotals(0, 0);
-		for (Path path : generatedCopyFiles(storage)) totals = totals.plus(ObjectStoreMaintenance.fileTotals(List.of(path)));
-		return new GeneratedCopyReport(totals.count(), totals.bytes());
+		Objects.requireNonNull(pinnedObjectHashes, "pinnedObjectHashes");
+		ExpectedSizes references = collectReferences(storage);
+		for (String hash : canonicalPins(pinnedObjectHashes, "pinned object")) references.optional(hash, -1, "explicit pin");
+		return SharedObjectOwnership.withGlobalReferences(storage.dataLocation(), "client", references.hashes(), globallyReferenced -> {
+			StorageReport before = measure(storage, references, true);
+			ObjectStoreMaintenance.DeletionReceipt deletion = ObjectStoreMaintenance.deleteUnreachable(storage.objectsDirectory(), globallyReferenced);
+			StorageReport after = measure(storage, references, true);
+			return new CollectionResult(before, after, deletion.deletedCount(), deletion.deletedBytes());
+		});
 	}
 
 	private static StorageReport measure(ClientStorage storage, ExpectedSizes references) throws IOException {
@@ -178,7 +176,6 @@ public final class ClientObjectStore {
 	private static StorageReport measure(ClientStorage storage, ExpectedSizes references, boolean requireRequiredReferences) throws IOException {
 		ObjectStoreMaintenance.FileTotals objects = ObjectStoreMaintenance.fileTotals(ObjectStoreMaintenance.objectFiles(storage.objectsDirectory()));
 		ReferenceTotals referenceTotals = measureReferences(storage, references, requireRequiredReferences);
-		ObjectStoreMaintenance.FileTotals records = fileTotals(regularFiles(storage.recordsDirectory(), "client generation records"));
 		ObjectStoreMaintenance.FileTotals active = fileTotals(regularFiles(storage.activeDirectory(), "client active projection"));
 		ObjectStoreMaintenance.FileTotals metadata = metadataTotals(storage);
 		ObjectStoreMaintenance.FileTotals overlays = fileTotals(regularFiles(storage.overlaysDirectory(), "client overlays"));
@@ -187,43 +184,23 @@ public final class ClientObjectStore {
 		ObjectStoreMaintenance.FileTotals incoming = fileTotals(regularFiles(storage.incomingDirectory(), "client incoming staging"));
 		ObjectStoreMaintenance.FileTotals backup = fileTotals(regularFiles(storage.backupDirectory(), "client projection backups"));
 		return new StorageReport(objects.count(), objects.bytes(), references.hashes().size(), referenceTotals.expectedBytes(), referenceTotals.validCount(), referenceTotals.validBytes(),
-				referenceTotals.missingCount(), referenceTotals.invalidCount(), records.count(), records.bytes(), active.count(), active.bytes(), metadata.count(), metadata.bytes(), overlays.count(), overlays.bytes(),
+				referenceTotals.missingCount(), referenceTotals.invalidCount(), active.count(), active.bytes(), metadata.count(), metadata.bytes(), overlays.count(), overlays.bytes(),
 				baselines.count(), baselines.bytes(), preservation.count(), preservation.bytes(), incoming.count(), incoming.bytes(), backup.count(), backup.bytes());
 	}
 
-	private static ExpectedSizes collectReferences(ClientStorage storage, Set<String> retainedGenerationIds) throws IOException {
+	private static ExpectedSizes collectReferences(ClientStorage storage) throws IOException {
 		ExpectedSizes retained = new ExpectedSizes();
-		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		List<String> generationIds = generationIds(storage);
-		Map<String, PackDocument> records = new TreeMap<>();
-		for (String contentToken : generationIds) {
-			if (!HashUtils.isCanonicalSha1(contentToken)) throw new IOException("Client generation directory is not canonical: " + contentToken);
-			PackDocument record;
-			try {
-				record = generations.read(contentToken).orElseThrow(() -> new IOException("Client generation record is missing: " + contentToken));
-			} catch (RuntimeException e) {
-				throw new IOException("Client generation record is invalid: " + contentToken, e);
+		// The journal mirror is the client's only history store, so every hash any of its entries names is kept:
+		// each entry's policy document, every change target, and every replaced source. The active generation's
+		// tree is the set of change targets up to its entry, so the mirror sweep covers it as well.
+		for (String modpackId : new ClientGenerationStore(storage).installedPackIds()) {
+			for (JournalEntry entry : new JournalMirror(storage).entries(modpackId)) {
+				retained.optional(entry.policySha1(), -1, "journal policy document");
+				for (JournalEntry.Change change : entry.changes()) {
+					if (change.toSha1() != null) retained.optional(change.toSha1(), change.toSize(), "journal change target");
+					if (change.fromSha1() != null) retained.optional(change.fromSha1(), -1, "journal change source");
+				}
 			}
-			records.put(contentToken, record);
-		}
-		TreeSet<String> selected = new TreeSet<>();
-		if (retainedGenerationIds == null) selected.addAll(records.keySet());
-		else {
-			if (!retainedGenerationIds.equals(records.keySet()))
-				throw new IOException("Cannot collect while generation records would remain without their objects; retain every installed generation record");
-			selected.addAll(records.keySet());
-		}
-		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
-		if (activeState != null) {
-			PackDocument active = records.get(activeState.contentToken);
-			if (active == null) throw new IOException("Active client generation record is missing: " + activeState.contentToken);
-			if (!active.manifest().modpackId().equals(activeState.modpackId)) throw new IOException("Active client generation identity is inconsistent");
-			selected.add(activeState.contentToken);
-		}
-		for (String contentToken : selected) {
-			PackDocument record = records.get(contentToken);
-			if (record == null) throw new IOException("Retained client generation is not installed: " + contentToken);
-			addRecordReferences(retained, record);
 		}
 		collectBaselines(storage, retained);
 		collectOverlays(storage, retained);
@@ -231,16 +208,8 @@ public final class ClientObjectStore {
 		collectPreservation(storage, retained);
 		collectTransaction(storage, retained);
 		collectRepair(storage, retained);
-		validateActiveProjection(storage, activeState);
+		validateActiveProjection(storage);
 		return retained;
-	}
-
-	private static void addRecordReferences(ExpectedSizes retained, PackDocument record) throws IOException {
-		// A generation record is the complete selectable catalogue. Clients acquire only their
-		// resolved selection, so absent objects from unselected groups are valid. Cached catalogue
-		// objects remain pinned for later offline selection changes.
-		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) retained.optional(file.sha1(), file.size(), "generation catalogue");
-		// Historical ledger hashes are ownership-proof metadata, not current materialized file objects.
 	}
 
 	private static void collectBaselines(ClientStorage storage, ExpectedSizes retained) throws IOException {
@@ -348,8 +317,8 @@ public final class ClientObjectStore {
 		}
 	}
 
-	private static void validateActiveProjection(ClientStorage storage, ClientStorageJsons.ClientGenerationStateFields activeState) throws IOException {
-		if (activeState != null && Files.exists(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS))
+	private static void validateActiveProjection(ClientStorage storage) throws IOException {
+		if (Files.exists(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS))
 			throw new IOException("Client active projection is not a directory");
 	}
 
@@ -391,21 +360,6 @@ public final class ClientObjectStore {
 		for (Path file : List.of(storage.stateFile(), storage.selectionFile(), storage.clientConfigFile(), storage.restartLoopStateFile(), storage.modpackContentTempFile()))
 			if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) total = total.plus(fileTotals(List.of(FileTrees.requireRegularFile(file, "client metadata"))));
 		return total;
-	}
-
-	private static List<String> generationIds(ClientStorage storage) throws IOException {
-		Path root = storage.recordsDirectory();
-		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
-		FileTrees.requireDirectory(root, "client generation records");
-		try (Stream<Path> paths = Files.list(root)) {
-			List<String> result = new ArrayList<>();
-			for (Path path : paths.sorted().toList()) {
-				FileTrees.requireNoSymbolicLink(path, "client generation records");
-				if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generation records contain an unsupported entry: " + path);
-				result.add(path.getFileName().toString());
-			}
-			return List.copyOf(result);
-		}
 	}
 
 	private static List<Path> childDirectories(Path root, String description) throws IOException {

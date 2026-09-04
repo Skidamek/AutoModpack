@@ -16,7 +16,9 @@ import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
@@ -31,7 +33,7 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * <p>
  * Every client entry point, including the detached helper, constructs this
  * object from the game directory. The active projection is deliberately a
- * fixed path; generation IDs identify immutable records, not directories
+ * fixed path; content tokens identify immutable generations, not directories
  * exposed to the game.
  * </p>
  */
@@ -43,7 +45,6 @@ public final class ClientStorage {
 	private final DataRootResolver.Location dataLocation;
 	private final Path dataDirectory;
 	private final Path objectsDirectory;
-	private final Path recordsDirectory;
 	private final Path overlaysDirectory;
 	private final Path baselinesDirectory;
 	private final Path generatedCopiesDirectory;
@@ -53,7 +54,6 @@ public final class ClientStorage {
 	private final Path stateFile;
 	private final Path transactionFile;
 	private final Path repairJournalFile;
-	private final Path compactionJournalFile;
 	private final Path mutationLockFile;
 	private final Path selectionFile;
 	private final Path restartLoopStateFile;
@@ -80,7 +80,6 @@ public final class ClientStorage {
 		this.dataDirectory = dataLocation.root();
 		DataRootResolver.Layout dataLayout = dataLocation.layout();
 		this.objectsDirectory = dataLayout.objectsDirectory();
-		this.recordsDirectory = this.gameDirectory.resolve(CLIENT_RECORDS_DIR).normalize();
 		this.overlaysDirectory = this.gameDirectory.resolve(CLIENT_OVERLAYS_DIR).normalize();
 		this.baselinesDirectory = this.gameDirectory.resolve(CLIENT_BASELINES_DIR).normalize();
 		this.generatedCopiesDirectory = this.gameDirectory.resolve(CLIENT_GENERATED_COPIES_DIR).normalize();
@@ -90,7 +89,6 @@ public final class ClientStorage {
 		this.stateFile = this.gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize();
 		this.transactionFile = this.gameDirectory.resolve(CLIENT_TRANSACTION_FILE).normalize();
 		this.repairJournalFile = this.gameDirectory.resolve(CLIENT_REPAIR_FILE).normalize();
-		this.compactionJournalFile = this.gameDirectory.resolve(CLIENT_COMPACTION_FILE).normalize();
 		this.mutationLockFile = this.gameDirectory.resolve(CLIENT_MUTATION_LOCK_FILE).normalize();
 		this.selectionFile = this.gameDirectory.resolve(CLIENT_SELECTION_FILE).normalize();
 		this.restartLoopStateFile = this.gameDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE).normalize();
@@ -121,7 +119,6 @@ public final class ClientStorage {
 		ClientStorage storage = new ClientStorage(dataLocation);
 		try {
 			storage.initialize();
-			new ClientGenerationStore(storage).recoverCompaction();
 			ClientObjectStore.publishOwnership(storage);
 			OPEN_STORAGE.put(canonicalGameDirectory, new WeakReference<>(storage));
 			return storage;
@@ -160,10 +157,6 @@ public final class ClientStorage {
 
 	public Path objectFile(String sha1) {
 		return DataRootResolver.objectFile(objectsDirectory, sha1);
-	}
-
-	public Path recordsDirectory() {
-		return recordsDirectory;
 	}
 
 	public Path overlaysDirectory() {
@@ -242,10 +235,6 @@ public final class ClientStorage {
 		return repairJournalFile;
 	}
 
-	public Path compactionJournalFile() {
-		return compactionJournalFile;
-	}
-
 	public Path mutationLockFile() {
 		return mutationLockFile;
 	}
@@ -302,6 +291,10 @@ public final class ClientStorage {
 		return preservationDirectory;
 	}
 
+	public Path historyDirectory() {
+		return historyDirectory;
+	}
+
 	public Path historyPackDirectory(String modpackId) {
 		return historyDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
 	}
@@ -337,14 +330,6 @@ public final class ClientStorage {
 
 	public Path modsDirectory() {
 		return gamePath(ModpackPathPolicy.MODS_ROOT);
-	}
-
-	public Path generationDirectory(String contentToken) {
-		return recordsDirectory.resolve(requireDigest(contentToken, "generation ID")).normalize();
-	}
-
-	public Path generationManifest(String contentToken) {
-		return generationDirectory(contentToken).resolve("manifest.json");
 	}
 
 	public Path connectionFile(String modpackId) {
@@ -442,7 +427,6 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(modCacheDirectory, "mod metadata cache");
 		FileTrees.createManagedDirectory(platformCacheDirectory, "platform cache");
 		FileTrees.createManagedDirectory(packsDirectory, "shared pack state");
-		FileTrees.createManagedDirectory(recordsDirectory, "client generation records");
 		FileTrees.createManagedDirectory(overlaysDirectory, "client overlays");
 		FileTrees.createManagedDirectory(baselinesDirectory, "client baselines");
 		FileTrees.createManagedDirectory(generatedCopiesDirectory, "client generated-copy state");
@@ -461,13 +445,20 @@ public final class ClientStorage {
 				.orElseThrow(() -> new IOException("Client active state is empty"));
 		if (!ModpackId.isValid(state.modpackId) || !HashUtils.isSha1(state.contentToken) || !"ACTIVE".equals(state.status))
 			throw new IOException("Client active state identity is invalid");
+		try {
+			OwnershipLedger.fromFields(state.ownershipLedger);
+		} catch (RuntimeException e) {
+			throw new IOException("Client active state ownership ledger is invalid", e);
+		}
+		if (!state.modpackId.equals(state.ownershipLedger.modpackId)) throw new IOException("Client active state and its ledger belong to different modpacks");
 		return state;
 	}
 
-	public void writeActiveState(String modpackId, String contentToken) throws IOException {
+	public void writeActiveState(String modpackId, String contentToken, GenerationJsons.OwnershipLedgerFields ownershipLedger) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = new ClientStorageJsons.ClientGenerationStateFields();
 		state.modpackId = ModpackId.requireValid(modpackId);
 		state.contentToken = requireDigest(contentToken, "generation ID");
+		state.ownershipLedger = Objects.requireNonNull(ownershipLedger, "ownership ledger");
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
 	}
@@ -479,8 +470,8 @@ public final class ClientStorage {
 	private void validateLayout() {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
-		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
-				historyDirectory, stateFile, transactionFile, repairJournalFile, compactionJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile,
+		validateWithin(clientDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
+				historyDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile,
 				journalTempFile, helperDirectory, helperLeaseFile, incomingProjectionDirectory(), backupProjectionDirectory());
 		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}

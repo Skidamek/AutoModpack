@@ -25,7 +25,6 @@ REPO_ROOT = ROOT.parent
 # Paths owned by a client generation reset. Connection/trust data and ordinary
 # game files are deliberately outside this set.
 CLIENT_GENERATION_STATE_PATHS = (
-    "records",
     "history",
     "overlays",
     "baselines",
@@ -36,7 +35,6 @@ CLIENT_GENERATION_STATE_PATHS = (
     "active-state.json",
     "update-transaction.json",
     "repair.json",
-    "compaction.json",
     "preservation",
     "selections.json",
     "restart-state.json",

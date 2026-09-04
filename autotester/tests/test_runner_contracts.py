@@ -349,7 +349,7 @@ def test_artifact_resolution_rejects_ambiguous_matches(tmp_path):
         runner._resolve_artifact(target, tmp_path)
 
 
-def test_wait_generation_requires_committed_state_and_matching_record(make_ctx):
+def test_wait_generation_requires_committed_state_and_matching_generation(make_ctx):
     ctx = make_ctx()
     marker = ctx.game_dir / "automodpack/client/active/config/amp-autotest-marker.json"
     marker.parent.mkdir(parents=True, exist_ok=True)
@@ -359,18 +359,36 @@ def test_wait_generation_requires_committed_state_and_matching_record(make_ctx):
         wait_generation(ctx, {"timeout": "1ms", "poll": "1ms"})
 
     content_token = "a" * 40
-    record = (
-        ctx.game_dir / "automodpack/client/records" / content_token / "manifest.json"
+    policy_sha1 = "c" * 40
+    policy_object = client_steps.cas_object(
+        ctx.game_dir / "automodpack/client/data/objects", policy_sha1
     )
-    record.parent.mkdir(parents=True, exist_ok=True)
-    record.write_text(
-        json.dumps({"contentToken": content_token, "policy": {"modpackId": "packaaa"}}),
-        encoding="utf-8",
+    policy_object.parent.mkdir(parents=True, exist_ok=True)
+    policy_object.write_text(json.dumps({"modpackId": "packaaa"}), encoding="utf-8")
+    mirror = (
+        ctx.game_dir / "automodpack/client/history/packaaa/journal.jsonl"
     )
+    mirror.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "seq": 1,
+        "contentToken": content_token,
+        "policySha1": policy_sha1,
+        "createdAt": "2026-09-02T23:45:32Z",
+        "notes": "",
+        "restoreOf": -1,
+        "snapshot": True,
+        "changes": [],
+    }
+    mirror.write_text(json.dumps(entry) + "\n", encoding="utf-8")
     state = ctx.game_dir / "automodpack/client/active-state.json"
     state.write_text(
         json.dumps(
-            {"schemaVersion": 1, "modpackId": "packaaa", "contentToken": content_token, "status": "ACTIVE"}
+            {
+                "modpackId": "packaaa",
+                "contentToken": content_token,
+                "status": "ACTIVE",
+                "ownershipLedger": staging_steps._staged_ledger("packaaa", {}),
+            }
         ),
         encoding="utf-8",
     )
@@ -381,18 +399,14 @@ def test_wait_generation_requires_committed_state_and_matching_record(make_ctx):
 def test_wait_generation_requires_expected_patch_notes(make_ctx):
     ctx = make_ctx()
 
-    def write_record(notes):
+    def write_generation(notes):
         content_token = "b" * 40
-        record = (
-            ctx.game_dir / "automodpack/client/records" / content_token / "manifest.json"
+        policy_sha1 = "c" * 40
+        policy_object = client_steps.cas_object(
+            ctx.game_dir / "automodpack/client/data/objects", policy_sha1
         )
-        record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(
-            json.dumps(
-                {"schemaVersion": 1, "contentToken": content_token, "policy": {"modpackId": "packaaa"}}
-            ),
-            encoding="utf-8",
-        )
+        policy_object.parent.mkdir(parents=True, exist_ok=True)
+        policy_object.write_text(json.dumps({"modpackId": "packaaa"}), encoding="utf-8")
         mirror = (
             ctx.game_dir / "automodpack/client/history/packaaa/journal.jsonl"
         )
@@ -400,7 +414,7 @@ def test_wait_generation_requires_expected_patch_notes(make_ctx):
         entry = {
             "seq": 1,
             "contentToken": content_token,
-            "policySha1": "c" * 40,
+            "policySha1": policy_sha1,
             "createdAt": "2026-09-02T23:45:32Z",
             "notes": notes,
             "restoreOf": -1,
@@ -411,19 +425,24 @@ def test_wait_generation_requires_expected_patch_notes(make_ctx):
         state = ctx.game_dir / "automodpack/client/active-state.json"
         state.write_text(
             json.dumps(
-                {"schemaVersion": 1, "modpackId": "packaaa", "contentToken": content_token, "status": "ACTIVE"}
+                {
+                    "modpackId": "packaaa",
+                    "contentToken": content_token,
+                    "status": "ACTIVE",
+                    "ownershipLedger": staging_steps._staged_ledger("packaaa", {}),
+                }
             ),
             encoding="utf-8",
         )
 
-    write_record("stale")
+    write_generation("stale")
 
     with pytest.raises(TimeoutError, match="active generation state was not committed"):
         wait_generation(
             ctx, {"patchNotes": "expected", "timeout": "1ms", "poll": "1ms"}
         )
 
-    write_record("expected")
+    write_generation("expected")
     wait_generation(ctx, {"patchNotes": "expected", "timeout": "1s", "poll": "1ms"})
 
 
@@ -690,19 +709,13 @@ def test_non_canonical_staged_timestamp_is_rejected():
             staging_steps._check_canonical_timestamp(bad)
 
 
-def test_staged_manifest_receipt_rejects_a_non_canonical_timestamp(tmp_path):
-    manifest = {
-        "schemaVersion": 1,
-        "contentToken": "0" * 40,
-        "policySha1": "1" * 40,
-        "createdAt": "2026-09-02T23:45:32.800000Z",
-        "ownershipLedger": {"modpackId": "packbbb", "entries": [], "digest": "2" * 40},
-        "policy": {"modpackId": "packbbb"},
-    }
-    path = tmp_path / "manifest.json"
-    path.write_text(json.dumps(manifest), encoding="utf-8")
+def test_staged_generation_receipt_rejects_a_non_canonical_timestamp(tmp_path):
+    policy = {"modpackId": "packbbb"}
+    policy_object = tmp_path / "policy-object"
+    policy_object.write_bytes(staging_steps._policy_bytes(policy))
     with pytest.raises(ValueError, match="not canonical"):
-        staging_steps._verify_staged_generation(path, tmp_path / "journal.jsonl", "")
+        staging_steps._verify_staged_generation(policy_object, "0" * 40, "1" * 40, "2026-09-02T23:45:32.800000Z",
+                                                staging_steps._staged_ledger("packbbb", {}), tmp_path / "journal.jsonl", "")
 
 
 # ── poisoned HMC cache recovery ─────────────────────────────────────────────

@@ -20,8 +20,8 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -50,7 +50,7 @@ class UpdateTransactionExecutorTest {
 		ClientStorage storage = storage();
 		byte[] bytes = "projection-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
-		SelectedModpackTarget target = target("mods/new.jar", "mod", false, hash, bytes.length);
+		SelectedModpackTarget target = target(storage, "mods/new.jar", "mod", false, hash, bytes.length);
 		Path projectionFile = storage.activePath("mods/new.jar");
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()),
 				List.of(new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
@@ -61,10 +61,10 @@ class UpdateTransactionExecutorTest {
 		assertTrue(execution.success());
 		assertTrue(FileIntegrity.matches(projectionFile, bytes.length, hash));
 		assertVerifiedObjectProjection(storage.objectFile(hash), projectionFile, bytes.length, hash);
-		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
-		assertEquals(target.document(), new ClientGenerationStore(storage).read(target.packTarget().contentToken()).orElseThrow());
+		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		assertEquals(target.packTarget().contentToken(), activeState.contentToken);
+		assertEquals(target.document().ownershipLedger(), OwnershipLedger.fromFields(activeState.ownershipLedger));
 		assertEquals(target.selection().intent(), new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
-		assertEquals(List.of(target.document()), new ClientGenerationStore(storage).installedRecords());
 		assertEquals(target.manifest().modpackId(), ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
 		assertFalse(Files.exists(storage.automodpackDirectory().resolve("modpacks")));
 		assertFalse(Files.exists(storage.transactionFile()));
@@ -77,7 +77,7 @@ class UpdateTransactionExecutorTest {
 		byte[] nestedBytes = "nested-object".getBytes(StandardCharsets.UTF_8);
 		String rootHash = store(storage, rootBytes);
 		String nestedHash = store(storage, nestedBytes);
-		SelectedModpackTarget target = target("mods/root.jar", "mod", false, rootHash, rootBytes.length);
+		SelectedModpackTarget target = target(storage, "mods/root.jar", "mod", false, rootHash, rootBytes.length);
 		UpdatePlan.NestedCopy generated = new UpdatePlan.NestedCopy("mods/nested.jar", nestedHash, nestedBytes.length, Set.of("nested"));
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(
 				new Operation(Root.PROJECTION, "mods/root.jar", OperationType.INSTALL_OBJECT, rootHash, rootBytes.length, null),
@@ -115,7 +115,7 @@ class UpdateTransactionExecutorTest {
 		byte[] bytes = "metadata-only-projection".getBytes(StandardCharsets.UTF_8);
 		Files.createDirectories(storage.activePath("mods"));
 		String hash = HashUtils.getHash(Files.write(storage.activePath("mods/existing.jar"), bytes));
-		SelectedModpackTarget target = target("mods/existing.jar", "mod", false, hash, bytes.length);
+		SelectedModpackTarget target = target(storage, "mods/existing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
 				ChangeSet.empty());
@@ -138,7 +138,7 @@ class UpdateTransactionExecutorTest {
 		Files.createDirectories(storage.activePath("shaderpacks"));
 		Path stray = storage.activePath("shaderpacks/ComplementaryReimagined_r5.8.1.zip.txt");
 		Files.writeString(stray, "#Mon Aug 24 12:06:20 PDT 2026\nFXAA_STRENGTH=100\n", StandardCharsets.UTF_8);
-		SelectedModpackTarget target = target("mods/existing.jar", "mod", false, hash, bytes.length);
+		SelectedModpackTarget target = target(storage, "mods/existing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.packTarget(), List.of(),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
 				ChangeSet.empty());
@@ -156,7 +156,7 @@ class UpdateTransactionExecutorTest {
 		ClientStorage storage = storage();
 		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
 		String oldHash = store(storage, oldBytes);
-		SelectedModpackTarget oldTarget = target("mods/old.jar", "mod", false, oldHash, oldBytes.length);
+		SelectedModpackTarget oldTarget = target(storage, "mods/old.jar", "mod", false, oldHash, oldBytes.length);
 		UpdateTransactionExecutor executor = executor(storage);
 		assertTrue(executor.commit(plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
@@ -167,12 +167,12 @@ class UpdateTransactionExecutorTest {
 		GroupManifest newManifest = GroupManifestValidator.validate(fields("mods/new.jar", "mod", false, newHash, newBytes.length));
 		PackDocument newRecord = PackDocument.create(newManifest, TestPacks.policySha1(newManifest), Instant.parse("2026-01-02T00:00:00Z"), oldTarget.document().ownershipLedger());
 		SelectionIntent intent = oldTarget.selection().intent();
-		SelectedModpackTarget newTarget = SelectedModpackTarget.prepare(head(newRecord), intent, intent, ClientPlatform.LINUX);
+		TestPacks.stageGeneration(storage, newRecord);
+		SelectedModpackTarget newTarget = SelectedModpackTarget.prepare(newRecord, intent, intent, ClientPlatform.LINUX);
 		UpdatePlan newPlan = plan(newTarget, clientConfig(newTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, newPlan, newTarget);
-		new ClientGenerationStore(storage).write(newRecord);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 		Files.move(storage.activeDirectory(), storage.backupProjectionDirectory());
 		Files.createDirectories(storage.activeDirectory().resolve("mods"));
@@ -191,14 +191,13 @@ class UpdateTransactionExecutorTest {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "expected-game-file".getBytes(StandardCharsets.UTF_8);
 		String expectedHash = store(storage, expectedBytes);
-		SelectedModpackTarget target = target("config/replanned.json", "config", false, expectedHash, expectedBytes.length);
+		SelectedModpackTarget target = target(storage, "config/replanned.json", "config", false, expectedHash, expectedBytes.length);
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
 				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, plan, target);
-		new ClientGenerationStore(storage).write(target.document());
 		Path live = storage.gameDirectory().resolve("config/replanned.json");
 		byte[] newerBytes = "newer-player-file".getBytes(StandardCharsets.UTF_8);
 		Files.createDirectories(live.getParent());
@@ -219,14 +218,13 @@ class UpdateTransactionExecutorTest {
 		ClientStorage storage = storage();
 		byte[] bytes = "config-drift".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
-		SelectedModpackTarget target = target("mods/config-drift.jar", "mod", false, hash, bytes.length);
+		SelectedModpackTarget target = target(storage, "mods/config-drift.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/config-drift.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/config-drift.jar", true, hash, bytes.length)));
 		ClientConfigJsons.ClientConfigFieldsV3 expected = new ClientConfigJsons.ClientConfigFieldsV3();
 		ConfigTools.writeAtomic(storage.clientConfigFile(), expected);
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
-		new ClientGenerationStore(storage).write(target.document());
 		ClientConfigJsons.ClientConfigFieldsV3 newer = new ClientConfigJsons.ClientConfigFieldsV3(expected);
 		newer.playMusic = false;
 		ConfigTools.writeAtomic(storage.clientConfigFile(), newer);
@@ -243,7 +241,7 @@ class UpdateTransactionExecutorTest {
 		ClientStorage storage = storage();
 		byte[] oldBytes = "mailbox-old".getBytes(StandardCharsets.UTF_8);
 		String oldHash = store(storage, oldBytes);
-		SelectedModpackTarget installed = target("mods/mailbox-old.jar", "mod", false, oldHash, oldBytes.length);
+		SelectedModpackTarget installed = target(storage, "mods/mailbox-old.jar", "mod", false, oldHash, oldBytes.length);
 		UpdateTransactionExecutor executor = executor(storage);
 		assertTrue(executor.commit(plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/mailbox-old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
@@ -251,14 +249,13 @@ class UpdateTransactionExecutorTest {
 
 		byte[] deferredBytes = "mailbox-deferred".getBytes(StandardCharsets.UTF_8);
 		String deferredHash = store(storage, deferredBytes);
-		SelectedModpackTarget deferredTarget = nextTarget(installed, "mods/mailbox-deferred.jar", deferredHash, deferredBytes.length, Instant.parse("2026-01-02T00:00:00Z"));
+		SelectedModpackTarget deferredTarget = nextTarget(storage, installed, "mods/mailbox-deferred.jar", deferredHash, deferredBytes.length, Instant.parse("2026-01-02T00:00:00Z"));
 		UpdatePlan deferredPlan = plan(deferredTarget, clientConfig(deferredTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/mailbox-deferred.jar", OperationType.INSTALL_OBJECT, deferredHash, deferredBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-deferred.jar", true, deferredHash, deferredBytes.length)));
 		UpdateTransaction deferred = createTransaction(storage, deferredPlan, deferredTarget);
 		deferred.phase = UpdateTransaction.Phase.DEFERRED;
 		deferred.resultStatus = UpdateTransaction.Status.DEFERRED_LOCKED;
-		new ClientGenerationStore(storage).write(deferredTarget.document());
 		ConfigTools.writeAtomic(storage.transactionFile(), deferred);
 		Files.createDirectories(storage.activePath("shaderpacks"));
 		Files.writeString(storage.activePath("shaderpacks/ComplementaryReimagined_r5.8.1.zip.txt"), "#Mon leftover\n", StandardCharsets.UTF_8);
@@ -278,7 +275,7 @@ class UpdateTransactionExecutorTest {
 
 		byte[] latestBytes = "mailbox-latest".getBytes(StandardCharsets.UTF_8);
 		String latestHash = store(storage, latestBytes);
-		SelectedModpackTarget latestTarget = nextTarget(deferredTarget, "mods/mailbox-latest.jar", latestHash, latestBytes.length, Instant.parse("2026-01-03T00:00:00Z"));
+		SelectedModpackTarget latestTarget = nextTarget(storage, deferredTarget, "mods/mailbox-latest.jar", latestHash, latestBytes.length, Instant.parse("2026-01-03T00:00:00Z"));
 		UpdatePlan latestPlan = plan(latestTarget, clientConfig(latestTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/mailbox-latest.jar", OperationType.INSTALL_OBJECT, latestHash, latestBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-latest.jar", true, latestHash, latestBytes.length)));
@@ -300,13 +297,13 @@ class UpdateTransactionExecutorTest {
 		ModpackJsons.CompleteModpackContentFields fields = fields("mods/pending-selection.jar", "mod", false, hash, bytes.length);
 		fields.modpackId = "def5678";
 		PackDocument record = TestPacks.document(GroupManifestValidator.validate(fields));
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(head(record), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		TestPacks.stageGeneration(storage, record);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(record, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/pending-selection.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/pending-selection.jar", true, hash, bytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, plan, target);
 		transaction.plannedClientConfig.syncLoaderVersion = false;
-		new ClientGenerationStore(storage).write(record);
 		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
 		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(current);
 		current.playMusic = false;
@@ -323,7 +320,7 @@ class UpdateTransactionExecutorTest {
 		ClientStorage storage = storage();
 		byte[] bytes = "stale-mailbox".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
-		SelectedModpackTarget target = target("mods/stale.jar", "mod", false, hash, bytes.length);
+		SelectedModpackTarget target = target(storage, "mods/stale.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/stale.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/stale.jar", true, hash, bytes.length)));
@@ -345,7 +342,7 @@ class UpdateTransactionExecutorTest {
 		byte[] localBytes = "local-sodium".getBytes(StandardCharsets.UTF_8);
 		Files.write(local, localBytes);
 		String localHash = HashUtils.getHash(local);
-		SelectedModpackTarget target = target("mods/server-sodium.jar", "mod", false, serverHash, serverBytes.length);
+		SelectedModpackTarget target = target(storage, "mods/server-sodium.jar", "mod", false, serverHash, serverBytes.length);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/local-sodium.jar"),
 				new UpdatePlan.FileState(localHash, localBytes.length, true));
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(),
@@ -378,7 +375,7 @@ class UpdateTransactionExecutorTest {
 		byte[] localBytes = "player-local".getBytes(StandardCharsets.UTF_8);
 		Files.write(local, localBytes);
 		String localHash = HashUtils.getHash(local);
-		SelectedModpackTarget target = target("mods/shared.jar", "other", false, serverHash, serverBytes.length);
+		SelectedModpackTarget target = target(storage, "mods/shared.jar", "other", false, serverHash, serverBytes.length);
 		UpdatePlan.FileState localState = new UpdatePlan.FileState(localHash, localBytes.length, true);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(new UpdatePlan.FileKey(Root.GAME_DIR, "mods/shared.jar"), localState);
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
@@ -398,53 +395,28 @@ class UpdateTransactionExecutorTest {
 		ClientStorage storage = storage();
 		byte[] bytes = "blocked-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
-		SelectedModpackTarget target = target("mods/blocked.jar", "mod", false, hash, bytes.length);
+		SelectedModpackTarget target = target(storage, "mods/blocked.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/blocked.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/blocked.jar", true, hash, bytes.length)));
 		Files.writeString(storage.transactionFile(), "active", StandardCharsets.UTF_8);
 
 		assertThrows(IOException.class, () -> executor(storage).commit(plan, target));
-		assertTrue(new ClientGenerationStore(storage).read(target.packTarget().contentToken()).isEmpty());
 	}
 
 	@Test
-	void failedPreflightDoesNotPublishGenerationRecord() throws Exception {
+	void failedPreflightLeavesNoDurableTransaction() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "missing-object".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.sha1(bytes);
-		SelectedModpackTarget target = target("mods/missing.jar", "mod", false, hash, bytes.length);
+		SelectedModpackTarget target = target(storage, "mods/missing.jar", "mod", false, hash, bytes.length);
 		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/missing.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/missing.jar", true, hash, bytes.length)));
 
 		assertThrows(IOException.class, () -> executor(storage).commit(plan, target));
 
-		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		assertTrue(generations.read(target.packTarget().contentToken()).isEmpty());
-		assertTrue(generations.installedRecords().isEmpty());
 		assertFalse(Files.exists(storage.transactionFile()));
-	}
-
-	@Test
-	void installedRecordCatalogueKeepsNewestValidPackAndSkipsMalformedRecords() throws Exception {
-		ClientStorage storage = storage();
-		byte[] bytes = "catalogue-object".getBytes(StandardCharsets.UTF_8);
-		String hash = store(storage, bytes);
-		byte[] secondBytes = "newer-catalogue-object".getBytes(StandardCharsets.UTF_8);
-		String secondHash = store(storage, secondBytes);
-		GroupManifest firstManifest = GroupManifestValidator.validate(fields("mods/catalogue.jar", "mod", false, hash, bytes.length));
-		GroupManifest secondManifest = GroupManifestValidator.validate(fields("mods/catalogue.jar", "mod", false, secondHash, secondBytes.length));
-		PackDocument first = PackDocument.create(firstManifest, TestPacks.policySha1(firstManifest), Instant.parse("2026-01-01T00:00:00Z"), null);
-		PackDocument second = PackDocument.create(secondManifest, TestPacks.policySha1(secondManifest), Instant.parse("2026-01-02T00:00:00Z"), first.ownershipLedger());
-		ClientGenerationStore generations = new ClientGenerationStore(storage);
-		generations.write(first);
-		generations.write(second);
-		String malformedId = "0".repeat(40);
-		Files.createDirectories(storage.generationDirectory(malformedId));
-		Files.writeString(storage.generationManifest(malformedId), "{}", StandardCharsets.UTF_8);
-
-		assertEquals(List.of(second), generations.installedRecords());
 	}
 
 	@Test
@@ -454,7 +426,7 @@ class UpdateTransactionExecutorTest {
 		String baseHash = store(storage, baseBytes);
 		byte[] editedBytes = "player-edit".getBytes(StandardCharsets.UTF_8);
 		String editedHash = store(storage, editedBytes);
-		SelectedModpackTarget target = target("config/settings.json", "config", true, baseHash, baseBytes.length);
+		SelectedModpackTarget target = target(storage, "config/settings.json", "config", true, baseHash, baseBytes.length);
 		List<Operation> operations = List.of(
 				new Operation(Root.PROJECTION, "config/settings.json", OperationType.INSTALL_OBJECT, baseHash, baseBytes.length, null),
 				new Operation(Root.OVERLAY, "config/settings.json", OperationType.INSTALL_OBJECT, editedHash, editedBytes.length, null),
@@ -485,7 +457,7 @@ class UpdateTransactionExecutorTest {
 		String baselineHash = store(storage, baselineBytes);
 		String targetHash = store(storage, targetBytes);
 		String restoredPath = "config/pack-a.json";
-		SelectedModpackTarget installed = target(restoredPath, "config", false, serverHash, serverBytes.length);
+		SelectedModpackTarget installed = target(storage, restoredPath, "config", false, serverHash, serverBytes.length);
 		UpdatePlan installedPlan = plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, restoredPath, OperationType.INSTALL_OBJECT, serverHash, serverBytes.length, null),
 				new Operation(Root.GAME_DIR, restoredPath, OperationType.INSTALL_OBJECT, serverHash, serverBytes.length, null)),
@@ -504,7 +476,9 @@ class UpdateTransactionExecutorTest {
 		baseline.entries = List.of(baselineEntry);
 		ModpackJsons.CompleteModpackContentFields targetFields = fields("config/pack-b.json", "config", false, targetHash, targetBytes.length);
 		targetFields.modpackId = "def5678";
-		SelectedModpackTarget target = SelectedModpackTarget.prepare(head(TestPacks.document(GroupManifestValidator.validate(targetFields))), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		PackDocument switchedDocument = TestPacks.document(GroupManifestValidator.validate(targetFields));
+		TestPacks.stageGeneration(storage, switchedDocument);
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(switchedDocument, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
 				new UpdatePlan.FileKey(Root.PROJECTION, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true),
 				new UpdatePlan.FileKey(Root.GAME_DIR, restoredPath), new UpdatePlan.FileState(serverHash, serverBytes.length, true));
@@ -525,11 +499,11 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
-	void removalSwapsToAnEmptyProjectionAndKeepsImmutableGenerationRecords() throws Exception {
+	void removalSwapsToAnEmptyProjectionAndKeepsTheMirrorHistory() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "removable-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
-		SelectedModpackTarget target = target("mods/remove.jar", "mod", false, hash, bytes.length);
+		SelectedModpackTarget target = target(storage, "mods/remove.jar", "mod", false, hash, bytes.length);
 		UpdatePlan install = plan(target, clientConfig(target.manifest().modpackId()),
 				List.of(new Operation(Root.PROJECTION, "mods/remove.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/remove.jar", true, hash, bytes.length)));
@@ -563,8 +537,8 @@ class UpdateTransactionExecutorTest {
 		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, "mods/remove.jar", hash, bytes.length)), removal.preservations());
 		assertTrue(removal.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR && operation.relativePath().equals("mods/generated-remove.jar")
 				&& operation.operation() == OperationType.DELETE && generatedHash.equals(operation.expectedExistingHash())));
-		UpdateTransaction transaction = UpdateTransaction.createRemoval(removal, ClientPlatform.LINUX, expected, storage.overlayDigest(target.manifest().modpackId()),
-				clientConfig(target.manifest().modpackId()));
+		UpdateTransaction transaction = UpdateTransaction.createRemoval(removal, ClientPlatform.LINUX, expected, target.flatTarget().ownershipLedger,
+				storage.overlayDigest(target.manifest().modpackId()), clientConfig(target.manifest().modpackId()));
 		Files.delete(storage.objectFile(hash));
 
 		assertTrue(executor.commit(transaction).success());
@@ -578,7 +552,7 @@ class UpdateTransactionExecutorTest {
 			assertEquals(List.of(), paths.toList());
 		}
 		assertNull(storage.readActiveState());
-		assertTrue(new ClientGenerationStore(storage).read(target.packTarget().contentToken()).isPresent());
+		assertTrue(Files.exists(storage.historyJournalFile(target.manifest().modpackId())), "Removal keeps the pack's mirror history; only the explicit forget flow deletes it");
 		assertTrue(new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).isEmpty());
 	}
 
@@ -588,7 +562,7 @@ class UpdateTransactionExecutorTest {
 		byte[] bytes = "deactivated-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
 		String managedPath = "config/empty/deactivate.txt";
-		SelectedModpackTarget target = target(managedPath, "config", false, hash, bytes.length);
+		SelectedModpackTarget target = target(storage, managedPath, "config", false, hash, bytes.length);
 		UpdateTransactionExecutor executor = executor(storage);
 		executor.commit(plan(target, clientConfig(target.manifest().modpackId()),
 				List.of(new Operation(Root.PROJECTION, managedPath, OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
@@ -619,7 +593,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan deactivation = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(), generatedCopies,
 				new ClientConfigJsons.ClientConfigFieldsV3()));
 
-		assertTrue(executor.commit(UpdateTransaction.createDeactivation(deactivation, ClientPlatform.LINUX, expected,
+		assertTrue(executor.commit(UpdateTransaction.createDeactivation(deactivation, ClientPlatform.LINUX, expected, target.flatTarget().ownershipLedger,
 				storage.overlayDigest(target.manifest().modpackId()), clientConfig(target.manifest().modpackId()))).success());
 
 		assertFalse(Files.exists(live));
@@ -627,7 +601,7 @@ class UpdateTransactionExecutorTest {
 		assertTrue(Files.isDirectory(userFile.getParent()));
 		assertEquals("user-owned", Files.readString(userFile, StandardCharsets.UTF_8));
 		assertNull(storage.readActiveState());
-		assertTrue(new ClientGenerationStore(storage).read(target.packTarget().contentToken()).isPresent());
+		assertTrue(Files.exists(storage.historyJournalFile(target.manifest().modpackId())), "Deactivation keeps the pack's mirror history");
 		assertEquals(expected, new ClientSelectionStore(storage.selectionFile()).get(target.manifest().modpackId()).orElseThrow());
 		assertTrue(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.packTarget().contentToken(), UpdateTransaction.digest(expected))));
 		assertTrue(Files.exists(storage.baselineFile(target.manifest().modpackId())));
@@ -697,25 +671,17 @@ class UpdateTransactionExecutorTest {
 				ChangeSet.empty());
 	}
 
-	private static GenerationJsons.HeadDocumentFields head(PackDocument document) {
-		GenerationJsons.HeadDocumentFields fields = new GenerationJsons.HeadDocumentFields();
-		fields.contentToken = document.contentToken();
-		fields.policySha1 = document.policySha1();
-		fields.createdAt = document.createdAt().toString();
-		fields.ownershipLedger = document.ownershipLedger().toFields();
-		fields.policy = document.manifest().toFields();
-		return fields;
-	}
-
-	private static SelectedModpackTarget target(String path, String type, boolean editable, String hash, long size) {
+	private static SelectedModpackTarget target(ClientStorage storage, String path, String type, boolean editable, String hash, long size) throws IOException {
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields(path, type, editable, hash, size)));
-		return SelectedModpackTarget.prepare(head(document), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		TestPacks.stageGeneration(storage, document);
+		return SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
 	}
 
-	private static SelectedModpackTarget nextTarget(SelectedModpackTarget parent, String path, String hash, long size, Instant createdAt) {
+	private static SelectedModpackTarget nextTarget(ClientStorage storage, SelectedModpackTarget parent, String path, String hash, long size, Instant createdAt) throws IOException {
 		GroupManifest manifest = GroupManifestValidator.validate(fields(path, "mod", false, hash, size));
 		PackDocument document = PackDocument.create(manifest, TestPacks.policySha1(manifest), createdAt, parent.document().ownershipLedger());
-		return SelectedModpackTarget.prepare(head(document), parent.selection().intent(), parent.selection().intent(), ClientPlatform.LINUX);
+		TestPacks.stageGeneration(storage, document);
+		return SelectedModpackTarget.prepare(document, parent.selection().intent(), parent.selection().intent(), ClientPlatform.LINUX);
 	}
 
 	private static ModpackJsons.CompleteModpackContentFields fields(String path, String type, boolean editable, String hash, long size) {

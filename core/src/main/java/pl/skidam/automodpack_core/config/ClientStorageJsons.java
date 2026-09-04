@@ -35,6 +35,7 @@ public class ClientStorageJsons {
 		public String modpackId = "";
 		public String contentToken = "";
 		public String status = "ACTIVE";
+		public GenerationJsons.OwnershipLedgerFields ownershipLedger = new GenerationJsons.OwnershipLedgerFields();
 	}
 
 	public static class ClientPreservationVaultFields {
@@ -82,10 +83,5 @@ public class ClientStorageJsons {
 			public String objectHash = "";
 			public long size = -1;
 		}
-	}
-
-	public static class ClientCompactionJournalFields {
-		public int schemaVersion = 1;
-		public List<String> removedGenerationIds = List.of();
 	}
 }

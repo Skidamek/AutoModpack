@@ -84,7 +84,7 @@ final class InstalledModpackController {
 		try {
 			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 			if (state == null || !modpackId.equals(state.modpackId)) return null;
-			return new ClientGenerationStore(storage).read(state.contentToken).orElse(null);
+			return new ClientGenerationStore(storage).activeDocument().orElse(null);
 		} catch (IOException | RuntimeException e) {
 			discoveryFailure = e;
 			return null;
@@ -107,10 +107,17 @@ final class InstalledModpackController {
 		String activeId = activeModpackId();
 		try {
 			List<Pending> pending = new ArrayList<>();
-			for (PackDocument record : new ClientGenerationStore(storage).installedRecords()) {
-				ConnectionJsons.ConnectionInfo connection = connection(record.manifest().modpackId());
+			for (String modpackId : new ClientGenerationStore(storage).installedPackIds()) {
+				PackDocument record;
+				try {
+					record = new ClientGenerationStore(storage).newestDocument(modpackId);
+				} catch (IOException | RuntimeException e) {
+					discoveryFailure = e;
+					continue;
+				}
+				ConnectionJsons.ConnectionInfo connection = connection(modpackId);
 				String connectionOrigin = connectionOrigin(connection);
-				pending.add(new Pending(record, record.manifest().modpackId().equals(activeId), connection, displayName(record, connectionOrigin)));
+				pending.add(new Pending(record, modpackId.equals(activeId), connection, displayName(record, connectionOrigin)));
 			}
 			pending.sort(Comparator.comparing(Pending::displayName, String.CASE_INSENSITIVE_ORDER));
 			return pending.stream().map(entry -> pack(entry.record(), entry.active(), entry.connection())).toList();
@@ -139,8 +146,8 @@ final class InstalledModpackController {
 		return ClientObjectStore.validate(storage);
 	}
 
-	ClientGenerationStore.CompactionResult compactStorage() throws IOException {
-		return new ClientGenerationStore(storage).compact();
+	ClientObjectStore.CollectionResult collectStorage() throws IOException {
+		return ClientObjectStore.collectUnreachableObjects(storage, Set.of());
 	}
 
 	List<PreservationVault.Snapshot> preservedFiles() throws IOException {

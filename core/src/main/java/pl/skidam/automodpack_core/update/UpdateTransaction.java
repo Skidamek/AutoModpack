@@ -12,6 +12,8 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -26,7 +28,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-/** The single write-ahead record for one client update. It stores intent and operations, never filesystem paths or duplicated manifests. */
+/** The single write-ahead record for one client update. It stores intent, operations, and its target's ledger, never filesystem paths or duplicated manifests. */
 public final class UpdateTransaction {
 	public static final int CURRENT_SCHEMA_VERSION = 1;
 
@@ -38,6 +40,7 @@ public final class UpdateTransaction {
 	public String contentToken;
 	public String policySha1;
 	public String ledgerDigest;
+	public GenerationJsons.OwnershipLedgerFields ownershipLedger;
 	public String targetPlatform;
 	public String selectionDigest;
 	public String overlayDigest;
@@ -75,7 +78,7 @@ public final class UpdateTransaction {
 			throw new IllegalArgumentException("Plan and selected flat target generation identities disagree");
 
 		UpdateTransaction transaction = base(Purpose.MODPACK_UPDATE);
-		fillGeneration(transaction, plan.packTarget());
+		fillGeneration(transaction, plan.packTarget(), target.document().ownershipLedger());
 		transaction.targetPlatform = target.platform().id();
 		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
 		transaction.expectedPriorRequestedGroups = intentValues(target.expectedPriorIntent(), IntentPart.GROUPS);
@@ -92,22 +95,22 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest,
-			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
-		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, overlayDigest, expectedClientConfig);
+	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
+			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
+		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig);
 	}
 
-	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest,
-			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
-		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, overlayDigest, expectedClientConfig);
+	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
+			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
+		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig);
 	}
 
-	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest,
-			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
+	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent,
+			GenerationJsons.OwnershipLedgerFields ownershipLedger, String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(platform, "platform");
 		UpdateTransaction transaction = base(purpose);
-		fillGeneration(transaction, plan.packTarget());
+		fillGeneration(transaction, plan.packTarget(), OwnershipLedger.fromFields(ownershipLedger));
 		transaction.targetPlatform = platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
 		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
@@ -141,11 +144,15 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	private static void fillGeneration(UpdateTransaction transaction, PackTarget target) {
+	/** The pending work must be able to rebuild its target generation offline, so modpack transactions carry its exact ledger. */
+	private static void fillGeneration(UpdateTransaction transaction, PackTarget target, OwnershipLedger ledger) {
 		transaction.modpackId = target.modpackId();
 		transaction.contentToken = target.contentToken();
 		transaction.policySha1 = target.policySha1();
 		transaction.ledgerDigest = target.ledgerDigest();
+		if (!target.modpackId().equals(ledger.modpackId()) || !target.ledgerDigest().equals(ledger.digest()))
+			throw new IllegalArgumentException("Transaction generation identity does not match the target ledger");
+		transaction.ownershipLedger = ledger.toFields();
 	}
 
 	private static void fillPlan(UpdateTransaction transaction, UpdatePlan plan) {
