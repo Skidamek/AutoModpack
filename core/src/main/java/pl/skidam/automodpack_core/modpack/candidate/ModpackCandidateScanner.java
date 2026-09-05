@@ -166,11 +166,13 @@ public final class ModpackCandidateScanner {
 		if (candidate != null) {
 			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
 					request.stagingDirectory(), request.fileCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
-			if (snapshot.exclusion() == null) {
+			if (snapshot.exclusion() != null) {
+				exclusions.add(excluded(candidate, snapshot.exclusion()));
+			} else if (snapshot.file() != null) {
 				selected = candidate;
 				file = snapshot.file();
 				object = snapshot.object();
-			} else exclusions.add(excluded(candidate, snapshot.exclusion()));
+			}
 		}
 		ShadowedCandidate shadow = pair.explicit != null && pair.synced != null
 				? new ShadowedCandidate(pair.explicit, pair.synced, ShadowedCandidate.Relationship.NOT_COMPARED)

@@ -57,6 +57,7 @@ public final class StableSourceSnapshotter {
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 
 			FileInspection.Mod mod = modFileCache == null ? null : modFileCache.getModOrNull(source.sourcePath(), fileCache);
+			if (isSelfFile(source.sourcePath(), mod)) return Snapshot.SKIPPED;
 			exclusion = expectedContentExclusion(source.sourcePath(), autoExcludeServerMods, mod);
 			if (exclusion != null) return new Snapshot(null, exclusion, null);
 			String type = fileType(source.sourcePath(), source.logicalPath(), mod);
@@ -124,15 +125,18 @@ public final class StableSourceSnapshotter {
 		return null;
 	}
 
+	/** The AutoModpack jar itself never becomes a candidate; clients receive it through the bootstrap flow, so it is not an exclusion event either. */
+	private static boolean isSelfFile(Path source, FileInspection.Mod cachedMod) {
+		String modId = cachedMod != null && cachedMod.id() != null ? cachedMod.id() : FileInspection.getModID(source);
+		return MOD_ID.equals(modId) || (MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId)
+				|| (MOD_ID + "_mod").equals(modId);
+	}
+
 	private static Exclusion expectedContentExclusion(Path source, boolean autoExcludeServerMods, FileInspection.Mod cachedMod) {
 		if (cachedMod == null && !FileInspection.isMod(source)) return null;
-		if (autoExcludeServerMods && LoaderManagerService.EnvironmentType.SERVER.equals(FileInspection.getModEnvironment(source)))
-			return new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod");
-		String modId = cachedMod != null && cachedMod.id() != null ? cachedMod.id() : FileInspection.getModID(source);
-		if (MOD_ID.equals(modId) || (MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId)
-				|| (MOD_ID + "_mod").equals(modId))
-			return new Exclusion(ExcludedCandidate.Reason.AUTOMODPACK_FILE, "AutoModpack cannot publish itself");
-		return null;
+		return autoExcludeServerMods && LoaderManagerService.EnvironmentType.SERVER.equals(FileInspection.getModEnvironment(source))
+				? new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod")
+				: null;
 	}
 
 	private static String fileType(Path source, String logicalPath, FileInspection.Mod cachedMod) {
@@ -159,7 +163,10 @@ public final class StableSourceSnapshotter {
 		String copy(Path source, Path staged) throws IOException;
 	}
 
-	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object) {}
+	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object) {
+		/** The source is neither a candidate nor an exclusion event; it never reaches any report. */
+		public static final Snapshot SKIPPED = new Snapshot(null, null, null);
+	}
 
 	public record Exclusion(ExcludedCandidate.Reason reason, String message) {}
 }
