@@ -29,7 +29,7 @@ public interface ScreenService {
 	void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled);
 
 	/** Asks before an installed modpack starts being served from a different address; exactly one of the runnables runs. */
-	default void originChange(String modpackName, String previousOrigin, String newOrigin, Runnable allowed, Runnable refused) {
+	default void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
 		refused.run();
 	}
 

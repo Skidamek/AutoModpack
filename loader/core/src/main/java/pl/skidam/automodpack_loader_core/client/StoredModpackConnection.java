@@ -38,6 +38,7 @@ public final class StoredModpackConnection implements AutoCloseable {
 		if (stored == null || stored.connectionMode == null || stored.origin == null || stored.endpoint == null) return null;
 		ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(stored.origin, stored.endpoint, stored.connectionMode,
 				CertificateTrustStore.getFingerprint(stored.origin), null);
+		stored.approvedOrigins().forEach(connection::approveOrigin);
 		Secrets.Secret secret = SecretsStore.getClientSecret(storage, modpackId, stored.origin);
 		return new Seeded(connection, secret == null ? Secrets.anonymousSecret() : secret, secret == null);
 	}

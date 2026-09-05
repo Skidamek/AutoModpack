@@ -3,6 +3,8 @@ package pl.skidam.automodpack.networking.packet;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -145,10 +147,12 @@ final class ClientLoginUpdateFlow {
 	private static CompletableFuture<LoginUpdateResponse> continueReconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			ClientStorage storage, DownloadClient downloadClient, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, boolean originApproved) {
 		ModpackJsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
-		ConnectionJsons.ConnectionInfo stored = originApproved ? null : storedConnection(storage, serverModpackContent.modpackId);
-		if (stored != null && stored.origin != null && !AddressHelpers.formatAddress(stored.origin).equals(AddressHelpers.formatAddress(connectionInfo.origin))) {
+		ConnectionJsons.ConnectionInfo stored = storedConnection(storage, serverModpackContent.modpackId);
+		if (!originApproved && stored != null && stored.origin != null && !stored.isApprovedOrigin(connectionInfo.origin)) {
 			return CompletableFuture.completedFuture(offerOriginChange(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, alreadyDisconnected, stored));
 		}
+		if (stored != null) stored.approvedOrigins().forEach(connectionInfo::approveOrigin);
+		connectionInfo.approveOrigin(AddressHelpers.formatAddress(connectionInfo.origin));
 		try {
 			ConnectionStore.saveConnection(storage, serverModpackContent.modpackId, connectionInfo);
 			SecretsStore.saveClientSecret(storage, serverModpackContent.modpackId, connectionInfo.origin, secret);
@@ -231,7 +235,7 @@ final class ClientLoginUpdateFlow {
 		}
 	}
 
-	/** A different address serving an installed pack can be a migration or an impostor; the player decides once and the saved connection makes it stick. */
+	/** A new address serving an installed pack can be a sibling server, a migration or an impostor; the player decides once and the approval set makes it stick. */
 	private static LoginUpdateResponse offerOriginChange(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			ClientStorage storage, DownloadClient downloadClient, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, ConnectionJsons.ConnectionInfo stored) {
 		if (!alreadyDisconnected) disconnectImmediately(handler);
@@ -242,7 +246,9 @@ final class ClientLoginUpdateFlow {
 		}
 		String modpackName = selectedTarget.manifest().modpackName();
 		if (modpackName.isBlank()) modpackName = selectedTarget.flatTarget().modpackId;
-		ScreenManager.originChange(modpackName, AddressHelpers.formatAddress(stored.origin), AddressHelpers.formatAddress(connectionInfo.origin),
+		List<String> approved = new ArrayList<>(stored.approvedOrigins());
+		if (approved.isEmpty() && stored.origin != null) approved.add(AddressHelpers.formatAddress(stored.origin));
+		ScreenManager.originChange(modpackName, String.join(", ", approved), AddressHelpers.formatAddress(connectionInfo.origin),
 				() -> DownloadClient.NET_EXECUTOR.execute(() -> continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, true, true)),
 				() -> {
 					downloadClient.close();

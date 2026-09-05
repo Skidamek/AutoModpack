@@ -16,6 +16,7 @@ import java.util.function.Supplier;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
@@ -108,6 +109,11 @@ public final class ConfigTools {
 			if (source.origin != null) object.addProperty("origin", AddressHelpers.formatAddress(source.origin));
 			if (source.endpoint != null) object.addProperty("endpoint", AddressHelpers.formatAddress(source.endpoint));
 			object.add("connectionMode", context.serialize(source.connectionMode));
+			if (!source.approvedOrigins().isEmpty()) {
+				JsonArray approved = new JsonArray();
+				source.approvedOrigins().forEach(approved::add);
+				object.add("approvedOrigins", approved);
+			}
 			return object;
 		}
 
@@ -122,7 +128,10 @@ public final class ConfigTools {
 				ModpackConnectionMode connectionMode = modeElement == null || modeElement.isJsonNull()
 						? ModpackConnectionMode.HOLEPUNCH
 						: context.deserialize(modeElement, ModpackConnectionMode.class);
-				return new ConnectionJsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
+				ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
+				JsonElement approved = object.get("approvedOrigins");
+				if (approved != null && approved.isJsonArray()) for (JsonElement element : approved.getAsJsonArray()) if (element.isJsonPrimitive()) connection.approveOrigin(element.getAsString());
+				return connection;
 			} catch (IllegalArgumentException e) {
 				throw new JsonParseException("Invalid ConnectionInfo", e);
 			}
