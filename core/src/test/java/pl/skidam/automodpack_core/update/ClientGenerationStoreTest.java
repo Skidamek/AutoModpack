@@ -33,6 +33,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 
 class ClientGenerationStoreTest {
 	private static final String FIRST_PACK = "abc1234";
@@ -73,6 +74,26 @@ class ClientGenerationStoreTest {
 		assertEquals(document, target.document());
 		assertNull(target.expectedPriorIntent());
 		assertEquals(Set.of("main"), target.selection().selectedGroups());
+	}
+
+	@Test
+	void declaringDetachmentFreesTheActiveProjection() throws Exception {
+		ClientStorage storage = storage();
+		PackDocument document = document(FIRST_PACK, "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", 12, Instant.now());
+		storage.writeActiveState(FIRST_PACK, document.contentToken(), document.ownershipLedger().toFields());
+		Path activeFile = storage.activePath("config/kept.txt");
+		Files.createDirectories(activeFile.getParent());
+		Files.writeString(activeFile, "kept", StandardCharsets.UTF_8);
+		ImmutableFiles.protect(activeFile);
+		assertTrue(ImmutableFiles.isProtected(activeFile));
+
+		new ClientGenerationStore(storage).declareDetached(FIRST_PACK);
+
+		assertTrue(storage.isDetached(FIRST_PACK));
+		assertFalse(ImmutableFiles.isProtected(activeFile));
+		// The owner can now edit and delete their kept state.
+		Files.writeString(activeFile, "edited", StandardCharsets.UTF_8);
+		Files.delete(activeFile);
 	}
 
 	@Test

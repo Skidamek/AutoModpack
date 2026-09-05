@@ -220,7 +220,7 @@ final class InstalledModpackController {
 	void stopSyncing(Pack pack, Runnable completed) {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
-				storage.setDetached(pack.modpackId(), true);
+				new ClientGenerationStore(storage).declareDetached(pack.modpackId());
 				releaseOnClient(completed);
 			} catch (Exception e) {
 				releaseOnClient(completed);
