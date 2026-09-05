@@ -27,7 +27,7 @@ import javax.net.ssl.SSLKeyException;
  */
 final class TlsRecordCamouflage {
 	private static final int TLS_HEADER_LENGTH = 5;
-	private static final int FRAME_HEADER_LENGTH = 3;
+	static final int FRAME_HEADER_LENGTH = 3;
 	private static final int SAMPLE_LENGTH = 16;
 	static final int MAX_RECORD_LENGTH = 16 * 1024 + 2048;
 	private static final byte[] CLIENT_TO_SERVER = "AUTOMODPACK-TLS-RECORD-KEY/CLIENT-TO-SERVER".getBytes(StandardCharsets.UTF_8);
@@ -163,6 +163,11 @@ final class TlsRecordCamouflage {
 		}
 		output.put(record);
 		reset();
+	}
+
+	/** Total size of the record currently being reassembled, or zero when sitting on a frame boundary. */
+	int pendingRecordLength() {
+		return record != null ? record.length : 0;
 	}
 
 	/** The last sixteen payload bytes, zero-padded on the left. */

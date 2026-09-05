@@ -163,9 +163,11 @@ public class HolepunchSocket extends Socket {
 		if (camouflage != null && data.length != 0) {
 			try {
 				ByteBuffer input = ByteBuffer.wrap(data);
-				ByteBuffer decoded = ByteBuffer.allocate(data.length);
+				// The decoder keeps state across dispatches: this dispatch can complete a record
+				// started by an earlier one and decode up to one full pending record more than
+				// its own wire bytes, so the pending record sizes the output buffer.
+				ByteBuffer decoded = ByteBuffer.allocate(data.length + camouflage.inbound().pendingRecordLength());
 				camouflage.inbound().decode(input, decoded);
-				if (input.hasRemaining()) throw new IOException("TLS record camouflage did not consume inbound data");
 				decoded.flip();
 				data = new byte[decoded.remaining()];
 				decoded.get(data);
@@ -298,9 +300,9 @@ public class HolepunchSocket extends Socket {
 			TlsRecordCamouflage.Pair camouflage = activeConnection.isRaw() ? trafficCamouflage : null;
 			ByteBuffer outbound = data.duplicate();
 			if (camouflage != null && outbound.hasRemaining()) {
-				// Headroom receipt: the worst case is minimum-size records, 17 bytes of payload
-				// becoming a 23-byte frame, about five percent.
-				ByteBuffer encoded = ByteBuffer.allocate(outbound.remaining() + outbound.remaining() / 4 + 64);
+				// Mirrors the decode side: completing a record pending from an earlier write can
+				// emit up to one full record plus its frame VarInt beyond this write's own bytes.
+				ByteBuffer encoded = ByteBuffer.allocate(outbound.remaining() + camouflage.outbound().pendingRecordLength() + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
 				camouflage.outbound().encode(outbound, encoded);
 				encoded.flip();
 				outbound = encoded;
