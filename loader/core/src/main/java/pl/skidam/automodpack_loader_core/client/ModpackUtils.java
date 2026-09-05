@@ -361,10 +361,14 @@ public class ModpackUtils {
 
 		CompletableFuture<Boolean> result = new CompletableFuture<>();
 		Runnable trustAction = () -> {
+			LOGGER.info("Certificate trust accepted by the player for {}", originHost);
 			CertificateTrustStore.save(connectionInfo.origin, fingerprint, CertificateTrustStore.Reason.TOFU);
 			result.complete(true);
 		};
-		Runnable cancelAction = () -> result.completeExceptionally(new CertificateTrustCancelledException());
+		Runnable cancelAction = () -> {
+			LOGGER.info("Certificate trust cancelled by the player for {}", originHost);
+			result.completeExceptionally(new CertificateTrustCancelledException());
+		};
 		ScreenManager.validation(parent, fingerprint, AddressHelpers.formatAddress(connectionInfo.origin), trustAction, cancelAction);
 		return result;
 	}

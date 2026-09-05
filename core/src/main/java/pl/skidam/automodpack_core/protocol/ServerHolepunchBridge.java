@@ -94,7 +94,7 @@ public final class ServerHolepunchBridge {
 
 						@Override
 						public void onClosed(HolepunchFailure failure) {
-							LOGGER.debug("Holepunched AutoModpack connection closed: {} ({})", address, failure);
+							LOGGER.info("Holepunch AutoModpack connection closed for {} ({})", address, failure.getMessage());
 							HolepunchSocket openedSocket = socket;
 							if (openedSocket != null) openedSocket.close();
 						}
@@ -182,7 +182,7 @@ public final class ServerHolepunchBridge {
 
 			pumpEmbeddedChannel(channel, socket);
 		} catch (Exception e) {
-			LOGGER.debug("AutoModpack holepunch handler ended", e);
+			LOGGER.warn("AutoModpack holepunch handler ended for {}", remoteAddress, e);
 		} finally {
 			sockets.remove(socket);
 			if (channel != null) channel.finishAndReleaseAll();

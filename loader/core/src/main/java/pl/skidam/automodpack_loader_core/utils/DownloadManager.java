@@ -548,6 +548,7 @@ public class DownloadManager {
 
 	public void cancelAllAndShutdown() {
 		cancelled = true;
+		LOGGER.info("Cancelling the download run: {} queued, {} in-flight", queuedDownloads.size(), downloadsInProgress.size());
 		queuedDownloads.clear();
 		downloadsInProgress.forEach((k, v) -> v.future.cancel(true));
 		activeTemporaryFiles.values().forEach(path -> {
