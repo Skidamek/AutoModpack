@@ -296,7 +296,12 @@ public class Commands {
 	}
 
 	private static MutableComponent copyable(String value) {
-		return VersionedText.literal(value).withStyle(style -> style
+		return copyable(value, value);
+	}
+
+	/** Shows {@code display}, click-copies {@code value}. */
+	private static MutableComponent copyable(String display, String value) {
+		return VersionedText.literal(display).withStyle(style -> style
 				/*? if >=1.21.5 {*/
 				.withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
 				.withClickEvent(new ClickEvent.CopyToClipboard(value)));
@@ -423,8 +428,8 @@ public class Commands {
 		send(context, "/automodpack generate [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-content <content-token> [notes <text...>]", ChatFormatting.YELLOW, false);
-			send(context, "/automodpack generate revert <seq> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
-			send(context, "/automodpack generate history/storage [collect confirm]", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack generate revert <seq> confirm [notes <text...>]", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack generate history/storage [collect confirm]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
@@ -451,8 +456,8 @@ public class Commands {
 			if (preview) {
 				ModpackExecutor.PreviewResult result = modpackExecutor.preview(notes);
 				if (result instanceof ModpackExecutor.PreviewReady ready) {
-					send(context, "PREVIEW READY" + elapsed(start), ChatFormatting.GREEN, false);
-					reportGenerationDetails(context, ready.state(), null, false);
+					headline(context, "PREVIEW READY", start, ready.state().contentToken(), ChatFormatting.GREEN, false);
+					reportGenerationDetails(context, ready.state(), true, false);
 					if (ready.state().parent().isEmpty())
 						send(context, "Guarded publication is unavailable until an unguarded root publication exists", ChatFormatting.YELLOW, false);
 				} else if (result instanceof ModpackExecutor.PreviewBusy busy) {
@@ -465,16 +470,15 @@ public class Commands {
 
 			ModpackExecutor.PublishResult result = guarded ? modpackExecutor.publishIfContent(expectedToken, notes) : modpackExecutor.publish(notes);
 			if (result instanceof ModpackExecutor.Published published) {
-				send(context, "PUBLISHED" + elapsed(start), ChatFormatting.GREEN, true);
-				reportGenerationDetails(context, published.state(), published.current(), false);
-				published.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, false));
+				headline(context, "PUBLISHED", start, published.state().contentToken(), ChatFormatting.GREEN, true);
+				reportGenerationDetails(context, published.state(), false, true);
+				published.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
 			} else if (result instanceof ModpackExecutor.NoChanges noChanges) {
-				send(context, "NO_CHANGES" + elapsed(start), ChatFormatting.YELLOW, true);
-				reportGenerationDetails(context, noChanges.state(), noChanges.current(), false);
-				noChanges.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, false));
+				headline(context, "NO_CHANGES", start, noChanges.state().contentToken(), ChatFormatting.YELLOW, true);
+				reportGenerationDetails(context, noChanges.state(), false, true);
+				noChanges.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
 			} else if (result instanceof ModpackExecutor.PublishGuardMismatch mismatch) {
 				send(context, "FAILED: " + mismatch.detail(), ChatFormatting.RED, true);
-				reportGenerationDetails(context, mismatch.state(), null, false);
 			} else if (result instanceof ModpackExecutor.PublishInvalidGuard invalid) {
 				send(context, "FAILED: " + invalid.detail(), ChatFormatting.RED, true);
 			} else if (result instanceof ModpackExecutor.PublishGuardUnsupported unsupported) {
@@ -486,6 +490,12 @@ public class Commands {
 			}
 		});
 		return Command.SINGLE_SUCCESS;
+	}
+
+	/** The one-line outcome of a generation: status, elapsed time and the short content token that click-copies the full one. */
+	private static void headline(CommandContext<CommandSourceStack> context, String status, long start, String contentToken, ChatFormatting statusColor, boolean broadcast) {
+		send(context, status + elapsed(start), statusColor, VersionedText.literal("content token ").append(copyable(shortToken(contentToken), contentToken)),
+				ChatFormatting.WHITE, broadcast);
 	}
 
 	private static int previewRevertGeneration(CommandContext<CommandSourceStack> context) {
@@ -524,13 +534,14 @@ public class Commands {
 			return 0;
 		}
 		Util.backgroundExecutor().execute(() -> {
+			long start = System.currentTimeMillis();
 			send(context, "Reverting the modpack to #" + targetSeq + "...", ChatFormatting.YELLOW, true);
 			ModpackExecutor.RevertResult result = modpackExecutor.revert(targetSeq, notes);
 			if (result instanceof ModpackExecutor.Reverted reverted) {
-				send(context, "REVERTED", ChatFormatting.GREEN, true);
-				send(context, "New content token", ChatFormatting.WHITE, copyable(reverted.current().contentToken()), ChatFormatting.YELLOW, true);
-				send(context, "Restored entry", ChatFormatting.WHITE, "#" + reverted.targetSeq(), ChatFormatting.YELLOW, true);
-				reverted.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, false));
+				send(context, "REVERTED to #" + reverted.targetSeq() + elapsed(start), ChatFormatting.GREEN,
+						VersionedText.literal("content token ").append(copyable(shortToken(reverted.current().contentToken()), reverted.current().contentToken())),
+						ChatFormatting.WHITE, true);
+				reverted.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
 			} else if (result instanceof ModpackExecutor.RevertBusy busy) {
 				send(context, "FAILED: " + busy.detail(), ChatFormatting.RED, true);
 			} else if (result instanceof ModpackExecutor.RevertInvalidTarget invalid) {
@@ -560,7 +571,6 @@ public class Commands {
 	private static void reportRevertTarget(CommandContext<CommandSourceStack> context, JournalEntry target, List<JournalEntry> history) {
 		send(context, "Revert target", ChatFormatting.YELLOW, "#" + target.seq() + " " + target.createdAt(), ChatFormatting.WHITE, true);
 		send(context, "Target content", ChatFormatting.WHITE, copyable(target.contentToken()), ChatFormatting.YELLOW, false);
-		send(context, "Target policy document", ChatFormatting.WHITE, copyable(target.policySha1()), ChatFormatting.YELLOW, false);
 		if (!target.notes().isBlank()) send(context, "Target patch notes: " + firstLine(target.notes()), ChatFormatting.GRAY, false);
 		if (!history.isEmpty() && history.get(history.size() - 1).seq() != target.seq())
 			send(context, "Changes from current: " + changesSince(history, target), ChatFormatting.YELLOW, false);
@@ -643,7 +653,8 @@ public class Commands {
 	}
 
 	private static String elapsed(long start) {
-		return " took " + (System.currentTimeMillis() - start) + "ms";
+		long ms = System.currentTimeMillis() - start;
+		return ms >= 1000 ? String.format(Locale.ROOT, " took %.1fs", ms / 1000.0) : " took " + ms + "ms";
 	}
 
 	/** Newest journal entries the operator-facing history command prints; the journal file itself is the authority beyond this window. */
@@ -657,23 +668,20 @@ public class Commands {
 		return notes.split("\\R", -1)[0];
 	}
 
-	private static void reportGenerationDetails(CommandContext<CommandSourceStack> context, ModpackExecutor.CandidateState state,
-			PackDocument current, boolean broadcast) {
-		state.parent().ifPresent(parent -> send(context, "Parent content token", ChatFormatting.WHITE, copyable(parent.contentToken()), ChatFormatting.YELLOW, broadcast));
-		send(context, "Candidate content token", ChatFormatting.WHITE, copyable(state.contentToken()), ChatFormatting.YELLOW, broadcast);
+	/** The diff line always; the per-file and exclusion detail only on explicit inspection (preview), which stays sender-only. */
+	private static void reportGenerationDetails(CommandContext<CommandSourceStack> context, ModpackExecutor.CandidateState state, boolean detail, boolean broadcast) {
 		var diff = state.diff().summary();
-		send(context, String.format(Locale.ROOT, "Diff: +%d ~%d -%d metadata-only %d metadata changes %d", diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles(),
-				diff.metadataOnlyFiles(), diff.metadataChanges()), ChatFormatting.WHITE, broadcast);
-		for (String change : state.diff().humanReadableChanges()) send(context, "Change: " + change, ChatFormatting.GRAY, broadcast);
-		var summary = state.summary();
-		send(context, String.format(Locale.ROOT, "Candidate: %d groups, %d files, %d objects, %d exclusions, %d shadows", summary.groups(), summary.files(), summary.objects(),
-				summary.exclusions(), summary.shadows()), ChatFormatting.WHITE, broadcast);
-		for (var exclusion : summary.excluded())
+		StringBuilder diffLine = new StringBuilder(String.format(Locale.ROOT, "Diff: +%d ~%d -%d", diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles()));
+		int exclusions = state.summary().exclusions();
+		if (exclusions > 0) diffLine.append(String.format(Locale.ROOT, " (%d excluded)", exclusions));
+		if (diff.metadataChanges() > 0) diffLine.append(String.format(Locale.ROOT, " (%d metadata)", diff.metadataChanges()));
+		send(context, diffLine.toString(), ChatFormatting.WHITE, broadcast);
+		if (!detail) return;
+		for (String change : state.diff().humanReadableChanges()) send(context, "Change: " + change, ChatFormatting.GRAY, false);
+		for (var exclusion : state.summary().excluded())
 			send(context, String.format(Locale.ROOT, "Excluded: %s/%s - %s (%s)", exclusion.source().groupId(), exclusion.source().logicalPath(),
-					exclusion.reason().name().toLowerCase(Locale.ROOT), exclusion.message()), ChatFormatting.GRAY, broadcast);
-		state.patchNotesSource().ifPresent(source -> send(context, "Patch notes: " + source.name().toLowerCase(Locale.ROOT), ChatFormatting.WHITE, broadcast));
-		if (current != null)
-			send(context, "Current content token", ChatFormatting.WHITE, copyable(current.contentToken()), ChatFormatting.YELLOW, broadcast);
+					exclusion.reason().name().toLowerCase(Locale.ROOT), exclusion.message()), ChatFormatting.GRAY, false);
+		state.patchNotesSource().ifPresent(source -> send(context, "Patch notes: " + source.name().toLowerCase(Locale.ROOT), ChatFormatting.WHITE, false));
 	}
 
 	private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, boolean broadcast) {
