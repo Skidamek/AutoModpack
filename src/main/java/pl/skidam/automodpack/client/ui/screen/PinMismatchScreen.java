@@ -13,7 +13,6 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /**
@@ -22,7 +21,6 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
  */
 public final class PinMismatchScreen extends VersionedScreen {
 	private static final int BODY = 420;
-	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 	private final Screen parent;
 	private final String origin;
 	private final String expectedFingerprint;
@@ -55,9 +53,9 @@ public final class PinMismatchScreen extends VersionedScreen {
 		ActionRow copyRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails()));
 		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
 		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, copyRow, footerRow);
-		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, copyRow, footerRow) - 4;
 		// The body starts below the pinned header; the "copied" confirmation shifts it down one line while it shows.
-		addCenteredScrollBody(BODY, 42 + (copied ? LINE : 0), bottomLimit, lines);
+		DialogColumn column = layoutDialogColumn(42 + (copied ? LINE_HEIGHT : 0), actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, copyRow, footerRow), lines.size() * LINE_HEIGHT, 0);
+		addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), lines);
 	}
 
 	private List<MutableComponent> wrappedFingerprint(String label, String fingerprint, int wrapWidth) {

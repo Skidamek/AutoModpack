@@ -15,7 +15,6 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
@@ -28,7 +27,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 /** Provides an explicit, user-confirmed cleanup pass for client local storage. */
 public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 310;
-	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 
 	private final Screen parent;
 	private final InstalledModpackController controller;
@@ -61,8 +59,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		buttons.get(0).active = !busy && !closed;
 		buttons.get(1).active = !busy && !closed;
 
-		// One pinned status line reserved right above the action area, so the busy/complete feedback never moves.
-		statusY = actionAreaTop(PANEL_WIDTH, actionY, maintenanceRow, footerRow) - 2 - LINE;
+		// One pinned status line rides with the column, so the busy/complete feedback never moves.
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.description").getString(), wrapWidth, ChatFormatting.GRAY));
@@ -81,7 +78,9 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
 					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())).getString(), wrapWidth));
 		}
-		this.addCenteredScrollBody(PANEL_WIDTH, 32, statusY - 4, lines);
+		DialogColumn column = layoutDialogColumn(32, actionAreaTop(PANEL_WIDTH, actionY, maintenanceRow, footerRow), lines.size() * LINE_HEIGHT, LINE_HEIGHT);
+		statusY = column.stackTop();
+		this.addCenteredScrollBody(PANEL_WIDTH, column.bodyTop(), column.bodyBottom(), lines);
 	}
 
 	private void verify() {

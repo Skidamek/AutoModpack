@@ -80,14 +80,15 @@ public class ErrorScreen extends VersionedScreen {
 
 		// Pinned header: title line at 36, the "copied" confirmation at 62 while it shows, the category right under it.
 		categoryY = 62 + (copied ? 16 : 0);
-		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new)) - 4;
+		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
 		int wrapWidth = Math.max(1, this.width - 30);
 		List<MutableComponent> lines = new ArrayList<>();
 		String summary = VersionedText.translatable(request.messageKey(), request.translationArguments()).getString();
 		lines.addAll(wrapParagraph(this.font, summary, wrapWidth, ChatFormatting.GRAY));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.error.details").getString(), wrapWidth, ChatFormatting.GRAY));
-		this.addScrollBody(wrapWidth, categoryY + 16, bottomLimit, lines, true);
+		DialogColumn column = layoutDialogColumn(categoryY + 16, footerTop, lines.size() * LINE_HEIGHT, 0);
+		this.addScrollBody(wrapWidth, column.bodyTop(), column.bodyBottom(), lines, true);
 	}
 
 	private void back() {

@@ -28,7 +28,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /** One ObjectSelectionList of already-wrapped text lines for a pinned-title / pinned-footer dialog body. */
 public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget.Entry> implements RowViewport {
-	public static final int ROW_HEIGHT = 9;
+	public static final int ROW_HEIGHT = VersionedScreen.LINE_HEIGHT;
 	private final int contentWidth;
 	private final boolean center;
 

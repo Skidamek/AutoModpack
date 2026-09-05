@@ -20,7 +20,6 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack.client.ui.widget.UnverifiedJarList;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePreview;
@@ -36,7 +35,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 /** Confirm before an update starts; the unverified-jar list and typed-ack gate appear only when unverified jars were selected. */
 public final class PackConfirmScreen extends VersionedScreen {
 	private static final int BODY = 420;
-	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 	private static final int TIMER_TICKS = 10 * 20;
 	private final ModpackUpdater updater;
 	private final boolean firstInstall;
@@ -133,7 +131,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 			this.setInitialFocus(cancelButton);
 		}
 
-		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray) - 4;
+		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		layoutBody(bottomY);
 	}
 
@@ -190,11 +188,12 @@ public final class PackConfirmScreen extends VersionedScreen {
 		return label;
 	}
 
-	private void layoutBody(int bottomY) {
+	private void layoutBody(int footerTop) {
 		if (!unverified) {
-			layoutMatchedBody(bottomY);
+			layoutMatchedBody(footerTop);
 			return;
 		}
+		int bottomY = footerTop - 4;
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> topLines = new ArrayList<>();
 		if (firstInstall) {
@@ -212,23 +211,22 @@ public final class PackConfirmScreen extends VersionedScreen {
 		bottomLines.add(blankLine());
 		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
 
-		int topHeight = topLines.size() * LINE;
-		int bottomHeight = bottomLines.size() * LINE;
-		int available = Math.max(LINE, bottomY - 42);
+		int topHeight = topLines.size() * LINE_HEIGHT;
+		int bottomHeight = bottomLines.size() * LINE_HEIGHT;
+		int available = Math.max(LINE_HEIGHT, bottomY - 42);
 		int listRows = preferredListRows(available - topHeight - bottomHeight - 8);
 		int listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
 		int needed = topHeight + 4 + listHeight + 4 + bottomHeight;
 
-		if (needed <= available) {
-			placeUnverifiedBody(42, bottomY, topLines, bottomLines, topHeight, listHeight);
-			return;
+		if (needed > available) {
+			listRows = Math.max(3, listRows - 1);
+			listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
+			needed = topHeight + 4 + listHeight + 4 + bottomHeight;
 		}
-
-		listRows = Math.max(3, listRows - 1);
-		listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
-		needed = topHeight + 4 + listHeight + 4 + bottomHeight;
 		if (needed <= available) {
-			placeUnverifiedBody(42, bottomY, topLines, bottomLines, topHeight, listHeight);
+			// The whole assembly centers, so a short window never opens a hole between the blocks.
+			int assemblyTop = 42 + (available - needed) / 2;
+			placeUnverifiedBody(assemblyTop, assemblyTop + needed, topLines, bottomLines, topHeight, listHeight);
 			return;
 		}
 
@@ -241,7 +239,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 	}
 
 	/** The matched layout: one centered scroll body between the pinned title and the action area. */
-	private void layoutMatchedBody(int bottomY) {
+	private void layoutMatchedBody(int footerTop) {
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		List<MutableComponent> lines = new ArrayList<>();
 		lines.addAll(wrapWithHighlight(this.font, PackConfirmCopy.intro(originDisplay), originDisplay, wrapWidth, ChatFormatting.YELLOW, ChatFormatting.BOLD));
@@ -253,7 +251,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.computerRisk(), wrapWidth));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
-		this.addCenteredScrollBody(BODY, 42, bottomY, lines);
+		DialogColumn column = layoutDialogColumn(42, footerTop, lines.size() * LINE_HEIGHT, 0);
+		this.addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), lines);
 	}
 
 	private void appendStatLines(List<MutableComponent> lines, int wrapWidth) {

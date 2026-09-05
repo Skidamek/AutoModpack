@@ -45,7 +45,6 @@ public final class GroupInspectorScreen extends VersionedScreen {
 				primaryAction(VersionedText.translatable("automodpack.groupInspector.browseFiles"), button -> browseFiles()));
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
-		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer) - 4;
 		String description = group.description().isBlank() ? VersionedText.translatable("automodpack.groupInspector.noDescription").getString() : group.description();
 		List<MutableComponent> lines = new ArrayList<>();
 		lines.addAll(wrapParagraph(this.font, description, wrapWidth));
@@ -57,7 +56,8 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.groupInspector.platforms", platforms()).getString(), wrapWidth, ChatFormatting.GRAY));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.selection.files", group.files().size(), UiFormat.formatSize(groupBytes())).getString(), wrapWidth, ChatFormatting.YELLOW));
-		this.addCenteredScrollBody(PANEL_WIDTH, 32, bottomLimit, lines);
+		DialogColumn column = layoutDialogColumn(32, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer), lines.size() * LINE_HEIGHT, 0);
+		this.addCenteredScrollBody(PANEL_WIDTH, column.bodyTop(), column.bodyBottom(), lines);
 	}
 
 	private void browseFiles() {

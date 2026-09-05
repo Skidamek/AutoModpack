@@ -43,7 +43,7 @@ public class RestartScreen extends VersionedScreen {
 				primaryAction(VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
-		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray) - 4;
+		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
 		int changed = changelogs == null ? 0 : changelogs.changedFiles().size();
 		int removed = changelogs == null ? 0 : changelogs.removedFiles().size();
@@ -66,7 +66,8 @@ public class RestartScreen extends VersionedScreen {
 			lines.add(blankLine());
 			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.preservedFiles", preserved).getString(), wrapWidth, ChatFormatting.GRAY));
 		}
-		this.addCenteredScrollBody(BODY, 42, bottomLimit, lines);
+		DialogColumn column = layoutDialogColumn(42, footerTop, lines.size() * LINE_HEIGHT, 0);
+		this.addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), lines);
 	}
 
 	@Override
