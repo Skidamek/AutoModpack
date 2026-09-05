@@ -238,10 +238,14 @@ public class HolepunchSocket extends Socket {
 						current = queue.poll(100, TimeUnit.MILLISECONDS);
 						if (current == null) continue;
 					} else {
-						current = queue.poll(timeout, TimeUnit.MILLISECONDS);
-						if (current == null) {
+						// The end flag must interrupt a pending wait: a server-initiated close
+						// surfaces here, and polling the full window would ignore it until expiry.
+						long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout);
+						while (current == null) {
 							if (end && queue.isEmpty()) return -1;
-							throw new SocketTimeoutException("Holepunch read timed out");
+							long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+							if (remaining <= 0) throw new SocketTimeoutException("Holepunch read timed out");
+							current = queue.poll(Math.min(remaining, 100), TimeUnit.MILLISECONDS);
 						}
 					}
 				} catch (InterruptedException e) {
