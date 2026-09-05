@@ -16,14 +16,12 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class SkipVerificationScreen extends VersionedScreen {
 	private static final int BODY = 420;
-	private static final int LINE = TextScrollWidget.ROW_HEIGHT;
 	private final Screen verificationScreen;
 	private final Runnable validatedCallback;
 	private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE,
@@ -35,6 +33,8 @@ public class SkipVerificationScreen extends VersionedScreen {
 	private Button confirmButton;
 	private int ticksRemaining;
 	private int fieldY;
+	private List<MutableComponent> stackLines = List.of();
+	private int stackTop;
 
 	public SkipVerificationScreen(Screen verificationScreen, Runnable validatedCallback) {
 		super(VersionedText.translatable("automodpack.validation.skip.title"));
@@ -54,17 +54,18 @@ public class SkipVerificationScreen extends VersionedScreen {
 	private void initWidgets() {
 		assert this.minecraft != null;
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
-		List<MutableComponent> before = new ArrayList<>();
-		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.warning1").getString(), wrapWidth));
-		before.add(blankLine());
-		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.warning2").getString(), wrapWidth, ChatFormatting.RED));
-		before.add(blankLine());
-		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.identity.publiclyTrusted").getString(), wrapWidth, ChatFormatting.GRAY));
-		before.add(blankLine());
-		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.instruction").getString(), wrapWidth));
-		before.add(blankLine());
-		before.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.confirm.text").getString(), wrapWidth, ChatFormatting.GRAY));
-		before.add(VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC));
+		List<MutableComponent> prose = new ArrayList<>();
+		prose.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.warning1").getString(), wrapWidth));
+		prose.add(blankLine());
+		prose.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.warning2").getString(), wrapWidth, ChatFormatting.RED));
+		prose.add(blankLine());
+		prose.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.identity.publiclyTrusted").getString(), wrapWidth, ChatFormatting.GRAY));
+		prose.add(blankLine());
+		prose.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.instruction").getString(), wrapWidth));
+		// The typed phrase pins with the field that must receive it: confirm label, phrase, field, countdown hint.
+		List<MutableComponent> stack = new ArrayList<>(wrapParagraph(this.font, VersionedText.translatable("automodpack.validation.skip.confirm.text").getString(), wrapWidth, ChatFormatting.GRAY));
+		stack.add(VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC));
+		stackLines = List.copyOf(stack);
 
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(verificationScreen)),
@@ -73,9 +74,11 @@ public class SkipVerificationScreen extends VersionedScreen {
 		this.confirmButton = buttons.get(1);
 		this.confirmButton.active = false;
 		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
-		int pinned = ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + LINE;
-		this.addCenteredScrollBody(BODY, 42, footerTop - 4 - pinned - ActionAreaLayout.GAP, before);
-		fieldY = footerTop - 4 - pinned;
+		int stackHeight = stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + LINE_HEIGHT;
+		DialogColumn column = layoutDialogColumn(42, footerTop, prose.size() * LINE_HEIGHT, stackHeight);
+		this.addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), prose);
+		stackTop = column.stackTop();
+		fieldY = stackTop + stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM;
 
 		int fieldLeft = panelLeft(BODY);
 		this.textField = fieldWidget(fieldLeft, fieldY, panelWidth(BODY), VersionedText.literal(REQUIRED_TEXT), VersionedText.translatable("automodpack.learnmore"), 128);
@@ -116,6 +119,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.skip.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.LIGHT_RED);
+		drawCenteredLines(matrices, stackLines, stackTop);
 		if (ticksRemaining > 0)
 			drawCenteredTextWithShadow(matrices, this.font,
 					VersionedText.translatable("automodpack.validation.skip.countdown", getRemainingSeconds()).withStyle(ChatFormatting.GRAY), this.width / 2,

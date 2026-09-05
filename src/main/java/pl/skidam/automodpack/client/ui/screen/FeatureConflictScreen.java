@@ -1,9 +1,11 @@
 package pl.skidam.automodpack.client.ui.screen;
 
+import java.util.List;
 import java.util.Objects;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
@@ -38,8 +40,9 @@ public final class FeatureConflictScreen extends VersionedScreen {
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
 		String description = VersionedText.translatable("automodpack.selection.conflictDescription", preferredName, conflictingNames, preferredName, preferredName).getString();
-		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer) - 4;
-		this.addCenteredScrollBody(PANEL_WIDTH, 42, bottomLimit, wrapParagraph(this.font, description, wrapWidth, ChatFormatting.GRAY));
+		List<MutableComponent> lines = wrapParagraph(this.font, description, wrapWidth, ChatFormatting.GRAY);
+		DialogColumn column = layoutDialogColumn(42, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer), lines.size() * LINE_HEIGHT, 0);
+		this.addCenteredScrollBody(PANEL_WIDTH, column.bodyTop(), column.bodyBottom(), lines);
 	}
 
 	private void confirm() {

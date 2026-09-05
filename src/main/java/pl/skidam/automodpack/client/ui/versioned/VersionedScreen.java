@@ -318,6 +318,40 @@ public class VersionedScreen extends Screen {
 		return VersionedText.literal("");
 	}
 
+	/** The vanilla font line height; every dialog line advance goes through this constant, never a raw 9. */
+	public static final int LINE_HEIGHT = 9;
+
+	/** Draws centered lines advancing by LINE_HEIGHT and returns the y below the last line. */
+	protected final int drawCenteredLines(VersionedMatrices matrices, List<? extends Component> lines, int y) {
+		for (Component line : lines) {
+			if (line == null) continue;
+			drawCenteredTextWithShadow(matrices, this.font, line instanceof MutableComponent mutable ? mutable : VersionedText.literal(line.getString()), this.width / 2, y, TextColors.WHITE);
+			y += LINE_HEIGHT;
+		}
+		return y;
+	}
+
+	/** One dialog column: the scrollable body window and where the pinned stack under it starts. */
+	protected record DialogColumn(int bodyTop, int bodyBottom, boolean scrolls, int stackTop) {}
+
+	/**
+	 * Lays a dialog out as one column — body, then an optional pinned stack — above the footer. A column
+	 * that fits centers in the space between the top reserve and the footer; only a real overflow clips
+	 * the body into the remaining window while the stack pins above the footer.
+	 */
+	protected final DialogColumn layoutDialogColumn(int topReserve, int footerTop, int contentHeight, int stackHeight) {
+		int bottomLimit = footerTop - 4;
+		int available = Math.max(0, bottomLimit - topReserve);
+		int blockHeight = stackHeight > 0 ? contentHeight + ActionAreaLayout.SEAM + stackHeight : contentHeight;
+		if (blockHeight <= available) {
+			int blockTop = topReserve + (available - blockHeight) / 2;
+			return new DialogColumn(blockTop, blockTop + contentHeight, false, blockTop + contentHeight + ActionAreaLayout.SEAM);
+		}
+		int stackTop = Math.max(topReserve, bottomLimit - stackHeight);
+		int bodyBottom = Math.max(topReserve + LINE_HEIGHT, stackTop - (stackHeight > 0 ? ActionAreaLayout.GAP : 0));
+		return new DialogColumn(topReserve, bodyBottom, true, stackTop);
+	}
+
 	protected static List<MutableComponent> wrapParagraph(Font font, String text, int maxWidth, ChatFormatting... styles) {
 		List<MutableComponent> lines = new ArrayList<>();
 		for (String line : wrapToWidth(font, text, maxWidth)) {
