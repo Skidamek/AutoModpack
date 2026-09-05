@@ -12,7 +12,7 @@ from .engine.util import parse_duration
 
 _VALID_MODES = {"full", "client-only"}
 _VALID_NETWORKS = {"bridge", "host"}
-_VALID_CONNECTION_MODES = {"DIRECT", "MAGIC", "HOLEPUNCH"}
+CONNECTION_MODES = {"DIRECT", "MAGIC", "HOLEPUNCH"}
 _COND_FIELDS = ("when", "until", "that")
 _DURATION_FIELDS = ("timeout", "poll", "duration")
 _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")
@@ -68,8 +68,8 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
             if not _contains_verb(scenario.get("flow", []), required_verb, release_macros):
                 problems.append(f"release-gate scenario must cover {capability} with verb {required_verb!r}")
         path_modes = {str(path.get("mode", "")).upper() for path in scenario.get("connectionPaths", []) if isinstance(path, dict)}
-        if path_modes != _VALID_CONNECTION_MODES:
-            problems.append(f"release-gate scenario must cover all connection modes: {sorted(_VALID_CONNECTION_MODES)}")
+        if path_modes != CONNECTION_MODES:
+            problems.append(f"release-gate scenario must cover all connection modes: {sorted(CONNECTION_MODES)}")
     generations = (scenario.get("serverFiles", {}) or {}).get("generations")
     if generations is not None:
         if not isinstance(generations, list):
@@ -130,8 +130,8 @@ def _check_connection_paths(paths, problems):
             problems.append(f"{where}: expected a mapping")
             continue
         mode = str(path.get("mode", "")).upper()
-        if mode not in _VALID_CONNECTION_MODES:
-            problems.append(f"{where}.mode: expected one of {sorted(_VALID_CONNECTION_MODES)}, got {path.get('mode')!r}")
+        if mode not in CONNECTION_MODES:
+            problems.append(f"{where}.mode: expected one of {sorted(CONNECTION_MODES)}, got {path.get('mode')!r}")
         if mode in modes:
             problems.append(f"{where}.mode: duplicate connection mode {mode!r}")
         modes.add(mode)

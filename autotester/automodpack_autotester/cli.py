@@ -27,7 +27,7 @@ from .config import (
 )
 from .runner import run_case
 from .supervisor import RunSupervisor, reap_orphaned_scopes
-from .validate import validate_scenario
+from .validate import CONNECTION_MODES, validate_scenario
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -214,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
     run_p = sub.add_parser("run")
     run_p.add_argument("--target")
     run_p.add_argument("--scenario")
+    run_p.add_argument("--connection-path", choices=sorted(CONNECTION_MODES), type=str.upper,
+                       help="Run one connection path (e.g. HOLEPUNCH) instead of the scenario's full matrix")
     run_p.add_argument("--jobs", type=int)
     run_p.add_argument("--docker-uid", type=int)
     run_p.add_argument("--docker-gid", type=int)
@@ -319,6 +321,11 @@ def main(argv: list[str] | None = None) -> int:
         print("No targets in scope for this scenario", file=sys.stderr)
         return 1
     variants = connection_path_variants(scenario)
+    if args.connection_path:
+        variants = [v for v in variants if str(v.get("connectionPath", {}).get("mode", "")).upper() == args.connection_path]
+        if not variants:
+            print(f"Scenario {scenario_name!r} declares no {args.connection_path} connection path", file=sys.stderr)
+            return 1
 
     out_dir = (
         _resolve_settings_path(s, "outDir", "out")
@@ -376,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     f"{'PASS' if r['ok'] else 'FAIL'} {r['target']} {r.get('duration', 0):.1f}s"
                 )
-                for path_result in r.get("connectionPaths", []):
+                for path_result in r.get("connectionPaths", [r] if r.get("connectionMode") else []):
                     print(
                         f"  {'PASS' if path_result['ok'] else 'FAIL'} {path_result.get('connectionMode', path_result.get('scenario', '?'))} "
                         f"{path_result.get('duration', 0):.1f}s"
