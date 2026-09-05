@@ -337,7 +337,8 @@ public class VersionedScreen extends Screen {
 	/**
 	 * Lays a dialog out as one column — body, then an optional pinned stack — above the footer. A column
 	 * that fits centers in the space between the top reserve and the footer; only a real overflow clips
-	 * the body into the remaining window while the stack pins above the footer.
+	 * the body into the remaining window while the stack pins above the footer. The fitting body window
+	 * includes the list's own content padding, or vanilla reports a phantom scroll and clips the last row.
 	 */
 	protected final DialogColumn layoutDialogColumn(int topReserve, int footerTop, int contentHeight, int stackHeight) {
 		int bottomLimit = footerTop - 4;
@@ -345,7 +346,7 @@ public class VersionedScreen extends Screen {
 		int blockHeight = stackHeight > 0 ? contentHeight + ActionAreaLayout.SEAM + stackHeight : contentHeight;
 		if (blockHeight <= available) {
 			int blockTop = topReserve + (available - blockHeight) / 2;
-			return new DialogColumn(blockTop, blockTop + contentHeight, false, blockTop + contentHeight + ActionAreaLayout.SEAM);
+			return new DialogColumn(blockTop, blockTop + contentHeight + TextScrollWidget.CONTENT_PADDING, false, blockTop + contentHeight + ActionAreaLayout.SEAM);
 		}
 		int stackTop = Math.max(topReserve, bottomLimit - stackHeight);
 		int bodyBottom = Math.max(topReserve + LINE_HEIGHT, stackTop - (stackHeight > 0 ? ActionAreaLayout.GAP : 0));

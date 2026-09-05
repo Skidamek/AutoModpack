@@ -20,6 +20,7 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 import pl.skidam.automodpack.client.ui.widget.UnverifiedJarList;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePreview;
@@ -214,13 +215,14 @@ public final class PackConfirmScreen extends VersionedScreen {
 		int topHeight = topLines.size() * LINE_HEIGHT;
 		int bottomHeight = bottomLines.size() * LINE_HEIGHT;
 		int available = Math.max(LINE_HEIGHT, bottomY - 42);
-		int listRows = preferredListRows(available - topHeight - bottomHeight - 8);
-		int listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
+		int listRows = preferredListRows(available - topHeight - bottomHeight - 12);
+		// The window carries the list's content padding, or vanilla reports a phantom scroll and clips the last row.
+		int listHeight = listRows * UnverifiedJarList.ROW_HEIGHT + TextScrollWidget.CONTENT_PADDING;
 		int needed = topHeight + 4 + listHeight + 4 + bottomHeight;
 
 		if (needed > available) {
 			listRows = Math.max(3, listRows - 1);
-			listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
+			listHeight = listRows * UnverifiedJarList.ROW_HEIGHT + TextScrollWidget.CONTENT_PADDING;
 			needed = topHeight + 4 + listHeight + 4 + bottomHeight;
 		}
 		if (needed <= available) {
