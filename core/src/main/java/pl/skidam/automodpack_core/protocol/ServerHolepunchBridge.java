@@ -241,19 +241,25 @@ public final class ServerHolepunchBridge {
 
 	private static void pumpEmbeddedChannel(EmbeddedChannel channel, OutboundSink sink) throws IOException {
 		boolean producedOutput = false;
+		try {
+			for (int pass = 0; pass < MAX_PUMP_PASSES && channel.isOpen(); pass++) {
+				channel.runPendingTasks();
+				channel.flushOutbound();
+				channel.runPendingTasks();
+				channel.checkException();
 
-		for (int pass = 0; pass < MAX_PUMP_PASSES; pass++) {
-			channel.runPendingTasks();
-			channel.flushOutbound();
-			channel.runPendingTasks();
-			channel.checkException();
-
-			boolean drained = drainOutbound(channel, sink);
-			producedOutput |= drained;
-			if (!drained) break;
+				boolean drained = drainOutbound(channel, sink);
+				producedOutput |= drained;
+				if (!drained) break;
+			}
+		} finally {
+			// The error-response path writes its frame and closes the pipeline in one task, so
+			// the channel can close before this pump flushes. A close must not swallow frames
+			// the pipeline already produced: draining stays legal after close, and the peer
+			// must see the frame before the transport goes away.
+			producedOutput |= drainOutbound(channel, sink);
+			if (producedOutput) sink.flush();
 		}
-
-		if (producedOutput) sink.flush();
 	}
 
 	private static boolean drainOutbound(EmbeddedChannel channel, OutboundSink sink) throws IOException {
