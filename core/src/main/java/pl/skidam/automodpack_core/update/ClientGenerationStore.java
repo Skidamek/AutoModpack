@@ -31,6 +31,7 @@ import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
@@ -300,7 +301,24 @@ public final class ClientGenerationStore {
 	public void detachOnDeclinedAdvance(String modpackId, String offeredToken) throws IOException {
 		String activeToken = activeToken(modpackId);
 		if (activeToken == null || activeToken.equals(HashUtils.normalizeSha1(offeredToken))) return;
+		declareDetached(modpackId);
+	}
+
+	/**
+	 * Declares local sovereignty over the active pack: no sync until an explicit attach, and the active projection
+	 * loses its immutability so the owner can edit, delete, and rearrange every file of the kept state.
+	 */
+	public void declareDetached(String modpackId) throws IOException {
 		storage.setDetached(modpackId, true);
+		unprotectProjection();
+	}
+
+	private void unprotectProjection() throws IOException {
+		Path active = storage.activeDirectory();
+		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) return;
+		try (var paths = Files.walk(active)) {
+			for (Path file : paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList()) ImmutableFiles.unprotect(file);
+		}
 	}
 
 	/**

@@ -76,6 +76,31 @@ public final class ImmutableFiles {
 		}
 	}
 
+	/** Clears the read-only policy so a sovereign owner can edit or delete the file. */
+	public static void unprotect(Path file) throws IOException {
+		Path normalized = file.toAbsolutePath().normalize();
+		if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(normalized)) return;
+		PosixFileAttributeView posix = Files.getFileAttributeView(normalized, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+		if (posix != null) {
+			if (!disjoint(posix.readAttributes().permissions(), WRITE_PERMISSIONS)) return;
+			Set<PosixFilePermission> permissions = EnumSet.noneOf(PosixFilePermission.class);
+			permissions.addAll(posix.readAttributes().permissions());
+			permissions.add(PosixFilePermission.OWNER_WRITE);
+			posix.setPermissions(permissions);
+			return;
+		}
+		AclFileAttributeView acl = Files.getFileAttributeView(normalized, AclFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+		if (acl != null) {
+			DosFileAttributeView dos = Files.getFileAttributeView(normalized, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+			if (dos != null && dos.readAttributes().isReadOnly()) dos.setReadOnly(false);
+			List<AclEntry> entries = new ArrayList<>(acl.getAcl());
+			if (entries.removeIf(entry -> entry.type() == AclEntryType.DENY)) acl.setAcl(entries);
+			return;
+		}
+		DosFileAttributeView dos = Files.getFileAttributeView(normalized, DosFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+		if (dos != null && dos.readAttributes().isReadOnly()) dos.setReadOnly(false);
+	}
+
 	public static boolean isProtected(Path file) throws IOException {
 		Path normalized = file.toAbsolutePath().normalize();
 		PosixFileAttributeView posix = Files.getFileAttributeView(normalized, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
