@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui.screen;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import net.minecraft.ChatFormatting;
@@ -230,7 +231,7 @@ public class DownloadScreen extends VersionedScreen {
 			if (downloadManager != null) downloadManager.cancelAllAndShutdown();
 			ScreenImpl.multiplayer();
 		} catch (Exception e) {
-			e.printStackTrace();
+			LOGGER.error("Failed to cancel the download run", e);
 		}
 	}
 }
