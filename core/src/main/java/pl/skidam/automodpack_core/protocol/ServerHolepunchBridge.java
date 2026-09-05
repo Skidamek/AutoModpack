@@ -4,32 +4,34 @@ import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
-import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.ReferenceCountUtil;
 
+import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
+import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
+import pl.skidam.automodpack_core.protocol.compression.CompressionType;
+import pl.skidam.automodpack_core.protocol.netty.BackpressuredEmbeddedChannel;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.ProtocolPipeline;
 import pl.skidam.automodpack_core.protocol.netty.handler.ErrorPrinter;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchFailure;
 import pl.skidam.mcholepunch.HolepunchHandler;
-import pl.skidam.mcholepunch.MinecraftProtocol;
-import pl.skidam.mcholepunch.minecraft.HolepunchServerRegistry;
+import pl.skidam.mcholepunch.server.HolepunchServerRegistry;
 
 public final class ServerHolepunchBridge {
 	private static final int EVENT_LOOP_TICK_MILLIS = 10;
@@ -51,10 +53,9 @@ public final class ServerHolepunchBridge {
 		executor = bridgeExecutor;
 		try {
 			registration = HolepunchServerRegistry.register(
-					MinecraftProtocol.forMinecraftVersion(MC_VERSION).loginPacketLayout(),
 					bridgeExecutor,
-					4L * 1024 * 1024,
-					Duration.ofSeconds(10),
+					maxPendingWriteBytes(),
+					NETWORK_TIMEOUT,
 					(username, address, marker) -> new HolepunchHandler() {
 						private volatile HolepunchSocket socket;
 
@@ -79,12 +80,21 @@ public final class ServerHolepunchBridge {
 							if (openedSocket == null) return;
 							byte[] bytes = new byte[data.remaining()];
 							data.get(bytes);
-							openedSocket.feedReadData(bytes);
+							openedSocket.feedPlainReadData(bytes);
+						}
+
+						@Override
+						public void onRawRead(ByteBuffer data) {
+							HolepunchSocket openedSocket = socket;
+							if (openedSocket == null) return;
+							byte[] bytes = new byte[data.remaining()];
+							data.get(bytes);
+							openedSocket.feedCamouflagedReadData(bytes);
 						}
 
 						@Override
 						public void onClosed(HolepunchFailure failure) {
-							LOGGER.debug("Holepunched AutoModpack connection closed: {} ({})", address, failure);
+							LOGGER.info("Holepunch AutoModpack connection closed for {} ({})", address, failure.getMessage());
 							HolepunchSocket openedSocket = socket;
 							if (openedSocket != null) openedSocket.close();
 						}
@@ -119,16 +129,19 @@ public final class ServerHolepunchBridge {
 		EmbeddedChannel channel = null;
 		try (
 				socket;
-				DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-				DataOutputStream output = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()))) {
-			channel = new EmbeddedChannel();
+				DataInputStream input = new DataInputStream(new BufferedInputStream(socket.getInputStream()))) {
+			channel = new BackpressuredEmbeddedChannel(maxPendingWriteBytes());
+			AtomicBoolean tlsHandshakeComplete = new AtomicBoolean(server.getSslCtx() == null);
+			AtomicBoolean transportUpgradeStarted = new AtomicBoolean(server.getSslCtx() == null);
+			AtomicBoolean transportUpgradeInProgress = new AtomicBoolean(false);
 			channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
 			channel.pipeline().addLast("error-printer-first", new ErrorPrinter());
-			if (server.getSslCtx() != null) {
-				SslHandler sslHandler = server.getSslCtx().newHandler(channel.alloc());
+			SslHandler sslHandler = server.getSslCtx() == null ? null : server.getSslCtx().newHandler(channel.alloc());
+			if (sslHandler != null) {
 				sslHandler.handshakeFuture().addListener(future -> {
 					if (future.isSuccess()) {
 						LOGGER.debug("TLS handshake completed via holepunch: {}", remoteAddress);
+						tlsHandshakeComplete.set(true);
 					} else {
 						LOGGER.debug("TLS handshake failed via holepunch: {}", remoteAddress, future.cause());
 					}
@@ -155,36 +168,101 @@ public final class ServerHolepunchBridge {
 					// The timeout is the event-loop tick while the peer waits for output.
 				}
 
-				pumpEmbeddedChannel(channel, output);
+				// Hold produced output while the transport upgrade is in flight: bytes written in
+				// that window must not enter the pre-raw stream queue, they have to be submitted
+				// after the raw switch so HolepunchSocket camouflages them and the peer decodes
+				// them from onRawRead. BackpressuredEmbeddedChannel keeps the undrained window to one pending frame.
+				if (transportUpgradeInProgress.get()) continue;
+				pumpEmbeddedChannel(channel, socket);
+				if (tlsHandshakeComplete.get() && transportUpgradeStarted.compareAndSet(false, true)) {
+					transportUpgradeInProgress.set(true);
+					startTlsTransportUpgrade(socket, remoteAddress, transportUpgradeInProgress);
+				}
 			}
 
-			pumpEmbeddedChannel(channel, output);
+			pumpEmbeddedChannel(channel, socket);
 		} catch (Exception e) {
-			LOGGER.debug("AutoModpack holepunch handler ended", e);
+			LOGGER.warn("AutoModpack holepunch handler ended for {}", remoteAddress, e);
 		} finally {
 			sockets.remove(socket);
 			if (channel != null) channel.finishAndReleaseAll();
 		}
 	}
 
-	static void pumpEmbeddedChannel(EmbeddedChannel channel, DataOutputStream output) throws IOException {
-		boolean producedOutput = false;
-
-		for (int pass = 0; pass < MAX_PUMP_PASSES; pass++) {
-			channel.runPendingTasks();
-			channel.flushOutbound();
-			channel.runPendingTasks();
-			channel.checkException();
-
-			boolean drained = drainOutbound(channel, output);
-			producedOutput |= drained;
-			if (!drained) break;
+	private static void startTlsTransportUpgrade(HolepunchSocket socket, SocketAddress remoteAddress, AtomicBoolean inProgress) {
+		try {
+			socket.enableTlsTrafficCamouflage(false);
+		} catch (Exception exception) {
+			LOGGER.debug("Failed to enable TLS record camouflage via holepunch: {}", remoteAddress, exception);
+			socket.close();
+			inProgress.set(false);
+			return;
 		}
-
-		if (producedOutput) output.flush();
+		socket.commitTransportUpgrade().exceptionally(error -> {
+			LOGGER.debug("TLS record camouflage setup failed via holepunch: {}", remoteAddress, error);
+			socket.close();
+			return null;
+		}).whenComplete((ignored, error) -> inProgress.set(false));
 	}
 
-	private static boolean drainOutbound(EmbeddedChannel channel, DataOutputStream output) throws IOException {
+	private static long maxPendingWriteBytes() {
+		long maxCompressedFrameLength = 0;
+		for (CompressionType type : CompressionType.values()) {
+			if (CompressionFactory.isAvailable(type)) {
+				CompressionCodec codec = CompressionFactory.createCodec(type);
+				maxCompressedFrameLength = Math.max(maxCompressedFrameLength, codec.maxCompressedLength(MAX_CHUNK_SIZE));
+			}
+		}
+		return maxCompressedFrameLength + ProtocolFrameCodec.HEADER_BYTES;
+	}
+
+	static void pumpEmbeddedChannel(EmbeddedChannel channel, DataOutputStream output) throws IOException {
+		pumpEmbeddedChannel(channel, new OutboundSink() {
+			@Override
+			public void write(ByteBuf buffer) throws IOException {
+				buffer.readBytes(output, buffer.readableBytes());
+			}
+
+			@Override
+			public void flush() throws IOException {
+				output.flush();
+			}
+		});
+	}
+
+	static void pumpEmbeddedChannel(EmbeddedChannel channel, HolepunchSocket socket) throws IOException {
+		pumpEmbeddedChannel(channel, new OutboundSink() {
+			@Override
+			public void write(ByteBuf buffer) throws IOException {
+				socket.writeBuffer(buffer);
+			}
+		});
+	}
+
+	private static void pumpEmbeddedChannel(EmbeddedChannel channel, OutboundSink sink) throws IOException {
+		boolean producedOutput = false;
+		try {
+			for (int pass = 0; pass < MAX_PUMP_PASSES && channel.isOpen(); pass++) {
+				channel.runPendingTasks();
+				channel.flushOutbound();
+				channel.runPendingTasks();
+				channel.checkException();
+
+				boolean drained = drainOutbound(channel, sink);
+				producedOutput |= drained;
+				if (!drained) break;
+			}
+		} finally {
+			// The error-response path writes its frame and closes the pipeline in one task, so
+			// the channel can close before this pump flushes. A close must not swallow frames
+			// the pipeline already produced: draining stays legal after close, and the peer
+			// must see the frame before the transport goes away.
+			producedOutput |= drainOutbound(channel, sink);
+			if (producedOutput) sink.flush();
+		}
+	}
+
+	private static boolean drainOutbound(EmbeddedChannel channel, OutboundSink sink) throws IOException {
 		boolean producedOutput = false;
 		Object message;
 
@@ -194,12 +272,19 @@ public final class ServerHolepunchBridge {
 				if (!(message instanceof ByteBuf buffer)) {
 					throw new IOException("Unexpected outbound message type: " + message.getClass().getName());
 				}
-				buffer.readBytes(output, buffer.readableBytes());
+				sink.write(buffer);
 			} finally {
 				ReferenceCountUtil.release(message);
 			}
 		}
 
 		return producedOutput;
+	}
+
+	@FunctionalInterface
+	private interface OutboundSink {
+		void write(ByteBuf buffer) throws IOException;
+
+		default void flush() throws IOException {}
 	}
 }

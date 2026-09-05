@@ -19,7 +19,7 @@ public final class GenerationPatchNotes {
 	private GenerationPatchNotes() {}
 
 	public enum Source {
-		INLINE, FILE, EMPTY
+		INLINE, FILE, EMPTY, INHERITED
 	}
 
 	public enum CleanupStatus {
@@ -85,12 +85,8 @@ public final class GenerationPatchNotes {
 		return new Resolution(normalizeAndValidate(decode(raw.bytes())), Source.FILE, raw.digest(), normalized);
 	}
 
-	private static String normalizeAndValidate(String notes) throws IOException {
-		try {
-			return GenerationMetadata.validateNotes(notes);
-		} catch (IllegalArgumentException e) {
-			throw new IOException(e.getMessage(), e);
-		}
+	private static String normalizeAndValidate(String notes) {
+		return notes.replace("\r\n", "\n").replace('\r', '\n');
 	}
 
 	private static RawFile readStable(Path path) throws IOException {

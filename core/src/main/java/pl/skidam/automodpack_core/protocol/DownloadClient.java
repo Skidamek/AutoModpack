@@ -29,6 +29,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
@@ -40,7 +41,7 @@ import javax.net.ssl.TrustManager;
 
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
@@ -49,7 +50,6 @@ import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchOptions;
 import pl.skidam.mcholepunch.HolepunchRoute;
-import pl.skidam.mcholepunch.MinecraftProtocol;
 
 public class DownloadClient implements AutoCloseable {
 
@@ -128,9 +128,8 @@ public class DownloadClient implements AutoCloseable {
 			}
 		}, NET_EXECUTOR).thenCompose(this::validateCandidate).thenApplyAsync(candidate -> {
 			try {
-				return new Connection(candidate.socket(), secretBytes);
+				return openConfiguredConnection(candidate);
 			} catch (IOException e) {
-				closeQuietly(candidate.socket());
 				throw new CompletionException(e);
 			}
 		}, NET_EXECUTOR);
@@ -147,33 +146,55 @@ public class DownloadClient implements AutoCloseable {
 		Socket plainSocket = connectTransport();
 
 		try {
-			plainSocket.setSoTimeout(10000);
-			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) performMagicHandshake(plainSocket);
-			return new TlsCandidate(wrapWithTls(plainSocket, context), trustManager);
+			plainSocket.setSoTimeout(NETWORK_TIMEOUT_MILLIS);
+			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC) performMagicHandshake(plainSocket);
+			SSLSocket tlsSocket = wrapWithTls(plainSocket, context);
+			if (plainSocket instanceof HolepunchSocket holepunchSocket) awaitTransportUpgrade(holepunchSocket);
+			tlsSocket.setSoTimeout(0);
+			return new TlsCandidate(tlsSocket, trustManager);
 		} catch (IOException e) {
 			closeQuietly(plainSocket);
 			throw e;
 		}
 	}
 
+	private void awaitTransportUpgrade(HolepunchSocket socket) throws IOException {
+		try {
+			socket.enableTlsTrafficCamouflage(true);
+			socket.commitTransportUpgrade().toCompletableFuture().get(NETWORK_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Holepunch transport upgrade interrupted", e);
+		} catch (ExecutionException e) {
+			Throwable cause = e.getCause() == null ? e : e.getCause();
+			throw new IOException("Holepunch transport handoff failed", cause);
+		} catch (TimeoutException e) {
+			throw new IOException("Holepunch transport handoff timed out", e);
+		}
+	}
+
+	private static HolepunchOptions holepunchOptions() {
+		HolepunchOptions.Builder builder = HolepunchOptions.builder().connectTimeout(NETWORK_TIMEOUT).negotiationTimeout(NETWORK_TIMEOUT);
+		LoaderManagerService.ModPlatform platform = LOADER_MANAGER.getPlatformType();
+		if (platform == LoaderManagerService.ModPlatform.FORGE || platform == LoaderManagerService.ModPlatform.NEOFORGE) {
+			builder.handshakeHostSuffix(HolepunchOptions.FORGE_FML3_HANDSHAKE_HOST_SUFFIX);
+		}
+		return builder.build();
+	}
+
 	private Socket connectTransport() throws IOException {
 		if (connectionInfo.connectionMode != ModpackConnectionMode.HOLEPUNCH) {
 			Socket socket = new Socket();
-			socket.connect(route.directAddress(), 15000);
+			socket.connect(route.directAddress(), NETWORK_TIMEOUT_MILLIS);
 			return socket;
 		}
 
-		MinecraftProtocol minecraftProtocol;
-		try {
-			minecraftProtocol = MinecraftProtocol.forMinecraftVersion(MC_VERSION);
-		} catch (IllegalArgumentException e) {
-			throw new IOException("No mcholepunch protocol for Minecraft " + MC_VERSION, e);
-		}
+		int protocolVersion = MinecraftProtocols.forVersion(MC_VERSION);
 
 		try {
 			HolepunchSocket socket = new HolepunchSocket();
-			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), minecraftProtocol, socket.handler(), HolepunchOptions.builder().build())
-					.toCompletableFuture().get(15, TimeUnit.SECONDS);
+			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), protocolVersion, socket.handler(), holepunchOptions())
+					.toCompletableFuture().get(NETWORK_TIMEOUT.plus(NETWORK_TIMEOUT).toSeconds(), TimeUnit.SECONDS);
 			socket.setConnection(connection);
 			return socket;
 		} catch (InterruptedException e) {
@@ -275,7 +296,9 @@ public class DownloadClient implements AutoCloseable {
 		return decision.handle((trusted, error) -> {
 			if (error != null) {
 				closeQuietly(candidate.socket());
-				throw new CompletionException(new IOException("Certificate trust decision failed", unwrap(error)));
+				Throwable cause = unwrap(error);
+				if (cause instanceof CertificateTrustCancelledException cancelled) throw new CompletionException(cancelled);
+				throw new CompletionException(new IOException("Certificate trust decision failed", cause));
 			}
 			if (!trusted) {
 				closeQuietly(candidate.socket());
@@ -289,6 +312,26 @@ public class DownloadClient implements AutoCloseable {
 				throw new CompletionException(e);
 			}
 		});
+	}
+
+	private Connection openConfiguredConnection(TlsCandidate candidate) throws IOException {
+		try {
+			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
+			return new Connection(candidate.socket(), secretBytes);
+		} catch (IOException first) {
+			closeQuietly(candidate.socket());
+			if (!sessionTrust.hasAccepted()) throw first;
+			LOGGER.warn("Modpack connection closed while waiting for certificate trust; reconnecting", first);
+			TlsCandidate retry = openTlsCandidate();
+			try {
+				retry.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
+				return new Connection(retry.socket(), secretBytes);
+			} catch (IOException second) {
+				closeQuietly(retry.socket());
+				second.addSuppressed(first);
+				throw second;
+			}
+		}
 	}
 
 	private static <T> CompletableFuture<T> rejectCandidate(TlsCandidate candidate, Throwable error) {
@@ -382,9 +425,12 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	/** Downloads one authenticated historical catalogue advertised by the current generation index. */
-	public CompletableFuture<Path> downloadHistoricalCatalogue(String stateDigest, Path destination, IntConsumer chunkCallback) {
-		String requestKey = GenerationHistoryIndex.catalogueRequestKey(stateDigest);
-		return downloadFile(requestKey.getBytes(StandardCharsets.UTF_8), destination, chunkCallback);
+
+	/** Copies a protocol frame into a remaining file length without truncating remaining through int. */
+	static int writableFrameBytes(int frameLength, long remaining) {
+		if (frameLength < 0) throw new IllegalArgumentException("frameLength must be non-negative");
+		if (remaining <= 0L) return 0;
+		return (int) Math.min(frameLength, remaining);
 	}
 
 	static boolean isSelfSigned(X509Certificate certificate) {
@@ -453,7 +499,7 @@ class Connection implements AutoCloseable {
 	private final DataOutputStream out;
 	private final ExecutorService executor = Executors.newSingleThreadExecutor();
 	private CompressionCodec compressionCodec;
-	private byte[] networkInputBuffer;
+	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
 
 	public Connection(SSLSocket socket, byte[] secretBytes) throws IOException {
 		if (socket == null || socket.isClosed()) throw new IOException("Server connection is closed");
@@ -468,7 +514,6 @@ class Connection implements AutoCloseable {
 			compressionType = sendCompressionConfig(compressionType);
 			compressionCodec = CompressionFactory.createCodec(compressionType);
 			chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
-			networkInputBuffer = new byte[compressionCodec.maxCompressedLength(chunkSize)];
 			sendEchoConfig();
 		} catch (IOException e) {
 			LOGGER.error("Failed to configure connection", e);
@@ -524,13 +569,13 @@ class Connection implements AutoCloseable {
 		ProtocolFrameCodec.write(out, getCompressionCodec(), payload, chunkSize);
 	}
 
-	private byte[] readProtocolMessageFrame() throws IOException {
-		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, networkInputBuffer);
+	private ProtocolFrameCodec.Frame readProtocolMessageFrame() throws IOException {
+		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, frameScratch);
 	}
 
 	private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
-		byte[] headerData = readProtocolMessageFrame();
-		ByteBuffer headerWrap = ByteBuffer.wrap(headerData);
+		ProtocolFrameCodec.Frame header = readProtocolMessageFrame();
+		ByteBuffer headerWrap = ByteBuffer.wrap(header.data(), 0, header.length());
 
 		byte version = headerWrap.get();
 		byte messageType = headerWrap.get();
@@ -547,20 +592,22 @@ class Connection implements AutoCloseable {
 		if (messageType != FILE_RESPONSE_TYPE) throw new IOException("Unexpected message type: " + messageType);
 
 		long expectedFileSize = headerWrap.getLong();
+		if (expectedFileSize < 0) throw new IOException("Negative file size: " + expectedFileSize);
 		long receivedBytes = 0;
 
 		try (OutputStream fos = LocalFileWriter.open(destination)) {
 			while (receivedBytes < expectedFileSize) {
-				byte[] dataFrame = readProtocolMessageFrame();
-				int toWrite = Math.min(dataFrame.length, (int) (expectedFileSize - receivedBytes));
-				fos.write(dataFrame, 0, toWrite);
+				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
+				int toWrite = DownloadClient.writableFrameBytes(dataFrame.length(), expectedFileSize - receivedBytes);
+				if (toWrite <= 0) throw new IOException("File frame did not advance the download");
+				fos.write(dataFrame.data(), 0, toWrite);
 				receivedBytes += toWrite;
 				if (chunkCallback != null) chunkCallback.accept(toWrite);
 			}
 		}
 
-		byte[] eotData = readProtocolMessageFrame();
-		if (eotData.length < 2 || eotData[0] != version || eotData[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
+		ProtocolFrameCodec.Frame eot = readProtocolMessageFrame();
+		if (eot.length() < 2 || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
 		return destination;
 	}
 

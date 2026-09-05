@@ -6,19 +6,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.storage.GameDirectory;
+import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.UpdatePlanner;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
-import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
+import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -100,7 +103,7 @@ public class SelfUpdater {
 			}
 
 			// Exact Hash Match (Fastest check)
-			if (automodpack.SHA1Hash().equals(HashUtils.getHash(THIS_MOD_JAR))) {
+			if (automodpack.SHA1Hash().equals(FileIntegrity.identityHash(THIS_MOD_JAR, null))) {
 				LOGGER.info("Already on the target version (Hash match): {}", AM_VERSION);
 				return false;
 			}
@@ -162,36 +165,46 @@ public class SelfUpdater {
 	}
 
 	public static void installModVersion(ModrinthAPI automodpack) {
+		ClientStorage storage = null;
 		try {
-			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			storage = ClientStorage.open(GameDirectory.current());
 			Path currentJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 			Path modsDirectory = storage.modsDirectory().toAbsolutePath().normalize();
 			if (!currentJar.getParent().equals(modsDirectory)) throw new IllegalStateException("Loaded AutoModpack JAR is not a direct child of the mods directory");
 			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
+			ClientObjectStore.publishOwnership(storage, Set.of(automodpack.SHA1Hash()));
 
-			DownloadManager downloadManager = new DownloadManager(0, storage);
-			new ScreenManager().download(downloadManager, "AutoModpack " + automodpack.fileVersion());
-			downloadManager.download(targetJar, automodpack.SHA1Hash(),
-					List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
-					() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
-			downloadManager.joinAll();
-			downloadManager.cancelAllAndShutdown();
+			try (PlatformCache platformCache = PlatformCache.open(storage.platformCacheDirectory())) {
+				DownloadManager downloadManager = new DownloadManager(0, storage, platformCache);
+				ScreenManager.download(downloadManager, "AutoModpack " + automodpack.fileVersion());
+				downloadManager.download(targetJar, automodpack.SHA1Hash(), null, ModpackContentType.MOD,
+						List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
+						() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
+				downloadManager.joinAll();
+				downloadManager.finish();
+			}
 
-			Path storeObject = storage.objectsDirectory().resolve(automodpack.SHA1Hash());
+			Path storeObject = storage.objectFile(automodpack.SHA1Hash());
 			if (!FileIntegrity.matches(storeObject, automodpack.fileSize(), automodpack.SHA1Hash()))
 				throw new IllegalStateException("Downloaded official AutoModpack JAR failed verification");
-			String currentHash = HashUtils.getHash(currentJar);
+			String currentHash = FileIntegrity.identityHash(currentJar, null);
 			if (currentHash == null || !Files.isRegularFile(currentJar)) throw new IllegalStateException("Loaded AutoModpack JAR cannot be verified");
 
-			String currentPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(currentJar).toString());
-			String targetPath = UpdatePlanner.normalize(storage.gameDirectory().relativize(targetJar).toString());
+			String currentPath = LogicalPath.normalize(storage.gameDirectory().relativize(currentJar).toString());
+			String targetPath = LogicalPath.normalize(storage.gameDirectory().relativize(targetJar).toString());
 			UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentPath, targetPath, automodpack.SHA1Hash(), automodpack.fileSize(), currentHash);
 			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transaction);
-			if (!execution.success()) DetachedUpdateHelper.launch(transaction);
+			if (!execution.success()) DetachedUpdateHelper.launch();
 			LOGGER.info("AutoModpack update transaction {} is ready; restart required", transaction.transactionId);
 			new ReLauncher(UpdateType.AUTOMODPACK).restart(true);
 		} catch (Exception e) {
 			LOGGER.error("Failed to update AutoModpack", e);
+		} finally {
+			if (storage != null) try {
+				ClientObjectStore.publishOwnership(storage);
+			} catch (Exception e) {
+				LOGGER.warn("Could not release self-update CAS ownership; the next startup will refresh it", e);
+			}
 		}
 	}
 }

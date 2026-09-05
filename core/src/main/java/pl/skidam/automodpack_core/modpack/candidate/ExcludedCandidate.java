@@ -15,7 +15,6 @@ public record ExcludedCandidate(CandidateSource source, Reason reason, String me
 		DISABLED_FILE,
 		BACKUP_FILE,
 		SERVER_SIDE_MOD,
-		AUTOMODPACK_FILE,
 		INTERNAL_FILE
 	}
 }

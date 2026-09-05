@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.modpack.group;
 
+import static pl.skidam.automodpack_core.storage.StoragePaths.BOOTSTRAP_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.MODPACK_CONTENT_FILE;
 
 import java.util.Locale;
@@ -12,8 +13,11 @@ public final class ModpackPathPolicy {
 	public static final String RESOURCEPACKS_ROOT = "resourcepacks";
 	public static final String MINECRAFT_OPTIONS_FILE = "options.txt";
 	private static final String MODS_PREFIX = MODS_ROOT + "/";
+
+	/** Roots owned by the player or by AutoModpack itself; a server manifest cannot claim them. */
 	private static final Set<String> PLAYER_LOCAL_ROOTS = Set.of("automodpack", "logs", "player-local", "saves", "screenshots", "server-resource-packs");
-	private static final Set<String> RESERVED_LIVE_ROOTS = Set.of(MODS_ROOT, CONFIG_ROOT, SHADERPACKS_ROOT, RESOURCEPACKS_ROOT);
+	/** Roots with client live-file semantics; descendants are valid only with their canonical lowercase spelling. */
+	private static final Set<String> LIVE_ROOTS = Set.of(MODS_ROOT, CONFIG_ROOT, SHADERPACKS_ROOT, RESOURCEPACKS_ROOT);
 
 	private ModpackPathPolicy() {}
 
@@ -40,9 +44,8 @@ public final class ModpackPathPolicy {
 		}
 		if (isPlayerLocal(normalized)) return false;
 		if (normalized.equalsIgnoreCase(MODPACK_CONTENT_FILE.toString())) return false;
-		String firstComponent = firstComponent(normalized);
-		String lowerFirstComponent = firstComponent.toLowerCase(Locale.ROOT);
-		if (RESERVED_LIVE_ROOTS.contains(lowerFirstComponent) && (!firstComponent.equals(lowerFirstComponent) || normalized.equals(firstComponent))) return false;
+		if (normalized.equalsIgnoreCase(BOOTSTRAP_FILE.getFileName().toString())) return false;
+		if (isInvalidLiveRoot(normalized)) return false;
 		// A mod-shaped file keeps its mod metadata regardless of where the operator stores it.
 		// Its logical path independently controls whether the client activates or only places it.
 		if (ModpackContentType.MOD.equals(type)) return true;
@@ -61,6 +64,12 @@ public final class ModpackPathPolicy {
 
 	public static boolean isModPath(String logicalPath) {
 		return logicalPath.startsWith(MODS_PREFIX) && logicalPath.length() > MODS_PREFIX.length();
+	}
+
+	private static boolean isInvalidLiveRoot(String normalized) {
+		String first = firstComponent(normalized);
+		String lowerFirst = first.toLowerCase(Locale.ROOT);
+		return LIVE_ROOTS.contains(lowerFirst) && (!first.equals(lowerFirst) || normalized.equals(first));
 	}
 
 	private static String firstComponent(String logicalPath) {

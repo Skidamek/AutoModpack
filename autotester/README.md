@@ -32,13 +32,13 @@ uv --project autotester run autotester build-images
 Run one target:
 
 ```bash
-uv --project autotester run autotester run --target 1.21.11-fabric --scenario download-only --jobs 3
+uv --project autotester run autotester run --target 1.21.11-fabric --scenario download-only
 ```
 
 Run the full default matrix:
 
 ```bash
-uv --project autotester run autotester run --target all --scenario all --jobs 3
+uv --project autotester run autotester run --target all --scenario all
 ```
 
 Clean generated output:
@@ -52,7 +52,7 @@ uv --project autotester run autotester clean
 The default `all` scenario performs one release-confidence flow:
 
 1. Start a server and client container and trust the certificate.
-2. Import and delete a bootstrap file, seed TLS trust, and prove that secure mode rejects anonymous pre-login catalogue access.
+2. Import and delete `automodpack/automodpack-bootstrap.json`, seed TLS trust, and prove that secure mode rejects anonymous pre-login catalogue access.
 3. Complete authenticated login, verify the issued secret is persisted by both client and server, then download and restart the pack.
 4. Relaunch with the saved secret and verify the complete catalogue preloads before reconnecting.
 5. Review advanced groups, including categories, dependencies, conflicts, defaults, and platform filtering.
@@ -134,8 +134,8 @@ A step is either a bare name (`- quit`, or a macro name) or a mapping with a
 | Key | Meaning |
 | --- | --- |
 | `name` | Human-readable label shown in logs and `results.json`. |
-| `when` | A condition; the step runs only if it holds. |
-| `repeat` | Run the step N times. |
+| `when` | A condition; the step runs only if it holds. With `repeat`, it is re-checked before every iteration and stops the loop once it no longer holds. |
+| `repeat` | Run the step at most N times; combined with `when` it becomes "do while the condition holds". |
 | `optional` | If the step fails, log it and continue instead of failing the run. |
 
 ### Networking, modes, and scoping
@@ -230,12 +230,20 @@ condition keys, generated straight from the registry — no need to grep `@verb(
 ```yaml
 select:
   role: button        # button | textfield | any (default)
+  key: automodpack.cancel  # translation key (preferred: survives copy edits)
+  key_any: [automodpack.selection.button, automodpack.selection.shortButton]
   text: Verify        # exact match preferred, else substring (case-insensitive)
   text_any: [ok, yes] # any of these
   class: Btn          # substring of the element's class
-  enabled: true       # filter by enabled / visible
+  enabled: true       # filter by enabled
+  visible: true       # default true; hidden widgets (plain-text placeholders) never match
   index: -1           # pick the Nth match (negative counts from the end)
 ```
+
+Prefer `key:` for chrome that comes from `en_us.json` (`Continue`, `Update`, `Back`). Keep `text:`
+for fixture data and glyph state (`[x] Visuals`, pack names). The bridge dumps only widgets
+attached through `Screen.children()` so a focused button leftover from `rebuildWidgets` cannot
+satisfy `element` / `no_element`.
 
 ### Conditions
 

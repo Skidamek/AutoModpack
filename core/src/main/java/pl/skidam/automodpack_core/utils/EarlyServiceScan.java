@@ -4,10 +4,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
+
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * Selects the modpack-folder jars an early-service bootstrapper should host in place: every jar the
@@ -22,19 +25,33 @@ public final class EarlyServiceScan {
 	 * Eligibility is checked before hashing, since it's cheap and most modpack jars never need a hash.
 	 * The standard-mods hash set is computed lazily, only once an eligible jar needs the comparison.
 	 */
-	public static List<Path> eligibleJars(Path modpackMods, Path standardMods, Predicate<Path> eligibleForInPlace) throws IOException {
+	public static List<Path> eligibleJars(Path modpackMods, Path standardMods, Predicate<Path> eligibleForInPlace, FileCache cache) throws IOException {
 		List<Path> earlyServiceJars = new ArrayList<>();
 		Set<String> standardModHashes = null;
 		try (Stream<Path> stream = Files.list(modpackMods)) {
 			for (Path jar : stream.filter(EarlyServiceScan::isJar).toList()) {
 				if (!eligibleForInPlace.test(jar)) continue;
-				if (standardModHashes == null) standardModHashes = HashUtils.getJarHashes(standardMods);
-				String hash = HashUtils.getHash(jar);
+				if (standardModHashes == null) standardModHashes = jarHashes(standardMods, cache);
+				String hash = FileIntegrity.identityHash(jar, cache);
 				if (hash != null && standardModHashes.contains(hash)) continue;
 				earlyServiceJars.add(jar);
 			}
 		}
 		return earlyServiceJars;
+	}
+
+	private static Set<String> jarHashes(Path dir, FileCache cache) {
+		Set<String> hashes = new HashSet<>();
+		if (dir == null || !Files.isDirectory(dir)) return hashes;
+		try (Stream<Path> stream = Files.list(dir)) {
+			for (Path jar : stream.filter(EarlyServiceScan::isJar).toList()) {
+				String hash = FileIntegrity.identityHash(jar, cache);
+				if (hash != null) hashes.add(hash);
+			}
+		} catch (Exception e) {
+			return hashes;
+		}
+		return hashes;
 	}
 
 	private static boolean isJar(Path path) {

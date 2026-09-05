@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -65,14 +65,26 @@ class ReviewedUpdatePlanTest {
 	}
 
 	@Test
+	void changedVisibleConsequencesCannotBypassReview() {
+		ChangeSet firstConsequences = ChangeSet.of(new ChangeSet.Change("mods/a.jar", ChangeSet.Kind.ADDED,
+				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, null, OBJECT_HASH, "mod", List.of(), List.of()))));
+		ChangeSet changedConsequences = ChangeSet.of(new ChangeSet.Change("mods/a.jar", ChangeSet.Kind.MODIFIED,
+				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, OTHER_HASH, OBJECT_HASH, "mod", List.of(), List.of()))));
+
+		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of(operation("mods/a.jar", OBJECT_HASH)), firstConsequences));
+		UpdatePlan changed = plan(List.of(operation("mods/a.jar", OBJECT_HASH)), changedConsequences);
+
+		assertThrows(IllegalStateException.class, () -> reviewed.requireCompatible(changed));
+	}
+
+	@Test
 	void durableTransactionUsesTheSameExecutionFingerprint() {
 		UpdatePlan plan = plan(List.of(operation("mods/a.jar", OBJECT_HASH)));
 		UpdateTransaction transaction = new UpdateTransaction();
 		transaction.modpackId = plan.modpackId();
-		transaction.targetGenerationId = plan.generationTarget().targetGenerationId();
-		transaction.parentGenerationId = plan.generationTarget().parentGenerationId();
-		transaction.stateDigest = plan.generationTarget().stateDigest();
-		transaction.ledgerDigest = plan.generationTarget().ledgerDigest();
+		transaction.contentToken = plan.packTarget().contentToken();
+		transaction.policySha1 = plan.packTarget().policySha1();
+		transaction.ledgerDigest = plan.packTarget().ledgerDigest();
 		transaction.operations = plan.operations();
 		transaction.projectedFinalState = plan.projectedFinalState();
 		transaction.plannedClientConfig = plan.plannedClientConfig();
@@ -80,6 +92,7 @@ class ReviewedUpdatePlanTest {
 		transaction.plannedPreservations = plan.preservations();
 		transaction.plannedBaselineCaptures = plan.baselineCaptures();
 		transaction.plannedConflicts = plan.conflicts();
+		transaction.plannedConsequencesDigest = ReviewedUpdatePlan.consequencesDigest(plan.consequences());
 
 		assertTrue(ReviewedUpdatePlan.isCompatible(transaction, plan));
 		transaction.operations = List.of(operation("mods/a.jar", OTHER_HASH));
@@ -87,8 +100,12 @@ class ReviewedUpdatePlanTest {
 	}
 
 	private static UpdatePlan plan(List<Operation> operations) {
-		return new UpdatePlan("packaa1", new GenerationTarget("packaa1", "a".repeat(40), "", "b".repeat(40), "c".repeat(40)), operations, List.of(),
-				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+		return plan(operations, ChangeSet.empty());
+	}
+
+	private static UpdatePlan plan(List<Operation> operations, ChangeSet consequences) {
+		return new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), "c".repeat(40)), operations, List.of(),
+				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), consequences);
 	}
 
 	private static Operation operation(String path, String objectHash) {

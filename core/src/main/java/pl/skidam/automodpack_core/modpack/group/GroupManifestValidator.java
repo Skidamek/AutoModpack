@@ -12,8 +12,6 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class GroupManifestValidator {
 	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
-	private static final Pattern RESOURCE_NAMESPACE = Pattern.compile("[a-z0-9._-]+");
-	private static final Pattern RESOURCE_PATH = Pattern.compile("[a-z0-9/._-]+");
 
 	private GroupManifestValidator() {}
 
@@ -37,10 +35,9 @@ public final class GroupManifestValidator {
 			Set<String> breaksWith = validateIds("Group '" + id + "' breaksWith", group.breaksWith, errors);
 			Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
 			String category = validateCategory(id, group.category, errors);
-			String icon = validateIcon(id, group.icon, errors);
 			Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
 			Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-			groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, icon, group.required, group.defaultSelected,
+			groups.put(id, new GroupManifest.Group(group.displayName, group.description, category, group.required, group.defaultSelected,
 					new TreeSet<>(breaksWith), new TreeSet<>(requires), platforms, new TreeMap<>(files)));
 		}
 
@@ -51,10 +48,10 @@ public final class GroupManifestValidator {
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
 				value(fields.loaderVersion), value(fields.mcVersion), new TreeMap<>(groups));
 		validatePlatformPaths(manifest, errors);
+		validateDefaultAndIndividualSelections(manifest, errors);
+		validateObjectSizes(manifest, errors);
+		validateOverlaps(manifest, errors);
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
-		validateDefaultAndIndividualSelections(manifest);
-		validateObjectSizes(manifest);
-		validateOverlaps(manifest);
 		return manifest;
 	}
 
@@ -85,8 +82,7 @@ public final class GroupManifestValidator {
 				if (!ModpackPathPolicy.isValidTypeAndPath(path, file.type))
 					errors.add("Group '" + groupId + "' file '" + path + "' has an invalid type/path combination: " + file.type);
 			if (!HashUtils.isSha1(file.sha1)) errors.add("Group '" + groupId + "' file '" + path + "' has invalid SHA-1");
-			if (file.overwriteEditable && !file.editable) errors.add("Group '" + groupId + "' file '" + path + "' overwrites edits but is not editable");
-			files.put(path, new GroupManifest.GroupFile(size, file.type, file.editable, file.overwriteEditable,
+			files.put(path, new GroupManifest.GroupFile(size, file.type, file.editable,
 					value(file.sha1).toLowerCase(Locale.ROOT), file.murmur));
 		}
 		return files;
@@ -123,8 +119,32 @@ public final class GroupManifestValidator {
 				}
 			}
 			validateAliasOwners(platform, manifest, aliases, false, errors);
+			validateAncestorOwners(platform, manifest, aliases, errors);
 			validateAliasOwners(platform, manifest, modBasenameAliases, true, errors);
 		}
+	}
+
+	private static void validateAncestorOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, List<String> errors) {
+		List<PathOwner> owners = aliases.values().stream().flatMap(Collection::stream).toList();
+		for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
+			PathPair pair = ancestorPair(owners.get(i), owners.get(j), platform);
+			if (pair == null) continue;
+			if (pair.ancestor().groupId().equals(pair.descendant().groupId()) || coSelectable(manifest, pair.ancestor().groupId(), pair.descendant().groupId())) {
+				String ownerDescription = pair.ancestor().groupId().equals(pair.descendant().groupId())
+						? "group '" + pair.ancestor().groupId() + "'"
+						: "co-selectable groups '" + pair.ancestor().groupId() + "' and '" + pair.descendant().groupId() + "'";
+				errors.add(platform.id() + ": file path '" + pair.ancestor().path() + "' cannot be an ancestor of '" + pair.descendant().path() + "' in "
+						+ ownerDescription);
+			}
+		}
+	}
+
+	private static PathPair ancestorPair(PathOwner first, PathOwner second, ClientPlatform platform) {
+		String firstKey = platformPathKey(first.path(), platform);
+		String secondKey = platformPathKey(second.path(), platform);
+		if (secondKey.startsWith(firstKey + "/")) return new PathPair(first, second);
+		if (firstKey.startsWith(secondKey + "/")) return new PathPair(second, first);
+		return null;
 	}
 
 	private static void validateAliasOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, boolean modBasenames,
@@ -166,6 +186,8 @@ public final class GroupManifestValidator {
 
 	private record PathOwner(String groupId, String path) {}
 
+	private record PathPair(PathOwner ancestor, PathOwner descendant) {}
+
 	private static void validateReferences(Map<String, GroupManifest.Group> groups, List<String> errors) {
 		for (var entry : groups.entrySet()) {
 			String id = entry.getKey();
@@ -195,8 +217,7 @@ public final class GroupManifestValidator {
 		active.remove(id);
 	}
 
-	private static void validateDefaultAndIndividualSelections(GroupManifest manifest) {
-		List<String> errors = new ArrayList<>();
+	private static void validateDefaultAndIndividualSelections(GroupManifest manifest, List<String> errors) {
 		for (ClientPlatform platform : ClientPlatform.values()) {
 			try {
 				GroupSelectionResolver.resolveDefault(manifest, platform);
@@ -224,25 +245,22 @@ public final class GroupManifestValidator {
 		return resolution != null && (resolution.status() == GroupResolution.Status.BLOCKED || resolution.status() == GroupResolution.Status.UNAVAILABLE);
 	}
 
-	private static void validateObjectSizes(GroupManifest manifest) {
+	private static void validateObjectSizes(GroupManifest manifest, List<String> errors) {
 		Map<String, Long> sizesByHash = new TreeMap<>();
-		List<String> errors = new ArrayList<>();
 		for (var groupEntry : manifest.groups().entrySet()) for (var fileEntry : groupEntry.getValue().files().entrySet()) {
 			GroupManifest.GroupFile file = fileEntry.getValue();
 			Long previous = sizesByHash.putIfAbsent(file.sha1(), file.size());
 			if (previous != null && previous.longValue() != file.size())
 				errors.add("SHA-1 '" + file.sha1() + "' has inconsistent advertised sizes: " + previous + " and " + file.size());
 		}
-		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 	}
 
-	private static void validateOverlaps(GroupManifest manifest) {
+	private static void validateOverlaps(GroupManifest manifest, List<String> errors) {
 		Map<String, List<Map.Entry<String, GroupManifest.GroupFile>>> byPath = new TreeMap<>();
 		for (var groupEntry : manifest.groups().entrySet())
 			for (var fileEntry : groupEntry.getValue().files().entrySet())
 				byPath.computeIfAbsent(fileEntry.getKey(), ignored -> new ArrayList<>()).add(Map.entry(groupEntry.getKey(), fileEntry.getValue()));
 
-		List<String> errors = new ArrayList<>();
 		for (var pathEntry : byPath.entrySet()) {
 			List<Map.Entry<String, GroupManifest.GroupFile>> owners = pathEntry.getValue();
 			for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
@@ -254,7 +272,6 @@ public final class GroupManifestValidator {
 							+ first.getKey() + "' and '" + second.getKey() + "'");
 			}
 		}
-		if (!errors.isEmpty()) throw new GroupValidationException(errors);
 	}
 
 	private static boolean coSelectable(GroupManifest manifest, String first, String second) {
@@ -317,18 +334,6 @@ public final class GroupManifestValidator {
 	private static String validateCategory(String groupId, String input, List<String> errors) {
 		if (input == null || input.isEmpty()) return "";
 		if (!isValidIdentifier(input)) errors.add("Invalid Group '" + groupId + "' category ID: " + input);
-		return input;
-	}
-
-	private static String validateIcon(String groupId, String input, List<String> errors) {
-		if (input == null || input.isEmpty()) return "";
-		int separator = input.indexOf(':');
-		String namespace = separator < 0 ? "" : input.substring(0, separator);
-		String path = separator < 0 ? "" : input.substring(separator + 1);
-		boolean valid = separator > 0 && separator == input.lastIndexOf(':') && RESOURCE_NAMESPACE.matcher(namespace).matches()
-				&& RESOURCE_PATH.matcher(path).matches() && !path.startsWith("/") && !path.endsWith("/") && !path.contains("//")
-				&& Arrays.stream(path.split("/", -1)).noneMatch(component -> component.equals(".") || component.equals(".."));
-		if (!valid) errors.add("Group '" + groupId + "' has invalid icon resource location: " + input);
 		return input;
 	}
 

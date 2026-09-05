@@ -4,12 +4,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Objects;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
@@ -22,7 +20,6 @@ import pl.skidam.automodpack_core.utils.HashUtils;
 /** Immutable cumulative ownership projection for one modpack lineage. */
 public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entries, String digest) {
 	private static final Comparator<Content> CONTENT_ORDER = Comparator.comparing(Content::sha1).thenComparingLong(Content::size);
-	private static final String PROVISIONAL_GENERATION = "0".repeat(HashUtils.SHA1_HEX_LENGTH);
 
 	public enum Status {
 		PRESENT, TOMBSTONE
@@ -35,22 +32,14 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		}
 	}
 
-	public record Entry(String logicalPath, NavigableSet<Content> historicalHashes, NavigableSet<String> historicalGroupIds,
-			String firstPublishedGenerationId, String lastPublishedGenerationId, Status currentStatus) {
+	public record Entry(String logicalPath, NavigableSet<Content> historicalHashes, NavigableSet<String> historicalGroupIds, Status currentStatus) {
 		public Entry {
 			logicalPath = LogicalPath.normalize(logicalPath);
 			historicalHashes = immutableContents(historicalHashes);
 			historicalGroupIds = immutableStrings(historicalGroupIds);
-			firstPublishedGenerationId = requireGenerationReference(firstPublishedGenerationId, "first published generation ID");
-			lastPublishedGenerationId = requireGenerationReference(lastPublishedGenerationId, "last published generation ID");
 			currentStatus = Objects.requireNonNull(currentStatus, "current status");
 			if (historicalHashes.isEmpty()) throw new IllegalArgumentException("Ledger entry has no historical hashes");
 			if (historicalGroupIds.isEmpty()) throw new IllegalArgumentException("Ledger entry has no historical groups");
-		}
-
-		public Entry(String logicalPath, Collection<Content> historicalHashes, Collection<String> historicalGroupIds,
-				String firstPublishedGenerationId, String lastPublishedGenerationId, Status currentStatus) {
-			this(logicalPath, immutableContents(historicalHashes), immutableStrings(historicalGroupIds), firstPublishedGenerationId, lastPublishedGenerationId, currentStatus);
 		}
 
 		private static NavigableSet<Content> immutableContents(Collection<Content> values) {
@@ -92,8 +81,6 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 			serialized.historicalHashes = entry.historicalHashes().stream()
 					.map(value -> new GenerationJsons.OwnershipLedgerFields.ContentFields(value.sha1(), value.size())).toList();
 			serialized.historicalGroupIds = new TreeSet<>(entry.historicalGroupIds());
-			serialized.firstPublishedGenerationId = entry.firstPublishedGenerationId();
-			serialized.lastPublishedGenerationId = entry.lastPublishedGenerationId();
 			serialized.currentStatus = entry.currentStatus().name();
 			fields.entries.add(serialized);
 		}
@@ -106,13 +93,12 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		Map<String, Entry> entries = new TreeMap<>();
 		for (GenerationJsons.OwnershipLedgerFields.EntryFields serialized : fields.entries) {
 			if (serialized == null || serialized.historicalHashes == null) throw new IllegalArgumentException("Ownership ledger entry is incomplete");
-			Set<Content> hashes = new TreeSet<>(CONTENT_ORDER);
+			NavigableSet<Content> hashes = new TreeSet<>(CONTENT_ORDER);
 			for (GenerationJsons.OwnershipLedgerFields.ContentFields content : serialized.historicalHashes) {
 				if (content == null) throw new IllegalArgumentException("Ownership ledger content is incomplete");
 				hashes.add(new Content(content.sha1, content.size));
 			}
-			Entry entry = new Entry(serialized.logicalPath, hashes, serialized.historicalGroupIds, serialized.firstPublishedGenerationId,
-					serialized.lastPublishedGenerationId, parseStatus(serialized.currentStatus));
+			Entry entry = new Entry(serialized.logicalPath, hashes, new TreeSet<>(serialized.historicalGroupIds), parseStatus(serialized.currentStatus));
 			if (entries.put(entry.logicalPath(), entry) != null) throw new IllegalArgumentException("Duplicate ledger path: " + entry.logicalPath());
 		}
 		return new OwnershipLedger(fields.modpackId, new TreeMap<>(entries), fields.digest);
@@ -141,11 +127,10 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 			entries = new TreeMap<>(base.entries());
 		}
 
-		public Builder apply(OwnershipDelta delta, String generationId) {
+		public Builder apply(OwnershipDelta delta) {
 			Objects.requireNonNull(delta, "ownership delta");
-			String currentGeneration = requireGenerationReference(generationId, "generation ID");
 			if (!modpackId.equals(delta.modpackId())) throw new IllegalArgumentException("Delta and ledger modpack IDs disagree");
-			for (OwnershipDelta.Change change : delta.changes().values()) apply(change, currentGeneration);
+			for (OwnershipDelta.Change change : delta.changes().values()) apply(change);
 			return this;
 		}
 
@@ -157,40 +142,40 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 			return Collections.unmodifiableNavigableMap(entries);
 		}
 
-		private void apply(OwnershipDelta.Change change, String generationId) {
+		private void apply(OwnershipDelta.Change change) {
 			String path = change.logicalPath();
 			Entry old = entries.get(path);
-			Set<Content> hashes = old == null ? new TreeSet<>(CONTENT_ORDER) : new TreeSet<>(old.historicalHashes());
-			Set<String> groups = old == null ? new TreeSet<>() : new TreeSet<>(old.historicalGroupIds());
+			NavigableSet<Content> hashes = old == null ? new TreeSet<>(CONTENT_ORDER) : new TreeSet<>(old.historicalHashes());
+			NavigableSet<String> groups = old == null ? new TreeSet<>() : new TreeSet<>(old.historicalGroupIds());
 			switch (change.kind()) {
 				case ADDED -> {
 					if (old != null) throw new IllegalArgumentException("Added ownership path already exists: " + path);
 					hashes.addAll(change.contents());
 					groups.addAll(change.groupIds());
-					entries.put(path, new Entry(path, hashes, groups, generationId, generationId, Status.PRESENT));
+					entries.put(path, new Entry(path, hashes, groups, Status.PRESENT));
 				}
 				case REPLACED -> {
 					requirePresent(old, path, change.kind());
 					hashes.addAll(change.contents());
 					groups.addAll(change.groupIds());
-					entries.put(path, new Entry(path, hashes, groups, old.firstPublishedGenerationId(), generationId, Status.PRESENT));
+					entries.put(path, new Entry(path, hashes, groups, Status.PRESENT));
 				}
 				case RETURNED -> {
 					if (old == null || old.currentStatus() != Status.TOMBSTONE)
 						throw new IllegalArgumentException("Returned ownership path is not a tombstone: " + path);
 					hashes.addAll(change.contents());
 					groups.addAll(change.groupIds());
-					entries.put(path, new Entry(path, hashes, groups, old.firstPublishedGenerationId(), generationId, Status.PRESENT));
+					entries.put(path, new Entry(path, hashes, groups, Status.PRESENT));
 				}
 				case GROUP_OWNERSHIP_CHANGED -> {
 					requirePresent(old, path, change.kind());
 					hashes.addAll(change.contents());
 					groups.addAll(change.groupIds());
-					entries.put(path, new Entry(path, hashes, groups, old.firstPublishedGenerationId(), generationId, Status.PRESENT));
+					entries.put(path, new Entry(path, hashes, groups, Status.PRESENT));
 				}
 				case REMOVED -> {
 					requirePresent(old, path, change.kind());
-					entries.put(path, new Entry(path, old.historicalHashes(), old.historicalGroupIds(), old.firstPublishedGenerationId(), generationId, Status.TOMBSTONE));
+					entries.put(path, new Entry(path, old.historicalHashes(), old.historicalGroupIds(), Status.TOMBSTONE));
 				}
 			}
 		}
@@ -201,33 +186,11 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		}
 	}
 
-	public static OwnershipLedger materialize(OwnershipLedger parent, GroupManifest manifest, String generationId) {
+	public static OwnershipLedger materialize(OwnershipLedger parent, GroupManifest manifest) {
 		Objects.requireNonNull(parent, "parent");
 		Objects.requireNonNull(manifest, "manifest");
 		if (!parent.modpackId().equals(manifest.modpackId())) throw new IllegalArgumentException("Ledger and catalogue modpack IDs disagree");
-		return builder(parent).apply(OwnershipDelta.between(parent, manifest), generationId).build();
-	}
-
-	public static OwnershipLedger materializeWithoutGeneration(OwnershipLedger parent, GroupManifest manifest) {
-		return materialize(parent, manifest, PROVISIONAL_GENERATION);
-	}
-
-	public static OwnershipLedger rebuild(List<GenerationRecord> orderedChain) {
-		if (orderedChain == null || orderedChain.isEmpty()) throw new IllegalArgumentException("Generation chain is empty");
-		GenerationRecord first = Objects.requireNonNull(orderedChain.get(0), "Generation chain contains null record");
-		OwnershipLedger ledger = empty(first.manifest().modpackId());
-		String previousGenerationId = GenerationMetadata.ROOT_PARENT;
-		for (GenerationRecord record : orderedChain) {
-			Objects.requireNonNull(record, "Generation chain contains null record");
-			if (!ledger.modpackId().equals(record.manifest().modpackId())) throw new IllegalArgumentException("Generation chain changes modpack ID");
-			if (!record.metadata().parentGenerationId().equals(previousGenerationId))
-				throw new IllegalArgumentException("Generation chain is not ordered by parent links");
-			OwnershipLedger expected = materialize(ledger, record.manifest(), record.metadata().generationId());
-			if (!expected.equals(record.ownershipLedger())) throw new IllegalArgumentException("Generation ledger does not match ordered parent state");
-			ledger = expected;
-			previousGenerationId = record.metadata().generationId();
-		}
-		return ledger;
+		return builder(parent).apply(OwnershipDelta.between(parent, manifest)).build();
 	}
 
 	public static String digest(String modpackId, Map<String, Entry> entries) {
@@ -243,7 +206,7 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 			/* Publication IDs are provenance metadata. Excluding them avoids a digest/identity cycle. */
 			encoder.string(entry.currentStatus().name());
 		}
-		return GenerationIdentity.sha1Bytes(encoder.bytes());
+		return HashUtils.sha1(encoder.bytes());
 	}
 
 	private static NavigableMap<String, Entry> toNavigableMap(Map<String, Entry> entries) {
@@ -256,11 +219,6 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		} catch (RuntimeException e) {
 			throw new IllegalArgumentException("Invalid ownership ledger status", e);
 		}
-	}
-
-	private static String requireGenerationReference(String value, String name) {
-		if (!HashUtils.isCanonicalSha1(value)) throw new IllegalArgumentException("Invalid " + name);
-		return value;
 	}
 
 }

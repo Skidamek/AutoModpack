@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import re
+import stat
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -17,12 +18,19 @@ from .registry import verb
 from .util import await_condition, parse_duration
 
 
+def _while_client_running(ctx, result):
+    if result is not None:
+        return result
+    ctx.assert_client_running()
+    return None
+
+
 def _await_exist(ctx, root, rels, step, msg, default_timeout):
     """Poll until every path in ``rels`` exists under ``root``, or time out."""
     paths = [root / r for r in rels]
     timeout = parse_duration(step.get("timeout"), default=default_timeout)
     await_condition(
-        lambda: True if all(p.exists() for p in paths) else None,
+        lambda: _while_client_running(ctx, True if all(p.exists() for p in paths) else None),
         timeout,
         step.get("poll"),
         msg,
@@ -45,7 +53,11 @@ def _mutate_file(path, action):
     if action == "delete":
         if not path.is_file():
             raise FileNotFoundError(f"cannot delete missing file: {path}")
-        path.unlink()
+        try:
+            path.unlink()
+        except PermissionError:
+            path.chmod(stat.S_IMODE(path.stat().st_mode) | stat.S_IWUSR)
+            path.unlink()
         return
     if action != "corrupt":
         raise ValueError(f"unknown client-file mutation {action!r}")
@@ -55,7 +67,15 @@ def _mutate_file(path, action):
     payload = _CORRUPT_BYTES
     while payload == original:
         payload += b"!"
-    path.write_bytes(payload)
+    original_mode = stat.S_IMODE(path.stat().st_mode)
+    made_writable = not original_mode & stat.S_IWUSR
+    if made_writable:
+        path.chmod(original_mode | stat.S_IWUSR)
+    try:
+        path.write_bytes(payload)
+    finally:
+        if made_writable:
+            path.chmod(original_mode)
 
 
 def _active_file(ctx, logical_path):
@@ -66,7 +86,7 @@ def _active_file(ctx, logical_path):
         raise ValueError(f"active logical path must be relative: {logical_path!r}")
     canonical = wanted.as_posix()
     matches = []
-    for group in (manifest.get("groups", {}) or {}).values():
+    for group in ((manifest.get("policy", {}) or {}).get("groups", {}) or {}).values():
         if not isinstance(group, dict):
             continue
         entry = (group.get("files", {}) or {}).get(canonical)
@@ -88,7 +108,8 @@ def _active_file(ctx, logical_path):
 
 
 def _object_path(ctx, object_hash):
-    return ctx.game_dir / "automodpack" / "client" / "data" / "objects" / object_hash
+    digest = str(object_hash).lower()
+    return ctx.game_dir / "automodpack" / "client" / "data" / "objects" / digest[:2] / digest[2:]
 
 
 def _claim_fields(ctx, step):
@@ -104,7 +125,6 @@ def _claim_fields(ctx, step):
         raise AssertionError(f"preservation manifest has no claim list: {manifest}")
     original_path = step.get("originalPath")
     reason = step.get("reason")
-    status = step.get("status")
     fixture = ctx.resolve(step.get("fixture"))
     fixture_hash = hashlib.sha1(valid_mod_jar_bytes(fixture, ctx.target.minecraft)).hexdigest() if isinstance(fixture, dict) else None
     content_hash = hashlib.sha1(str(ctx.resolve(step["content"])).encode("utf-8")).hexdigest() if "content" in step else None
@@ -115,8 +135,6 @@ def _claim_fields(ctx, step):
         if original_path is not None and claim.get("originalPath") != str(ctx.resolve(original_path)):
             continue
         if reason is not None and claim.get("reason") != str(ctx.resolve(reason)):
-            continue
-        if status is not None and claim.get("status") != str(ctx.resolve(status)):
             continue
         if fixture_hash is not None and claim.get("objectHash") != fixture_hash:
             continue
@@ -131,7 +149,7 @@ def wait_file(ctx, step):
     template = str(step["path"])
     timeout = parse_duration(step.get("timeout"), default=300)
     await_condition(
-        lambda: True if (ctx.game_dir / ctx.resolve(template)).exists() else None,
+        lambda: _while_client_running(ctx, True if (ctx.game_dir / ctx.resolve(template)).exists() else None),
         timeout,
         step.get("poll"),
         f"file {template} did not appear",
@@ -148,9 +166,10 @@ def wait_file_content(ctx, step):
 
     def _matches():
         try:
-            return True if path.read_text(encoding="utf-8") == expected else None
+            result = True if path.read_text(encoding="utf-8") == expected else None
         except (FileNotFoundError, IsADirectoryError, OSError):
-            return None
+            result = None
+        return _while_client_running(ctx, result)
 
     await_condition(_matches, timeout, step.get("poll"), f"file {template} did not contain the expected content")
 
@@ -180,9 +199,28 @@ def verify_mods(ctx, step):
     def _all():
         mods = {p.name for p in mod_dir.glob("*.jar")} if mod_dir.exists() else set()
         ok = all(any(fnmatch(m, pat) for m in mods) for pat in ctx.expected_mods)
-        return True if ok else None
+        return _while_client_running(ctx, True if ok else None)
 
     await_condition(_all, timeout, step.get("poll"), "expected mods missing")
+
+
+def _mirror_entry(ctx, modpack_id, content_token):
+    """One generation's journal entry, read from the client's journal mirror."""
+    mirror_path = ctx.game_dir / "automodpack" / "client" / "history" / modpack_id / "journal.jsonl"
+    with mirror_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            entry = json.loads(line)
+            if isinstance(entry, dict) and str(entry.get("contentToken", "")) == content_token:
+                return entry
+    raise ValueError(f"journal mirror has no entry for the active generation {content_token!r}")
+
+
+def _active_generation_notes(ctx, modpack_id, content_token):
+    """The patch notes of one generation's journal entry, read from the client's journal mirror."""
+    return str(_mirror_entry(ctx, modpack_id, content_token).get("notes", ""))
 
 
 def _read_active_generation(ctx, expected_patch_notes=None):
@@ -191,30 +229,33 @@ def _read_active_generation(ctx, expected_patch_notes=None):
     if not isinstance(state, dict):
         raise ValueError("active generation state is not an object")
     modpack_id = state["modpackId"]
-    generation_id = state["generationId"]
-    if state.get("status") != "ACTIVE" or not isinstance(modpack_id, str) or not isinstance(generation_id, str):
+    content_token = state["contentToken"]
+    if state.get("status") != "ACTIVE" or not isinstance(modpack_id, str) or not isinstance(content_token, str):
         raise ValueError("active generation state is not committed")
-    record_path = ctx.game_dir / "automodpack" / "client" / "records" / generation_id / "manifest.json"
-    manifest = json.loads(record_path.read_text(encoding="utf-8"))
-    generation = manifest.get("generation") if isinstance(manifest, dict) else None
-    if not isinstance(generation, dict) or manifest.get("modpackId") != modpack_id or generation.get("generationId") != generation_id:
-        raise ValueError("active generation state does not match its immutable record")
-    if expected_patch_notes is not None and generation.get("patchNotes") != expected_patch_notes:
+    entry = _mirror_entry(ctx, modpack_id, content_token)
+    policy_sha1 = str(entry.get("policySha1", ""))
+    policy_path = _object_path(ctx, policy_sha1)
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    manifest = {"contentToken": content_token, "policySha1": policy_sha1, "createdAt": entry.get("createdAt"), "policy": policy}
+    if not isinstance(policy, dict) or policy.get("modpackId") != modpack_id or state.get("ownershipLedger", {}).get("modpackId") != modpack_id:
+        raise ValueError("active generation state does not match its mirror and policy document")
+    if expected_patch_notes is not None and _active_generation_notes(ctx, modpack_id, content_token) != expected_patch_notes:
         raise ValueError("active generation patch notes are not committed")
     return state, manifest
 
 
 @verb("wait_generation")
 def wait_generation(ctx, step):
-    """Wait until active-state.json and its immutable generation record are committed."""
+    """Wait until active-state.json, its mirror entry, and its policy document are committed."""
     timeout = parse_duration(step.get("timeout"), default=300)
     expected_patch_notes = str(ctx.resolve(step["patchNotes"])) if "patchNotes" in step else None
 
     def _committed():
         try:
-            return _read_active_generation(ctx, expected_patch_notes)
+            result = _read_active_generation(ctx, expected_patch_notes)
         except (FileNotFoundError, IsADirectoryError, OSError, TypeError, ValueError, json.JSONDecodeError):
-            return None
+            result = None
+        return _while_client_running(ctx, result)
 
     await_condition(_committed, timeout, step.get("poll"), "active generation state was not committed")
 
@@ -299,7 +340,7 @@ def assert_bootstrap_import(ctx, _step):
     }
     if not all(expected.values()):
         raise AssertionError("bootstrap expectations were not captured by seed_bootstrap")
-    bootstrap_path = ctx.game_dir / "automodpack-bootstrap.json"
+    bootstrap_path = ctx.game_dir / "automodpack" / "automodpack-bootstrap.json"
     if bootstrap_path.exists():
         raise AssertionError(f"Preload did not delete imported bootstrap file: {bootstrap_path}")
     try:
@@ -413,17 +454,51 @@ def assert_mod_fixture(ctx, step):
 
 @verb("assert_preservation_claim")
 def assert_preservation_claim(ctx, step):
-    """Assert filtered vault claims and verify that their claimed CAS bytes are sound."""
-    manifest, matches = _claim_fields(ctx, step)
+    """Assert filtered vault claims and verify that their claimed CAS bytes are sound.
+
+    Vault mutations (delete, save-copy, restore, repair) run on the client's background executor and surface through
+    a render-thread refresh, so a one-shot read right after a UI wait can observe the pre-mutation file. The
+    expectation is therefore awaited (default 30s, override with ``timeout``); passing states return immediately,
+    so the wait only costs time when the state is actually wrong.
+    """
+    raw_timeout = step.get("timeout")
+    timeout = 30.0 if raw_timeout is None else parse_duration(raw_timeout, default=30.0)
+    if timeout <= 0:
+        error = _preservation_claim_mismatch(ctx, step)
+        if error is not None:
+            raise error
+        return
+    state: dict = {}
+
+    def _pred():
+        error = _preservation_claim_mismatch(ctx, step)
+        if error is None:
+            return True
+        state["error"] = error
+        ctx.assert_client_running()
+        return None
+
+    try:
+        await_condition(_pred, timeout, step.get("poll"), f"preservation claim assertion under {step.get('packId')}")
+    except TimeoutError as timeout_error:
+        raise state.get("error", timeout_error) from timeout_error
+
+
+def _preservation_claim_mismatch(ctx, step):
+    """Return an AssertionError describing the mismatch, or None when the expectation holds."""
+    try:
+        manifest, matches = _claim_fields(ctx, step)
+    except AssertionError as error:
+        return error
     expected_present = step.get("present", True)
     expected_count = step.get("count")
     if expected_count is not None:
         if len(matches) != expected_count:
-            raise AssertionError(f"matching preservation claim count under {manifest} was {len(matches)}, expected {expected_count}")
+            return AssertionError(f"matching preservation claim count under {manifest} was {len(matches)}, expected {expected_count}")
     elif bool(matches) != expected_present:
-        raise AssertionError(f"matching preservation claim presence under {manifest} was {bool(matches)}, expected {expected_present}")
+        return AssertionError(f"matching preservation claim presence under {manifest} was {bool(matches)}, expected {expected_present}")
     if not expected_present or not matches:
-        return
+        return None
     expected_valid = step.get("objectValid", True)
     for claim in matches:
         object_hash = str(claim.get("objectHash", ""))
@@ -434,22 +509,26 @@ def assert_preservation_claim(ctx, step):
             size = -1
         valid = re.fullmatch(r"[0-9a-f]{40}", object_hash) is not None and payload.is_file() and payload.stat().st_size == size and hashlib.sha1(payload.read_bytes()).hexdigest() == object_hash
         if valid != expected_valid:
-            raise AssertionError(f"preservation object {object_hash!r} validity was {valid}, expected {expected_valid}")
+            return AssertionError(f"preservation object {object_hash!r} validity was {valid}, expected {expected_valid}")
+    return None
 
 
 @verb("assert_generation")
 def assert_generation(ctx, step):
     """Assert installed generation metadata without coupling scenarios to Java internals."""
     try:
-        _state, manifest = _read_active_generation(ctx)
+        state, manifest = _read_active_generation(ctx)
+        if "patchNotes" in step:
+            notes = _active_generation_notes(ctx, state["modpackId"], state["contentToken"])
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         raise AssertionError(f"active generation metadata is invalid: {error}") from error
+    groups = (manifest.get("policy", {}) or {}).get("groups", {}) or {}
     for group_id, requirements in (step.get("groups", {}) or {}).items():
-        if group_id not in manifest.get("groups", {}):
+        if group_id not in groups:
             raise AssertionError(f"active generation is missing group {group_id!r}")
-        actual = manifest["groups"][group_id]
+        actual = groups[group_id]
         for field, value in (requirements or {}).items():
             if actual.get(field) != value:
                 raise AssertionError(f"group {group_id!r} field {field!r}: expected {value!r}, got {actual.get(field)!r}")
-    if "patchNotes" in step and manifest.get("generation", {}).get("patchNotes") != ctx.resolve(step["patchNotes"]):
+    if "patchNotes" in step and notes != ctx.resolve(step["patchNotes"]):
         raise AssertionError("active generation patch notes do not match the scenario")

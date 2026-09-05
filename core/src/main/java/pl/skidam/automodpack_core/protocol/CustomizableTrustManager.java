@@ -39,6 +39,10 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 			return true;
 		}
 
+		boolean hasAccepted() {
+			return acceptedFingerprint.get() != null || configuredFingerprint != null;
+		}
+
 		void accept(X509Certificate certificate) throws CertificateException {
 			String fingerprint = getFingerprint(certificate);
 			String expected = configuredFingerprint;

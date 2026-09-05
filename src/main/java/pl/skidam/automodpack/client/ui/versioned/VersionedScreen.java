@@ -4,18 +4,28 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+/*? if >=1.20.4 {*/
+import net.minecraft.client.gui.components.Checkbox;
+/*?}*/
 /*? if >= 1.20.2 {*/
 import net.minecraft.client.gui.components.SpriteIconButton;
 /*?} else {*/
 /*import net.minecraft.client.gui.components.ImageButton;
 *//*?}*/
+import net.minecraft.ChatFormatting;
+import net.minecraft.util.Util;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+
+import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 
 /*? if >= 1.21.9 {*/
 import net.minecraft.client.input.KeyEvent;
@@ -44,6 +54,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 public class VersionedScreen extends Screen {
 
@@ -87,16 +98,16 @@ public class VersionedScreen extends Screen {
 	// This method is to be override by the child classes
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
 
-
-	/*? if <=1.16.5 {*//*
-	public <T extends Element> void addDrawableChild(T child) {
-		if (child instanceof ClickableWidget) {
-			super.addButton((ClickableWidget) child);
-			return;
-		}
-		super.addChild(child);
+	/** Re-runs init so every widget reflects the current fields; for when one change reshapes the whole screen. */
+	protected void rebuild() {
+		/*? if >=1.19.2 {*/
+		this.rebuildWidgets();
+		/*?} else {*/
+		/*
+		this.init(this.minecraft, this.width, this.height);
+		*//*?}*/
 	}
-	*//*?}*/
+
 
 	/*? if >=1.20 {*/
 	public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
@@ -150,12 +161,8 @@ public class VersionedScreen extends Screen {
 		return action(message, onPress, ActionAreaLayout.Role.PRIMARY, true);
 	}
 
-	protected final ActionDefinition navigationAction(Component message, Button.OnPress onPress) {
-		return action(message, onPress, ActionAreaLayout.Role.NAVIGATION, true);
-	}
-
-	protected final ActionDefinition disabledNavigationAction(Component message) {
-		return action(message, button -> {}, ActionAreaLayout.Role.NAVIGATION, false);
+	protected final ActionDefinition disabledAction(Component message) {
+		return action(message, button -> {}, ActionAreaLayout.Role.OPTIONAL, false);
 	}
 
 	private ActionDefinition action(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled) {
@@ -166,20 +173,20 @@ public class VersionedScreen extends Screen {
 		return new ActionRow(kind, List.of(actions));
 	}
 
-	protected final List<Button> addActionArea(int preferredPanelWidth, int bottomY, ActionRow... rows) {
-		return addActionArea(preferredPanelWidth, bottomY, false, rows);
+	protected final List<Button> addActionArea(int footerWidth, int bottomY, ActionRow... rows) {
+		return addActionArea(footerWidth, bottomY, false, rows);
 	}
 
-	protected final List<Button> addActionAreaAt(int preferredPanelWidth, int topY, ActionRow... rows) {
-		return addActionArea(preferredPanelWidth, topY, true, rows);
+	protected final List<Button> addActionAreaAt(int footerWidth, int topY, ActionRow... rows) {
+		return addActionArea(footerWidth, topY, true, rows);
 	}
 
-	protected final int actionAreaTop(int preferredPanelWidth, int bottomY, ActionRow... rows) {
-		return buildActionArea(preferredPanelWidth, bottomY, false, rows).layout().top();
+	protected final int actionAreaTop(int footerWidth, int bottomY, ActionRow... rows) {
+		return buildActionArea(footerWidth, bottomY, false, rows).layout().top();
 	}
 
-	private List<Button> addActionArea(int preferredPanelWidth, int anchorY, boolean fromTop, ActionRow... rows) {
-		ActionArea area = buildActionArea(preferredPanelWidth, anchorY, fromTop, rows);
+	private List<Button> addActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
+		ActionArea area = buildActionArea(footerWidth, anchorY, fromTop, rows);
 		List<Button> buttons = new ArrayList<>(area.layout().placements().size());
 		for (ActionAreaLayout.Placement placement : area.layout().placements()) {
 			ActionDefinition definition = area.definitions().get(placement.id());
@@ -191,7 +198,7 @@ public class VersionedScreen extends Screen {
 		return buttons;
 	}
 
-	private ActionArea buildActionArea(int preferredPanelWidth, int anchorY, boolean fromTop, ActionRow... rows) {
+	private ActionArea buildActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
 		List<ActionAreaLayout.Row> geometryRows = new ArrayList<>();
 		Map<String, ActionDefinition> definitions = new HashMap<>();
 		for (int rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -200,15 +207,14 @@ public class VersionedScreen extends Screen {
 			for (int actionIndex = 0; actionIndex < row.actions().size(); actionIndex++) {
 				String id = rowIndex + ":" + actionIndex;
 				ActionDefinition definition = row.actions().get(actionIndex);
-				int minimumWidth = Math.max(ActionAreaLayout.MIN_BUTTON_WIDTH, this.font.width(definition.message().getString()) + 16);
-				geometryActions.add(new ActionAreaLayout.Action(id, ActionAreaLayout.preferredWidth(row.actions().size()), minimumWidth, definition.role()));
+				geometryActions.add(new ActionAreaLayout.Action(id, definition.role()));
 				definitions.put(id, definition);
 			}
 			geometryRows.add(new ActionAreaLayout.Row(row.kind(), geometryActions));
 		}
 
-		int left = panelLeft(preferredPanelWidth);
-		int width = panelWidth(preferredPanelWidth);
+		int left = panelLeft(footerWidth);
+		int width = panelWidth(footerWidth);
 		ActionAreaLayout.Layout layout = fromTop
 				? ActionAreaLayout.fromTop(left, anchorY, width, actionRowGap(), geometryRows)
 				: ActionAreaLayout.fromBottom(left, anchorY + ActionAreaLayout.BUTTON_HEIGHT, width, actionRowGap(), geometryRows);
@@ -220,20 +226,21 @@ public class VersionedScreen extends Screen {
 		return false;
 	}
 
-	protected final int actionButtonWidth(int preferredPanelWidth, int buttonCount) {
-		int count = Math.max(1, buttonCount);
-		return Math.max(1, (panelWidth(preferredPanelWidth) - actionRowGap() * (count - 1)) / count);
+	/** Shows the tooltip while the pointer stays inside the given text bounds, matching vanilla hover-on-text behavior. */
+	protected final void showHoverTooltip(VersionedMatrices matrices, Component tooltip, int x, int y, int width, int mouseX, int mouseY) {
+		if (mouseX < x || mouseX >= x + width || mouseY < y || mouseY >= y + this.font.lineHeight) return;
+		showComponentTooltip(matrices, tooltip, mouseX, mouseY);
 	}
 
-	protected final int actionButtonX(int preferredPanelWidth, int buttonCount, int index) {
-		return panelLeft(preferredPanelWidth) + index * (actionButtonWidth(preferredPanelWidth, buttonCount) + actionRowGap());
-	}
-
-	protected final int centeredActionButtonX(int preferredPanelWidth, int slotCount, int visibleButtonCount, int index) {
-		int buttonWidth = actionButtonWidth(preferredPanelWidth, slotCount);
-		int visibleCount = Math.max(1, Math.min(slotCount, visibleButtonCount));
-		int groupWidth = visibleCount * buttonWidth + actionRowGap() * (visibleCount - 1);
-		return (this.width - groupWidth) / 2 + index * (buttonWidth + actionRowGap());
+	/** Shows the tooltip wherever the pointer currently is; row lists call this only while a tooltip-carrying row is hovered. */
+	protected final void showComponentTooltip(VersionedMatrices matrices, Component tooltip, int mouseX, int mouseY) {
+		/*? if >=1.21.8 {*/
+		matrices.getContext().setComponentTooltipForNextFrame(this.font, List.of(tooltip), mouseX, mouseY);
+		/*?} elif >=1.20 {*/
+		/*setTooltipForNextRenderPass(tooltip);
+		*//*?} else {*/
+		/*renderTooltip(matrices.getContext(), tooltip, mouseX, mouseY);
+		*//*?}*/
 	}
 
 	/*? if <1.19.3 {*/
@@ -246,6 +253,135 @@ public class VersionedScreen extends Screen {
 	}
 	/*?}*/
 
+	/** One input row shared by every screen: the field on the rail, an optional square help button at its right. */
+	protected static final int HELP_BUTTON_SIZE = 20;
+
+	protected final EditBox fieldWidget(int x, int y, int railWidth, Component label, Component helpHint, int maxLength) {
+		int helpSize = helpHint == null ? 0 : HELP_BUTTON_SIZE + ActionAreaLayout.SEAM;
+		int fieldWidth = Math.max(1, railWidth - helpSize);
+		EditBox field = new EditBox(this.font, x, y, fieldWidth, ActionAreaLayout.BUTTON_HEIGHT, label);
+		field.setMaxLength(maxLength);
+		this.addRenderableWidget(field);
+		if (helpHint != null) {
+			Button help = buttonWidget(x + fieldWidth + ActionAreaLayout.SEAM, y, HELP_BUTTON_SIZE, HELP_BUTTON_SIZE, VersionedText.literal("?"),
+					button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"));
+			setTooltip(help, helpHint);
+			this.addRenderableWidget(help);
+		}
+		return field;
+	}
+
+	/*? if >=1.20.4 {*/
+	public static AbstractWidget checkboxWidget(Font font, int x, int y, int width, int height, Component message, boolean selected, Consumer<Boolean> onValueChange) {
+		Checkbox.Builder builder = Checkbox.builder(message, font).pos(x, y).selected(selected).onValueChange((box, value) -> onValueChange.accept(value));
+		/*? if >=1.21.1 {*/
+		builder.maxWidth(Math.max(1, width));
+		/*?}*/
+		Checkbox checkbox = builder.build();
+		/*? if <1.21.1 {*/
+		/*checkbox.setWidth(Math.max(1, width));
+		*//*?}*/
+		return checkbox;
+	}
+	/*?} else {*/
+	/*public static AbstractWidget checkboxWidget(Font font, int x, int y, int width, int height, Component message, boolean selected, Consumer<Boolean> onValueChange) {
+		boolean[] checked = { selected };
+		return buttonWidget(x, y, width, height, checkboxButtonMessage(message, checked[0]), button -> {
+			checked[0] = !checked[0];
+			button.setMessage(checkboxButtonMessage(message, checked[0]));
+			onValueChange.accept(checked[0]);
+		});
+	}
+
+	private static Component checkboxButtonMessage(Component message, boolean selected) {
+		return VersionedText.literal(selected ? "[x] " : "[ ] ").append(message);
+	}
+	*//*?}*/
+
+	protected final TextScrollWidget addScrollBody(int contentWidth, int topY, int bottomY, List<String> lines) {
+		List<MutableComponent> components = new ArrayList<>();
+		for (String line : lines) components.add(VersionedText.literal(line == null ? "" : line));
+		return addScrollBody(contentWidth, topY, bottomY, components, false);
+	}
+
+	protected final TextScrollWidget addCenteredScrollBody(int contentWidth, int topY, int bottomY, List<? extends Component> lines) {
+		return addScrollBody(contentWidth, topY, bottomY, lines, true);
+	}
+
+	protected final TextScrollWidget addScrollBody(int contentWidth, int topY, int bottomY, List<? extends Component> lines, boolean center) {
+		TextScrollWidget body = new TextScrollWidget(this.minecraft, this.width, this.height, panelWidth(contentWidth), topY, bottomY, lines, center);
+		this.addRenderableWidget(body);
+		return body;
+	}
+
+	protected static MutableComponent blankLine() {
+		return VersionedText.literal("");
+	}
+
+	/** The vanilla font line height; every dialog line advance goes through this constant, never a raw 9. */
+	public static final int LINE_HEIGHT = 9;
+
+	/** Draws centered lines advancing by LINE_HEIGHT and returns the y below the last line. */
+	protected final int drawCenteredLines(VersionedMatrices matrices, List<? extends Component> lines, int y) {
+		for (Component line : lines) {
+			if (line == null) continue;
+			drawCenteredTextWithShadow(matrices, this.font, line instanceof MutableComponent mutable ? mutable : VersionedText.literal(line.getString()), this.width / 2, y, TextColors.WHITE);
+			y += LINE_HEIGHT;
+		}
+		return y;
+	}
+
+	/** One dialog column: the scrollable body window and where the pinned stack under it starts. */
+	protected record DialogColumn(int bodyTop, int bodyBottom, boolean scrolls, int stackTop) {}
+
+	/**
+	 * Lays a dialog out as one column — body, then an optional pinned stack — above the footer. A column
+	 * that fits centers in the space between the top reserve and the footer; only a real overflow clips
+	 * the body into the remaining window while the stack pins above the footer. The fitting body window
+	 * includes the list's own content padding, or vanilla reports a phantom scroll and clips the last row.
+	 */
+	protected final DialogColumn layoutDialogColumn(int topReserve, int footerTop, int contentHeight, int stackHeight) {
+		int bottomLimit = footerTop - 4;
+		int available = Math.max(0, bottomLimit - topReserve);
+		int blockHeight = stackHeight > 0 ? contentHeight + ActionAreaLayout.SEAM + stackHeight : contentHeight;
+		if (blockHeight <= available) {
+			int blockTop = topReserve + (available - blockHeight) / 2;
+			return new DialogColumn(blockTop, blockTop + contentHeight + TextScrollWidget.CONTENT_PADDING, false, blockTop + contentHeight + ActionAreaLayout.SEAM);
+		}
+		int stackTop = Math.max(topReserve, bottomLimit - stackHeight);
+		int bodyBottom = Math.max(topReserve + LINE_HEIGHT, stackTop - (stackHeight > 0 ? ActionAreaLayout.GAP : 0));
+		return new DialogColumn(topReserve, bodyBottom, true, stackTop);
+	}
+
+	protected static List<MutableComponent> wrapParagraph(Font font, String text, int maxWidth, ChatFormatting... styles) {
+		List<MutableComponent> lines = new ArrayList<>();
+		for (String line : wrapToWidth(font, text, maxWidth)) {
+			MutableComponent component = VersionedText.literal(line);
+			if (styles.length > 0) component = component.withStyle(styles);
+			lines.add(component);
+		}
+		return lines;
+	}
+
+	protected static List<MutableComponent> wrapWithHighlight(Font font, String text, String highlight, int maxWidth, ChatFormatting... highlightStyles) {
+		String token = highlight == null ? "" : highlight;
+		List<MutableComponent> lines = new ArrayList<>();
+		for (String line : wrapToWidth(font, text, maxWidth)) {
+			int index = token.isEmpty() ? -1 : line.indexOf(token);
+			if (index < 0) {
+				lines.add(VersionedText.literal(line));
+				continue;
+			}
+			MutableComponent component = VersionedText.literal(line.substring(0, index));
+			MutableComponent marked = VersionedText.literal(token);
+			if (highlightStyles.length > 0) marked = marked.withStyle(highlightStyles);
+			component.append(marked);
+			component.append(VersionedText.literal(line.substring(index + token.length())));
+			lines.add(component);
+		}
+		return lines;
+	}
+
 	public static String truncateToWidth(Font font, String text, int maxWidth) {
 		if (text == null || text.isEmpty() || maxWidth <= 0) return "";
 		if (font.width(text) <= maxWidth) return text;
@@ -254,21 +390,16 @@ public class VersionedScreen extends Screen {
 		return fitPrefix(font, text, maxWidth - font.width(ellipsis)).stripTrailing() + ellipsis;
 	}
 
-	protected static List<String> wrapToWidth(Font font, String text, int maxWidth, int maxLines) {
+	protected static List<String> wrapToWidth(Font font, String text, int maxWidth) {
 		List<String> lines = new ArrayList<>();
-		if (text == null || text.isBlank() || maxWidth <= 0 || maxLines <= 0) return lines;
-		boolean truncated = false;
+		if (text == null || text.isBlank() || maxWidth <= 0) return lines;
 		for (String rawLine : text.split("\\R", -1)) {
 			String remaining = rawLine.strip();
 			if (remaining.isEmpty()) {
-				if (lines.size() < maxLines) lines.add("");
+				lines.add("");
 				continue;
 			}
 			while (!remaining.isEmpty()) {
-				if (lines.size() == maxLines) {
-					truncated = true;
-					break;
-				}
 				String fitting = fitPrefix(font, remaining, maxWidth);
 				int end = fitting.length();
 				if (end < remaining.length()) {
@@ -279,14 +410,19 @@ public class VersionedScreen extends Screen {
 				lines.add(remaining.substring(0, end).strip());
 				remaining = remaining.substring(Math.min(end, remaining.length())).strip();
 			}
-			if (truncated) break;
 		}
 		if (lines.isEmpty()) lines.add("");
-		if (truncated) {
-			int last = lines.size() - 1;
-			lines.set(last, truncateToWidth(font, lines.get(last) + "…", maxWidth));
-		}
 		return lines;
+	}
+
+	protected static List<String> wrapToWidth(Font font, String text, int maxWidth, int maxLines) {
+		List<String> lines = wrapToWidth(font, text, maxWidth);
+		if (maxLines <= 0) return new ArrayList<>();
+		if (lines.size() <= maxLines) return lines;
+		List<String> truncated = new ArrayList<>(lines.subList(0, maxLines));
+		int last = truncated.size() - 1;
+		truncated.set(last, truncateToWidth(font, truncated.get(last) + "…", maxWidth));
+		return truncated;
 	}
 
 	private static String fitPrefix(Font font, String text, int maxWidth) {

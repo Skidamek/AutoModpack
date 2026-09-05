@@ -10,7 +10,11 @@ import net.minecraft.client.Screenshot;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+/*? if >=1.20.4 {*/
+import net.minecraft.client.gui.components.Checkbox;
+/*?}*/
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.ConnectScreen;
 /*? if >=1.21.6 {*/
@@ -21,6 +25,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.widget.RowViewport;
 /*? if >= 1.21.10 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -28,33 +33,27 @@ import net.minecraft.client.input.MouseButtonInfo;
 /*? if >= 1.20.5 {*/
 import net.minecraft.client.multiplayer.TransferState;
 /*?}*/
-/*? if >= 1.19.2 {*/
 import net.minecraft.network.chat.Component;
+/*? if >= 1.19.2 {*/
+import net.minecraft.network.chat.contents.TranslatableContents;
 /*?} else {*/
 /*import net.minecraft.network.chat.TranslatableComponent;
 *//*?}*/
 
 import java.io.IOException;
 import java.awt.image.BufferedImage;
-import java.lang.reflect.Array;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.imageio.ImageIO;
@@ -77,7 +76,7 @@ public final class AutoTestBridge {
 		onClientReady();
 	}
 
-	public static boolean hasReloadFinished() {
+	private static boolean hasReloadFinished() {
 		return RELOAD_FINISHED.get();
 	}
 
@@ -194,7 +193,7 @@ public final class AutoTestBridge {
 	}
 
 	private static Screen currentScreen() {
-		return (Screen) new ScreenManager().getScreen().orElse(null);
+		return (Screen) ScreenManager.getScreen().orElse(null);
 	}
 
 	private static JsonObject gui() {
@@ -202,6 +201,7 @@ public final class AutoTestBridge {
 		JsonObject o = base();
 		o.addProperty("screenClass", s == null ? null : s.getClass().getName());
 		o.addProperty("title", s == null ? null : s.getTitle().getString());
+		o.addProperty("screenRevision", screenRevision(s));
 		GuiElements elements = elements(s);
 		o.add("buttons", elementsJson(elements.buttons()));
 		o.add("textFields", elementsJson(elements.textFields()));
@@ -213,6 +213,7 @@ public final class AutoTestBridge {
 	private static String click(JsonObject req) {
 		Screen s = currentScreen();
 		if (s == null) return err("no screen");
+		if (screenRevision(s) != optLong(req, "screenRevision", -1)) return err("stale_screen", "GUI screen changed before click");
 
 		int button = optInt(req, "button", 0);
 		int x;
@@ -223,8 +224,9 @@ public final class AutoTestBridge {
 			if (has(req, "enable") && req.get("enable").getAsBoolean() && e.widget() instanceof Button) {
 				e.widget().active = true;
 			}
-			x = e.x() + e.width() / 2;
-			y = e.y() + e.height() / 2;
+			int[] point = e.clickPoint();
+			x = point[0];
+			y = point[1];
 		} else {
 			x = optInt(req, "x", -1);
 			y = optInt(req, "y", -1);
@@ -246,6 +248,7 @@ public final class AutoTestBridge {
 	private static String text(JsonObject req) {
 		Screen s = currentScreen();
 		if (s == null) return err("no screen");
+		if (screenRevision(s) != optLong(req, "screenRevision", -1)) return err("stale_screen", "GUI screen changed before text input");
 
 		int id = optInt(req, "id", -1);
 		GuiElement e = elements(s).byId(id);
@@ -295,8 +298,14 @@ public final class AutoTestBridge {
 		PendingScreenshot pending = PENDING_SCREENSHOT.get();
 		if (pending == null) return;
 		RenderedFrameState state = RenderedFrameState.capture();
-		if (!pending.observe(state)) return;
+		PendingScreenshot.Observation observation = pending.observe(state);
+		if (observation == PendingScreenshot.Observation.WAIT) return;
 		if (!PENDING_SCREENSHOT.compareAndSet(pending, null)) return;
+		if (observation == PendingScreenshot.Observation.TARGET_GONE) {
+			LOGGER.info("AutoModpack autotest screenshot {} skipped: {}", pending.path().getFileName(), state.describeFor(pending.targetScreen()));
+			pending.captured().complete(pending.skippedResponse(state).toString());
+			return;
+		}
 		try {
 			Minecraft minecraft = Minecraft.getInstance();
 			/*? if >=26.2 {*/
@@ -320,17 +329,30 @@ public final class AutoTestBridge {
 		private volatile RenderedFrameState lastState;
 		private RenderedFrameState previousState;
 
+		private enum Observation {
+			WAIT, SETTLED, TARGET_GONE
+		}
+
 		private PendingScreenshot(CompletableFuture<String> captured, Path path, Screen targetScreen) {
 			this.captured = captured;
 			this.path = path;
 			this.targetScreen = targetScreen;
 		}
 
-		private boolean observe(RenderedFrameState state) {
+		private Observation observe(RenderedFrameState state) {
+			RenderedFrameState previous = previousState;
 			lastState = state;
-			boolean settled = state.isSettledAfter(previousState, targetScreen);
 			previousState = state;
-			return settled;
+			// A replaced target screen can never settle; two consecutive frames of another screen prove it is gone.
+			if (previous != null && state.screen() != targetScreen && previous.screen() != targetScreen) return Observation.TARGET_GONE;
+			return state.isSettledAfter(previous, targetScreen) ? Observation.SETTLED : Observation.WAIT;
+		}
+
+		private JsonObject skippedResponse(RenderedFrameState state) {
+			JsonObject response = base();
+			response.addProperty("skipped", true);
+			response.addProperty("reason", state.describeFor(targetScreen));
+			return response;
 		}
 
 		private void logTimeout() {
@@ -344,6 +366,10 @@ public final class AutoTestBridge {
 
 		private Path path() {
 			return path;
+		}
+
+		private Screen targetScreen() {
+			return targetScreen;
 		}
 	}
 
@@ -441,57 +467,48 @@ public final class AutoTestBridge {
 	private static GuiElements elements(Screen screen) {
 		if (screen == null) return new GuiElements(List.of());
 
+		// children() (and nested ContainerEventHandler children) is what rebuildWidgets replaces.
+		// Field scraping used to also pick up Screen.focused, which keeps the pre-rebuild widget with
+		// stale text and visible=true — a ghost that could satisfy wait_for/no_element.
 		LinkedHashSet<AbstractWidget> widgets = new LinkedHashSet<>();
-		for (GuiEventListener child : screen.children()) {
-			if (child instanceof AbstractWidget widget) widgets.add(widget);
-		}
-		findWidgets(screen, widgets, newSeenSet());
+		for (GuiEventListener child : screen.children()) collectAttachedWidgets(child, widgets);
 
 		List<GuiElement> result = new ArrayList<>();
 		int id = 0;
 		for (AbstractWidget widget : widgets) {
-			result.add(new GuiElement(id++, widget));
+			result.add(GuiElement.of(id++, widget));
+			// Scrollable lists are represented by one clickable element per row; the row's
+			// text, enabled and checked state covers the controls inside it.
+			if (widget instanceof RowViewport viewport) {
+				for (int index = 0; index < viewport.rowCount(); index++) result.add(GuiElement.ofRow(id++, viewport, index));
+			}
 		}
 		return new GuiElements(result);
 	}
 
-	private static void findWidgets(Object object, Set<AbstractWidget> widgets, Set<Object> seen) {
-		if (object == null || seen.contains(object)) return;
-		seen.add(object);
-
-		Class<?> type = object.getClass();
-		while (type != null && type != Object.class) {
-			for (Field field : type.getDeclaredFields()) {
-				if (Modifier.isStatic(field.getModifiers())) continue;
-				try {
-					field.setAccessible(true);
-					collectWidgetValue(field.get(object), widgets, seen);
-				} catch (ReflectiveOperationException | RuntimeException ignored) {
-					// Best effort only. Screen#children is the primary source.
-				}
-			}
-			type = type.getSuperclass();
+	private static void collectAttachedWidgets(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets) {
+		if (listener instanceof AbstractWidget widget) widgets.add(widget);
+		// Row viewport lists are emitted as one element per row carrying the row's text and
+		// checkbox state; buttons inside rows (a row's help control) stay individually addressable.
+		if (listener instanceof RowViewport) {
+			if (!(listener instanceof ContainerEventHandler container)) return;
+			for (GuiEventListener child : container.children()) collectRowButtons(child, widgets);
+			return;
 		}
+		if (listener instanceof Screen || !(listener instanceof ContainerEventHandler container)) return;
+		for (GuiEventListener child : container.children()) collectAttachedWidgets(child, widgets);
 	}
 
-	private static void collectWidgetValue(Object value, Set<AbstractWidget> widgets, Set<Object> seen) {
-		if (value == null) return;
-		if (value instanceof AbstractWidget widget) {
-			widgets.add(widget);
+	private static void collectRowButtons(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets) {
+		if (listener instanceof ContainerEventHandler container) {
+			for (GuiEventListener child : container.children()) collectRowButtons(child, widgets);
 			return;
 		}
-		if (value instanceof Collection<?> collection) {
-			for (Object item : collection) collectWidgetValue(item, widgets, seen);
-			return;
-		}
-		if (value instanceof Map<?, ?> map) {
-			for (Object item : map.values()) collectWidgetValue(item, widgets, seen);
-			return;
-		}
-		if (value.getClass().isArray()) {
-			int length = Array.getLength(value);
-			for (int i = 0; i < length; i++) collectWidgetValue(Array.get(value, i), widgets, seen);
-		}
+		if (!(listener instanceof AbstractWidget widget)) return;
+		/*? if >=1.20.4 {*/
+		if (listener instanceof Checkbox) return;
+		/*?}*/
+		widgets.add(widget);
 	}
 
 	private static JsonArray elementsJson(List<GuiElement> elements) {
@@ -500,21 +517,35 @@ public final class AutoTestBridge {
 			JsonObject o = new JsonObject();
 			o.addProperty("id", e.id());
 			o.addProperty("text", e.text());
+			String key = e.translationKey();
+			if (!key.isEmpty()) o.addProperty("key", key);
 			o.addProperty("x", e.x());
 			o.addProperty("y", e.y());
 			o.addProperty("width", e.width());
 			o.addProperty("height", e.height());
-			o.addProperty("enabled", e.widget().active);
-			o.addProperty("visible", e.widget().visible);
+			o.addProperty("enabled", e.enabled());
+			o.addProperty("visible", e.visible());
+			Boolean checked = e.checked();
+			if (checked != null) o.addProperty("checked", checked);
 			o.addProperty("type", e.type());
-			o.addProperty("class", e.widget().getClass().getName());
+			o.addProperty("class", e.className());
 			a.add(o);
 		}
 		return a;
 	}
 
-	private static Set<Object> newSeenSet() {
-		return Collections.newSetFromMap(new IdentityHashMap<>());
+	private static String translationKey(Component component) {
+		if (component == null) return "";
+		/*? if >= 1.19.2 {*/
+		if (component.getContents() instanceof TranslatableContents translatable) return translatable.getKey();
+		/*?} else {*/
+		/*if (component instanceof TranslatableComponent translatable) return translatable.getKey();
+		*//*?}*/
+		for (Component sibling : component.getSiblings()) {
+			String key = translationKey(sibling);
+			if (!key.isEmpty()) return key;
+		}
+		return "";
 	}
 
 	private static <T> String onMain(ThrowingSupplier<T> supplier) throws Exception {
@@ -554,6 +585,27 @@ public final class AutoTestBridge {
 		return o.toString();
 	}
 
+	private static String err(String code, String message) {
+		JsonObject o = new JsonObject();
+		o.addProperty("ok", false);
+		o.addProperty("code", code);
+		o.addProperty("error", message);
+		return o.toString();
+	}
+
+	private static long screenRevision(Screen screen) {
+		// The revision must change whenever the widget set is replaced (rebuildWidgets swaps
+		// screen.children()), not only when the screen instance changes: element ids are
+		// positional over children, so a rebuild shifts every id and a click dumped before the
+		// rebuild would otherwise land on a different button.
+		if (screen == null) return 0;
+		long revision = System.identityHashCode(screen);
+		for (GuiEventListener child : screen.children()) {
+			revision = revision * 31 + System.identityHashCode(child);
+		}
+		return revision;
+	}
+
 	private static boolean has(JsonObject o, String k) {
 		JsonElement e = o.get(k);
 		return e != null && !e.isJsonNull();
@@ -567,6 +619,11 @@ public final class AutoTestBridge {
 	private static int optInt(JsonObject o, String k, int d) {
 		JsonElement e = o.get(k);
 		return e != null && !e.isJsonNull() ? e.getAsInt() : d;
+	}
+
+	private static long optLong(JsonObject o, String k, long d) {
+		JsonElement e = o.get(k);
+		return e != null && !e.isJsonNull() ? e.getAsLong() : d;
 	}
 
 	/*? if >= 1.19.2 {*/
@@ -600,12 +657,28 @@ public final class AutoTestBridge {
 		}
 	}
 
-	private record GuiElement(int id, AbstractWidget widget) {
+	/** One clickable GUI thing: a regular widget, or one row of a scrollable list. */
+	private record GuiElement(int id, AbstractWidget widget, RowViewport rows, int rowIndex, String rowText, boolean rowEnabled, Boolean rowChecked) {
+		static GuiElement of(int id, AbstractWidget widget) {
+			return new GuiElement(id, widget, null, -1, "", false, null);
+		}
+
+		static GuiElement ofRow(int id, RowViewport rows, int rowIndex) {
+			RowViewport.RowView view = rows.rowView(rowIndex);
+			return new GuiElement(id, null, rows, rowIndex, view.text(), view.enabled(), view.checked());
+		}
+
 		String text() {
+			if (rows != null) return rowText;
 			return widget instanceof EditBox editBox ? editBox.getValue() : widget.getMessage().getString();
 		}
 
+		String translationKey() {
+			return rows != null ? "" : AutoTestBridge.translationKey(widget.getMessage());
+		}
+
 		int x() {
+			if (rows != null) return rows.rowLeft();
 			/*? if >= 1.19.4 {*/
 			return widget.getX();
 			/*?} else {*/
@@ -614,6 +687,7 @@ public final class AutoTestBridge {
 		}
 
 		int y() {
+			if (rows != null) return rows.rowTop(rowIndex);
 			/*? if >= 1.19.4 {*/
 			return widget.getY();
 			/*?} else {*/
@@ -622,17 +696,49 @@ public final class AutoTestBridge {
 		}
 
 		int width() {
-			return widget.getWidth();
+			return rows != null ? rows.rowWidth() : widget.getWidth();
 		}
 
 		int height() {
-			return widget.getHeight();
+			return rows != null ? rows.rowHeight() : widget.getHeight();
+		}
+
+		/** Center of the element's current bounds; list rows are scrolled into view first so scrolled-out rows still receive the click. */
+		int[] clickPoint() {
+			if (rows != null) {
+				rows.revealRow(rowIndex);
+				return new int[] { rows.rowLeft() + rows.rowWidth() / 2, rows.rowTop(rowIndex) + rows.rowHeight() / 2 };
+			}
+			return new int[] { x() + width() / 2, y() + height() / 2 };
+		}
+
+		boolean enabled() {
+			return rows != null ? rowEnabled : widget.active;
+		}
+
+		boolean visible() {
+			return rows != null || widget.visible;
+		}
+
+		/** Selected state of a real checkbox or checkbox-like row, or null when there is none. */
+		Boolean checked() {
+			if (rows != null) return rowChecked;
+			/*? if >=1.20.4 {*/
+			return widget instanceof Checkbox checkbox ? checkbox.selected() : null;
+			/*?} else {*/
+			/*return null;
+			*//*?}*/
 		}
 
 		String type() {
+			if (rows != null) return "ListRow";
 			if (widget instanceof Button) return "Button";
 			if (widget instanceof EditBox) return "TextField";
 			return widget.getClass().getSimpleName();
+		}
+
+		String className() {
+			return rows != null ? rows.getClass().getName() : widget.getClass().getName();
 		}
 	}
 

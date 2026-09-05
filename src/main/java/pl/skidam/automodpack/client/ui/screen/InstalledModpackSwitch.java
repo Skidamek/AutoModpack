@@ -1,0 +1,69 @@
+package pl.skidam.automodpack.client.ui.screen;
+
+import net.minecraft.client.Minecraft;
+
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.UpdatePreview;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
+import pl.skidam.automodpack_loader_core.screen.FailureCategory;
+import pl.skidam.automodpack_loader_core.screen.FailureDestination;
+import pl.skidam.automodpack_loader_core.screen.FailureRequest;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+
+/** Switches an installed generation, reusing local objects and connecting only when the selected target needs more. */
+final class InstalledModpackSwitch {
+	private InstalledModpackSwitch() {}
+
+	static void start(ClientStorage storage, PackDocument record, SelectionIntent expectedSelection, SelectionIntent targetSelection,
+			String modpackName, Runnable release) {
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			ModpackUpdater updater = null;
+			try {
+				SelectedModpackTarget target = SelectedModpackTarget.prepare(record, expectedSelection, targetSelection, ClientPlatform.effective(targetSelection));
+				updater = updater(storage, target);
+				UpdatePreview preview = updater.previewInstalledSwitch();
+				ModpackUpdater finalUpdater = updater;
+				boolean shown = ScreenManager.preview(preview, modpackName, finalUpdater,
+						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> apply(finalUpdater, release)),
+						(Runnable) () -> {
+							finalUpdater.close();
+							release.run();
+						});
+				if (!shown) {
+					finalUpdater.close();
+					Minecraft.getInstance().execute(release);
+				}
+			} catch (Exception e) {
+				if (updater != null) updater.close();
+				release.run();
+				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			}
+		});
+	}
+
+	private static ModpackUpdater updater(ClientStorage storage, SelectedModpackTarget target) throws Exception {
+		ModpackUpdater local = new ModpackUpdater(target, null, null, storage);
+		if (!local.requiresSelectedTargetDownload()) return local;
+		local.close();
+
+		try (StoredModpackConnection connection = StoredModpackConnection.open(storage, target.manifest().modpackId(), true)) {
+			return connection.newUpdater(target, storage);
+		}
+	}
+
+	private static void apply(ModpackUpdater updater, Runnable release) {
+		try {
+			updater.applyInstalledSwitch();
+		} catch (Exception e) {
+			updater.close();
+			release.run();
+			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+		}
+	}
+}

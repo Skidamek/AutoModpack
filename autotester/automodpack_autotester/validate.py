@@ -12,14 +12,14 @@ from .engine.util import parse_duration
 
 _VALID_MODES = {"full", "client-only"}
 _VALID_NETWORKS = {"bridge", "host"}
+CONNECTION_MODES = {"DIRECT", "MAGIC", "HOLEPUNCH"}
 _COND_FIELDS = ("when", "until", "that")
 _DURATION_FIELDS = ("timeout", "poll", "duration")
 _REGEX_FIELDS = ("matches", "matches_all", "matches_any", "not_matches")
 _COUNT_FIELDS = ("count", "min_count", "max_count")
 _REMOTE_MOD_FIELDS = {"url", "sha512", "name"}
 _SHA512 = re.compile(r"[0-9a-fA-F]{128}")
-_PRESERVATION_REASONS = {"SERVER_REMOVAL", "MODPACK_REMOVAL", "MODPACK_DEACTIVATION", "LOCAL_CONFLICT", "STRICT_INSTALL", "STRICT_REPAIR", "EDITABLE_RESET"}
-_PRESERVATION_STATUSES = {"AVAILABLE", "RESTORED", "SAVED_COPY"}
+_PRESERVATION_REASONS = {"SERVER_REMOVAL", "MODPACK_REMOVAL", "MODPACK_DEACTIVATION", "LOCAL_CONFLICT", "PLAYER_CONSENT", "STRICT_REPAIR", "EDITABLE_RESET", "LOCAL_DRIFT"}
 _RELEASE_GATE_CAPABILITIES = frozenset({
     "bootstrap",
     "groups",
@@ -30,7 +30,6 @@ _RELEASE_GATE_CAPABILITIES = frozenset({
     "conflict-preservation",
     "preservation-vault",
     "storage-maintenance",
-    "server-history-compaction",
     "server-generation-rollback",
     "server-object-gc",
     "fresh-generation-deletion",
@@ -68,6 +67,9 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
         for capability, required_verb in _RELEASE_GATE_REQUIRED_VERBS.items():
             if not _contains_verb(scenario.get("flow", []), required_verb, release_macros):
                 problems.append(f"release-gate scenario must cover {capability} with verb {required_verb!r}")
+        path_modes = {str(path.get("mode", "")).upper() for path in scenario.get("connectionPaths", []) if isinstance(path, dict)}
+        if path_modes != CONNECTION_MODES:
+            problems.append(f"release-gate scenario must cover all connection modes: {sorted(CONNECTION_MODES)}")
     generations = (scenario.get("serverFiles", {}) or {}).get("generations")
     if generations is not None:
         if not isinstance(generations, list):
@@ -83,6 +85,8 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
     net = scenario.get("network")
     if net is not None and str(net).lower() not in _VALID_NETWORKS:
         problems.append(f"unknown network {net!r} (expected one of {sorted(_VALID_NETWORKS)})")
+
+    _check_connection_paths(scenario.get("connectionPaths"), problems)
 
     for name, value in (scenario.get("timeouts") or {}).items():
         _check_duration(value, problems, f"timeouts.{name}")
@@ -111,6 +115,32 @@ def validate_scenario(scenario: dict, macros: dict, targets: dict | None = None)
 
     _walk(flow, known_macros, problems, stack=(), scoped_targets=scoped_targets)
     return problems
+
+
+def _check_connection_paths(paths, problems):
+    if paths is None:
+        return
+    if not isinstance(paths, list) or not paths:
+        problems.append("connectionPaths must be a non-empty list")
+        return
+    modes = set()
+    for index, path in enumerate(paths):
+        where = f"connectionPaths[{index}]"
+        if not isinstance(path, dict):
+            problems.append(f"{where}: expected a mapping")
+            continue
+        mode = str(path.get("mode", "")).upper()
+        if mode not in CONNECTION_MODES:
+            problems.append(f"{where}.mode: expected one of {sorted(CONNECTION_MODES)}, got {path.get('mode')!r}")
+        if mode in modes:
+            problems.append(f"{where}.mode: duplicate connection mode {mode!r}")
+        modes.add(mode)
+        for field in ("bindPort", "endpointPort"):
+            value = path.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < -1 or value > 65535 or value == 0:
+                problems.append(f"{where}.{field}: expected an integer port or -1, got {value!r}")
+        if mode == "DIRECT" and path.get("bindPort", -1) == -1:
+            problems.append(f"{where}.bindPort: DIRECT needs a built-in listener for an end-to-end case")
 
 
 def _target_pattern_matches(pattern: str, target_id: str) -> bool:
@@ -186,8 +216,6 @@ def _walk(steps, macros, problems, stack, scoped_targets):
                     problems.append(f"{label}.originalPath: expected a non-empty relative path")
                 if verb in ("assert_preservation_claim", "mutate_preservation_object") and "reason" in step and step["reason"] not in _PRESERVATION_REASONS:
                     problems.append(f"{label}.reason: unknown preservation reason {step['reason']!r}")
-                if verb in ("assert_preservation_claim", "mutate_preservation_object") and "status" in step and step["status"] not in _PRESERVATION_STATUSES:
-                    problems.append(f"{label}.status: unknown preservation status {step['status']!r}")
                 if verb in ("mutate_client_file", "mutate_active_object", "mutate_preservation_object") and step.get("action") not in ("corrupt", "delete"):
                     problems.append(f"{label}.action: expected 'corrupt' or 'delete'")
                 for field in ("present", "valid", "objectValid"):

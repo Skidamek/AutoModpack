@@ -4,46 +4,54 @@ import static pl.skidam.automodpack_core.Constants.*;
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import org.jetbrains.annotations.NotNull;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
+import pl.skidam.automodpack_core.update.ClientObjectStore;
+import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.UpdatePlanner;
-import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.update.JournalMirror;
+import pl.skidam.automodpack_core.update.UpdatePlan;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class ModpackUtils {
 
 	// Modpack may require update even if there's no files to update, because some files may need to be deleted
-	public record UpdateCheckResult(boolean requiresUpdate, Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate,
-			Set<String> changedOverwriteEditableFiles) {}
+	public record UpdateCheckResult(boolean requiresUpdate, Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
 
 	public enum ManifestFetchState {
 		SUCCESS, OPERATION_FAILED, CONNECTION_FAILED
 	}
 
-	public record ManifestFetchResult(ManifestFetchState state, ModpackJsons.CompleteModpackContentFields content, DownloadClient client, Throwable failure) {
+	public record ManifestFetchResult(ManifestFetchState state, GenerationJsons.HeadDocumentFields content, DownloadClient client, Throwable failure) {
 		public boolean successful() {
 			return state == ManifestFetchState.SUCCESS;
 		}
@@ -52,166 +60,113 @@ public class ModpackUtils {
 	// Fast and friendly method to check if the modpack is up to date without modifying anything on disk
 	public static UpdateCheckResult isUpdate(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
-		Path activeDirectory = storage.activeDirectory();
-		try {
-			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-			if (state == null || !Files.isDirectory(activeDirectory, LinkOption.NOFOLLOW_LINKS)) {
-				return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
-			}
-		} catch (IOException e) {
-			LOGGER.warn("Cannot read active client generation state", e);
-			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
-		}
+		if (verificationCannotDecide(serverModpackContent, storage)) return new UpdateCheckResult(true, serverModpackContent.list);
 
 		LOGGER.info("Verifying content against server list...");
 		var start = System.currentTimeMillis();
 
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
-		Set<String> changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, activeDirectory);
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
+			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
+			for (var serverItem : serverModpackContent.list) {
+				if (verifyActiveItem(serverItem, LogicalPath.normalize(serverItem.file), live) == FileVerification.MISMATCH) filesToUpdate.add(serverItem);
+			}
 
-		// Group & Sort Server Files (Optimizes Disk Seek Pattern)
-		// Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
-		// TreeMap ensures alphabetical order of directories (HDD friendly).
-		Map<Path, List<ModpackJsons.ModpackContentFields.ModpackContentItem>> itemsByDir = serverModpackContent.list.stream()
-				.collect(Collectors.groupingBy(item -> storage.activePath(item.file).getParent(), TreeMap::new, Collectors.toList()));
-
-		try (var cache = FileMetadataCache.open(storage.fileMetadataDirectory())) {
-
-			// Process Directory by Directory
-			for (Map.Entry<Path, List<ModpackJsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
-				Path parentDir = entry.getKey();
-				List<ModpackJsons.ModpackContentFields.ModpackContentItem> itemsInDir = entry.getValue();
-
-				// If directory is missing, all items in it are missing.
-				if (!Files.exists(parentDir)) {
-					filesToUpdate.addAll(itemsInDir);
-					continue;
-				}
-
-				// Read all file attributes in this folder in ONE pass.
-				// This map will hold "FileName" -> "Attributes"
-				Map<String, BasicFileAttributes> diskFiles = new HashMap<>();
-
-				try {
-					// walkFileTree with depth 1 is efficient on Windows (gets attributes for free within a single syscall)
-					Files.walkFileTree(parentDir, EnumSet.noneOf(FileVisitOption.class), 1, new SimpleFileVisitor<>() {
-						@NotNull
-						@Override
-						public FileVisitResult visitFile(@NotNull Path file, @NotNull BasicFileAttributes attrs) {
-							diskFiles.put(file.getFileName().toString(), attrs);
-							return FileVisitResult.CONTINUE;
-						}
-
-						@NotNull
-						@Override
-						public FileVisitResult visitFileFailed(@NotNull Path file, @NotNull IOException exc) {
-							return FileVisitResult.CONTINUE; // Handle locked files or permission errors gracefully
-						}
-					});
-				} catch (IOException e) {
-					LOGGER.warn("Failed to inspect directory: {}", parentDir, e);
-					filesToUpdate.addAll(itemsInDir);
-					continue;
-				}
-
-				// Check Individual Files in a given directory (Pure RAM logic, 0 IO)
-				for (var serverItem : itemsInDir) {
-					String fileName = Paths.get(serverItem.file).getFileName().toString();
-					BasicFileAttributes diskAttrs = diskFiles.get(fileName);
-
-					if (diskAttrs == null) {
-						// File does not exist in the directory map
-						filesToUpdate.add(serverItem);
-					} else {
-						if (serverItem.editable) {
-							if (changedOverwriteEditableFiles.contains(serverItem.file)) {
-								LOGGER.info("Server changed overwrite-editable file: {}", serverItem.file);
-								filesToUpdate.add(serverItem);
-							} else {
-								LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
-							}
-							continue;
-						}
-
-						// Check Size first from already read attributes
-						if (diskAttrs.size() != Long.parseLong(serverItem.size)) {
-							filesToUpdate.add(serverItem);
-							continue;
-						}
-
-						// Finally, check Hash
-						// We pass 'diskAttrs' to the cache so it doesn't need to re-stat the file.
-						String hash = cache.getHashOrNullWithAttributes(parentDir.resolve(fileName), diskAttrs);
-
-						if (!serverItem.sha1.equalsIgnoreCase(hash)) filesToUpdate.add(serverItem);
+			if (filesToUpdate.isEmpty()) {
+				LOGGER.info("Checking for deleted files...");
+				Set<String> serverFileSet = serverModpackContent.list.stream().map(item -> LogicalPath.normalize(item.file)).collect(Collectors.toSet());
+				for (String relative : live.keySet()) {
+					if (!serverFileSet.contains(relative)) {
+						LOGGER.info("Found projected file marked for deletion: {}", relative);
+						return new UpdateCheckResult(true, Set.of());
 					}
 				}
 			}
 		} catch (Exception e) {
 			LOGGER.error("Error during update check", e);
-			// Fail-safe: assume update needed if process crashes
-			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
+			return new UpdateCheckResult(true, serverModpackContent.list);
 		}
 
 		if (!filesToUpdate.isEmpty()) {
 			LOGGER.info("Active projection requires update! Took {} ms", System.currentTimeMillis() - start);
-			return new UpdateCheckResult(true, filesToUpdate, changedOverwriteEditableFiles);
-		}
-
-		LOGGER.info("Checking for deleted files...");
-
-		Set<String> serverFileSet = serverModpackContent.list.stream().map(item -> UpdatePlanner.normalize(item.file)).collect(Collectors.toSet());
-		try {
-			try (Stream<Path> projectedFiles = Files.walk(activeDirectory)) {
-				for (Path path : projectedFiles.filter(file -> Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)).toList()) {
-					String relative = UpdatePlanner.normalize(activeDirectory.relativize(path).toString());
-					if (!serverFileSet.contains(relative)) {
-						LOGGER.info("Found projected file marked for deletion: {}", relative);
-						return new UpdateCheckResult(true, Set.of(), Set.of());
-					}
-				}
-			}
-		} catch (IOException e) {
-			LOGGER.warn("Failed to inspect the active projection for deleted files", e);
-			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
+			return new UpdateCheckResult(true, filesToUpdate);
 		}
 
 		LOGGER.info("Active projection is up to date! Took {} ms", System.currentTimeMillis() - start);
-		return new UpdateCheckResult(false, Set.of(), Set.of());
+		return new UpdateCheckResult(false, Set.of());
 	}
 
-	static Set<String> findChangedOverwriteEditableFiles(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> serverItems, Path projection) {
-
-		Set<String> overwriteEditablePaths = new HashSet<>();
-		for (var item : serverItems) {
-			if (item.editable && item.overwriteEditable) overwriteEditablePaths.add(item.file);
+	// Re-applies the filesystem's immutability to active files that already match the server content; the update verdict above stays read-only
+	public static void reprotectActiveFiles(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
+		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
+		if (verificationCannotDecide(serverModpackContent, storage)) return;
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
+			if (new ClientGenerationStore(storage).isDetached(serverModpackContent.modpackId)) {
+				LOGGER.info("Modpack is detached; its active files stay editable");
+				return;
+			}
+			Map<String, UpdatePlan.FileState> live = ClientProjectionView.open(storage).liveFiles(cache);
+			for (var serverItem : serverModpackContent.list) {
+				String relative = LogicalPath.normalize(serverItem.file);
+				if (verifyActiveItem(serverItem, relative, live) == FileVerification.MATCH) ImmutableFiles.protect(storage.activePath(relative));
+			}
+		} catch (Exception e) {
+			LOGGER.warn("Failed to re-protect the matching active files", e);
 		}
-		if (overwriteEditablePaths.isEmpty()) return Set.of();
+	}
 
-		Set<String> changedPaths = new HashSet<>();
-		for (var item : serverItems) {
-			if (!item.editable || !item.overwriteEditable) continue;
-			Path path = LogicalPath.resolve(projection, item.file);
-			String installedHash = HashUtils.getHash(path);
-			if (!item.sha1.equalsIgnoreCase(installedHash)) changedPaths.add(item.file);
+	// True when the per-file scan cannot decide anything and every file must be treated as an update: without an active projection nothing can match, and differing content digests can never pass the per-file scan
+	private static boolean verificationCannotDecide(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
+		try {
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return true;
+			if (!serverModpackContent.contentToken.isBlank() && !serverModpackContent.contentToken.equals(state.contentToken)) {
+				LOGGER.info("Server modpack content differs from the installed modpack; skipping the per-file verification");
+				return true;
+			}
+			return false;
+		} catch (IOException e) {
+			LOGGER.warn("Cannot read active client generation state", e);
+			return true;
 		}
-		return changedPaths;
+	}
+
+	private enum FileVerification {
+		MATCH, MISMATCH, SKIP
+	}
+
+	// Editable files are skipped from the hash check entirely; only non-editable files present in the projection with matching size and sha1 are a match
+	private static FileVerification verifyActiveItem(ModpackJsons.ModpackContentFields.ModpackContentItem serverItem, String relative, Map<String, UpdatePlan.FileState> live) {
+		UpdatePlan.FileState observed = live.get(relative);
+		if (observed == null || !observed.regularFile()) return FileVerification.MISMATCH;
+		if (serverItem.editable) {
+			LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
+			return FileVerification.SKIP;
+		}
+		long size;
+		try {
+			size = Long.parseLong(serverItem.size);
+		} catch (NumberFormatException e) {
+			return FileVerification.MISMATCH;
+		}
+		if (observed.size() != size || serverItem.sha1 == null || !serverItem.sha1.equalsIgnoreCase(observed.sha1())) return FileVerification.MISMATCH;
+		return FileVerification.MATCH;
 	}
 
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
-	public static void populateStoreFromCWD(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache, ClientStorage storage) {
+	public static void populateStoreFromCWD(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileCache cache, ClientStorage storage) {
 		for (var entry : filesToUpdate) {
-			Path storeFile = storage.objectsDirectory().resolve(entry.sha1);
+			Path storeFile = storage.objectFile(entry.sha1);
 			long expectedSize = Long.parseLong(entry.size);
 
-			if (isValidFile(storeFile, expectedSize, entry.sha1, cache)) {
+			if (FileIntegrity.matchesNamed(storeFile, expectedSize, entry.sha1, cache)) {
 				LOGGER.debug("Verified file already exists in store: {}", entry.file);
 				continue;
 			}
 			try {
 				if (Files.exists(storeFile)) {
 					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
-					Files.delete(storeFile);
+					ImmutableFiles.deleteIfExists(storeFile);
 				}
 			} catch (IOException e) {
 				LOGGER.error("Failed to evict corrupt store object {}", entry.sha1, e);
@@ -219,10 +174,10 @@ public class ModpackUtils {
 			}
 
 			Path fileInCWD = storage.gamePath(entry.file);
-			if (isValidFile(fileInCWD, expectedSize, entry.sha1, cache)) {
+			if (FileIntegrity.matches(fileInCWD, expectedSize, entry.sha1, cache)) {
 				LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
 				try {
-					VerifiedFileTransfer.copyAtomic(fileInCWD, storeFile, expectedSize, entry.sha1);
+					VerifiedFileTransfer.copyAtomicImmutable(fileInCWD, storeFile, expectedSize, entry.sha1, cache);
 				} catch (IOException e) {
 					LOGGER.error("Failed to copy file from CWD to store: {}", entry.file, e);
 				}
@@ -232,15 +187,15 @@ public class ModpackUtils {
 
 	// Returns the set of files that are missing or corrupt in the store.
 	public static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToCheck,
-			FileMetadataCache cache, ClientStorage storage) {
+			FileCache cache, ClientStorage storage) {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
-			Path storeFile = storage.objectsDirectory().resolve(entry.sha1);
-			if (isValidFile(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
+			Path storeFile = storage.objectFile(entry.sha1);
+			if (FileIntegrity.matchesNamed(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
 			if (Files.exists(storeFile)) {
 				try {
 					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
-					Files.delete(storeFile);
+					ImmutableFiles.deleteIfExists(storeFile);
 				} catch (IOException e) {
 					LOGGER.warn("Failed to evict corrupt store object {}", entry.sha1, e);
 				}
@@ -250,35 +205,24 @@ public class ModpackUtils {
 		return uncachedFiles;
 	}
 
-	private static boolean isValidFile(Path file, long expectedSize, String expectedSha1, FileMetadataCache cache) {
-		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
-		try {
-			return Files.size(file) == expectedSize && expectedSha1.equalsIgnoreCase(cache.getOrComputeHash(file));
-		} catch (IOException e) {
-			return false;
-		}
-	}
-
 	public static ClientConfigJsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, ConnectionJsons.ConnectionInfo connectionInfo,
 			ClientConfigJsons.ClientConfigFieldsV3 currentConfig) {
 		ModpackId.requireValid(modpackId);
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing");
-
-		ClientConfigJsons.ClientConfigFieldsV3 updatedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
-		updatedConfig.selectedModpackId = modpackId;
-		return updatedConfig;
+		return planCachedModpackSelection(modpackId, currentConfig);
 	}
 
 	public static ClientConfigJsons.ClientConfigFieldsV3 planCachedModpackSelection(String modpackId, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) {
 		ModpackId.requireValid(modpackId);
-		ClientConfigJsons.ClientConfigFieldsV3 updatedConfig = new ClientConfigJsons.ClientConfigFieldsV3(currentConfig);
-		updatedConfig.selectedModpackId = modpackId;
-		return updatedConfig;
+		return currentConfig.withSelectedModpackId(modpackId);
 	}
 
 	public static ManifestFetchResult requestServerModpackContent(ClientStorage storage, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser) {
 		try {
-			return requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser).get();
+			CompletableFuture<ManifestFetchResult> future = requestServerModpackContentAsync(storage, connectionInfo, secret, allowAskingUser);
+			if (allowAskingUser) return future.get();
+			// Non-interactive fetch: the protocol's per-stage timeouts sum to at most 5 * NETWORK_TIMEOUT, so anything past 6 gave up somewhere.
+			return future.get(NetUtils.NETWORK_TIMEOUT.multipliedBy(6).toSeconds(), TimeUnit.SECONDS);
 		} catch (Exception e) {
 			Throwable cause = DownloadClient.unwrap(e);
 			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);
@@ -300,20 +244,59 @@ public class ModpackUtils {
 		}
 
 		return createDownloadClient(connectionInfo, secret.secretBytes(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
-				.thenCompose(client -> fetchModpackContentAsync(storage, client, current -> current.downloadFile(new byte[0], storage.modpackContentTempFile(), null)).handle((content, error) -> {
-					if (error != null || content.isEmpty()) {
-						client.close();
-						Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : DownloadClient.unwrap(error);
-						return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
-					}
-					return new ManifestFetchResult(ManifestFetchState.SUCCESS, content.get(), client, null);
-				})).exceptionally(error -> {
+				.thenCompose(client -> fetchModpackContentAsync(storage, client, current -> current.downloadFile(new byte[0], storage.modpackContentTempFile(), null))
+						.thenCompose(content -> syncJournalMirror(storage, client, content.orElse(null))).handle((content, error) -> {
+							if (error != null || content.isEmpty()) {
+								client.close();
+								Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : DownloadClient.unwrap(error);
+								return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
+							}
+							return new ManifestFetchResult(ManifestFetchState.SUCCESS, content.get(), client, null);
+						}))
+				.exceptionally(error -> {
 					Throwable cause = DownloadClient.unwrap(error);
 					return new ManifestFetchResult(connectionFailedState, null, null, cause);
 				});
 	}
 
-	private static CompletableFuture<Optional<ModpackJsons.CompleteModpackContentFields>> fetchModpackContentAsync(ClientStorage storage, DownloadClient client,
+	/**
+	 * After a successful head fetch the pack's durable history artifacts must vouch for it: the head policy document
+	 * is stored in the client CAS under its own hash (the mirror's entries name it), and the journal mirror must
+	 * vouch for the head content token; when it is stale, missing, or unreadable, the whole journal file is fetched
+	 * under the reserved key and swapped in whole.
+	 */
+	private static CompletableFuture<Optional<GenerationJsons.HeadDocumentFields>> syncJournalMirror(ClientStorage storage, DownloadClient client,
+			GenerationJsons.HeadDocumentFields content) {
+		if (content == null) return CompletableFuture.completedFuture(Optional.empty());
+		String modpackId;
+		JournalMirror mirror = new JournalMirror(storage);
+		try {
+			modpackId = ModpackId.requireValid(content.policy.modpackId);
+			byte[] policyBytes = ConfigTools.GSON.toJson(content.policy).getBytes(StandardCharsets.UTF_8);
+			ClientObjectStore.storeObject(storage, content.policySha1, policyBytes);
+		} catch (RuntimeException | IOException e) {
+			return CompletableFuture.failedFuture(e);
+		}
+		if (!mirror.isStale(modpackId, content.contentToken)) return CompletableFuture.completedFuture(Optional.of(content));
+		LOGGER.info("Journal mirror is stale for modpack {}; fetching the full journal from the server", modpackId);
+		return client.downloadFile(GenerationHosting.JOURNAL_KEY.getBytes(StandardCharsets.UTF_8), storage.journalTempFile(), null)
+				.thenApplyAsync(path -> {
+					try {
+						mirror.replaceFrom(modpackId, path);
+					} catch (IOException e) {
+						throw new CompletionException(e);
+					}
+					return Optional.of(content);
+				}, DownloadClient.NET_EXECUTOR).whenComplete((ignored, error) -> {
+					try {
+						Files.deleteIfExists(storage.journalTempFile());
+					} catch (IOException e) {
+						LOGGER.warn("Failed to remove the temporary journal download", e);
+					}
+				});
+	}
+
+	private static CompletableFuture<Optional<GenerationJsons.HeadDocumentFields>> fetchModpackContentAsync(ClientStorage storage, DownloadClient client,
 			Function<DownloadClient, CompletableFuture<Path>> operation) {
 		CompletableFuture<Path> operationFuture;
 		try {
@@ -323,7 +306,7 @@ public class ModpackUtils {
 		}
 
 		return operationFuture.thenApplyAsync(path -> {
-			ModpackJsons.CompleteModpackContentFields content = ModpackContentTools.readCompleteFields(path);
+			GenerationJsons.HeadDocumentFields content = ModpackContentTools.readHeadDocument(path);
 			return Optional.ofNullable(content);
 		}, DownloadClient.NET_EXECUTOR).whenComplete((content, error) -> {
 			try {
@@ -345,7 +328,7 @@ public class ModpackUtils {
 		});
 	}
 
-	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(ConnectionJsons.ConnectionInfo connectionInfo,
+	private static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(ConnectionJsons.ConnectionInfo connectionInfo,
 			boolean allowAskingUser) {
 		String originHost = connectionInfo.origin.getHostString();
 		return certificate -> {
@@ -370,7 +353,7 @@ public class ModpackUtils {
 		LOGGER.info("Asking user to verify certificate for Minecraft server {} from AutoModpack endpoint {}:{}", originHost, connectionInfo.endpoint.getHostString(),
 				connectionInfo.endpoint.getPort());
 
-		var parent = new ScreenManager().getScreen().orElse(null);
+		var parent = ScreenManager.getScreen().orElse(null);
 		if (parent == null) {
 			LOGGER.warn("No screen available, cannot ask user");
 			return CompletableFuture.completedFuture(false);
@@ -378,11 +361,15 @@ public class ModpackUtils {
 
 		CompletableFuture<Boolean> result = new CompletableFuture<>();
 		Runnable trustAction = () -> {
+			LOGGER.info("Certificate trust accepted by the player for {}", originHost);
 			CertificateTrustStore.save(connectionInfo.origin, fingerprint, CertificateTrustStore.Reason.TOFU);
 			result.complete(true);
 		};
-		Runnable cancelAction = () -> result.complete(false);
-		new ScreenManager().validation(parent, fingerprint, trustAction, cancelAction);
+		Runnable cancelAction = () -> {
+			LOGGER.info("Certificate trust cancelled by the player for {}", originHost);
+			result.completeExceptionally(new CertificateTrustCancelledException());
+		};
+		ScreenManager.validation(parent, fingerprint, AddressHelpers.formatAddress(connectionInfo.origin), trustAction, cancelAction);
 		return result;
 	}
 }

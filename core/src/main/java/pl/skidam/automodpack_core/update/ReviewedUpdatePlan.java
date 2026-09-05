@@ -2,16 +2,24 @@ package pl.skidam.automodpack_core.update;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
+import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
+import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
+import pl.skidam.automodpack_core.update.UpdatePlan.NestedCopy;
+import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
+import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
+import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** Owns the finite lifecycle and execution fingerprint of one player-reviewed update plan. */
 public final class ReviewedUpdatePlan {
@@ -27,10 +35,6 @@ public final class ReviewedUpdatePlan {
 
 	public static ReviewedUpdatePlan pending(UpdatePlan plan) {
 		return new ReviewedUpdatePlan(plan, State.PENDING_REVIEW);
-	}
-
-	public static ReviewedUpdatePlan approved(UpdatePlan plan) {
-		return new ReviewedUpdatePlan(plan, State.APPROVED);
 	}
 
 	public UpdatePlan plan() {
@@ -50,13 +54,20 @@ public final class ReviewedUpdatePlan {
 		state = State.APPROVED;
 	}
 
+	/** Marks the approved plan as committed-to-execution; cancellation can no longer roll it back. */
+	public void beginExecution() {
+		if (state != State.APPROVED) throw new IllegalStateException("Only an approved update plan can begin execution: " + state);
+		state = State.EXECUTING;
+	}
+
 	public void cancel() {
+		if (state == State.EXECUTING) return;
 		if (state != State.PENDING_REVIEW && state != State.APPROVED) throw new IllegalStateException("Update plan cannot be cancelled: " + state);
 		state = State.CANCELLED;
 	}
 
 	public void complete() {
-		if (state != State.APPROVED) throw new IllegalStateException("Only an approved update plan can be completed: " + state);
+		if (state != State.APPROVED && state != State.EXECUTING) throw new IllegalStateException("Only an approved update plan can be completed: " + state);
 		state = State.APPLIED;
 	}
 
@@ -76,34 +87,84 @@ public final class ReviewedUpdatePlan {
 		return executionDigest(transaction).equals(executionDigest(candidate));
 	}
 
+	/** The complete execution meaning of one update, normalized so plans and durable transactions digest identically. */
+	private record ExecutionTuple(String modpackId, PackTarget generation, List<Operation> operations, List<ProjectedFile> projected,
+			ClientConfigJsons.ClientConfigFieldsV3 config, List<String> restartReasons, List<Preservation> preservations, List<BaselineCapture> baselines,
+			List<Conflict> conflicts, List<NestedCopy> nestedCopies, String consequencesDigest) {}
+
+	private static ExecutionTuple tuple(UpdatePlan plan) {
+		return new ExecutionTuple(plan.modpackId(), plan.packTarget(), safe(plan.operations()), safe(plan.projectedFinalState()), plan.plannedClientConfig(),
+				plan.restartReasons().stream().map(Enum::name).sorted().toList(), safe(plan.preservations()), safe(plan.baselineCaptures()), safe(plan.conflicts()),
+				safe(plan.generatedCopies()), consequencesDigest(plan.consequences()));
+	}
+
+	private static ExecutionTuple tuple(UpdateTransaction transaction) {
+		List<NestedCopy> nestedCopies = transaction.plannedGeneratedCopies == null
+				? List.of()
+				: safe(transaction.plannedGeneratedCopies.entries).stream().map(entry -> new NestedCopy(entry.logicalPath, entry.sha1, entry.size, Set.of())).toList();
+		return new ExecutionTuple(transaction.modpackId, transaction.packTarget(), safe(transaction.operations), safe(transaction.projectedFinalState),
+				transaction.plannedClientConfig, safe(transaction.restartReasons).stream().map(Enum::name).sorted().toList(), safe(transaction.plannedPreservations),
+				safe(transaction.plannedBaselineCaptures), safe(transaction.plannedConflicts), nestedCopies, transaction.plannedConsequencesDigest);
+	}
+
 	public static String executionDigest(UpdatePlan plan) {
 		Objects.requireNonNull(plan, "update plan");
-		MessageDigest digest = newDigest();
-		value(digest, "modpackId", plan.modpackId());
-		generation(digest, plan.generationTarget());
-		values(digest, "operation", plan.operations(), ReviewedUpdatePlan::operation);
-		values(digest, "projected", plan.projectedFinalState(), ReviewedUpdatePlan::projected);
-		config(digest, plan.plannedClientConfig());
-		values(digest, "restart", plan.restartReasons().stream().map(Enum::name).sorted().toList(), value -> restartValue(value));
-		values(digest, "preservation", plan.preservations(), ReviewedUpdatePlan::preservation);
-		values(digest, "baseline", plan.baselineCaptures(), ReviewedUpdatePlan::baseline);
-		values(digest, "conflict", plan.conflicts(), ReviewedUpdatePlan::conflict);
-		values(digest, "nestedCopy", plan.generatedCopies(), ReviewedUpdatePlan::nestedCopy);
-		return digest(digest);
+		return executionDigest(tuple(plan));
 	}
 
 	private static String executionDigest(UpdateTransaction transaction) {
+		return executionDigest(tuple(transaction));
+	}
+
+	private static String executionDigest(ExecutionTuple tuple) {
 		MessageDigest digest = newDigest();
-		value(digest, "modpackId", transaction.modpackId);
-		generation(digest, transaction.generationTarget());
-		values(digest, "operation", safe(transaction.operations), ReviewedUpdatePlan::operation);
-		values(digest, "projected", safe(transaction.projectedFinalState), ReviewedUpdatePlan::projected);
-		config(digest, transaction.plannedClientConfig);
-		values(digest, "restart", safe(transaction.restartReasons).stream().map(Enum::name).sorted().toList(), value -> restartValue(value));
-		values(digest, "preservation", safe(transaction.plannedPreservations), ReviewedUpdatePlan::preservation);
-		values(digest, "baseline", safe(transaction.plannedBaselineCaptures), ReviewedUpdatePlan::baseline);
-		values(digest, "conflict", safe(transaction.plannedConflicts), ReviewedUpdatePlan::conflict);
-		values(digest, "nestedCopy", transaction.plannedGeneratedCopies == null ? List.of() : safe(transaction.plannedGeneratedCopies.entries), ReviewedUpdatePlan::generatedCopyEntry);
+		value(digest, "modpackId", tuple.modpackId());
+		generation(digest, tuple.generation());
+		values(digest, "operation", tuple.operations(), ReviewedUpdatePlan::operation);
+		values(digest, "projected", tuple.projected(), ReviewedUpdatePlan::projected);
+		config(digest, tuple.config());
+		values(digest, "restart", tuple.restartReasons(), ReviewedUpdatePlan::restartValue);
+		values(digest, "preservation", tuple.preservations(), ReviewedUpdatePlan::preservation);
+		values(digest, "baseline", tuple.baselines(), ReviewedUpdatePlan::baseline);
+		values(digest, "conflict", tuple.conflicts(), ReviewedUpdatePlan::conflict);
+		values(digest, "nestedCopy", tuple.nestedCopies(), ReviewedUpdatePlan::nestedCopy);
+		value(digest, "consequences", tuple.consequencesDigest());
+		return digest(digest);
+	}
+
+	public static String consequencesDigest(ChangeSet consequences) {
+		Objects.requireNonNull(consequences, "reconciliation consequences");
+		MessageDigest digest = newDigest();
+		values(digest, "change", consequences.changes(), ReviewedUpdatePlan::change);
+		values(digest, "effect", consequences.effects(), ReviewedUpdatePlan::effect);
+		return digest(digest);
+	}
+
+	private static String change(ChangeSet.Change change) {
+		MessageDigest digest = newDigest();
+		value(digest, "path", change.logicalPath());
+		value(digest, "kind", change.kind());
+		values(digest, "occurrence", change.occurrences(), ReviewedUpdatePlan::occurrence);
+		return digest(digest);
+	}
+
+	private static String occurrence(ChangeSet.Occurrence occurrence) {
+		MessageDigest digest = newDigest();
+		value(digest, "location", occurrence.location());
+		value(digest, "path", occurrence.logicalPath());
+		value(digest, "size", occurrence.size());
+		value(digest, "before", occurrence.beforeHash());
+		value(digest, "after", occurrence.afterHash());
+		value(digest, "contentKind", occurrence.contentKind());
+		strings(digest, "featureId", occurrence.featureIds());
+		strings(digest, "reference", occurrence.references());
+		return digest(digest);
+	}
+
+	private static String effect(ChangeSet.Effect effect) {
+		MessageDigest digest = newDigest();
+		value(digest, "category", effect.category());
+		value(digest, "value", effect.value());
 		return digest(digest);
 	}
 
@@ -178,19 +239,10 @@ public final class ReviewedUpdatePlan {
 		return digest(digest);
 	}
 
-	private static String generatedCopyEntry(ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields entry) {
-		MessageDigest digest = newDigest();
-		value(digest, "path", entry.logicalPath);
-		value(digest, "hash", entry.sha1);
-		value(digest, "size", entry.size);
-		return digest(digest);
-	}
-
-	private static void generation(MessageDigest digest, GenerationTarget generation) {
+	private static void generation(MessageDigest digest, PackTarget generation) {
 		value(digest, "generationModpack", generation.modpackId());
-		value(digest, "generationId", generation.targetGenerationId());
-		value(digest, "parentGenerationId", generation.parentGenerationId());
-		value(digest, "stateDigest", generation.stateDigest());
+		value(digest, "contentToken", generation.contentToken());
+		value(digest, "policySha1", generation.policySha1());
 		value(digest, "ledgerDigest", generation.ledgerDigest());
 	}
 
@@ -205,6 +257,7 @@ public final class ReviewedUpdatePlan {
 		value(digest, "syncAutoModpackVersion", config.syncAutoModpackVersion);
 		value(digest, "syncLoaderVersion", config.syncLoaderVersion);
 		value(digest, "playMusic", config.playMusic);
+		value(digest, "showModpackSettingsButton", config.showModpackSettingsButton);
 	}
 
 	private static <T> void values(MessageDigest digest, String label, List<T> values, Encoder<T> encoder) {
@@ -215,8 +268,14 @@ public final class ReviewedUpdatePlan {
 		for (String item : encoded) value(digest, label + "Value", item);
 	}
 
-	private static void set(MessageDigest digest, String label, java.util.Set<String> values) {
+	private static void set(MessageDigest digest, String label, Set<String> values) {
 		List<String> sorted = values == null ? List.of() : values.stream().filter(Objects::nonNull).map(value -> value.toLowerCase(Locale.ROOT)).sorted().toList();
+		value(digest, label + "Count", sorted.size());
+		for (String item : sorted) value(digest, label + "Value", item);
+	}
+
+	private static void strings(MessageDigest digest, String label, List<String> values) {
+		List<String> sorted = values == null ? List.of() : values.stream().filter(Objects::nonNull).sorted().toList();
 		value(digest, label + "Count", sorted.size());
 		for (String item : sorted) value(digest, label + "Value", item);
 	}
@@ -236,15 +295,11 @@ public final class ReviewedUpdatePlan {
 	}
 
 	private static String digest(MessageDigest digest) {
-		return java.util.HexFormat.of().formatHex(digest.digest());
+		return HexFormat.of().formatHex(digest.digest());
 	}
 
 	private static MessageDigest newDigest() {
-		try {
-			return MessageDigest.getInstance("SHA-1");
-		} catch (NoSuchAlgorithmException e) {
-			throw new AssertionError("SHA-1 is required by the client protocol", e);
-		}
+		return HashUtils.newSha1Digest();
 	}
 
 	@FunctionalInterface
@@ -255,6 +310,7 @@ public final class ReviewedUpdatePlan {
 	public enum State {
 		PENDING_REVIEW,
 		APPROVED,
+		EXECUTING,
 		APPLIED,
 		CANCELLED
 	}

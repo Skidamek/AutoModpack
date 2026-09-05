@@ -67,24 +67,47 @@ public final class GroupSelectionResolver {
 		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
 	}
 
-	/** Toggles one persisted category intent without pretending that its groups were clicked individually. */
+	/** Persists a category request and clears the per-group choices inside it, so the category speaks with one voice. */
 	public static SelectionIntent preferCategory(GroupManifest manifest, SelectionIntent current, String category, ClientPlatform platform) {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(category);
 		Objects.requireNonNull(platform);
-		Set<String> categoryGroups = new TreeSet<>();
-		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().required() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
-		boolean remove = !requestedCategories.add(category);
-		if (remove) requestedCategories.remove(category);
+		requestedCategories.add(category);
+		clearCategoryChoices(categoryGroups(manifest, category, platform), requestedGroups, excludedGroups);
+		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
+	}
+
+	/** Excludes every optional group in the category and drops the category request, so one click turns the whole category off — even groups that are on by default. */
+	public static SelectionIntent excludeCategory(GroupManifest manifest, SelectionIntent current, String category, ClientPlatform platform) {
+		Objects.requireNonNull(manifest);
+		Objects.requireNonNull(current);
+		Objects.requireNonNull(category);
+		Objects.requireNonNull(platform);
+		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
+		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
+		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
+		requestedCategories.remove(category);
+		Set<String> categoryGroups = categoryGroups(manifest, category, platform);
+		clearCategoryChoices(categoryGroups, requestedGroups, excludedGroups);
+		excludedGroups.addAll(categoryGroups);
+		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
+	}
+
+	private static Set<String> categoryGroups(GroupManifest manifest, String category, ClientPlatform platform) {
+		Set<String> categoryGroups = new TreeSet<>();
+		for (var entry : manifest.groups().entrySet()) if (category.equals(entry.getValue().category()) && !entry.getValue().required() && entry.getValue().supports(platform)) categoryGroups.add(entry.getKey());
+		return categoryGroups;
+	}
+
+	private static void clearCategoryChoices(Set<String> categoryGroups, Set<String> requestedGroups, Set<String> excludedGroups) {
 		for (String groupId : categoryGroups) {
 			requestedGroups.remove(groupId);
 			excludedGroups.remove(groupId);
 		}
-		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
 	}
 
 	public static boolean conflicts(GroupManifest manifest, String first, String second) {

@@ -14,4 +14,10 @@ class ModpackPathPolicyTest {
 		assertFalse(ModpackPathPolicy.isActiveMod("config/main.jar", "mod"));
 		assertFalse(ModpackPathPolicy.isActiveMod("mods/../config/main.jar", "mod"));
 	}
+
+	@Test
+	void packsCannotClaimInstanceRootBootstrapFile() {
+		assertFalse(ModpackPathPolicy.isValidTypeAndPath("automodpack-bootstrap.json", ModpackContentType.OTHER));
+		assertFalse(ModpackPathPolicy.isValidTypeAndPath("automodpack/automodpack-bootstrap.json", ModpackContentType.OTHER));
+	}
 }

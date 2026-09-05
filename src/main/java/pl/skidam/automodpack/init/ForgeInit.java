@@ -20,7 +20,6 @@ public class ForgeInit {
 
 	public ForgeInit(/^? if >=1.19.2 {^/FMLJavaModLoadingContext context/^?}^/) {
 		preload = false;
-		ScreenManager.install(new ScreenImpl());
 
 		long start = System.currentTimeMillis();
 		LOGGER.info("Launching AutoModpack...");
@@ -30,6 +29,7 @@ public class ForgeInit {
 		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
 			Common.serverInit();
 		} else {
+			ScreenManager.install(new ScreenImpl());
 			ModPackets.registerC2SPackets();
 			new AudioManager(
 				/^? if >=1.19.2 {^/

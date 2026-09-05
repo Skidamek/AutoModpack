@@ -20,17 +20,35 @@ public interface ScreenService {
 
 	void welcome(ModpackUpdater modpackUpdater);
 
-	boolean preview(UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction, boolean returnToSelection);
+	boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction);
 
 	void history(HistoryViewRequest request);
 
 	void failure(FailureRequest request);
 
-	void title();
+	void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled);
 
-	void validation(Object parent, String fingerprint, Runnable validated, Runnable canceled);
+	/** Asks before an installed modpack starts being served from a different address; exactly one of the runnables runs. */
+	default void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
+		refused.run();
+	}
+
+	/**
+	 * Warn-but-allow prompt for a pack running detached from its server; exactly one of the runnables runs. The prompt
+	 * shows on every detached join, and {@code headMatchesActive} only picks the body paragraph: equal tokens say
+	 * nothing about locally changed files. The default continues the join headlessly, keeping the local sovereignty
+	 * the detached state promises.
+	 */
+	default void detachedJoin(String modpackName, boolean headMatchesActive, Runnable continueJoin, Runnable syncNow) {
+		continueJoin.run();
+	}
 
 	void waiting();
+
+	/** Shows the preparing screen; {@code onCancel} runs when the player backs out with Esc. */
+	default void waiting(Runnable onCancel) {
+		waiting();
+	}
 
 	Optional<String> getScreenString();
 

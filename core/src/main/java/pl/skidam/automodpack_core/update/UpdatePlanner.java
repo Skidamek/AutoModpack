@@ -24,18 +24,16 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.ModpackId;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 public final class UpdatePlanner {
-	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
-			.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
-	private static final Comparator<FileKey> FILE_KEY_ORDER = Comparator.comparing((FileKey key) -> key.root().ordinal()).thenComparing(FileKey::relativePath);
 
 	private UpdatePlanner() {}
 
@@ -57,7 +55,7 @@ public final class UpdatePlanner {
 				throw new IllegalArgumentException("First-install consent cannot be used after a modpack is installed");
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
 			Map<String, FileState> normalizedOverlays = new TreeMap<>();
-			for (var entry : editableOverlays.entrySet()) normalizedOverlays.put(normalize(entry.getKey()), entry.getValue());
+			for (var entry : editableOverlays.entrySet()) normalizedOverlays.put(LogicalPath.normalize(entry.getKey()), entry.getValue());
 			editableOverlays = Collections.unmodifiableMap(normalizedOverlays);
 			forceCopyServicePaths = Collections.unmodifiableSet(new LinkedHashSet<>(forceCopyServicePaths));
 			targetMods = List.copyOf(targetMods);
@@ -66,7 +64,7 @@ public final class UpdatePlanner {
 			nestedCopies = List.copyOf(nestedCopies);
 			Map<String, FileState> normalizedConsent = new TreeMap<>();
 			for (var entry : (consentedLocalModFiles == null ? Map.<String, FileState>of() : consentedLocalModFiles).entrySet())
-				normalizedConsent.put(normalize(entry.getKey()), entry.getValue());
+				normalizedConsent.put(LogicalPath.normalize(entry.getKey()), entry.getValue());
 			consentedLocalModFiles = Collections.unmodifiableMap(normalizedConsent);
 		}
 
@@ -113,11 +111,11 @@ public final class UpdatePlanner {
 		Objects.requireNonNull(input);
 		ModpackJsons.ModpackContentFields installed = Objects.requireNonNull(input.installedManifest());
 		ModpackId.requireValid(installed.modpackId);
-		GenerationTarget generationTarget = GenerationTarget.fromFlat(installed);
+		PackTarget packTarget = PackTarget.fromFlat(installed);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(installed.ownershipLedger);
 		if (!installed.modpackId.equals(ledger.modpackId())) throw new IllegalArgumentException("Removal ledger modpack ID does not match installed modpack");
 		if (input.generatedCopies() != null && (!installed.modpackId.equals(input.generatedCopies().modpackId())
-				|| !generationTarget.targetGenerationId().equals(input.generatedCopies().generationId())))
+				|| !packTarget.contentToken().equals(input.generatedCopies().contentToken())))
 			throw new IllegalArgumentException("Removal generated-copy state identity is invalid");
 		if (input.baseline() == null || !installed.modpackId.equals(input.baseline().modpackId) || input.baseline().entries == null)
 			throw new IllegalArgumentException("Removal baseline identity is invalid");
@@ -125,7 +123,7 @@ public final class UpdatePlanner {
 
 		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselines = new TreeMap<>();
 		for (var entry : input.baseline().entries) {
-			if (entry == null || entry.logicalPath == null || !normalize(entry.logicalPath).equals(entry.logicalPath)
+			if (entry == null || entry.logicalPath == null || !LogicalPath.normalize(entry.logicalPath).equals(entry.logicalPath)
 					|| baselines.put(entry.logicalPath, entry) != null)
 				throw new IllegalArgumentException("Removal baseline contains duplicate or incomplete entries");
 			if (entry.absent) {
@@ -143,7 +141,7 @@ public final class UpdatePlanner {
 		restartReasons.add(RestartReason.SELECTED_MODPACK);
 
 		if (installed.list != null) for (var item : installed.list) {
-			FileKey key = new FileKey(Root.PROJECTION, normalize(item.file));
+			FileKey key = new FileKey(Root.PROJECTION, LogicalPath.normalize(item.file));
 			FileState state = projected.get(key);
 			if (state != null && state.regularFile() && hashesEqual(state.sha1(), item.sha1)) {
 				delete(operations, projected, key, item.sha1);
@@ -173,16 +171,16 @@ public final class UpdatePlanner {
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
 
-		List<Operation> ordered = operations.values().stream().sorted(OPERATION_ORDER).toList();
+		List<Operation> ordered = operations.values().stream().sorted(Operation.ORDER).toList();
 		projectedScope.addAll(operations.keySet());
-		List<ProjectedFile> finalState = projectedScope.stream().sorted(FILE_KEY_ORDER).map(key -> {
+		List<ProjectedFile> finalState = projectedScope.stream().sorted(FileKey.ORDER).map(key -> {
 			FileState state = projected.get(key);
 			return state == null || !state.regularFile()
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
 		ChangeSet consequences = consequences(ordered, input.files(), installed, ledger, restartReasons, true, input.baseline());
-		return new UpdatePlan(installed.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
+		return new UpdatePlan(installed.modpackId, packTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
 				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(), List.of(), List.of(), List.of(),
 				consequences);
 	}
@@ -191,10 +189,10 @@ public final class UpdatePlanner {
 		Objects.requireNonNull(input);
 		ModpackJsons.ModpackContentFields target = Objects.requireNonNull(input.targetManifest());
 		ModpackId.requireValid(target.modpackId);
-		GenerationTarget generationTarget = GenerationTarget.fromFlat(target);
+		PackTarget packTarget = PackTarget.fromFlat(target);
 		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
 		if (!target.modpackId.equals(ledger.modpackId())) throw new IllegalArgumentException("Target ledger modpack ID does not match target");
-		if (input.installedManifest() != null) GenerationTarget.fromFlat(input.installedManifest());
+		if (input.installedManifest() != null) PackTarget.fromFlat(input.installedManifest());
 		if (target.list == null) throw new IllegalArgumentException("Target manifest list is missing");
 
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems = sortedItems(target.list);
@@ -212,10 +210,10 @@ public final class UpdatePlanner {
 
 		for (var entry : installedItems.entrySet()) {
 			if (targetItems.containsKey(entry.getKey())) continue;
-			FileKey modpackKey = new FileKey(Root.PROJECTION, normalize(entry.getKey()));
+			FileKey modpackKey = new FileKey(Root.PROJECTION, LogicalPath.normalize(entry.getKey()));
 			delete(operations, projected, modpackKey, null);
 			if (input.installedManifest() != null && input.installedManifest().modpackId.equals(target.modpackId)) {
-				FileKey overlayKey = new FileKey(Root.OVERLAY, normalize(entry.getKey()));
+				FileKey overlayKey = new FileKey(Root.OVERLAY, LogicalPath.normalize(entry.getKey()));
 				if (projected.containsKey(overlayKey)) delete(operations, projected, overlayKey, projected.get(overlayKey).sha1());
 			}
 			FileKey liveKey = liveKey(entry.getValue());
@@ -225,6 +223,11 @@ public final class UpdatePlanner {
 				delete(operations, projected, liveKey, previousOverlay.sha1());
 				restartReasons.add(RestartReason.REMOVED_NON_MODPACK_FILES);
 			}
+		}
+		for (FileKey key : List.copyOf(projected.keySet())) {
+			if (key.root() != Root.PROJECTION || targetItems.containsKey(key.relativePath()) || operations.containsKey(key)) continue;
+			FileState extra = projected.get(key);
+			delete(operations, projected, key, extra == null ? null : extra.sha1());
 		}
 
 		if (installedLedger != null)
@@ -236,15 +239,15 @@ public final class UpdatePlanner {
 			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
 		if (input.installedManifest() == null || isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
 		Set<String> forceCopyPaths = new HashSet<>(input.forceCopyServicePaths());
+		Set<String> listedPins = listedPins(input);
+		Set<String> protectedIds = PinnedMods.protectedIds(listedPins, input.standardMods().stream().map(ModInfo::ids).toList());
 
 		for (var item : targetItems.values()) {
-			String relative = normalize(item.file);
+			String relative = LogicalPath.normalize(item.file);
 			boolean activeMod = ModpackPathPolicy.isActiveMod(relative, item.type);
 			FileKey modpackKey = new FileKey(Root.PROJECTION, relative);
 			FileState existing = projected.get(modpackKey);
-			boolean installedHashChanged = !hashesEqual(item.sha1, Optional.ofNullable(installedItems.get(relative)).map(old -> old.sha1).orElse(null));
-			boolean overwriteEditable = item.editable && item.overwriteEditable && installedHashChanged;
-			FileState overlay = item.editable && !overwriteEditable ? input.editableOverlays().get(relative) : null;
+			FileState overlay = item.editable ? input.editableOverlays().get(relative) : null;
 			if (overlay != null && overlay.regularFile() && !matches(projected.get(new FileKey(Root.OVERLAY, relative)), overlay.sha1(), overlay.size()))
 				install(operations, projected, new FileKey(Root.OVERLAY, relative), overlay.sha1(), overlay.size());
 			if (overlay == null && projected.containsKey(new FileKey(Root.OVERLAY, relative)))
@@ -252,7 +255,7 @@ public final class UpdatePlanner {
 			if (!matches(existing, item.sha1, parseSize(item.size)))
 				install(operations, projected, modpackKey, item.sha1, parseSize(item.size));
 
-			boolean copyToLive = !activeMod || forceCopyPaths.contains(relative) || overlay != null;
+			boolean copyToLive = !PinnedMods.protects(protectedIds, idsForPath(input.targetMods(), relative)) && (!activeMod || forceCopyPaths.contains(relative) || overlay != null);
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {
 				FileState live = projected.get(liveKey);
@@ -272,19 +275,19 @@ public final class UpdatePlanner {
 
 		List<NestedCopy> generatedCopies = ownedNestedCopies(input.nestedCopies());
 		planNestedCopies(input.previousNestedCopies(), generatedCopies, projected, operations, restartReasons);
-		conflicts.addAll(planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), forceCopyPaths, installedLedger, projected, operations, restartReasons));
+		conflicts.addAll(planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), forceCopyPaths, installedLedger, projected, operations, restartReasons, listedPins));
 
 		planBaselineCaptures(input.files(), operations, baselineCaptures);
-		List<Operation> ordered = operations.values().stream().sorted(OPERATION_ORDER).toList();
+		List<Operation> ordered = operations.values().stream().sorted(Operation.ORDER).toList();
 		projectedScope.addAll(operations.keySet());
-		List<ProjectedFile> finalState = projectedScope.stream().sorted(FILE_KEY_ORDER).map(key -> {
+		List<ProjectedFile> finalState = projectedScope.stream().sorted(FileKey.ORDER).map(key -> {
 			FileState state = projected.get(key);
 			return state == null || !state.regularFile()
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
 		ChangeSet consequences = consequences(ordered, input.files(), target, ledger, restartReasons, false, null);
-		return new UpdatePlan(target.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
+		return new UpdatePlan(target.modpackId, packTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
 				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(),
 				baselineCaptures.stream().sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal()).thenComparing(BaselineCapture::relativePath)).toList(),
 				conflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList(), generatedCopies, consequences);
@@ -297,14 +300,16 @@ public final class UpdatePlanner {
 			return;
 		}
 		if (input.consentedLocalModFiles().isEmpty()) return;
+		Set<String> listedPins = listedPins(input);
 		for (var entry : input.consentedLocalModFiles().entrySet()) {
-			String relative = normalize(entry.getKey());
+			String relative = LogicalPath.normalize(entry.getKey());
 			Path path = Path.of(relative);
 			if (path.getNameCount() != 2 || !path.getName(0).toString().equals(ModpackPathPolicy.MODS_ROOT))
 				throw new IllegalArgumentException("First-install consent path must be a direct mods child: " + relative);
 			FileState observed = entry.getValue();
 			if (observed == null || !observed.regularFile() || !HashUtils.isSha1(observed.sha1()) || observed.size() < 0)
 				throw new IllegalArgumentException("First-install consent file metadata is invalid: " + relative);
+			if (PinnedMods.matches(listedPins, idsForPath(input.standardMods(), relative))) continue;
 			FileKey key = new FileKey(Root.GAME_DIR, relative);
 			FileState current = projected.get(key);
 			if (!matches(current, observed.sha1(), observed.size())) throw new IllegalArgumentException("First-install consent file changed after scanning: " + relative);
@@ -337,7 +342,7 @@ public final class UpdatePlanner {
 		}
 
 		Set<String> targetPaths = targetFiles.keySet();
-		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries = removal ? consequenceBaselineEntries(baseline) : Map.of();
+		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries = removal ? baselineEntries(baseline) : Map.of();
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
 			if (!removal && targetPaths.contains(ledgerEntry.logicalPath())) continue;
 			Optional<FileKey> optionalKey = managedCleanupKey(ledgerEntry.logicalPath());
@@ -366,13 +371,6 @@ public final class UpdatePlanner {
 		return ChangeSet.of(changes, effects);
 	}
 
-	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> consequenceBaselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
-		if (baseline == null || baseline.entries == null) return Map.of();
-		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
-		for (var entry : baseline.entries) if (entry != null && entry.logicalPath != null) entries.put(normalize(entry.logicalPath), entry);
-		return entries;
-	}
-
 	private static boolean consequenceBaselineMatches(FileState current, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
 		return baseline != null && !baseline.absent && HashUtils.isSha1(baseline.objectHash)
 				&& baseline.size >= 0 && current.regularFile() && baseline.size == current.size() && baseline.objectHash.equalsIgnoreCase(current.sha1());
@@ -385,7 +383,7 @@ public final class UpdatePlanner {
 			if ((operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE)
 					|| operation.root() != Root.GAME_DIR)
 				continue;
-			FileKey key = new FileKey(operation.root(), normalize(operation.relativePath()));
+			FileKey key = new FileKey(operation.root(), LogicalPath.normalize(operation.relativePath()));
 			FileState previous = original.get(key);
 			if (previous != null && (!previous.regularFile() || previous.sha1() == null || previous.size() < 0))
 				throw new IllegalArgumentException("Cannot capture a safe baseline for live path: " + key.relativePath());
@@ -424,8 +422,13 @@ public final class UpdatePlanner {
 
 	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline, String modpackId) {
 		if (baseline == null || !Objects.equals(modpackId, baseline.modpackId) || baseline.entries == null) return Map.of();
+		return baselineEntries(baseline);
+	}
+
+	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
+		if (baseline == null || baseline.entries == null) return Map.of();
 		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
-		for (var entry : baseline.entries) if (entry != null && entry.logicalPath != null) entries.put(normalize(entry.logicalPath), entry);
+		for (var entry : baseline.entries) if (entry != null && entry.logicalPath != null) entries.put(LogicalPath.normalize(entry.logicalPath), entry);
 		return entries;
 	}
 
@@ -472,7 +475,7 @@ public final class UpdatePlanner {
 	public static Optional<FileKey> managedCleanupKey(String logicalPath) {
 		final String normalized;
 		try {
-			normalized = normalize(logicalPath);
+			normalized = LogicalPath.normalize(logicalPath);
 		} catch (RuntimeException e) {
 			return Optional.empty();
 		}
@@ -493,7 +496,7 @@ public final class UpdatePlanner {
 		Set<String> targetPaths = copies.stream().map(NestedCopy::relativePath).collect(Collectors.toSet());
 		for (NestedCopy previous : previousCopies.stream().sorted(Comparator.comparing(NestedCopy::relativePath)).toList()) {
 			if (targetPaths.contains(previous.relativePath())) continue;
-			FileKey key = new FileKey(Root.GAME_DIR, normalize(previous.relativePath()));
+			FileKey key = new FileKey(Root.GAME_DIR, LogicalPath.normalize(previous.relativePath()));
 			FileState current = projected.get(key);
 			if (matches(current, previous.sha1(), previous.size())) {
 				delete(operations, projected, key, previous.sha1());
@@ -501,7 +504,7 @@ public final class UpdatePlanner {
 			}
 		}
 		for (NestedCopy copy : copies) {
-			FileKey key = new FileKey(Root.GAME_DIR, normalize(copy.relativePath()));
+			FileKey key = new FileKey(Root.GAME_DIR, LogicalPath.normalize(copy.relativePath()));
 			FileState current = projected.get(key);
 			if (!matches(current, copy.sha1(), copy.size())) {
 				NestedCopy previous = previousByPath.get(copy.relativePath());
@@ -527,14 +530,14 @@ public final class UpdatePlanner {
 	}
 
 	private static List<Conflict> planDuplicates(String modpackId, List<ModInfo> targetMods, List<ModInfo> standardMods, Set<String> forceCopyPaths,
-			OwnershipLedger installedLedger, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, EnumSet<RestartReason> restartReasons) {
-		List<ModInfo> sortedTarget = targetMods.stream().filter(mod -> projected.containsKey(new FileKey(Root.PROJECTION, normalize(mod.relativePath()))))
+			OwnershipLedger installedLedger, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, EnumSet<RestartReason> restartReasons, Set<String> listedPins) {
+		List<ModInfo> sortedTarget = targetMods.stream().filter(mod -> projected.containsKey(new FileKey(Root.PROJECTION, LogicalPath.normalize(mod.relativePath()))))
 				.sorted(Comparator.comparing(ModInfo::relativePath)).toList();
-		List<ModInfo> sortedStandard = standardMods.stream().filter(mod -> projected.containsKey(new FileKey(Root.GAME_DIR, normalize(mod.relativePath()))))
+		List<ModInfo> sortedStandard = standardMods.stream().filter(mod -> projected.containsKey(new FileKey(Root.GAME_DIR, LogicalPath.normalize(mod.relativePath()))))
 				.sorted(Comparator.comparing(ModInfo::relativePath)).toList();
 		Map<ModInfo, ModInfo> duplicates = new LinkedHashMap<>();
 		for (ModInfo target : sortedTarget) {
-			if (forceCopyPaths.contains(normalize(target.relativePath()))) continue;
+			if (forceCopyPaths.contains(LogicalPath.normalize(target.relativePath()))) continue;
 			sortedStandard.stream().filter(standard -> intersects(target.ids(), standard.ids())).findFirst().ifPresent(standard -> duplicates.put(target, standard));
 		}
 		Set<ModInfo> keep = new HashSet<>();
@@ -545,10 +548,11 @@ public final class UpdatePlanner {
 		for (var duplicate : duplicates.entrySet()) {
 			ModInfo target = duplicate.getKey();
 			ModInfo standard = duplicate.getValue();
-			FileKey oldKey = new FileKey(Root.GAME_DIR, normalize(standard.relativePath()));
+			if (PinnedMods.matches(listedPins, standard.ids())) continue;
+			FileKey oldKey = new FileKey(Root.GAME_DIR, LogicalPath.normalize(standard.relativePath()));
 			boolean owned = isOwned(standard, installedLedger);
 			boolean keepStandard = target.ids().stream().anyMatch(idsToKeep::contains);
-			FileKey targetKey = new FileKey(Root.GAME_DIR, normalize(target.relativePath()));
+			FileKey targetKey = new FileKey(Root.GAME_DIR, LogicalPath.normalize(target.relativePath()));
 			boolean targetAlreadyMatches = matches(projected.get(targetKey), target.sha1(), target.size());
 			boolean sourceNeedsDisposition = !oldKey.equals(targetKey) || !keepStandard || !targetAlreadyMatches;
 			if (sourceNeedsDisposition) conflicts.add(conflict(modpackId, target, standard, owned ? ConflictAction.REMOVE_OWNED : ConflictAction.PRESERVE_LOCAL));
@@ -569,13 +573,13 @@ public final class UpdatePlanner {
 
 	private static boolean isOwned(ModInfo standard, OwnershipLedger ledger) {
 		if (ledger == null) return false;
-		OwnershipLedger.Entry entry = ledger.entries().get(normalize(standard.relativePath()));
+		OwnershipLedger.Entry entry = ledger.entries().get(LogicalPath.normalize(standard.relativePath()));
 		return entry != null && entry.historicalHashes().contains(new OwnershipLedger.Content(standard.sha1().toLowerCase(Locale.ROOT), standard.size()));
 	}
 
 	private static Conflict conflict(String modpackId, ModInfo target, ModInfo standard, ConflictAction action) {
-		String sourcePath = normalize(standard.relativePath());
-		String targetPath = normalize(target.relativePath());
+		String sourcePath = LogicalPath.normalize(standard.relativePath());
+		String targetPath = LogicalPath.normalize(target.relativePath());
 		String identity = conflictId(target, standard);
 		Set<String> ids = new TreeSet<>(target.ids());
 		ids.addAll(standard.ids());
@@ -583,7 +587,7 @@ public final class UpdatePlanner {
 	}
 
 	private static String conflictId(ModInfo target, ModInfo standard) {
-		String value = String.join("\n", normalize(target.relativePath()), target.sha1().toLowerCase(Locale.ROOT), normalize(standard.relativePath()),
+		String value = String.join("\n", LogicalPath.normalize(target.relativePath()), target.sha1().toLowerCase(Locale.ROOT), LogicalPath.normalize(standard.relativePath()),
 				standard.sha1().toLowerCase(Locale.ROOT), String.join(",", new TreeSet<>(target.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()),
 				String.join(",", new TreeSet<>(standard.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()));
 		return HashUtils.sha1(value);
@@ -605,14 +609,14 @@ public final class UpdatePlanner {
 
 	private static String normalizedManifestPath(ModpackJsons.ModpackContentFields.ModpackContentItem item) {
 		if (item == null) throw new IllegalArgumentException("Manifest item is incomplete");
-		String normalized = normalize(item.file);
+		String normalized = LogicalPath.normalize(item.file);
 		if (!ModpackPathPolicy.isValidTypeAndPath(normalized, item.type))
 			throw new IllegalArgumentException("Invalid manifest type/path combination: " + item.type + " " + item.file);
 		return normalized;
 	}
 
 	private static FileKey liveKey(ModpackJsons.ModpackContentFields.ModpackContentItem item) {
-		String relative = normalize(item.file);
+		String relative = LogicalPath.normalize(item.file);
 		return new FileKey(Root.GAME_DIR, relative);
 	}
 
@@ -622,15 +626,23 @@ public final class UpdatePlanner {
 
 	private static void install(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String hash, long size,
 			String expectedExistingHash) {
-		operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, hash, size, expectedExistingHash));
+		String safeExpectedExistingHash = expectedExistingHash;
+		if (safeExpectedExistingHash == null && key.root() == Root.GAME_DIR) safeExpectedExistingHash = expectedExistingHash(operations, projected, key);
+		operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, hash, size, safeExpectedExistingHash));
 		projected.put(key, new FileState(hash, size, true));
 	}
 
 	private static void delete(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key, String expectedHash) {
-		FileState existing = projected.get(key);
-		String safeExpectedHash = expectedHash != null ? expectedHash : existing == null ? null : existing.sha1();
+		String safeExpectedHash = expectedHash != null ? expectedHash : expectedExistingHash(operations, projected, key);
 		operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.DELETE, null, -1, safeExpectedHash));
 		projected.remove(key);
+	}
+
+	private static String expectedExistingHash(Map<FileKey, Operation> operations, Map<FileKey, FileState> projected, FileKey key) {
+		Operation previous = operations.get(key);
+		if (previous != null) return previous.expectedExistingHash();
+		FileState existing = projected.get(key);
+		return existing != null && existing.regularFile() ? existing.sha1() : null;
 	}
 
 	private static boolean matches(FileState state, String hash, long size) {
@@ -645,6 +657,15 @@ public final class UpdatePlanner {
 		return first.stream().anyMatch(second::contains);
 	}
 
+	private static Set<String> listedPins(Input input) {
+		return input.plannedClientConfig() == null ? Set.of() : PinnedMods.index(input.plannedClientConfig().pinnedModIds);
+	}
+
+	private static Set<String> idsForPath(List<ModInfo> mods, String relative) {
+		for (ModInfo mod : mods) if (LogicalPath.normalize(mod.relativePath()).equals(relative)) return mod.ids();
+		return Set.of();
+	}
+
 	private static long parseSize(String size) {
 		try {
 			long parsed = Long.parseLong(size);
@@ -653,9 +674,5 @@ public final class UpdatePlanner {
 		} catch (RuntimeException e) {
 			throw new IllegalArgumentException("Invalid file size: " + size, e);
 		}
-	}
-
-	public static String normalize(String path) {
-		return LogicalPath.normalize(path);
 	}
 }

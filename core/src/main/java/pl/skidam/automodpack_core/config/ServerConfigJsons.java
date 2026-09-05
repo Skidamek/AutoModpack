@@ -4,7 +4,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ServerConfigJsons {
@@ -28,17 +27,17 @@ public class ServerConfigJsons {
 		public String advertisedEndpointHost = "";
 		public int advertisedEndpointPort = -1;
 		public boolean disableInternalTLS = false;
-		public ModpackConnectionMode connectionMode = ModpackConnectionMode.defaultFor(Constants.MC_VERSION, Constants.LOADER);
-		public boolean updateIpsOnEveryStart = false;
+		public ModpackConnectionMode connectionMode = ModpackConnectionMode.HOLEPUNCH;
 		public int bandwidthLimit = 0;
 		public boolean validateSecrets = true;
 		public long secretLifetime = 336; // 336 hours = 14 days
 		public boolean selfUpdater = false;
 		public Set<String> acceptedLoaders = new HashSet<>();
+		public boolean syncLoaderVersion = true;
 	}
 
 	// Default group for a fresh config.
-	public static GroupDeclaration mainGroupDeclaration() {
+	private static GroupDeclaration mainGroupDeclaration() {
 		GroupDeclaration declaration = new GroupDeclaration();
 		declaration.displayName = "Main";
 		declaration.description = "Core modpack files";
@@ -54,7 +53,6 @@ public class ServerConfigJsons {
 		public String displayName = "";
 		public String description = "";
 		public String category = "";
-		public String icon = "";
 
 		// If required, the client cannot uncheck it. defaultSelected is ignored when required.
 		public boolean required = false;
@@ -68,6 +66,5 @@ public class ServerConfigJsons {
 		// File rules scoped to this group.
 		public Set<String> syncedFiles = Set.of();
 		public Set<String> allowEditsInFiles = Set.of();
-		public Set<String> overwriteEditableFiles = Set.of();
 	}
 }

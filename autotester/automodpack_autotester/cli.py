@@ -3,16 +3,22 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
+import signal
 import shutil
+import subprocess
 import sys
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import docker as docker_py
 
+from .cache import deduplicate_asset_objects
 from .config import (
     REPO_ROOT,
     ROOT,
+    connection_path_variants,
     load_macros,
     load_scenarios,
     load_settings,
@@ -20,10 +26,15 @@ from .config import (
     scenario_matches_target,
 )
 from .runner import run_case
-from .validate import validate_scenario
+from .supervisor import RunSupervisor, reap_orphaned_scopes
+from .validate import CONNECTION_MODES, validate_scenario
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _interrupt_on_termination(_signum, _frame) -> None:
+    raise KeyboardInterrupt
 
 
 def _resolve_settings_path(s: dict, key: str, default: str) -> Path:
@@ -32,18 +43,86 @@ def _resolve_settings_path(s: dict, key: str, default: str) -> Path:
     return (REPO_ROOT / p).resolve() if not p.is_absolute() else p.resolve()
 
 
-def _kill_amp_containers() -> None:
+def _stop_gradle_daemons() -> None:
+    gradlew = REPO_ROOT / "gradlew"
+    if not os.access(gradlew, os.X_OK):
+        return
+    try:
+        subprocess.run([str(gradlew), "--stop"], cwd=REPO_ROOT, check=False, capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _cleanup_run_resources(resource_scope: str) -> None:
+    prefix = f"amp-{resource_scope}-"
     client = docker_py.from_env()
-    for c in client.containers.list(all=True, filters={"name": "amp-"}):
+    for c in client.containers.list(all=True):
+        if not c.name.startswith(prefix):
+            continue
         try:
             c.remove(force=True)
         except Exception:
             pass
-    for n in client.networks.list(filters={"name": "amp-"}):
+    for n in client.networks.list():
+        if not n.name.startswith(prefix):
+            continue
         try:
             n.remove()
         except Exception:
             pass
+
+
+def _matrix_payload(selected: list, results: dict, interrupted: bool) -> dict:
+    expected = [target.id for target in selected]
+    terminal = dict(results)
+    for target_id in expected:
+        if target_id not in terminal:
+            terminal[target_id] = {
+                "target": target_id,
+                "scenario": "?",
+                "ok": False,
+                "duration": 0,
+                "error": "Case did not produce a terminal result",
+                "steps": [],
+            }
+    complete = set(terminal) == set(expected) and len(terminal) == len(expected)
+    return {"ok": not interrupted and complete and all(result.get("ok", False) for result in terminal.values()), "results": [terminal[target_id] for target_id in expected]}
+
+
+def _write_results(path: Path, payload: dict) -> None:
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope):
+    case_results = [
+        run_case(
+            target,
+            deepcopy(variant),
+            out_dir=out_dir,
+            artifact_dir=artifact_dir,
+            client_image=client_image,
+            settings=settings,
+            resource_scope=resource_scope,
+        )
+        for variant in variants
+    ]
+    if len(case_results) == 1:
+        return case_results[0]
+    failures = [
+        f"{result.get('connectionMode', result.get('scenario', '?'))}: {result.get('error', 'failed')}"
+        for result in case_results
+        if not result.get("ok", False)
+    ]
+    return {
+        "target": target.id,
+        "scenario": variants[0].get("id", "?"),
+        "ok": all(result.get("ok", False) for result in case_results),
+        "duration": sum(float(result.get("duration", 0)) for result in case_results),
+        "connectionPaths": case_results,
+        "error": "; ".join(failures) if failures else None,
+    }
 
 
 def _cmd_verbs() -> int:
@@ -94,7 +173,7 @@ def _cmd_validate(scenario_name: str | None) -> int:
 
 
 def _select_targets(targets: dict, target_name: str, scenario: dict) -> tuple[list, list]:
-    requested = list(targets.values()) if target_name == "all" else [targets[target_name]]
+    requested = list(targets.values()) if target_name == "all" else [targets[name.strip()] for name in target_name.split(",") if name.strip()]
     return requested, [t for t in requested if scenario_matches_target(scenario, t)]
 
 
@@ -135,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
     run_p = sub.add_parser("run")
     run_p.add_argument("--target")
     run_p.add_argument("--scenario")
+    run_p.add_argument("--connection-path", choices=sorted(CONNECTION_MODES), type=str.upper,
+                       help="Run one connection path (e.g. HOLEPUNCH) instead of the scenario's full matrix")
     run_p.add_argument("--jobs", type=int)
     run_p.add_argument("--docker-uid", type=int)
     run_p.add_argument("--docker-gid", type=int)
@@ -195,6 +276,8 @@ def main(argv: list[str] | None = None) -> int:
             else args.out_dir.resolve()
         )
         shutil.rmtree(out_dir, ignore_errors=True)
+        _stop_gradle_daemons()
+        reap_orphaned_scopes()
         return 0
 
     # --- run ---
@@ -237,6 +320,12 @@ def main(argv: list[str] | None = None) -> int:
     if not selected:
         print("No targets in scope for this scenario", file=sys.stderr)
         return 1
+    variants = connection_path_variants(scenario)
+    if args.connection_path:
+        variants = [v for v in variants if str(v.get("connectionPath", {}).get("mode", "")).upper() == args.connection_path]
+        if not variants:
+            print(f"Scenario {scenario_name!r} declares no {args.connection_path} connection path", file=sys.stderr)
+            return 1
 
     out_dir = (
         _resolve_settings_path(s, "outDir", "out")
@@ -252,23 +341,39 @@ def main(argv: list[str] | None = None) -> int:
         s.get("images", {}).get("client", "automodpack-autotest-client:local")
     )
     out_dir.mkdir(parents=True, exist_ok=True)
+    _stop_gradle_daemons()
+    reap_orphaned_scopes()
+    asset_cache = deduplicate_asset_objects(out_dir.parent / ".hmc-cache")
+    if asset_cache.linked_files or asset_cache.invalid_objects or asset_cache.link_failures:
+        logger.info(
+            "HMC assets: linked %d duplicates, reclaimed %.2f GiB, invalid=%d, link failures=%d",
+            asset_cache.linked_files,
+            asset_cache.reclaimed_bytes / (1024 ** 3),
+            asset_cache.invalid_objects,
+            asset_cache.link_failures,
+        )
 
     results: dict = {}
     interrupted = False
+    resource_scope = secrets.token_hex(4)
+    supervisor = RunSupervisor(resource_scope)
     try:
         executor = ThreadPoolExecutor(
             max_workers=max(1, args.jobs or rc.get("jobs", 1))
         )
+        previous_sigterm_handler = signal.signal(signal.SIGTERM, _interrupt_on_termination)
+        task_map = {}
         try:
             task_map = {
                 executor.submit(
-                    run_case,
+                    _run_target_cases,
                     t,
-                    scenario,
+                    variants,
                     out_dir=out_dir,
                     artifact_dir=artifact_dir,
                     client_image=client_image,
                     settings=s,
+                    resource_scope=resource_scope,
                 ): t
                 for t in selected
             }
@@ -278,6 +383,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     f"{'PASS' if r['ok'] else 'FAIL'} {r['target']} {r.get('duration', 0):.1f}s"
                 )
+                for path_result in r.get("connectionPaths", [r] if r.get("connectionMode") else []):
+                    print(
+                        f"  {'PASS' if path_result['ok'] else 'FAIL'} {path_result.get('connectionMode', path_result.get('scenario', '?'))} "
+                        f"{path_result.get('duration', 0):.1f}s"
+                    )
                 if r.get("error"):
                     print(f"  {r['error']}", file=sys.stderr)
 
@@ -287,22 +397,25 @@ def main(argv: list[str] | None = None) -> int:
             for ff in task_map:
                 ff.cancel()
             try:
-                _kill_amp_containers()
+                _cleanup_run_resources(resource_scope)
             except KeyboardInterrupt:
                 print("Force exit.", file=sys.stderr)
                 os._exit(1)
             print("Cleanup complete.", file=sys.stderr)
 
         finally:
+            signal.signal(signal.SIGTERM, previous_sigterm_handler)
             executor.shutdown(wait=False)
-            ok = all(r.get("ok", False) for r in results.values())
-            (out_dir / "results.json").write_text(
-                json.dumps({"ok": ok, "results": list(results.values())}, indent=2), encoding="utf-8"
-            )
+            payload = _matrix_payload(selected, results, interrupted)
+            ok = payload["ok"]
+            _write_results(out_dir / "results.json", payload)
             if interrupted:
+                supervisor.close()
                 os._exit(1)
 
+        supervisor.close()
         return 0 if ok else 1
 
     except KeyboardInterrupt:
+        supervisor.close()
         os._exit(1)

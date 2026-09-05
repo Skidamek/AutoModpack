@@ -25,6 +25,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import pl.skidam.automodpack_core.protocol.NetUtils;
+
 /**
  * Resolves an admin-published certificate fingerprint from DNS under the
  * Minecraft hostname selected by the user.
@@ -35,7 +37,7 @@ public final class DnsPinResolver {
 	public static final String RECORD_VERSION = "amp1";
 
 	private static final List<String> DOH_RESOLVERS = List.of("https://cloudflare-dns.com/dns-query", "https://doh.mullvad.net/dns-query");
-	private static final Duration TIMEOUT = Duration.ofSeconds(5);
+	private static final Duration TIMEOUT = NetUtils.HTTP_TIMEOUT;
 	private static final Duration MAX_PIN_CACHE_TIME = Duration.ofMinutes(5);
 	private static final Duration MAX_ABSENCE_CACHE_TIME = Duration.ofSeconds(30);
 	private static final int MAX_CACHE_ENTRIES = 128;

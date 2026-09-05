@@ -23,10 +23,10 @@ Gate Lite forwards the packets out of the box. Your issue here is routing.
 
 The endpoint sent to clients is controlled by `advertisedEndpointHost` and `advertisedEndpointPort`. Set them to the public route that accepts the selected `connectionMode`; they do not need to match the process's `bindAddress` or `bindPort` when a proxy or separate host is involved.
 
-- `HOLEPUNCH` must route the marked Minecraft Login connection to a server with holepunch handling enabled.
-- `MAGIC_PACKET` must preserve AMMH/AMOK before the TLS session. With `bindPort: -1`, route it to the backend Minecraft port; with an explicit port, route it to the dedicated magic-only listener.
+- `HOLEPUNCH` must route the marked Minecraft Login connection to a server with holepunch handling enabled. On Forge and NeoForge the Handshake hostname carries the normal `\0FML3\0` extra so the backend does not classify the connection as vanilla and disconnect it before Login Start.
+- `MAGIC` must preserve AMMH/AMOK before the TLS session. With `bindPort: -1`, route it to the backend Minecraft port; with an explicit port, route it to the dedicated magic-only listener.
 - `DIRECT` must route TLS directly to an explicit dedicated listener or another endpoint that handles it. `DIRECT` with `bindPort: -1` starts no built-in listener.
 
-Optional PROXY protocol metadata is accepted before dedicated `MAGIC_PACKET` and `DIRECT` connections. It is not consumed by shared Minecraft-port magic routing.
+Optional PROXY protocol metadata is accepted before dedicated `MAGIC` and `DIRECT` connections. It is not consumed by shared Minecraft-port magic routing.
 
 When `disableInternalTLS` is enabled, clients still initiate TLS. The proxy or another compatible component must terminate it and forward already-decrypted AutoModpack traffic.

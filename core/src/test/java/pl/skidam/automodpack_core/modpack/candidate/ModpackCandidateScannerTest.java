@@ -17,6 +17,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 class ModpackCandidateScannerTest {
 	@TempDir
@@ -173,6 +176,7 @@ class ModpackCandidateScannerTest {
 			copies.incrementAndGet();
 			Files.copy(sourceFile, staged, StandardCopyOption.REPLACE_EXISTING);
 			Files.writeString(sourceFile, Files.readString(sourceFile, StandardCharsets.UTF_8) + "x", StandardCharsets.UTF_8);
+			return HashUtils.getHash(staged);
 		});
 
 		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> reader.snapshot(source, false, false, staging));
@@ -195,6 +199,7 @@ class ModpackCandidateScannerTest {
 		StableSourceSnapshotter snapshotter = new StableSourceSnapshotter((sourceFile, staged) -> {
 			byte[] bytes = Files.readAllBytes(sourceFile);
 			Files.write(staged, Arrays.copyOf(bytes, bytes.length - 1));
+			return HashUtils.getHash(staged);
 		});
 
 		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> snapshotter.snapshot(source, false, false, staging));
@@ -204,6 +209,55 @@ class ModpackCandidateScannerTest {
 		assertTrue(Files.isDirectory(staging, LinkOption.NOFOLLOW_LINKS));
 		try (var files = Files.list(staging)) {
 			assertEquals(0, files.count());
+		}
+	}
+
+	@Test
+	void identityOnlySnapshotDoesNotCopy() throws Exception {
+		Path pack = tempDir.resolve("resourcepacks/pack.zip");
+		Files.createDirectories(pack.getParent());
+		Files.write(pack, new byte[4096]);
+		AtomicInteger copies = new AtomicInteger();
+		CandidateSource source = new CandidateSource("main", "resourcepacks/pack.zip", CandidateSource.SourceKind.GROUP_DIRECTORY, pack, null);
+		StableSourceSnapshotter snapshotter = new StableSourceSnapshotter((sourceFile, staged) -> {
+			copies.incrementAndGet();
+			return HashUtils.copyAndSha1(sourceFile, staged);
+		});
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			StableSourceSnapshotter.Snapshot first = snapshotter.snapshot(source, false, false, tempDir.resolve("staging"), cache, null, tempDir.resolve("objects"), false);
+			StableSourceSnapshotter.Snapshot second = snapshotter.snapshot(source, false, false, tempDir.resolve("staging"), cache, null, tempDir.resolve("objects"), false);
+			assertNotNull(first.file().sha1());
+			assertNotNull(first.file().murmur());
+			assertNull(first.object());
+			assertEquals(first.file().sha1(), second.file().sha1());
+			assertEquals(first.file().murmur(), second.file().murmur());
+			assertEquals(0, copies.get());
+		}
+	}
+
+	@Test
+	void trustedCasObjectIsNotRestaged() throws Exception {
+		Path pack = tempDir.resolve("resourcepacks/pack.zip");
+		Files.createDirectories(pack.getParent());
+		Files.write(pack, new byte[4096]);
+		Path staging = tempDir.resolve("staging");
+		Path objects = tempDir.resolve("objects");
+		AtomicInteger copies = new AtomicInteger();
+		CandidateSource source = new CandidateSource("main", "resourcepacks/pack.zip", CandidateSource.SourceKind.GROUP_DIRECTORY, pack, null);
+		StableSourceSnapshotter snapshotter = new StableSourceSnapshotter((sourceFile, staged) -> {
+			copies.incrementAndGet();
+			return HashUtils.copyAndSha1(sourceFile, staged);
+		});
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			StableSourceSnapshotter.Snapshot first = snapshotter.snapshot(source, false, false, staging, cache, null, objects, true);
+			assertNotNull(first.object());
+			Path object = DataRootResolver.objectFile(objects, first.file().sha1());
+			Files.createDirectories(object.getParent());
+			Files.move(first.object().stagedPath(), object);
+			StableSourceSnapshotter.Snapshot second = snapshotter.snapshot(source, false, false, staging, cache, null, objects, true);
+			assertNull(second.object());
+			assertEquals(first.file().sha1(), second.file().sha1());
+			assertEquals(1, copies.get());
 		}
 	}
 

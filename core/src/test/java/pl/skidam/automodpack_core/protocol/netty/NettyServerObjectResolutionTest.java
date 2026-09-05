@@ -9,7 +9,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.TreeMap;
 
 import org.junit.jupiter.api.Assumptions;
@@ -19,10 +18,10 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
-import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class NettyServerObjectResolutionTest {
@@ -30,25 +29,24 @@ class NettyServerObjectResolutionTest {
 	Path tempDir;
 
 	@Test
-	void blankServesCurrentProjectionAndOnlyActiveObjects() throws Exception {
+	void storedObjectsResolveThroughCaseInsensitiveSha1Keys() throws Exception {
 		GenerationStore store = store();
 		GenerationStore.Publication first = publish(store, "first");
 		NettyServer server = server(store, first);
 		String firstHash = hash(first);
-		Path projection = store.objectRoot().getParent().resolve("current-projection.json");
+		Path projection = tempDir.resolve("host-generations").resolve("current-projection.json");
 
-		assertEquals(projection, server.getPath("").orElseThrow());
-		assertEquals(store.objectRoot().resolve(firstHash), server.getPath(firstHash.toUpperCase(Locale.ROOT)).orElseThrow());
-		assertEquals(tempDir.resolve("host-generations/catalogues").resolve(first.record().metadata().stateDigest() + ".json").toAbsolutePath().normalize(),
-				server.getPath(GenerationHistoryIndex.catalogueRequestKey(first.record().metadata().stateDigest())).orElseThrow());
+		assertEquals(DataRootResolver.objectFile(store.objectRoot(), firstHash), server.getPath(firstHash.toUpperCase(Locale.ROOT)).orElseThrow());
+		assertEquals(projection, server.getPath(GenerationHosting.HEAD_DOCUMENT_KEY).orElseThrow());
+		assertEquals(tempDir.resolve("host-generations").resolve("journal.jsonl"), server.getPath(GenerationHosting.JOURNAL_KEY).orElseThrow());
 
-		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
-		GenerationStore.Publication second = publish(store, "second", Optional.of(current));
+		GenerationStore.Publication second = publish(store, "second");
 		server.replacePaths(second.hostingPaths());
 
-		assertEquals(projection, server.getPath("").orElseThrow());
+		assertEquals(DataRootResolver.objectFile(store.objectRoot(), hash(second)), server.getPath(hash(second)).orElseThrow());
+		// The hosting split unpublishes the previous generation's bytes the moment the head moves.
 		assertTrue(server.getPath(firstHash).isEmpty());
-		assertEquals(store.objectRoot().resolve(hash(second)), server.getPath(hash(second)).orElseThrow());
+		assertTrue(Files.exists(projection));
 	}
 
 	@Test
@@ -113,22 +111,18 @@ class NettyServerObjectResolutionTest {
 	}
 
 	private GenerationStore store() {
-		return new GenerationStore(tempDir.resolve("host-generations"));
+		return new GenerationStore(tempDir.resolve("host-generations"), tempDir.resolve("objects"));
 	}
 
 	private GenerationStore.Publication publish(GenerationStore store, String description) throws Exception {
-		return publish(store, description, store.loadCurrent());
-	}
-
-	private GenerationStore.Publication publish(GenerationStore store, String description, Optional<GenerationStore.CurrentSnapshot> current) throws Exception {
 		try (ModpackCandidate candidate = candidate(store, description)) {
-			return store.publish(candidate, current, "");
+			return store.publish(candidate, "");
 		}
 	}
 
 	private ModpackCandidate candidate(GenerationStore store, String description) throws Exception {
 		byte[] bytes = ("object-" + description).getBytes(StandardCharsets.UTF_8);
-		Path staging = store.objectRoot().getParent().resolve("staging");
+		Path staging = tempDir.resolve("host-generations").resolve("staging");
 		Files.createDirectories(staging);
 		Path staged = Files.createTempFile(staging, "candidate-", ".staged");
 		Files.write(staged, bytes);
@@ -137,13 +131,12 @@ class NettyServerObjectResolutionTest {
 		fields.modpackId = "abc1234";
 		var group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
-		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "config", false, false, hash, null));
+		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(bytes.length), "config", false, hash, null));
 		fields.groups = Map.of("main", group);
-		GroupManifest manifest = GroupManifestValidator.validate(fields);
-		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), List.of(), List.of());
+		return new ModpackCandidate(GroupManifestValidator.validate(fields), new TreeMap<>(Map.of(hash, new StagedObject(hash, bytes.length, staged))), new TreeMap<>(), List.of(), List.of());
 	}
 
 	private static String hash(GenerationStore.Publication publication) {
-		return publication.record().manifest().groups().get("main").files().values().iterator().next().sha1();
+		return publication.manifest().groups().get("main").files().values().iterator().next().sha1();
 	}
 }

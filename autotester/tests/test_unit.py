@@ -128,7 +128,7 @@ def test_wait_for_server_log_does_not_require_client(make_ctx):
 GUI = {
     "screenClass": "S",
     "buttons": [
-        {"id": 1, "text": "Cancel", "enabled": True, "class": "net.Btn"},
+        {"id": 1, "text": "Cancel", "key": "automodpack.cancel", "enabled": True, "class": "net.Btn"},
         {"id": 2, "text": "Download file", "enabled": False, "class": "net.Btn"},
         {"id": 3, "text": "Download", "enabled": True, "class": "net.Btn"},
     ],
@@ -146,6 +146,19 @@ def test_selector_enabled_filter():
     assert el is None  # the only "download file" button is disabled
 
 
+def test_selector_checked_filter():
+    gui = {
+        "buttons": [
+            {"id": 1, "text": "Keep 2 existing mod files", "enabled": True, "checked": False},
+            {"id": 2, "text": "Keep 2 existing mod files", "enabled": True, "checked": True},
+        ],
+        "textFields": [],
+    }
+    assert selectors.find_one(gui, {"text": "Keep 2 existing mod files", "checked": True})["id"] == 2
+    assert selectors.find_one(gui, {"text": "Keep 2 existing mod files", "checked": False})["id"] == 1
+    assert selectors.find_one(gui, {"text": "Keep 2 existing mod files"})["id"] == 1  # absent checked = no constraint
+
+
 def test_selector_role_and_class():
     assert selectors.find_one(GUI, {"role": "textfield"})["id"] == 9
     assert selectors.find_one(GUI, {"class": "edit"})["id"] == 9
@@ -159,6 +172,31 @@ def test_selector_index_negative():
 
 def test_selector_no_match():
     assert selectors.find_one(GUI, {"text": "nope"}) is None
+
+
+def test_selector_matches_translation_key():
+    gui = {
+        "buttons": [
+            {"id": 1, "text": "Go on", "key": "automodpack.firstConnect.continue", "enabled": True, "visible": True},
+            {"id": 2, "text": "Continue", "key": "automodpack.selection.preview", "enabled": True, "visible": True},
+        ],
+        "textFields": [],
+    }
+    assert selectors.find_one(gui, {"key": "automodpack.selection.preview"})["id"] == 2
+    assert selectors.find_one(gui, {"key_any": ["automodpack.cancel", "automodpack.selection.preview"]})["id"] == 2
+    assert selectors.find_one(gui, {"text": "continue"})["id"] == 2
+
+
+def test_selector_ignores_hidden_widgets_by_default():
+    gui = {
+        "buttons": [
+            {"id": 9, "text": "Continue", "enabled": True, "visible": False},
+            {"id": 3, "text": "Continue", "enabled": True, "visible": True},
+        ],
+        "textFields": [],
+    }
+    assert selectors.find_one(gui, {"text": "Continue"})["id"] == 3
+    assert selectors.find_one(gui, {"text": "Continue", "visible": False})["id"] == 9
 
 
 def test_click_timeout_reports_disabled_gui_state(make_ctx, monkeypatch):
@@ -182,6 +220,64 @@ def test_click_timeout_reports_disabled_gui_state(make_ctx, monkeypatch):
 
     with pytest.raises(TimeoutError, match=r"current screen: 'TitleScreen'.*multiplayer.*enabled.*False"):
         steps_ui.click(ctx, {"select": {"text": "multiplayer"}})
+
+
+def test_click_skips_when_navigation_already_reached_its_destination(make_ctx):
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+
+    class MultiplayerBridge:
+        def gui(self, timeout=30):
+            return {
+                "screenClass": "net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen",
+                "title": "Play Multiplayer",
+                "buttons": [{"id": 3, "text": "Direct Connection", "enabled": True, "visible": True}],
+            }
+
+        def click(self, element_id, **payload):
+            raise AssertionError("click must not be sent after navigation reached its destination")
+
+    ctx.bridge = MultiplayerBridge()
+    steps_ui.click(ctx, {"select": {"text": "multiplayer"}, "skip_if": {"screen": "Play Multiplayer"}, "timeout": "1ms"})
+
+
+def test_click_reselects_after_the_screen_changes_between_snapshot_and_interaction(make_ctx):
+    from automodpack_autotester.bridge import BridgeError
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+
+    class ChangingBridge:
+        def __init__(self):
+            self.revision = 1
+            self.clicks = []
+
+        def gui(self, timeout=30):
+            return {"screenClass": "TitleScreen", "screenRevision": self.revision, "buttons": [{"id": self.revision, "text": "Multiplayer", "enabled": True, "visible": True}]}
+
+        def click(self, element_id, screen_revision=None, **payload):
+            self.clicks.append((element_id, screen_revision))
+            if len(self.clicks) == 1:
+                self.revision = 2
+                raise BridgeError("click", "stale_screen", "GUI screen changed before click")
+
+    ctx.bridge = ChangingBridge()
+    steps_ui.click(ctx, {"select": {"text": "multiplayer"}, "timeout": "1s"})
+
+    assert ctx.bridge.clicks == [(1, 1), (2, 2)]
+
+
+def test_element_lookup_honors_a_shared_interaction_deadline(make_ctx, monkeypatch):
+    from automodpack_autotester.engine import steps_ui
+
+    ctx = make_ctx()
+    observed = []
+    monkeypatch.setattr(steps_ui, "await_condition", lambda _candidate, timeout, _poll, _message: observed.append(timeout))
+
+    steps_ui._await_element(ctx, {"text": "missing"}, {"timeout": "30s"}, "missing", timeout=0.25)
+
+    assert observed == [0.25]
 
 
 # ── templating ────────────────────────────────────────────────────────────
@@ -273,7 +369,7 @@ def test_condition_log_captures_variable(make_ctx):
 
 def test_screenshot_verb_records_artifact(make_ctx):
     from automodpack_autotester.engine.steps_ui import screenshot
-    from .conftest import FakeBridge
+    from .fake_bridge import FakeBridge
 
     ctx = make_ctx()
     ctx.bridge = FakeBridge(ctx)
@@ -286,7 +382,7 @@ def test_screenshot_verb_records_artifact(make_ctx):
 
 def test_screenshot_verb_captures_the_currently_rendered_screen(make_ctx):
     from automodpack_autotester.engine.steps_ui import screenshot
-    from .conftest import FakeBridge
+    from .fake_bridge import FakeBridge
 
     ctx = make_ctx()
     ctx.bridge = FakeBridge(ctx)
@@ -309,6 +405,12 @@ def _t_rec(ctx, step):
 @verb("t_boom")
 def _t_boom(ctx, step):
     raise RuntimeError("kaboom")
+
+
+@verb("t_flip")
+def _t_flip(ctx, step):
+    ctx.vars.setdefault("log", []).append(step.get("tag", "?"))
+    (ctx.game_dir / "flip.txt").touch()
 
 
 def test_executor_macro_and_group_expansion(make_ctx):
@@ -335,6 +437,18 @@ def test_executor_when_gate_and_repeat(make_ctx):
     }
     run_flow(ctx, scenario)
     assert ctx.vars["log"] == ["x", "x", "x"]
+
+
+def test_executor_when_stops_repeat_loop_once_condition_breaks(make_ctx):
+    ctx = make_ctx()
+    scenario = {
+        "flow": [
+            {"do": "t_flip", "tag": "loop", "when": {"not": {"file": "flip.txt"}}, "repeat": 5},
+            {"do": "t_rec", "tag": "done"},
+        ]
+    }
+    run_flow(ctx, scenario)
+    assert ctx.vars["log"] == ["loop", "done"]
 
 
 def test_executor_when_and_repeat_apply_to_macros_and_groups(make_ctx):
@@ -577,3 +691,69 @@ def test_fetch_serializes_concurrent_downloads(tmp_path, monkeypatch):
     assert paths[0] == paths[1]
     assert paths[0].read_bytes() == payload
     assert calls == [("https://cdn/fixture.jar", 12)]
+
+
+# ── assert_preservation_claim awaits durable vault state ───────────────────
+# Vault mutations run on the client's background executor, so a one-shot read right
+# after a UI wait can observe the pre-mutation file (1.21.1-fabric MAGIC, run
+# 33695849021). The verb awaits the expectation instead of snapshotting it once.
+
+
+def _write_claims(ctx, claims):
+    import json
+
+    manifest = ctx.game_dir / "automodpack/client/preservation/packaaa/claims.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(json.dumps({"claims": claims}), encoding="utf-8")
+
+
+def test_preservation_claim_assert_passes_immediately_when_already_met(make_ctx):
+    from automodpack_autotester.engine.steps_io import assert_preservation_claim
+
+    ctx = make_ctx()
+    _write_claims(ctx, [])
+    start = time.monotonic()
+    assert_preservation_claim(ctx, {"packId": "packaaa", "originalPath": "mods/gone.jar", "present": False})
+    assert time.monotonic() - start < 5
+
+
+def test_preservation_claim_assert_awaits_a_delayed_release(make_ctx):
+    from automodpack_autotester.engine.steps_io import assert_preservation_claim
+
+    ctx = make_ctx()
+    _write_claims(ctx, [{"originalPath": "mods/gone.jar", "objectHash": "a" * 40, "size": 1}])
+
+    def release_later():
+        time.sleep(0.3)
+        _write_claims(ctx, [])
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(release_later)
+        assert_preservation_claim(
+            ctx,
+            {"packId": "packaaa", "originalPath": "mods/gone.jar", "present": False, "timeout": "10s", "poll": "10ms"},
+        )
+        future.result()
+
+
+def test_preservation_claim_assert_one_shot_reports_immediately(make_ctx):
+    from automodpack_autotester.engine.steps_io import assert_preservation_claim
+
+    ctx = make_ctx()
+    _write_claims(ctx, [{"originalPath": "mods/gone.jar", "objectHash": "a" * 40, "size": 1}])
+    start = time.monotonic()
+    with pytest.raises(AssertionError, match="was True, expected False"):
+        assert_preservation_claim(ctx, {"packId": "packaaa", "originalPath": "mods/gone.jar", "present": False, "timeout": "0s"})
+    assert time.monotonic() - start < 5
+
+
+def test_preservation_claim_assert_times_out_with_the_last_mismatch(make_ctx):
+    from automodpack_autotester.engine.steps_io import assert_preservation_claim
+
+    ctx = make_ctx()
+    _write_claims(ctx, [{"originalPath": "mods/gone.jar", "objectHash": "a" * 40, "size": 1}])
+    with pytest.raises(AssertionError, match="was True, expected False"):
+        assert_preservation_claim(
+            ctx,
+            {"packId": "packaaa", "originalPath": "mods/gone.jar", "present": False, "timeout": "0.2s", "poll": "10ms"},
+        )

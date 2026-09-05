@@ -9,6 +9,11 @@ import java.util.TreeMap;
 
 /** Immutable object paths published for the active generation host. */
 public final class GenerationHosting {
+
+	/** Reserved hosting keys served beside the content-addressed object hashes. */
+	public static final String HEAD_DOCUMENT_KEY = "";
+	public static final String JOURNAL_KEY = "journal";
+
 	private final NavigableMap<String, Path> paths;
 
 	public GenerationHosting(Map<String, Path> paths) {
@@ -33,9 +38,5 @@ public final class GenerationHosting {
 
 	public NavigableMap<String, Path> asMap() {
 		return paths;
-	}
-
-	public boolean isEmpty() {
-		return paths.isEmpty();
 	}
 }

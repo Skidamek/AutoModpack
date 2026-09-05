@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -17,11 +18,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
+import pl.skidam.automodpack_core.modpack.generation.TestPacks;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.storage.TestDataRoot;
 import pl.skidam.automodpack_core.update.PreservationVault.Reason;
-import pl.skidam.automodpack_core.update.PreservationVault.Status;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.ConflictAction;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -48,12 +50,34 @@ class PreservationVaultTest {
 		assertEquals(first, repeated);
 		assertEquals(Reason.LOCAL_CONFLICT, first.reason());
 		assertFalse(Files.exists(source));
-		assertEquals(hash, HashUtils.getHash(storage.objectsDirectory().resolve(hash)));
+		assertEquals(hash, HashUtils.getHash(storage.objectFile(hash)));
 		assertEquals(1, PreservationVault.read(storage, MODPACK_ID).claims().size());
 	}
 
 	@Test
-	void originalRestoreRequiresAnActiveUnownedPathAndKeepsTheClaim() throws Exception {
+	void preservingTheSamePathAndBytesSupersedesTheOlderClaimWhileNewBytesStayDistinct() throws Exception {
+		ClientStorage storage = storage();
+		Path source = Files.writeString(storage.gamePath("config/kept.cfg"), "kept", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(source);
+		long size = Files.size(source);
+
+		PreservationVault.Claim deactivation = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.MODPACK_DEACTIVATION, Root.GAME_DIR, "config/kept.cfg", hash, size);
+		PreservationVault.Claim removal = PreservationVault.preserve(storage, MODPACK_ID, "d".repeat(40), Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/kept.cfg", hash, size);
+
+		List<PreservationVault.Claim> superseded = PreservationVault.read(storage, MODPACK_ID).claims();
+		assertEquals(1, superseded.size());
+		assertEquals(removal, superseded.get(0));
+		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().stream().noneMatch(claim -> claim.claimId().equals(deactivation.claimId())));
+		assertTrue(Files.exists(storage.objectFile(hash)));
+
+		Path changed = Files.writeString(storage.gamePath("config/kept.cfg"), "kept-v2", StandardCharsets.UTF_8);
+		PreservationVault.preserve(storage, MODPACK_ID, "d".repeat(40), Reason.MODPACK_DEACTIVATION, Root.GAME_DIR, "config/kept.cfg", HashUtils.getHash(changed), Files.size(changed));
+
+		assertEquals(2, PreservationVault.read(storage, MODPACK_ID).claims().size());
+	}
+
+	@Test
+	void originalRestoreRequiresAnActiveUnownedPathAndReleasesTheClaim() throws Exception {
 		ClientStorage storage = storage();
 		Path source = Files.writeString(storage.gamePath("mods/local.jar"), "local-mod", StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(source);
@@ -66,13 +90,12 @@ class PreservationVaultTest {
 		Path restored = PreservationVault.restoreOriginal(storage, MODPACK_ID, claim.claimId());
 
 		assertEquals("local-mod", Files.readString(restored, StandardCharsets.UTF_8));
-		PreservationVault.Claim retained = PreservationVault.read(storage, MODPACK_ID).claims().get(0);
-		assertEquals(Status.RESTORED, retained.status());
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(hash)));
+		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().isEmpty());
+		assertTrue(Files.exists(storage.objectFile(hash)));
 	}
 
 	@Test
-	void saveCopyUsesAStablePathAndNeverOverwritesDifferentBytes() throws Exception {
+	void saveCopyUsesAStablePathReleasesTheClaimAndNeverOverwritesDifferentBytes() throws Exception {
 		ClientStorage storage = storage();
 		Path source = Files.writeString(storage.gamePath("config/local.txt"), "local", StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(source);
@@ -80,10 +103,13 @@ class PreservationVaultTest {
 				Files.size(source));
 
 		Path first = PreservationVault.saveCopy(storage, MODPACK_ID, claim.claimId());
-		Path repeated = PreservationVault.saveCopy(storage, MODPACK_ID, claim.claimId());
-		assertEquals(first, repeated);
-		Files.writeString(first, "different", StandardCharsets.UTF_8);
+		assertEquals("local", Files.readString(first, StandardCharsets.UTF_8));
+		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().isEmpty());
 		assertThrows(IOException.class, () -> PreservationVault.saveCopy(storage, MODPACK_ID, claim.claimId()));
+		PreservationVault.Claim repeated = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/local.txt", hash,
+				Files.size(source));
+		Files.writeString(first, "different", StandardCharsets.UTF_8);
+		assertThrows(IOException.class, () -> PreservationVault.saveCopy(storage, MODPACK_ID, repeated.claimId()));
 		assertEquals(1, PreservationVault.read(storage, MODPACK_ID).claims().size());
 	}
 
@@ -97,8 +123,8 @@ class PreservationVaultTest {
 		Files.delete(source);
 		installActiveRecord(storage, "mods/server.jar");
 		var active = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElseThrow();
-		new GeneratedCopyState(MODPACK_ID, active.generationTarget().targetGenerationId(), UpdateTransaction.digest(active.selection().intent()),
-				java.util.List.of(new GeneratedCopyState.Entry("mods/generated.jar", hash, 10))).write(storage);
+		new GeneratedCopyState(MODPACK_ID, active.packTarget().contentToken(), UpdateTransaction.digest(active.selection().intent()),
+				List.of(new GeneratedCopyState.Entry("mods/generated.jar", hash, 10))).write(storage);
 
 		assertThrows(IOException.class, () -> PreservationVault.restoreOriginal(storage, MODPACK_ID, claim.claimId()));
 		assertFalse(Files.exists(source));
@@ -115,18 +141,37 @@ class PreservationVaultTest {
 		PreservationVault.delete(storage, MODPACK_ID, claim.claimId());
 
 		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().isEmpty());
-		assertTrue(Files.exists(storage.objectsDirectory().resolve(hash)));
+		assertTrue(Files.exists(storage.objectFile(hash)));
 	}
 
-	private ClientStorage storage() throws IOException {
-		ClientStorage storage = ClientStorage.fromGameDirectory(temporaryDirectory.resolve("game"));
-		storage.ensureRoots();
+	@Test
+	void discoversPreservationOnlyPackAfterItsGenerationRecordsAreForgotten() throws Exception {
+		ClientStorage storage = storage();
+		PackDocument installed = installActiveRecord(storage, "mods/server.jar");
+		storage.clearActiveState();
+		Path source = Files.writeString(storage.gamePath("config/local.txt"), "local", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(source);
+		PreservationVault.Claim claim = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/local.txt", hash,
+				Files.size(source));
+
+		new ClientGenerationStore(storage).forgetModpack(MODPACK_ID);
+
+		assertFalse(new ClientGenerationStore(storage).installedPackIds().contains(MODPACK_ID), "The mirror is gone with the forgotten pack");
+		assertEquals(List.of(MODPACK_ID), PreservationVault.modpackIds(storage));
+		assertEquals(List.of(MODPACK_ID), PreservationVault.snapshots(storage).stream().map(PreservationVault.Snapshot::modpackId).toList());
+		assertEquals(GENERATION_ID, PreservationVault.read(storage, MODPACK_ID).claims().get(0).contentToken(),
+				"discovery must not manufacture a replacement generation identity");
+		assertEquals(claim.claimId(), PreservationVault.read(storage, MODPACK_ID).claims().get(0).claimId());
+	}
+
+	private ClientStorage storage() throws Exception {
+		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
 		Files.createDirectories(storage.gamePath("config"));
 		return storage;
 	}
 
-	private void installActiveRecord(ClientStorage storage, String path) throws Exception {
+	private PackDocument installActiveRecord(ClientStorage storage, String path) throws Exception {
 		byte[] bytes = "active-mod".getBytes(StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(Files.write(storage.gamePath(path), bytes));
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
@@ -141,8 +186,9 @@ class PreservationVaultTest {
 		file.murmur = "0";
 		group.files = Map.of(path, file);
 		fields.groups = Map.of("main", group);
-		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
-		new ClientGenerationStore(storage).write(record);
-		storage.writeActiveState(record.manifest().modpackId(), record.metadata().generationId());
+		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
+		TestPacks.stageGeneration(storage, document);
+		storage.writeActiveState(document.manifest().modpackId(), document.contentToken(), document.ownershipLedger().toFields());
+		return document;
 	}
 }

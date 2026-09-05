@@ -3,24 +3,29 @@ package pl.skidam.automodpack_core.update;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /**
  * The only authority for client-side AutoModpack paths.
@@ -28,18 +33,18 @@ import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
  * <p>
  * Every client entry point, including the detached helper, constructs this
  * object from the game directory. The active projection is deliberately a
- * fixed path; generation IDs identify immutable records, not directories
+ * fixed path; content tokens identify immutable generations, not directories
  * exposed to the game.
  * </p>
  */
 public final class ClientStorage {
+	private static final Map<Path, WeakReference<ClientStorage>> OPEN_STORAGE = new HashMap<>();
 	private final Path gameDirectory;
 	private final Path automodpackDirectory;
 	private final Path clientDirectory;
+	private final DataRootResolver.Location dataLocation;
 	private final Path dataDirectory;
-	private final boolean sharedDataDirectory;
 	private final Path objectsDirectory;
-	private final Path recordsDirectory;
 	private final Path overlaysDirectory;
 	private final Path baselinesDirectory;
 	private final Path generatedCopiesDirectory;
@@ -48,54 +53,78 @@ public final class ClientStorage {
 	private final Path backupDirectory;
 	private final Path stateFile;
 	private final Path transactionFile;
+	private final Path repairJournalFile;
+	private final Path mutationLockFile;
 	private final Path selectionFile;
 	private final Path restartLoopStateFile;
 	private final Path clientConfigFile;
 	private final Path modpackContentTempFile;
 	private final Path helperDirectory;
+	private final Path helperLeaseFile;
 	private final Path preservationDirectory;
+	private final Path historyDirectory;
+	private final Path journalTempFile;
 	private final Path bootstrapFile;
-	private final Path fileMetadataDirectory;
-	private final Path modMetadataDirectory;
+	private final Path fileCacheDirectory;
+	private final Path modCacheDirectory;
+	private final Path platformCacheDirectory;
 	private final Path packsDirectory;
 	private final Path knownHostsFile;
 	private final Path knownHostsLockFile;
 
-	public ClientStorage(Path gameDirectory) {
-		this.gameDirectory = requireDirectoryPath(gameDirectory, "game directory");
+	private ClientStorage(DataRootResolver.Location dataLocation) {
+		this.dataLocation = Objects.requireNonNull(dataLocation, "data location");
+		this.gameDirectory = requireDirectoryPath(dataLocation.ownerPath(), "game directory");
 		this.automodpackDirectory = this.gameDirectory.resolve(AUTOMODPACK_DIR).normalize();
 		this.clientDirectory = this.gameDirectory.resolve(CLIENT_DIR).normalize();
-		DataRootResolver.Location dataLocation = DataRootResolver.resolve(this.gameDirectory);
 		this.dataDirectory = dataLocation.root();
-		this.sharedDataDirectory = dataLocation.shared();
 		DataRootResolver.Layout dataLayout = dataLocation.layout();
 		this.objectsDirectory = dataLayout.objectsDirectory();
-		this.recordsDirectory = this.clientDirectory.resolve(CLIENT_RECORDS_DIR.getFileName()).normalize();
-		this.overlaysDirectory = this.clientDirectory.resolve(CLIENT_OVERLAYS_DIR.getFileName()).normalize();
-		this.baselinesDirectory = this.clientDirectory.resolve(CLIENT_BASELINES_DIR.getFileName()).normalize();
-		this.generatedCopiesDirectory = this.clientDirectory.resolve(CLIENT_GENERATED_COPIES_DIR.getFileName()).normalize();
-		this.activeDirectory = this.clientDirectory.resolve(CLIENT_ACTIVE_DIR.getFileName()).normalize();
-		this.incomingDirectory = this.clientDirectory.resolve(CLIENT_INCOMING_DIR.getFileName()).normalize();
-		this.backupDirectory = this.clientDirectory.resolve(CLIENT_BACKUP_DIR.getFileName()).normalize();
-		this.stateFile = this.clientDirectory.resolve(CLIENT_ACTIVE_STATE_FILE.getFileName()).normalize();
-		this.transactionFile = this.clientDirectory.resolve(CLIENT_TRANSACTION_FILE.getFileName()).normalize();
-		this.selectionFile = this.clientDirectory.resolve(CLIENT_SELECTION_FILE.getFileName()).normalize();
-		this.restartLoopStateFile = this.clientDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE.getFileName()).normalize();
+		this.overlaysDirectory = this.gameDirectory.resolve(CLIENT_OVERLAYS_DIR).normalize();
+		this.baselinesDirectory = this.gameDirectory.resolve(CLIENT_BASELINES_DIR).normalize();
+		this.generatedCopiesDirectory = this.gameDirectory.resolve(CLIENT_GENERATED_COPIES_DIR).normalize();
+		this.activeDirectory = this.gameDirectory.resolve(CLIENT_ACTIVE_DIR).normalize();
+		this.incomingDirectory = this.gameDirectory.resolve(CLIENT_INCOMING_DIR).normalize();
+		this.backupDirectory = this.gameDirectory.resolve(CLIENT_BACKUP_DIR).normalize();
+		this.stateFile = this.gameDirectory.resolve(CLIENT_ACTIVE_STATE_FILE).normalize();
+		this.transactionFile = this.gameDirectory.resolve(CLIENT_TRANSACTION_FILE).normalize();
+		this.repairJournalFile = this.gameDirectory.resolve(CLIENT_REPAIR_FILE).normalize();
+		this.mutationLockFile = this.gameDirectory.resolve(CLIENT_MUTATION_LOCK_FILE).normalize();
+		this.selectionFile = this.gameDirectory.resolve(CLIENT_SELECTION_FILE).normalize();
+		this.restartLoopStateFile = this.gameDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
-		this.modpackContentTempFile = this.clientDirectory.resolve(CLIENT_CONTENT_TEMP_FILE.getFileName()).normalize();
-		this.helperDirectory = this.clientDirectory.resolve(CLIENT_HELPER_DIR.getFileName()).normalize();
-		this.preservationDirectory = this.clientDirectory.resolve(CLIENT_PRESERVATION_DIR.getFileName()).normalize();
+		this.modpackContentTempFile = this.gameDirectory.resolve(CLIENT_CONTENT_TEMP_FILE).normalize();
+		this.helperDirectory = this.gameDirectory.resolve(CLIENT_HELPER_DIR).normalize();
+		this.helperLeaseFile = this.gameDirectory.resolve(CLIENT_HELPER_LEASE_FILE).normalize();
+		this.preservationDirectory = this.gameDirectory.resolve(CLIENT_PRESERVATION_DIR).normalize();
+		this.historyDirectory = this.gameDirectory.resolve(CLIENT_HISTORY_DIR).normalize();
+		this.journalTempFile = this.gameDirectory.resolve(CLIENT_JOURNAL_TEMP_FILE).normalize();
 		this.bootstrapFile = this.gameDirectory.resolve(BOOTSTRAP_FILE).normalize();
-		this.fileMetadataDirectory = dataLayout.fileMetadataDirectory();
-		this.modMetadataDirectory = dataLayout.modMetadataDirectory();
+		this.fileCacheDirectory = dataLayout.fileCacheDirectory();
+		this.modCacheDirectory = dataLayout.modCacheDirectory();
+		this.platformCacheDirectory = dataLayout.platformCacheDirectory();
 		this.packsDirectory = dataLayout.packsDirectory();
 		this.knownHostsFile = dataLayout.knownHostsFile();
 		this.knownHostsLockFile = dataLayout.knownHostsLockFile();
 		validateLayout();
 	}
 
-	public static ClientStorage fromGameDirectory(Path gameDirectory) {
-		return new ClientStorage(gameDirectory);
+	public static synchronized ClientStorage open(Path gameDirectory) {
+		DataRootResolver.Location dataLocation = DataRootResolver.resolve(requireDirectoryPath(gameDirectory, "game directory"));
+		Path canonicalGameDirectory = dataLocation.ownerPath();
+		WeakReference<ClientStorage> reference = OPEN_STORAGE.get(canonicalGameDirectory);
+		ClientStorage existing = reference == null ? null : reference.get();
+		if (existing != null) return existing;
+		OPEN_STORAGE.entrySet().removeIf(entry -> entry.getValue().get() == null);
+		ClientStorage storage = new ClientStorage(dataLocation);
+		try {
+			storage.initialize();
+			ClientObjectStore.publishOwnership(storage);
+			OPEN_STORAGE.put(canonicalGameDirectory, new WeakReference<>(storage));
+			return storage;
+		} catch (IOException e) {
+			throw new IllegalStateException("Cannot initialize client storage for " + storage.gameDirectory, e);
+		}
 	}
 
 	public Path gameDirectory() {
@@ -118,16 +147,16 @@ public final class ClientStorage {
 		return dataDirectory;
 	}
 
-	public boolean sharedDataDirectory() {
-		return sharedDataDirectory;
+	public DataRootResolver.Location dataLocation() {
+		return dataLocation;
 	}
 
 	public Path objectsDirectory() {
 		return objectsDirectory;
 	}
 
-	public Path recordsDirectory() {
-		return recordsDirectory;
+	public Path objectFile(String sha1) {
+		return DataRootResolver.objectFile(objectsDirectory, sha1);
 	}
 
 	public Path overlaysDirectory() {
@@ -142,16 +171,16 @@ public final class ClientStorage {
 		return generatedCopiesDirectory;
 	}
 
-	public Path generatedCopiesFile(String modpackId, String generationId, String selectionDigest) {
+	public Path generatedCopiesFile(String modpackId, String contentToken, String selectionDigest) {
 		Path packRoot = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
-		Path generationRoot = packRoot.resolve(requireDigest(generationId, "generation ID")).normalize();
+		Path generationRoot = packRoot.resolve(requireDigest(contentToken, "generation ID")).normalize();
 		Path file = generationRoot.resolve(requireDigest(selectionDigest, "generated-copy selection digest") + ".json").normalize();
 		if (!file.startsWith(generationRoot)) throw new IllegalArgumentException("Generated-copy state escaped its generation root");
 		return file;
 	}
 
-	public Path generatedCopiesGenerationDirectory(String modpackId, String generationId) {
-		Path root = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve(requireDigest(generationId, "generation ID")).normalize();
+	public Path generatedCopiesGenerationDirectory(String modpackId, String contentToken) {
+		Path root = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve(requireDigest(contentToken, "generation ID")).normalize();
 		if (!root.startsWith(generatedCopiesDirectory)) throw new IllegalArgumentException("Generated-copy state escaped its root");
 		return root;
 	}
@@ -166,6 +195,24 @@ public final class ClientStorage {
 
 	public Path activePath(String logicalPath) {
 		return resolveLogical(activeDirectory, logicalPath);
+	}
+
+	/** The one physical root directory of an update-plan root for the given modpack. */
+	public Path root(Root root, String modpackId) {
+		return switch (root) {
+			case PROJECTION -> activeDirectory;
+			case OVERLAY -> overlayDirectory(modpackId);
+			case GAME_DIR -> gameDirectory;
+		};
+	}
+
+	/** The one physical file location of a root-relative logical path for the given modpack. */
+	public Path rootedPath(Root root, String modpackId, String logicalPath) {
+		return switch (root) {
+			case GAME_DIR -> gamePath(logicalPath);
+			case OVERLAY -> overlayFile(modpackId, logicalPath);
+			case PROJECTION -> activePath(logicalPath);
+		};
 	}
 
 	public Path incomingDirectory() {
@@ -184,6 +231,14 @@ public final class ClientStorage {
 		return transactionFile;
 	}
 
+	public Path repairJournalFile() {
+		return repairJournalFile;
+	}
+
+	public Path mutationLockFile() {
+		return mutationLockFile;
+	}
+
 	public Path selectionFile() {
 		return selectionFile;
 	}
@@ -196,12 +251,16 @@ public final class ClientStorage {
 		return clientConfigFile;
 	}
 
-	public Path fileMetadataDirectory() {
-		return fileMetadataDirectory;
+	public Path fileCacheDirectory() {
+		return fileCacheDirectory;
 	}
 
-	public Path modMetadataDirectory() {
-		return modMetadataDirectory;
+	public Path modCacheDirectory() {
+		return modCacheDirectory;
+	}
+
+	public Path platformCacheDirectory() {
+		return platformCacheDirectory;
 	}
 
 	public Path packsDirectory() {
@@ -224,8 +283,34 @@ public final class ClientStorage {
 		return helperDirectory;
 	}
 
+	public Path helperLeaseFile() {
+		return helperLeaseFile;
+	}
+
 	public Path preservationDirectory() {
 		return preservationDirectory;
+	}
+
+	public Path historyDirectory() {
+		return historyDirectory;
+	}
+
+	public Path historyPackDirectory(String modpackId) {
+		return historyDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
+	}
+
+	/** The per-pack replica of the server journal file; a pure server artifact the client only swaps atomically. */
+	public Path historyJournalFile(String modpackId) {
+		return historyPackDirectory(modpackId).resolve(SERVER_JOURNAL_FILE.getFileName().toString()).normalize();
+	}
+
+	/** The per-pack receipt of the last manual history compaction; informational state for the storage UI. */
+	public Path historyCompactionReceiptFile(String modpackId) {
+		return historyPackDirectory(modpackId).resolve("compaction.json").normalize();
+	}
+
+	public Path journalTempFile() {
+		return journalTempFile;
 	}
 
 	public Path preservationPackDirectory(String modpackId) {
@@ -236,9 +321,9 @@ public final class ClientStorage {
 		return preservationPackDirectory(modpackId).resolve("claims.json").normalize();
 	}
 
-	public Path restoredClaimDirectory(String modpackId, String generationId, String claimId) {
-		String generation = generationId == null || generationId.isEmpty() ? "unversioned" : requireDigest(generationId, "generation ID");
-		Path root = automodpackDirectory.resolve("restored").resolve(ModpackId.requireValid(modpackId)).resolve(generation).normalize();
+	public Path restoredClaimDirectory(String modpackId, String contentToken, String claimId) {
+		String generation = contentToken == null || contentToken.isEmpty() ? "unversioned" : requireDigest(contentToken, "generation ID");
+		Path root = gameDirectory.resolve(RECOVERED_DIR).resolve(ModpackId.requireValid(modpackId)).resolve(generation).normalize();
 		Path claim = root.resolve(requireDigest(claimId, "preservation claim ID")).normalize();
 		if (!claim.startsWith(root)) throw new IllegalArgumentException("Restored copy path escaped its modpack root");
 		return claim;
@@ -250,14 +335,6 @@ public final class ClientStorage {
 
 	public Path modsDirectory() {
 		return gamePath(ModpackPathPolicy.MODS_ROOT);
-	}
-
-	public Path generationDirectory(String generationId) {
-		return recordsDirectory.resolve(requireDigest(generationId, "generation ID")).normalize();
-	}
-
-	public Path generationManifest(String generationId) {
-		return generationDirectory(generationId).resolve("manifest.json");
 	}
 
 	public Path connectionFile(String modpackId) {
@@ -331,36 +408,38 @@ public final class ClientStorage {
 		return baselinesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve("baseline.json").normalize();
 	}
 
-	public Path incomingTransactionDirectory(String transactionId) {
-		return incomingDirectory.resolve(requireTransactionId(transactionId)).normalize();
+	public Path incomingProjectionDirectory() {
+		return gameDirectory.resolve(CLIENT_INCOMING_PROJECTION_DIR).normalize();
 	}
 
-	public Path backupTransactionDirectory(String transactionId) {
-		return backupDirectory.resolve(requireTransactionId(transactionId)).normalize();
+	public Path backupProjectionDirectory() {
+		return gameDirectory.resolve(CLIENT_BACKUP_PROJECTION_DIR).normalize();
 	}
 
 	public String overlayDigest(String modpackId) throws IOException {
 		return ClientOverlaySnapshot.capture(this, modpackId, null).digest();
 	}
 
-	public ClientOverlaySnapshot overlaySnapshot(String modpackId, FileMetadataCache cache) throws IOException {
+	public ClientOverlaySnapshot overlaySnapshot(String modpackId, FileCache cache) throws IOException {
 		return ClientOverlaySnapshot.capture(this, modpackId, cache);
 	}
 
-	public void ensureRoots() throws IOException {
-		ensureDirectory(clientDirectory, "client state root");
-		ensureDirectory(objectsDirectory, "client object store");
-		ensureDirectory(fileMetadataDirectory, "file metadata cache");
-		ensureDirectory(modMetadataDirectory, "mod metadata cache");
-		ensureDirectory(packsDirectory, "shared pack state");
-		ensureDirectory(recordsDirectory, "client generation records");
-		ensureDirectory(overlaysDirectory, "client overlays");
-		ensureDirectory(baselinesDirectory, "client baselines");
-		ensureDirectory(generatedCopiesDirectory, "client generated-copy state");
-		ensureDirectory(incomingDirectory, "client transaction incoming root");
-		ensureDirectory(backupDirectory, "client transaction backup root");
-		ensureDirectory(helperDirectory, "client update helper");
-		ensureDirectory(preservationDirectory, "client preservation root");
+	/** Creates the complete client storage layout during application bootstrap. */
+	private void initialize() throws IOException {
+		FileTrees.createManagedDirectory(clientDirectory, "client state root");
+		FileTrees.createManagedDirectory(objectsDirectory, "client object store");
+		FileTrees.createManagedDirectory(fileCacheDirectory, "file cache");
+		FileTrees.createManagedDirectory(modCacheDirectory, "mod metadata cache");
+		FileTrees.createManagedDirectory(platformCacheDirectory, "platform cache");
+		FileTrees.createManagedDirectory(packsDirectory, "shared pack state");
+		FileTrees.createManagedDirectory(overlaysDirectory, "client overlays");
+		FileTrees.createManagedDirectory(baselinesDirectory, "client baselines");
+		FileTrees.createManagedDirectory(generatedCopiesDirectory, "client generated-copy state");
+		FileTrees.createManagedDirectory(incomingDirectory, "client incoming staging root");
+		FileTrees.createManagedDirectory(backupDirectory, "client projection backup root");
+		FileTrees.createManagedDirectory(helperDirectory, "client update helper");
+		FileTrees.createManagedDirectory(preservationDirectory, "client preservation root");
+		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
 	}
 
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
@@ -369,30 +448,67 @@ public final class ClientStorage {
 			throw new IOException("Client active state is not a regular file");
 		ClientStorageJsons.ClientGenerationStateFields state = ConfigTools.read(stateFile, ClientStorageJsons.ClientGenerationStateFields.class)
 				.orElseThrow(() -> new IOException("Client active state is empty"));
-		if (!ModpackId.isValid(state.modpackId) || !HashUtils.isSha1(state.generationId) || !"ACTIVE".equals(state.status))
+		if (!ModpackId.isValid(state.modpackId) || !HashUtils.isSha1(state.contentToken) || !"ACTIVE".equals(state.status))
 			throw new IOException("Client active state identity is invalid");
+		try {
+			OwnershipLedger.fromFields(state.ownershipLedger);
+		} catch (RuntimeException e) {
+			throw new IOException("Client active state ownership ledger is invalid", e);
+		}
+		if (!state.modpackId.equals(state.ownershipLedger.modpackId)) throw new IOException("Client active state and its ledger belong to different modpacks");
 		return state;
 	}
 
-	public void writeActiveState(String modpackId, String generationId) throws IOException {
+	public void writeActiveState(String modpackId, String contentToken, GenerationJsons.OwnershipLedgerFields ownershipLedger) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = new ClientStorageJsons.ClientGenerationStateFields();
 		state.modpackId = ModpackId.requireValid(modpackId);
-		state.generationId = requireDigest(generationId, "generation ID");
+		state.contentToken = requireDigest(contentToken, "generation ID");
+		state.ownershipLedger = Objects.requireNonNull(ownershipLedger, "ownership ledger");
+		state.detached = currentDetachmentFor(state.modpackId);
 		Files.createDirectories(stateFile.getParent());
 		ConfigTools.writeAtomic(stateFile, state);
+	}
+
+	/**
+	 * The persistent detachment flag of the active pack: commits republish the same pack's sovereignty, so only an
+	 * explicit attach or a cleared state may end it. An unreadable state carries no live flag; the fresh write repairs it.
+	 */
+	private boolean currentDetachmentFor(String modpackId) {
+		try {
+			ClientStorageJsons.ClientGenerationStateFields current = readActiveState();
+			return current != null && current.modpackId.equals(modpackId) && current.detached;
+		} catch (IOException e) {
+			return false;
+		}
 	}
 
 	public void clearActiveState() throws IOException {
 		Files.deleteIfExists(stateFile);
 	}
 
+	/** Whether the active pack runs detached: local sovereignty over server enforcement. Packs without the active state never are. */
+	public boolean isDetached(String modpackId) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = readActiveState();
+		return state != null && state.modpackId.equals(ModpackId.requireValid(modpackId)) && state.detached;
+	}
+
+	/** Sets the active pack's detachment flag; a no-op for packs without the active state, since the flag lives there. */
+	public void setDetached(String modpackId, boolean detached) throws IOException {
+		String normalizedModpackId = ModpackId.requireValid(modpackId);
+		ClientStorageJsons.ClientGenerationStateFields state = readActiveState();
+		if (state == null || !state.modpackId.equals(normalizedModpackId) || state.detached == detached) return;
+		state.detached = detached;
+		Files.createDirectories(stateFile.getParent());
+		ConfigTools.writeAtomic(stateFile, state);
+	}
+
 	private void validateLayout() {
 		validateWithin(gameDirectory, automodpackDirectory);
-		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile);
-		validateWithin(gameDirectory, bootstrapFile);
-		validateWithin(clientDirectory, recordsDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
-				stateFile, transactionFile, selectionFile, restartLoopStateFile, modpackContentTempFile, helperDirectory);
-		validateWithin(dataDirectory, objectsDirectory, fileMetadataDirectory, modMetadataDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
+		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
+		validateWithin(clientDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
+				historyDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile,
+				journalTempFile, helperDirectory, helperLeaseFile, incomingProjectionDirectory(), backupProjectionDirectory());
+		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}
 
 	private static void validateWithin(Path parent, Path... children) {
@@ -409,14 +525,6 @@ public final class ClientStorage {
 		return HashUtils.normalizeSha1(value);
 	}
 
-	private static String requireTransactionId(String value) {
-		try {
-			return UUID.fromString(value).toString();
-		} catch (RuntimeException e) {
-			throw new IllegalArgumentException("Invalid transaction UUID", e);
-		}
-	}
-
 	private static String requireLogicalPath(String value) {
 		return LogicalPath.requireCanonical(value);
 	}
@@ -425,9 +533,4 @@ public final class ClientStorage {
 		return LogicalPath.resolve(root, logicalPath);
 	}
 
-	private static void ensureDirectory(Path directory, String description) throws IOException {
-		if (Files.isSymbolicLink(directory)) throw new IOException("Managed " + description + " cannot be a symbolic link: " + directory);
-		Files.createDirectories(directory);
-		if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Managed " + description + " is not a directory: " + directory);
-	}
 }

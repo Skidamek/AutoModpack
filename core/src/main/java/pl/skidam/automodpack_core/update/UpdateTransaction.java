@@ -12,7 +12,9 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
-import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -26,7 +28,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-/** The single write-ahead record for one client update. It stores intent and operations, never filesystem paths or duplicated manifests. */
+/** The single write-ahead record for one client update. It stores intent, operations, and its target's ledger, never filesystem paths or duplicated manifests. */
 public final class UpdateTransaction {
 	public static final int CURRENT_SCHEMA_VERSION = 1;
 
@@ -35,13 +37,14 @@ public final class UpdateTransaction {
 	public Purpose purpose;
 	public Phase phase;
 	public String modpackId;
-	public String targetGenerationId;
-	public String parentGenerationId;
-	public String stateDigest;
+	public String contentToken;
+	public String policySha1;
 	public String ledgerDigest;
+	public GenerationJsons.OwnershipLedgerFields ownershipLedger;
 	public String targetPlatform;
 	public String selectionDigest;
 	public String overlayDigest;
+	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
 	public boolean expectedPriorSelectionPresent;
 	public List<String> expectedPriorRequestedGroups;
 	public List<String> expectedPriorRequestedCategories;
@@ -56,6 +59,7 @@ public final class UpdateTransaction {
 	public List<Preservation> plannedPreservations;
 	public List<BaselineCapture> plannedBaselineCaptures;
 	public List<Conflict> plannedConflicts;
+	public String plannedConsequencesDigest;
 	public ClientStorageJsons.ClientGeneratedCopiesFields plannedGeneratedCopies;
 	public Status resultStatus;
 	public String resultOperation;
@@ -64,16 +68,17 @@ public final class UpdateTransaction {
 
 	public UpdateTransaction() {}
 
-	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest) {
+	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
+			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(target, "target");
 		if (!plan.modpackId().equals(target.manifest().modpackId())) throw new IllegalArgumentException("Plan and selected target modpack IDs disagree");
-		if (!plan.generationTarget().equals(target.generationTarget())) throw new IllegalArgumentException("Plan and selected target generation identities disagree");
-		if (!plan.generationTarget().equals(GenerationTarget.fromFlat(target.flatTarget())))
+		if (!plan.packTarget().equals(target.packTarget())) throw new IllegalArgumentException("Plan and selected target generation identities disagree");
+		if (!plan.packTarget().equals(PackTarget.fromFlat(target.flatTarget())))
 			throw new IllegalArgumentException("Plan and selected flat target generation identities disagree");
 
 		UpdateTransaction transaction = base(Purpose.MODPACK_UPDATE);
-		fillGeneration(transaction, plan.generationTarget());
+		fillGeneration(transaction, plan.packTarget(), target.document().ownershipLedger());
 		transaction.targetPlatform = target.platform().id();
 		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
 		transaction.expectedPriorRequestedGroups = intentValues(target.expectedPriorIntent(), IntentPart.GROUPS);
@@ -84,24 +89,28 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.selectionDigest = digest(target.selection().intent());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
+		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
 		fillPlan(transaction, plan);
-		transaction.plannedGeneratedCopies = GeneratedCopyState.fromCopies(plan.modpackId(), plan.generationTarget().targetGenerationId(), digest(target.selection().intent()), plan.generatedCopies()).toFields();
+		transaction.plannedGeneratedCopies = GeneratedCopyState.fromCopies(plan.modpackId(), plan.packTarget().contentToken(), digest(target.selection().intent()), plan.generatedCopies()).toFields();
 		return transaction;
 	}
 
-	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
-		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, overlayDigest);
+	public static UpdateTransaction createRemoval(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
+			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
+		return createRemovalLike(Purpose.MODPACK_REMOVAL, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig);
 	}
 
-	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
-		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, overlayDigest);
+	public static UpdateTransaction createDeactivation(UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, GenerationJsons.OwnershipLedgerFields ownershipLedger,
+			String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
+		return createRemovalLike(Purpose.MODPACK_DEACTIVATION, plan, platform, expectedPriorIntent, ownershipLedger, overlayDigest, expectedClientConfig);
 	}
 
-	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent, String overlayDigest) {
+	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent,
+			GenerationJsons.OwnershipLedgerFields ownershipLedger, String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(platform, "platform");
 		UpdateTransaction transaction = base(purpose);
-		fillGeneration(transaction, plan.generationTarget());
+		fillGeneration(transaction, plan.packTarget(), OwnershipLedger.fromFields(ownershipLedger));
 		transaction.targetPlatform = platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
 		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
@@ -112,6 +121,7 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = List.of();
 		transaction.selectionDigest = digest(expectedPriorIntent);
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
+		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
 		fillPlan(transaction, plan);
 		return transaction;
 	}
@@ -134,12 +144,15 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	private static void fillGeneration(UpdateTransaction transaction, GenerationTarget target) {
+	/** The pending work must be able to rebuild its target generation offline, so modpack transactions carry its exact ledger. */
+	private static void fillGeneration(UpdateTransaction transaction, PackTarget target, OwnershipLedger ledger) {
 		transaction.modpackId = target.modpackId();
-		transaction.targetGenerationId = target.targetGenerationId();
-		transaction.parentGenerationId = target.parentGenerationId();
-		transaction.stateDigest = target.stateDigest();
+		transaction.contentToken = target.contentToken();
+		transaction.policySha1 = target.policySha1();
 		transaction.ledgerDigest = target.ledgerDigest();
+		if (!target.modpackId().equals(ledger.modpackId()) || !target.ledgerDigest().equals(ledger.digest()))
+			throw new IllegalArgumentException("Transaction generation identity does not match the target ledger");
+		transaction.ownershipLedger = ledger.toFields();
 	}
 
 	private static void fillPlan(UpdateTransaction transaction, UpdatePlan plan) {
@@ -150,6 +163,7 @@ public final class UpdateTransaction {
 		transaction.plannedPreservations = List.copyOf(plan.preservations());
 		transaction.plannedBaselineCaptures = List.copyOf(plan.baselineCaptures());
 		transaction.plannedConflicts = List.copyOf(plan.conflicts());
+		transaction.plannedConsequencesDigest = ReviewedUpdatePlan.consequencesDigest(plan.consequences());
 	}
 
 	private static UpdateTransaction base(Purpose purpose) {
@@ -166,8 +180,7 @@ public final class UpdateTransaction {
 	}
 
 	private static void sortOperations(List<Operation> operations) {
-		operations.sort(Comparator.comparing((Operation operation) -> operation.operation().ordinal()).thenComparing(operation -> operation.root().ordinal())
-				.thenComparing(Operation::relativePath));
+		operations.sort(Operation.ORDER);
 	}
 
 	private enum IntentPart {
@@ -183,8 +196,8 @@ public final class UpdateTransaction {
 		};
 	}
 
-	public GenerationTarget generationTarget() {
-		return new GenerationTarget(modpackId, targetGenerationId, parentGenerationId, stateDigest, ledgerDigest);
+	public PackTarget packTarget() {
+		return new PackTarget(modpackId, contentToken, policySha1, ledgerDigest);
 	}
 
 	public ClientPlatform platform() {
@@ -209,6 +222,10 @@ public final class UpdateTransaction {
 		return HexFormat.of().formatHex(digest.digest());
 	}
 
+	private static ClientConfigJsons.ClientConfigFieldsV3 copyConfig(ClientConfigJsons.ClientConfigFieldsV3 config) {
+		return new ClientConfigJsons.ClientConfigFieldsV3(Objects.requireNonNull(config, "expectedClientConfig"));
+	}
+
 	public enum Phase {
 		PLANNED,
 		PREPARING,
@@ -228,6 +245,7 @@ public final class UpdateTransaction {
 	public enum Status {
 		SUCCESS,
 		DEFERRED_LOCKED,
+		REPLAN_REQUIRED,
 		FAILED
 	}
 }

@@ -3,14 +3,20 @@ package pl.skidam.automodpack_core.config;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonDeserializationContext;
 import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
@@ -20,9 +26,10 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.DurableFiles;
+import pl.skidam.automodpack_core.utils.FileTrees;
 
 public final class ConfigTools {
 	public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
@@ -65,7 +72,27 @@ public final class ConfigTools {
 	}
 
 	public static void writeAtomic(Path path, Object value) throws IOException {
-		AtomicFileWriter.write(path, GSON.toJson(value).getBytes(StandardCharsets.UTF_8));
+		byte[] bytes = GSON.toJson(value).getBytes(StandardCharsets.UTF_8);
+		Path parent = path.toAbsolutePath().normalize().getParent();
+		if (parent == null) throw new IOException("Configuration path has no parent: " + path);
+		Files.createDirectories(parent);
+
+		Path temporary = parent.resolve("." + path.getFileName() + "." + UUID.randomUUID() + ".tmp");
+		try {
+			try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
+				ByteBuffer buffer = ByteBuffer.wrap(bytes);
+				while (buffer.hasRemaining()) channel.write(buffer);
+				channel.force(true);
+			}
+			try {
+				DurableFiles.replace(temporary, path);
+			} catch (AtomicMoveNotSupportedException e) {
+				throw new IOException("The filesystem cannot durably replace " + path + "; use a major local filesystem with atomic rename support", e);
+			}
+			FileTrees.forceDirectory(parent);
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
 	}
 
 	private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress> {
@@ -82,6 +109,11 @@ public final class ConfigTools {
 			if (source.origin != null) object.addProperty("origin", AddressHelpers.formatAddress(source.origin));
 			if (source.endpoint != null) object.addProperty("endpoint", AddressHelpers.formatAddress(source.endpoint));
 			object.add("connectionMode", context.serialize(source.connectionMode));
+			if (!source.approvedOrigins().isEmpty()) {
+				JsonArray approved = new JsonArray();
+				source.approvedOrigins().forEach(approved::add);
+				object.add("approvedOrigins", approved);
+			}
 			return object;
 		}
 
@@ -94,9 +126,12 @@ public final class ConfigTools {
 				InetSocketAddress endpoint = parseAddress(object, "endpoint", "hostAddress", false);
 				JsonElement modeElement = object.get("connectionMode");
 				ModpackConnectionMode connectionMode = modeElement == null || modeElement.isJsonNull()
-						? ModpackConnectionMode.defaultFor(Constants.MC_VERSION, Constants.LOADER)
+						? ModpackConnectionMode.HOLEPUNCH
 						: context.deserialize(modeElement, ModpackConnectionMode.class);
-				return new ConnectionJsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
+				ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
+				JsonElement approved = object.get("approvedOrigins");
+				if (approved != null && approved.isJsonArray()) for (JsonElement element : approved.getAsJsonArray()) if (element.isJsonPrimitive()) connection.approveOrigin(element.getAsString());
+				return connection;
 			} catch (IllegalArgumentException e) {
 				throw new JsonParseException("Invalid ConnectionInfo", e);
 			}

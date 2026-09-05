@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -76,12 +77,24 @@ public final class ChangeSet {
 
 	/** Creates the canonical current-state view of a complete modpack catalogue. */
 	public static ChangeSet catalogue(GroupManifest manifest) {
+		return catalogue(manifest, Kind.PRESERVED);
+	}
+
+	/** Creates a catalogue of the given kind. First-install review uses {@link Kind#ADDED}. */
+	public static ChangeSet catalogue(GroupManifest manifest, Kind kind) {
+		return catalogue(manifest, kind, null);
+	}
+
+	public static ChangeSet catalogue(GroupManifest manifest, Kind kind, Set<String> groupIds) {
 		Objects.requireNonNull(manifest, "catalogue manifest");
+		Objects.requireNonNull(kind, "catalogue kind");
 		List<Change> changes = new ArrayList<>();
-		for (var group : manifest.groups().entrySet()) for (var file : group.getValue().files().entrySet()) {
-			GroupManifest.GroupFile value = file.getValue();
-			changes.add(new Change(file.getKey(), Kind.PRESERVED,
-					List.of(new Occurrence("catalogue", file.getKey(), value.size(), null, value.sha1(), value.type(), List.of(group.getKey()), List.of()))));
+		for (var group : manifest.groups().entrySet()) {
+			if (groupIds != null && !groupIds.contains(group.getKey())) continue;
+			for (var file : group.getValue().files().entrySet()) {
+				GroupManifest.GroupFile value = file.getValue();
+				changes.add(new Change(file.getKey(), kind, List.of(new Occurrence("catalogue", file.getKey(), value.size(), null, value.sha1(), value.type(), List.of(group.getKey()), List.of()))));
+			}
 		}
 		return of(changes);
 	}
@@ -256,10 +269,6 @@ public final class ChangeSet {
 		public Occurrence withReferences(List<String> newReferences) {
 			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, featureIds, newReferences);
 		}
-
-		public Occurrence withFeatureIds(Collection<String> newFeatureIds) {
-			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, newFeatureIds == null ? List.of() : List.copyOf(newFeatureIds), references);
-		}
 	}
 
 	public record Effect(String category, String value) {
@@ -268,10 +277,6 @@ public final class ChangeSet {
 			if (value == null || value.isBlank()) throw new IllegalArgumentException("Change effect value is missing");
 			category = category.trim();
 			value = value.trim();
-		}
-
-		public static Effect named(String value) {
-			return new Effect("general", value);
 		}
 	}
 

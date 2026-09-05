@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.preload;
 
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.fml.loading.VersionInfo;
 import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -25,17 +26,21 @@ public class LoaderManager implements LoaderManagerService {
 	@Override
 	public String getLoaderVersion() {
 		// versionInfo() is still null when Preload runs from onLoad() (see
-		// AutoModpackTransformationService) - fall back to the value it captured from the JVM's
-		// own process arguments for that window; once preload is false, versionInfo() is populated.
+		// AutoModpackTransformationService) - use the launch args captured there for that window;
+		// once preload is false, versionInfo() is populated.
 		if (preload && AutoModpackTransformationService.EARLY_FORGE_VERSION != null) return AutoModpackTransformationService.EARLY_FORGE_VERSION;
-		return FMLLoader.versionInfo().forgeVersion();
+		VersionInfo versionInfo = FMLLoader.versionInfo();
+		if (versionInfo != null) return versionInfo.forgeVersion();
+		throw new IllegalStateException("Forge version is not available yet");
 	}
 
 	@Override
 	public EnvironmentType getEnvironmentType() {
-		// FMLLoader.getDist() is unreliable during preload (see AutoModpackTransformationService) -
-		// prefer the dist captured from --launchTarget on the command line when it's available.
-		if (AutoModpackTransformationService.EARLY_IS_CLIENT != null) {
+		// At mod-construction time the loader-native dist is authoritative: the --launchTarget
+		// heuristic exists only for preload, where FMLLoader's dist isn't populated yet (see
+		// AutoModpackTransformationService). Trusting the heuristic past preload let a stale or
+		// misparsed launchTarget report CLIENT on a real dedicated server and crash mod construction.
+		if (preload && AutoModpackTransformationService.EARLY_IS_CLIENT != null) {
 			return AutoModpackTransformationService.EARLY_IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
 		}
 		if (FMLLoader.getDist() == Dist.CLIENT) {
@@ -50,7 +55,9 @@ public class LoaderManager implements LoaderManagerService {
 		if (preload) {
 			if (modId.equals("minecraft")) {
 				if (AutoModpackTransformationService.EARLY_MC_VERSION != null) return AutoModpackTransformationService.EARLY_MC_VERSION;
-				return FMLLoader.versionInfo().mcVersion();
+				VersionInfo versionInfo = FMLLoader.versionInfo();
+				if (versionInfo != null) return versionInfo.mcVersion();
+				throw new IllegalStateException("Minecraft version is not available yet");
 			}
 
 			return null;

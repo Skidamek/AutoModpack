@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_loader_core.Preload;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 
@@ -53,11 +54,14 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			new Preload();
 			progress.complete();
 
-			ClientStorage storage = ClientStorage.fromGameDirectory(GameDirectory.current());
+			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
 			if (!Files.isDirectory(activeModsDirectory)) return;
 
-			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace);
+			List<Path> earlyServiceJars;
+			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+				earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace, cache);
+			}
 
 			if (earlyServiceJars.isEmpty()) return;
 
@@ -72,7 +76,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			bootstrapJars(earlyServiceJars, serviceLayer, arguments);
 
 			EarlyServiceLayer.instantiateTransformationServices();
-			EarlyServiceBridgePlugin.ensureRunsFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
+			EarlyServiceBridgePlugin.registerFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
 		} catch (Throwable t) {
 			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
 		}

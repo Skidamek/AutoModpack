@@ -6,26 +6,33 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.Set;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNoteHistory;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 
 public class Changelogs {
-	private final Map<String, FileChange> changedFiles = new LinkedHashMap<>();
-	private final Map<String, FileChange> removedFiles = new LinkedHashMap<>();
 	private String latestPatchNotes = "";
-	private List<GenerationPatchNoteHistory.Entry> patchNotesHistory = List.of();
+	private List<JournalEntry> journal = List.of();
 	private List<String> restartReasons = List.of();
 	private ChangeSet changeSet = ChangeSet.empty();
 
+	/** Changed files derived on demand from the canonical change set. */
 	public Map<String, FileChange> changedFiles() {
-		return Collections.unmodifiableMap(changedFiles);
+		return fileChanges(ChangeSet.Kind.ADDED, ChangeSet.Kind.MODIFIED);
 	}
 
+	/** Removed files derived on demand from the canonical change set. */
 	public Map<String, FileChange> removedFiles() {
-		return Collections.unmodifiableMap(removedFiles);
+		return fileChanges(ChangeSet.Kind.REMOVED);
+	}
+
+	private Map<String, FileChange> fileChanges(ChangeSet.Kind... kinds) {
+		Set<ChangeSet.Kind> wanted = Set.of(kinds);
+		Map<String, FileChange> files = new LinkedHashMap<>();
+		for (ChangeSet.Change change : changeSet.changes()) if (wanted.contains(change.kind())) files.put(change.logicalPath(), new FileChange(change.logicalPath(), references(change)));
+		return Collections.unmodifiableMap(files);
 	}
 
 	/** The complete applied change set, including every physical occurrence and source reference. */
@@ -34,46 +41,30 @@ public class Changelogs {
 	}
 
 	public void clear() {
-		changedFiles.clear();
-		removedFiles.clear();
 		latestPatchNotes = "";
-		patchNotesHistory = List.of();
+		journal = List.of();
 		restartReasons = List.of();
 		changeSet = ChangeSet.empty();
 	}
 
 	public void replaceWith(UpdatePreview preview) {
 		Objects.requireNonNull(preview, "preview");
-		clear();
 		latestPatchNotes = preview.latestPatchNotes();
-		patchNotesHistory = preview.patchNotesHistory();
+		journal = preview.journal();
 		changeSet = preview.changeSet();
-		for (ChangeSet.Change change : changeSet.changes()) {
-			FileChange fileChange = new FileChange(change.logicalPath(), references(change));
-			switch (change.kind()) {
-				case ADDED, MODIFIED -> changedFiles.put(change.logicalPath(), fileChange);
-				case REMOVED -> removedFiles.put(change.logicalPath(), fileChange);
-				default -> {
-				}
-			}
-		}
 	}
 
 	public String latestPatchNotes() {
 		return latestPatchNotes;
 	}
 
-	public Optional<GenerationPatchNoteHistory.Entry> featuredPatchNotes() {
-		if (latestPatchNotes.isBlank()) return Optional.empty();
-		for (int index = patchNotesHistory.size() - 1; index >= 0; index--) {
-			GenerationPatchNoteHistory.Entry entry = patchNotesHistory.get(index);
-			if (entry.patchNotes().equals(latestPatchNotes)) return Optional.of(entry);
-		}
-		return Optional.empty();
+	public List<JournalEntry> journal() {
+		return journal;
 	}
 
-	public List<GenerationPatchNoteHistory.Entry> patchNotesHistory() {
-		return patchNotesHistory;
+	/** True when any journal entry in the tail carries patch notes worth showing. */
+	public static boolean hasNotes(List<JournalEntry> journal) {
+		return journal.stream().anyMatch(entry -> !entry.notes().isBlank());
 	}
 
 	public List<String> restartReasons() {

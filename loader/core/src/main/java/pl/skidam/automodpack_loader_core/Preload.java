@@ -1,64 +1,72 @@
 package pl.skidam.automodpack_loader_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
-import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_DIR;
 
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 
-import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.config.BootstrapConfig;
+import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
+import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
-import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
+import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
+import pl.skidam.automodpack_loader_core.client.ClientPendingUpdateRecovery;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
+import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class Preload {
 	private ClientStorage storage;
+	private boolean trustedBootstrapApply;
 
 	public Preload() {
 		try {
 			long start = System.currentTimeMillis();
 			LOGGER.info("Prelaunching AutoModpack...");
-			storage = ClientStorage.fromGameDirectory(GameDirectory.current());
 			initializeConstants();
-			loadConfigs();
-			DetachedUpdateHelper.cleanupOldHelperJars();
-			recoverPendingTransaction();
-			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) importBootstrap();
+			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
+				storage = ClientStorage.open(GameDirectory.current());
+				loadClientConfig();
+				recoverPendingRepair();
+				recoverPendingTransaction();
+				importBootstrap();
+			} else {
+				serverConfig = ConfigUtils.loadOrCreateServerConfig();
+			}
 			updateAll();
 			LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new RuntimeException(e);
 		}
+	}
+
+	private void recoverPendingRepair() throws IOException {
+		if (!Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) return;
+		new ClientOfflineRepair(storage, MODPACK_LOADER).recover()
+				.ifPresent(receipt -> LOGGER.info("Recovered offline repair for {} (complete: {})", receipt.before().modpackId(), receipt.complete()));
 	}
 
 	private static void writeConfig(Path path, Object value) {
@@ -81,26 +89,56 @@ public class Preload {
 			return;
 		}
 
-		UpdateTransactionExecutor executor;
 		try {
-			executor = UpdateTransactionSupport.executor();
-			executor.validate(transaction);
+			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
+			UpdateTransactionExecutor.Execution execution;
+			boolean replanned = false;
+			if (executor.hasMutableInputDrift(transaction) && !executor.projectionPublicationStarted(transaction)) {
+				execution = replanPendingTransaction(transaction);
+				replanned = true;
+			} else {
+				try {
+					execution = executor.recoverLatest();
+				} catch (UpdateReplanRequiredException e) {
+					execution = replanPendingTransaction(transaction);
+					replanned = true;
+				}
+			}
+			if (execution.replanRequired()) {
+				execution = replanPendingTransaction(execution.transaction() == null ? transaction : execution.transaction());
+				replanned = true;
+			}
+			if (!replanned && execution.success() && executor.hasMutableInputDrift(transaction)) execution = replanPendingTransaction(transaction);
+			if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), "Pending update still requires a fresh plan");
+			finishPendingRecovery(execution, transaction);
+		} catch (UpdateReplanRequiredException e) {
+			throw e;
 		} catch (IOException | RuntimeException e) {
 			quarantineTransaction(e);
-			return;
 		}
+	}
 
-		UpdateTransactionExecutor.Execution execution = executor.recover(transaction);
-		if (!execution.success()) {
-			DetachedUpdateHelper.launch(transaction);
-			new ReLauncher(UpdateType.UPDATE, null).restart(true);
-			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
+	private UpdateTransactionExecutor.Execution replanPendingTransaction(UpdateTransaction transaction) throws IOException {
+		try {
+			return ClientPendingUpdateRecovery.replan(storage, transaction, MODPACK_LOADER, LOADER);
+		} catch (IOException e) {
+			throw new UpdateReplanRequiredException(null, "Pending update could not be replanned; its durable mailbox was retained", e);
 		}
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
+	}
+
+	private void finishPendingRecovery(UpdateTransactionExecutor.Execution execution, UpdateTransaction original) throws IOException {
+		if (!execution.success()) {
+			DetachedUpdateHelper.launch();
+			new ReLauncher(UpdateType.UPDATE, null).restart(true);
+			UpdateTransaction deferred = execution.transaction() == null ? original : execution.transaction();
+			throw new UpdateDeferredException(deferred.transactionId, execution.blockedPath(), execution.message());
+		}
+		UpdateTransaction recovered = execution.transaction() == null ? original : execution.transaction();
+		if (recovered.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			clientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
 		}
-		LOGGER.info("Recovered update transaction {}", transaction.transactionId);
+		LOGGER.info("Recovered update transaction {}", recovered.transactionId);
 	}
 
 	private void quarantineTransaction(Exception reason) throws IOException {
@@ -116,40 +154,46 @@ public class Preload {
 			return;
 		}
 
-		ConnectionJsons.ConnectionInfo storedConnectionInfo = null;
+		StoredModpackConnection.Seeded seeded = null;
 		if (clientConfig.selectedModpackId != null && !clientConfig.selectedModpackId.isBlank()) {
 			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 				LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
-				clientConfig.selectedModpackId = "";
+				clientConfig = clientConfig.withSelectedModpackId("");
 				writeConfig(storage.clientConfigFile(), clientConfig);
 			} else {
 				try {
-					storedConnectionInfo = ConnectionStore.getConnection(storage, clientConfig.selectedModpackId);
+					seeded = StoredModpackConnection.seed(storage, clientConfig.selectedModpackId);
 				} catch (IOException e) {
 					LOGGER.error("Failed to load selected modpack connection state", e);
 				}
 			}
 		}
 
-		if (storedConnectionInfo == null || !storedConnectionInfo.isComplete()) {
+		if (seeded == null || !seeded.connection().isComplete()) {
 			if (hasActiveProjection()) loadLocalModpack(null, null);
 			else SelfUpdater.update();
 			return;
 		}
 
-		String expectedFingerprint = CertificateTrustStore.getFingerprint(storedConnectionInfo.origin);
-		ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(storedConnectionInfo.origin, storedConnectionInfo.endpoint,
-				storedConnectionInfo.connectionMode, expectedFingerprint, null);
-		Secrets.Secret secret = SecretsStore.getClientSecret(storage, clientConfig.selectedModpackId, storedConnectionInfo.origin);
-		if (secret == null) {
-			secret = Secrets.anonymousSecret();
-			LOGGER.info("No saved secret for seeded/selected origin {}; using an anonymous preload secret", AddressHelpers.formatAddress(storedConnectionInfo.origin));
+		ConnectionJsons.ConnectionInfo connectionInfo = seeded.connection();
+		Secrets.Secret secret = seeded.secret();
+		if (seeded.anonymousSecret()) LOGGER.info("No saved secret for seeded/selected origin {}; using an anonymous preload secret", AddressHelpers.formatAddress(connectionInfo.origin));
+
+		// updateSelectedModpackOnLaunch=false loads the current projection and does not contact the
+		// server, so extra jars in mods/ stay put (binary search, pinning experiments). A trusted
+		// bootstrap file is an explicit install request and still applies.
+		if (!clientConfig.updateSelectedModpackOnLaunch && !trustedBootstrapApply) {
+			if (hasActiveProjection()) {
+				loadLocalModpack(connectionInfo, secret);
+			} else {
+				SelfUpdater.update();
+			}
+			return;
 		}
 
-		// When update-on-launch is disabled, just load the already-installed
-		// modpack: don't contact the server and don't reconcile local files,
-		// so the user can freely add/remove mods (e.g. a binary search).
-		if (!clientConfig.updateSelectedModpackOnLaunch) {
+		// A detached pack holds local sovereignty: launch boots it as-is, fetching nothing, applying nothing, protecting nothing.
+		if (!trustedBootstrapApply && isDetachedFromServer()) {
+			LOGGER.info("Selected modpack is detached; booting the local pack without server sync");
 			if (hasActiveProjection()) {
 				loadLocalModpack(connectionInfo, secret);
 			} else {
@@ -188,7 +232,9 @@ public class Preload {
 			return;
 		}
 
-		new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient).processModpackUpdate(null);
+		ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, storage, downloadClient);
+		if (trustedBootstrapApply) updater.applyTrustedInstall();
+		else updater.processModpackUpdate(true);
 	}
 
 	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
@@ -224,6 +270,16 @@ public class Preload {
 		}
 	}
 
+	/** An unreadable state is not detachment; the normal launch path then hits its own loud failure for the corrupt state. */
+	private boolean isDetachedFromServer() {
+		try {
+			return new ClientGenerationStore(storage).isDetached(clientConfig.selectedModpackId);
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Cannot read the detached flag of the selected modpack", e);
+			return false;
+		}
+	}
+
 	private SelectedModpackTarget loadStoredTarget() {
 		try {
 			SelectedModpackTarget target = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
@@ -251,90 +307,17 @@ public class Preload {
 		AM_VERSION = FileInspection.getModVersion(THIS_MOD_JAR);
 	}
 
-	private void loadConfigs() {
+	private void loadClientConfig() {
 		long startTime = System.currentTimeMillis();
-
-		// load client config
 		clientConfig = ConfigTools.readOrCreate(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
-
-		// load server config
-		serverConfig = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
-
-		if (serverConfig != null) {
-			String serverConfigBefore = ConfigTools.GSON.toJson(serverConfig);
-			if (serverConfig.acceptedLoaders == null) {
-				serverConfig.acceptedLoaders = new HashSet<>(Set.of(LOADER));
-			} else {
-				serverConfig.acceptedLoaders.add(LOADER);
-			}
-
-			ConfigUtils.normalizeServerConfig(serverConfig);
-			if (!serverConfigBefore.equals(ConfigTools.GSON.toJson(serverConfig))) writeConfig(SERVER_CONFIG_FILE, serverConfig);
-		}
-
-		try {
-			storage.ensureRoots();
-			Files.createDirectories(SERVER_DIR);
-		} catch (IOException e) {
-			LOGGER.error("Failed to create AutoModpack state roots", e);
-		}
-
-		if (serverConfig == null || clientConfig == null) throw new RuntimeException("Failed to load config!");
-
+		if (clientConfig == null) throw new RuntimeException("Failed to load config!");
 		LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
 	}
 
 	private void importBootstrap() {
-		if (!Files.isRegularFile(storage.bootstrapFile())) return;
-
-		ConnectionJsons.KnownHostsBootstrapFields fields = ConfigTools.read(storage.bootstrapFile(), ConnectionJsons.KnownHostsBootstrapFields.class)
-				.orElseThrow(() -> new ConfigTools.ConfigException("Bootstrap file is not a regular file"));
-		final BootstrapConfig.Validated bootstrap;
-		try {
-			bootstrap = BootstrapConfig.validate(fields);
-		} catch (IllegalArgumentException e) {
-			throw new ConfigTools.ConfigException("Invalid bootstrap file " + storage.bootstrapFile().toAbsolutePath().normalize(), e);
-		}
-
-		String originKey = AddressHelpers.formatAddress(bootstrap.origin());
-		String previousSelectedModpackId = clientConfig.selectedModpackId;
-		ClientConfigJsons.ClientConfigFieldsV3 updatedClientConfig = clientConfig;
-		String targetModpackId = bootstrap.installsModpack() ? bootstrap.modpackId() : ModpackId.isValid(clientConfig.selectedModpackId) ? clientConfig.selectedModpackId : null;
-		ConnectionJsons.ConnectionInfo previousConnection = null;
-		ConnectionJsons.CertificateTrustEntry previousTrust;
-		try {
-			previousTrust = CertificateTrustStore.get(bootstrap.origin());
-			CertificateTrustStore.save(bootstrap.origin(), bootstrap.fingerprint(), CertificateTrustStore.Reason.SEED);
-			if (targetModpackId != null) {
-				previousConnection = ConnectionStore.getConnection(storage, targetModpackId);
-				if (bootstrap.installsModpack()) {
-					ConnectionStore.saveConnection(storage, targetModpackId,
-							new ConnectionJsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
-					updatedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(clientConfig);
-					updatedClientConfig.selectedModpackId = targetModpackId;
-					writeConfig(storage.clientConfigFile(), updatedClientConfig);
-					clientConfig = updatedClientConfig;
-				}
-			}
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to import bootstrap connection state", e);
-		}
-		if (previousTrust == null) {
-			LOGGER.info("Imported seeded certificate pin for origin {} ({})", originKey, NetUtils.shortenFingerprint(bootstrap.fingerprint()));
-		} else {
-			LOGGER.info("Replaced seeded certificate pin for origin {}: {} -> {}", originKey, NetUtils.shortenFingerprint(previousTrust.fingerprint),
-					NetUtils.shortenFingerprint(bootstrap.fingerprint()));
-		}
-		if (bootstrap.installsModpack()) {
-			String oldOrigin = previousConnection == null || previousConnection.origin == null ? "none" : AddressHelpers.formatAddress(previousConnection.origin);
-			String oldEndpoint = previousConnection == null || previousConnection.endpoint == null ? "none" : AddressHelpers.formatAddress(previousConnection.endpoint);
-			LOGGER.info("Seed selection {} -> {}; connection origin {} -> {}; endpoint {} -> {}", previousSelectedModpackId, targetModpackId, oldOrigin,
-					AddressHelpers.formatAddress(bootstrap.origin()), oldEndpoint, AddressHelpers.formatAddress(bootstrap.endpoint()));
-		}
-		try {
-			Files.delete(storage.bootstrapFile());
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Bootstrap state was saved but the bootstrap file could not be deleted", e);
-		}
+		BootstrapInstaller.importIfPresent(storage, clientConfig).ifPresent(receipt -> {
+			clientConfig = receipt.clientConfig();
+			trustedBootstrapApply = receipt.installsModpack() && receipt.hasSecret();
+		});
 	}
 }

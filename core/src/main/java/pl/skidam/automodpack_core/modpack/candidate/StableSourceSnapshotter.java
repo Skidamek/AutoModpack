@@ -1,9 +1,9 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.MOD_ID;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
@@ -12,17 +12,20 @@ import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public final class StableSourceSnapshotter {
 	private final CopyOperation copyOperation;
 
 	public StableSourceSnapshotter() {
-		this((source, staged) -> Files.copy(source, staged, StandardCopyOption.REPLACE_EXISTING));
+		this(HashUtils::copyAndSha1);
 	}
 
 	StableSourceSnapshotter(CopyOperation copyOperation) {
@@ -31,43 +34,51 @@ public final class StableSourceSnapshotter {
 
 	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory)
 			throws CandidateBuildException {
-		return snapshot(source, autoExcludeUnnecessary, autoExcludeServerMods, stagingDirectory, null, null, null);
+		return snapshot(source, autoExcludeUnnecessary, autoExcludeServerMods, stagingDirectory, null, null, null, true);
 	}
 
 	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory,
-			FileMetadataCache fileMetadataCache, ModFileCache modFileCache, Path objectStoreDirectory) throws CandidateBuildException {
+			FileCache fileCache, ModFileCache modFileCache, Path objectStoreDirectory) throws CandidateBuildException {
+		return snapshot(source, autoExcludeUnnecessary, autoExcludeServerMods, stagingDirectory, fileCache, modFileCache, objectStoreDirectory, true);
+	}
+
+	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory,
+			FileCache fileCache, ModFileCache modFileCache, Path objectStoreDirectory, boolean materializeMissing) throws CandidateBuildException {
 		Path staged = null;
 		try {
 			BasicFileAttributes before = attributes(source.sourcePath());
+			FileCache.FileFingerprint beforeFingerprint = FileCache.fingerprint(source.sourcePath(), before);
 			Exclusion exclusion = expectedPathExclusion(source, before, autoExcludeUnnecessary);
 			if (exclusion != null) return new Snapshot(null, exclusion, null);
-			Snapshot cached = cachedSnapshot(source, before, autoExcludeServerMods, stagingDirectory, fileMetadataCache, modFileCache, objectStoreDirectory);
-			if (cached != null) return cached;
 
-			ensureStagingDirectory(stagingDirectory);
-			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
-			copyOperation.copy(source.sourcePath(), staged);
-			force(staged);
+			String sha1 = fileCache != null ? fileCache.getOrComputeHashWithAttributes(source.sourcePath(), before) : HashUtils.getHash(source.sourcePath());
+			if (sha1 == null) throw new IOException("SHA-1 calculation returned null");
+			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
+				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 
-			exclusion = expectedContentExclusion(staged, autoExcludeServerMods);
-			String type = exclusion == null ? fileType(staged, source.logicalPath()) : null;
-			String sha1 = exclusion == null ? HashUtils.getHash(staged) : null;
-			if (exclusion == null && sha1 == null) throw new IOException("SHA-1 calculation returned null");
+			FileInspection.Mod mod = modFileCache == null ? null : modFileCache.getModOrNull(source.sourcePath(), fileCache);
+			if (isSelfFile(source.sourcePath(), mod)) return Snapshot.SKIPPED;
+			exclusion = expectedContentExclusion(source.sourcePath(), autoExcludeServerMods, mod);
+			if (exclusion != null) return new Snapshot(null, exclusion, null);
+			String type = fileType(source.sourcePath(), source.logicalPath(), mod);
 			String murmur = null;
-			if (exclusion == null && ModpackContentType.isSourceFetchable(type)) murmur = HashUtils.getCurseforgeMurmurHash(staged);
-			BasicFileAttributes after = attributes(source.sourcePath());
-			if (!stable(before, after)) throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
+			if (ModpackContentType.isSourceFetchable(type)) murmur = fileCache != null ? fileCache.getOrComputeMurmur(source.sourcePath()) : HashUtils.getCurseforgeMurmurHash(source.sourcePath());
+			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
+				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
+			GroupManifest.GroupFile file = new GroupManifest.GroupFile(before.size(), type, false, sha1, murmur);
+			if (!materializeMissing) return new Snapshot(file, null, null);
+			if (trustedObject(objectStoreDirectory, sha1, before.size(), fileCache)) return new Snapshot(file, null, null);
+
+			FileTrees.createManagedDirectory(stagingDirectory, "staging directory");
+			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
+			String copiedSha1 = copyOperation.copy(source.sourcePath(), staged);
+			FileTrees.forceFile(staged);
+			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
+				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 			long size = Files.size(staged);
-			if (size != after.size()) throw new IOException("Staged snapshot size does not match stable source size: " + source.sourcePath());
-			if (exclusion != null) {
-				Files.deleteIfExists(staged);
-				staged = null;
-				return new Snapshot(null, exclusion, null);
-			}
-			if (fileMetadataCache != null) fileMetadataCache.overwriteCache(source.sourcePath(), sha1);
-			if (fileMetadataCache != null) fileMetadataCache.overwriteCache(staged, sha1);
-			return new Snapshot(new GroupManifest.GroupFile(size, type, false, false, sha1, murmur), null,
-					new StagedObject(sha1, size, staged));
+			if (size != before.size()) throw new IOException("Staged snapshot size does not match stable source size: " + source.sourcePath());
+			if (copiedSha1 == null || !sha1.equalsIgnoreCase(copiedSha1)) throw new IOException("Staged snapshot SHA-1 does not match source identity: " + source.sourcePath());
+			return new Snapshot(file, null, new StagedObject(sha1, size, staged));
 		} catch (CandidateBuildException e) {
 			delete(staged, e);
 			throw e;
@@ -78,46 +89,19 @@ public final class StableSourceSnapshotter {
 		}
 	}
 
-	private Snapshot cachedSnapshot(CandidateSource source, BasicFileAttributes before, boolean autoExcludeServerMods, Path stagingDirectory,
-			FileMetadataCache fileMetadataCache, ModFileCache modFileCache, Path objectStoreDirectory) throws IOException, CandidateBuildException {
-		if (fileMetadataCache == null || objectStoreDirectory == null) return null;
-		String sha1 = fileMetadataCache.getHashOrNullWithAttributes(source.sourcePath(), before);
-		if (sha1 == null) return null;
-		Path object = objectStoreDirectory.resolve(sha1).normalize();
-		if (!object.startsWith(objectStoreDirectory.toAbsolutePath().normalize()) || !Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)
-				|| Files.size(object) != before.size() || !sha1.equalsIgnoreCase(fileMetadataCache.getHashOrNull(object)))
-			return null;
-		ensureStagingDirectory(stagingDirectory);
-		Path staged = Files.createTempFile(stagingDirectory, "snapshot-cached-", stagingSuffix(source.sourcePath()));
-		Files.deleteIfExists(staged);
+	private static boolean trustedObject(Path objectStoreDirectory, String sha1, long size, FileCache cache) {
+		if (objectStoreDirectory == null) return false;
+		Path object;
 		try {
-			try {
-				Files.createLink(staged, object);
-			} catch (UnsupportedOperationException | FileSystemException e) {
-				Files.copy(object, staged);
-			}
-			BasicFileAttributes after = attributes(source.sourcePath());
-			if (!stable(before, after)) {
-				Files.deleteIfExists(staged);
-				return null;
-			}
-			fileMetadataCache.overwriteCache(staged, sha1);
-			FileInspection.Mod mod = modFileCache == null ? null : modFileCache.getModOrNull(staged, fileMetadataCache);
-			Exclusion exclusion = expectedContentExclusion(staged, autoExcludeServerMods, mod);
-			if (exclusion != null) {
-				Files.deleteIfExists(staged);
-				return new Snapshot(null, exclusion, null);
-			}
-			String type = fileType(staged, source.logicalPath(), mod);
-			String murmur = ModpackContentType.isSourceFetchable(type) ? HashUtils.getCurseforgeMurmurHash(staged) : null;
-			return new Snapshot(new GroupManifest.GroupFile(before.size(), type, false, false, sha1, murmur), null, new StagedObject(sha1, before.size(), staged));
-		} catch (IOException e) {
-			Files.deleteIfExists(staged);
-			throw e;
-		} catch (RuntimeException e) {
-			Files.deleteIfExists(staged);
-			throw e;
+			object = DataRootResolver.objectFile(objectStoreDirectory, sha1);
+		} catch (IllegalArgumentException e) {
+			return false;
 		}
+		if (!FileIntegrity.matchesNamed(object, size, sha1, cache)) {
+			if (Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS)) LOGGER.warn("Immutable object {} no longer matches its Git-stat tripwire; restaging from source", object);
+			return false;
+		}
+		return true;
 	}
 
 	private static BasicFileAttributes attributes(Path path) throws IOException {
@@ -141,46 +125,28 @@ public final class StableSourceSnapshotter {
 		return null;
 	}
 
-	private static Exclusion expectedContentExclusion(Path staged, boolean autoExcludeServerMods) {
-		return expectedContentExclusion(staged, autoExcludeServerMods, null);
+	/** The AutoModpack jar itself never becomes a candidate; clients receive it through the bootstrap flow, so it is not an exclusion event either. */
+	private static boolean isSelfFile(Path source, FileInspection.Mod cachedMod) {
+		String modId = cachedMod != null && cachedMod.id() != null ? cachedMod.id() : FileInspection.getModID(source);
+		return MOD_ID.equals(modId) || (MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId)
+				|| (MOD_ID + "_mod").equals(modId);
 	}
 
-	private static Exclusion expectedContentExclusion(Path staged, boolean autoExcludeServerMods, FileInspection.Mod cachedMod) {
-		if (cachedMod == null && !FileInspection.isMod(staged)) return null;
-		if (autoExcludeServerMods && LoaderManagerService.EnvironmentType.SERVER.equals(FileInspection.getModEnvironment(staged)))
-			return new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod");
-		String modId = FileInspection.getModID(staged);
-		if (MOD_ID.equals(modId) || (MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId)
-				|| (MOD_ID + "_mod").equals(modId))
-			return new Exclusion(ExcludedCandidate.Reason.AUTOMODPACK_FILE, "AutoModpack cannot publish itself");
-		return null;
+	private static Exclusion expectedContentExclusion(Path source, boolean autoExcludeServerMods, FileInspection.Mod cachedMod) {
+		if (cachedMod == null && !FileInspection.isMod(source)) return null;
+		return autoExcludeServerMods && LoaderManagerService.EnvironmentType.SERVER.equals(FileInspection.getModEnvironment(source))
+				? new Exclusion(ExcludedCandidate.Reason.SERVER_SIDE_MOD, "detected as a server-side mod")
+				: null;
 	}
 
-	private static String fileType(Path staged, String logicalPath) {
-		return fileType(staged, logicalPath, null);
-	}
-
-	private static String fileType(Path staged, String logicalPath, FileInspection.Mod cachedMod) {
-		if (cachedMod != null || FileInspection.isMod(staged)) return ModpackContentType.MOD;
+	private static String fileType(Path source, String logicalPath, FileInspection.Mod cachedMod) {
+		if (cachedMod != null || FileInspection.isMod(source)) return ModpackContentType.MOD;
 		return ModpackPathPolicy.typeForPath(logicalPath);
 	}
 
 	private static String stagingSuffix(Path source) {
 		String name = source.getFileName().toString();
 		return JarUtils.hasJarExtension(name) ? ".jar" : ".staged";
-	}
-
-	private static void ensureStagingDirectory(Path stagingDirectory) throws IOException {
-		if (Files.isSymbolicLink(stagingDirectory)) throw new IOException("Managed staging directory cannot be a symbolic link: " + stagingDirectory);
-		Files.createDirectories(stagingDirectory);
-		if (Files.isSymbolicLink(stagingDirectory) || !Files.isDirectory(stagingDirectory, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Managed staging directory is not a regular directory: " + stagingDirectory);
-	}
-
-	private static void force(Path file) throws IOException {
-		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
-			channel.force(true);
-		}
 	}
 
 	private static void delete(Path path, CandidateBuildException failure) {
@@ -192,17 +158,15 @@ public final class StableSourceSnapshotter {
 		}
 	}
 
-	private static boolean stable(BasicFileAttributes before, BasicFileAttributes after) {
-		return before.isRegularFile() == after.isRegularFile() && before.size() == after.size() && before.lastModifiedTime().equals(after.lastModifiedTime())
-				&& (before.fileKey() == null || after.fileKey() == null || Objects.equals(before.fileKey(), after.fileKey()));
-	}
-
 	@FunctionalInterface
 	interface CopyOperation {
-		void copy(Path source, Path staged) throws IOException;
+		String copy(Path source, Path staged) throws IOException;
 	}
 
-	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object) {}
+	public record Snapshot(GroupManifest.GroupFile file, Exclusion exclusion, StagedObject object) {
+		/** The source is neither a candidate nor an exclusion event; it never reaches any report. */
+		public static final Snapshot SKIPPED = new Snapshot(null, null, null);
+	}
 
 	public record Exclusion(ExcludedCandidate.Reason reason, String message) {}
 }

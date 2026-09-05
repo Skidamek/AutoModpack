@@ -4,17 +4,16 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.Locale;
-import java.util.Set;
-import java.util.stream.Stream;
 
+/** Low-level digest primitives; path-keyed callers add caching through {@code FileCache}. */
 public final class HashUtils {
 	public static final int SHA1_HEX_LENGTH = 40;
 	private static final String SHA_1 = "SHA-1";
@@ -65,30 +64,12 @@ public final class HashUtils {
 		return value.toLowerCase(Locale.ROOT);
 	}
 
-	/** The {@link #getHash} of every {@code .jar} file directly in {@code dir}; empty if it isn't a directory. */
-	public static Set<String> getJarHashes(Path dir) {
-		Set<String> hashes = new HashSet<>();
-		if (dir == null || !Files.isDirectory(dir)) return hashes;
-		try (Stream<Path> stream = Files.list(dir)) {
-			stream.filter(JarUtils::isRegularJar).forEach(jar -> {
-				String hash = getHash(jar);
-				if (hash != null) hashes.add(hash);
-			});
-		} catch (Exception e) {
-			LOGGER.debug("Failed to list directory for jar hashes: {}", dir, e);
-		}
-		return hashes;
-	}
-
+	/** Full SHA-1 of current bytes. Path-keyed identity goes through {@code FileIntegrity} / {@code FileCache}. */
 	public static String getHash(Path path) {
 		try {
 			MessageDigest digest = newSha1Digest();
 			try (InputStream is = Files.newInputStream(path)) {
-				byte[] buffer = new byte[64 * 1024];
-				int bytesRead;
-				while ((bytesRead = is.read(buffer)) != -1) {
-					digest.update(buffer, 0, bytesRead);
-				}
+				digestStream(digest, is);
 			}
 			return HexFormat.of().formatHex(digest.digest());
 		} catch (IOException ignored) {
@@ -97,6 +78,26 @@ public final class HashUtils {
 			LOGGER.error("Failed to get hash for path: {}", path, e);
 		}
 		return null;
+	}
+
+	/** Copies {@code source} to {@code destination} and returns the SHA-1 of the bytes written. */
+	public static String copyAndSha1(Path source, Path destination) throws IOException {
+		MessageDigest digest = newSha1Digest();
+		try (InputStream in = Files.newInputStream(source); OutputStream out = Files.newOutputStream(destination)) {
+			byte[] buffer = new byte[64 * 1024];
+			int bytesRead;
+			while ((bytesRead = in.read(buffer)) != -1) {
+				digest.update(buffer, 0, bytesRead);
+				out.write(buffer, 0, bytesRead);
+			}
+		}
+		return HexFormat.of().formatHex(digest.digest());
+	}
+
+	private static void digestStream(MessageDigest digest, InputStream is) throws IOException {
+		byte[] buffer = new byte[64 * 1024];
+		int bytesRead;
+		while ((bytesRead = is.read(buffer)) != -1) digest.update(buffer, 0, bytesRead);
 	}
 
 	/**

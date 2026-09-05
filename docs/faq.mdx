@@ -16,6 +16,8 @@ Likely no, most of these type of mods forward only minecraft packets. These mods
 ### Can I use non modpack mods on client?
 Yes, you can add any mod you want to use alongside downloaded modpack by just placing the mod into the standard mods' folder.
 
+If a pack also ships the same mod id, add it to `pinnedModIds` in the [client config](configuration/client-config) or in **Pinned mods**. AutoModpack still downloads the pack copy but does not load it. Restart after changing the list. If that breaks the pack, that is on you.
+
 ### How can I delete files from modpack?
 Just delete file from server, or exclude it from sync, read about `syncedFiles` in [config](configuration/server-config). AutoModpack removes the previously managed client file during the next update when its path, SHA-1 hash, and size match the cumulative ownership ledger.
 
@@ -23,9 +25,9 @@ Just delete file from server, or exclude it from sync, read about `syncedFiles` 
 No. AutoModpack does not support arbitrary client-file deletion. Changed files and player-local paths are preserved.
 
 ### Do I have to open any port on my router?
-Usually not. On supported targets, the default `HOLEPUNCH` mode uses the Minecraft Login connection. Otherwise, the default `MAGIC_PACKET` mode can share the Minecraft port when `bindPort` is `-1`.
+Usually not. The default `HOLEPUNCH` mode carries the modpack connection through the Minecraft Login protocol, so the modpack itself needs no extra port.
 
-An explicit `bindPort` starts a dedicated listener for `MAGIC_PACKET` or `DIRECT`. Configure `advertisedEndpointHost` and `advertisedEndpointPort` for the public route clients should use. See the complete matrix in [config](configuration/server-config).
+An explicit `bindPort` starts a dedicated listener for `MAGIC` or `DIRECT`. Configure `advertisedEndpointHost` and `advertisedEndpointPort` for the public route clients should use. See the complete matrix in [config](configuration/server-config).
 
 ### What happens when I update AutoModpack version on server?
 Client always try to sync to the server's version of AutoModpack. It updates or downgrades itself to the server's version if such is found on the Modrinth.

@@ -15,6 +15,7 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
@@ -31,6 +32,15 @@ import org.bouncycastle.operator.ContentSigner;
 
 public class NetUtils {
 	public static final String USER_AGENT = "github/skidamek/automodpack/" + AM_VERSION;
+	public static final Duration NETWORK_TIMEOUT = Duration.ofSeconds(15);
+	// The configured-connection read deadline also guards bulk file transfers, where legitimate
+	// flow-control pauses outlast a connect-grade deadline. It only has to catch a dead peer, not
+	// a slow pipe, so it sits far past any healthy inter-frame gap.
+	public static final Duration TRANSFER_IDLE_TIMEOUT = Duration.ofSeconds(60);
+	public static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
+	public static final int NETWORK_TIMEOUT_MILLIS = Math.toIntExact(NETWORK_TIMEOUT.toMillis());
+	public static final int TRANSFER_IDLE_TIMEOUT_MILLIS = Math.toIntExact(TRANSFER_IDLE_TIMEOUT.toMillis());
+	public static final int HTTP_TIMEOUT_MILLIS = Math.toIntExact(HTTP_TIMEOUT.toMillis());
 
 	// Magic numbers
 	public static final int MAGIC_AMMH = 0x414D4D48;
@@ -53,9 +63,9 @@ public class NetUtils {
 	public static final byte CONFIGURATION_CHUNK_SIZE_TYPE = 0x42;
 
 	// Chunk size
-	public static final int DEFAULT_CHUNK_SIZE = 256 * 1024; // 256 KB
-	public static final int MIN_CHUNK_SIZE = 8 * 1024; // 8 KB
-	public static final int MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
+	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
+	public static final int MIN_CHUNK_SIZE = 1024 * 1024; // 1 MiB
+	public static final int MAX_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB
 
 	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
 	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);
@@ -81,6 +91,11 @@ public class NetUtils {
 	public static String shortenFingerprint(String fingerprint) {
 		if (fingerprint == null || fingerprint.length() <= 19) return fingerprint;
 		return fingerprint.substring(0, 8) + "…" + fingerprint.substring(fingerprint.length() - 8);
+	}
+
+	public static String shortenFingerprint(String fingerprint, int visibleCharactersPerSide) {
+		if (fingerprint == null || visibleCharactersPerSide < 1 || fingerprint.length() <= visibleCharactersPerSide * 2 + 3) return fingerprint;
+		return fingerprint.substring(0, visibleCharactersPerSide) + "..." + fingerprint.substring(fingerprint.length() - visibleCharactersPerSide);
 	}
 
 	public static KeyPair generateKeyPair() throws Exception {

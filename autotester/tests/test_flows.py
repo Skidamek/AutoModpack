@@ -23,12 +23,10 @@ from automodpack_autotester.config import (
 )
 from automodpack_autotester.engine import run_flow, steps_io, steps_ui
 from automodpack_autotester.engine.registry import VERBS
-from automodpack_autotester.mod_fixtures import (
-    assert_valid_mod_fixture,
-    valid_mod_jar_bytes,
-)
+from automodpack_autotester import client_steps
+from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
 
-from .conftest import FakeBridge
+from .fake_bridge import FakeBridge
 
 # ── stub the lifecycle verbs the runner normally provides (need Docker) ────
 
@@ -58,12 +56,14 @@ def _launch_client(ctx, step):
         objects = ctx.game_dir / "automodpack" / "client" / "data" / "objects"
         objects.mkdir(parents=True, exist_ok=True)
         for payload in (b"bootstrap-a\n", b"bootstrap-b\n"):
-            (objects / hashlib.sha1(payload).hexdigest()).write_bytes(payload)
+            object_path = client_steps.cas_object(objects, hashlib.sha1(payload).hexdigest())
+            object_path.parent.mkdir(parents=True, exist_ok=True)
+            object_path.write_bytes(payload)
         ctx.vars["fake_preload_logged"] = True
         ctx.vars["fake_preload_review_logged"] = True
         latest_log = ctx.game_dir / "logs" / "latest.log"
         latest_log.parent.mkdir(parents=True, exist_ok=True)
-        latest_log.write_text("Preloaded 2 complete modpack objects in 1ms\nPreload acquired the complete selected target; active projection remains unchanged until player review\n", encoding="utf-8")
+        latest_log.write_text("Launch apply acquired 2 complete modpack objects in 1ms\nLaunch apply is waiting for first-install review\n", encoding="utf-8")
 
 
 def _wait_bridge(ctx, step):
@@ -130,7 +130,7 @@ def _seed_bootstrap(ctx, step):
         sha1 = hashlib.sha1(payload).hexdigest()
         files[path] = {"sha1": sha1, "size": str(len(payload))}
     (projection_root / "current-projection.json").write_text(
-        json.dumps({"modpackId": "packaaa", "groups": {"main": {"files": files}}}), encoding="utf-8"
+        json.dumps({"policy": {"modpackId": "packaaa", "groups": {"main": {"files": files}}}}), encoding="utf-8"
     )
 
 
@@ -197,20 +197,12 @@ def _publish_server_generation(ctx, step):
         ctx.bridge.update_available = True
 
 
-def _compact_server_history(ctx, step):
-    """Record an explicit fake receipt; Docker remains runtime authority."""
-    ctx.vars["fake_server_history_compacted"] = {
-        "receipt": "fake-only",
-        "runtimeAuthority": "Docker runner",
-    }
-
-
 def _rollback_server_generation(ctx, step):
     """Record a fake receipt; Docker remains runtime authority for rollback."""
     ctx.vars["fake_server_generation_rollback"] = {
         "receipt": "fake-only",
         "runtimeAuthority": "Docker runner",
-        "command": ["rcon-cli", "automodpack", "generate", "revert", "<ancestor>", "confirm", "notes", step.get("notes", "")],
+        "command": ["rcon-cli", "automodpack", "generate", "revert", "<seq>", "confirm", "notes", step.get("notes", "")],
         "notes": step.get("notes", ""),
     }
 
@@ -289,7 +281,6 @@ _FAKE_VERBS = {
 	"reset_isolated_client_objects": _reset_isolated_client_objects,
     "stage_modpack": _stage_modpack,
     "publish_server_generation": _publish_server_generation,
-    "compact_server_history": _compact_server_history,
     "rollback_server_generation": _rollback_server_generation,
     "collect_server_objects": _collect_server_objects,
     "wait_join": _wait_join,
@@ -342,10 +333,10 @@ def _ctx_for(make_ctx, scenario: dict):
                     "Imported seeded certificate pin for origin amp-server:25565"
                     if ctx.vars.get("fake_bootstrap_imported")
                     else "",
-                    "Preloaded 2 complete modpack objects in 1ms"
+                    "Launch apply acquired 2 complete modpack objects in 1ms"
                     if ctx.vars.get("fake_preload_logged")
                     else "",
-                    "Preload acquired the complete selected target; active projection remains unchanged until player review"
+                    "Launch apply is waiting for first-install review"
                     if ctx.vars.get("fake_preload_review_logged")
                     else "",
                 ],
@@ -390,8 +381,8 @@ def test_fake_restart_screen_matches_production_button_order(make_ctx):
     bridge.screen = "restart"
 
     assert bridge.gui()["buttons"] == [
-        {"id": 6, "text": "No, back to the game", "enabled": True, "visible": True},
-        {"id": 4, "text": "Yes, close the game", "enabled": True, "visible": True},
+        {"id": 6, "text": "No, back to the game", "enabled": True, "visible": True, "key": "automodpack.restart.cancel"},
+        {"id": 4, "text": "Yes, close the game", "enabled": True, "visible": True, "key": "automodpack.restart.confirm"},
         {"id": 40, "text": "View changelogs", "enabled": True, "visible": True},
     ]
 
@@ -401,15 +392,16 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     bridge = FakeBridge(ctx)
     ctx.bridge = bridge
 
-    # First-install cleanup is explicit, reversible before confirmation, and off by default.
+    # First-install cleanup is explicit and reversible before confirmation; archive is the safe default.
     for name in ("local-one.jar", "local-two.jar"):
         (ctx.game_dir / "mods" / name).write_bytes(b"local")
     bridge.screen = "first_connection"
-    assert any(button["text"] == "[ ] Keep 2 existing files in mods" for button in bridge.gui()["buttons"])
+    assert any(button["text"] == "Keep 2 existing mod files" and not button.get("checked") for button in bridge.gui()["buttons"])
     bridge.click(89)
-    assert any(button["text"] == "[x] Preserve and remove 2 existing files" for button in bridge.gui()["buttons"])
+    assert any(button["text"] == "Keep 2 existing mod files" and button.get("checked") for button in bridge.gui()["buttons"])
     bridge.click(89)
-    assert any(button["text"] == "[ ] Keep 2 existing files in mods" for button in bridge.gui()["buttons"])
+    assert any(button["text"] == "Keep 2 existing mod files" and not button.get("checked") for button in bridge.gui()["buttons"])
+    assert any(button["text"] == "Download" for button in bridge.gui()["buttons"])
 
     # Repair is available only for the active pack. Its destructive choices default to keep.
     bridge.pack_a_installed = True
@@ -421,18 +413,19 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     assert any(button["text"] == "Repair" for button in bridge.gui()["buttons"])
     bridge.click(70)
     buttons = bridge.gui()["buttons"]
-    assert any(button["text"] == "[x] Reset config/pack-shared-editable.txt" for button in buttons)
-    assert any(button["text"] == "[ ] Keep 2 unowned mods" for button in buttons)
+    # Defaults: unchecked on both rows - each unchecked box is a removal/reset consent.
+    assert any(button["text"] == "[ ] Keep changes in config/pack-shared-editable.txt" for button in buttons)
+    assert any(button["text"] == "Keep 2 existing mod files" and not button.get("checked") for button in buttons)
+    bridge.click(95)  # Checking the editable row keeps the player's changes.
+    assert any(button["text"] == "[x] Keep changes in config/pack-shared-editable.txt" for button in bridge.gui()["buttons"])
     bridge.click(95)
-    assert any(button["text"] == "[ ] Keep changes in config/pack-shared-editable.txt" for button in bridge.gui()["buttons"])
-    bridge.click(97)
-    assert any(button["text"] == "[x] Archive and remove 2 unowned mods" for button in bridge.gui()["buttons"])
+    bridge.click(97)  # Checking the unowned row opts into keeping them.
+    assert any(button["text"] == "Keep 2 existing mod files" and button.get("checked") for button in bridge.gui()["buttons"])
     bridge.click(100)
     assert bridge.gui()["screenClass"] == "ModpackDetailsScreen"
 
     # Storage verification returns to the same screen after a corrupt claimed object fails.
     object_path = bridge._vault_claim("packaaa", "config/amp-autotest-gamma.cfg", b"gamma", "SERVER_REMOVAL")
-    bridge.vault_claim_available = True
     bridge.screen = "storage"
     bridge.click(91)
     assert bridge.storage_verified
@@ -455,10 +448,7 @@ def test_fake_new_repair_and_preservation_ui_states(make_ctx):
     assert bridge.gui()["screenClass"] == "ErrorScreen"
     bridge.click(94)
     assert bridge.gui()["screenClass"] == "PreservationVaultScreen"
-    bridge.click(90)
-    assert any(button["text"] == "Confirm deletion" for button in bridge.gui()["buttons"])
-    bridge.click(83)  # Reselecting a row cancels the pending destructive action.
-    assert any(button["text"] == "Delete from vault" for button in bridge.gui()["buttons"])
+    bridge.click(83)  # Reselecting a row cancels any pending destructive action.
     bridge.click(90)
     bridge.click(90)
     assert not (ctx.game_dir / "automodpack/client/preservation/packaaa/claims.json").exists()
@@ -473,14 +463,10 @@ def test_release_gate_flow(make_ctx, flow_verbs):
 
     assert all(r["ok"] for r in results), [r for r in results if not r["ok"]]
     assert ctx.bridge.exited
-    assert ctx.vars.get("fake_server_history_compacted") == {
-        "receipt": "fake-only",
-        "runtimeAuthority": "Docker runner",
-    }
     assert ctx.vars["fake_server_generation_rollback"] == {
         "receipt": "fake-only",
         "runtimeAuthority": "Docker runner",
-        "command": ["rcon-cli", "automodpack", "generate", "revert", "<ancestor>", "confirm", "notes", "Release gate rollback: restore the retained ancestor."],
+        "command": ["rcon-cli", "automodpack", "generate", "revert", "<seq>", "confirm", "notes", "Release gate rollback: restore the retained ancestor."],
         "notes": "Release gate rollback: restore the retained ancestor.",
     }
     assert ctx.vars["fake_server_object_gc"]["command"] == ["rcon-cli", "automodpack", "generate", "storage", "collect", "confirm"]

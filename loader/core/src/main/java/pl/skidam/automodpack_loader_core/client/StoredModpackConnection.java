@@ -1,21 +1,15 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
-import pl.skidam.automodpack_core.modpack.generation.CatalogueSnapshot;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
-import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
 /** Owns one authenticated transfer session opened from a stored per-modpack route. */
@@ -23,42 +17,45 @@ public final class StoredModpackConnection implements AutoCloseable {
 	private final String modpackId;
 	private final ConnectionJsons.ConnectionInfo connection;
 	private final Secrets.Secret secret;
-	private final GenerationRecord advertisedRecord;
-	private final GenerationHistoryIndex advertisedHistoryIndex;
-	private final ClientStorage storage;
+	private final GenerationJsons.HeadDocumentFields advertisedDocument;
 	private DownloadClient client;
 
-	private StoredModpackConnection(String modpackId, ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, GenerationRecord advertisedRecord,
-			GenerationHistoryIndex advertisedHistoryIndex, ClientStorage storage, DownloadClient client) {
+	private StoredModpackConnection(String modpackId, ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, GenerationJsons.HeadDocumentFields advertisedDocument,
+			DownloadClient client) {
 		this.modpackId = modpackId;
 		this.connection = connection;
 		this.secret = secret;
-		this.advertisedRecord = advertisedRecord;
-		this.advertisedHistoryIndex = advertisedHistoryIndex;
-		this.storage = storage;
+		this.advertisedDocument = advertisedDocument;
 		this.client = client;
 	}
 
-	public static StoredModpackConnection open(ClientStorage storage, String modpackId, boolean allowAskingUser) throws Exception {
+	/** A stored connection seeded with its exact certificate pin and the client secret for its origin. */
+	public record Seeded(ConnectionJsons.ConnectionInfo connection, Secrets.Secret secret, boolean anonymousSecret) {}
+
+	/** Loads the stored connection route and seeds its fingerprint-checked connection and secret; null when no complete connection is stored. */
+	public static Seeded seed(ClientStorage storage, String modpackId) throws IOException {
 		ConnectionJsons.ConnectionInfo stored = ConnectionStore.getConnection(storage, modpackId);
-		if (stored == null || stored.connectionMode == null || stored.origin == null || stored.endpoint == null)
-			throw new IOException("Saved modpack connection is unavailable");
+		if (stored == null || stored.connectionMode == null || stored.origin == null || stored.endpoint == null) return null;
 		ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(stored.origin, stored.endpoint, stored.connectionMode,
 				CertificateTrustStore.getFingerprint(stored.origin), null);
+		stored.approvedOrigins().forEach(connection::approveOrigin);
 		Secrets.Secret secret = SecretsStore.getClientSecret(storage, modpackId, stored.origin);
-		if (secret == null) secret = Secrets.anonymousSecret();
+		return new Seeded(connection, secret == null ? Secrets.anonymousSecret() : secret, secret == null);
+	}
+
+	public static StoredModpackConnection open(ClientStorage storage, String modpackId, boolean allowAskingUser) throws Exception {
+		Seeded seeded = seed(storage, modpackId);
+		if (seeded == null) throw new IOException("Saved modpack connection is unavailable");
+		ConnectionJsons.ConnectionInfo connection = seeded.connection();
+		Secrets.Secret secret = seeded.secret();
 		ModpackUtils.ManifestFetchResult result = ModpackUtils.requestServerModpackContent(storage, connection, secret, allowAskingUser);
 		if (!result.successful())
 			throw new IOException(result.failure() == null ? "Could not fetch the latest modpack generation" : result.failure().getMessage(), result.failure());
 		DownloadClient client = result.client();
 		try {
-			GenerationRecord advertisedRecord = GenerationRecord.fromFields(result.content());
-			if (!modpackId.equals(advertisedRecord.manifest().modpackId())) throw new IOException("Connected modpack identity does not match the installed pack");
-			if (result.content().generationHistory == null) throw new IOException("Server generation history is unavailable");
-			GenerationHistoryIndex historyIndex = GenerationHistoryIndex.fromFields(result.content().generationHistory);
-			if (!advertisedRecord.metadata().generationId().equals(historyIndex.currentGenerationId()))
-				throw new IOException("Server generation history does not describe the advertised generation");
-			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, advertisedRecord, historyIndex, storage, client);
+			PackDocument advertised = PackDocument.fromFields(result.content());
+			if (!modpackId.equals(advertised.manifest().modpackId())) throw new IOException("Connected modpack identity does not match the installed pack");
+			StoredModpackConnection session = new StoredModpackConnection(modpackId, connection, secret, result.content(), client);
 			client = null;
 			return session;
 		} finally {
@@ -66,30 +63,9 @@ public final class StoredModpackConnection implements AutoCloseable {
 		}
 	}
 
-	public GenerationRecord advertisedRecord() {
-		return advertisedRecord;
-	}
-
-	public GenerationHistoryIndex advertisedHistoryIndex() {
-		return advertisedHistoryIndex;
-	}
-
-	/** Downloads and validates one historical catalogue through this authenticated session. */
-	public CompletableFuture<CatalogueSnapshot> downloadHistoricalCatalogue(GenerationHistoryIndex.Entry entry) {
-		Objects.requireNonNull(entry, "history entry");
-		DownloadClient currentClient;
-		synchronized (this) {
-			if (client == null) return CompletableFuture.failedFuture(new IOException("Stored modpack transfer session was already consumed"));
-			currentClient = client;
-		}
-		Path destination = storage.helperDirectory().resolve("history-catalogue-" + entry.stateDigest() + ".json").normalize();
-		if (!destination.startsWith(storage.helperDirectory())) return CompletableFuture.failedFuture(new IOException("Historical catalogue path escaped client storage"));
-		try {
-			Files.createDirectories(storage.helperDirectory());
-		} catch (IOException e) {
-			return CompletableFuture.failedFuture(e);
-		}
-		return new ClientGenerationStore(storage).downloadHistoricalCatalogue(currentClient, entry, destination, null);
+	/** Returns the complete head document validated when this session was opened. */
+	public GenerationJsons.HeadDocumentFields advertisedFields() {
+		return advertisedDocument;
 	}
 
 	/** Transfers this session's client ownership to an updater. This connection becomes empty. */

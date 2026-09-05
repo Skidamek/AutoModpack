@@ -1,0 +1,230 @@
+id: history-compaction
+description: |
+  Manually compacting the local history from the storage maintenance screen:
+  the cleanup reclaims the older generation's bytes, the content history stops
+  offering a restore for it, and the active head generation keeps working,
+  syncing, and updating afterwards.
+renderClient: true
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - use: restart_client
+  - use: rejoin
+  - do: publish_server_generation
+    name: publish a changed generation with new patch notes
+    generation: 1
+  - do: disconnect
+    name: leave the game for the published update
+  - do: connect
+    name: connect to the published generation
+  - do: wait_for
+    name: show the published generation review
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: accept the published generation
+    select: { text: Update }
+  - do: wait_file_content
+    name: wait for the changed file
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
+    timeout: 300s
+  - do: wait_generation
+    name: wait for the committed head generation
+    patchNotes: "Update 2: changed alpha and added delta."
+    timeout: 300s
+  - do: wait_for
+    name: wait for the post-update restart
+    timeout: 60s
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart onto the head generation
+    select: { text: "Yes, close the game" }
+    timeout: 20s
+  - do: wait_client_exit
+    name: wait for the head restart to exit
+  - do: launch_client
+    name: relaunch the head client without the server
+  - do: wait_bridge
+    name: wait for the offline bridge
+  - use: open_multiplayer
+  - use: open_pack_manager
+  - do: click
+    name: open client local storage maintenance
+    select: { text: Local storage }
+  - do: wait_for
+    name: wait for client local storage maintenance
+    timeout: 120s
+    until:
+      all:
+        - screen: ClientStorageMaintenanceScreen
+        - element: { text: Clean local storage, enabled: true }
+  - do: screenshot
+    name: capture client local storage before the compaction
+    file: compaction-storage-before
+  - do: click
+    name: compact the local history
+    select: { text: Clean local storage }
+  - do: wait_for
+    name: wait for the compaction to complete
+    timeout: 120s
+    until:
+      all:
+        - screen: ClientStorageMaintenanceScreen
+        - element: { text: Clean local storage, enabled: true }
+  - do: screenshot
+    name: capture the compaction receipt and reclaimed space
+    file: compaction-storage-after
+  - do: click
+    name: leave client local storage maintenance
+    select: { text: Back }
+  - do: wait_for
+    name: return to the installed pack list after the compaction
+    timeout: 20s
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: amp-autotest, enabled: true }
+  - do: click
+    name: open the pack details
+    select: { text: amp-autotest }
+  - do: wait_for
+    name: show the history action on the pack details
+    timeout: 20s
+    until:
+      all:
+        - screen: ModpackDetailsScreen
+        - element: { text: History, enabled: true }
+  - do: click
+    name: open the content history
+    select: { text: History }
+  - do: wait_for
+    name: show the content history with both generations
+    timeout: 20s
+    until: { screen: ContentHistoryScreen }
+  - do: click
+    name: open the compacted older generation entry
+    select: { text: "Initial release: core content." }
+  - do: wait_for
+    name: show the older entry without a restore affordance
+    timeout: 20s
+    until: { screen: ChangeBrowserScreen }
+  - do: assert
+    name: verify the compacted generation offers no restore
+    that: { no_element: { key: automodpack.history.restore, enabled: true } }
+  - do: screenshot
+    name: capture the compacted entry detail
+    file: compaction-entry-detail
+  - do: click
+    name: return to the content history
+    select: { text: Back }
+  - do: wait_for
+    name: show the content history again
+    timeout: 20s
+    until: { screen: ContentHistoryScreen }
+  - do: quit
+    name: quit the client to rejoin the compacted pack
+  - do: wait_client_exit
+    name: wait for the client to exit
+  - do: launch_client
+    name: relaunch the compacted client
+  - do: wait_bridge
+    name: wait for the compacted client bridge
+  - do: connect
+    name: join the server with the compacted history
+  - do: wait_join
+    name: verify the pack still works after the compaction
+  - do: assert_file_content
+    name: verify the projection kept the head generation content
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
+  - do: assert_file_content
+    name: verify the live game directory kept the head generation content
+    path: "config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v2\n"
+  - do: disconnect
+    name: leave the game for the post-compaction update
+  - do: publish_server_generation
+    name: publish another generation after the compaction
+    generation: 2
+  - do: connect
+    name: connect to the newly published generation
+  - do: wait_for
+    name: show the post-compaction update review
+    timeout: 90s
+    until:
+      all:
+        - screen: UpdatePreviewScreen
+        - element: { text: Update, enabled: true }
+  - do: click
+    name: accept the post-compaction update
+    select: { text: Update }
+  - do: wait_file_content
+    name: wait for the newly published file
+    path: "${active_dir}/config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v3\n"
+    timeout: 300s
+  - do: wait_generation
+    name: wait for the committed post-compaction generation
+    patchNotes: "Update 3: changed alpha again."
+    timeout: 300s
+  - do: wait_for
+    name: wait for the post-update restart
+    timeout: 60s
+    until: { screen: RestartScreen }
+  - do: click
+    name: restart onto the new head generation
+    select: { text: "Yes, close the game" }
+    timeout: 20s
+  - do: wait_client_exit
+    name: wait for the new head restart to exit
+  - do: launch_client
+    name: relaunch the updated client
+  - do: wait_bridge
+    name: wait for the updated client bridge
+  - do: connect
+    name: join the server on the post-compaction generation
+  - do: wait_join
+    name: verify the updated pack still works
+  - do: assert_file_content
+    name: verify the live game directory runs the newest generation
+    path: "config/amp-autotest-alpha.txt"
+    content: "amp-autotest-alpha-v3\n"
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    modrinth:
+      projects:
+        - ferrite-core?
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  generations:
+    - patchNotes: "Initial release: core content."
+      files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":42}' }
+        - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+    - patchNotes: "Update 2: changed alpha and added delta."
+      files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v2\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":43}' }
+        - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { path: config/amp-autotest-delta.txt, content: "delta-v2\n" }
+    - patchNotes: "Update 3: changed alpha again."
+      files:
+        - { path: config/amp-autotest-alpha.txt, content: "amp-autotest-alpha-v3\n" }
+        - { path: config/amp-autotest-beta.json, content: '{"id":"beta","value":43}' }
+        - { path: config/amp-autotest-gamma.cfg, content: "alpha=true\nbeta=false\n" }
+        - { path: config/amp-autotest-delta.txt, content: "delta-v2\n" }

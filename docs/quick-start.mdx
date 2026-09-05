@@ -32,7 +32,7 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 
 ### Server Config File
 
-**Location:** `~/automodpack/automodpack-server.json`
+**Location:** `~/automodpack/server-config.json`
 
 **Example Configuration:**
 ```json
@@ -49,7 +49,6 @@ Restart your game. Your server's modpack should now be loaded, and you should be
   "allowEditsInFiles": [
     "/options.txt"
   ],
-  "overwriteEditableFiles": [],
   "autoExcludeServerSideMods": true,
   "requireAutoModpackOnClient": true
 }
@@ -58,7 +57,7 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 **Key Configuration Options:**
 
 - **`syncedFiles`**: List of files and folders to sync to clients. Use `*` for wildcards and `**` for recursive matching. Prefix with `!` to exclude
-- **`allowEditsInFiles`**: Files that clients can edit locally. These files are downloaded once and not updated automatically
+- **`allowEditsInFiles`**: Files that clients can edit locally. Local edits are preserved until the server version of the file changes
   - **Example:** To always update FancyMenu configs, remove `/config/**` from `allowEditsInFiles`
   - **⚠️ Warning:** Removing `/config/**` will make ALL config files non-editable. If you only want specific config folders to be always updated, use exclusions instead:
     ```json
@@ -70,7 +69,6 @@ Restart your game. Your server's modpack should now be loaded, and you should be
       "!/config/fancymenu/**"
     ]
     ```
-- **`overwriteEditableFiles`**: Editable files to overwrite once when their server version changes. These paths must also match `allowEditsInFiles`; otherwise they have no effect
 - **Other options**: See the [full configuration page](configuration/server-config) for detailed explanations of all settings
 
 ### Splitting Mods for Server and Client
@@ -103,8 +101,7 @@ After installation, restart Minecraft to load the modpack.
 
 ## Maintaining Updates
 
-- Files listed in `allowEditsInFiles` are only downloaded once and not updated. Use this for files that players should be able to customize
-- Files listed in both `allowEditsInFiles` and `overwriteEditableFiles` keep local edits until the server changes its version, then are overwritten with that new version
+- Files listed in `allowEditsInFiles` keep player edits until the server version of the file changes; then the edited copy is saved to the player's "Preserved files" and the new server version is applied once. Use this for files that players should be able to customize, and never change them server-side if the edits must never be replaced
 - For files that must always be in sync (e.g., specific configs), ensure they are in `syncedFiles` and not in `allowEditsInFiles`
 
 **Example for FancyMenu configs:**
@@ -124,13 +121,10 @@ This ensures FancyMenu configs are always updated, while players can still edit 
 ```json
 "allowEditsInFiles": [
   "/config/**"
-],
-"overwriteEditableFiles": [
-  "/config/fancymenu/**"
 ]
 ```
 
-Players can edit these FancyMenu files normally. AutoModpack overwrites them only after the server changes the file's content; local changes alone never trigger an update.
+Players can edit these config files normally. When you change one of them on the server, the player's edited copy is saved to their "Preserved files" and the new server version is applied once; local changes alone never trigger an update.
 
 ---
 

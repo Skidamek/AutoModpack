@@ -40,10 +40,11 @@ public class LoaderManager implements LoaderManagerService {
 
 	@Override
 	public EnvironmentType getEnvironmentType() {
-		// FMLLoader.getCurrent().getDist() is unreliable during preload (see
-		// EarlyServiceBootstrapper) - prefer the dist captured from --launchTarget on the command
-		// line when it's available.
-		if (EarlyServiceBootstrapper.EARLY_IS_CLIENT != null) {
+		// At mod-construction time the loader-native dist is authoritative: the --launchTarget
+		// heuristic exists only for preload, where FMLLoader's dist isn't populated yet (see
+		// EarlyServiceBootstrapper). Trusting the heuristic past preload let a stale or misparsed
+		// launchTarget report CLIENT on a real dedicated server and crash mod construction.
+		if (preload && EarlyServiceBootstrapper.EARLY_IS_CLIENT != null) {
 			return EarlyServiceBootstrapper.EARLY_IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
 		}
 		if (FMLLoader.getCurrent().getDist() == Dist.CLIENT) {

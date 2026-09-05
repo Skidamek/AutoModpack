@@ -135,6 +135,7 @@ afterEvaluate {
 			endWithNewline()
 		}
 	}
+	tasks.named("spotlessApply") { dependsOn("fixFullyQualifiedNames") }
 }
 
 val availableTargets = stonecutter.versions.map { it.project }.sorted()
@@ -208,8 +209,91 @@ tasks.register("formatApply") {
 	dependsOn("spotlessApply")
 }
 
+// Fully qualified names (e.g. `pl.skidam.automodpack_core.config.ConfigTools` or `java.util.ArrayList` used inline) bypass the import order and rot silently when packages move, so they are banned: use a proper import instead. Spotless has no built-in "FQN to import" step, so formatApply rewrites the roots that are identical on every Minecraft target (own code plus stdlib) and formatCheck fails on anything left. Loader and Minecraft packages (net.*, com.mojang, ...) and stonecutter template files (`/*?` markers) are intentionally out of scope for the rewrite: an unconditional import can break another target, so those need a human and a stonecutter-guarded import. The masking lexer and rewrite rules live in buildSrc (FqnImports.kt) so they stay unit-testable.
+tasks.register("fixFullyQualifiedNames") {
+	group = "formatting"
+	description = "Rewrites fully qualified names (own code plus stdlib) to imports; runs before spotlessApply."
+	doLast {
+		var fixed = 0
+		for (root in listOf("src/main/java", "core/src", "loader")) {
+			fileTree(root) { include("**/*.java") }.visit {
+				if (isDirectory) return@visit
+				if (path.contains("/versions/")) return@visit
+				val text = file.readText()
+				if (text.contains("/*?")) return@visit // Stonecutter template: needs a human and a guarded import.
+				val rewritten = fixFullyQualifiedNames(text)
+				if (rewritten != text) {
+					file.writeText(rewritten)
+					fixed++
+					logger.lifecycle("Replaced fully qualified names in $path")
+				}
+			}
+		}
+		if (fixed > 0) logger.lifecycle("Replaced fully qualified names in $fixed files")
+	}
+}
+
 tasks.register("formatCheck") {
 	group = "verification"
 	description = "Checks formatting without changing files."
 	dependsOn("spotlessCheck")
+	dependsOn("checkNoFullyQualifiedNames")
+}
+
+tasks.register("checkNoFullyQualifiedNames") {
+	group = "verification"
+	description = "Fails on fully qualified names in Java sources; use imports instead."
+	doLast {
+		val violations = mutableListOf<String>()
+		for (root in listOf("src/main/java", "core/src", "loader")) {
+			fileTree(root) { include("**/*.java") }.visit {
+				if (isDirectory) return@visit
+				if (path.contains("/versions/")) return@visit
+				for (hit in findFullyQualifiedNames(file.readText())) violations.add("$path:$hit")
+			}
+		}
+		if (violations.isNotEmpty()) {
+			throw GradleException(
+				"Fully qualified names must be replaced with imports (loader/Minecraft ones need a stonecutter-guarded import):\n" + violations.sorted().joinToString("\n"),
+			)
+		}
+	}
+}
+
+// The Windows native ships as a committed binary plus a receipt (core/src/main/c/natives-receipt.txt) naming the exact sources and DLL it was built from. Cross-toolchain builds are not byte-identical, so this check validates the receipt with no mingw needed; CI additionally compiles the C with mingw to prove the sources build.
+tasks.register("checkWinNatives") {
+	group = "verification"
+	description = "Fails when the committed Windows native is stale relative to its receipt in core/src/main/c."
+	doLast {
+		val receipt = file("core/src/main/c/natives-receipt.txt")
+		if (!receipt.isFile) {
+			throw GradleException(
+				"Missing $receipt; run core/src/main/c/rebuild-windows-natives.sh (needs mingw-w64 and JAVA_HOME) and commit the refreshed DLL and receipt",
+			)
+		}
+		val digest = java.security.MessageDigest.getInstance("SHA-256")
+
+		fun sha256(file: File): String = digest.digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+		val violations = mutableListOf<String>()
+		for (line in receipt.readLines()) {
+			if (line.isBlank() || line.startsWith("#")) continue
+			val parts = line.split(Regex("\\s+"), limit = 2)
+			if (parts.size != 2) {
+				violations.add("Unreadable receipt line: $line")
+				continue
+			}
+			val named = file(parts[1].removePrefix("*"))
+			if (!named.isFile) {
+				violations.add("The receipt names a missing file: ${parts[1]}")
+				continue
+			}
+			if (sha256(named) != parts[0]) violations.add("${parts[1]} does not match the receipt; the committed native is stale")
+		}
+		if (violations.isNotEmpty()) {
+			throw GradleException(
+				"The committed Windows native is stale relative to core/src/main/c/natives-receipt.txt:\n" + violations.sorted().joinToString("\n") +
+					"\nRun core/src/main/c/rebuild-windows-natives.sh (needs mingw-w64 and JAVA_HOME) and commit the refreshed DLL and receipt",
+			)
+		}
+	}
 }

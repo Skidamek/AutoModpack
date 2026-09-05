@@ -2,19 +2,19 @@ id: all
 description: |
   The release gate: exercise secure bootstrap authentication, advanced group
   review, patch-note history, cached pack switching, and a published
-  changed/removed generation, server rollback, history compaction, and server
-  object collection in one flow. The focused scenarios remain
+  changed/removed generation, server rollback, and server object collection in
+  one flow. The focused scenarios remain
   available for faster diagnosis; this is the default confidence path.
 renderClient: true
 
 # Run the complete release gate independently through each supported opening.
-# DIRECT uses a dedicated listener while MAGIC_PACKET shares the Minecraft
+# DIRECT uses a dedicated listener while MAGIC shares the Minecraft
 # listener and HOLEPUNCH takes over the marked Login stream.
 connectionPaths:
   - mode: DIRECT
     bindPort: 25566
     endpointPort: 25566
-  - mode: MAGIC_PACKET
+  - mode: MAGIC
     bindPort: -1
     endpointPort: 25565
   - mode: HOLEPUNCH
@@ -32,7 +32,6 @@ releaseGate:
     - conflict-preservation
     - preservation-vault
     - storage-maintenance
-    - server-history-compaction
     - server-generation-rollback
     - server-object-gc
     - fresh-generation-deletion
@@ -67,59 +66,37 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: FirstConnectScreen
+        - screen: PackConfirmScreen
         - no_element: { text: verify }
   - do: click
     name: open advanced group selection
-    select: { text: customize groups }
+    select: { text: Customize }
   - do: wait_for
-    name: show the first paginated group-selection page
+    name: show the group-selection list without pagination
     until:
       all:
         - screen: ModpackSelectionScreen
         - element: { text: Core }
-        - element: { text: "< Prev", enabled: false }
-        - element: { text: "Next >", enabled: true }
-  - do: screenshot
-    name: capture the first group-selection page at the supported 320x240 logical size
-    file: all-groups-page-one
-  - do: click
-    name: open the optional feature page
-    select: { text: "Next >" }
-  - do: click
-    name: open the platform and visual feature page
-    select: { text: Next > }
-  - do: wait_for
-    name: show the optional feature pages
-    until:
-      all:
         - element: { text: Visuals }
         - element: { text: "Category: Visuals" }
         - element: { text: Windows-only }
+        - no_element: { text: "Next >" }
+  - do: screenshot
+    name: capture the group-selection list at the supported 320x240 logical size
+    file: all-groups-page-one
   - do: click
-    name: select the visual category
-    select: { text: "Category: Visuals" }
-  - do: click
-    name: return to the optional feature page
-    select: { text: "< Prev" }
+    name: select the visual category unless its defaults already carry it
+    select: { text: "Category: Visuals", checked: false }
+    when: { element: { text: "Category: Visuals", checked: false } }
   - do: click
     name: select a group with a dependency
-    select: { text: Addon }
-  - do: wait_for
-    name: return to the visual page to inspect the dependency
-    until: { element: { text: "Next >", enabled: true } }
-  - do: click
-    name: inspect the dependency selected by Addon
-    select: { text: "Next >" }
+    select: { text: "Addon (" }
   - do: wait_for
     name: show the dependency explanation
-    until: { element: { text: "[+] Visuals (required by Addon)" } }
-  - do: click
-    name: return to dependency and conflict groups
-    select: { text: "< Prev" }
+    until: { element: { text: "Visuals (", checked: true } }
   - do: click
     name: select the conflicting alternative
-    select: { text: Alternative }
+    select: { text: "Alternative (" }
   - do: wait_for
     name: show the conflict explanation
     until:
@@ -132,15 +109,11 @@ flow:
   - do: click
     name: keep the alternative and replace the conflicting visual choice
     select: { text: "Use Alternative" }
-  - do: click
-    name: inspect unavailable platform filtering
-    select: { text: Next > }
   - do: wait_for
     name: show the unavailable platform group
     until:
       all:
-        - element: { text: Windows-only }
-        - element: { text: unavailable }
+        - element: { text: "Windows-only (", enabled: false }
   - do: screenshot
     name: capture unavailable and conflict group states
     file: all-groups-platform
@@ -149,33 +122,45 @@ flow:
     select: { text: Defaults }
   - do: click
     name: preview the default target
-    select: { text: preview target }
+    select: { text: continue }
   - do: wait_for
-    name: show the first update preview
+    name: show the first unverified write confirm
     timeout: 90s
     until:
       all:
-        - screen: UpdatePreviewScreen
-        - element: { text: Update, enabled: true }
-        - element: { text: View all patch notes, enabled: true }
+        - screen: PackConfirmScreen
+        - element: { text: History, enabled: true }
+  - do: wait_for
+    name: wait for the unverified ack checkbox after the lock
+    timeout: 20s
+    until:
+      element: { key: automodpack.confirm.ack, enabled: true }
+  - do: click
+    name: acknowledge unverified risk before update
+    select: { key: automodpack.confirm.ack }
+  - do: wait_for
+    name: unlock update after acknowledgement
+    timeout: 20s
+    until:
+      element: { text: Download, enabled: true }
   - do: screenshot
     name: capture first review with latest patch notes
     file: all-first-review
   - do: click
-    name: open connected generation patch-note history from review
-    select: { text: View all patch notes }
+    name: open the connected content history from review
+    select: { text: History }
   - do: wait_for
-    name: show patch-note history from review
-    until: { screen: PatchNotesHistoryScreen }
+    name: show the connected content history with attached patch notes
+    until: { screen: ContentHistoryScreen }
   - do: screenshot
-    name: capture connected patch-note history
+    name: capture the connected content history
     file: all-first-patch-history
   - do: click
     name: return to first review
     select: { text: Back }
   - do: click
     name: accept the complete bootstrap
-    select: { text: Update }
+    select: { text: Download }
   - do: wait_file
     name: wait for the projected modpack marker
     path: "${active_dir}/${marker}"
@@ -211,17 +196,20 @@ flow:
     name: capture connected generation history
     file: all-connected-history
   - do: click
-    name: open all connected patch notes
-    select: { text: View all patch notes }
+    name: open the connected content history from the changelog
+    select: { text: History }
   - do: wait_for
-    name: show all connected patch notes
-    until: { screen: PatchNotesHistoryScreen }
+    name: show the connected content history
+    until: { screen: ContentHistoryScreen }
   - do: screenshot
-    name: capture all connected patch notes
+    name: capture the connected content history
     file: all-connected-patch-history
   - do: click
     name: return to connected changelog
     select: { text: Back }
+  - do: wait_for
+    name: show the changelog after returning from history
+    until: { screen: ChangelogScreen }
   - do: click
     name: return to completed update
     select: { text: Back }
@@ -281,7 +269,7 @@ flow:
       all:
         - element: { text: Pack A }
         - element: { text: Pack B }
-        - element: { text: active }
+        - element: { text: server }
   - do: click
     name: open Pack B for review only
     select: { text: Pack B }
@@ -291,21 +279,33 @@ flow:
       all:
         - screen: ModpackDetailsScreen
         - element: { text: Activate, enabled: true }
+  - do: screenshot
+    name: capture the installed pack details
+    file: all-pack-details
   - do: click
     name: review the A to B cached switch
     select: { text: Activate }
   - do: wait_for
-    name: show cached switch preview
+    name: show the A to B unverified switch confirm
+    timeout: 90s
     until:
       all:
-        - screen: UpdatePreviewScreen
-        - element: { text: Update, enabled: true }
+        - screen: PackConfirmScreen
+        - element: { key: automodpack.confirm.ack, enabled: true }
   - do: screenshot
     name: capture A to B switch review
     file: all-switch-a-to-b
   - do: click
+    name: acknowledge unverified risk for the A to B switch
+    select: { key: automodpack.confirm.ack }
+  - do: wait_for
+    name: unlock the A to B switch after acknowledgement
+    timeout: 20s
+    until:
+      element: { key: automodpack.update.apply, enabled: true }
+  - do: click
     name: accept the A to B switch
-    select: { text: Update }
+    select: { key: automodpack.update.apply }
   - do: wait_for
     name: wait for A to B restart
     until: { screen: RestartScreen }
@@ -372,10 +372,13 @@ flow:
     until:
       all:
         - screen: OfflineRepairScreen
-        - element: { text: "[ ] Keep 1 unowned mods", enabled: true }
+        - element: { text: "Keep 1 existing mod files", enabled: true }
+  - do: screenshot
+    name: capture the offline repair review
+    file: all-offline-repair
   - do: click
     name: cancel the healthy repair review
-    select: { text: Cancel }
+    select: { text: Back }
   - do: wait_for
     name: return from repair without leaving Pack B details stale
     until:
@@ -383,14 +386,23 @@ flow:
         - screen: ModpackDetailsScreen
         - element: { text: Repair, enabled: true }
   - do: click
-    name: open Pack B storage from the same details screen
-    select: { text: Storage }
+    name: return to the installed pack list before preserved files
+    select: { text: Back }
+  - do: wait_for
+    name: show preserved files on the installed pack list
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Preserved files }
+  - do: screenshot
+    name: capture the installed pack list
+    file: all-installed-packs
   - do: click
-    name: open the owned conflict in the preservation vault
+    name: open the owned conflict in preserved files from the pack list
     select: { text: Preserved files }
   - do: click
     name: select the still-owned local conflict
-    select: { text: mods/amp-autotest-conflict.jar }
+    select: { text: amp-autotest-conflict.jar }
   - do: click
     name: attempt an unsafe restore without overwriting the active pack
     select: { text: Restore }
@@ -398,6 +410,9 @@ flow:
     name: show the unsafe restore as a recoverable error
     timeout: 30s
     until: { screen: ErrorScreen }
+  - do: screenshot
+    name: capture the recoverable error screen
+    file: all-error-recoverable
   - do: click
     name: copy the unsafe restore diagnostics
     select: { text: Copy details }
@@ -405,55 +420,24 @@ flow:
     name: return to the same preservation selection
     select: { text: Back }
   - do: wait_for
-    name: offer save-copy fallback after the unsafe restore
+    name: keep the owned conflict in preserved files after the unsafe restore
     until:
       all:
         - screen: PreservationVaultScreen
+        - element: { text: amp-autotest-conflict.jar, enabled: true }
         - element: { text: Save copy, enabled: true }
-  - do: click
-    name: save the owned conflict without touching its original path
-    select: { text: Save copy }
-  - do: wait_for
-    name: retain the claim after saving a copy
-    until:
-      all:
-        - screen: PreservationVaultScreen
-        - element: { text: mods/amp-autotest-conflict.jar, enabled: true }
-  - do: assert_preservation_claim
-    name: verify save-copy status stayed durable
-    packId: packbbb
-    fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
-    status: SAVED_COPY
-  - do: click
-    name: select the saved conflict for delete-confirmation testing
-    select: { text: mods/amp-autotest-conflict.jar }
-  - do: click
-    name: arm preservation deletion without deleting yet
-    select: { text: Delete from vault }
-  - do: wait_for
-    name: require a second explicit delete click
-    until: { element: { text: Confirm deletion, enabled: true } }
-  - do: click
-    name: cancel pending deletion by selecting the claim again
-    select: { text: mods/amp-autotest-conflict.jar }
-  - do: wait_for
-    name: restore the non-destructive vault action state
-    until: { element: { text: Delete from vault, enabled: true } }
   - do: click
     name: leave the preservation vault
     select: { text: Back }
-  - do: click
-    name: leave Pack B storage
-    select: { text: Back }
-  - do: click
-    name: leave Pack B details
-    select: { text: Back }
+  - do: wait_for
+    name: return to the installed pack list from the vault
+    until: { screen: InstalledModpacksScreen }
   - do: click
     name: leave the installed pack manager
     select: { text: Back }
-  - do: click
+  - do: wait_for
     name: return to multiplayer after repair navigation
-    select: { text: Back }
+    until: { screen: Play Multiplayer }
   - do: disconnect
     name: reset to the title screen after the repair navigation cycle
   - do: write_file
@@ -483,14 +467,26 @@ flow:
     name: review the B to A cached switch
     select: { text: Activate }
   - do: wait_for
-    name: show reverse cached switch preview
-    until: { element: { text: Update, enabled: true } }
+    name: show the B to A unverified switch confirm
+    timeout: 90s
+    until:
+      all:
+        - screen: PackConfirmScreen
+        - element: { key: automodpack.confirm.ack, enabled: true }
   - do: screenshot
     name: capture B to A switch review
     file: all-switch-b-to-a
   - do: click
+    name: acknowledge unverified risk for the B to A switch
+    select: { key: automodpack.confirm.ack }
+  - do: wait_for
+    name: unlock the B to A switch after acknowledgement
+    timeout: 20s
+    until:
+      element: { key: automodpack.update.apply, enabled: true }
+  - do: click
     name: accept the B to A switch
-    select: { text: Update }
+    select: { key: automodpack.update.apply }
   - do: wait_for
     name: wait for B to A restart
     until: { screen: RestartScreen }
@@ -573,12 +569,20 @@ flow:
     name: open Pack B v2 settings directly from multiplayer
     select: { text: Modpack settings }
   - do: wait_for
-    name: show Pack B preservation action
+    name: show the installed pack list from multiplayer
     until:
       all:
-        - screen: ModpackSelectionScreen
+        - screen: InstalledModpacksScreen
+        - element: { text: Pack B, enabled: true }
+  - do: click
+    name: open Pack B v2 details
+    select: { text: Pack B }
+  - do: wait_for
+    name: show Pack B history action
+    until:
+      all:
+        - screen: ModpackDetailsScreen
         - element: { text: History, enabled: true }
-        - element: { text: Preserved files, enabled: true }
   - do: click
     name: open Pack B generation history from multiplayer settings
     select: { text: History }
@@ -589,32 +593,52 @@ flow:
     name: capture Pack B generation history
     file: all-content-history
   - do: click
-    name: open all Pack B patch notes from content history
-    select: { text: Patch notes }
+    name: open the newest Pack B entry from content history
+    select: { text: Pack B v2 removes the incompatible mod }
   - do: wait_for
-    name: show all Pack B patch notes
-    until: { screen: PatchNotesHistoryScreen }
+    name: show the newest Pack B entry detail browser
+    until: { screen: ChangeBrowserScreen }
+  - do: screenshot
+    name: capture the Pack B entry detail
+    file: all-content-history-detail
   - do: click
-    name: return to Pack B content history
+    name: return to Pack B content history from the entry detail
     select: { text: Back }
   - do: wait_for
-    name: return to Pack B content history after all notes
+    name: return to Pack B content history after the entry detail
     until: { screen: ContentHistoryScreen }
   - do: click
     name: leave Pack B content history
     select: { text: Back }
   - do: wait_for
-    name: return to Pack B settings after history
-    until: { screen: ModpackSelectionScreen }
+    name: return to Pack B details after history
+    until: { screen: ModpackDetailsScreen }
+  - do: click
+    name: return to the installed pack list before preserved files restore
+    select: { text: Back }
+  - do: wait_for
+    name: show preserved files on the pack list after history
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Preserved files }
   - do: screenshot
     name: capture Pack B preservation action
     file: all-preservation-settings
   - do: click
     name: open the preservation archive
     select: { text: Preserved files }
+  # The vault is a scrolling vanilla list; the bridge scrolls a clicked row into view,
+  # so no page turns are needed to reach older claims.
+  - do: wait_for
+    name: show the preserved local conflict in the vault
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - element: { text: amp-autotest-conflict.jar, enabled: true }
   - do: click
     name: select the preserved local conflict
-    select: { text: mods/amp-autotest-conflict.jar }
+    select: { text: amp-autotest-conflict.jar }
   - do: wait_for
     name: show the safe preservation restore action
     until:
@@ -627,6 +651,13 @@ flow:
   - do: click
     name: restore the no-longer-owned local conflict
     select: { text: Restore }
+  - do: wait_for
+    name: show the restored path and drop the claim from the list
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - element: { text: Restored to mods/amp-autotest-conflict.jar }
+        - no_element: { text: amp-autotest-conflict.jar, enabled: true }
   - do: wait_file
     name: wait for the restored local mod
     path: mods/amp-autotest-conflict.jar
@@ -635,18 +666,19 @@ flow:
     path: mods/amp-autotest-conflict.jar
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
   - do: assert_preservation_claim
-    name: verify the restored preservation claim remains durable in the vault
+    name: verify restore released the preservation claim
     packId: packbbb
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
+    present: false
   - do: click
-    name: return from preservation to Pack B settings
+    name: return from preservation to the installed pack list
     select: { text: Back }
   - do: wait_for
-    name: return to Pack B settings after restore
-    until: { screen: ModpackSelectionScreen }
-  - do: click
-    name: return to the installed pack manager
-    select: { text: Pack manager }
+    name: return to the installed pack list after restore
+    until:
+      all:
+        - screen: InstalledModpacksScreen
+        - element: { text: Pack A, enabled: true }
   - do: click
     name: open client local storage maintenance
     select: { text: Local storage }
@@ -681,9 +713,10 @@ flow:
     path: mods/amp-autotest-conflict.jar
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
   - do: assert_preservation_claim
-    name: verify cleanup retained the durable preservation claim
+    name: verify cleanup did not recreate the consumed preservation claim
     packId: packbbb
     fixture: { modId: amp_autotest_conflict, version: "1.0.0-local", marker: local }
+    present: false
   - do: screenshot
     name: capture client local storage after cleanup
     file: all-local-storage-after
@@ -703,11 +736,23 @@ flow:
     name: review the Pack B v2 to Pack A switch
     select: { text: Activate }
   - do: wait_for
-    name: show the return to Pack A preview
-    until: { element: { text: Update, enabled: true } }
+    name: show the return to Pack A unverified switch confirm
+    timeout: 90s
+    until:
+      all:
+        - screen: PackConfirmScreen
+        - element: { key: automodpack.confirm.ack, enabled: true }
+  - do: click
+    name: acknowledge unverified risk for the return to Pack A
+    select: { key: automodpack.confirm.ack }
+  - do: wait_for
+    name: unlock the return to Pack A after acknowledgement
+    timeout: 20s
+    until:
+      element: { key: automodpack.update.apply, enabled: true }
   - do: click
     name: accept the return to Pack A
-    select: { text: Update }
+    select: { key: automodpack.update.apply }
   - do: wait_for
     name: wait for return to Pack A restart
     until: { screen: RestartScreen }
@@ -736,18 +781,18 @@ flow:
       all:
         - screen: UpdatePreviewScreen
         - element: { text: Update, enabled: true }
-        - element: { text: View all patch notes, enabled: true }
+        - element: { text: History, enabled: true }
   - do: screenshot
     name: capture changed and removed generation review
     file: all-generation-update
   - do: click
-    name: open latest update patch-note history
-    select: { text: View all patch notes }
+    name: open the content history from the update review
+    select: { text: History }
   - do: wait_for
-    name: show latest and previous patch notes
-    until: { screen: PatchNotesHistoryScreen }
+    name: show the content history with latest and previous patch notes
+    until: { screen: ContentHistoryScreen }
   - do: screenshot
-    name: capture latest and previous patch notes
+    name: capture the content history with latest and previous patch notes
     file: all-generation-patch-history
   - do: click
     name: return to changed and removed review
@@ -805,69 +850,31 @@ flow:
   - do: click
     name: open Pack A settings for recovered
     select: { text: Modpack settings }
-  - do: click
-    name: open the installed pack manager for recovered
-    select: { text: Pack manager }
-  - do: click
-    name: open Pack A details for recovered
-    select: { text: Pack A }
   - do: wait_for
-    name: show Pack A storage actions
+    name: show the installed pack list for recovered
     until:
       all:
-        - screen: ModpackDetailsScreen
-        - element: { text: Storage, enabled: true }
+        - screen: InstalledModpacksScreen
+        - element: { text: Pack A, enabled: true }
+        - element: { text: Preserved files }
   - do: click
-    name: open Pack A storage actions
-    select: { text: Storage }
-  - do: wait_for
-    name: expose the first recovered candidate
-    until:
-      all:
-        - screen: ModpackStorageScreen
-        - element: { text: Preserved files, enabled: true }
-  - do: screenshot
-    name: capture storage with recovered available
-    file: all-pack-storage-recovered
-  - do: click
-    name: open the recovered archive
+    name: open the recovered archive from the pack list
     select: { text: Preserved files }
   - do: wait_for
     name: show the removed file as recoverable
     until:
       all:
         - screen: PreservationVaultScreen
-        - element: { text: config/amp-autotest-gamma.cfg, enabled: true }
+        - element: { text: amp-autotest-gamma.cfg, enabled: true }
   - do: screenshot
     name: capture available recovered files
     file: all-recovered-available
   - do: click
-    name: select the removed file
-    select: { text: config/amp-autotest-gamma.cfg }
-  - do: click
-    name: save a copy of the removed file
-    select: { text: Save copy }
+    name: return to the pack list with the removed-file claim still held
+    select: { text: Back }
   - do: wait_for
-    name: finish saving the removed file copy
-    timeout: 30s
-    until: { screen: PreservationVaultScreen }
-  - do: sleep
-    name: render the archived removed file
-    duration: 1s
-  - do: screenshot
-    name: capture archived recovered files
-    file: all-recovered-archived
-  - do: assert_preservation_claim
-    name: verify the removed-file copy updated the durable claim
-    packId: "${bootstrap_modpack_id}"
-    originalPath: config/amp-autotest-gamma.cfg
-    status: SAVED_COPY
-  - do: mutate_preservation_object
-    name: corrupt the removed-file CAS object while its saved copy remains valid
-    packId: "${bootstrap_modpack_id}"
-    originalPath: config/amp-autotest-gamma.cfg
-    status: SAVED_COPY
-    action: corrupt
+    name: return to the installed pack list before corrupting client storage
+    until: { screen: InstalledModpacksScreen }
   - do: mutate_active_object
     name: corrupt a current CAS object behind the active projection
     path: config/amp-autotest-alpha.txt
@@ -889,37 +896,6 @@ flow:
     path: config/amp-autotest-delta.txt
     action: delete
   - do: click
-    name: return to Pack A storage with deliberate corruption present
-    select: { text: Back }
-  - do: click
-    name: return to Pack A details before storage verification
-    select: { text: Back }
-  - do: click
-    name: return to the installed pack manager before storage verification
-    select: { text: Back }
-  - do: click
-    name: open client storage verification with corrupt required preservation bytes
-    select: { text: Local storage }
-  - do: click
-    name: verify client storage before repair
-    select: { text: Verify storage }
-  - do: wait_for
-    name: report corrupt required preservation bytes
-    timeout: 120s
-    until: { screen: ErrorScreen }
-  - do: click
-    name: return from failed verification to the same maintenance screen
-    select: { text: Back }
-  - do: wait_for
-    name: keep maintenance usable after the verification error
-    until:
-      all:
-        - screen: ClientStorageMaintenanceScreen
-        - element: { text: Verify storage, enabled: true }
-  - do: click
-    name: leave failed storage verification
-    select: { text: Back }
-  - do: click
     name: reopen Pack A details for repair
     select: { text: Pack A }
   - do: wait_for
@@ -937,34 +913,44 @@ flow:
     until:
       all:
         - screen: OfflineRepairScreen
-        - element: { text: "[x] Reset config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
-        - element: { text: Repair available files, enabled: true }
+        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "Keep 2 existing mod files", enabled: true }
+        - element: { text: Repair, enabled: true }
         - element: { text: Update and finish repair, enabled: true }
   - do: screenshot
     name: capture offline repair findings and defaults
     file: all-offline-repair-findings
-  - do: click
-    name: keep all editable changes during the first review pass
-    select: { text: Keep all editable changes }
   - do: wait_for
-    name: show editable files as explicitly kept
+    name: show the editable row checked as reset consent by default
+    until:
+      all:
+        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "Keep 2 existing mod files", enabled: true }
+        - element: { text: Keep all editable changes, enabled: true }
+  - do: click
+    name: opt into keeping the edited file
+    select: { text: "[ ] Keep changes in config/pack-shared-editable.txt" }
+  - do: wait_for
+    name: show the keep choice checked on the editable row
+    until: { element: { text: "[x] Keep changes in config/pack-shared-editable.txt", enabled: true } }
+  - do: click
+    name: return the editable row to removal consent before leaving
+    select: { text: "[x] Keep changes in config/pack-shared-editable.txt" }
+  - do: wait_for
+    name: restore the unchecked reset consent on the editable row
     until: { element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true } }
   - do: click
-    name: select the editable file for reset again
-    select: { text: "[ ] Keep changes in config/pack-shared-editable.txt" }
-  - do: click
-    name: opt in to preserve and remove unowned mods
-    select: { text: "[ ] Keep 2 unowned mods" }
+    name: opt into keeping the unowned mods
+    select: { text: "Keep 2 existing mod files" }
   - do: wait_for
-    name: show explicit repair cleanup consent
-    until: { element: { text: "[x] Archive and remove 2 unowned mods", enabled: true } }
+    name: show the keep choice checked on the unowned row
+    until: { element: { text: "Keep 2 existing mod files", enabled: true, checked: true } }
   - do: click
-    name: revoke repair cleanup consent before leaving
-    select: { text: "[x] Archive and remove 2 unowned mods" }
+    name: return to removal consent before leaving
+    select: { text: "Keep 2 existing mod files", checked: true }
   - do: click
     name: cancel repair after exercising every choice
-    select: { text: Cancel }
+    select: { text: Back }
   - do: wait_for
     name: return to usable Pack A details after repair cancellation
     until:
@@ -975,18 +961,22 @@ flow:
     name: reopen repair to verify choices did not leak
     select: { text: Repair }
   - do: wait_for
-    name: restore reset-all and keep-unowned defaults on reopen
+    name: restore reset-consent and keep-unowned defaults on reopen
     timeout: 120s
     until:
       all:
-        - element: { text: "[x] Reset config/pack-shared-editable.txt", enabled: true }
-        - element: { text: "[ ] Keep 2 unowned mods", enabled: true }
-  - do: click
-    name: consent to preserve and remove unowned mods for this repair
-    select: { text: "[ ] Keep 2 unowned mods" }
+        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "Keep 2 existing mod files", enabled: true }
+  - do: wait_for
+    name: hold both rows at removal consent while keeping is one click away
+    until:
+      all:
+        - element: { text: "[ ] Keep changes in config/pack-shared-editable.txt", enabled: true }
+        - element: { text: "Keep 2 existing mod files", enabled: true }
+        - element: { text: Repair, enabled: true }
   - do: click
     name: repair every locally available byte before updating
-    select: { text: Repair available files }
+    select: { text: Repair }
   - do: wait_for
     name: retain only unavailable findings after local repair
     timeout: 120s
@@ -994,7 +984,7 @@ flow:
       all:
         - screen: OfflineRepairScreen
         - element: { text: Update and finish repair, enabled: true }
-        - element: { text: Repair available files, enabled: false }
+        - element: { text: Repair, enabled: false }
   - do: assert_client_object
     name: verify repair rebuilt the corrupt active CAS object
     path: config/amp-autotest-alpha.txt
@@ -1012,11 +1002,6 @@ flow:
   - do: assert
     name: verify repair removed the restored conflict only after consent
     that: { file_gone: mods/amp-autotest-conflict.jar }
-  - do: assert_preservation_claim
-    name: verify repair reconstructed the removed-file claim CAS object
-    packId: "${bootstrap_modpack_id}"
-    originalPath: config/amp-autotest-gamma.cfg
-    status: SAVED_COPY
   - do: assert_preservation_claim
     name: verify editable reset preserved the player copy
     packId: "${bootstrap_modpack_id}"
@@ -1048,10 +1033,88 @@ flow:
   - do: assert_client_object
     name: verify update restored the unavailable CAS object
     path: config/amp-autotest-delta.txt
+  # The repair update always ends on the restart screen (mid-session content changes cannot hot-load into the
+  # running game), but the file above can already hold its final content while the apply is still in flight.
+  # Disconnecting first strands the client on the restart screen that lands mid-navigation, so synchronize on
+  # the apply completing before resetting to title.
+  - do: wait_for
+    name: show the post-repair restart screen before resetting to title
+    timeout: 120s
+    until: { screen: RestartScreen }
   - do: disconnect
     name: reset to title before the post-repair verification cycle
   - use: open_multiplayer
   - use: open_pack_manager
+  - do: mutate_preservation_object
+    name: corrupt the archived unowned mod's CAS object while its claim remains
+    packId: "${bootstrap_modpack_id}"
+    originalPath: mods/local-unowned.jar
+    action: corrupt
+  - do: click
+    name: open client storage verification with corrupt required preservation bytes
+    select: { text: Local storage }
+  - do: click
+    name: report corrupt required preservation bytes
+    select: { text: Verify storage }
+  - do: wait_for
+    name: show the corrupt preserved bytes as a verification error
+    timeout: 120s
+    until: { screen: ErrorScreen }
+  - do: click
+    name: return from the preservation verification error to the maintenance screen
+    select: { text: Back }
+  - do: wait_for
+    name: keep maintenance usable after the preservation verification error
+    until:
+      all:
+        - screen: ClientStorageMaintenanceScreen
+        - element: { text: Verify storage, enabled: true }
+  - do: click
+    name: leave the failed preservation verification
+    select: { text: Back }
+  - do: wait_for
+    name: reach the installed pack list before discarding the corrupted claim
+    until: { screen: InstalledModpacksScreen }
+  - do: click
+    name: open the vault to discard the corrupted preserved file
+    select: { text: Preserved files }
+  # The archived unowned mod was preserved last by the repair, so the vault's newest-first
+  # list opens on it.
+  - do: wait_for
+    name: show the corrupted preserved file first in the vault
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - element: { text: local-unowned.jar, enabled: true }
+  - do: click
+    name: select the corrupted preserved file
+    select: { text: local-unowned.jar }
+  - do: click
+    name: arm deletion of the corrupted preserved file
+    select: { text: Delete }
+  - do: click
+    name: cancel the deletion by reselecting the file
+    select: { text: local-unowned.jar }
+  - do: click
+    name: arm deletion of the corrupted preserved file again
+    select: { text: Delete }
+  - do: click
+    name: discard the corrupted preserved file on the second click
+    select: { text: Delete }
+  - do: wait_for
+    name: drop the discarded preserved file from the vault
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - no_element: { text: local-unowned.jar, enabled: true }
+  - do: assert_preservation_claim
+    name: verify the discard released the corrupted preserved claim
+    packId: "${bootstrap_modpack_id}"
+    originalPath: mods/local-unowned.jar
+    present: false
+  - do: click
+    name: return to the pack list after the discard
+    select: { text: Back }
   - do: click
     name: verify repaired client storage
     select: { text: Local storage }
@@ -1072,65 +1135,45 @@ flow:
     name: return to the manager after successful verification
     select: { text: Back }
   - do: click
-    name: open Pack A to delete one repaired claim
-    select: { text: Pack A }
-  - do: click
-    name: open Pack A storage after repair
-    select: { text: Storage }
-  - do: click
     name: reopen the preservation vault after repair
     select: { text: Preserved files }
-  - do: click
-    name: browse to the next preservation page after repair created more claims
-    select: { text: Next > }
-  - do: click
-    name: select the removed-file claim for deletion
-    select: { text: config/amp-autotest-gamma.cfg }
-  - do: click
-    name: arm removed-file claim deletion
-    select: { text: Delete from vault }
+  # The vault is a scrolling vanilla list now, so the surviving claim is reachable
+  # without page turns even though it sits behind the newer discarded claim.
   - do: wait_for
-    name: require delete confirmation for the repaired claim
-    until: { element: { text: Confirm deletion, enabled: true } }
-  - do: click
-    name: cancel the first deletion attempt by reselecting
-    select: { text: config/amp-autotest-gamma.cfg }
-  - do: wait_for
-    name: return to the safe delete state
-    until: { element: { text: Delete from vault, enabled: true } }
-  - do: click
-    name: arm removed-file claim deletion again
-    select: { text: Delete from vault }
-  - do: click
-    name: confirm removed-file claim deletion
-    select: { text: Confirm deletion }
-  - do: wait_for
-    name: wait for explicit vault deletion to finish
+    name: show the surviving editable-reset claim
+    timeout: 30s
     until:
       all:
         - screen: PreservationVaultScreen
-        - no_element: { text: config/amp-autotest-gamma.cfg, visible: true }
+        - element: { text: pack-shared-editable.txt, enabled: true }
+  - do: click
+    name: select the editable-reset claim to save a copy
+    select: { text: pack-shared-editable.txt }
+  - do: click
+    name: save a copy of the editable-reset claim
+    select: { text: Save copy }
+  - do: wait_for
+    name: show the saved copy path and drop the editable-reset claim
+    until:
+      all:
+        - screen: PreservationVaultScreen
+        - element: { text: Saved a copy to automodpack/recovered/ }
+        - no_element: { text: pack-shared-editable.txt, enabled: true }
   - do: assert_preservation_claim
-    name: verify explicit deletion removed only the server-removal claim
+    name: verify save-copy released the editable-reset claim
     packId: "${bootstrap_modpack_id}"
-    originalPath: config/amp-autotest-gamma.cfg
-    reason: SERVER_REMOVAL
+    originalPath: config/pack-shared-editable.txt
+    reason: EDITABLE_RESET
     present: false
-  - do: click
-    name: return to Pack A storage after deletion
-    select: { text: Back }
-  - do: click
-    name: return to Pack A details after deletion
-    select: { text: Back }
   - do: click
     name: return to the installed pack manager after deletion
     select: { text: Back }
   - do: click
-    name: return to Pack A settings after deletion
-    select: { text: Back }
-  - do: click
     name: return to multiplayer after repair and vault review
     select: { text: Back }
+  - do: wait_for
+    name: verify the installed pack list closes onto multiplayer
+    until: { screen: Play Multiplayer }
   - do: quit
     name: stop the installed client before fresh-client reset
   - do: wait_client_exit
@@ -1165,13 +1208,17 @@ flow:
   - do: wait_bridge
     name: wait for the fresh client bridge
   - do: assert_preload_acquired
-    name: verify the fresh client reacquired current objects into empty CAS
+    name: verify the fresh client reacquired its selected groups into empty CAS
+    groups: [main, visual]
+  # Match the container stream, not the log file: Minecraft rotates logs/latest.log on every launch and on every
+  # midnight rollover, archiving the marker away while the wait is still polling. The container output is
+  # append-only for this fresh client's lifetime, so it cannot lose the line.
   - do: wait_for
-    name: verify preload left direct mod cleanup for the review path
+    name: verify first install waits for in-game review
     until:
       log:
-        file: logs/latest.log
-        matches: 'Preload acquired the complete selected target; active projection remains unchanged until player review'
+        container: client
+        matches: 'Launch apply is waiting for first-install review'
   - do: assert_mod_fixture
     name: verify preload left the direct mod untouched before review
     path: mods/amp-autotest-removed.jar
@@ -1183,15 +1230,14 @@ flow:
     timeout: 90s
     until:
       all:
-        - screen: FirstConnectScreen
-        - element: { text: "[ ] Keep 2 existing files in mods", enabled: true }
-        - element: { text: Continue and keep mods, enabled: true }
+        - screen: PackConfirmScreen
+        - element: { key: automodpack.confirm.keepExistingMods, enabled: true }
   - do: screenshot
     name: capture first-install cleanup with its safe default
     file: all-first-install-cleanup-default
   - do: click
     name: navigate into first-install customization before consent
-    select: { text: Customize groups }
+    select: { key: automodpack.confirm.customize }
   - do: wait_for
     name: show first-install group customization
     until: { screen: ModpackSelectionScreen }
@@ -1202,36 +1248,59 @@ flow:
     name: return to the same first-install consent state
     until:
       all:
-        - screen: FirstConnectScreen
-        - element: { text: "[ ] Keep 2 existing files in mods", enabled: true }
+        - screen: PackConfirmScreen
+        - element: { key: automodpack.confirm.keepExistingMods, enabled: true }
   - do: click
-    name: opt in to preserve and remove existing mods
-    select: { text: "[ ] Keep 2 existing files in mods" }
+    name: opt into keeping existing mods
+    select: { key: automodpack.confirm.keepExistingMods }
   - do: wait_for
-    name: show explicit first-install cleanup consent
-    until: { element: { text: "[x] Preserve and remove 2 existing files", enabled: true } }
+    name: show checked keep state after opting in
+    until: { element: { key: automodpack.confirm.keepExistingMods, enabled: true, checked: true } }
   - do: screenshot
-    name: capture explicit first-install cleanup consent
+    name: capture first-install cleanup keep state
     file: all-first-install-cleanup-consent
   - do: click
-    name: revoke first-install cleanup once before final consent
-    select: { text: "[x] Preserve and remove 2 existing files" }
+    name: return to the default removal consent before continuing
+    select: { key: automodpack.confirm.keepExistingMods }
+  - do: wait_for
+    name: wait for the unverified ack checkbox or an already trusted download
+    timeout: 30s
+    until:
+      any:
+        - element: { key: automodpack.confirm.ack, enabled: true }
+        - element: { key: automodpack.firstConnect.download, enabled: true }
   - do: click
-    name: give final first-install cleanup consent
-    select: { text: "[ ] Keep 2 existing files in mods" }
+    name: acknowledge unverified risk
+    select: { key: automodpack.confirm.ack }
+    when: { element: { key: automodpack.confirm.ack, enabled: true } }
+  - do: wait_for
+    name: unlock download after acknowledgement
+    timeout: 20s
+    until:
+      element: { key: automodpack.firstConnect.download, enabled: true }
   - do: click
     name: continue with defaults and approved cleanup
-    select: { text: Continue with defaults }
+    select: { key: automodpack.firstConnect.download }
   - do: wait_for
-    name: review the strict first-install update
+    name: review the strict first-install update or restart directly
     timeout: 90s
     until:
-      all:
-        - screen: UpdatePreviewScreen
-        - element: { text: Update, enabled: true }
+      any:
+        - screen: RestartScreen
+        - all:
+            - screen: UpdatePreviewScreen
+            - element: { key: automodpack.update.apply, enabled: true }
+        - all:
+            - screen: PackConfirmScreen
+            - element: { key: automodpack.confirm.ack, enabled: true }
+  - do: click
+    name: acknowledge later unverified risk
+    select: { key: automodpack.confirm.ack }
+    when: { element: { key: automodpack.confirm.ack, enabled: true } }
   - do: click
     name: approve strict first-install reconciliation
     select: { text: Update }
+    when: { element: { key: automodpack.update.apply, enabled: true } }
   - do: wait_file
     name: wait for the fresh strict installation
     path: "${active_dir}/${marker}"
@@ -1258,7 +1327,7 @@ flow:
   - do: assert_preservation_claim
     name: verify first-install cleanup preserved both removed mods
     packId: "${bootstrap_modpack_id}"
-    reason: STRICT_INSTALL
+    reason: PLAYER_CONSENT
     count: 2
   - do: disconnect
     name: return from the server to the vanilla title screen before removal
@@ -1267,15 +1336,13 @@ flow:
     name: open modpack settings for the installed Pack A
     select: { text: Modpack settings }
   - do: wait_for
-    name: show Pack A settings without lifecycle actions
+    name: show Pack A row without lifecycle actions on the list
     until:
       all:
-        - screen: ModpackSelectionScreen
-        - element: { text: Pack manager, enabled: true }
+        - screen: InstalledModpacksScreen
+        - element: { text: Pack A, enabled: true }
+        - element: { text: Local storage, enabled: true }
         - no_element: { text: Remove }
-  - do: click
-    name: open the Pack A manager
-    select: { text: Pack manager }
   - do: click
     name: open active Pack A details
     select: { text: Pack A }
@@ -1326,16 +1393,12 @@ flow:
   - do: assert_preservation_claim
     name: verify Pack A removal retained explicit first-install preservation claims
     packId: "${bootstrap_modpack_id}"
-    reason: STRICT_INSTALL
+    reason: PLAYER_CONSENT
     count: 2
-  # Rollback must precede compaction so the runner can select and verify a
-  # durable ancestor. Both server-maintenance steps run after client assertions.
+  # The server-maintenance steps run after the client assertions.
   - do: rollback_server_generation
     name: roll back through the real RCON command to a retained server ancestor
     notes: "Release gate rollback: restore the retained ancestor."
-    timeout: 180s
-  - do: compact_server_history
-    name: compact the rolled-back server lineage and verify retained patch notes
     timeout: 180s
   - do: collect_server_objects
     name: collect a valid orphan from the mounted server object store through RCON

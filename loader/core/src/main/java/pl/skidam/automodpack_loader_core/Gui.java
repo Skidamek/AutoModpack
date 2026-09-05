@@ -146,7 +146,7 @@ public class Gui {
 	}
 
 	private static boolean hasAwtSupport() {
-		if (PlatformUtils.IS_MAC) {
+		if (PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.MACOS) {
 			// check for JAVA_STARTED_ON_FIRST_THREAD_<pid> which is set if -XstartOnFirstThread is used
 			// -XstartOnFirstThread is incompatible with AWT (force enables embedded mode)
 			for (String key : System.getenv().keySet()) {

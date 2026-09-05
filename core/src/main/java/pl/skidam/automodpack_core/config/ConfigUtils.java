@@ -11,6 +11,22 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ConfigUtils {
 
+	public static ServerConfigJsons.ServerConfigFieldsV3 loadOrCreateServerConfig() {
+		ServerConfigJsons.ServerConfigFieldsV3 config = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
+		String before = ConfigTools.GSON.toJson(config);
+		if (config.acceptedLoaders == null) config.acceptedLoaders = new HashSet<>(Set.of(LOADER));
+		else config.acceptedLoaders.add(LOADER);
+		normalizeServerConfig(config);
+		if (!before.equals(ConfigTools.GSON.toJson(config))) {
+			try {
+				ConfigTools.writeAtomic(SERVER_CONFIG_FILE, config);
+			} catch (IOException e) {
+				throw new ConfigTools.ConfigException("Failed to save server configuration", e);
+			}
+		}
+		return config;
+	}
+
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config, boolean saveAfter) {
 		normalizeServerConfig(config);
 		if (saveAfter) {
@@ -23,11 +39,7 @@ public class ConfigUtils {
 	}
 
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
-		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.defaultFor(MC_VERSION, LOADER);
-		if (config.connectionMode == ModpackConnectionMode.HOLEPUNCH && !ModpackConnectionMode.isHolepunchAvailable(MC_VERSION, LOADER)) {
-			config.connectionMode = ModpackConnectionMode.MAGIC_PACKET;
-			LOGGER.warn("HOLEPUNCH connection mode is unavailable on " + LOADER + " " + MC_VERSION + ". Falling back to MAGIC_PACKET");
-		}
+		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
 
 		String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";
 		Pattern pattern = Pattern.compile(prefixPattern);
@@ -41,7 +53,6 @@ public class ConfigUtils {
 				}
 				group.syncedFiles = normalizeSyncedFiles(group.syncedFiles, pattern);
 				group.allowEditsInFiles = normalizePathRules(group.allowEditsInFiles, "allowEditsInFiles", pattern);
-				group.overwriteEditableFiles = normalizePathRules(group.overwriteEditableFiles, "overwriteEditableFiles", pattern);
 			}
 		}
 	}
@@ -92,7 +103,7 @@ public class ConfigUtils {
 		return normalizedFiles;
 	}
 
-	public static String prefixSlash(String path) {
+	private static String prefixSlash(String path) {
 		if (path == null) return null;
 		if (path.isEmpty()) return path;
 		if (path.startsWith("/!/")) return path.substring(1);

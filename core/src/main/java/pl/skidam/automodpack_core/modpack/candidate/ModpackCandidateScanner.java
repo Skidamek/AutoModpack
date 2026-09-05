@@ -11,7 +11,7 @@ import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
 public final class ModpackCandidateScanner {
@@ -52,14 +52,14 @@ public final class ModpackCandidateScanner {
 		if (!synchronizedGroups.isEmpty()) {
 			Set<String> scanRoots = new TreeSet<>();
 			for (GroupRules rules : synchronizedGroups) scanRoots.addAll(rules.syncedFiles().safeScanRoots());
-			for (String scanRoot : minimalScanRoots(scanRoots)) {
+			Set<String> minimalRoots = minimalScanRoots(scanRoots);
+			Map<String, List<String>> groupsByScanRoot = indexGroupsByScanRoot(minimalRoots, rulesByGroup);
+			for (String scanRoot : minimalRoots) {
 				Path root = (scanRoot.isEmpty() ? request.serverRoot() : request.serverRoot().resolve(scanRoot)).normalize();
 				if (!root.startsWith(request.serverRoot())) throw new CandidateBuildException("Synchronized scan root escapes server root: " + scanRoot);
 				for (var file : walk(root, request.serverRoot()).entrySet()) {
-					for (var entry : declarations.entrySet()) {
-						String groupId = entry.getKey();
+					for (String groupId : groupsByScanRoot.get(scanRoot)) {
 						PathRuleSet syncedRules = rulesByGroup.get(groupId).syncedFiles();
-						if (syncedRules.isEmpty()) continue;
 						PathRuleSet.Decision decision = syncedRules.evaluate(file.getKey());
 						if (!decision.matched()) continue;
 						CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), decision.decisiveRule());
@@ -114,11 +114,12 @@ public final class ModpackCandidateScanner {
 				if (result.shadow != null) shadows.add(result.shadow);
 				if (result.selected == null || result.file == null) continue;
 				GroupManifest.GroupFile file = result.file;
-				if (result.object == null) throw new CandidateBuildException("Selected source has no staged object: " + result.selected.sourcePath());
 				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(
-						String.valueOf(file.size()), file.type(), file.editable(), file.overwriteEditable(), file.sha1(), file.murmur()));
-				StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
-				if (redundant != null) result.object.delete();
+						String.valueOf(file.size()), file.type(), file.editable(), file.sha1(), file.murmur()));
+				if (result.object != null) {
+					StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
+					if (redundant != null) result.object.delete();
+				}
 				provenance.put(ModpackCandidate.provenanceKey(result.selected.groupId(), result.selected.logicalPath()), result.provenance);
 			}
 
@@ -136,7 +137,6 @@ public final class ModpackCandidateScanner {
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
 				group.category = declaration.category == null ? "" : declaration.category;
-				group.icon = declaration.icon == null ? "" : declaration.icon;
 				group.required = declaration.required;
 				group.defaultSelected = declaration.defaultSelected;
 				group.breaksWith = sortedSet(declaration.breaksWith);
@@ -165,12 +165,14 @@ public final class ModpackCandidateScanner {
 		StagedObject object = null;
 		if (candidate != null) {
 			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(candidate, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
-					request.stagingDirectory(), request.fileMetadataCache(), request.modFileCache(), request.objectStoreDirectory());
-			if (snapshot.exclusion() == null) {
+					request.stagingDirectory(), request.fileCache(), request.modFileCache(), request.objectStoreDirectory(), request.materializeMissingObjects());
+			if (snapshot.exclusion() != null) {
+				exclusions.add(excluded(candidate, snapshot.exclusion()));
+			} else if (snapshot.file() != null) {
 				selected = candidate;
 				file = snapshot.file();
 				object = snapshot.object();
-			} else exclusions.add(excluded(candidate, snapshot.exclusion()));
+			}
 		}
 		ShadowedCandidate shadow = pair.explicit != null && pair.synced != null
 				? new ShadowedCandidate(pair.explicit, pair.synced, ShadowedCandidate.Relationship.NOT_COMPARED)
@@ -178,18 +180,15 @@ public final class ModpackCandidateScanner {
 		CandidateProvenance provenance = null;
 		if (selected != null && file != null) {
 			PathRuleSet.Decision editable = rules.allowEditsInFiles().evaluate(selected.logicalPath());
-			PathRuleSet.Decision overwrite = rules.overwriteEditableFiles().evaluate(selected.logicalPath());
-			boolean isEditable = editable.included();
-			file = new GroupManifest.GroupFile(file.size(), file.type(), isEditable, isEditable && overwrite.included(), file.sha1(), file.murmur());
-			provenance = new CandidateProvenance(selected, editable.decisiveRule(), overwrite.decisiveRule());
+			file = new GroupManifest.GroupFile(file.size(), file.type(), editable.included(), file.sha1(), file.murmur());
+			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
 		return new PathResult(selected, file, object, provenance, exclusions, shadow, pair.explicit != null ? pair.explicit : pair.synced);
 	}
 
 	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
 		return new GroupRules(compileRuleSet(declaration.syncedFiles, groupId, "syncedFiles"),
-				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"),
-				compileRuleSet(declaration.overwriteEditableFiles, groupId, "overwriteEditableFiles"));
+				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"));
 	}
 
 	private static PathRuleSet compileRuleSet(Set<String> rules, String groupId, String name) throws CandidateBuildException {
@@ -245,6 +244,21 @@ public final class ModpackCandidateScanner {
 		return minimal;
 	}
 
+	private static Map<String, List<String>> indexGroupsByScanRoot(Set<String> scanRoots, Map<String, GroupRules> rulesByGroup) {
+		Map<String, List<String>> result = new TreeMap<>();
+		for (String scanRoot : scanRoots) {
+			List<String> groups = new ArrayList<>();
+			for (var entry : rulesByGroup.entrySet()) {
+				Set<String> groupRoots = entry.getValue().syncedFiles().safeScanRoots();
+				if (groupRoots.stream().anyMatch(groupRoot -> groupRoot.isEmpty() || scanRoot.isEmpty() || scanRoot.equals(groupRoot)
+						|| scanRoot.startsWith(groupRoot + "/") || groupRoot.startsWith(scanRoot + "/")))
+					groups.add(entry.getKey());
+			}
+			result.put(scanRoot, List.copyOf(groups));
+		}
+		return Map.copyOf(result);
+	}
+
 	private static NavigableMap<String, Path> walk(Path root) throws CandidateBuildException {
 		return walk(root, root);
 	}
@@ -281,8 +295,7 @@ public final class ModpackCandidateScanner {
 
 	private record GroupRules(
 			PathRuleSet syncedFiles,
-			PathRuleSet allowEditsInFiles,
-			PathRuleSet overwriteEditableFiles) {}
+			PathRuleSet allowEditsInFiles) {}
 
 	private static final class SourcePair {
 		private CandidateSource explicit;
@@ -317,13 +330,14 @@ public final class ModpackCandidateScanner {
 			Path stagingDirectory,
 			Executor executor,
 			Path objectStoreDirectory,
-			FileMetadataCache fileMetadataCache,
-			ModFileCache modFileCache) {
+			FileCache fileCache,
+			ModFileCache modFileCache,
+			boolean materializeMissingObjects) {
 		public Request(String modpackId, String modpackName, String automodpackVersion, String loader, String loaderVersion, String mcVersion, Path serverRoot,
 				Path groupRoot, Map<String, ServerConfigJsons.GroupDeclaration> groups, boolean autoExcludeUnnecessaryFiles,
 				boolean autoExcludeServerSideMods, Path stagingDirectory, Executor executor) {
 			this(modpackId, modpackName, automodpackVersion, loader, loaderVersion, mcVersion, serverRoot, groupRoot, groups, autoExcludeUnnecessaryFiles,
-					autoExcludeServerSideMods, stagingDirectory, executor, null, null, null);
+					autoExcludeServerSideMods, stagingDirectory, executor, null, null, null, true);
 		}
 
 		public Request {

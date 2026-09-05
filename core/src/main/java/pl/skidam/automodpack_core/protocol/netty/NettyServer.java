@@ -26,15 +26,12 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryIndex;
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -80,18 +77,9 @@ public class NettyServer {
 		this.paths = hosting.asMap();
 	}
 
-	public Map<String, Path> getPathsSnapshot() {
-		return paths;
-	}
-
 	public Optional<Path> getPath(String requestKey) {
 		if (requestKey == null) return Optional.empty();
-		if (requestKey.isEmpty()) return regularPath(paths.get(""));
-		if (requestKey.startsWith(GenerationHistoryIndex.CATALOGUE_REQUEST_PREFIX)) {
-			String stateDigest = requestKey.substring(GenerationHistoryIndex.CATALOGUE_REQUEST_PREFIX.length());
-			if (!HashUtils.isCanonicalSha1(stateDigest)) return Optional.empty();
-			return regularPath(paths.get(GenerationHistoryIndex.catalogueRequestKey(stateDigest)));
-		}
+		if (requestKey.equals(GenerationHosting.HEAD_DOCUMENT_KEY) || requestKey.equals(GenerationHosting.JOURNAL_KEY)) return regularPath(paths.get(requestKey));
 		if (!HashUtils.isSha1(requestKey)) return Optional.empty();
 
 		return regularPath(paths.get(HashUtils.normalizeSha1(requestKey)));
@@ -117,8 +105,6 @@ public class NettyServer {
 			return Optional.empty();
 		}
 
-		updateAdvertisedAddress();
-
 		ModpackConnectionMode connectionMode = serverConfig.connectionMode;
 		if (connectionMode == ModpackConnectionMode.DIRECT && serverConfig.bindPort == -1) {
 			LOGGER.info("DIRECT is advertised without a built-in listener; expecting the endpoint to be handled externally");
@@ -134,7 +120,7 @@ public class NettyServer {
 				return Optional.empty();
 			}
 
-			if (connectionMode == ModpackConnectionMode.MAGIC_PACKET && serverConfig.bindPort == -1) {
+			if (connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
 				LOGGER.info("Hosting modpack through magic packet routing on the Minecraft port");
 				new TrafficShaper(null);
 				sharedMagicEnabled = true;
@@ -205,24 +191,6 @@ public class NettyServer {
 				.ciphers(Arrays.asList("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256")).sessionTimeout(1800).build();
 		certificateFingerprint = NetUtils.getFingerprint(cert);
 		if (certificateFingerprint != null) LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
-	}
-
-	private void updateAdvertisedAddress() {
-		if (!serverConfig.updateIpsOnEveryStart) return;
-
-		String publicIp = AddressHelpers.getPublicIp();
-		if (publicIp != null) {
-			serverConfig.advertisedEndpointHost = publicIp;
-			LOGGER.warn("Setting Host IP to {}", serverConfig.advertisedEndpointHost);
-		} else {
-			LOGGER.error("Couldn't get public IP, please change it manually!");
-		}
-
-		try {
-			ConfigTools.writeAtomic(SERVER_CONFIG_FILE, serverConfig);
-		} catch (Exception e) {
-			LOGGER.error("Failed to save updated advertised endpoint", e);
-		}
 	}
 
 	public boolean isSharedMagicEnabled() {

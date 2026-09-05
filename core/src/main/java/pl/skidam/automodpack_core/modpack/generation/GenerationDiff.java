@@ -153,10 +153,6 @@ public record GenerationDiff(
 		public boolean isEmpty() {
 			return added.isEmpty() && modified.isEmpty() && removed.isEmpty();
 		}
-
-		public int changedCount() {
-			return added.size() + modified.size() + removed.size();
-		}
 	}
 
 	public record Summary(int addedFiles, int modifiedFiles, int removedFiles, int metadataOnlyFiles, int metadataChanges) {}
@@ -175,7 +171,7 @@ public record GenerationDiff(
 
 	private static MetadataSummary groupSummary(GroupManifest parent, GroupManifest child) {
 		Map<String, GroupManifest.Group> before = parent == null ? Map.of() : parent.groups();
-		return compareKeys(before, child.groups(), GenerationDiff::sameGroupMetadata);
+		return compareKeys(before, child.groups(), GroupManifest.Group::hasSameMetadata);
 	}
 
 	private static <T> MetadataSummary compareKeys(Map<String, T> before, Map<String, T> after, BiPredicate<T, T> equal) {
@@ -191,13 +187,6 @@ public record GenerationDiff(
 			else if (!equal.test(before.get(key), after.get(key))) modified.add(key);
 		}
 		return new MetadataSummary(added, modified, removed);
-	}
-
-	private static boolean sameGroupMetadata(GroupManifest.Group before, GroupManifest.Group after) {
-		return Objects.equals(before.displayName(), after.displayName()) && Objects.equals(before.description(), after.description())
-				&& Objects.equals(before.category(), after.category()) && Objects.equals(before.icon(), after.icon()) && before.required() == after.required() && before.defaultSelected() == after.defaultSelected()
-				&& Objects.equals(before.breaksWith(), after.breaksWith()) && Objects.equals(before.requires(), after.requires())
-				&& Objects.equals(before.compatiblePlatforms(), after.compatiblePlatforms());
 	}
 
 	private static boolean sameBytes(GroupManifest.GroupFile before, GroupManifest.GroupFile after) {

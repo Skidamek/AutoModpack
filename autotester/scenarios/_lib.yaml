@@ -26,6 +26,8 @@ boot:
 boot_with_bootstrap:
   - do: launch_server
     name: start server for bootstrap-file import
+  - do: prepare_client
+    name: prepare the client profile while the server starts
   - do: wait_server
     name: wait for server generation and TLS
   - use: read_server_fingerprint
@@ -61,52 +63,87 @@ accept_certificate:
     until:
       all:
         - element: { role: textfield }
-        - element: { text: verify, enabled: true }
+        - element: { key: automodpack.validation.verify, enabled: true }
+  - do: screenshot
+    name: capture the shortened certificate fingerprint
+    file: certificate-verification
+  - do: click
+    name: open the skip-verification disclosure
+    select: { key: automodpack.skip }
+  - do: wait_for
+    name: wait for the skip-verification screen
+    timeout: 20s
+    until: { screen: SkipVerificationScreen }
+  - do: screenshot
+    name: capture the skip-verification disclosure
+    file: skip-verification
+  - do: click
+    name: return from the skip disclosure to the fingerprint check
+    select: { key: automodpack.back }
+  - do: wait_for
+    name: wait for the fingerprint check again
+    timeout: 20s
+    until:
+      element: { key: automodpack.validation.verify, enabled: true }
   - do: type
     name: enter the fingerprint
     select: { role: textfield }
     value: "${fingerprint}"
   - do: click
     name: click verify
-    select: { text: verify }
+    select: { key: automodpack.validation.verify }
   - do: wait_for
     name: transition directly to AutoModpack UI
     timeout: 20s
     until:
       all:
-        - screen: [PreparingScreen, FirstConnectScreen, UpdatePreviewScreen, DownloadScreen, FetchScreen, RestartScreen]
+        - screen: [PreparingScreen, PackConfirmScreen, UpdatePreviewScreen, DownloadScreen, FetchScreen, RestartScreen]
         - screen_not: DisconnectedScreen
   - do: wait_for
     name: wait for the certificate to be accepted
     timeout: 20s
     until:
-      no_element: { text: verify }
+      no_element: { key: automodpack.validation.verify }
 
-# Accept the first-connection prompt, approve the update preview, and wait for
-# the modpack to land on disk.
+# Accept the first-connection prompt and wait for the modpack to land on disk.
+# Download on the honesty confirm approves the plan and applies it directly;
+# a second first-install review was removed, so the next screen is the restart.
 download_modpack:
   - do: wait_for
     name: wait for the first-connection prompt
     timeout: 90s
     until:
-      element: { text: continue, enabled: true }
+      screen: PackConfirmScreen
   - do: screenshot
     name: capture the first-connection prompt
     file: first-connect
+  - do: wait_for
+    name: wait for the unverified ack checkbox after the lock
+    timeout: 20s
+    until:
+      element: { key: automodpack.confirm.ack, enabled: true }
+    when: { element: { key: automodpack.confirm.ack } }
+  - do: click
+    name: acknowledge unverified risk
+    select: { key: automodpack.confirm.ack }
+    when: { element: { key: automodpack.confirm.ack } }
+  - do: wait_for
+    name: wait for download to unlock
+    timeout: 20s
+    until:
+      element: { key: automodpack.firstConnect.download, enabled: true }
   - do: click
     name: accept first connection
-    select: { text: continue }
+    select: { key: automodpack.firstConnect.download }
   - do: wait_for
-    name: wait for the update preview
-    timeout: 90s
-    until:
-      element: { text: update, enabled: true }
+    name: catch the download screen while the pack transfers
+    timeout: 60s
+    until: { screen: DownloadScreen }
+    skip_if: { screen_not: [PackConfirmScreen, DownloadScreen] }
   - do: screenshot
-    name: capture the update preview
-    file: update-preview
-  - do: click
-    name: approve update
-    select: { text: update }
+    name: capture the download progress
+    file: download-progress
+    skip_if: { screen_not: DownloadScreen }
   - do: wait_file
     name: wait for the modpack marker file
     path: "${active_dir}/${marker}"
@@ -124,7 +161,7 @@ restart_client:
     file: update-complete
   - do: click
     name: confirm restart
-    select: { text: "Yes, close the game" }
+    select: { key: automodpack.restart.confirm }
     timeout: 20s
   - do: wait_client_exit
     name: wait for the client to close
@@ -162,7 +199,8 @@ rejoin:
 open_multiplayer:
   - do: click
     name: open vanilla multiplayer
-    select: { text: multiplayer }
+    select: { key: menu.multiplayer }
+    skip_if: { screen: Play Multiplayer }
   - do: wait_for
     name: wait for multiplayer screen
     timeout: 20s
@@ -170,17 +208,8 @@ open_multiplayer:
 
 open_pack_manager:
   - do: click
-    name: open modpack settings from multiplayer
-    select: { text: modpack settings }
-  - do: wait_for
-    name: wait for modpack settings
-    until: { screen: ModpackSelectionScreen }
-  - do: screenshot
-    name: capture modpack settings before manager action
-    file: all-pack-settings
-  - do: click
-    name: open installed pack manager
-    select: { text: pack manager }
+    name: open installed pack manager from multiplayer
+    select: { key_any: [automodpack.selection.button, automodpack.selection.shortButton] }
   - do: wait_for
     name: wait for installed pack manager
     until: { screen: InstalledModpacksScreen }

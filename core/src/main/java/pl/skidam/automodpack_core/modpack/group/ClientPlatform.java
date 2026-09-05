@@ -4,6 +4,8 @@ import java.util.Locale;
 
 import com.google.gson.annotations.SerializedName;
 
+import pl.skidam.automodpack_core.utils.PlatformUtils;
+
 public enum ClientPlatform {
 	@SerializedName("windows")
 	WINDOWS,
@@ -15,13 +17,17 @@ public enum ClientPlatform {
 	ANDROID;
 
 	public static ClientPlatform current() {
-		String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-		String javaVendor = System.getProperty("java.vendor", "").toLowerCase(Locale.ROOT);
-		String javaVmName = System.getProperty("java.vm.name", "").toLowerCase(Locale.ROOT);
-		if (javaVendor.contains("android") || javaVmName.contains("dalvik") || javaVmName.contains("lemur")) return ANDROID;
-		if (osName.contains("win")) return WINDOWS;
-		if (osName.contains("mac")) return MACOS;
-		return LINUX;
+		return switch (PlatformUtils.operatingSystem()) {
+			case WINDOWS -> WINDOWS;
+			case MACOS -> MACOS;
+			case LINUX -> LINUX;
+			case ANDROID -> ANDROID;
+		};
+	}
+
+	/** The saved selection's platform override when present, otherwise the detected platform. */
+	public static ClientPlatform effective(SelectionIntent savedSelection) {
+		return savedSelection != null && savedSelection.platform() != null ? savedSelection.platform() : current();
 	}
 
 	public static ClientPlatform parse(String value) {
