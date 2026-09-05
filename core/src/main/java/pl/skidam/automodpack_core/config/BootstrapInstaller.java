@@ -44,8 +44,9 @@ public final class BootstrapInstaller {
 			if (bootstrap.hasFingerprint()) OriginTrustStore.save(storage, bootstrap.origin(), new ConnectionJsons.CertificateTrustEntry(bootstrap.fingerprint(), "SEED"));
 			if (bootstrap.installsModpack()) {
 				previousConnection = ConnectionStore.getConnection(storage, bootstrap.modpackId());
-				ConnectionStore.saveConnection(storage, bootstrap.modpackId(),
-						new ConnectionJsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
+				ConnectionJsons.ConnectionInfo seeded = new ConnectionJsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null);
+				seeded.approveOrigin(originKey);
+				ConnectionStore.saveConnection(storage, bootstrap.modpackId(), seeded);
 				clientConfig = clientConfig.withSelectedModpackId(bootstrap.modpackId());
 				ConfigTools.writeAtomic(storage.clientConfigFile(), clientConfig);
 			}

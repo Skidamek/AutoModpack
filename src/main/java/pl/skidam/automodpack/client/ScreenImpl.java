@@ -99,8 +99,8 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void originChange(String modpackName, String previousOrigin, String newOrigin, Runnable allowed, Runnable refused) {
-		executeOnClient(() -> Screens.originChange(modpackName, previousOrigin, newOrigin, allowed, refused));
+	public void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
+		executeOnClient(() -> Screens.originChange(modpackName, approvedOrigins, newOrigin, allowed, refused));
 	}
 
 	@Override
@@ -266,8 +266,8 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new FingerprintVerificationScreen(parent, fingerprint, origin, validated, canceled));
 		}
 
-		public static void originChange(String modpackName, String previousOrigin, String newOrigin, Runnable allowed, Runnable refused) {
-			Screens.setScreen(new OriginChangeConfirmScreen(modpackName, previousOrigin, newOrigin, allowed, refused));
+		public static void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
+			Screens.setScreen(new OriginChangeConfirmScreen(modpackName, approvedOrigins, newOrigin, allowed, refused));
 		}
 
 		public static void detachedJoin(String modpackName, boolean headMatchesActive, Runnable continueJoin, Runnable syncNow) {
