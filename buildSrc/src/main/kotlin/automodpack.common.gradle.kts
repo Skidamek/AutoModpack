@@ -194,9 +194,11 @@ val auditMergedJarTask =
 	tasks.register<MergedJarAuditTask>("auditMergedJar") {
 		mergedJar.set(optimizedMergedJar.flatMap { it.archiveFile })
 		inputs.property("automodpackBuildMode", automodpackBuildMode)
-		maxJarBytes.set(7L * 1024 * 1024 / 2)
+		// Merged jar measured 3732574 bytes with the bossa nova waiting loop; 4 MiB leaves headroom and still trips on dependency bloat.
+		maxJarBytes.set(4L * 1024 * 1024)
 		enforceReleaseSizeBudget.set(!isAutotestBuild)
-		maxMusicBytes.set(64L * 1024)
+		// The waiting loop is the transcribed note-block bossa nova, 550322 bytes as packaged; 1 MiB leaves it headroom and still trips on accidental full songs.
+		maxMusicBytes.set(1024L * 1024)
 	}
 
 mergeJarTask.configure {
