@@ -316,7 +316,7 @@ public class DownloadClient implements AutoCloseable {
 
 	private Connection openConfiguredConnection(TlsCandidate candidate) throws IOException {
 		try {
-			candidate.socket().setSoTimeout(NETWORK_TIMEOUT_MILLIS);
+			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
 			return new Connection(candidate.socket(), secretBytes);
 		} catch (IOException first) {
 			closeQuietly(candidate.socket());
@@ -324,7 +324,7 @@ public class DownloadClient implements AutoCloseable {
 			LOGGER.warn("Modpack connection closed while waiting for certificate trust; reconnecting", first);
 			TlsCandidate retry = openTlsCandidate();
 			try {
-				retry.socket().setSoTimeout(NETWORK_TIMEOUT_MILLIS);
+				retry.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
 				return new Connection(retry.socket(), secretBytes);
 			} catch (IOException second) {
 				closeQuietly(retry.socket());

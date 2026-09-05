@@ -33,8 +33,13 @@ import org.bouncycastle.operator.ContentSigner;
 public class NetUtils {
 	public static final String USER_AGENT = "github/skidamek/automodpack/" + AM_VERSION;
 	public static final Duration NETWORK_TIMEOUT = Duration.ofSeconds(15);
+	// The configured-connection read deadline also guards bulk file transfers, where legitimate
+	// flow-control pauses outlast a connect-grade deadline. It only has to catch a dead peer, not
+	// a slow pipe, so it sits far past any healthy inter-frame gap.
+	public static final Duration TRANSFER_IDLE_TIMEOUT = Duration.ofSeconds(60);
 	public static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
 	public static final int NETWORK_TIMEOUT_MILLIS = Math.toIntExact(NETWORK_TIMEOUT.toMillis());
+	public static final int TRANSFER_IDLE_TIMEOUT_MILLIS = Math.toIntExact(TRANSFER_IDLE_TIMEOUT.toMillis());
 	public static final int HTTP_TIMEOUT_MILLIS = Math.toIntExact(HTTP_TIMEOUT.toMillis());
 
 	// Magic numbers
