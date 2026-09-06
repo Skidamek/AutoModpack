@@ -94,7 +94,7 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 
 	@Override
 	public RowView rowView(int index) {
-		return new RowView(this.children().get(index).getNarration().getString(), true, null);
+		return new RowView(this.children().get(index).getNarration().getString(), true, null, false);
 	}
 
 	@Override

@@ -85,7 +85,8 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	@Override
 	public RowView rowView(int index) {
 		Item item = this.children().get(index).item();
-		return new RowView(item.label().getString(), item.canToggle(), item.kind() == Kind.CAPTION ? null : item.selected());
+		String text = item.counter().isBlank() ? item.label().getString() : item.label().getString() + " " + item.counter();
+		return new RowView(text, item.canToggle(), item.kind() == Kind.CAPTION ? null : item.selected(), item.partial());
 	}
 
 	@Override
@@ -113,11 +114,12 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		return ROW_HEIGHT;
 	}
 
-	public record Item(Kind kind, String id, Component label, Component tooltip, boolean selected, boolean canToggle) {
+	public record Item(Kind kind, String id, Component label, Component tooltip, boolean selected, boolean canToggle, boolean partial, String counter) {
 		public Item {
 			Objects.requireNonNull(kind, "kind");
 			id = id == null ? "" : id;
 			label = Objects.requireNonNull(label, "label");
+			counter = counter == null ? "" : counter;
 		}
 	}
 
@@ -125,6 +127,13 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		CAPTION,
 		HEADER,
 		GROUP
+	}
+
+	/** Group rows step right of their category header; the same step the change browser uses for nested rows. */
+	private static final int CHILD_INDENT = 12;
+
+	private static CheckboxWidget.State state(Item item) {
+		return item.partial() ? CheckboxWidget.State.PARTIAL : item.selected() ? CheckboxWidget.State.CHECKED : CheckboxWidget.State.UNCHECKED;
 	}
 
 	public final class Entry extends ContainerObjectSelectionList.Entry<Entry> {
@@ -142,10 +151,13 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 				this.row = null;
 				this.infoButton = null;
 			} else {
-			int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM) : rowWidth;
-			AbstractWidget checkbox = new CheckboxWidget(minecraft.font, 0, 0, mainWidth, item.label(), item.selected(), value -> {
-				if (value != item.selected()) onToggle.accept(item);
-			});
+			int indent = item.kind() == Kind.GROUP ? CHILD_INDENT : 0;
+			int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - indent - INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM) : rowWidth;
+			AbstractWidget checkbox = item.kind() == Kind.HEADER
+					? new CategoryHeaderRow(minecraft.font, 0, 0, mainWidth, item.label(), state(item), item.counter(), () -> onToggle.accept(item))
+					: new CheckboxWidget(minecraft.font, 0, 0, mainWidth, item.label(), item.selected(), value -> {
+						if (value != item.selected()) onToggle.accept(item);
+					});
 			// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
 			checkbox.active = item.canToggle();
 				if (item.tooltip() != null) {
@@ -232,7 +244,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			this.setHeight(ROW_HEIGHT);
 			/*?}*/
 			if (row == null) return;
-			positionWidget(row, x, y);
+			positionWidget(row, x + (item.kind() == Kind.GROUP ? CHILD_INDENT : 0), y);
 			if (infoButton != null) positionWidget(infoButton, x + GroupSelectionList.this.getRowWidth() - INFO_BUTTON_WIDTH, y);
 		}
 

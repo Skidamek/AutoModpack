@@ -528,6 +528,7 @@ public final class AutoTestBridge {
 			o.addProperty("visible", e.visible());
 			Boolean checked = e.checked();
 			if (checked != null) o.addProperty("checked", checked);
+			if (e.partial()) o.addProperty("partial", true);
 			o.addProperty("type", e.type());
 			o.addProperty("class", e.className());
 			a.add(o);
@@ -659,14 +660,14 @@ public final class AutoTestBridge {
 	}
 
 	/** One clickable GUI thing: a regular widget, or one row of a scrollable list. */
-	private record GuiElement(int id, AbstractWidget widget, RowViewport rows, int rowIndex, String rowText, boolean rowEnabled, Boolean rowChecked) {
+	private record GuiElement(int id, AbstractWidget widget, RowViewport rows, int rowIndex, String rowText, boolean rowEnabled, Boolean rowChecked, boolean rowPartial) {
 		static GuiElement of(int id, AbstractWidget widget) {
-			return new GuiElement(id, widget, null, -1, "", false, null);
+			return new GuiElement(id, widget, null, -1, "", false, null, false);
 		}
 
 		static GuiElement ofRow(int id, RowViewport rows, int rowIndex) {
 			RowViewport.RowView view = rows.rowView(rowIndex);
-			return new GuiElement(id, null, rows, rowIndex, view.text(), view.enabled(), view.checked());
+			return new GuiElement(id, null, rows, rowIndex, view.text(), view.enabled(), view.checked(), view.partial());
 		}
 
 		String text() {
@@ -725,6 +726,12 @@ public final class AutoTestBridge {
 		Boolean checked() {
 			if (rows != null) return rowChecked;
 			return widget instanceof CheckboxWidget checkbox ? checkbox.selected() : null;
+		}
+
+		/** Indeterminate state of a tri-state checkbox row: some, but not all, of what it stands for is in. */
+		boolean partial() {
+			if (rows != null) return rowPartial;
+			return widget instanceof CheckboxWidget checkbox && checkbox.partial();
 		}
 
 		String type() {
