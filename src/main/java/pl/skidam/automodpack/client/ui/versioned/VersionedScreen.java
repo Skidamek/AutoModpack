@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.WeakHashMap;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -88,6 +90,7 @@ public class VersionedScreen extends Screen {
 
 		// Render the rest of our screen
 		versionedRender(matrices, mouseX, mouseY, delta);
+		renderLegacyTooltips(matrices, mouseX, mouseY);
 
 		/*? if <1.20.6 {*/
 		/*super.render(matrices.getContext(), mouseX, mouseY, delta);
@@ -435,15 +438,40 @@ public class VersionedScreen extends Screen {
 	*//*?}*/
 
 	/*? > 1.19.2 {*/
-	public static void setTooltip(Button button, Component tooltip) {
-		button.setTooltip(Tooltip.create(tooltip));
+	public static void setTooltip(AbstractWidget widget, Component tooltip) {
+		widget.setTooltip(Tooltip.create(tooltip));
 	}
 
 	/*?} else {*/
-	/*public static void setTooltip(Button button, Component tooltip) {
-		// Legacy buttons have no tooltip API. Keep their existing message unchanged.
+	/*public static void setTooltip(AbstractWidget widget, Component tooltip) {
+		// Legacy widgets have no tooltip API, so the current screen remembers the pair and draws it while hovered.
+		Objects.requireNonNull(widget, "tooltip widget");
+		Objects.requireNonNull(tooltip, "tooltip");
+		if (Minecraft.getInstance().screen instanceof VersionedScreen versioned) versioned.legacyTooltips.put(widget, tooltip);
 	}
 	*//*?}*/
+
+	/** Widget tooltips on versions without a tooltip API; cleared on re-init so replaced widgets cannot answer for their successors. */
+	private final WeakHashMap<AbstractWidget, Component> legacyTooltips = new WeakHashMap<>();
+
+	@Override
+	protected void init() {
+		super.init();
+		legacyTooltips.clear();
+	}
+
+	/** Draws the registered widget tooltip under the pointer; only compiled for versions that cannot attach one to the widget. */
+	private void renderLegacyTooltips(VersionedMatrices matrices, int mouseX, int mouseY) {
+		/*? if <1.19.3 {*/
+		/*if (legacyTooltips.isEmpty()) return;
+		for (Map.Entry<AbstractWidget, Component> entry : legacyTooltips.entrySet()) {
+			if (entry.getKey().isMouseOver(mouseX, mouseY)) {
+				showComponentTooltip(this.font, matrices, entry.getValue(), mouseX, mouseY);
+				return;
+			}
+		}
+		*//*?}*/
+	}
 
 	protected static final class ActionDefinition {
 		private final Component message;

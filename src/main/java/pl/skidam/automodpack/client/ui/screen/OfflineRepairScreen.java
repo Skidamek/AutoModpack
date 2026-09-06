@@ -12,17 +12,14 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-/*? if > 1.19.2 {*/
-import net.minecraft.client.gui.components.Tooltip;
-/*?}*/
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
-import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.OfflineRepair;
@@ -78,9 +75,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 				rebuild();
 			});
 			keep.active = !busy;
-			/*? if > 1.19.2 {*/
-			keep.setTooltip(Tooltip.create(VersionedText.translatable("automodpack.confirm.leftoverTooltip", files)));
-			/*?}*/
+			VersionedScreen.setTooltip(keep, VersionedText.translatable("automodpack.confirm.leftoverTooltip", files));
 			this.addRenderableWidget(keep);
 			listTop += 28;
 		}

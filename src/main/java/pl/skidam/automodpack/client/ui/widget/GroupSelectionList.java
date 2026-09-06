@@ -20,10 +20,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
-/*? if > 1.19.2 {*/
-import net.minecraft.client.gui.components.Tooltip;
-/*?}*/
-
 /*? if >= 1.21.9 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 /*?}*/
@@ -177,11 +173,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 					});
 			// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
 			checkbox.active = item.canToggle();
-				if (item.tooltip() != null) {
-					/*? if > 1.19.2 {*/
-					checkbox.setTooltip(Tooltip.create(item.tooltip()));
-					/*?}*/
-				}
+				if (item.tooltip() != null) VersionedScreen.setTooltip(checkbox, item.tooltip());
 				this.row = checkbox;
 				if (item.kind() == Kind.GROUP) {
 					Button inspect = VersionedScreen.buttonWidget(0, 0, INFO_BUTTON_WIDTH, 20, VersionedText.literal("?"), button -> onInspect.accept(item));
