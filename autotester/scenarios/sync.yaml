@@ -1,8 +1,8 @@
 id: sync
 description: |
   Full round trip: boot, trust the certificate, sync the modpack, verify the files,
-  restart the client, rejoin, and confirm the player reaches the game with the
-  modpack applied.
+  restart the client, rejoin, restart the server with unchanged content to prove the
+  modpack stays hosted, rejoin again, and confirm the player reaches the game.
 renderClient: true
 
 flow:
@@ -18,6 +18,14 @@ flow:
         dir: mods
         patterns: ["automodpack.jar"]
   - use: restart_client
+  - do: restart_server
+    name: restart the server with unchanged modpack content
+  - do: assert
+    name: unchanged server restart keeps the modpack hosted
+    that:
+      log:
+        container: server
+        not_matches: 'No current generation record is prepared'
   - use: rejoin
   - do: quit
     name: quit the client
