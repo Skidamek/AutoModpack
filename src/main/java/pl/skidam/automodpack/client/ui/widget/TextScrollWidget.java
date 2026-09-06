@@ -81,7 +81,7 @@ public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget
 	@Override
 	public RowView rowView(int index) {
 		// Text rows are never interactive: enabled stays false, so click-style selectors cannot land on a body line.
-		return new RowView(this.children().get(index).line().getString(), false, null);
+		return new RowView(this.children().get(index).line().getString(), false, null, false);
 	}
 
 	@Override

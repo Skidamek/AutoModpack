@@ -194,18 +194,18 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		for (Row row : rows) {
 			if (row.groupId() == null) {
 				if (row.categoryId() == null) {
-					items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.CAPTION, "", sectionLabel(row), null, false, false));
+					items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.CAPTION, "", sectionLabel(row), null, false, false, false, ""));
 					continue;
 				}
-				boolean canToggle = hasOptionalCategoryGroups(row.categoryId());
-				Component tooltip = canToggle ? VersionedText.translatable("automodpack.selection.categoryTooltip").withStyle(ChatFormatting.GRAY) : null;
-				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, row.categoryId(), sectionLabel(row), tooltip, categoryFullySelected(row.categoryId()), canToggle));
+				String category = row.categoryId();
+				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, category, headerLabel(category), headerTooltip(category, hasOptionalCategoryGroups(category)),
+						categoryFullySelected(category), hasOptionalCategoryGroups(category), categoryPartiallySelected(category), headerCounter(category)));
 				continue;
 			}
 			GroupManifest.Group group = groups.get(row.groupId());
 			boolean togglable = group != null && canToggle(row.groupId(), group);
 			items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.GROUP, row.groupId(), rowLabel(row.groupId(), group), rowTooltip(row.groupId(), group), resolution.selectedGroups().contains(row.groupId()),
-					togglable));
+					togglable, false, ""));
 		}
 		return List.copyOf(items);
 	}
@@ -385,16 +385,35 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private MutableComponent sectionLabel(Row row) {
-		if (row.categoryId() == null) return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
-		String title = VersionedText.translatable("automodpack.selection.category", categoryLabel(row.categoryId())).getString();
-		// The checked box names what the next click does: full = exclude all, empty = include all, partial = include the rest.
-		long optional = optionalGroupCount(row.categoryId());
-		long selected = selectedOptionalGroupCount(row.categoryId());
+		return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
+	}
+
+	/** The header glyph names what the next click does: full = exclude all, empty = include all, partial = include the rest. */
+	private MutableComponent headerLabel(String category) {
+		long optional = optionalGroupCount(category);
+		long selected = selectedOptionalGroupCount(category);
 		boolean allSelected = optional > 0 && selected == optional;
-		String label = title;
-		if (selected > 0 && !allSelected) label += " " + VersionedText.translatable("automodpack.selection.categoryPart", selected, optional).getString();
-		return VersionedText.literal(label)
+		return VersionedText.literal(VersionedText.translatable("automodpack.selection.category", categoryLabel(category)).getString())
 				.withStyle(ChatFormatting.BOLD, allSelected ? ChatFormatting.GREEN : selected == 0 ? ChatFormatting.GRAY : ChatFormatting.YELLOW);
+	}
+
+	private boolean categoryPartiallySelected(String category) {
+		long optional = optionalGroupCount(category);
+		long selected = selectedOptionalGroupCount(category);
+		return selected > 0 && selected < optional;
+	}
+
+	private String headerCounter(String category) {
+		long optional = optionalGroupCount(category);
+		return optional == 0 ? "" : selectedOptionalGroupCount(category) + "/" + optional;
+	}
+
+	private Component headerTooltip(String category, boolean canToggle) {
+		if (!canToggle) return null;
+		StringBuilder tooltip = new StringBuilder(VersionedText.translatable("automodpack.selection.categoryTooltip").getString());
+		if (categoryPartiallySelected(category))
+			tooltip.append("\n").append(VersionedText.translatable("automodpack.selection.categoryPart", selectedOptionalGroupCount(category), optionalGroupCount(category)).getString());
+		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
 	}
 
 	private long optionalGroupCount(String category) {

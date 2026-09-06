@@ -11,6 +11,7 @@ A selector is a mapping; all given fields must match (AND):
   enabled  true/false
   visible  true/false (default true: hidden/plain-text placeholders never match)
   checked  true/false for checkbox elements (absent for plain buttons)
+  partial  true/false for tri-state checkbox rows (indeterminate dash); absent otherwise
   index    pick the Nth match (default 0; negative counts from the end)
 """
 from __future__ import annotations
@@ -70,6 +71,8 @@ def find_all(gui: dict, selector: dict) -> list:
         if visible is not None and bool(e.get("visible", True)) != bool(visible):
             continue
         if checked is not None and bool(e.get("checked", False)) != bool(checked):
+            continue
+        if selector.get("partial") is not None and bool(e.get("partial", False)) != bool(selector["partial"]):
             continue
         if keys is not None and str(e.get("key") or "") not in keys:
             continue

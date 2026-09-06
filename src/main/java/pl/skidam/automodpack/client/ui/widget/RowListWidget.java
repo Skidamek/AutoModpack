@@ -88,7 +88,7 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 
 	@Override
 	public RowView rowView(int index) {
-		return new RowView(this.children().get(index).row().text(), true, null);
+		return new RowView(this.children().get(index).row().text(), true, null, false);
 	}
 
 	@Override
