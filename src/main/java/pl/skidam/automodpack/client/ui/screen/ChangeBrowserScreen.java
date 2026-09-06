@@ -46,33 +46,37 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private final Component heading;
 	private final Component description;
 	private final List<MutableComponent> preamble;
+	private final boolean warnUnverified;
 	private ChangeSet changes;
 	private final Map<String, String> featureNames;
 	private final BrowserAction auxiliaryAction;
 	private boolean closed;
 	private boolean cacheLookupStarted;
+	private boolean referencesResolved;
 	private final Set<String> collapsedFolders = new TreeSet<>();
 	private String search = "";
 	private String selectedContent = "";
 	private String selectedFeature = "";
+	private Boolean selectedSource = null;
 	private String selectedPath = "";
 	private ChangeBrowserWidget browser;
 	private EditBox searchField;
 	private Button contentButton;
 	private Button featureButton;
+	private Button sourceButton;
 	private int browserTop;
 	private int browserBottom;
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames) {
-		this(parent, heading, description, changes, featureNames, null);
+		this(parent, heading, description, changes, featureNames, null, List.of(), false);
 	}
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction) {
-		this(parent, heading, description, changes, featureNames, auxiliaryAction, List.of());
+		this(parent, heading, description, changes, featureNames, auxiliaryAction, List.of(), false);
 	}
 
 	/** The preamble is a pre-wrapped text block (for example an entry's full patch notes) drawn between the description and the browser. */
-	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble) {
+	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble, boolean warnUnverified) {
 		super(heading);
 		this.parent = parent;
 		this.heading = Objects.requireNonNull(heading, "browser heading");
@@ -81,6 +85,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.changes = Objects.requireNonNull(changes, "browser changes");
 		this.featureNames = Map.copyOf(featureNames == null ? Map.of() : featureNames);
 		this.auxiliaryAction = auxiliaryAction;
+		this.warnUnverified = warnUnverified;
 	}
 
 	@Override
@@ -95,7 +100,8 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int searchY = 35 + preambleHeight;
 		int controlsY = (narrow ? 59 : 35) + preambleHeight;
 		int controlsLeft = narrow ? panelLeft : panelLeft + searchWidth + GAP;
-		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * 2 : searchWidth + GAP * 3)) / 2);
+		int controlCount = warnUnverified ? 3 : 2;
+		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * controlCount : searchWidth + GAP * (controlCount + 1))) / controlCount);
 		this.browserTop = (narrow ? 83 : 59) + preambleHeight;
 		this.searchField = fieldWidget(panelLeft, searchY, searchWidth, VersionedText.translatable("automodpack.browser.search"), null, Integer.MAX_VALUE);
 		this.searchField.setValue(search);
@@ -110,6 +116,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.featureButton = buttonWidget(controlsLeft + GAP + controlWidth, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleFeature());
 		this.addRenderableWidget(this.contentButton);
 		this.addRenderableWidget(this.featureButton);
+		if (warnUnverified) {
+			this.sourceButton = buttonWidget(controlsLeft + (GAP + controlWidth) * 2, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleSource());
+			this.addRenderableWidget(this.sourceButton);
+		}
 		updateControlLabels();
 		List<ActionRow> actionRows = buildActionRows();
 		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
@@ -158,9 +168,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (this.minecraft == null) return;
 		if (this.browser != null) this.removeWidget(this.browser);
 		ChangeBrowserProjection.Filter filter = new ChangeBrowserProjection.Filter(search,
-				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature));
+				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature), selectedSource);
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE, filter).collapse(collapsedFolders);
-		this.browser = new ChangeBrowserWidget(projection, collapsedFolders, featureNames, this::toggleFolder, this::onFileSelected,
+		this.browser = new ChangeBrowserWidget(projection, collapsedFolders, featureNames, warnUnverified, referencesResolved, this::toggleFolder, this::onFileSelected,
 				this.minecraft, this.width, this.height, browserTop, browserBottom);
 		this.addRenderableWidget(this.browser);
 		this.browser.selectPath(selectedPath);
@@ -184,6 +194,12 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	private void cycleFeature() {
 		selectedFeature = next(selectedFeature, features());
+		updateControlLabels();
+		rebuildBrowser();
+	}
+
+	private void cycleSource() {
+		selectedSource = selectedSource == null ? Boolean.FALSE : selectedSource.booleanValue() ? null : Boolean.TRUE;
 		updateControlLabels();
 		rebuildBrowser();
 	}
@@ -217,19 +233,40 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			else if (label == null || label.isBlank()) label = VersionedText.translatable("automodpack.browser.unknownFeature").getString();
 			featureButton.setMessage(VersionedText.translatable("automodpack.browser.featureFilter", label));
 		}
+		if (sourceButton != null) sourceButton.setMessage(VersionedText.translatable("automodpack.browser.sourceFilter",
+				selectedSource == null ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom").getString()));
 	}
 
 	private void resolveCachedReferences() {
 		if (cacheLookupStarted) return;
 		cacheLookupStarted = true;
+		if (!hasAnyHash()) {
+			referencesResolved = true;
+			return;
+		}
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, ClientStorage.open(GameDirectory.current()).platformCacheDirectory());
 			this.minecraft.execute(() -> {
+				referencesResolved = true;
 				if (closed || referenced == changes) return;
 				changes = referenced;
 				rebuild();
 			});
 		});
+	}
+
+	private boolean hasAnyHash() {
+		for (ChangeSet.Change change : changes.changes())
+			for (ChangeSet.Occurrence occurrence : change.occurrences())
+				if (occurrence.beforeHash() != null || occurrence.afterHash() != null) return true;
+		return false;
+	}
+
+	/** A jar whose every occurrence lacks a platform reference: the pack ships a custom copy of it. */
+	private static boolean isUnreferencedJar(ChangeBrowserProjection.FileRow file) {
+		if (!file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) return false;
+		for (ChangeSet.Occurrence occurrence : file.occurrences()) if (!occurrence.references().isEmpty()) return false;
+		return true;
 	}
 
 	private List<PlatformLink> platformLinks() {
@@ -279,9 +316,13 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			preambleY += LINE_STEP;
 		}
 		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE,
-				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature)));
+				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature), selectedSource));
 		String summary = UiFormat.plural(projection.total().fileCount(), "automodpack.browser.summary", UiFormat.formatSize(projection.total().byteCount())).getString();
-		if (!projection.effects().isEmpty()) summary += " | " + projection.effects().size() + " " + VersionedText.translatable("automodpack.browser.kind.metadata_only").getString();
+		if (!projection.effects().isEmpty()) summary += " | " + UiFormat.plural(projection.effects().size(), "automodpack.browser.effectsSummary").getString();
+		if (warnUnverified) {
+			long custom = projection.files().stream().filter(ChangeBrowserScreen::isUnreferencedJar).count();
+			if (custom > 0) summary += " · " + UiFormat.plural(custom, "automodpack.browser.customSummary").getString();
+		}
 		int summaryY = footerTop(buildActionRows()) - this.font.lineHeight - 5;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, summaryY, TextColors.WHITE);
 		if (projection.rows().isEmpty())

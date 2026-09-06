@@ -14,7 +14,15 @@ import java.util.Set;
 
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
-/** Resolves Modrinth and CurseForge project pages for file digests from the shared platform cache. */
+/**
+ * Resolves Modrinth and CurseForge project pages for file digests from the shared platform cache.
+ *
+ * <p>
+ * Pages attach for the state a row writes: when any occurrence of a path carries an after-hash, only
+ * after-hash pages attach, so an edited replacement jar without a platform hit never inherits the
+ * original jar's badges; before-hash pages attach only to rows with no after-hash (removed/preserved).
+ * </p>
+ */
 public final class PlatformReferences {
 	private PlatformReferences() {}
 
@@ -25,7 +33,7 @@ public final class PlatformReferences {
 		return pagesOf(cache.getAll(List.of(sha1)).get(sha1));
 	}
 
-	/** Attaches the cached project pages of every occurrence's file digests as references, opening a short-lived cache instance. */
+	/** Attaches cached project pages as references, opening a short-lived cache instance; pages attach for the state each row writes (see {@link #withCachedReferences(ChangeSet, PlatformCache)}). */
 	public static ChangeSet withCachedReferences(ChangeSet changes, Path platformCacheDirectory) {
 		try (PlatformCache cache = PlatformCache.open(platformCacheDirectory)) {
 			return withCachedReferences(changes, cache);
@@ -48,10 +56,10 @@ public final class PlatformReferences {
 		if (pagesBySha1.isEmpty()) return changes;
 		Map<String, List<String>> referencesByPath = new LinkedHashMap<>();
 		for (ChangeSet.Change change : changes.changes()) {
+			boolean writesAfterState = change.occurrences().stream().anyMatch(occurrence -> occurrence.afterHash() != null);
 			Set<String> references = new LinkedHashSet<>();
 			for (ChangeSet.Occurrence occurrence : change.occurrences()) {
-				addPages(references, pagesBySha1.get(occurrence.beforeHash()));
-				addPages(references, pagesBySha1.get(occurrence.afterHash()));
+				addPages(references, pagesBySha1.get(writesAfterState ? occurrence.afterHash() : occurrence.beforeHash()));
 			}
 			if (!references.isEmpty()) referencesByPath.put(change.logicalPath(), List.copyOf(references));
 		}

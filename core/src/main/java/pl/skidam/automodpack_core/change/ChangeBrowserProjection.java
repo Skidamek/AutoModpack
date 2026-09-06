@@ -114,8 +114,8 @@ public final class ChangeBrowserProjection {
 		LIST
 	}
 
-	/** A query shared by tree and list projections. Empty sets mean no restriction. */
-	public record Filter(String search, Set<String> contentKinds, Set<String> featureIds) {
+	/** A query shared by tree and list projections. Empty sets mean no restriction; {@code source} is {@code null} for no restriction, TRUE for occurrences with references, FALSE for unreferenced jars. */
+	public record Filter(String search, Set<String> contentKinds, Set<String> featureIds, Boolean source) {
 		public Filter {
 			search = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
 			contentKinds = normalizedKinds(contentKinds);
@@ -123,7 +123,7 @@ public final class ChangeBrowserProjection {
 		}
 
 		public static Filter all() {
-			return new Filter("", Set.of(), Set.of());
+			return new Filter("", Set.of(), Set.of(), null);
 		}
 
 		private List<ChangeSet.Occurrence> visibleOccurrences(ChangeSet.Change change) {
@@ -135,7 +135,13 @@ public final class ChangeBrowserProjection {
 
 		private boolean matchesOccurrence(ChangeSet.Occurrence occurrence) {
 			return (contentKinds.isEmpty() || contentKinds.contains(occurrence.contentKind()))
-					&& (featureIds.isEmpty() || occurrence.featureIds().stream().anyMatch(featureIds::contains));
+					&& (featureIds.isEmpty() || occurrence.featureIds().stream().anyMatch(featureIds::contains))
+					&& (source == null || matchesSource(occurrence));
+		}
+
+		private boolean matchesSource(ChangeSet.Occurrence occurrence) {
+			if (source.booleanValue()) return !occurrence.references().isEmpty();
+			return occurrence.references().isEmpty() && occurrence.logicalPath().toLowerCase(Locale.ROOT).endsWith(".jar");
 		}
 
 		private boolean matchesSearch(ChangeSet.Occurrence occurrence) {
@@ -215,6 +221,17 @@ public final class ChangeBrowserProjection {
 		@Override
 		public Aggregate aggregate() {
 			return Aggregate.single(kind, size());
+		}
+
+		/** The hash of the state this row writes: the first occurrence's after-hash, falling back to its before-hash, else {@code null}. */
+		public String writtenHash() {
+			ChangeSet.Occurrence occurrence = occurrences.get(0);
+			return occurrence.afterHash() != null ? occurrence.afterHash() : occurrence.beforeHash();
+		}
+
+		/** The hash of the state this row replaces: the first occurrence's before-hash, else {@code null}. */
+		public String previousHash() {
+			return occurrences.get(0).beforeHash();
 		}
 
 		public long size() {
