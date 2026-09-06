@@ -351,6 +351,7 @@
   "automodpack.browser.effectsSummary.one": "%s other efekt",
   "automodpack.browser.effectsSummary.other": "%s other efekts",
   "automodpack.browser.modrinth": "Modrinth",
+  "automodpack.browser.selectHint": "pik a file 2 c its detailz.",
   "automodpack.browser.source.custom": "Kustom",
   "automodpack.browser.source.published": "publishd",
   "automodpack.browser.sourceFilter": "sorz: %s",

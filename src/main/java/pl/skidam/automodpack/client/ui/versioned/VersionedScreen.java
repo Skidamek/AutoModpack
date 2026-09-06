@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -232,12 +233,17 @@ public class VersionedScreen extends Screen {
 
 	/** Shows the tooltip wherever the pointer currently is; row lists call this only while a tooltip-carrying row is hovered. */
 	protected final void showComponentTooltip(VersionedMatrices matrices, Component tooltip, int mouseX, int mouseY) {
+		showComponentTooltip(this.font, matrices, tooltip, mouseX, mouseY);
+	}
+
+	/** Static twin so widgets outside the screen hierarchy (list rows) can show tooltips on every version. */
+	public static void showComponentTooltip(Font font, VersionedMatrices matrices, Component tooltip, int mouseX, int mouseY) {
 		/*? if >=1.21.8 {*/
-		matrices.getContext().setComponentTooltipForNextFrame(this.font, List.of(tooltip), mouseX, mouseY);
+		matrices.getContext().setComponentTooltipForNextFrame(font, List.of(tooltip), mouseX, mouseY);
 		/*?} elif >=1.20 {*/
-		/*setTooltipForNextRenderPass(tooltip);
+		/*if (Minecraft.getInstance().screen instanceof VersionedScreen versioned) versioned.setTooltipForNextRenderPass(tooltip);
 		*//*?} else {*/
-		/*renderTooltip(matrices.getContext(), tooltip, mouseX, mouseY);
+		/*if (Minecraft.getInstance().screen instanceof VersionedScreen versioned) versioned.renderTooltip(matrices.getContext(), tooltip, mouseX, mouseY);
 		*//*?}*/
 	}
 

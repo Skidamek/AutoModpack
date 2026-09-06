@@ -361,6 +361,7 @@
   "automodpack.browser.effectsSummary.one": "%s другой эффект",
   "automodpack.browser.effectsSummary.other": "%s других эффектов",
   "automodpack.browser.modrinth": "Modrinth",
+  "automodpack.browser.selectHint": "Выберите файл, чтобы увидеть сведения.",
   "automodpack.browser.source.custom": "Свой",
   "automodpack.browser.source.published": "Опубликован",
   "automodpack.browser.sourceFilter": "Источник: %s",

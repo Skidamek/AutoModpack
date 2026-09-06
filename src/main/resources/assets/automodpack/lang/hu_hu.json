@@ -351,6 +351,7 @@
   "automodpack.browser.effectsSummary.one": "%s további hatás",
   "automodpack.browser.effectsSummary.other": "%s további hatás",
   "automodpack.browser.modrinth": "Modrinth",
+  "automodpack.browser.selectHint": "Válassz egy fájlt a részleteihez.",
   "automodpack.browser.source.custom": "Egyéni",
   "automodpack.browser.source.published": "Közzétett",
   "automodpack.browser.sourceFilter": "Forrás: %s",
