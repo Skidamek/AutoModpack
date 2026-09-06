@@ -240,6 +240,14 @@ public final class ChangeBrowserProjection {
 			return size;
 		}
 
+		/** The largest recorded size of the state this row replaces, or {@code null} when no occurrence knows its before-state. */
+		public Long beforeSize() {
+			Long beforeSize = null;
+			for (ChangeSet.Occurrence occurrence : occurrences)
+				if (occurrence.beforeSize() != null) beforeSize = beforeSize == null ? occurrence.beforeSize() : Math.max(beforeSize, occurrence.beforeSize());
+			return beforeSize;
+		}
+
 		public Set<String> contentKinds() {
 			TreeSet<String> kinds = new TreeSet<>();
 			for (ChangeSet.Occurrence occurrence : occurrences) kinds.add(occurrence.contentKind());

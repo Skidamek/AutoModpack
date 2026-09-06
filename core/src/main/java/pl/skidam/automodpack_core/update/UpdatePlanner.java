@@ -337,8 +337,9 @@ public final class UpdatePlanner {
 			String contentKind = after == null ? null : after.type;
 			List<String> featureIds = ownership == null ? List.of() : List.copyOf(ownership.historicalGroupIds());
 			long size = operation.operation() == OperationType.DELETE ? before == null ? 0 : Math.max(0, before.size()) : operation.expectedSize();
+			Long beforeSize = kind == ChangeSet.Kind.REMOVED ? null : before != null && before.regularFile() ? Math.max(0, before.size()) : null;
 			changes.add(new ChangeSet.Change(operation.relativePath(), kind,
-					List.of(new ChangeSet.Occurrence(operation.root().name(), operation.relativePath(), size, beforeHash, afterHash, contentKind, featureIds, List.of()))));
+					List.of(new ChangeSet.Occurrence(operation.root().name(), operation.relativePath(), size, beforeSize, beforeHash, afterHash, contentKind, featureIds, List.of()))));
 		}
 
 		Set<String> targetPaths = targetFiles.keySet();
@@ -364,7 +365,7 @@ public final class UpdatePlanner {
 			}
 			String beforeHash = HashUtils.isSha1(current.sha1()) ? current.sha1() : null;
 			changes.add(new ChangeSet.Change(key.relativePath(), kind, List.of(new ChangeSet.Occurrence(key.root().name(), key.relativePath(), Math.max(0, current.size()),
-					beforeHash, null, null, List.copyOf(ledgerEntry.historicalGroupIds()), List.of()))));
+					null, beforeHash, null, null, List.copyOf(ledgerEntry.historicalGroupIds()), List.of()))));
 		}
 
 		List<ChangeSet.Effect> effects = restartReasons.stream().map(reason -> new ChangeSet.Effect("restart", reason.name())).toList();

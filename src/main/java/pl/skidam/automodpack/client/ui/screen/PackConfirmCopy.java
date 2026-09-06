@@ -45,9 +45,23 @@ final class PackConfirmCopy {
 		return originFull.endsWith(":25565") ? originFull.substring(0, originFull.length() - 6) : originFull;
 	}
 
+	/** The download cost of the selected target: the sum of every selected file's size. */
+	static long selectedBytes(SelectedModpackTarget target) {
+		if (target.flatTarget().list == null) return 0;
+		long bytes = 0;
+		for (var item : target.flatTarget().list) bytes += Long.parseLong(item.size);
+		return bytes;
+	}
+
 	static String selectedSummary(SelectedModpackTarget target) {
-		long bytes = target.flatTarget().list.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		return VersionedText.translatable("automodpack.firstConnect.selectedSummary", target.selection().selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(bytes)).getString();
+		return VersionedText.translatable("automodpack.firstConnect.selectedSummary", target.selection().selectedGroups().size(), target.flatTarget().list.size(), UiFormat.formatSize(selectedBytes(target))).getString();
+	}
+
+	/** The selected target's size for one file path, or 0 when the path is not part of the target. */
+	static long selectedJarSize(SelectedModpackTarget target, String path) {
+		if (target.flatTarget().list == null) return 0;
+		for (var item : target.flatTarget().list) if (path.equals(item.file)) return Math.max(0, Long.parseLong(item.size));
+		return 0;
 	}
 
 	static String requestedGroups(SelectedModpackTarget target) {

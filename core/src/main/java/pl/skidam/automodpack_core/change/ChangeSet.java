@@ -93,7 +93,7 @@ public final class ChangeSet {
 			if (groupIds != null && !groupIds.contains(group.getKey())) continue;
 			for (var file : group.getValue().files().entrySet()) {
 				GroupManifest.GroupFile value = file.getValue();
-				changes.add(new Change(file.getKey(), kind, List.of(new Occurrence("catalogue", file.getKey(), value.size(), null, value.sha1(), value.type(), List.of(group.getKey()), List.of()))));
+				changes.add(new Change(file.getKey(), kind, List.of(new Occurrence("catalogue", file.getKey(), value.size(), null, null, value.sha1(), value.type(), List.of(group.getKey()), List.of()))));
 			}
 		}
 		return of(changes);
@@ -235,21 +235,21 @@ public final class ChangeSet {
 		}
 	}
 
-	public record Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, String contentKind, List<String> featureIds, List<String> references) {
+	public record Occurrence(String location, String logicalPath, long size, Long beforeSize, String beforeHash, String afterHash, String contentKind, List<String> featureIds, List<String> references) {
 		public Occurrence(String location, String logicalPath, long size) {
-			this(location, logicalPath, size, null, null, null, List.of(), List.of());
+			this(location, logicalPath, size, null, null, null, null, List.of(), List.of());
 		}
 
 		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash) {
-			this(location, logicalPath, size, beforeHash, afterHash, null, List.of(), List.of());
+			this(location, logicalPath, size, null, beforeHash, afterHash, null, List.of(), List.of());
 		}
 
 		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, List<String> references) {
-			this(location, logicalPath, size, beforeHash, afterHash, null, List.of(), references);
+			this(location, logicalPath, size, null, beforeHash, afterHash, null, List.of(), references);
 		}
 
 		public Occurrence(String location, String logicalPath, long size, String beforeHash, String afterHash, String contentKind, List<String> references) {
-			this(location, logicalPath, size, beforeHash, afterHash, contentKind, List.of(), references);
+			this(location, logicalPath, size, null, beforeHash, afterHash, contentKind, List.of(), references);
 		}
 
 		public Occurrence {
@@ -257,6 +257,7 @@ public final class ChangeSet {
 			location = location.trim();
 			logicalPath = LogicalPath.requireCanonical(logicalPath);
 			if (size < 0) throw new IllegalArgumentException("Change occurrence size is negative");
+			if (beforeSize != null && beforeSize < 0) throw new IllegalArgumentException("Change occurrence before size is negative");
 			beforeHash = normalizeHash(beforeHash, "before hash");
 			afterHash = normalizeHash(afterHash, "after hash");
 			contentKind = normalizeContentKind(contentKind, logicalPath);
@@ -267,7 +268,7 @@ public final class ChangeSet {
 		}
 
 		public Occurrence withReferences(List<String> newReferences) {
-			return new Occurrence(location, logicalPath, size, beforeHash, afterHash, contentKind, featureIds, newReferences);
+			return new Occurrence(location, logicalPath, size, beforeSize, beforeHash, afterHash, contentKind, featureIds, newReferences);
 		}
 	}
 

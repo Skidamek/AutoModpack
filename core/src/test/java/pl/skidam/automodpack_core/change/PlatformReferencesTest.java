@@ -63,7 +63,7 @@ class PlatformReferencesTest {
 	}
 
 	private static ChangeSet.Change change(String path, ChangeSet.Kind kind, String beforeHash, String afterHash) {
-		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("diff", path, 5, beforeHash, afterHash, "mod", List.of("main"), List.of())));
+		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("diff", path, 5, null, beforeHash, afterHash, "mod", List.of("main"), List.of())));
 	}
 
 	private static ChangeSet catalogue() {

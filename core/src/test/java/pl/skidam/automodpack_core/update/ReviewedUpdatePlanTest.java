@@ -67,9 +67,9 @@ class ReviewedUpdatePlanTest {
 	@Test
 	void changedVisibleConsequencesCannotBypassReview() {
 		ChangeSet firstConsequences = ChangeSet.of(new ChangeSet.Change("mods/a.jar", ChangeSet.Kind.ADDED,
-				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, null, OBJECT_HASH, "mod", List.of(), List.of()))));
+				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, null, null, OBJECT_HASH, "mod", List.of(), List.of()))));
 		ChangeSet changedConsequences = ChangeSet.of(new ChangeSet.Change("mods/a.jar", ChangeSet.Kind.MODIFIED,
-				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, OTHER_HASH, OBJECT_HASH, "mod", List.of(), List.of()))));
+				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, null, OTHER_HASH, OBJECT_HASH, "mod", List.of(), List.of()))));
 
 		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of(operation("mods/a.jar", OBJECT_HASH)), firstConsequences));
 		UpdatePlan changed = plan(List.of(operation("mods/a.jar", OBJECT_HASH)), changedConsequences);
