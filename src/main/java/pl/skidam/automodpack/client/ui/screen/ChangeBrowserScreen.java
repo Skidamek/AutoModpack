@@ -47,6 +47,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private final Component description;
 	private final List<MutableComponent> preamble;
 	private final boolean warnUnverified;
+	private final long downloadBytes;
 	private ChangeSet changes;
 	private final Map<String, String> featureNames;
 	private final BrowserAction auxiliaryAction;
@@ -70,15 +71,15 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private int paneTop;
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames) {
-		this(parent, heading, description, changes, featureNames, null, List.of(), false);
+		this(parent, heading, description, changes, featureNames, null, List.of(), false, 0);
 	}
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction) {
-		this(parent, heading, description, changes, featureNames, auxiliaryAction, List.of(), false);
+		this(parent, heading, description, changes, featureNames, auxiliaryAction, List.of(), false, 0);
 	}
 
 	/** The preamble is a pre-wrapped text block (for example an entry's full patch notes) drawn between the description and the browser. */
-	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble, boolean warnUnverified) {
+	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble, boolean warnUnverified, long downloadBytes) {
 		super(heading);
 		this.parent = parent;
 		this.heading = Objects.requireNonNull(heading, "browser heading");
@@ -88,6 +89,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.featureNames = Map.copyOf(featureNames == null ? Map.of() : featureNames);
 		this.auxiliaryAction = auxiliaryAction;
 		this.warnUnverified = warnUnverified;
+		this.downloadBytes = Math.max(0, downloadBytes);
 	}
 
 	@Override
@@ -330,6 +332,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			long custom = projection.files().stream().filter(ChangeBrowserScreen::isUnreferencedJar).count();
 			if (custom > 0) summary += " · " + UiFormat.plural(custom, "automodpack.browser.customSummary").getString();
 		}
+		if (downloadBytes > 0) summary += " · " + VersionedText.translatable("automodpack.browser.downloadCost", UiFormat.formatSize(downloadBytes)).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.summaryY, TextColors.WHITE);
 		if (projection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);

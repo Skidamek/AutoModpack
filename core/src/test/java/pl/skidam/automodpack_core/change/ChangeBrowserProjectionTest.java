@@ -119,10 +119,10 @@ class ChangeBrowserProjectionTest {
 	}
 
 	private static ChangeSet.Change change(String path, ChangeSet.Kind kind, String group, long size, String contentKind) {
-		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("catalogue", path, size, null, HASH, contentKind, List.of(group), List.of())));
+		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("catalogue", path, size, null, null, HASH, contentKind, List.of(group), List.of())));
 	}
 
 	private static ChangeSet.Change change(String path, ChangeSet.Kind kind, String contentKind, List<String> references) {
-		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("catalogue", path, 8, null, HASH, contentKind, List.of("main"), references)));
+		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("catalogue", path, 8, null, null, HASH, contentKind, List.of("main"), references)));
 	}
 }

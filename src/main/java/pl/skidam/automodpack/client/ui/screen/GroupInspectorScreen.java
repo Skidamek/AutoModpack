@@ -70,7 +70,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		List<ChangeSet.Change> changes = new ArrayList<>();
 		for (var entry : group.files().entrySet()) {
 			GroupManifest.GroupFile file = entry.getValue();
-			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence("catalogue", entry.getKey(), file.size(), null, file.sha1(), file.type(), List.of(groupId), List.of());
+			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence("catalogue", entry.getKey(), file.size(), null, null, file.sha1(), file.type(), List.of(groupId), List.of());
 			changes.add(new ChangeSet.Change(entry.getKey(), ChangeSet.Kind.PRESERVED, List.of(occurrence)));
 		}
 		return ChangeSet.of(changes);

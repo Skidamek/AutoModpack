@@ -3,6 +3,7 @@ package pl.skidam.automodpack.client.ui.widget;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -230,8 +231,9 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			String hash = shortHash(written);
 			if (hash != null) lines.add("sha1: " + hash);
 			if (previous != null && written != null && !previous.equals(written)) lines.add(shortHash(previous) + " -> " + shortHash(written));
-			List<String> platforms = badges.stream().filter(badge -> badge.key() != null).map(badge -> VersionedText.translatable(badge.key()).getString()).toList();
-			if (!platforms.isEmpty()) lines.add(String.join(", ", platforms));
+			List<String> badgeNames = badges.stream().filter(badge -> badge.key() != null).map(badge -> VersionedText.translatable(badge.key()).getString()).toList();
+			String identity = projectIdentity(file, badgeNames);
+			if (!identity.isEmpty()) lines.add(identity);
 			VersionedScreen.showComponentTooltip(minecraft.font, matrices, VersionedText.literal(String.join("\n", lines)), mouseX, mouseY);
 		}
 
@@ -258,8 +260,10 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			if (row instanceof ChangeBrowserProjection.EffectRow effect) return kindName(effectKind(effect.effect()));
 			ChangeBrowserProjection.FileRow file = (ChangeBrowserProjection.FileRow) row;
 			List<String> parts = new ArrayList<>();
-			parts.add(kindName(file.kind()));
+			parts.add(file.kind() == ChangeSet.Kind.REMOVED ? VersionedText.translatable("automodpack.browser.kind.deleted").getString() : kindName(file.kind()));
 			parts.add(UiFormat.formatSize(file.size()));
+			Long beforeSize = file.kind() != ChangeSet.Kind.MODIFIED && file.kind() != ChangeSet.Kind.METADATA_ONLY ? null : file.beforeSize();
+			if (beforeSize != null && beforeSize.longValue() != file.size()) parts.add(VersionedText.translatable("automodpack.browser.wasSize", UiFormat.formatSize(beforeSize)).getString());
 			if (!file.contentKinds().isEmpty()) parts.add(String.join(", ", file.contentKinds().stream().map(ChangeBrowserWidget::contentName).toList()));
 			List<String> visibleFeatures = file.features().stream().map(featureNames::get).filter(name -> name != null && !name.isBlank()).distinct().sorted().toList();
 			if (!visibleFeatures.isEmpty()) parts.add(String.join(", ", visibleFeatures));
@@ -341,6 +345,42 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			return "";
 		} catch (URISyntaxException | IllegalArgumentException ignored) {
 			return "";
+		}
+	}
+
+	/** "slug (Modrinth), slug (CurseForge)" from the file's storefront references, once as "slug (Modrinth, CurseForge)" when both agree, else the plain platform names. */
+	private static String projectIdentity(ChangeBrowserProjection.FileRow file, List<String> badgeNames) {
+		Map<String, String> slugs = new LinkedHashMap<>();
+		for (ChangeSet.Occurrence occurrence : file.occurrences())
+			for (String reference : occurrence.references()) {
+				String platform = platform(reference);
+				if (!platform.equals("modrinth") && !platform.equals("curseforge")) continue;
+				String slug = slug(reference);
+				if (slug != null) slugs.putIfAbsent(platform, slug);
+			}
+		String modrinth = slugs.get("modrinth");
+		String curseforge = slugs.get("curseforge");
+		if (modrinth == null && curseforge == null) return String.join(", ", badgeNames);
+		if (modrinth != null && modrinth.equals(curseforge)) return modrinth + " (" + platformName("modrinth") + ", " + platformName("curseforge") + ")";
+		List<String> entries = new ArrayList<>();
+		if (modrinth != null) entries.add(modrinth + " (" + platformName("modrinth") + ")");
+		if (curseforge != null) entries.add(curseforge + " (" + platformName("curseforge") + ")");
+		return String.join(", ", entries);
+	}
+
+	private static String platformName(String platform) {
+		return VersionedText.translatable("automodpack.browser." + platform).getString();
+	}
+
+	/** The project slug of a reference URL: the last non-empty segment of the URI path, ignoring trailing separators, else null. */
+	private static String slug(String url) {
+		try {
+			String path = new URI(url).getPath();
+			String slug = null;
+			if (path != null) for (String segment : path.split("/")) if (!segment.isBlank()) slug = segment;
+			return slug;
+		} catch (URISyntaxException | IllegalArgumentException ignored) {
+			return null;
 		}
 	}
 

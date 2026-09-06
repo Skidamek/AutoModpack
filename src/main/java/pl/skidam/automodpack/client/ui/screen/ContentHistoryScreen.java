@@ -144,7 +144,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, platformCacheDirectory());
 			this.minecraft.execute(() -> {
 				if (closed) return;
-				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, Map.of(), restoreAction, notes, false));
+				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, Map.of(), restoreAction, notes, false, 0));
 			});
 		});
 	}

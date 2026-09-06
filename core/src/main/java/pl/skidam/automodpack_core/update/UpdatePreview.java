@@ -95,7 +95,8 @@ public final class UpdatePreview {
 				continue;
 			}
 			List<ChangeSet.Occurrence> occurrences = change.occurrences().stream()
-					.map(occurrence -> new ChangeSet.Occurrence(occurrence.location(), occurrence.logicalPath(), occurrence.size(), occurrence.beforeHash(), occurrence.afterHash(), occurrence.contentKind(), owners,
+					.map(occurrence -> new ChangeSet.Occurrence(occurrence.location(), occurrence.logicalPath(), occurrence.size(), occurrence.beforeSize(), occurrence.beforeHash(), occurrence.afterHash(),
+							occurrence.contentKind(), owners,
 							occurrence.references()))
 					.toList();
 			changes.add(new ChangeSet.Change(change.logicalPath(), change.kind(), occurrences));

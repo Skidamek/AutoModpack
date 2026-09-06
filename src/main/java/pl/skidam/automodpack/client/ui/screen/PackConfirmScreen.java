@@ -17,6 +17,7 @@ import net.minecraft.client.gui.components.Tooltip;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -46,6 +47,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private final Runnable laterContinue;
 	private final Runnable laterCancel;
 	private final List<String> unverifiedPaths = new ArrayList<>();
+	private final List<UnverifiedJarList.UnverifiedFile> unverifiedFiles = new ArrayList<>();
 	private boolean keepExistingMods;
 	private boolean acknowledged;
 	private boolean finished;
@@ -99,6 +101,9 @@ public final class PackConfirmScreen extends VersionedScreen {
 		}
 		unverifiedPaths.clear();
 		unverifiedPaths.addAll(currentPaths);
+		unverifiedFiles.clear();
+		var target = updater.getSelectedTarget();
+		for (String path : currentPaths) unverifiedFiles.add(new UnverifiedJarList.UnverifiedFile(path, PackConfirmCopy.selectedJarSize(target, path)));
 
 		boolean leftover = firstInstall && updater.firstInstallLocalModCount() > 0;
 		boolean customize = PackConfirmCopy.canCustomize(updater.getSelectedTarget().manifest());
@@ -235,7 +240,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 		List<MutableComponent> all = new ArrayList<>(topLines);
 		all.add(blankLine());
-		for (String path : unverifiedPaths) all.addAll(wrapParagraph(this.font, path, wrapWidth, ChatFormatting.GRAY));
+		for (UnverifiedJarList.UnverifiedFile file : unverifiedFiles) all.addAll(wrapParagraph(this.font, file.size() > 0 ? file.path() + " · " + UiFormat.formatSize(file.size()) : file.path(), wrapWidth, ChatFormatting.GRAY));
 		all.add(blankLine());
 		all.addAll(bottomLines);
 		this.addCenteredScrollBody(BODY, 42, bottomY, all);
@@ -276,7 +281,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private void placeUnverifiedBody(int topY, int bottomY, List<MutableComponent> topLines, List<MutableComponent> bottomLines, int topHeight, int listHeight) {
 		this.addCenteredScrollBody(BODY, topY, topY + topHeight + 2, topLines);
 		int listTop = topY + topHeight + 4;
-		this.addRenderableWidget(new UnverifiedJarList(this.minecraft, this.width, this.height, panelWidth(BODY), listTop, listTop + listHeight, unverifiedPaths));
+		this.addRenderableWidget(new UnverifiedJarList(this.minecraft, this.width, this.height, panelWidth(BODY), listTop, listTop + listHeight, unverifiedFiles));
 		this.addCenteredScrollBody(BODY, listTop + listHeight + 4, bottomY, bottomLines);
 	}
 
@@ -320,10 +325,10 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private void openFiles() {
 		if (firstInstall) {
 			var target = updater.getSelectedTarget();
-			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"), PackConfirmCopy.catalogue(updater), PackConfirmCopy.featureNames(target.manifest()), null, List.of(), true));
+			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"), PackConfirmCopy.catalogue(updater), PackConfirmCopy.featureNames(target.manifest()), null, List.of(), true, PackConfirmCopy.selectedBytes(target)));
 			return;
 		}
-		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.update.reviewUpdate"), laterPreview.changeSet(), laterPreview.featureNames(), null, List.of(), true));
+		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.update.reviewUpdate"), laterPreview.changeSet(), laterPreview.featureNames(), null, List.of(), true, laterPreview.uncachedAcquisitionBytes()));
 	}
 
 	private void openHistory() {
