@@ -7,16 +7,13 @@ import java.util.Objects;
 /** Shared operating-system detection and per-user data-directory policy. */
 public final class PlatformUtils {
 
-	private static final String OS_NAME = System.getProperty("os.name", "generic").toLowerCase(Locale.ROOT);
-	private static final String JAVA_VENDOR = System.getProperty("java.vendor", "").toLowerCase(Locale.ROOT);
-	private static final String JAVA_VM_NAME = System.getProperty("java.vm.name", "").toLowerCase(Locale.ROOT);
-	private static final OperatingSystem OPERATING_SYSTEM = classify(OS_NAME, JAVA_VENDOR, JAVA_VM_NAME);
+	private static final OperatingSystem OPERATING_SYSTEM = classify(System.getProperty("os.name", ""));
 
 	public enum OperatingSystem {
 		WINDOWS,
 		MACOS,
 		LINUX,
-		ANDROID
+		OTHER
 	}
 
 	private PlatformUtils() {}
@@ -25,14 +22,19 @@ public final class PlatformUtils {
 		return OPERATING_SYSTEM;
 	}
 
-	static OperatingSystem classify(String osName, String javaVendor, String javaVmName) {
+	/**
+	 * Recognizes only the first-class desktop systems; every other kernel (the BSDs, Solaris, Android launchers
+	 * that do not announce themselves, anything new) lands in {@link OperatingSystem#OTHER}, which resolves modpack
+	 * content to platform-agnostic groups only. Mobile and other unusual systems are not probed for on purpose -
+	 * every launcher reports something different - the player overrides to OTHER manually when detection fails.
+	 * Order matters: "darwin" contains "win", so macOS must be tested before Windows.
+	 */
+	static OperatingSystem classify(String osName) {
 		String os = Objects.requireNonNull(osName, "OS name").toLowerCase(Locale.ROOT);
-		String vendor = Objects.requireNonNull(javaVendor, "Java vendor").toLowerCase(Locale.ROOT);
-		String vm = Objects.requireNonNull(javaVmName, "Java VM name").toLowerCase(Locale.ROOT);
-		if (vendor.contains("android") || vm.contains("dalvik") || vm.contains("lemur")) return OperatingSystem.ANDROID;
 		if (os.contains("mac") || os.contains("darwin")) return OperatingSystem.MACOS;
 		if (os.contains("win")) return OperatingSystem.WINDOWS;
-		return OperatingSystem.LINUX;
+		if (os.contains("linux")) return OperatingSystem.LINUX;
+		return OperatingSystem.OTHER;
 	}
 
 	/** Returns the platform-specific per-user data directory before the application name is appended. */

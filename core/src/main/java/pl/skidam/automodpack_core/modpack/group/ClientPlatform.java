@@ -13,15 +13,16 @@ public enum ClientPlatform {
 	LINUX,
 	@SerializedName("macos")
 	MACOS,
-	@SerializedName("android")
-	ANDROID;
+	/** Everything outside the first-class desktop trio - mobile launchers, the BSDs, anything new. */
+	@SerializedName("other")
+	OTHER;
 
 	public static ClientPlatform current() {
 		return switch (PlatformUtils.operatingSystem()) {
 			case WINDOWS -> WINDOWS;
 			case MACOS -> MACOS;
 			case LINUX -> LINUX;
-			case ANDROID -> ANDROID;
+			case OTHER -> OTHER;
 		};
 	}
 
@@ -36,7 +37,7 @@ public enum ClientPlatform {
 			case "windows" -> WINDOWS;
 			case "linux" -> LINUX;
 			case "macos" -> MACOS;
-			case "android" -> ANDROID;
+			case "other" -> OTHER;
 			default -> throw new IllegalArgumentException("Unknown platform: " + value);
 		};
 	}
