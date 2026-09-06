@@ -47,6 +47,11 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.centerListVertically = false;
+		/*? if <1.20.6 {*/
+		/*// Vanilla's list render repaints opaque dirt bands across the whole screen above and below the list;
+		// with the screen's text and action rows drawn before the list, those bands erase them (invisible: same dirt as the background).
+		this.setRenderTopAndBottom(false);
+		*//*?}*/
 		this.claimPicked = Objects.requireNonNull(claimPicked, "claim pick");
 		Map<String, String> names = Map.copyOf(packNames == null ? Map.of() : packNames);
 		for (PreservationVault.Claim claim : Objects.requireNonNull(claims, "claims")) this.addEntry(new Entry(claim, names));

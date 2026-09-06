@@ -43,6 +43,11 @@ public final class TextScrollWidget extends ObjectSelectionList<TextScrollWidget
 		this.contentWidth = Math.max(1, contentWidth);
 		this.center = center;
 		this.centerListVertically = false;
+		/*? if <1.20.6 {*/
+		/*// Vanilla's list render repaints opaque dirt bands across the whole screen above and below the list;
+		// with the screen's text and action rows drawn before the list, those bands erase them (invisible: same dirt as the background).
+		this.setRenderTopAndBottom(false);
+		*//*?}*/
 		/*? if <1.21.1 {*/
 		/*this.setRenderBackground(false);
 		this.setRenderTopAndBottom(false);

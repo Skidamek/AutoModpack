@@ -17,6 +17,7 @@ import net.minecraft.client.gui.components.Tooltip;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -146,7 +147,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		int y = placeholder.y;
 		*//*?}*/
 		Component label = PackConfirmCopy.leftoverLabel(updater.firstInstallLocalModCount());
-		AbstractWidget checkbox = checkboxWidget(this.font, x, y, placeholder.getWidth(), ActionAreaLayout.BUTTON_HEIGHT, label, keepExistingMods, value -> {
+		AbstractWidget checkbox = new CheckboxWidget(this.font, x, y, placeholder.getWidth(), label, keepExistingMods, value -> {
 			keepExistingMods = value;
 			updater.setFirstInstallLocalModCleanup(!keepExistingMods);
 			// The checkbox label is constant now; the rebuild only refreshes the existing-mods summary line.
@@ -168,7 +169,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		/*int x = placeholder.x;
 		int y = placeholder.y;
 		*//*?}*/
-		ackCheckbox = checkboxWidget(this.font, x, y, placeholder.getWidth(), ActionAreaLayout.BUTTON_HEIGHT, ackMessage(), acknowledged, value -> {
+		ackCheckbox = new CheckboxWidget(this.font, x, y, placeholder.getWidth(), ackMessage(), acknowledged, value -> {
 			if (ticksRemaining > 0) {
 				acknowledged = false;
 				ackCheckbox.setMessage(ackMessage());

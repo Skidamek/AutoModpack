@@ -4,14 +4,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 /*? if >=1.20.4 {*/
-import net.minecraft.client.gui.components.Checkbox;
 /*?}*/
 /*? if >= 1.20.2 {*/
 import net.minecraft.client.gui.components.SpriteIconButton;
@@ -271,33 +269,6 @@ public class VersionedScreen extends Screen {
 		return field;
 	}
 
-	/*? if >=1.20.4 {*/
-	public static AbstractWidget checkboxWidget(Font font, int x, int y, int width, int height, Component message, boolean selected, Consumer<Boolean> onValueChange) {
-		Checkbox.Builder builder = Checkbox.builder(message, font).pos(x, y).selected(selected).onValueChange((box, value) -> onValueChange.accept(value));
-		/*? if >=1.21.1 {*/
-		builder.maxWidth(Math.max(1, width));
-		/*?}*/
-		Checkbox checkbox = builder.build();
-		/*? if <1.21.1 {*/
-		/*checkbox.setWidth(Math.max(1, width));
-		*//*?}*/
-		return checkbox;
-	}
-	/*?} else {*/
-	/*public static AbstractWidget checkboxWidget(Font font, int x, int y, int width, int height, Component message, boolean selected, Consumer<Boolean> onValueChange) {
-		boolean[] checked = { selected };
-		return buttonWidget(x, y, width, height, checkboxButtonMessage(message, checked[0]), button -> {
-			checked[0] = !checked[0];
-			button.setMessage(checkboxButtonMessage(message, checked[0]));
-			onValueChange.accept(checked[0]);
-		});
-	}
-
-	private static Component checkboxButtonMessage(Component message, boolean selected) {
-		return VersionedText.literal(selected ? "[x] " : "[ ] ").append(message);
-	}
-	*//*?}*/
-
 	protected final TextScrollWidget addScrollBody(int contentWidth, int topY, int bottomY, List<String> lines) {
 		List<MutableComponent> components = new ArrayList<>();
 		for (String line : lines) components.add(VersionedText.literal(line == null ? "" : line));
@@ -353,7 +324,7 @@ public class VersionedScreen extends Screen {
 		return new DialogColumn(topReserve, bodyBottom, true, stackTop);
 	}
 
-	protected static List<MutableComponent> wrapParagraph(Font font, String text, int maxWidth, ChatFormatting... styles) {
+	public static List<MutableComponent> wrapParagraph(Font font, String text, int maxWidth, ChatFormatting... styles) {
 		List<MutableComponent> lines = new ArrayList<>();
 		for (String line : wrapToWidth(font, text, maxWidth)) {
 			MutableComponent component = VersionedText.literal(line);

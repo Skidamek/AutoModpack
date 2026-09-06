@@ -38,6 +38,11 @@ public final class UnverifiedJarList extends ObjectSelectionList<UnverifiedJarLi
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.centerListVertically = false;
+		/*? if <1.20.6 {*/
+		/*// Vanilla's list render repaints opaque dirt bands across the whole screen above and below the list;
+		// with the screen's text and action rows drawn before the list, those bands erase them (invisible: same dirt as the background).
+		this.setRenderTopAndBottom(false);
+		*//*?}*/
 		for (String path : Objects.requireNonNull(paths, "paths")) this.addEntry(new Entry(path == null ? "" : path));
 		if (!this.children().isEmpty()) this.setSelected(this.children().get(0));
 	}

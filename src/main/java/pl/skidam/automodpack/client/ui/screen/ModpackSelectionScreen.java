@@ -413,7 +413,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		GroupResolution explanation = resolution.resolution(groupId);
 		if (explanation != null) appendTooltipLine(tooltip, resolutionText(explanation));
 		appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.category", categoryLabel(group)).getString());
-		if (group.required()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requiredAlways").getString());
+		// The resolution text already carries "Required: always included" whenever it exists; only fall back to it here.
+		if (group.required() && explanation == null) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requiredAlways").getString());
 		if (group.defaultSelected()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.defaultSelected").getString());
 		if (resolution.forcedGroups().contains(groupId)) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.forced").getString());
 		if (!group.requires().isEmpty()) appendTooltipLine(tooltip, VersionedText.translatable("automodpack.selection.requires", names(group.requires())).getString());
