@@ -300,12 +300,14 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		/*? if >= 1.21.9 {*/
 		@Override
 		public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean bl) {
+			if (mouseButtonEvent.button() != 0) return false;
 			activate(this);
 			return true;
 		}
 		/*?} else {*/
 		/*@Override
 		public boolean mouseClicked(double mouseX, double mouseY, int button) {
+			if (button != 0) return false;
 			activate(this);
 			return true;
 		}
