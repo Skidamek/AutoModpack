@@ -11,6 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
+import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 /*? if >= 1.21.9 {*/
@@ -46,6 +47,22 @@ public final class UnverifiedJarList extends ObjectSelectionList<UnverifiedJarLi
 		for (String path : Objects.requireNonNull(paths, "paths")) this.addEntry(new Entry(path == null ? "" : path));
 		if (!this.children().isEmpty()) this.setSelected(this.children().get(0));
 	}
+	/*? if <1.19.4 {*/
+	/*@Override
+	public void render(PoseStack matrices, int mouseX, int mouseY, float delta) {
+		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
+		super.render(matrices, mouseX, mouseY, delta);
+		VersionedScissor.disable();
+	}
+	*//*?}*/
+	/*? if >=1.19.4 <1.20.3 {*/
+	/*@Override
+	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
+		super.render(graphics, mouseX, mouseY, delta);
+		VersionedScissor.disable();
+	}
+	*//*?}*/
 
 	protected int getScrollbarPosition() {
 		return Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);

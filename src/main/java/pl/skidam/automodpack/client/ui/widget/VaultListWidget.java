@@ -17,6 +17,7 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
+import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.update.PreservationVault;
 
@@ -92,6 +93,22 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 		entry.layoutEntry(this.getRowLeft(), this.getRowTop(index), this.getRowWidth());
 	}
 
+	/*? if <1.19.4 {*/
+	/*@Override
+	public void render(PoseStack matrices, int mouseX, int mouseY, float delta) {
+		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
+		super.render(matrices, mouseX, mouseY, delta);
+		VersionedScissor.disable();
+	}
+	*//*?}*/
+	/*? if >=1.19.4 <1.20.3 {*/
+	/*@Override
+	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
+		super.render(graphics, mouseX, mouseY, delta);
+		VersionedScissor.disable();
+	}
+	*//*?}*/
 	@Override
 	public RowView rowView(int index) {
 		return new RowView(this.children().get(index).getNarration().getString(), true, null, false);
