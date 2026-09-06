@@ -67,6 +67,11 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 		this.rowPicked = Objects.requireNonNull(rowPicked, "row pick");
 		this.tooltipShower = tooltipShower;
 		this.centerListVertically = false;
+		/*? if <1.20.6 {*/
+		/*// Vanilla's list render repaints opaque dirt bands across the whole screen above and below the list;
+		// with the screen's text and action rows drawn before the list, those bands erase them (invisible: same dirt as the background).
+		this.setRenderTopAndBottom(false);
+		*//*?}*/
 		for (Row row : Objects.requireNonNull(rows, "rows")) this.addEntry(new RowEntry(row));
 	}
 

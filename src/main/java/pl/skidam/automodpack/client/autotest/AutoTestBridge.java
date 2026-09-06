@@ -11,7 +11,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 /*? if >=1.20.4 {*/
-import net.minecraft.client.gui.components.Checkbox;
 /*?}*/
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.ContainerEventHandler;
@@ -25,6 +24,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.RowViewport;
 /*? if >= 1.21.10 {*/
 import net.minecraft.client.input.MouseButtonEvent;
@@ -471,32 +471,34 @@ public final class AutoTestBridge {
 		// Field scraping used to also pick up Screen.focused, which keeps the pre-rebuild widget with
 		// stale text and visible=true — a ghost that could satisfy wait_for/no_element.
 		LinkedHashSet<AbstractWidget> widgets = new LinkedHashSet<>();
-		for (GuiEventListener child : screen.children()) collectAttachedWidgets(child, widgets);
+		List<RowViewport> rowViewports = new ArrayList<>();
+		for (GuiEventListener child : screen.children()) collectAttachedWidgets(child, widgets, rowViewports);
 
 		List<GuiElement> result = new ArrayList<>();
 		int id = 0;
-		for (AbstractWidget widget : widgets) {
-			result.add(GuiElement.of(id++, widget));
-			// Scrollable lists are represented by one clickable element per row; the row's
-			// text, enabled and checked state covers the controls inside it.
-			if (widget instanceof RowViewport viewport) {
-				for (int index = 0; index < viewport.rowCount(); index++) result.add(GuiElement.ofRow(id++, viewport, index));
-			}
+		for (AbstractWidget widget : widgets) result.add(GuiElement.of(id++, widget));
+		// Scrollable lists are represented by one clickable element per row; the row's
+		// text, enabled and checked state covers the controls inside it. Row collection must not
+		// depend on the list being an AbstractWidget: older Minecraft lists are only GuiEventListeners.
+		for (RowViewport viewport : rowViewports) {
+			for (int index = 0; index < viewport.rowCount(); index++) result.add(GuiElement.ofRow(id++, viewport, index));
 		}
 		return new GuiElements(result);
 	}
 
-	private static void collectAttachedWidgets(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets) {
+	private static void collectAttachedWidgets(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets, List<RowViewport> rowViewports) {
 		if (listener instanceof AbstractWidget widget) widgets.add(widget);
 		// Row viewport lists are emitted as one element per row carrying the row's text and
 		// checkbox state; buttons inside rows (a row's help control) stay individually addressable.
-		if (listener instanceof RowViewport) {
-			if (!(listener instanceof ContainerEventHandler container)) return;
-			for (GuiEventListener child : container.children()) collectRowButtons(child, widgets);
+		if (listener instanceof RowViewport viewport) {
+			rowViewports.add(viewport);
+			if (listener instanceof ContainerEventHandler container) {
+				for (GuiEventListener child : container.children()) collectRowButtons(child, widgets);
+			}
 			return;
 		}
 		if (listener instanceof Screen || !(listener instanceof ContainerEventHandler container)) return;
-		for (GuiEventListener child : container.children()) collectAttachedWidgets(child, widgets);
+		for (GuiEventListener child : container.children()) collectAttachedWidgets(child, widgets, rowViewports);
 	}
 
 	private static void collectRowButtons(GuiEventListener listener, LinkedHashSet<AbstractWidget> widgets) {
@@ -505,9 +507,8 @@ public final class AutoTestBridge {
 			return;
 		}
 		if (!(listener instanceof AbstractWidget widget)) return;
-		/*? if >=1.20.4 {*/
-		if (listener instanceof Checkbox) return;
-		/*?}*/
+		// The row's checkbox is represented by the row element itself; exposing it again as a bare widget would duplicate every row.
+		if (listener instanceof CheckboxWidget) return;
 		widgets.add(widget);
 	}
 
@@ -723,11 +724,7 @@ public final class AutoTestBridge {
 		/** Selected state of a real checkbox or checkbox-like row, or null when there is none. */
 		Boolean checked() {
 			if (rows != null) return rowChecked;
-			/*? if >=1.20.4 {*/
-			return widget instanceof Checkbox checkbox ? checkbox.selected() : null;
-			/*?} else {*/
-			/*return null;
-			*//*?}*/
+			return widget instanceof CheckboxWidget checkbox ? checkbox.selected() : null;
 		}
 
 		String type() {

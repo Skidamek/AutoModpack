@@ -18,6 +18,7 @@ import net.minecraft.client.gui.components.Tooltip;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -72,7 +73,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		int listTop = prepared.requiresUpdate() ? 94 : 82;
 		if (!prepared.unownedModPaths().isEmpty()) {
 			String files = String.join("\n", wrapToWidth(this.font, String.join(", ", prepared.unownedModPaths()), 240, 8));
-			AbstractWidget keep = checkboxWidget(this.font, x, listTop, width, ActionAreaLayout.BUTTON_HEIGHT, VersionedText.translatable("automodpack.confirm.keepExistingMods", prepared.unownedModPaths().size()), keepUnownedMods, value -> {
+			AbstractWidget keep = new CheckboxWidget(this.font, x, listTop, width, VersionedText.translatable("automodpack.confirm.keepExistingMods", prepared.unownedModPaths().size()), keepUnownedMods, value -> {
 				keepUnownedMods = value;
 				rebuild();
 			});

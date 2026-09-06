@@ -55,6 +55,11 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		super(client, width, Math.max(ROW_HEIGHT, bottom - top), top, ROW_HEIGHT);
 		/*?}*/
 		this.centerListVertically = false;
+		/*? if <1.20.6 {*/
+		/*// Vanilla's list render repaints opaque dirt bands across the whole screen above and below the list;
+		// with the screen's text and action rows drawn before the list, those bands erase them (invisible: same dirt as the background).
+		this.setRenderTopAndBottom(false);
+		*//*?}*/
 		this.folderToggle = Objects.requireNonNull(folderToggle, "folder toggle");
 		this.selectionChanged = selectionChanged;
 		Set<String> collapsed = Set.copyOf(collapsedFolders == null ? Set.of() : collapsedFolders);

@@ -49,6 +49,11 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.centerListVertically = false;
+		/*? if <1.20.6 {*/
+		/*// Vanilla's list render repaints opaque dirt bands across the whole screen above and below the list;
+		// with the screen's text and action rows drawn before the list, those bands erase them (invisible: same dirt as the background).
+		this.setRenderTopAndBottom(false);
+		*//*?}*/
 		/*? if <1.20.4 {*/
 		/*this.setRenderSelection(false);
 		*//*?}*/
@@ -137,14 +142,12 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 				this.row = null;
 				this.infoButton = null;
 			} else {
-				int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM) : rowWidth;
-				AbstractWidget checkbox = VersionedScreen.checkboxWidget(minecraft.font, 0, 0, mainWidth, 20, item.label(), item.selected(), value -> {
-					if (value != item.selected()) onToggle.accept(item);
-				});
-				// Vanilla sizes a checkbox to its label; stretch it across the row so the whole row toggles like a list row should.
-				resizeWidget(checkbox, mainWidth);
-				// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
-				checkbox.active = item.canToggle();
+			int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM) : rowWidth;
+			AbstractWidget checkbox = new CheckboxWidget(minecraft.font, 0, 0, mainWidth, item.label(), item.selected(), value -> {
+				if (value != item.selected()) onToggle.accept(item);
+			});
+			// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
+			checkbox.active = item.canToggle();
 				if (item.tooltip() != null) {
 					/*? if > 1.19.2 {*/
 					checkbox.setTooltip(Tooltip.create(item.tooltip()));
@@ -241,14 +244,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			/*widget.x = x;
 			widget.y = y;
 			*//*?}*/
-		}
-
-		private static void resizeWidget(AbstractWidget widget, int width) {
-			// Older versions fall back to a full-width button in checkboxWidget; only real
-			// checkboxes self-size to their label and need the stretch.
-			/*? if >=1.20.4 {*/
-			widget.setWidth(width);
-			/*?}*/
 		}
 
 		/*? if >= 1.21.9 {*/
