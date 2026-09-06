@@ -20,9 +20,11 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.SelfUpdateSwap;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
@@ -46,6 +48,7 @@ public class Preload {
 			long start = System.currentTimeMillis();
 			LOGGER.info("Prelaunching AutoModpack...");
 			initializeConstants();
+			recoverPendingSelfUpdate();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
 				storage = ClientStorage.open(GameDirectory.current());
 				loadClientConfig();
@@ -60,6 +63,16 @@ public class Preload {
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new RuntimeException(e);
+		}
+	}
+
+	/** Both roles run their real jars from mods/, so the instance-level swap recovers before any role machinery wakes up. */
+	private void recoverPendingSelfUpdate() {
+		Path gameDirectory = GameDirectory.current();
+		try {
+			SelfUpdateSwap.recover(gameDirectory, DataRootResolver.resolve(gameDirectory));
+		} catch (IOException e) {
+			throw new IllegalStateException("Cannot recover the pending AutoModpack self-update", e);
 		}
 	}
 

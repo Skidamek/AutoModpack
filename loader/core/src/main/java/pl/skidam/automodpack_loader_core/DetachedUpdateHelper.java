@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_loader_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_DIR;
 
 import java.io.File;
 import java.io.IOException;
@@ -15,7 +16,6 @@ import org.apache.logging.log4j.core.LoggerContext;
 import com.google.gson.Gson;
 
 import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
@@ -26,11 +26,15 @@ public final class DetachedUpdateHelper {
 
 	private DetachedUpdateHelper() {}
 
+	/** The helper hosts instance-level machinery, so its jars live beside the instance state, outside any role tree. */
+	public static Path helperDirectory() {
+		return GameDirectory.current().resolve(HELPER_DIR).toAbsolutePath().normalize();
+	}
+
 	public static void launch() throws IOException {
 		Path sourceJar = THIS_MOD_JAR.toAbsolutePath().normalize();
 		if (!Files.isRegularFile(sourceJar)) throw new IOException("Runnable AutoModpack JAR is missing: " + sourceJar);
-		ClientStorage storage = ClientStorage.open(GameDirectory.current());
-		Path absoluteHelperDirectory = storage.helperDirectory();
+		Path absoluteHelperDirectory = helperDirectory();
 		Files.createDirectories(absoluteHelperDirectory);
 
 		long size = Files.size(sourceJar);
@@ -49,7 +53,7 @@ public final class DetachedUpdateHelper {
 	}
 
 	public static void cleanupOldHelperJars() {
-		cleanupOldHelperJars(ClientStorage.open(GameDirectory.current()).helperDirectory());
+		cleanupOldHelperJars(helperDirectory());
 	}
 
 	private static void cleanupOldHelperJars(Path directory) {

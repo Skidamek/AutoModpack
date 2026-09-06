@@ -28,6 +28,11 @@ public final class DataRootResolver {
 			return DataRootResolver.objectFile(objectsDirectory(), sha1);
 		}
 
+		/** In-flight downloads stage here before verified promotion into the object store. */
+		public Path stagingDirectory() {
+			return root.resolve("staging").normalize();
+		}
+
 		public Path fileCacheDirectory() {
 			return root.resolve("file-cache").normalize();
 		}

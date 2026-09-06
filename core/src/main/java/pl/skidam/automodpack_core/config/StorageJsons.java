@@ -10,4 +10,13 @@ public class StorageJsons {
 		public String ownerPath = "";
 		public List<String> objectHashes = List.of();
 	}
+
+	/** The durable record of a pending AutoModpack self-update swap, game-directory relative. */
+	public static class SelfUpdateFields {
+		public String currentPath = "";
+		public String targetPath = "";
+		public String targetSha1 = "";
+		public long targetSize = -1;
+		public String currentSha1 = "";
+	}
 }

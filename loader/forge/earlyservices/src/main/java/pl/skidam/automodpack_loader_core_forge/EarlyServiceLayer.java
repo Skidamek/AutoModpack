@@ -37,6 +37,7 @@ import cpw.mods.modlauncher.api.ITransformer;
 import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
@@ -160,6 +161,9 @@ public final class EarlyServiceLayer {
 	 */
 	public static void bootstrap() {
 		if (!BOOTSTRAPPED.compareAndSet(false, true)) return;
+
+		// Early-service hosting serves the client's active projection; a dedicated server has none.
+		if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) return;
 
 		try {
 			ClientStorage storage = ClientStorage.open(GameDirectory.current());

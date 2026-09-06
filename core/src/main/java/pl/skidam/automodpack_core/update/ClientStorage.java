@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.update;
 
+import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.util.TreeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -59,8 +61,6 @@ public final class ClientStorage {
 	private final Path restartLoopStateFile;
 	private final Path clientConfigFile;
 	private final Path modpackContentTempFile;
-	private final Path helperDirectory;
-	private final Path helperLeaseFile;
 	private final Path preservationDirectory;
 	private final Path historyDirectory;
 	private final Path journalTempFile;
@@ -94,8 +94,6 @@ public final class ClientStorage {
 		this.restartLoopStateFile = this.gameDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
 		this.modpackContentTempFile = this.gameDirectory.resolve(CLIENT_CONTENT_TEMP_FILE).normalize();
-		this.helperDirectory = this.gameDirectory.resolve(CLIENT_HELPER_DIR).normalize();
-		this.helperLeaseFile = this.gameDirectory.resolve(CLIENT_HELPER_LEASE_FILE).normalize();
 		this.preservationDirectory = this.gameDirectory.resolve(CLIENT_PRESERVATION_DIR).normalize();
 		this.historyDirectory = this.gameDirectory.resolve(CLIENT_HISTORY_DIR).normalize();
 		this.journalTempFile = this.gameDirectory.resolve(CLIENT_JOURNAL_TEMP_FILE).normalize();
@@ -110,6 +108,10 @@ public final class ClientStorage {
 	}
 
 	public static synchronized ClientStorage open(Path gameDirectory) {
+		// The detached helper and unit tests run without a loader environment (null dist); there the check stays silent.
+		LoaderManagerService.EnvironmentType environment = LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType();
+		if (environment != null && environment != LoaderManagerService.EnvironmentType.CLIENT)
+			throw new IllegalStateException("Client storage belongs to the client role, but this process runs the " + environment + " environment");
 		DataRootResolver.Location dataLocation = DataRootResolver.resolve(requireDirectoryPath(gameDirectory, "game directory"));
 		Path canonicalGameDirectory = dataLocation.ownerPath();
 		WeakReference<ClientStorage> reference = OPEN_STORAGE.get(canonicalGameDirectory);
@@ -279,14 +281,6 @@ public final class ClientStorage {
 		return modpackContentTempFile;
 	}
 
-	public Path helperDirectory() {
-		return helperDirectory;
-	}
-
-	public Path helperLeaseFile() {
-		return helperLeaseFile;
-	}
-
 	public Path preservationDirectory() {
 		return preservationDirectory;
 	}
@@ -437,7 +431,6 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(generatedCopiesDirectory, "client generated-copy state");
 		FileTrees.createManagedDirectory(incomingDirectory, "client incoming staging root");
 		FileTrees.createManagedDirectory(backupDirectory, "client projection backup root");
-		FileTrees.createManagedDirectory(helperDirectory, "client update helper");
 		FileTrees.createManagedDirectory(preservationDirectory, "client preservation root");
 		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
 	}
@@ -507,7 +500,7 @@ public final class ClientStorage {
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
 				historyDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile,
-				journalTempFile, helperDirectory, helperLeaseFile, incomingProjectionDirectory(), backupProjectionDirectory());
+				journalTempFile, incomingProjectionDirectory(), backupProjectionDirectory());
 		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
 	}
 

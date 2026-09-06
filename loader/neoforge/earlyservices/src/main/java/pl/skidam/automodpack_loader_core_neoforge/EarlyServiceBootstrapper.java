@@ -13,6 +13,7 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -52,6 +53,9 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
 			new Preload();
 			progress.complete();
+
+			// Early-service hosting serves the client's active projection; a dedicated server has none.
+			if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) return;
 
 			ClientStorage storage = ClientStorage.open(GameDirectory.current());
 			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);

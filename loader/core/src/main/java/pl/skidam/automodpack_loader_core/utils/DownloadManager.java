@@ -17,7 +17,7 @@ import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
-import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -72,12 +72,12 @@ public class DownloadManager {
 
 	private final Semaphore semaphore = new Semaphore(0);
 	private final Speedometer speedometer = new Speedometer();
-	private final ClientStorage storage;
+	private final DataRootResolver.Layout dataLayout;
 
-	public DownloadManager(long bytesToDownload, ClientStorage storage, PlatformCache platformCache) {
+	public DownloadManager(long bytesToDownload, DataRootResolver.Layout dataLayout, PlatformCache platformCache) {
 		this.totalBytesToDownload.set(bytesToDownload);
 		this.speedometer.setExpectedBytes(bytesToDownload);
-		this.storage = Objects.requireNonNull(storage, "storage");
+		this.dataLayout = Objects.requireNonNull(dataLayout, "dataLayout");
 		this.downloadExecutor = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS,
 				new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
 		this.platformCache = Objects.requireNonNull(platformCache, "platformCache");
@@ -276,11 +276,11 @@ public class DownloadManager {
 	}
 
 	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task) {
-		Path storeFile = storage.objectFile(hashPathPair.hash());
+		Path storeFile = dataLayout.objectFile(hashPathPair.hash());
 		boolean success = false;
 		boolean interrupted = false;
 
-		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+		try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
 			if (FileIntegrity.matchesNamed(storeFile, task.fileSize, hashPathPair.hash(), cache)) {
 				// CACHE HIT
 				totalBytesDownloaded.addAndGet(task.fileSize);
@@ -318,7 +318,9 @@ public class DownloadManager {
 
 		try {
 			try {
-				tempStoreFile = Files.createTempFile(storage.incomingDirectory(), "." + hashPathPair.hash() + ".", ".tmp");
+				Path stagingDirectory = dataLayout.stagingDirectory();
+				Files.createDirectories(stagingDirectory);
+				tempStoreFile = Files.createTempFile(stagingDirectory, "." + hashPathPair.hash() + ".", ".tmp");
 				activeTemporaryFiles.put(hashPathPair, tempStoreFile);
 			} catch (IOException e) {
 				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;

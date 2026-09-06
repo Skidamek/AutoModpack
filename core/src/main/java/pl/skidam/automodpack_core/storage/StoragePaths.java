@@ -32,9 +32,12 @@ public final class StoragePaths {
 	public static final Path CLIENT_MUTATION_LOCK_FILE = CLIENT_DIR.resolve("mutation.lock");
 	public static final Path CLIENT_CONTENT_TEMP_FILE = CLIENT_DIR.resolve("incoming-manifest.json.temp");
 	public static final Path CLIENT_JOURNAL_TEMP_FILE = CLIENT_DIR.resolve("incoming-journal.jsonl.temp");
-	public static final Path CLIENT_HELPER_DIR = CLIENT_DIR.resolve("helper");
-	public static final Path CLIENT_HELPER_LEASE_FILE = CLIENT_HELPER_DIR.resolve("running.lock");
 	public static final Path LOCAL_DATA_DIR = AUTOMODPACK_DIR.resolve("data");
+
+	/** The instance-level pending self-update swap; consumed at boot before any role machinery wakes up. */
+	public static final Path SELF_UPDATE_FILE = AUTOMODPACK_DIR.resolve("self-update.json");
+	public static final Path HELPER_DIR = AUTOMODPACK_DIR.resolve("helper");
+	public static final Path HELPER_LEASE_FILE = HELPER_DIR.resolve("running.lock");
 
 	public static final Path SERVER_DIR = AUTOMODPACK_DIR.resolve("server");
 	public static final Path SERVER_PROJECTION_FILE = SERVER_DIR.resolve("current-projection.json");

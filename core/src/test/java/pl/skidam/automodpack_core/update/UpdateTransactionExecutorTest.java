@@ -28,7 +28,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
-import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.storage.TestDataRoot;
@@ -606,27 +605,6 @@ class UpdateTransactionExecutorTest {
 		assertTrue(Files.exists(storage.generatedCopiesFile(target.manifest().modpackId(), target.packTarget().contentToken(), UpdateTransaction.digest(expected))));
 		assertTrue(Files.exists(storage.baselineFile(target.manifest().modpackId())));
 		assertEquals("player-edit", Files.readString(overlay, StandardCharsets.UTF_8));
-	}
-
-	@Test
-	void selfUpdateRemainsAConstrainedCasOperation() throws Exception {
-		ClientStorage storage = storage();
-		Path current = Files.writeString(storage.modsDirectory().resolve("automodpack-old.jar"), "old", StandardCharsets.UTF_8);
-		Path replacementPath = storage.modsDirectory().resolve("automodpack-new.jar");
-		String currentHash = HashUtils.getHash(current);
-		byte[] replacement = "replacement".getBytes(StandardCharsets.UTF_8);
-		String replacementHash = store(storage, replacement);
-		String currentPath = LogicalPath.normalize(storage.gameDirectory().relativize(current).toString());
-		String targetPath = LogicalPath.normalize(storage.gameDirectory().relativize(replacementPath).toString());
-		UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentPath, targetPath, replacementHash, replacement.length, currentHash);
-
-		assertTrue(executor(storage).commit(transaction).success());
-		assertFalse(Files.exists(current));
-		assertTrue(FileIntegrity.matches(replacementPath, replacement.length, replacementHash));
-		assertNull(storage.readActiveState());
-
-		UpdateTransaction invalid = UpdateTransaction.createSelfUpdate(currentPath, "../outside.jar", replacementHash, replacement.length, currentHash);
-		assertThrows(IOException.class, () -> executor(storage).validate(invalid));
 	}
 
 	@Test
