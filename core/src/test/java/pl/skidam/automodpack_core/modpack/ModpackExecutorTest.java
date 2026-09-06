@@ -20,7 +20,9 @@ import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.storage.StoragePaths;
 
 class ModpackExecutorTest {
@@ -165,6 +167,45 @@ class ModpackExecutorTest {
 		}
 	}
 
+	@Test
+	void restartWithoutChangesKeepsModpackHostingPrepared() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Path source = groups.resolve("main/config/example.txt");
+		Files.createDirectories(source.getParent());
+		Files.writeString(source, "one", StandardCharsets.UTF_8);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		Constants.serverConfig = config();
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
+		ModpackExecutor first = new ModpackExecutor(server, groups, generationRoot);
+		try {
+			Constants.hostServer = new NettyServer();
+			assertInstanceOf(ModpackExecutor.Published.class, first.publish());
+			assertTrue(Constants.hostServer.getPath(GenerationHosting.HEAD_DOCUMENT_KEY).isPresent());
+
+			// A server restart builds a fresh host and executor over the same on-disk journal.
+			Constants.hostServer = new NettyServer();
+			ModpackExecutor restarted = new ModpackExecutor(server, groups, generationRoot);
+			try {
+				assertInstanceOf(ModpackExecutor.NoChanges.class, restarted.publish());
+				assertTrue(Constants.hostServer.getPath(GenerationHosting.HEAD_DOCUMENT_KEY).isPresent());
+			} finally {
+				restarted.stop();
+			}
+		} finally {
+			first.stop();
+			snapshot.restore();
+			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
+			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
+		}
+	}
+
 	private static ServerConfigJsons.ServerConfigFieldsV3 config() {
 		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 		ServerConfigJsons.GroupDeclaration main = new ServerConfigJsons.GroupDeclaration();
@@ -182,6 +223,7 @@ class ModpackExecutorTest {
 		private final String loader = Constants.LOADER;
 		private final String loaderVersion = Constants.LOADER_VERSION;
 		private final String mcVersion = Constants.MC_VERSION;
+		private final NettyServer hostServer = Constants.hostServer;
 
 		void restore() {
 			Constants.serverConfig = serverConfig;
@@ -189,6 +231,7 @@ class ModpackExecutorTest {
 			Constants.LOADER = loader;
 			Constants.LOADER_VERSION = loaderVersion;
 			Constants.MC_VERSION = mcVersion;
+			Constants.hostServer = hostServer;
 		}
 	}
 }

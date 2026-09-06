@@ -10,7 +10,7 @@ from pathlib import Path
 from .mod_fixtures import write_valid_mod_fixture
 from .supervisor import resource_labels
 from .client_steps import cas_object
-from .docker_harness import _container, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
+from .docker_harness import _container, _container_logs, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
 from .engine import Context
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -178,6 +178,17 @@ def _v_wait_server(ctx: Context, step):
     to = ctx.scenario.get("timeouts", {}) or ctx.settings.get("timeouts", {})
     timeout = parse_duration(step.get("timeout"), default=float(to.get("serverStartSeconds", 180)))
     _wait_for_log(ctx.srv_name, "Done (", timeout=timeout)
+
+
+@verb("restart_server")
+def _v_restart_server(ctx: Context, step):
+    """Restart the server container in place; persisted state stays, so the modpack host must come back on its own."""
+    to = ctx.scenario.get("timeouts", {}) or ctx.settings.get("timeouts", {})
+    timeout = parse_duration(step.get("timeout"), default=float(to.get("serverStartSeconds", 180)))
+    # Container stdout survives a restart, so readiness is a *new* "Done (" line, not any old one.
+    booted = _container_logs(ctx.srv_name).count("Done (")
+    _container(ctx.srv_name).restart(timeout=60)
+    await_condition(lambda: _container_logs(ctx.srv_name).count("Done (") > booted or None, timeout, msg="server did not finish loading after restart")
 
 
 @verb("publish_server_generation")
