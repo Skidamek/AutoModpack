@@ -71,7 +71,7 @@ public final class ServerHolepunchBridge {
 		channel.closeFuture().addListener(future -> channels.remove(channel));
 		ChannelPipeline pipeline = channel.pipeline();
 		pipeline.addLast("error-printer-first", new ErrorPrinter());
-		pipeline.addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
+		pipeline.addLast("traffic-shaper", TrafficShaper.handler());
 		// Both camouflage handlers sit on the wire side of the TLS handler: inbound records are
 		// decamouflaged before TLS decrypts them, and outbound records are camouflaged after TLS
 		// encrypts them. A single pipeline position serves both directions with opposite relative

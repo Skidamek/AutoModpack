@@ -66,7 +66,7 @@ class ProtocolServerHandlerTest {
 
 	@Test
 	void directDoesNotRespondToMagicPacket() {
-		new TrafficShaper(null);
+		TrafficShaper.startShared();
 		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(new NettyServer(), ModpackConnectionMode.DIRECT, false));
 
 		channel.writeInbound(magicPacket("example.com"));

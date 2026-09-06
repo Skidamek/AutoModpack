@@ -141,7 +141,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 
 	private void setupPipeline(ChannelHandlerContext ctx) {
 		ctx.pipeline().addLast("error-printer-first", new ErrorPrinter());
-		ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
+		ctx.pipeline().addLast("traffic-shaper", TrafficShaper.handler());
 
 		if (sslCtx != null) {
 			ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));

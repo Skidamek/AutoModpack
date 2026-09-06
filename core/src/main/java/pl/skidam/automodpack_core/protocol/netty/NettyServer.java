@@ -116,14 +116,14 @@ public class NettyServer {
 
 			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 				LOGGER.info("Hosting modpack through Minecraft Login holepunch; bindPort is not used");
-				new TrafficShaper(null);
+				TrafficShaper.startShared();
 				ServerHolepunchBridge.register(this);
 				return Optional.empty();
 			}
 
 			if (connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
 				LOGGER.info("Hosting modpack through magic packet routing on the Minecraft port");
-				new TrafficShaper(null);
+				TrafficShaper.startShared();
 				sharedMagicEnabled = true;
 				return Optional.empty();
 			}
@@ -157,7 +157,7 @@ public class NettyServer {
 			eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
 		}
 
-		new TrafficShaper(eventLoopGroup);
+		TrafficShaper.start(eventLoopGroup);
 
 		serverChannel = new ServerBootstrap().channel(socketChannelClass).childOption(ChannelOption.TCP_NODELAY, true)
 				.childHandler(new ChannelInitializer<SocketChannel>() {
