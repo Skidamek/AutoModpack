@@ -138,8 +138,13 @@ download_modpack:
   - do: wait_for
     name: catch the download screen while the pack transfers
     timeout: 60s
-    until: { screen: DownloadScreen }
-    skip_if: { screen_not: [PackConfirmScreen, DownloadScreen] }
+    # A warm-cache transfer can skip straight past DownloadScreen before the first poll;
+    # reaching RestartScreen means the transfer already finished, which is just as done.
+    until:
+      any:
+        - screen: DownloadScreen
+        - screen: RestartScreen
+    skip_if: { screen_not: [PackConfirmScreen, DownloadScreen, RestartScreen] }
   - do: screenshot
     name: capture the download progress
     file: download-progress

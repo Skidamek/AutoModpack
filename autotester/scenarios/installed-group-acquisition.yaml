@@ -35,10 +35,10 @@ flow:
     until:
       all:
         - screen: ModpackDetailsScreen
-        - element: { text: Modpack settings, enabled: true }
+        - element: { key: automodpack.management.groups, enabled: true }
   - do: click
     name: open the installed group selection
-    select: { text: Modpack settings }
+    select: { key: automodpack.management.groups }
   - do: wait_for
     name: show the unchanged required-only selection
     until:
