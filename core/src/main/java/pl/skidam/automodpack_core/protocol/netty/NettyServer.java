@@ -116,6 +116,7 @@ public class NettyServer {
 
 			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 				LOGGER.info("Hosting modpack through Minecraft Login holepunch; bindPort is not used");
+				new TrafficShaper(null);
 				ServerHolepunchBridge.register(this);
 				return Optional.empty();
 			}

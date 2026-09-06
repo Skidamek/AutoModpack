@@ -14,7 +14,6 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.mcholepunch.server.netty.NettyLoginClaimHandler;
-import pl.skidam.mcholepunch.server.netty.NettyTakeoverSpec;
 
 @Mixin(targets = "net/minecraft/server/network/ServerConnectionListener$1", priority = 2137)
 public abstract class ServerNetworkIoMixin {
@@ -27,7 +26,7 @@ public abstract class ServerNetworkIoMixin {
 			return;
 		}
 		if (Common.server != null && ServerHolepunchBridge.isRegistered()) {
-			channel.pipeline().addAfter(NettyTakeoverSpec.minecraftLogin().inboundEncryptionAnchor(), MOD_ID, new NettyLoginClaimHandler(Common.server.getKeyPair()));
+			NettyLoginClaimHandler.install(channel.pipeline(), Common.server.getKeyPair());
 		}
 	}
 }

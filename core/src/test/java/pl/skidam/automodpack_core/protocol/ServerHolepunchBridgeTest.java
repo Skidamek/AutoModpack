@@ -1,119 +1,118 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.junit.jupiter.api.Test;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
-import io.netty.handler.stream.ChunkedStream;
-import io.netty.handler.stream.ChunkedWriteHandler;
 
-import pl.skidam.automodpack_core.protocol.netty.BackpressuredEmbeddedChannel;
 import pl.skidam.mcholepunch.HolepunchConnection;
 
 class ServerHolepunchBridgeTest {
-	@Test
-	void pumpDrainsChunkedWritesAndTrailingControlFrame() throws Exception {
-		EmbeddedChannel channel = new BackpressuredEmbeddedChannel(4);
-		channel.pipeline().addLast(new ChunkedWriteHandler());
-		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-		DataOutputStream output = new DataOutputStream(bytes);
-
-		channel.write(new ChunkedStream(new ByteArrayInputStream(new byte[]{1, 2, 3, 4, 5}), 2));
-		channel.writeAndFlush(Unpooled.wrappedBuffer(new byte[]{6, 7}));
-		ServerHolepunchBridge.pumpEmbeddedChannel(channel, output);
-
-		assertArrayEquals(new byte[]{1, 2, 3, 4, 5, 6, 7}, bytes.toByteArray());
-		channel.finishAndReleaseAll();
-	}
 
 	@Test
-	void chunkedWriteDoesNotMaterializeTheWholeStreamUntilDrained() throws Exception {
-		int watermark = 2048;
-		int chunkSize = 256;
-		byte[] payload = new byte[64 * 1024];
-		for (int i = 0; i < payload.length; i++) payload[i] = (byte) i;
-		BackpressuredEmbeddedChannel channel = new BackpressuredEmbeddedChannel(watermark);
-		channel.pipeline().addLast(new ChunkedWriteHandler());
-		channel.writeAndFlush(new ChunkedStream(new ByteArrayInputStream(payload), chunkSize));
-		channel.runPendingTasks();
-		channel.flushOutbound();
-
-		long queued = 0;
-		for (Object message : channel.outboundMessages()) queued += ((ByteBuf) message).readableBytes();
-		assertTrue(queued > 0);
-		assertTrue(queued <= watermark, "queued=" + queued);
-		assertTrue(channel.outboundMessages().size() < payload.length / chunkSize);
-		int queuedMessages = channel.outboundMessages().size();
-		channel.flushOutbound();
-		assertEquals(queuedMessages, channel.outboundMessages().size());
-
-		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-		ServerHolepunchBridge.pumpEmbeddedChannel(channel, new DataOutputStream(bytes));
-		assertArrayEquals(payload, bytes.toByteArray());
-		channel.finishAndReleaseAll();
-	}
-
-	@Test
-	void pumpSendsAWholeNioOutboundBufferAsOneHolepunchWrite() throws Exception {
+	void camouflageHandlersPassThroughBeforeTheHandoffAndRoundTripAfterIt() throws Exception {
+		FakeConnection connection = new FakeConnection();
 		EmbeddedChannel channel = new EmbeddedChannel();
-		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-		AtomicInteger writes = new AtomicInteger();
-		HolepunchConnection connection = new HolepunchConnection() {
-			@Override
-			public CompletableFuture<Void> write(ByteBuffer data) {
-				ByteBuffer copy = data.duplicate();
-				byte[] chunk = new byte[copy.remaining()];
-				copy.get(chunk);
-				bytes.writeBytes(chunk);
-				writes.incrementAndGet();
-				return CompletableFuture.completedFuture(null);
-			}
+		channel.pipeline().addLast("holepunch-camouflage-encoder", new ServerHolepunchBridge.CamouflageEncoder(connection));
+		channel.pipeline().addLast("holepunch-camouflage-decoder", new ServerHolepunchBridge.CamouflageDecoder(connection));
+		byte[] record = tlsRecord(64);
+		TlsRecordCamouflage.Pair client = TlsRecordCamouflage.create(connection.transportSecret(), true);
 
-			@Override
-			public boolean isRaw() {
-				return false;
-			}
+		channel.writeOutbound(Unpooled.wrappedBuffer(record));
+		assertArrayEquals(record, readBytes(channel.readOutbound()));
 
-			@Override
-			public byte[] transportSecret() {
-				return new byte[16];
-			}
+		connection.activateRaw();
+		channel.writeOutbound(Unpooled.wrappedBuffer(record));
+		ByteBuffer framed = ByteBuffer.wrap(readBytes(channel.readOutbound()));
+		ByteBuffer decoded = ByteBuffer.allocate(record.length + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
+		client.inbound().decode(framed, decoded);
+		decoded.flip();
+		byte[] roundTripped = new byte[decoded.remaining()];
+		decoded.get(roundTripped);
+		assertArrayEquals(record, roundTripped);
 
-			@Override
-			public CompletableFuture<Void> commitTransportUpgrade() {
-				return CompletableFuture.completedFuture(null);
-			}
+		ByteBuffer encodedByClient = ByteBuffer.allocate(record.length + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
+		client.outbound().encode(ByteBuffer.wrap(record), encodedByClient);
+		encodedByClient.flip();
+		byte[] camouflaged = new byte[encodedByClient.remaining()];
+		encodedByClient.get(camouflaged);
+		channel.writeInbound(Unpooled.wrappedBuffer(camouflaged, 0, 3));
+		channel.writeInbound(Unpooled.wrappedBuffer(camouflaged, 3, camouflaged.length - 3));
+		assertArrayEquals(record, readBytes(channel.readInbound()));
 
-			@Override
-			public void pauseReads() {}
-
-			@Override
-			public void resumeReads() {}
-
-			@Override
-			public void close() {}
-		};
-		HolepunchSocket socket = new HolepunchSocket(connection);
-		byte[] payload = new byte[20 * 1024];
-		for (int i = 0; i < payload.length; i++) payload[i] = (byte) i;
-		channel.writeAndFlush(Unpooled.wrappedBuffer(payload));
-		ServerHolepunchBridge.pumpEmbeddedChannel(channel, socket);
-
-		assertEquals(1, writes.get());
-		assertArrayEquals(payload, bytes.toByteArray());
-		socket.close();
 		channel.finishAndReleaseAll();
+	}
+
+	private static byte[] tlsRecord(int payloadLength) {
+		byte[] record = new byte[5 + payloadLength];
+		record[0] = 0x17;
+		record[1] = 0x03;
+		record[2] = 0x03;
+		record[3] = (byte) (payloadLength >>> 8);
+		record[4] = (byte) payloadLength;
+		byte[] payload = new byte[payloadLength];
+		ThreadLocalRandom.current().nextBytes(payload);
+		System.arraycopy(payload, 0, record, 5, payloadLength);
+		return record;
+	}
+
+	private static byte[] readBytes(ByteBuf buffer) {
+		try {
+			byte[] bytes = new byte[buffer.readableBytes()];
+			buffer.readBytes(bytes);
+			return bytes;
+		} finally {
+			buffer.release();
+		}
+	}
+
+	private static final class FakeConnection implements HolepunchConnection {
+		private final byte[] secret = new byte[16];
+		private boolean raw;
+
+		FakeConnection() {
+			ThreadLocalRandom.current().nextBytes(secret);
+		}
+
+		void activateRaw() {
+			raw = true;
+		}
+
+		@Override
+		public CompletionStage<Void> write(ByteBuffer data) {
+			return CompletableFuture.completedFuture(null);
+		}
+
+		@Override
+		public boolean isRaw() {
+			return raw;
+		}
+
+		@Override
+		public byte[] transportSecret() {
+			return secret.clone();
+		}
+
+		@Override
+		public CompletionStage<Void> commitTransportUpgrade() {
+			return CompletableFuture.completedFuture(null);
+		}
+
+		@Override
+		public void pauseReads() {}
+
+		@Override
+		public void resumeReads() {}
+
+		@Override
+		public void close() {}
 	}
 }
