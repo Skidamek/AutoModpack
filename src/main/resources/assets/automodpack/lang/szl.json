@@ -361,6 +361,7 @@
   "automodpack.browser.effectsSummary.one": "%s inny efekt",
   "automodpack.browser.effectsSummary.other": "%s inkszych efektōw",
   "automodpack.browser.modrinth": "Modrinth",
+  "automodpack.browser.selectHint": "Wybier zbiōr, coby zobaczyć jego szczegōły.",
   "automodpack.browser.source.custom": "Własny",
   "automodpack.browser.source.published": "Ôpublikowany",
   "automodpack.browser.sourceFilter": "Zdrzōdło: %s",

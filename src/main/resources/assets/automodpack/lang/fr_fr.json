@@ -351,6 +351,7 @@
   "automodpack.browser.effectsSummary.one": "%s autre effet",
   "automodpack.browser.effectsSummary.other": "%s autres effets",
   "automodpack.browser.modrinth": "Modrinth",
+  "automodpack.browser.selectHint": "Sélectionnez un fichier pour voir ses détails.",
   "automodpack.browser.source.custom": "Personnalisé",
   "automodpack.browser.source.published": "Publié",
   "automodpack.browser.sourceFilter": "Source : %s",

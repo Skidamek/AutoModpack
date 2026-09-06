@@ -94,6 +94,12 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		return selected == null || !(selected.row instanceof ChangeBrowserProjection.FileRow file) ? null : file;
 	}
 
+	/** The selected row's fact line, or null when nothing is selected. */
+	public String facts() {
+		Entry selected = this.getSelected();
+		return selected == null ? null : selected.facts();
+	}
+
 	public void selectPath(String path) {
 		if (path == null || path.isBlank()) {
 			this.setSelected(null);
@@ -191,9 +197,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			}
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
 					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, detail(), Math.max(1, entryWidth - indent - 22))).withStyle(ChatFormatting.GRAY), x + indent + 16, y + 17, TextColors.WHITE);
-			/*? if >=1.21.8 {*/
 			if (hovered) tooltip(matrices, mouseX, mouseY);
-			/*?}*/
 		}
 
 		private record Badge(String text, String key, int color) {}
@@ -217,21 +221,19 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			return badges;
 		}
 
-		/*? if >=1.21.8 {*/
 		private void tooltip(VersionedMatrices matrices, int mouseX, int mouseY) {
 			if (!(row instanceof ChangeBrowserProjection.FileRow file)) return;
-			List<Component> lines = new ArrayList<>();
-			lines.add(VersionedText.literal(row.path()));
+			List<String> lines = new ArrayList<>();
+			lines.add(row.path());
 			String written = file.writtenHash();
 			String previous = file.previousHash();
 			String hash = shortHash(written);
-			if (hash != null) lines.add(VersionedText.literal("sha1: " + hash));
-			if (previous != null && written != null && !previous.equals(written)) lines.add(VersionedText.literal(shortHash(previous) + " -> " + shortHash(written)));
+			if (hash != null) lines.add("sha1: " + hash);
+			if (previous != null && written != null && !previous.equals(written)) lines.add(shortHash(previous) + " -> " + shortHash(written));
 			List<String> platforms = badges.stream().filter(badge -> badge.key() != null).map(badge -> VersionedText.translatable(badge.key()).getString()).toList();
-			if (!platforms.isEmpty()) lines.add(VersionedText.literal(String.join(", ", platforms)));
-			matrices.getContext().setComponentTooltipForNextFrame(minecraft.font, lines, mouseX, mouseY);
+			if (!platforms.isEmpty()) lines.add(String.join(", ", platforms));
+			VersionedScreen.showComponentTooltip(minecraft.font, matrices, VersionedText.literal(String.join("\n", lines)), mouseX, mouseY);
 		}
-		/*?}*/
 
 		private String marker() {
 			if (row instanceof ChangeBrowserProjection.FolderRow) return collapsed ? "+ " : "- ";
@@ -262,6 +264,11 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			List<String> visibleFeatures = file.features().stream().map(featureNames::get).filter(name -> name != null && !name.isBlank()).distinct().sorted().toList();
 			if (!visibleFeatures.isEmpty()) parts.add(String.join(", ", visibleFeatures));
 			return String.join(" | ", parts);
+		}
+
+		/** The row's fact line, shared with the browser screen's details pane. */
+		public String facts() {
+			return detail();
 		}
 
 		private static String folderDetail(ChangeBrowserProjection.Aggregate aggregate) {

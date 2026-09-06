@@ -346,6 +346,7 @@
   "automodpack.browser.effectsSummary.one": "기타 효과 %s개",
   "automodpack.browser.effectsSummary.other": "기타 효과 %s개",
   "automodpack.browser.modrinth": "Modrinth",
+  "automodpack.browser.selectHint": "파일을 선택하면 세부 정보가 표시됩니다.",
   "automodpack.browser.source.custom": "커스텀",
   "automodpack.browser.source.published": "게시됨",
   "automodpack.browser.sourceFilter": "출처: %s",

@@ -346,6 +346,7 @@
   "automodpack.browser.effectsSummary.one": "%s 个其他效果",
   "automodpack.browser.effectsSummary.other": "%s 个其他效果",
   "automodpack.browser.modrinth": "Modrinth",
+  "automodpack.browser.selectHint": "选择一个文件以查看其详情。",
   "automodpack.browser.source.custom": "自定义",
   "automodpack.browser.source.published": "已发布",
   "automodpack.browser.sourceFilter": "来源：%s",

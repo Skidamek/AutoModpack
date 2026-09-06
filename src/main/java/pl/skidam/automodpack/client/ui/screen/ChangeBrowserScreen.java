@@ -66,6 +66,8 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private Button sourceButton;
 	private int browserTop;
 	private int browserBottom;
+	private int summaryY;
+	private int paneTop;
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames) {
 		this(parent, heading, description, changes, featureNames, null, List.of(), false);
@@ -123,45 +125,50 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		updateControlLabels();
 		List<ActionRow> actionRows = buildActionRows();
 		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
-		String hash = selectedHash();
-		if (hash != null) setTooltip(actionButtons.get(platformLinks().size()), VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
 		if (auxiliaryAction != null) actionButtons.get(actionButtons.size() - 2).active = auxiliaryAction.active();
-		this.browserBottom = footerTop(actionRows) - this.font.lineHeight - 9;
+		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
+		int summaryY = footerTop - this.font.lineHeight - 5;
+		// The pane reserves all three bands — path, facts, action rail — so selection never moves the layout.
+		int paneTop = summaryY - 3 - (2 * this.font.lineHeight + 2 + ActionAreaLayout.BUTTON_HEIGHT);
+		this.summaryY = summaryY;
+		this.paneTop = paneTop;
+		this.browserBottom = paneTop - 4;
 		rebuildBrowser();
+		addPaneActions(paneTop + 2 * this.font.lineHeight + 2);
 	}
 
-	private int footerTop(List<ActionRow> actionRows) {
-		return actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
+	/** The selected file's pane buttons on the details line: one per storefront link, then Copy hash. */
+	private void addPaneActions(int topY) {
+		List<PlatformLink> platforms = platformLinks();
+		String hash = selectedHash();
+		if (platforms.isEmpty() && hash == null) return;
+		List<PaneAction> actions = new ArrayList<>();
+		for (PlatformLink platform : platforms) actions.add(new PaneAction(platform.label(), button -> Util.getPlatform().openUri(platform.url()), false));
+		if (hash != null) actions.add(new PaneAction(VersionedText.translatable("automodpack.browser.copyHash"), button -> Minecraft.getInstance().keyboardHandler.setClipboard(hash), true));
+		List<ActionAreaLayout.Action> geometry = new ArrayList<>();
+		for (int index = 0; index < actions.size(); index++) geometry.add(new ActionAreaLayout.Action(String.valueOf(index), ActionAreaLayout.Role.OPTIONAL));
+		ActionAreaLayout.Layout layout = ActionAreaLayout.fromTop(panelLeft(ActionAreaLayout.FOOTER_RAIL), topY, panelWidth(ActionAreaLayout.FOOTER_RAIL), ActionAreaLayout.GAP, List.of(new ActionAreaLayout.Row(ActionAreaLayout.RowKind.AUXILIARY, geometry)));
+		List<ActionAreaLayout.Placement> placements = layout.placements();
+		for (int index = 0; index < placements.size(); index++) {
+			ActionAreaLayout.Placement placement = placements.get(index);
+			PaneAction action = actions.get(index);
+			Button button = buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), action.label(), action.onPress());
+			if (action.copyHash()) setTooltip(button, VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
+			this.addRenderableWidget(button);
+		}
 	}
 
 	private List<ActionRow> buildActionRows() {
 		List<ActionRow> actionRows = new ArrayList<>();
-		List<PlatformLink> platforms = platformLinks();
-		String hash = selectedHash();
-		if (!platforms.isEmpty() || hash != null) {
-			List<ActionDefinition> fileActions = new ArrayList<>();
-			for (PlatformLink platform : platforms) fileActions.add(optionalAction(platform.label(), button -> Util.getPlatform().openUri(platform.url())));
-			if (hash != null) fileActions.add(optionalAction(VersionedText.translatable("automodpack.browser.copyHash"), button -> Minecraft.getInstance().keyboardHandler.setClipboard(hash)));
-			actionRows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, fileActions.toArray(ActionDefinition[]::new)));
-		}
 		if (auxiliaryAction != null) actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this)), secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		else actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		return actionRows;
 	}
 
-	/** One representative hash for the selected file: the first downloadable state, else the last known state. */
+	/** One representative hash for the selected file: the hash of the state written on disk. */
 	private String selectedHash() {
-		if (selectedPath == null || selectedPath.isBlank()) return null;
-		String after = null;
-		String before = null;
-		for (ChangeSet.Change change : changes.changes()) {
-			if (!change.logicalPath().equals(selectedPath)) continue;
-			for (ChangeSet.Occurrence occurrence : change.occurrences()) {
-				if (after == null) after = occurrence.afterHash();
-				if (before == null) before = occurrence.beforeHash();
-			}
-		}
-		return after != null ? after : before;
+		ChangeBrowserProjection.FileRow file = this.browser == null ? null : this.browser.selectedFile();
+		return file == null ? null : file.writtenHash();
 	}
 
 	private void rebuildBrowser() {
@@ -323,10 +330,18 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			long custom = projection.files().stream().filter(ChangeBrowserScreen::isUnreferencedJar).count();
 			if (custom > 0) summary += " · " + UiFormat.plural(custom, "automodpack.browser.customSummary").getString();
 		}
-		int summaryY = footerTop(buildActionRows()) - this.font.lineHeight - 5;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, summaryY, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.summaryY, TextColors.WHITE);
 		if (projection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
+		ChangeBrowserProjection.FileRow selected = this.browser == null ? null : this.browser.selectedFile();
+		if (selected == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.selectHint").withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop, TextColors.WHITE);
+		else {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selected.path(), contentWidth)).withStyle(ChatFormatting.WHITE), this.width / 2, this.paneTop, TextColors.WHITE);
+			String facts = this.browser.facts();
+			String hash = selected.writtenHash();
+			if (hash != null) facts += " · sha1 " + hash.substring(0, Math.min(12, hash.length()));
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, facts, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop + this.font.lineHeight, TextColors.WHITE);
+		}
 	}
 
 	@Override
@@ -345,6 +360,13 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			key = Objects.requireNonNull(key, "platform key");
 			label = Objects.requireNonNull(label, "platform label");
 			url = Objects.requireNonNull(url, "platform url");
+		}
+	}
+
+	private record PaneAction(Component label, Button.OnPress onPress, boolean copyHash) {
+		private PaneAction {
+			label = Objects.requireNonNull(label, "pane action label");
+			onPress = Objects.requireNonNull(onPress, "pane action press");
 		}
 	}
 
