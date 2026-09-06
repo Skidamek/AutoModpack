@@ -69,6 +69,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private int browserBottom;
 	private int summaryY;
 	private int paneTop;
+	private int paneActionsY;
+	private ChangeBrowserProjection.Projection currentProjection;
+	private String summaryText;
+	private final List<Button> paneButtons = new ArrayList<>();
 
 	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames) {
 		this(parent, heading, description, changes, featureNames, null, List.of(), false, 0);
@@ -135,12 +139,15 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.summaryY = summaryY;
 		this.paneTop = paneTop;
 		this.browserBottom = paneTop - 4;
+		this.paneActionsY = paneTop + 2 * this.font.lineHeight + 2;
 		rebuildBrowser();
-		addPaneActions(paneTop + 2 * this.font.lineHeight + 2);
+		addPaneActions(this.paneActionsY);
 	}
 
 	/** The selected file's pane buttons on the details line: one per storefront link, then Copy hash. */
 	private void addPaneActions(int topY) {
+		for (Button button : paneButtons) this.removeWidget(button);
+		paneButtons.clear();
 		List<PlatformLink> platforms = platformLinks();
 		String hash = selectedHash();
 		if (platforms.isEmpty() && hash == null) return;
@@ -156,6 +163,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			PaneAction action = actions.get(index);
 			Button button = buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), action.label(), action.onPress());
 			if (action.copyHash()) setTooltip(button, VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
+			paneButtons.add(button);
 			this.addRenderableWidget(button);
 		}
 	}
@@ -178,11 +186,28 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		if (this.browser != null) this.removeWidget(this.browser);
 		ChangeBrowserProjection.Filter filter = new ChangeBrowserProjection.Filter(search,
 				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature), selectedSource);
-		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE, filter).collapse(collapsedFolders);
-		this.browser = new ChangeBrowserWidget(projection, collapsedFolders, featureNames, warnUnverified, referencesResolved, this::toggleFolder, this::onFileSelected,
+		this.currentProjection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE, filter).collapse(collapsedFolders);
+		this.browser = new ChangeBrowserWidget(this.currentProjection, collapsedFolders, featureNames, warnUnverified, referencesResolved, this::toggleFolder, this::onFileSelected,
 				this.minecraft, this.width, this.height, browserTop, browserBottom);
 		this.addRenderableWidget(this.browser);
 		this.browser.selectPath(selectedPath);
+		recomputeSummary();
+	}
+
+	/** The totals line under the browser, computed from the cached projection whenever the projection changes. */
+	private void recomputeSummary() {
+		if (currentProjection == null) {
+			this.summaryText = "";
+			return;
+		}
+		String summary = UiFormat.plural(currentProjection.total().fileCount(), "automodpack.browser.summary", UiFormat.formatSize(currentProjection.total().byteCount())).getString();
+		if (!currentProjection.effects().isEmpty()) summary += " | " + UiFormat.plural(currentProjection.effects().size(), "automodpack.browser.effectsSummary").getString();
+		if (warnUnverified) {
+			long custom = currentProjection.files().stream().filter(ChangeBrowserScreen::isUnreferencedJar).count();
+			if (custom > 0) summary += " · " + UiFormat.plural(custom, "automodpack.browser.customSummary").getString();
+		}
+		if (downloadBytes > 0) summary += " · " + VersionedText.translatable("automodpack.browser.downloadCost", UiFormat.formatSize(downloadBytes)).getString();
+		this.summaryText = summary;
 	}
 
 	private void onFileSelected(ChangeBrowserProjection.FileRow file) {
@@ -259,7 +284,17 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				referencesResolved = true;
 				if (closed || referenced == changes) return;
 				changes = referenced;
-				rebuild();
+				// In-place refresh instead of a full screen rebuild, so the search field keeps its content and focus.
+				/*? if >=1.21.4 {*/
+				double scrollAmount = this.browser.scrollAmount();
+				/*?} else {*/
+				/*double scrollAmount = this.browser.getScrollAmount();
+				*//*?}*/
+				rebuildBrowser();
+				// Both vanilla setters clamp, so a stale scroll from the smaller old list is safe.
+				this.browser.setScrollAmount(scrollAmount);
+				recomputeSummary();
+				addPaneActions(this.paneActionsY);
 			});
 		});
 	}
@@ -324,17 +359,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			drawCenteredTextWithShadow(matrices, this.font, line, this.width / 2, preambleY, TextColors.WHITE);
 			preambleY += LINE_STEP;
 		}
-		ChangeBrowserProjection.Projection projection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE,
-				new ChangeBrowserProjection.Filter(search, selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature), selectedSource));
-		String summary = UiFormat.plural(projection.total().fileCount(), "automodpack.browser.summary", UiFormat.formatSize(projection.total().byteCount())).getString();
-		if (!projection.effects().isEmpty()) summary += " | " + UiFormat.plural(projection.effects().size(), "automodpack.browser.effectsSummary").getString();
-		if (warnUnverified) {
-			long custom = projection.files().stream().filter(ChangeBrowserScreen::isUnreferencedJar).count();
-			if (custom > 0) summary += " · " + UiFormat.plural(custom, "automodpack.browser.customSummary").getString();
-		}
-		if (downloadBytes > 0) summary += " · " + VersionedText.translatable("automodpack.browser.downloadCost", UiFormat.formatSize(downloadBytes)).getString();
+		String summary = summaryText == null ? "" : summaryText;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.summaryY, TextColors.WHITE);
-		if (projection.rows().isEmpty())
+		if (currentProjection == null || currentProjection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
 		ChangeBrowserProjection.FileRow selected = this.browser == null ? null : this.browser.selectedFile();
 		if (selected == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.selectHint").withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop, TextColors.WHITE);
