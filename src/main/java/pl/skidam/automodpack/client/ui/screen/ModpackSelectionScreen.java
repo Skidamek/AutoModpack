@@ -46,7 +46,8 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public class ModpackSelectionScreen extends VersionedScreen {
 
 	private static final int ROW_WIDTH = 500;
-	private static final int PLATFORM_BUTTON_WIDTH = 90;
+	/** Square on purpose: the platform override is an escape hatch for failed auto-detection, not an invitation. */
+	private static final int PLATFORM_BUTTON_SIZE = 20;
 	/** Vanilla checkbox geometry: the box plus the gap before its label. */
 	private static final int CHECKBOX_LABEL_OFFSET = 24;
 
@@ -183,8 +184,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int listTop = 80;
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - 8;
 		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(ROW_WIDTH), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
-		Button platformButton = buttonWidget(panelLeft(ROW_WIDTH) + panelWidth(ROW_WIDTH) - PLATFORM_BUTTON_WIDTH, 24, PLATFORM_BUTTON_WIDTH, 20,
-				VersionedText.literal(platformLabel(effectivePlatform())), press -> cyclePlatform());
+		Button platformButton = buttonWidget(panelLeft(ROW_WIDTH) + panelWidth(ROW_WIDTH) - PLATFORM_BUTTON_SIZE, 24, PLATFORM_BUTTON_SIZE, PLATFORM_BUTTON_SIZE,
+				VersionedText.literal("OS"), press -> cyclePlatform());
 		setTooltip(platformButton, VersionedText.translatable("automodpack.selection.platformTooltip"));
 		this.addRenderableWidget(platformButton);
 	}
@@ -578,15 +579,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		applySelectionChange(currentIntent(), Set.of(), null);
 	}
 
-	private static String platformLabel(ClientPlatform platform) {
-		return switch (platform) {
-			case WINDOWS -> "Windows";
-			case LINUX -> "Linux";
-			case MACOS -> "macOS";
-			case ANDROID -> "Android";
-		};
-	}
-
 	private boolean canSave() {
 		return resolutionError.isEmpty()
 				&& (selectionAction != null || managerEntry && !activeModpack || !initialSelection.equals(currentIntent()) || !Objects.equals(initialSelection.platform(), currentIntent().platform()));
@@ -632,7 +624,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			// wraps inside the space left of it and the summary waits until that zone ends.
 			int railLeft = panelLeft(ROW_WIDTH);
 			int railWidth = panelWidth(ROW_WIDTH);
-			List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - PLATFORM_BUTTON_WIDTH - 8);
+			List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - PLATFORM_BUTTON_SIZE - 8);
 			if (descriptionLines.size() > 2) descriptionLines = descriptionLines.subList(0, 2);
 			for (int index = 0; index < descriptionLines.size(); index++)
 				drawTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), railLeft, 22 + index * 11, TextColors.WHITE);
