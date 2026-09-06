@@ -116,7 +116,7 @@ public class DownloadClient implements AutoCloseable {
 			InetSocketAddress address = new InetSocketAddress(host, connectionInfo.endpoint.getPort());
 			if (address.isUnresolved()) throw new CompletionException(new IOException("Failed to resolve endpoint host: " + host));
 			return new TransportRoute(address, null);
-		}, NET_EXECUTOR);
+		}, DownloadClient.NET_EXECUTOR);
 	}
 
 	private CompletableFuture<Connection> openConnectionAsync() {
@@ -132,7 +132,7 @@ public class DownloadClient implements AutoCloseable {
 			} catch (IOException e) {
 				throw new CompletionException(e);
 			}
-		}, NET_EXECUTOR);
+		}, DownloadClient.NET_EXECUTOR);
 	}
 
 	private TlsCandidate openTlsCandidate() throws IOException {
@@ -497,7 +497,6 @@ class Connection implements AutoCloseable {
 	private final SSLSocket socket;
 	private final DataInputStream in;
 	private final DataOutputStream out;
-	private final ExecutorService executor = Executors.newSingleThreadExecutor();
 	private CompressionCodec compressionCodec;
 	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
 
@@ -551,7 +550,7 @@ class Connection implements AutoCloseable {
 			} finally {
 				finalBlock(exception);
 			}
-		}, executor);
+		}, DownloadClient.NET_EXECUTOR);
 	}
 
 	private void finalBlock(Exception exception) {
@@ -672,6 +671,5 @@ class Connection implements AutoCloseable {
 			socket.close();
 		} catch (Exception ignored) {
 		}
-		executor.shutdownNow();
 	}
 }
