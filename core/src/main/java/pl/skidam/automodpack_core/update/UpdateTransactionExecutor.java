@@ -103,14 +103,14 @@ public final class UpdateTransactionExecutor {
 		return withFileCache(cache -> {
 			validator.validate(transaction, unpublishedTarget, true, cache);
 			validateSelectionBeforeMutation(transaction);
-			preparePendingReplacement(transaction);
+			preparePendingReplacement();
 			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
 			ClientObjectStore.publishOwnership(context.storage());
 			return executePersisted(transaction);
 		});
 	}
 
-	private void preparePendingReplacement(UpdateTransaction replacement) throws IOException {
+	private void preparePendingReplacement() throws IOException {
 		ClientStorage storage = context.storage();
 		if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An offline repair must finish before an update can start");
 		UpdateTransaction pending = readPersistedTransaction();
@@ -120,8 +120,6 @@ public final class UpdateTransactionExecutor {
 			Files.deleteIfExists(storage.transactionFile());
 			return;
 		}
-		if (pending.purpose == UpdateTransaction.Purpose.SELF_UPDATE || replacement.purpose == UpdateTransaction.Purpose.SELF_UPDATE)
-			throw new IOException("A self-update must finish before another update can start");
 		validator.validatePendingReplacementEnvelope(pending);
 		if (Files.exists(storage.backupProjectionDirectory(), LinkOption.NOFOLLOW_LINKS)
 				&& !verifyProjectionQuietly(storage.activeDirectory(), pending.projectedFinalState))

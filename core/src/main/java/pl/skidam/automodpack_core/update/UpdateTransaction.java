@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.update;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -21,11 +20,9 @@ import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
-import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
-import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** The single write-ahead record for one client update. It stores intent, operations, and its target's ledger, never filesystem paths or duplicated manifests. */
@@ -126,24 +123,6 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
-	public static UpdateTransaction createSelfUpdate(String currentPath, String targetPath, String targetHash, long targetSize, String currentHash) {
-		UpdateTransaction transaction = base(Purpose.SELF_UPDATE);
-		List<Operation> operations = new ArrayList<>();
-		operations.add(new Operation(Root.GAME_DIR, targetPath, OperationType.INSTALL_OBJECT, targetHash, targetSize, null));
-		List<ProjectedFile> finalState = new ArrayList<>();
-		finalState.add(new ProjectedFile(Root.GAME_DIR, targetPath, true, targetHash, targetSize));
-		if (!currentPath.equals(targetPath)) {
-			operations.add(new Operation(Root.GAME_DIR, currentPath, OperationType.DELETE, null, -1, currentHash));
-			finalState.add(new ProjectedFile(Root.GAME_DIR, currentPath, false, null, -1));
-		}
-		sortOperations(operations);
-		finalState.sort(Comparator.comparing((ProjectedFile projected) -> projected.root().ordinal()).thenComparing(ProjectedFile::relativePath));
-		transaction.operations = List.copyOf(operations);
-		transaction.projectedFinalState = List.copyOf(finalState);
-		transaction.restartReasons = List.of();
-		return transaction;
-	}
-
 	/** The pending work must be able to rebuild its target generation offline, so modpack transactions carry its exact ledger. */
 	private static void fillGeneration(UpdateTransaction transaction, PackTarget target, OwnershipLedger ledger) {
 		transaction.modpackId = target.modpackId();
@@ -177,10 +156,6 @@ public final class UpdateTransaction {
 		transaction.plannedConflicts = new ArrayList<>();
 		transaction.plannedGeneratedCopies = null;
 		return transaction;
-	}
-
-	private static void sortOperations(List<Operation> operations) {
-		operations.sort(Operation.ORDER);
 	}
 
 	private enum IntentPart {
@@ -238,8 +213,7 @@ public final class UpdateTransaction {
 	public enum Purpose {
 		MODPACK_UPDATE,
 		MODPACK_DEACTIVATION,
-		MODPACK_REMOVAL,
-		SELF_UPDATE
+		MODPACK_REMOVAL
 	}
 
 	public enum Status {

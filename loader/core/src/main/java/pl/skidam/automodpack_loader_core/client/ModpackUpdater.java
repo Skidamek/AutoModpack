@@ -704,7 +704,7 @@ public class ModpackUpdater implements AutoCloseable {
 			else LOGGER.info("Downloading from the AutoModpack host without waiting for CurseForge/Modrinth lookup");
 		}
 
-		downloadManager = new DownloadManager(totalBytesToDownload, storage, platformCache);
+		downloadManager = new DownloadManager(totalBytesToDownload, storage.dataLocation().layout(), platformCache);
 		if (playerFacing) ScreenManager.download(downloadManager, getModpackName());
 		downloadManager.attachDownloadClient(downloadClient);
 

@@ -37,7 +37,6 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.JarUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Every structural and precondition check a persisted transaction must pass before its plan may mutate live state. */
@@ -110,8 +109,7 @@ public final class UpdateTransactionValidator {
 			else validateRemovalClientConfig(transaction);
 			if (verifyMutableInputs && !Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.modpackId)))
 				throw new IOException("Client editable overlay changed after planning");
-		} else if (transaction.purpose == UpdateTransaction.Purpose.SELF_UPDATE) validateSelfUpdateMetadata(transaction);
-		else throw new IOException("Unsupported transaction purpose");
+		} else throw new IOException("Unsupported transaction purpose");
 
 		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.projectedFinalState, transaction.modpackId, transaction.purpose);
 		for (Operation operation : transaction.operations)
@@ -139,8 +137,6 @@ public final class UpdateTransactionValidator {
 		validateBaselineCaptures(transaction);
 		validateConflicts(transaction, finalState, target);
 		validatePreservations(transaction, finalState, target);
-		if (transaction.purpose == UpdateTransaction.Purpose.SELF_UPDATE && !operationKeys.equals(finalState.keySet()))
-			throw new IOException("Special-purpose transaction operations and projected final state must match exactly");
 		if (target != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateManifestProjection(target, finalState);
 	}
 
@@ -247,30 +243,8 @@ public final class UpdateTransactionValidator {
 			throw new IOException("Removal client config still selects the removed modpack");
 	}
 
-	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.modpackId != null || transaction.contentToken != null || transaction.policySha1 != null
-				|| transaction.ledgerDigest != null || transaction.ownershipLedger != null || transaction.targetPlatform != null || transaction.selectionDigest != null || transaction.overlayDigest != null
-				|| transaction.expectedClientConfig != null
-				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.expectedPriorRequestedCategories != null
-				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedGroups != null || transaction.requestedCategories != null || transaction.excludedGroups != null
-				|| transaction.plannedClientConfig != null || transaction.plannedGeneratedCopies != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty()
-				|| !transaction.plannedBaselineCaptures.isEmpty() || !transaction.plannedConflicts.isEmpty())
-			throw new IOException("Self-update transaction contains modpack metadata");
-		long installs = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT).count();
-		long deletions = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.DELETE).count();
-		if (installs != 1 || deletions > 1 || transaction.operations.size() != installs + deletions)
-			throw new IOException("Self-update transaction must contain one install and at most one deletion");
-	}
-
 	private static void validatePurposeOperation(UpdateTransaction.Purpose purpose, Operation operation) throws IOException {
-		if (purpose == UpdateTransaction.Purpose.SELF_UPDATE) {
-			if (operation.root() != Root.GAME_DIR || (operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE))
-				throw new IOException("Self-update operations are restricted to JAR replacement in the mods directory");
-			Path relative = Path.of(normalizeOperationPath(operation.relativePath()));
-			if (relative.getNameCount() != 2 || !relative.getName(0).toString().equalsIgnoreCase(ModpackPathPolicy.MODS_ROOT)
-					|| !JarUtils.hasJarExtension(relative))
-				throw new IOException("Self-update target must be a direct JAR child of the mods directory");
-		} else if (isModpackPurpose(purpose)) {
+		if (isModpackPurpose(purpose)) {
 			if (operation.root() != Root.PROJECTION && operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR)
 				throw new IOException("Modpack operations are restricted to projection, overlays, and managed live files");
 		} else throw new IOException("Unsupported transaction purpose");
@@ -305,12 +279,6 @@ public final class UpdateTransactionValidator {
 		FileKey previous = null;
 		for (ProjectedFile entry : entries) {
 			if (entry == null || entry.root() == null) throw new IOException("Incomplete projected final-state entry");
-			if (purpose == UpdateTransaction.Purpose.SELF_UPDATE) {
-				Path selfUpdatePath = Path.of(normalizeOperationPath(entry.relativePath()));
-				if (entry.root() != Root.GAME_DIR || selfUpdatePath.getNameCount() != 2 || !selfUpdatePath.getName(0).toString().equalsIgnoreCase(ModpackPathPolicy.MODS_ROOT)
-						|| !JarUtils.hasJarExtension(selfUpdatePath))
-					throw new IOException("Self-update projected state is restricted to direct JAR children of the mods directory");
-			}
 			String relative = normalizeOperationPath(entry.relativePath());
 			Path physicalTarget = validateRootAndPath(entry.root(), relative, modpackId, purpose);
 			if (!physicalTargets.add(physicalTarget)) throw new IOException("Projected entries alias the same physical target");
