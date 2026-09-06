@@ -44,6 +44,28 @@ class PlatformReferencesTest {
 		assertEquals(List.of(MODRINTH_PAGE), referenced.changes().get(0).occurrences().get(0).references());
 	}
 
+	@Test
+	void editedAfterHashWithoutAHitDoesNotInheritBeforeHashPages() throws Exception {
+		try (PlatformCache cache = PlatformCache.open(temporaryDirectory)) {
+			cache.putModrinth(SHA1, new ModrinthAPI("example", null, "https://cdn.modrinth.com/data/example/file.jar", "1", "example.jar", 1, "release", SHA1), MODRINTH_PAGE);
+		}
+		ChangeSet referenced = PlatformReferences.withCachedReferences(ChangeSet.of(List.of(change("mods/example.jar", ChangeSet.Kind.MODIFIED, SHA1, "2222222222222222222222222222222222222222"))), temporaryDirectory);
+		assertEquals(List.of(), referenced.changes().get(0).occurrences().get(0).references());
+	}
+
+	@Test
+	void removedPathWithOnlyABeforeHashKeepsGettingBeforeHashPages() throws Exception {
+		try (PlatformCache cache = PlatformCache.open(temporaryDirectory)) {
+			cache.putModrinth(SHA1, new ModrinthAPI("example", null, "https://cdn.modrinth.com/data/example/file.jar", "1", "example.jar", 1, "release", SHA1), MODRINTH_PAGE);
+		}
+		ChangeSet referenced = PlatformReferences.withCachedReferences(ChangeSet.of(List.of(change("mods/example.jar", ChangeSet.Kind.REMOVED, SHA1, null))), temporaryDirectory);
+		assertEquals(List.of(MODRINTH_PAGE), referenced.changes().get(0).occurrences().get(0).references());
+	}
+
+	private static ChangeSet.Change change(String path, ChangeSet.Kind kind, String beforeHash, String afterHash) {
+		return new ChangeSet.Change(path, kind, List.of(new ChangeSet.Occurrence("diff", path, 5, beforeHash, afterHash, "mod", List.of("main"), List.of())));
+	}
+
 	private static ChangeSet catalogue() {
 		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, SHA1, null);
 		GroupManifest.Group group = new GroupManifest.Group("Main", "", "", true, true, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>(Map.of("mods/example.jar", file)));

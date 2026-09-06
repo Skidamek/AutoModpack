@@ -44,11 +44,14 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 	private static final int BADGE_MARGIN = 6;
 	private static final int BADGE_MODRINTH_COLOR = 0xFF00AF5C;
 	private static final int BADGE_CURSEFORGE_COLOR = 0xFFF16436;
-	private static final int BADGE_UNVERIFIED_COLOR = 0xFFFF5555;
+	private static final int BADGE_CUSTOM_COLOR = 0xFFAAAAAA;
+	private static final int BADGE_CUSTOM_UNVERIFIED_COLOR = 0xFFFF5555;
+	private final boolean warnUnverified;
+	private final boolean referencesResolved;
 	private final Consumer<String> folderToggle;
 	private final Consumer<ChangeBrowserProjection.FileRow> selectionChanged;
 
-	public ChangeBrowserWidget(ChangeBrowserProjection.Projection projection, Set<String> collapsedFolders, Map<String, String> featureNames,
+	public ChangeBrowserWidget(ChangeBrowserProjection.Projection projection, Set<String> collapsedFolders, Map<String, String> featureNames, boolean warnUnverified, boolean referencesResolved,
 			Consumer<String> folderToggle, Consumer<ChangeBrowserProjection.FileRow> selectionChanged, Minecraft client, int width, int height, int top, int bottom) {
 		/*? if <1.20.3 {*/
 		/*super(client, width, height, top, bottom, ROW_HEIGHT);
@@ -62,6 +65,8 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		this.setRenderTopAndBottom(false);
 		*//*?}*/
 		this.folderToggle = Objects.requireNonNull(folderToggle, "folder toggle");
+		this.warnUnverified = warnUnverified;
+		this.referencesResolved = referencesResolved;
 		this.selectionChanged = selectionChanged;
 		Set<String> collapsed = Set.copyOf(collapsedFolders == null ? Set.of() : collapsedFolders);
 		Map<String, String> names = Map.copyOf(featureNames == null ? Map.of() : featureNames);
@@ -193,8 +198,8 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 
 		private record Badge(String text, String key, int color) {}
 
-		/** Right-aligned first-line tags: the storefronts this file is published on, or the unverified mark for plain jars. */
-		private static List<Badge> badges(ChangeBrowserProjection.Row row) {
+		/** Right-aligned first-line tags: the storefronts publishing this file's written state, or the custom mark for plain jars. */
+		private List<Badge> badges(ChangeBrowserProjection.Row row) {
 			if (!(row instanceof ChangeBrowserProjection.FileRow file)) return List.of();
 			List<Badge> badges = new ArrayList<>();
 			boolean modrinth = false;
@@ -208,7 +213,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			}
 			if (modrinth) badges.add(new Badge("MR", "automodpack.browser.modrinth", BADGE_MODRINTH_COLOR));
 			if (curseforge) badges.add(new Badge("CF", "automodpack.browser.curseforge", BADGE_CURSEFORGE_COLOR));
-			if (badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.translatable("automodpack.browser.unverifiedShort").getString(), null, BADGE_UNVERIFIED_COLOR));
+			if (referencesResolved && badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.translatable("automodpack.browser.custom").getString(), "automodpack.browser.custom", warnUnverified ? BADGE_CUSTOM_UNVERIFIED_COLOR : BADGE_CUSTOM_COLOR));
 			return badges;
 		}
 
@@ -217,15 +222,11 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			if (!(row instanceof ChangeBrowserProjection.FileRow file)) return;
 			List<Component> lines = new ArrayList<>();
 			lines.add(VersionedText.literal(row.path()));
-			String after = null;
-			String before = null;
-			for (ChangeSet.Occurrence occurrence : file.occurrences()) {
-				if (after == null) after = occurrence.afterHash();
-				if (before == null) before = occurrence.beforeHash();
-			}
-			String hash = shortHash(after != null ? after : before);
+			String written = file.writtenHash();
+			String previous = file.previousHash();
+			String hash = shortHash(written);
 			if (hash != null) lines.add(VersionedText.literal("sha1: " + hash));
-			if (before != null && after != null && !before.equals(after)) lines.add(VersionedText.literal(shortHash(before) + " -> " + shortHash(after)));
+			if (previous != null && written != null && !previous.equals(written)) lines.add(VersionedText.literal(shortHash(previous) + " -> " + shortHash(written)));
 			List<String> platforms = badges.stream().filter(badge -> badge.key() != null).map(badge -> VersionedText.translatable(badge.key()).getString()).toList();
 			if (!platforms.isEmpty()) lines.add(VersionedText.literal(String.join(", ", platforms)));
 			matrices.getContext().setComponentTooltipForNextFrame(minecraft.font, lines, mouseX, mouseY);
