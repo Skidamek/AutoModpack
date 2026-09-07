@@ -466,13 +466,7 @@ class UpdateTransactionExecutorTest {
 		assertTrue(executor.commit(installedPlan, installed).success());
 		Files.delete(storage.objectFile(serverHash));
 
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = installed.manifest().modpackId();
-		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
-		baselineEntry.logicalPath = restoredPath;
-		baselineEntry.objectHash = baselineHash;
-		baselineEntry.size = baselineBytes.length;
-		baseline.entries = List.of(baselineEntry);
+		ClientBaseline baseline = new ClientBaseline(installed.manifest().modpackId(), List.of(new ClientBaseline.Entry(restoredPath, baselineHash, baselineBytes.length, false, "")));
 		ModpackJsons.CompleteModpackContentFields targetFields = fields("config/pack-b.json", "config", false, targetHash, targetBytes.length);
 		targetFields.modpackId = "def5678";
 		PackDocument switchedDocument = TestPacks.document(GroupManifestValidator.validate(targetFields));
@@ -519,14 +513,7 @@ class UpdateTransactionExecutorTest {
 				UpdateTransaction.digest(expected), List.of(new GeneratedCopyState.Entry("mods/generated-remove.jar", generatedHash, generatedBytes.length)));
 		generatedCopies.write(storage);
 
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = target.manifest().modpackId();
-		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
-		baselineEntry.logicalPath = "mods/remove.jar";
-		baselineEntry.absent = true;
-		baselineEntry.objectHash = "";
-		baselineEntry.size = -1;
-		baseline.entries = List.of(baselineEntry);
+		ClientBaseline baseline = new ClientBaseline(target.manifest().modpackId(), List.of(new ClientBaseline.Entry("mods/remove.jar", "", -1, true, "")));
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = Map.of(
 				new UpdatePlan.FileKey(Root.PROJECTION, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true),
 				new UpdatePlan.FileKey(Root.GAME_DIR, "mods/remove.jar"), new UpdatePlan.FileState(hash, bytes.length, true),
@@ -573,15 +560,8 @@ class UpdateTransactionExecutorTest {
 		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/options.txt");
 		Files.createDirectories(overlay.getParent());
 		Files.writeString(overlay, "player-edit", StandardCharsets.UTF_8);
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = target.manifest().modpackId();
-		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
-		baselineEntry.logicalPath = managedPath;
-		baselineEntry.absent = true;
-		baselineEntry.objectHash = "";
-		baselineEntry.size = -1;
-		baseline.entries = List.of(baselineEntry);
-		ConfigTools.writeAtomic(storage.baselineFile(target.manifest().modpackId()), baseline);
+		ClientBaseline baseline = new ClientBaseline(target.manifest().modpackId(), List.of(new ClientBaseline.Entry(managedPath, "", -1, true, "")));
+		baseline.write(storage);
 		SelectionIntent expected = target.selection().intent();
 		GeneratedCopyState generatedCopies = new GeneratedCopyState(target.manifest().modpackId(), target.packTarget().contentToken(),
 				UpdateTransaction.digest(expected), List.of());

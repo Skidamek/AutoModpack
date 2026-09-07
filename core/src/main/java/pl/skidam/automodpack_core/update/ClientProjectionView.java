@@ -217,14 +217,7 @@ public final class ClientProjectionView {
 	}
 
 	private UpdateTransaction readPending() throws IOException {
-		Path path = storage.transactionFile();
-		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return null;
-		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client transaction state is not a regular file: " + path);
-		try {
-			return ConfigTools.read(path, UpdateTransaction.class).orElseThrow(() -> new IOException("Client transaction state is empty: " + path));
-		} catch (RuntimeException e) {
-			throw new IOException("Client transaction state is invalid: " + path, e);
-		}
+		return UpdateTransaction.read(storage.transactionFile());
 	}
 
 	private static boolean isProjectionTransaction(UpdateTransaction transaction) {

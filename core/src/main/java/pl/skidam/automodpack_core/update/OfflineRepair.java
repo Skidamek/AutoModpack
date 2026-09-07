@@ -432,22 +432,10 @@ public final class OfflineRepair {
 	}
 
 	private void addBaselineObjects(Map<Path, Expected> expected, String modpackId) throws IOException {
-		Path baselineFile = storage.baselineFile(modpackId);
-		if (!Files.exists(baselineFile, LinkOption.NOFOLLOW_LINKS)) return;
-		if (Files.isSymbolicLink(baselineFile) || !Files.isRegularFile(baselineFile, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client baseline is not a regular file: " + baselineFile);
-		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(baselineFile, ClientStorageJsons.ClientBaselineFields.class)
-				.orElseThrow(() -> new IOException("Client baseline is empty: " + baselineFile));
-		if (baseline.schemaVersion != 1 || !modpackId.equals(baseline.modpackId) || baseline.entries == null) throw new IOException("Client baseline identity is invalid: " + baselineFile);
-		for (var entry : baseline.entries) {
-			if (entry == null || entry.logicalPath == null || entry.objectHash == null) throw new IOException("Client baseline entry is incomplete: " + baselineFile);
-			String logicalPath = LogicalPath.normalize(entry.logicalPath);
-			if (!logicalPath.equals(entry.logicalPath)) throw new IOException("Client baseline path is not canonical: " + entry.logicalPath);
-			if (entry.absent) {
-				if (!entry.objectHash.isEmpty() || entry.size != -1) throw new IOException("Absent client baseline contains file metadata: " + logicalPath);
-				continue;
-			}
-			Content content = new Content(entry.objectHash, entry.size);
-			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
+		for (ClientBaseline.Entry entry : ClientBaseline.read(storage, modpackId).entries()) {
+			if (entry.absent()) continue;
+			Content content = new Content(entry.objectHash(), entry.size());
+			addExpected(expected, new Expected(Place.CAS, entry.logicalPath(), storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
 		}
 	}
 

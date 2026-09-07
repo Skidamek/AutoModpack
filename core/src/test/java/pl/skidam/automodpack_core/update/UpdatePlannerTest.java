@@ -8,7 +8,6 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -277,8 +276,7 @@ class UpdatePlannerTest {
 	void removalCleansOnlyUnmodifiedGeneratedCopies() {
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("mods/root.jar", item("mods/root.jar", TARGET_HASH, 9, "mod")),
 				ledger(entry("mods/root.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = installed.modpackId;
+		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of());
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, "mods/root.jar"), new FileState(TARGET_HASH, 9, true),
@@ -303,8 +301,7 @@ class UpdatePlannerTest {
 		String path = "test/server-owned.mp4";
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of(path, item(path, TARGET_HASH, 9, "other")),
 				ledger(entry(path, TARGET_HASH, 9, OwnershipLedger.Status.PRESENT)));
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = installed.modpackId;
+		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of());
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, path), new FileState(TARGET_HASH, 9, true),
 				new FileKey(Root.GAME_DIR, path), new FileState(TARGET_HASH, 9, true));
@@ -373,13 +370,7 @@ class UpdatePlannerTest {
 		ModpackJsons.ModpackContentFields installed = manifest(Map.of("config/connector.json", item("config/connector.json", OLD_HASH, 8, "config")),
 				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = installed.modpackId;
-		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
-		baselineEntry.logicalPath = "config/connector.json";
-		baselineEntry.objectHash = OLD_HASH;
-		baselineEntry.size = 8;
-		baseline.entries = List.of(baselineEntry);
+		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of(new ClientBaseline.Entry("config/connector.json", OLD_HASH, 8, false, "")));
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/connector.json"), new FileState(OLD_HASH, 8, true));
 		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(OLD_HASH));
 
@@ -396,13 +387,7 @@ class UpdatePlannerTest {
 				ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT)));
 		ModpackJsons.ModpackContentFields target = manifest(Map.of(), ledger(entry("config/connector.json", OLD_HASH, 8, OwnershipLedger.Status.TOMBSTONE)));
 		String baselineHash = "4444444444444444444444444444444444444444";
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = installed.modpackId;
-		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
-		baselineEntry.logicalPath = "config/connector.json";
-		baselineEntry.objectHash = baselineHash;
-		baselineEntry.size = 8;
-		baseline.entries = List.of(baselineEntry);
+		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of(new ClientBaseline.Entry("config/connector.json", baselineHash, 8, false, "")));
 		UpdatePlanner.SelectionContext selection = new UpdatePlanner.SelectionContext(installed.modpackId, installed, Map.of(), baseline, Set.of(baselineHash));
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target,
