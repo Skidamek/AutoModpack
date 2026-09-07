@@ -228,7 +228,6 @@
   "automodpack.selection.metrics.other": "（%s 個檔案，%s）",
   "automodpack.selection.status.dependencyUnavailable": "（相依項無法使用）",
   "automodpack.selection.status.available": "可用",
-  "automodpack.selection.status.stale": "已儲存的選擇已無法使用",
   "automodpack.selection.blockedBy": "無法使用，因為此功能需要 %s",
   "automodpack.selection.conflictsWith": "與 %s 衝突",
   "automodpack.selection.conflictTitle": "要取代衝突的功能嗎？",

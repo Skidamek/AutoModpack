@@ -62,7 +62,7 @@ public final class UpdateTransactionValidator {
 		try {
 			if (pending.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported deferred transaction schema");
 			UUID.fromString(pending.transactionId);
-			if (!isModpackPurpose(pending.purpose) || pending.projectedFinalState == null)
+			if (pending.purpose == null || pending.projectedFinalState == null)
 				throw new IOException("Deferred transaction envelope is incomplete");
 			ModpackId.requireValid(pending.modpackId);
 			validateFinalState(pending.projectedFinalState, pending.modpackId, pending.purpose);
@@ -91,7 +91,7 @@ public final class UpdateTransactionValidator {
 			throw new IOException("Generated-copy state is only valid for modpack update transactions");
 
 		ModpackJsons.ModpackContentFields target = null;
-		if (isModpackPurpose(transaction.purpose)) {
+		if (transaction.purpose != null) {
 			if (transaction.expectedClientConfig == null) throw new IOException("Expected client configuration is missing");
 			ModpackId.requireValid(transaction.modpackId);
 			if (selectedTarget != null && transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE)
@@ -244,7 +244,7 @@ public final class UpdateTransactionValidator {
 	}
 
 	private static void validatePurposeOperation(UpdateTransaction.Purpose purpose, Operation operation) throws IOException {
-		if (isModpackPurpose(purpose)) {
+		if (purpose != null) {
 			if (operation.root() != Root.PROJECTION && operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR)
 				throw new IOException("Modpack operations are restricted to projection, overlays, and managed live files");
 		} else throw new IOException("Unsupported transaction purpose");
@@ -485,15 +485,10 @@ public final class UpdateTransactionValidator {
 		Path game = storage.gameDirectory();
 		Path automodpack = storage.automodpackDirectory();
 		if (root == Root.GAME_DIR && resolved.startsWith(automodpack)) throw new IOException("GAME_DIR operation uses a narrower root");
-		if (root == Root.OVERLAY && !isModpackPurpose(purpose)) throw new IOException("OVERLAY is restricted to modpack transactions");
-		if (root == Root.PROJECTION && !isModpackPurpose(purpose)) throw new IOException("PROJECTION is restricted to modpack transactions");
+		if (root == Root.OVERLAY && purpose == null) throw new IOException("OVERLAY is restricted to modpack transactions");
+		if (root == Root.PROJECTION && purpose == null) throw new IOException("PROJECTION is restricted to modpack transactions");
 		if (!resolved.startsWith(game)) throw new IOException("Transaction target escaped the game directory");
 		return resolved;
-	}
-
-	public static boolean isModpackPurpose(UpdateTransaction.Purpose purpose) {
-		return purpose == UpdateTransaction.Purpose.MODPACK_UPDATE || purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION
-				|| purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
 	}
 
 	static String normalizeManifestPath(String path) throws IOException {

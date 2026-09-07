@@ -228,9 +228,7 @@ public final class ClientProjectionView {
 	}
 
 	private static boolean isProjectionTransaction(UpdateTransaction transaction) {
-		return transaction != null && (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
-				|| transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION || transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL)
-				&& transaction.projectedFinalState != null;
+		return transaction != null && transaction.purpose != null && transaction.projectedFinalState != null;
 	}
 
 	public final class Snapshot {

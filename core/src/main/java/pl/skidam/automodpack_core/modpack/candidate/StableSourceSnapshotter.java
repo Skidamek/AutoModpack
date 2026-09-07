@@ -32,16 +32,6 @@ public final class StableSourceSnapshotter {
 		this.copyOperation = Objects.requireNonNull(copyOperation);
 	}
 
-	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory)
-			throws CandidateBuildException {
-		return snapshot(source, autoExcludeUnnecessary, autoExcludeServerMods, stagingDirectory, null, null, null, true);
-	}
-
-	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory,
-			FileCache fileCache, ModFileCache modFileCache, Path objectStoreDirectory) throws CandidateBuildException {
-		return snapshot(source, autoExcludeUnnecessary, autoExcludeServerMods, stagingDirectory, fileCache, modFileCache, objectStoreDirectory, true);
-	}
-
 	public Snapshot snapshot(CandidateSource source, boolean autoExcludeUnnecessary, boolean autoExcludeServerMods, Path stagingDirectory,
 			FileCache fileCache, ModFileCache modFileCache, Path objectStoreDirectory, boolean materializeMissing) throws CandidateBuildException {
 		Path staged = null;

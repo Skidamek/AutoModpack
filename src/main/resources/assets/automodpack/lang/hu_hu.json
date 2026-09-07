@@ -232,7 +232,6 @@
   "automodpack.selection.metrics.other": "(%s fájl, %s)",
   "automodpack.selection.status.dependencyUnavailable": "(a függőség nem elérhető)",
   "automodpack.selection.status.available": "Elérhető",
-  "automodpack.selection.status.stale": "A mentett választás már nem érhető el",
   "automodpack.selection.blockedBy": "Nem érhető el, mert ehhez a funkcióhoz %s kell",
   "automodpack.selection.conflictsWith": "Ütközik ezzel: %s",
   "automodpack.selection.conflictTitle": "Lecseréled az ütköző funkciókat?",

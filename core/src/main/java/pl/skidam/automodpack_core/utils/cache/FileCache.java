@@ -11,9 +11,7 @@ import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
@@ -116,27 +114,10 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		super(recordsDirectory, "file cache");
 	}
 
-	/** Git worktree identity. Named CAS objects use {@link #matchesImmutable}; explicit repair uses {@link #rehash()}. */
+	/** Git worktree identity. Named CAS objects use {@link #matchesImmutable}. */
 	public String getOrComputeHash(Path file) throws IOException {
 		BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
 		return getOrComputeHashWithAttributes(file, attrs);
-	}
-
-	/**
-	 * Hashes the current bytes without consulting a cached record and publishes the stable
-	 * observation back to the cache. This is intended for explicit integrity checks where
-	 * the cache itself is one of the things being verified.
-	 */
-	public String rehash(Path file) throws IOException {
-		Path absPath = file.toAbsolutePath().normalize();
-		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-		if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
-		String pathKey = absPath.toString();
-		synchronized (lock(pathKey)) {
-			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
-			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
-			return publishComputed(pathKey, computed);
-		}
 	}
 
 	/** Full-read identity for explicit fsck. Hot paths use {@link #getOrComputeHash(Path)}. */
@@ -348,24 +329,6 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 					validationTimeNanos(), storedMurmur);
 			writeRecord(pathKey, record);
 		}
-	}
-
-	public void cleanup() {
-		if (!Files.isDirectory(recordsDirectory, LinkOption.NOFOLLOW_LINKS)) return;
-		try (Stream<Path> paths = Files.walk(recordsDirectory)) {
-			for (Path path : paths.filter(candidate -> candidate.getFileName().toString().endsWith(RECORD_SUFFIX))
-					.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
-				try {
-					CachedFile record = ConfigTools.read(path, CachedFile.class).orElse(null);
-					if (record == null || record.path() == null || Files.notExists(Path.of(record.path()))) Files.deleteIfExists(path);
-				} catch (RuntimeException | IOException e) {
-					Files.deleteIfExists(path);
-				}
-			}
-		} catch (IOException e) {
-			LOGGER.debug("Could not clean file cache: {}", recordsDirectory, e);
-		}
-		hotRecords.entrySet().removeIf(entry -> Files.notExists(Path.of(entry.getKey())));
 	}
 
 	@Override

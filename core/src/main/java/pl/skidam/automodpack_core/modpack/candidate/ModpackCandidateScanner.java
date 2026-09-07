@@ -333,13 +333,6 @@ public final class ModpackCandidateScanner {
 			FileCache fileCache,
 			ModFileCache modFileCache,
 			boolean materializeMissingObjects) {
-		public Request(String modpackId, String modpackName, String automodpackVersion, String loader, String loaderVersion, String mcVersion, Path serverRoot,
-				Path groupRoot, Map<String, ServerConfigJsons.GroupDeclaration> groups, boolean autoExcludeUnnecessaryFiles,
-				boolean autoExcludeServerSideMods, Path stagingDirectory, Executor executor) {
-			this(modpackId, modpackName, automodpackVersion, loader, loaderVersion, mcVersion, serverRoot, groupRoot, groups, autoExcludeUnnecessaryFiles,
-					autoExcludeServerSideMods, stagingDirectory, executor, null, null, null, true);
-		}
-
 		public Request {
 			serverRoot = serverRoot.toAbsolutePath().normalize();
 			groupRoot = groupRoot.toAbsolutePath().normalize();

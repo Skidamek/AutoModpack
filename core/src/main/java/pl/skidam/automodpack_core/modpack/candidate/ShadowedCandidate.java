@@ -7,8 +7,6 @@ public record ShadowedCandidate(CandidateSource selected, CandidateSource shadow
 	}
 
 	public enum Relationship {
-		IDENTICAL_CONTENT,
-		DIFFERENT_CONTENT,
 		NOT_COMPARED
 	}
 }

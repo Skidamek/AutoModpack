@@ -232,7 +232,6 @@
   "automodpack.selection.metrics.other": "(%s fylez, %s)",
   "automodpack.selection.status.dependencyUnavailable": "(needz stuff u no has)",
   "automodpack.selection.status.available": "can has",
-  "automodpack.selection.status.stale": "savd pick iz gone. sad.",
   "automodpack.selection.blockedBy": "no can has. needz %s",
   "automodpack.selection.conflictsWith": "fitez %s",
   "automodpack.selection.conflictTitle": "replace teh fightin featurz?",

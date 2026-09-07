@@ -228,7 +228,6 @@
   "automodpack.selection.metrics.other": "(파일 %s개, %s)",
   "automodpack.selection.status.dependencyUnavailable": "(의존성 없음)",
   "automodpack.selection.status.available": "사용 가능",
-  "automodpack.selection.status.stale": "저장된 선택을 더 이상 쓸 수 없습니다",
   "automodpack.selection.blockedBy": "이 기능에 %s이(가) 필요해서 쓸 수 없습니다",
   "automodpack.selection.conflictsWith": "%s과(와) 충돌",
   "automodpack.selection.conflictTitle": "충돌하는 기능을 바꿀까요?",

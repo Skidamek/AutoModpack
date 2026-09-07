@@ -232,7 +232,6 @@
   "automodpack.selection.metrics.other": "(%s файлов, %s)",
   "automodpack.selection.status.dependencyUnavailable": "(нет зависимости)",
   "automodpack.selection.status.available": "Доступна",
-  "automodpack.selection.status.stale": "Сохранённый выбор больше недоступен",
   "automodpack.selection.blockedBy": "Недоступна: этой функции нужен %s",
   "automodpack.selection.conflictsWith": "Конфликтует с %s",
   "automodpack.selection.conflictTitle": "Заменить конфликтующие функции?",

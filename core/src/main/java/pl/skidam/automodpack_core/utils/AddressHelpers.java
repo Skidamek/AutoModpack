@@ -32,14 +32,6 @@ public class AddressHelpers {
 		return parseStrict(address, true);
 	}
 
-	/**
-	 * @deprecated Use {@link #parseOrigin(String)} or {@link #parseEndpoint(String)} at the schema boundary.
-	 */
-	@Deprecated
-	public static InetSocketAddress parse(String address) {
-		return parseOrigin(address);
-	}
-
 	private static InetSocketAddress parseStrict(String address, boolean requireExplicitPort) {
 		if (address == null) throw new IllegalArgumentException("Address is required");
 		String value = address.trim();

@@ -22,18 +22,6 @@ public class SelectionJsons {
 
 			public ModpackSelection() {}
 
-			public ModpackSelection(Set<String> requestedGroups) {
-				this(requestedGroups, Set.of());
-			}
-
-			public ModpackSelection(Set<String> requestedGroups, Set<String> excludedGroups) {
-				this(requestedGroups, Set.of(), excludedGroups);
-			}
-
-			public ModpackSelection(Set<String> requestedGroups, Set<String> requestedCategories, Set<String> excludedGroups) {
-				this(requestedGroups, requestedCategories, excludedGroups, null);
-			}
-
 			public ModpackSelection(Set<String> requestedGroups, Set<String> requestedCategories, Set<String> excludedGroups, String platform) {
 				this.requestedGroups = requestedGroups;
 				this.requestedCategories = requestedCategories;

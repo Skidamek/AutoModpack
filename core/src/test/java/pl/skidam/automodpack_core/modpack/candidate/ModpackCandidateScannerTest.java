@@ -179,7 +179,7 @@ class ModpackCandidateScannerTest {
 			return HashUtils.getHash(staged);
 		});
 
-		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> reader.snapshot(source, false, false, staging));
+		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> reader.snapshot(source, false, false, staging, null, null, null, true));
 
 		assertTrue(failure.getMessage().contains("changed while being snapshotted"));
 		assertEquals(1, copies.get());
@@ -202,7 +202,7 @@ class ModpackCandidateScannerTest {
 			return HashUtils.getHash(staged);
 		});
 
-		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> snapshotter.snapshot(source, false, false, staging));
+		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> snapshotter.snapshot(source, false, false, staging, null, null, null, true));
 
 		assertTrue(failure.getMessage().contains("snapshot"));
 		assertEquals(original, Files.readString(sourcePath, StandardCharsets.UTF_8));
@@ -274,14 +274,14 @@ class ModpackCandidateScannerTest {
 		Path staging = tempDir.resolve("staging");
 		CandidateSource source = new CandidateSource("main", "config/source.txt", CandidateSource.SourceKind.GROUP_DIRECTORY, sourcePath, null);
 
-		assertThrows(CandidateBuildException.class, () -> new StableSourceSnapshotter().snapshot(source, false, false, staging));
+		assertThrows(CandidateBuildException.class, () -> new StableSourceSnapshotter().snapshot(source, false, false, staging, null, null, null, true));
 		assertFalse(Files.exists(staging, LinkOption.NOFOLLOW_LINKS));
 	}
 
 	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean autoExclude) throws Exception {
 		Executor direct = Runnable::run;
 		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, declarations,
-				autoExclude, false, tempDir.resolve("staging"), direct);
+				autoExclude, false, tempDir.resolve("staging"), direct, null, null, null, true);
 		return new ModpackCandidateScanner().scan(request);
 	}
 

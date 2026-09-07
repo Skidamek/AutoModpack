@@ -232,7 +232,6 @@
   "automodpack.selection.metrics.other": "(%s plikōw, %s)",
   "automodpack.selection.status.dependencyUnavailable": "(zależność niydostympnŏ)",
   "automodpack.selection.status.available": "Dostympne",
-  "automodpack.selection.status.stale": "Zapisany wybōr niy je już dostympny",
   "automodpack.selection.blockedBy": "Niydostympne, bo ta funkcyjo wymŏgŏ %s",
   "automodpack.selection.conflictsWith": "Kōnflikt ze %s",
   "automodpack.selection.conflictTitle": "Zastōmpić kōnfliktowe funkcyje?",
