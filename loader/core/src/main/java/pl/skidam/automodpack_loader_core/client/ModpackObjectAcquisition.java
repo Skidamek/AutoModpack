@@ -84,6 +84,11 @@ final class ModpackObjectAcquisition {
 		return ModpackUtils.identifyUncachedFiles(uniqueObjects(items), cache, storage);
 	}
 
+	/** The download queue needs a complete connection and its client; entry points that can run without a live handshake trip this. */
+	void requireTransferSession() throws IOException {
+		if (connectionInfo == null || !connectionInfo.isComplete() || downloadClient == null) throw new IOException("Modpack transfer session is unavailable");
+	}
+
 	int acquireTargetObjects(ModpackJsons.ModpackContentFields target, FileCache cache, boolean playerFacing) throws Exception {
 		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items = target.list == null ? List.of() : target.list;
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> targetObjects = uniqueObjects(items);
@@ -96,7 +101,7 @@ final class ModpackObjectAcquisition {
 			return 0;
 		}
 
-		if (connectionInfo == null || !connectionInfo.isComplete() || downloadClient == null) throw new IOException("Modpack transfer session is unavailable");
+		requireTransferSession();
 		long start = System.currentTimeMillis();
 		long totalBytes = missing.stream().mapToLong(item -> item.size).sum();
 		FetchManager fetchManager = sourceCatalogue.sourceFetch(missing);

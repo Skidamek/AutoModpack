@@ -621,7 +621,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private void requireLiveConnection() throws IOException {
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IOException("Modpack connection is unavailable");
-		if (downloadClient == null) throw new IOException("Modpack transfer session is unavailable");
+		objectAcquisition.requireTransferSession();
 	}
 
 	// this is run every time we modpack is updated
