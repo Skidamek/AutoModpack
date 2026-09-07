@@ -22,7 +22,6 @@ import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
-import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.ConflictAction;
@@ -166,22 +165,12 @@ public final class UpdateTransactionExecutor {
 	public boolean hasMutableInputDrift(UpdateTransaction transaction) throws IOException {
 		return withFileCache(cache -> {
 			if (transaction == null) return false;
-			boolean configChanged = configurationChangedAfterPlanning(transaction);
+			UpdateTransactionValidator.MutableInputDrift drift = validator.mutableInputDrift(transaction);
 			if (projectionPublicationStarted(transaction))
-				return configChanged || transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
-						&& (!overlayStateMatches(transaction) || selectionChangedAfterPlanning(transaction));
-			if (configChanged) return true;
-			if (!Objects.equals(transaction.overlayDigest, context.storage().overlayDigest(transaction.modpackId))) return true;
-			return selectionChangedAfterPlanning(transaction);
+				return drift.configuration() || transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+						&& (!overlayStateMatches(transaction) || drift.selection());
+			return drift.any();
 		});
-	}
-
-	private boolean configurationChangedAfterPlanning(UpdateTransaction transaction) throws IOException {
-		if (transaction == null) return false;
-		if (transaction.expectedClientConfig == null) return true;
-		ClientConfigJsons.ClientConfigFieldsV3 current = readClientConfig();
-		if (current.equals(transaction.expectedClientConfig)) return false;
-		return transaction.plannedClientConfig == null || !current.equals(transaction.plannedClientConfig);
 	}
 
 	/** Reports whether the live state has already reached the point where only projection publication remains. */
@@ -201,15 +190,6 @@ public final class UpdateTransactionExecutor {
 			if (!publicationStarted) validateSelectionBeforeMutation(pending);
 			return executePersisted(pending);
 		});
-	}
-
-	private boolean selectionChangedAfterPlanning(UpdateTransaction transaction) throws IOException {
-		SelectionIntent current = new ClientSelectionStore(context.storage().selectionFile()).get(transaction.modpackId).orElse(null);
-		SelectionIntent expected = transaction.expectedPriorIntent();
-		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
-				? Objects.equals(current, transaction.targetIntent())
-				: transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL ? current == null : Objects.equals(current, expected);
-		return !Objects.equals(current, expected) && !alreadyCommitted;
 	}
 
 	public UpdateTransaction readPersisted() {
@@ -233,7 +213,7 @@ public final class UpdateTransactionExecutor {
 		Path blockedPath = null;
 		boolean publicationStarted = projectionPublicationStarted(transaction);
 		boolean liveAlreadyApplied = transaction != null && (publicationStarted || managedStateMatches(transaction));
-		boolean preserveNewerSelection = publicationStarted && selectionChangedAfterPlanning(transaction);
+		boolean preserveNewerSelection = publicationStarted && validator.mutableInputDrift(transaction).selection();
 		try {
 			transaction.resultStatus = null;
 			transaction.resultOperation = null;
@@ -268,7 +248,7 @@ public final class UpdateTransactionExecutor {
 	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
 	private void applyModpackTransaction(UpdateTransaction transaction, AtomicReference<Operation> current, boolean publicationStarted, boolean liveAlreadyApplied,
 			boolean preserveNewerSelection) throws IOException {
-		if (!publicationStarted && configurationChangedAfterPlanning(transaction))
+		if (!publicationStarted && validator.mutableInputDrift(transaction).configuration())
 			throw new UpdateReplanRequiredException(null, "Client configuration changed after planning the update");
 		captureBaselines(transaction);
 		// The ledger-driven batch is bookkeeping; the conflict resolutions are the player's last review
@@ -279,15 +259,16 @@ public final class UpdateTransactionExecutor {
 		current.set(null);
 		if (!publicationStarted) {
 			verifyManagedFinalState(transaction);
-			if (selectionChangedAfterPlanning(transaction)) throw new UpdateReplanRequiredException(null, "Group selection changed while applying the update");
-			if (configurationChangedAfterPlanning(transaction))
-				throw new UpdateReplanRequiredException(null, "Client configuration changed while applying the update");
+			UpdateTransactionValidator.MutableInputDrift applied = validator.mutableInputDrift(transaction);
+			if (applied.selection()) throw new UpdateReplanRequiredException(null, "Group selection changed while applying the update");
+			if (applied.configuration()) throw new UpdateReplanRequiredException(null, "Client configuration changed while applying the update");
 		}
 		publishProjection(transaction);
 		if (publicationStarted
-				&& (!managedStateMatches(transaction) || preserveNewerSelection || configurationChangedAfterPlanning(transaction)))
+				&& (!managedStateMatches(transaction) || preserveNewerSelection || validator.mutableInputDrift(transaction).configuration()))
 			throw new UpdateReplanRequiredException(null, "Mutable client state changed while publishing the update");
-		if (selectionChangedAfterPlanning(transaction) || configurationChangedAfterPlanning(transaction))
+		UpdateTransactionValidator.MutableInputDrift finalized = validator.mutableInputDrift(transaction);
+		if (finalized.selection() || finalized.configuration())
 			throw new UpdateReplanRequiredException(null, "Mutable client configuration changed before update finalization");
 		finalizeModpackState(transaction, preserveNewerSelection);
 		claimSelection(transaction);
@@ -543,7 +524,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {
-		if (selectionChangedAfterPlanning(transaction)) throw new IOException("Group selection changed after planning for modpack " + transaction.modpackId);
+		if (validator.mutableInputDrift(transaction).selection()) throw new IOException("Group selection changed after planning for modpack " + transaction.modpackId);
 	}
 
 	private Path resolve(Operation operation, UpdateTransaction transaction) throws IOException {

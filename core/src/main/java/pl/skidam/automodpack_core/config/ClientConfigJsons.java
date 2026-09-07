@@ -82,5 +82,13 @@ public class ClientConfigJsons {
 		public int hashCode() {
 			return Objects.hash(selectedModpackId, updateSelectedModpackOnLaunch, selfUpdater, syncAutoModpackVersion, syncLoaderVersion, playMusic, showModpackSettingsButton, PinnedMods.normalize(pinnedModIds));
 		}
+
+		/** Canonical with {@link #equals}: normalized pins, no file-version field. */
+		@Override
+		public String toString() {
+			return "ClientConfigFieldsV3[selectedModpackId=" + selectedModpackId + ", updateSelectedModpackOnLaunch=" + updateSelectedModpackOnLaunch + ", selfUpdater=" + selfUpdater
+					+ ", syncAutoModpackVersion=" + syncAutoModpackVersion + ", syncLoaderVersion=" + syncLoaderVersion + ", playMusic=" + playMusic
+					+ ", showModpackSettingsButton=" + showModpackSettingsButton + ", pinnedModIds=" + PinnedMods.normalize(pinnedModIds) + "]";
+		}
 	}
 }

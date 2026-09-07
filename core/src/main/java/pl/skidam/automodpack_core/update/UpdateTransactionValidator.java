@@ -14,12 +14,14 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -107,7 +109,7 @@ public final class UpdateTransactionValidator {
 			if (transaction.plannedClientConfig == null) throw new IOException("Planned client config is missing");
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
 			else validateRemovalClientConfig(transaction);
-			if (verifyMutableInputs && !Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.modpackId)))
+			if (verifyMutableInputs && mutableInputDrift(transaction).overlay())
 				throw new IOException("Client editable overlay changed after planning");
 		} else throw new IOException("Unsupported transaction purpose");
 
@@ -138,6 +140,42 @@ public final class UpdateTransactionValidator {
 		validateConflicts(transaction, finalState, target);
 		validatePreservations(transaction, finalState, target);
 		if (target != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateManifestProjection(target, finalState);
+	}
+
+	/** One mutable planning input's drift from the snapshot the transaction was planned against. */
+	record MutableInputDrift(boolean configuration, boolean selection, boolean overlay) {
+		boolean any() {
+			return configuration || selection || overlay;
+		}
+	}
+
+	/**
+	 * The canonical mutable-input precondition: which planned-against inputs (client configuration, group selection,
+	 * editable overlays) drifted since the transaction was planned. Evaluated once per stage boundary; the caller owns the throw.
+	 */
+	MutableInputDrift mutableInputDrift(UpdateTransaction transaction) throws IOException {
+		return new MutableInputDrift(configurationChanged(transaction), selectionChanged(transaction),
+				!Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.modpackId)));
+	}
+
+	private boolean configurationChanged(UpdateTransaction transaction) throws IOException {
+		if (transaction.expectedClientConfig == null) return true;
+		ClientConfigJsons.ClientConfigFieldsV3 current = currentClientConfig();
+		if (current.equals(transaction.expectedClientConfig)) return false;
+		return transaction.plannedClientConfig == null || !current.equals(transaction.plannedClientConfig);
+	}
+
+	private ClientConfigJsons.ClientConfigFieldsV3 currentClientConfig() {
+		return ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+	}
+
+	private boolean selectionChanged(UpdateTransaction transaction) throws IOException {
+		SelectionIntent current = new ClientSelectionStore(storage.selectionFile()).get(transaction.modpackId).orElse(null);
+		SelectionIntent expected = transaction.expectedPriorIntent();
+		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+				? Objects.equals(current, transaction.targetIntent())
+				: transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL ? current == null : Objects.equals(current, expected);
+		return !Objects.equals(current, expected) && !alreadyCommitted;
 	}
 
 	private static void validateSelectedTargetMetadata(UpdateTransaction transaction, SelectedModpackTarget target) throws IOException {
