@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.ClientBaseline;
+import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientOverlaySnapshot;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -119,7 +120,7 @@ final class ClientUpdatePlanBuilder {
 	private record AvailableBaseline(ClientBaseline baseline, Set<String> objectHashes) {}
 
 	/** Inspection phase: observes live, overlay and projection state and produces the plan; expects {@link #reconcileEditableState} to have run already. */
-	PreparedPlan buildPlan(Input input, FileCache cache, ModFileCache modCache) throws Exception {
+	PreparedPlan buildPlan(Input input, FileCache cache, ModFileCache modCache) throws IOException {
 		ClientProjectionView projectionView = ClientProjectionView.open(storage);
 		ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 		ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
@@ -221,12 +222,10 @@ final class ClientUpdatePlanBuilder {
 			}
 			var item = itemsByHash.get(operation.expectedObjectHash().toLowerCase(Locale.ROOT));
 			if (item == null) throw new IOException("Planned CAS object is unavailable: " + operation.expectedObjectHash());
-			List<Path> candidates = projection.sourceCandidates(item.file);
-			Path source = candidates.stream().filter(candidate -> FileIntegrity.matchesObject(candidate, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache)).findFirst().orElse(null);
-			if (source == null) source = livePath(item);
-			if (!FileIntegrity.matchesObject(source, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache))
+			List<Path> candidates = new ArrayList<>(projection.sourceCandidates(item.file));
+			candidates.add(livePath(item));
+			if (ClientObjectStore.acquireVerified(storeFile, operation.expectedObjectHash(), operation.expectedSize(), candidates, cache, ClientObjectStore.CorruptObjectPolicy.KEEP).missing())
 				throw new IOException("Required object is absent from CAS and verified live locations: " + operation.expectedObjectHash());
-			VerifiedFileTransfer.copyAtomicImmutable(source, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache);
 		}
 	}
 
@@ -352,19 +351,8 @@ final class ClientUpdatePlanBuilder {
 	private void populateStoreFromSources(ModpackJsons.ModpackContentFields target, FileCache cache,
 			Function<ModpackJsons.ModpackContentFields.ModpackContentItem, List<Path>> sourceResolver) throws IOException {
 		if (target.list == null) return;
-		for (var item : target.list) {
-			Path object = storage.objectFile(item.sha1);
-			long size = item.size;
-			if (FileIntegrity.matchesNamed(object, size, item.sha1, cache)) continue;
-			for (Path source : sourceResolver.apply(item)) if (populateStoreObject(source, object, size, item.sha1, cache)) break;
-		}
-	}
-
-	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileCache cache) throws IOException {
-		if (!FileIntegrity.matchesObject(source, object, size, sha1, cache)) return false;
-		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, sha1, cache);
-		cache.overwriteCache(object, sha1);
-		return true;
+		for (var item : target.list)
+			ClientObjectStore.acquireVerified(storage.objectFile(item.sha1), item.sha1, item.size, sourceResolver.apply(item), cache, ClientObjectStore.CorruptObjectPolicy.KEEP);
 	}
 
 	private Map<UpdatePlan.FileKey, UpdatePlan.FileState> inspectFiles(ModpackJsons.ModpackContentFields target, ModpackJsons.ModpackContentFields installed,

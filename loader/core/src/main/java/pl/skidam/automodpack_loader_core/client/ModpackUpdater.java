@@ -768,57 +768,66 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private ClientUpdatePlanBuilder.PreparedPlan executePlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, SelectedModpackTarget target) throws Exception {
-		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
 		// An executing plan is a durable fact; a player cancel during the commit must not cancel it afterwards.
 		reviewed.review().beginExecution();
-		boolean replanned = false;
-		while (true) {
-			UpdatePlan plan = prepared.plan();
-			planBuilder.preparePlanObjects(plan, target.flatTarget());
-			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(plan, target, prepared.overlayDigest(), prepared.expectedClientConfig());
-			if (execution.replanRequired() && !replanned) {
-				ensureSelectedModpackUnchanged(prepared);
-				try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
-					planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
-					prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
-				}
-				try {
-					reviewed.review().requireCompatible(prepared.plan());
-				} catch (IllegalStateException e) {
-					throw new UpdateReplanRequiredException(execution.blockedPath(), "Mutable input changed the reviewed update consequences", e);
-				}
-				recordChangelogs(prepared, target);
-				replanned = true;
-				continue;
-			}
-			if (!execution.success()) {
-				if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
-				DetachedUpdateHelper.launch();
-				throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
-			}
-			reviewed.review().complete();
+		AtomicReference<ClientUpdatePlanBuilder.PreparedPlan> prepared = new AtomicReference<>(reviewed.prepared());
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commitWithReplan(
+				() -> commitPlanObjects(prepared.get(), target),
+				failedExecution -> {
+					ClientUpdatePlanBuilder.PreparedPlan replanned = replanFromMutableInputs(reviewed, prepared.get(), target, failedExecution);
+					prepared.set(replanned);
+					return commitPlanObjects(replanned, target);
+				});
+		if (!execution.success()) {
+			if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
+			DetachedUpdateHelper.launch();
+			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
+		}
+		reviewed.review().complete();
+		UpdatePlan plan = prepared.get().plan();
+		try {
+			cleanupOverlayState(plan, target.manifest().modpackId());
+		} catch (IOException e) {
+			LOGGER.warn("Modpack update committed, but stale overlay tombstones could not be cleaned", e);
+		}
+		if (connectionInfo != null && connectionInfo.isComplete()) {
 			try {
-				cleanupOverlayState(plan, target.manifest().modpackId());
+				ConnectionStore.saveConnection(storage, target.manifest().modpackId(), connectionInfo);
 			} catch (IOException e) {
-				LOGGER.warn("Modpack update committed, but stale overlay tombstones could not be cleaned", e);
+				throw new IOException("Modpack generation committed but connection state could not be saved", e);
 			}
-			if (connectionInfo != null && connectionInfo.isComplete()) {
-				try {
-					ConnectionStore.saveConnection(storage, target.manifest().modpackId(), connectionInfo);
-				} catch (IOException e) {
-					throw new IOException("Modpack generation committed but connection state could not be saved", e);
-				}
+		}
+		// One of the two attach exits: an explicitly requested sync ends attached at its commit.
+		if (attaching) {
+			try {
+				storage.setDetached(target.manifest().modpackId(), false);
+			} catch (IOException e) {
+				throw new IOException("Modpack generation committed but detachment could not be cleared", e);
 			}
-			// One of the two attach exits: an explicitly requested sync ends attached at its commit.
-			if (attaching) {
-				try {
-					storage.setDetached(target.manifest().modpackId(), false);
-				} catch (IOException e) {
-					throw new IOException("Modpack generation committed but detachment could not be cleared", e);
-				}
+		}
+		clientConfig = plan.plannedClientConfig();
+		return prepared.get();
+	}
+
+	private UpdateTransactionExecutor.Execution commitPlanObjects(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
+		planBuilder.preparePlanObjects(prepared.plan(), target.flatTarget());
+		return UpdateTransactionSupport.executor().commit(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
+	}
+
+	/** Rebuilds the reviewed plan from the mutable inputs after a replan-required commit, and rechecks it against the player's review. */
+	private ClientUpdatePlanBuilder.PreparedPlan replanFromMutableInputs(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, ClientUpdatePlanBuilder.PreparedPlan prepared,
+			SelectedModpackTarget target, UpdateTransactionExecutor.Execution failedExecution) throws IOException {
+		ensureSelectedModpackUnchanged(prepared);
+		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
+			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
+			ClientUpdatePlanBuilder.PreparedPlan replanned = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
+			try {
+				reviewed.review().requireCompatible(replanned.plan());
+			} catch (IllegalStateException e) {
+				throw new UpdateReplanRequiredException(failedExecution.blockedPath(), "Mutable input changed the reviewed update consequences", e);
 			}
-			clientConfig = plan.plannedClientConfig();
-			return prepared;
+			recordChangelogs(replanned, target);
+			return replanned;
 		}
 	}
 

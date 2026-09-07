@@ -35,10 +35,8 @@ import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
-import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
@@ -156,50 +154,31 @@ public class ModpackUtils {
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
 	public static void populateStoreFromCWD(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileCache cache, ClientStorage storage) {
 		for (var entry : filesToUpdate) {
-			Path storeFile = storage.objectFile(entry.sha1);
-			long expectedSize = entry.size;
-
-			if (FileIntegrity.matchesNamed(storeFile, expectedSize, entry.sha1, cache)) {
-				LOGGER.debug("Verified file already exists in store: {}", entry.file);
-				continue;
-			}
 			try {
-				if (Files.exists(storeFile)) {
-					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
-					ImmutableFiles.deleteIfExists(storeFile);
+				ClientObjectStore.Acquisition acquisition = ClientObjectStore.acquireVerified(storage.objectFile(entry.sha1), entry.sha1, entry.size, List.of(storage.gamePath(entry.file)), cache,
+						ClientObjectStore.CorruptObjectPolicy.EVICT_AND_REPORT);
+				switch (acquisition.outcome()) {
+					case PRESENT -> LOGGER.debug("Verified file already exists in store: {}", entry.file);
+					case COPIED -> LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
+					case EVICTION_FAILED -> LOGGER.error("Failed to evict corrupt store object {}", entry.sha1, acquisition.evictionFailure());
+					case MISSING_SOURCE -> {
+					}
 				}
 			} catch (IOException e) {
-				LOGGER.error("Failed to evict corrupt store object {}", entry.sha1, e);
-				continue;
-			}
-
-			Path fileInCWD = storage.gamePath(entry.file);
-			if (FileIntegrity.matchesObject(fileInCWD, storeFile, expectedSize, entry.sha1, cache)) {
-				LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
-				try {
-					VerifiedFileTransfer.copyAtomicImmutable(fileInCWD, storeFile, expectedSize, entry.sha1, cache);
-				} catch (IOException e) {
-					LOGGER.error("Failed to copy file from CWD to store: {}", entry.file, e);
-				}
+				LOGGER.error("Failed to copy file from CWD to store: {}", entry.file, e);
 			}
 		}
 	}
 
 	// Returns the set of files that are missing or corrupt in the store.
 	public static Set<ModpackJsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToCheck,
-			FileCache cache, ClientStorage storage) {
+			FileCache cache, ClientStorage storage) throws IOException {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
-			Path storeFile = storage.objectFile(entry.sha1);
-			if (FileIntegrity.matchesNamed(storeFile, entry.size, entry.sha1, cache)) continue;
-			if (Files.exists(storeFile)) {
-				try {
-					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
-					ImmutableFiles.deleteIfExists(storeFile);
-				} catch (IOException e) {
-					LOGGER.warn("Failed to evict corrupt store object {}", entry.sha1, e);
-				}
-			}
+			ClientObjectStore.Acquisition acquisition = ClientObjectStore.acquireVerified(storage.objectFile(entry.sha1), entry.sha1, entry.size, List.of(), cache,
+					ClientObjectStore.CorruptObjectPolicy.EVICT_AND_REPORT);
+			if (acquisition.outcome() == ClientObjectStore.Acquisition.Outcome.EVICTION_FAILED) LOGGER.warn("Failed to evict corrupt store object {}", entry.sha1, acquisition.evictionFailure());
+			if (acquisition.present()) continue;
 			uncachedFiles.add(entry);
 		}
 		return uncachedFiles;

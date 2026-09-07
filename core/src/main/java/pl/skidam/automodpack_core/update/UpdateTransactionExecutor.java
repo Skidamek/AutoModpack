@@ -49,6 +49,18 @@ public final class UpdateTransactionExecutor {
 		void run(UpdateTransaction transaction, ModpackJsons.ModpackContentFields target) throws IOException;
 	}
 
+	/** One apply of the current plan through the executor. */
+	@FunctionalInterface
+	public interface CommitCall {
+		Execution run() throws IOException;
+	}
+
+	/** The replan policy: rebuilds the plan from mutable inputs, rechecks it against the review, and commits it once. */
+	@FunctionalInterface
+	public interface ReplanCall {
+		Execution run(Execution failedExecution) throws IOException;
+	}
+
 	public record Context(ClientStorage storage, CommitAction beforeManifestAction) {
 		public Context {
 			storage = Objects.requireNonNull(storage, "storage");
@@ -93,6 +105,19 @@ public final class UpdateTransactionExecutor {
 
 	public Execution commit(UpdateTransaction transaction) throws IOException {
 		return commitPrepared(transaction, null);
+	}
+
+	/**
+	 * The one commit-with-replan: applies the current plan once, and on a replan-required result rebuilds the plan from
+	 * mutable inputs through {@code replan} and retries exactly once. A second replan-required result is terminal and
+	 * rethrows the underlying replan reason; a caller whose terminal spelling differs throws it from its replan call.
+	 */
+	public Execution commitWithReplan(CommitCall apply, ReplanCall replan) throws IOException {
+		Execution execution = apply.run();
+		if (!execution.replanRequired()) return execution;
+		execution = replan.run(execution);
+		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
+		return execution;
 	}
 
 	private Execution commitPrepared(UpdateTransaction transaction, SelectedModpackTarget unpublishedTarget) throws IOException {

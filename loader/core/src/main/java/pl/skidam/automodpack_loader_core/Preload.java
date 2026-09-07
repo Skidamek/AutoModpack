@@ -104,31 +104,37 @@ public class Preload {
 
 		try {
 			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
-			UpdateTransactionExecutor.Execution execution;
-			boolean replanned = false;
-			if (executor.hasMutableInputDrift(transaction) && !executor.projectionPublicationStarted(transaction)) {
-				execution = replanPendingTransaction(transaction);
-				replanned = true;
-			} else {
-				try {
-					execution = executor.recoverLatest();
-				} catch (UpdateReplanRequiredException e) {
-					execution = replanPendingTransaction(transaction);
-					replanned = true;
-				}
-			}
-			if (execution.replanRequired()) {
-				execution = replanPendingTransaction(execution.transaction() == null ? transaction : execution.transaction());
-				replanned = true;
-			}
-			if (!replanned && execution.success() && executor.hasMutableInputDrift(transaction)) execution = replanPendingTransaction(transaction);
-			if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), "Pending update still requires a fresh plan");
+			UpdateTransactionExecutor.Execution execution = executor.commitWithReplan(
+					() -> recoverPendingExecution(executor, transaction),
+					failedExecution -> replanPendingExecution(transaction, failedExecution));
 			finishPendingRecovery(execution, transaction);
 		} catch (UpdateReplanRequiredException e) {
 			throw e;
 		} catch (IOException | RuntimeException e) {
 			quarantineTransaction(e);
 		}
+	}
+
+	/** The preload recovery policy: a pending update replans proactively on pre-commit drift, and drift found after a successful recovery forces one replan whose replan-required result is terminal. */
+	private UpdateTransactionExecutor.Execution recoverPendingExecution(UpdateTransactionExecutor executor, UpdateTransaction transaction) throws IOException {
+		if (executor.hasMutableInputDrift(transaction) && !executor.projectionPublicationStarted(transaction)) return replanPendingTransaction(transaction);
+		UpdateTransactionExecutor.Execution execution;
+		try {
+			execution = executor.recoverLatest();
+		} catch (UpdateReplanRequiredException e) {
+			return replanPendingTransaction(transaction);
+		}
+		if (execution.success() && executor.hasMutableInputDrift(transaction)) {
+			execution = replanPendingTransaction(transaction);
+			if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), "Pending update still requires a fresh plan");
+		}
+		return execution;
+	}
+
+	private UpdateTransactionExecutor.Execution replanPendingExecution(UpdateTransaction transaction, UpdateTransactionExecutor.Execution failedExecution) throws IOException {
+		UpdateTransactionExecutor.Execution execution = replanPendingTransaction(failedExecution.transaction() == null ? transaction : failedExecution.transaction());
+		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), "Pending update still requires a fresh plan");
+		return execution;
 	}
 
 	private UpdateTransactionExecutor.Execution replanPendingTransaction(UpdateTransaction transaction) throws IOException {

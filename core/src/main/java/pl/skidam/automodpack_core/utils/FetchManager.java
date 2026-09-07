@@ -24,8 +24,15 @@ public class FetchManager {
 	public record FetchData(String file, String sha1, String murmur, String fileType) {}
 	private record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
 	private record Datas(FetchData fetchData, FetchedData fetchedData) {}
+	private record DeadLink(String murmur, String fileType) {}
 	private final Map<String, Datas> fetchDatas = new HashMap<>();
 	private final PlatformCache platformCache;
+
+	// --- DEAD LINK INVALIDATION ---
+	private final Object metadataRefetchLock = new Object();
+	private final Map<String, DeadLink> pendingMetadataRefetch = new HashMap<>();
+	private final Map<String, List<DownloadSource>> resolvedMetadataRefetches = new HashMap<>();
+	private final Set<String> refetchedSha1s = new HashSet<>();
 
 	public FetchManager(List<FetchData> fetchDatas, PlatformCache platformCache) {
 		this.platformCache = platformCache;
@@ -164,6 +171,55 @@ public class FetchManager {
 				applyCurseForge(datas, info.downloadUrl(), info.projectPageUrl());
 			}
 		}
+	}
+
+	/** Evicts the cached metadata of a dead platform link and schedules its refetch; reports whether this sha1 joined the pending batch. */
+	public boolean markDeadPlatformLink(String sha1, String murmur, String fileType) {
+		String normalizedSha1 = sha1.toLowerCase(Locale.ROOT);
+		synchronized (metadataRefetchLock) {
+			platformCache.evict(normalizedSha1);
+			if (!refetchedSha1s.add(normalizedSha1)) return false;
+			pendingMetadataRefetch.put(normalizedSha1, new DeadLink(murmur, fileType));
+			return true;
+		}
+	}
+
+	/** Waits for one batched refetch covering every sha1 whose platform link died, so concurrent dead links share the bulk calls. */
+	public List<DownloadSource> awaitMetadataRefetch(String sha1) {
+		String normalizedSha1 = sha1.toLowerCase(Locale.ROOT);
+		synchronized (metadataRefetchLock) {
+			List<DownloadSource> resolved = resolvedMetadataRefetches.remove(normalizedSha1);
+			if (resolved != null) return resolved;
+			if (!pendingMetadataRefetch.containsKey(normalizedSha1)) return List.of();
+			Map<String, DeadLink> batch = new LinkedHashMap<>(pendingMetadataRefetch);
+			pendingMetadataRefetch.clear();
+			resolvedMetadataRefetches.putAll(refetchPlatformMetadata(batch));
+			List<DownloadSource> fresh = resolvedMetadataRefetches.remove(normalizedSha1);
+			return fresh == null ? List.of() : fresh;
+		}
+	}
+
+	private Map<String, List<DownloadSource>> refetchPlatformMetadata(Map<String, DeadLink> batch) {
+		Map<String, List<DownloadSource>> fresh = new HashMap<>();
+		List<ModrinthAPI> modrinthInfos = ModrinthAPI.getModsInfosFromListOfSHA1(new ArrayList<>(batch.keySet()));
+		if (modrinthInfos != null) for (ModrinthAPI info : modrinthInfos) {
+			String sha1 = info.SHA1Hash().toLowerCase(Locale.ROOT);
+			DeadLink deadLink = batch.get(sha1);
+			String mainPageUrl = deadLink == null ? null : ModrinthAPI.getMainPageUrl(info.modrinthID(), deadLink.fileType());
+			platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
+			fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
+		}
+		Map<String, String> murmurs = new HashMap<>();
+		for (Map.Entry<String, DeadLink> entry : batch.entrySet()) if (entry.getValue().murmur() != null && !entry.getValue().murmur().isBlank()) murmurs.put(entry.getKey(), entry.getValue().murmur());
+		if (!murmurs.isEmpty()) {
+			List<CurseForgeAPI> curseForgeInfos = CurseForgeAPI.getModInfosFromFingerPrints(murmurs);
+			if (curseForgeInfos != null) for (CurseForgeAPI info : curseForgeInfos) {
+				String sha1 = info.sha1Hash().toLowerCase(Locale.ROOT);
+				platformCache.putCurseForge(info.sha1Hash(), info);
+				fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.CURSEFORGE));
+			}
+		}
+		return fresh;
 	}
 
 	private void applyModrinth(Datas datas, PlatformCache.ModrinthEntry entry) {
