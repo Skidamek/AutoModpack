@@ -101,7 +101,7 @@ flow:
     name: show the conflict explanation
     until:
       all:
-        - screen: FeatureConflictScreen
+        - screen: GroupConflictScreen
         - element: { text: "Use Alternative", enabled: true }
   - do: screenshot
     name: capture deterministic conflict replacement
@@ -403,29 +403,17 @@ flow:
   - do: click
     name: select the still-owned local conflict
     select: { text: amp-autotest-conflict.jar }
-  - do: click
-    name: attempt an unsafe restore without overwriting the active pack
-    select: { text: Restore }
   - do: wait_for
-    name: show the unsafe restore as a recoverable error
-    timeout: 30s
-    until: { screen: ErrorScreen }
-  - do: screenshot
-    name: capture the recoverable error screen
-    file: all-error-recoverable
-  - do: click
-    name: copy the unsafe restore diagnostics
-    select: { text: Copy details }
-  - do: click
-    name: return to the same preservation selection
-    select: { text: Back }
-  - do: wait_for
-    name: keep the owned conflict in preserved files after the unsafe restore
+    name: keep the Pack B claim's restore locked while Pack B is inactive
     until:
       all:
         - screen: PreservationVaultScreen
         - element: { text: amp-autotest-conflict.jar, enabled: true }
+        - element: { text: Restore, enabled: false }
         - element: { text: Save copy, enabled: true }
+  - do: screenshot
+    name: capture the locked still-owned claim in preserved files
+    file: all-vault-locked-restore
   - do: click
     name: leave the preservation vault
     select: { text: Back }

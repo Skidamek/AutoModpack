@@ -34,19 +34,23 @@ flow:
     name: capture explicit child selection
     file: ui-navigation-explicit-child
   - do: click
-    name: open the group inspector from the row help button
+    name: open the group file browser from the row help button
     select: { text: "?" }
   - do: wait_for
-    name: wait for the group inspector
-    until: { screen: GroupInspectorScreen }
+    name: wait for the group file browser
+    until:
+      all:
+        - screen: ChangeBrowserScreen
+        # The fixed details rail stays in place and just waits disabled until a file is picked.
+        - element: { text: "Copy hash", enabled: false }
   - do: screenshot
-    name: capture the group inspector
-    file: ui-navigation-group-inspector
+    name: capture the group file browser
+    file: ui-navigation-group-files
   - do: click
-    name: return from the group inspector
+    name: return from the group file browser
     select: { text: Back }
   - do: wait_for
-    name: verify group customization is still usable after the inspector
+    name: verify group customization is still usable after the file browser
     until:
       all:
         - screen: ModpackSelectionScreen
