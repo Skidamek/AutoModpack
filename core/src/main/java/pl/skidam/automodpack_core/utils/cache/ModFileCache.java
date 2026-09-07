@@ -3,12 +3,15 @@ package pl.skidam.automodpack_core.utils.cache;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 /** A shared content-keyed mod inspection cache backed by immutable loose records. */
 public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
@@ -24,18 +27,20 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 	}
 
 	public FileInspection.Mod getOrComputeMod(Path file, FileCache cache) throws IOException {
+		return getOrComputeMod(file, null, cache);
+	}
+
+	public FileInspection.Mod getOrComputeMod(Path file, String knownSha1, FileCache cache) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
-		String hash = cache.getOrComputeHash(absPath);
+		String hash = contentHash(absPath, knownSha1, cache);
 		if (hash == null) return null;
-		hash = hash.toLowerCase(Locale.ROOT);
 
 		synchronized (lock(hash)) {
 			ModRecord cached = readRecord(hash, ModRecord.class);
 			if (isComplete(cached)) return cached.at(absPath);
 
-			hash = cache.getOrComputeHash(absPath);
+			hash = contentHash(absPath, knownSha1, cache);
 			if (hash == null) return null;
-			hash = hash.toLowerCase(Locale.ROOT);
 			cached = readRecord(hash, ModRecord.class);
 			if (isComplete(cached)) return cached.at(absPath);
 
@@ -46,12 +51,25 @@ public class ModFileCache extends LooseRecordCache<ModFileCache.ModRecord> {
 	}
 
 	public FileInspection.Mod getModOrNull(Path path, FileCache cache) {
+		return getModOrNull(path, null, cache);
+	}
+
+	public FileInspection.Mod getModOrNull(Path path, String knownSha1, FileCache cache) {
 		try {
-			return getOrComputeMod(path, cache);
+			return getOrComputeMod(path, knownSha1, cache);
 		} catch (IOException e) {
 			LOGGER.error("Failed to compute mod metadata for path: {}", path, e);
 			return null;
 		}
+	}
+
+	private static String contentHash(Path file, String knownSha1, FileCache cache) throws IOException {
+		if (knownSha1 != null && HashUtils.isSha1(knownSha1)) {
+			String sha1 = HashUtils.normalizeSha1(knownSha1);
+			if (FileIntegrity.matchesNamed(file, Files.size(file), sha1, cache)) return sha1;
+		}
+		String hash = cache.getOrComputeHash(file);
+		return hash == null ? null : hash.toLowerCase(Locale.ROOT);
 	}
 
 	private static boolean isComplete(ModRecord cached) {

@@ -221,9 +221,11 @@ final class ClientUpdatePlanBuilder {
 			var item = itemsByHash.get(operation.expectedObjectHash().toLowerCase(Locale.ROOT));
 			if (item == null) throw new IOException("Planned CAS object is unavailable: " + operation.expectedObjectHash());
 			List<Path> candidates = projection.sourceCandidates(item.file);
-			Path source = candidates.stream().filter(candidate -> FileIntegrity.matches(candidate, operation.expectedSize(), operation.expectedObjectHash(), cache)).findFirst().orElse(null);
+			Path source = candidates.stream().filter(candidate -> FileIntegrity.matchesObject(candidate, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache)
+					|| FileIntegrity.matches(candidate, operation.expectedSize(), operation.expectedObjectHash(), cache)).findFirst().orElse(null);
 			if (source == null) source = livePath(item);
-			if (!FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash(), cache))
+			if (!FileIntegrity.matchesObject(source, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache)
+					&& !FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash(), cache))
 				throw new IOException("Required object is absent from CAS and verified live locations: " + operation.expectedObjectHash());
 			VerifiedFileTransfer.copyAtomicImmutable(source, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache);
 		}
@@ -433,10 +435,10 @@ final class ClientUpdatePlanBuilder {
 
 	private Path resolvedObject(ModpackJsons.ModpackContentFields.ModpackContentItem item, ClientProjectionView.Snapshot projection, FileCache cache) {
 		long size = Long.parseLong(item.size);
-		Path source = storage.objectFile(item.sha1);
-		if (FileIntegrity.matches(source, size, item.sha1, cache)) return source;
+		Path object = storage.objectFile(item.sha1);
+		if (FileIntegrity.matchesNamed(object, size, item.sha1, cache)) return object;
 		for (Path candidate : projection.sourceCandidates(item.file)) {
-			if (FileIntegrity.matches(candidate, size, item.sha1, cache)) return candidate;
+			if (FileIntegrity.matchesObject(candidate, object, size, item.sha1, cache) || FileIntegrity.matches(candidate, size, item.sha1, cache)) return candidate;
 		}
 		return null;
 	}
@@ -447,7 +449,7 @@ final class ClientUpdatePlanBuilder {
 				.sorted(Comparator.comparing(value -> value.file)).toList()) {
 			Path source = resolvedObject(item, projection, cache);
 			if (source == null) continue;
-			FileInspection.Mod mod = modCache.getModOrNull(source, cache);
+			FileInspection.Mod mod = modCache.getModOrNull(source, item.sha1, cache);
 			if (mod != null) mods.add(new UpdatePlan.ModInfo(LogicalPath.normalize(item.file), item.sha1, Long.parseLong(item.size), mod.IDs(), mod.deps()));
 		}
 		return mods;
@@ -504,6 +506,7 @@ final class ClientUpdatePlanBuilder {
 		Files.createDirectories(inspectionPath.getParent());
 		try {
 			Files.createLink(inspectionPath, source);
+			cache.overwriteCache(inspectionPath, sha1);
 			return;
 		} catch (UnsupportedOperationException | FileSystemException ignored) {
 		}
@@ -518,7 +521,7 @@ final class ClientUpdatePlanBuilder {
 			if (!ModpackPathPolicy.isActiveMod(LogicalPath.normalize(item.file), item.type)) continue;
 			Path modPath = resolvedObject(item, projection, cache);
 			if (modPath == null) continue;
-			FileInspection.Mod mod = modCache.getModOrNull(modPath, cache);
+			FileInspection.Mod mod = modCache.getModOrNull(modPath, item.sha1, cache);
 			if (mod != null && !Collections.disjoint(mod.services(), forceCopyServices)) forceCopyMods.add(item.file);
 		}
 		return forceCopyMods;

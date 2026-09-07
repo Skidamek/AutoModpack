@@ -23,6 +23,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -141,15 +142,38 @@ public final class ClientProjectionView {
 	private Map<String, UpdatePlan.FileState> readLiveFiles(FileCache cache) throws IOException {
 		Map<String, UpdatePlan.FileState> files = new LinkedHashMap<>();
 		Path active = storage.activeDirectory();
-		if (Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) {
-			try (var paths = Files.walk(active)) {
-				for (Path path : paths.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
-					String relative = LogicalPath.normalize(active.relativize(path).toString());
-					files.put(relative, new UpdatePlan.FileState(cache.getOrComputeHash(path), Files.size(path), true));
+		if (!Files.isDirectory(active, LinkOption.NOFOLLOW_LINKS)) return files;
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> published = publishedProjectionItems();
+		try (var paths = Files.walk(active)) {
+			for (Path path : paths.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList()) {
+				String relative = LogicalPath.normalize(active.relativize(path).toString());
+				long size = Files.size(path);
+				var item = published.get(relative);
+				if (item != null) {
+					try {
+						long expectedSize = Long.parseLong(item.size);
+						if (expectedSize == size && FileIntegrity.matchesObject(path, storage.objectFile(item.sha1), expectedSize, item.sha1, cache)) {
+							files.put(relative, new UpdatePlan.FileState(HashUtils.normalizeSha1(item.sha1), size, true));
+							continue;
+						}
+					} catch (NumberFormatException ignored) {
+					}
 				}
+				files.put(relative, new UpdatePlan.FileState(cache.getOrComputeHash(path), size, true));
 			}
 		}
 		return files;
+	}
+
+	private Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> publishedProjectionItems() throws IOException {
+		ModpackJsons.ModpackContentFields target = committedTarget();
+		if (target == null || target.list == null) return Map.of();
+		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> items = new LinkedHashMap<>();
+		for (var item : target.list) {
+			if (item == null || item.file == null || item.sha1 == null) continue;
+			items.put(LogicalPath.normalize(item.file), item);
+		}
+		return items;
 	}
 
 	private static Map<String, List<UpdatePlan.FileState>> pendingGameStates(UpdateTransaction pending) throws IOException {

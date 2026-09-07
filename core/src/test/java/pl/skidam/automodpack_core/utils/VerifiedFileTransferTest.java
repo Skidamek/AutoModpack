@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileStore;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -99,6 +100,27 @@ class VerifiedFileTransferTest {
 			cache.overwriteCache(object, hash);
 			assertTrue(VerifiedFileTransfer.linkAtomic(object, projection, size, hash, cache));
 			assertTrue(Files.isSameFile(object, projection));
+			assertTrue(FileIntegrity.matchesNamed(object, size, hash, cache));
+			assertTrue(FileIntegrity.matchesObject(projection, object, size, hash, cache));
+		}
+	}
+
+	@Test
+	void namedSourceCopySurvivesAnExtraHardlinkWithoutRehashingTheObject() throws Exception {
+		Path object = Files.writeString(tempDir.resolve("object"), "named-bytes", StandardCharsets.UTF_8);
+		Path target = tempDir.resolve("mods/out.jar");
+		String hash = HashUtils.getHash(object);
+		long size = Files.size(object);
+		try (FileCache cache = FileCache.open(tempDir.resolve("file-cache"))) {
+			assertTrue(cache.matchesImmutable(object, size, hash));
+			try {
+				Files.createLink(tempDir.resolve("alias"), object);
+			} catch (UnsupportedOperationException | FileSystemException e) {
+				Assumptions.assumeTrue(false, "hardlinks unavailable");
+				return;
+			}
+			assertTrue(VerifiedFileTransfer.copyAtomic(object, target, size, hash, cache));
+			assertTrue(FileIntegrity.matches(target, size, hash, cache));
 			assertTrue(FileIntegrity.matchesNamed(object, size, hash, cache));
 		}
 	}
