@@ -5,9 +5,15 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -17,6 +23,13 @@ import java.util.Locale;
 public final class HashUtils {
 	public static final int SHA1_HEX_LENGTH = 40;
 	private static final String SHA_1 = "SHA-1";
+	private static final int STREAM_BUFFER = 64 * 1024;
+	private static final int MURMUR_M = 0x5bd1e995;
+	private static final int MURMUR_R = 24;
+	private static final int MURMUR_SEED = 1;
+	private static final long BYTE_ONES = 0x0101010101010101L;
+	private static final long BYTE_HIGHS = 0x8080808080808080L;
+	private static final VarHandle LITTLE_ENDIAN_LONGS = MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.LITTLE_ENDIAN);
 
 	private HashUtils() {}
 
@@ -84,7 +97,7 @@ public final class HashUtils {
 	public static String copyAndSha1(Path source, Path destination) throws IOException {
 		MessageDigest digest = newSha1Digest();
 		try (InputStream in = Files.newInputStream(source); OutputStream out = Files.newOutputStream(destination)) {
-			byte[] buffer = new byte[64 * 1024];
+			byte[] buffer = new byte[STREAM_BUFFER];
 			int bytesRead;
 			while ((bytesRead = in.read(buffer)) != -1) {
 				digest.update(buffer, 0, bytesRead);
@@ -95,7 +108,7 @@ public final class HashUtils {
 	}
 
 	private static void digestStream(MessageDigest digest, InputStream is) throws IOException {
-		byte[] buffer = new byte[64 * 1024];
+		byte[] buffer = new byte[STREAM_BUFFER];
 		int bytesRead;
 		while ((bytesRead = is.read(buffer)) != -1) digest.update(buffer, 0, bytesRead);
 	}
@@ -106,68 +119,96 @@ public final class HashUtils {
 	 */
 	public static String getCurseforgeMurmurHash(Path file) throws IOException {
 		if (!Files.exists(file)) return null;
-
-		// MurmurHash2 Constants
-		final int m = 0x5bd1e995;
-		final int r = 24;
-		final int seed = 1;
-
-		// Pass 1: Count valid non-whitespace bytes to determine the hash seed
-		long validLength = 0;
-		byte[] buffer = new byte[64 * 1024];
-
-		try (InputStream is = Files.newInputStream(file)) {
+		byte[] array = new byte[STREAM_BUFFER];
+		ByteBuffer buffer = ByteBuffer.wrap(array);
+		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+			long validLength = 0;
 			int bytesRead;
-			while ((bytesRead = is.read(buffer)) != -1) {
-				for (int i = 0; i < bytesRead; i++) {
-					if (!isWhitespace(buffer[i])) validLength++;
-				}
+			while ((bytesRead = channel.read(buffer)) != -1) {
+				validLength += countNonWhitespace(array, bytesRead);
+				buffer.clear();
 			}
-		}
-
-		// Pass 2: Calculate Hash
-		long h = (seed ^ validLength);
-		long k = 0;
-		int shift = 0;
-
-		try (InputStream is = Files.newInputStream(file)) {
-			int bytesRead;
-			while ((bytesRead = is.read(buffer)) != -1) {
-				for (int i = 0; i < bytesRead; i++) {
-					byte b = buffer[i];
+			channel.position(0);
+			long h = MURMUR_SEED ^ validLength;
+			long k = 0;
+			int shift = 0;
+			while ((bytesRead = channel.read(buffer)) != -1) {
+				int i = 0;
+				while (i < bytesRead) {
+					if (shift == 0 && i + 8 <= bytesRead) {
+						long word = (long) LITTLE_ENDIAN_LONGS.get(array, i);
+						if (!containsCurseForgeWhitespace(word)) {
+							h = murmurMix(h, word & 0xFFFFFFFFL);
+							h = murmurMix(h, word >>> 32);
+							i += 8;
+							continue;
+						}
+					}
+					byte b = array[i++];
 					if (isWhitespace(b)) continue;
-
-					// Append byte to current 4-byte chunk
-					k = k | ((long) (b & 0xFF) << shift);
+					k |= (long) (b & 0xFF) << shift;
 					shift += 8;
-
 					if (shift == 32) {
-						k = (k * m) & 0xFFFFFFFFL;
-						k ^= (k >>> r);
-						k = (k * m) & 0xFFFFFFFFL;
-
-						h = (h * m) & 0xFFFFFFFFL;
-						h ^= k;
-
-						// Reset chunk
+						h = murmurMix(h, k);
 						k = 0;
 						shift = 0;
 					}
 				}
+				buffer.clear();
+			}
+			if (shift > 0) {
+				h ^= k;
+				h = (h * MURMUR_M) & 0xFFFFFFFFL;
+			}
+			h ^= h >>> 13;
+			h = (h * MURMUR_M) & 0xFFFFFFFFL;
+			h ^= h >>> 15;
+			return String.valueOf(h);
+		}
+	}
+
+	private static long countNonWhitespace(byte[] array, int length) {
+		long validLength = 0;
+		int i = 0;
+		while (i + 8 <= length) {
+			long word = (long) LITTLE_ENDIAN_LONGS.get(array, i);
+			if (whitespaceHighBits(word) == 0) {
+				validLength += 8;
+				i += 8;
+				continue;
+			}
+			int end = i + 8;
+			while (i < end) {
+				if (!isWhitespace(array[i])) validLength++;
+				i++;
 			}
 		}
-
-		// Handle tail
-		if (shift > 0) {
-			h ^= k;
-			h = (h * m) & 0xFFFFFFFFL;
+		while (i < length) {
+			if (!isWhitespace(array[i])) validLength++;
+			i++;
 		}
+		return validLength;
+	}
 
-		h ^= (h >>> 13);
-		h = (h * m) & 0xFFFFFFFFL;
-		h ^= (h >>> 15);
+	private static long murmurMix(long h, long k) {
+		k = (k * MURMUR_M) & 0xFFFFFFFFL;
+		k ^= k >>> MURMUR_R;
+		k = (k * MURMUR_M) & 0xFFFFFFFFL;
+		h = (h * MURMUR_M) & 0xFFFFFFFFL;
+		return h ^ k;
+	}
 
-		return String.valueOf(h);
+	private static boolean containsCurseForgeWhitespace(long word) {
+		return whitespaceHighBits(word) != 0;
+	}
+
+	private static long whitespaceHighBits(long word) {
+		return repeatedByteHighBits(word, 0x09) | repeatedByteHighBits(word, 0x0A) | repeatedByteHighBits(word, 0x0D) | repeatedByteHighBits(word, 0x20);
+	}
+
+	private static long repeatedByteHighBits(long word, int value) {
+		long n = word ^ (BYTE_ONES * (value & 0xFF));
+		return (n - BYTE_ONES) & ~n & BYTE_HIGHS;
 	}
 
 	private static boolean isWhitespace(byte b) {
