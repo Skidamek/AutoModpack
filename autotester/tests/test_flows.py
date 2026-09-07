@@ -269,6 +269,7 @@ _FAKE_VERBS = {
     "launch_server": _noop,
     "prepare_client": _noop,
     "wait_server": _noop,
+    "restart_server": _noop,
     "launch_client": _launch_client,
     "wait_bridge": _wait_bridge,
     "seed_bootstrap": _seed_bootstrap,
