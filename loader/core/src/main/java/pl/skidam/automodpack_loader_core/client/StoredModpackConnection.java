@@ -48,7 +48,7 @@ public final class StoredModpackConnection implements AutoCloseable {
 		if (seeded == null) throw new IOException("Saved modpack connection is unavailable");
 		ConnectionJsons.ConnectionInfo connection = seeded.connection();
 		Secrets.Secret secret = seeded.secret();
-		ModpackUtils.ManifestFetchResult result = ModpackUtils.requestServerModpackContent(storage, connection, secret, allowAskingUser);
+		ManifestFetcher.ManifestFetchResult result = ManifestFetcher.requestServerModpackContent(storage, connection, secret, allowAskingUser);
 		if (!result.successful())
 			throw new IOException(result.failure() == null ? "Could not fetch the latest modpack generation" : result.failure().getMessage(), result.failure());
 		DownloadClient client = result.client();

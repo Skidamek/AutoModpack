@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
@@ -130,17 +131,9 @@ public class ModpackUpdater implements AutoCloseable {
 				&& selectedTarget.document().contentToken().equals(active.contentToken)
 				&& Objects.equals(selectedTarget.expectedPriorIntent(), selectedTarget.selection().intent()))
 			throw new IllegalArgumentException("Installed modpack target generation and group selection are already active");
-		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
-			objectAcquisition.acquireTargetObjects(selectedTarget.flatTarget(), cache, true);
-			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
-			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
-			planBuilder.preparePlanObjects(prepared.plan(), selectedTarget.flatTarget());
-			installedSwitchPlan = new ReviewedClientPlan<>(prepared, ReviewedUpdatePlan.pending(prepared.plan()));
-			String installedToken;
-			if (active != null && selectedTarget.manifest().modpackId().equals(active.modpackId)) installedToken = active.contentToken;
-			else installedToken = new JournalMirror(storage).lastEntryToken(selectedTarget.manifest().modpackId()).orElse("");
-			return updatePreview(prepared.plan(), selectedTarget, installedToken);
-		}
+		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = prepareReview(true, true);
+		installedSwitchPlan = reviewed;
+		return updatePreview(reviewed.prepared().plan(), selectedTarget, InstalledTokenRule.ACTIVE_OR_MIRROR_HEAD);
 	}
 
 	/** Applies the last installed-generation switch plan through the normal atomic transaction executor. */
@@ -148,18 +141,11 @@ public class ModpackUpdater implements AutoCloseable {
 		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = installedSwitchPlan;
 		if (reviewed == null || selectedTarget == null) throw new IllegalStateException("Installed modpack switch was not prepared");
 		if (!reviewed.review().isApproved()) reviewed.review().approve();
-		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
-		try {
-			recordChangelogs(prepared, selectedTarget);
-			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
-			changelogs.setRestartReasons(applyResult.reasonIds());
-			removalLifecycle.restartAfterApply(applyResult);
-		} catch (UpdateDeferredException e) {
-			LOGGER.warn("Installed modpack switch transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(UpdateType.SELECT, changelogs).restart(false);
-		} finally {
-			close();
-		}
+		// The switch flow reports its failure through its own caller, so its failure handling carries the failure out of the harness.
+		AtomicReference<Exception> propagated = new AtomicReference<>();
+		runReviewedFlow(new ApplyFlow("Installed modpack switch", () -> new ReLauncher(UpdateType.SELECT, changelogs).restart(false), propagated::set, this::close),
+				() -> removalLifecycle.restartAfterApply(commitReviewedPlan(reviewed)));
+		if (propagated.get() != null) throw propagated.get();
 	}
 
 	/**
@@ -367,7 +353,7 @@ public class ModpackUpdater implements AutoCloseable {
 		} catch (Exception e) {
 			close();
 			if (abortedByPlayer(e)) return;
-			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			showUpdateFailure(e);
 		}
 	}
 
@@ -410,51 +396,54 @@ public class ModpackUpdater implements AutoCloseable {
 	 * {@code applyFirstInstall} is set (trusted bootstrap).
 	 */
 	private void applySelectedTargetWithoutReview(boolean applyFirstInstall) {
-		try {
-			if (selectedTarget == null || serverModpackContent == null) {
-				LOGGER.info("Skipping launch apply because no resolved target is available");
-				return;
-			}
-			requireLiveConnection();
-			firstConnection = !new ClientGenerationStore(storage).hasLocalState(selectedTarget.manifest().modpackId());
-			consentedLocalModFiles = Map.of();
-			if (firstConnection && !applyFirstInstall) {
-				try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-					objectAcquisition.acquireTargetObjects(selectedTarget.flatTarget(), cache, false);
-				}
-				LOGGER.info("Launch apply is waiting for first-install review");
-				return;
-			}
-			long start = System.currentTimeMillis();
-			ClientUpdatePlanBuilder.PreparedPlan prepared = prepareSelectedPlan(false);
-			if (planWritesUnverifiedJar(prepared.plan())) {
-				LOGGER.warn("Launch apply aborted: unverified jars will not be written during preload; leaving the live pack unchanged");
-				return;
-			}
-			if (!firstConnection && !requiresReconciliation(prepared, storedTarget())) {
-				LOGGER.info("Launch apply reused the active projection");
-				return;
-			}
-			ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = new ReviewedClientPlan<>(prepared, ReviewedUpdatePlan.pending(prepared.plan()));
-			reviewed.review().approve();
-			recordChangelogs(prepared, selectedTarget);
-			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
-			LOGGER.info("Launch apply completed; restart required: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
-			finishLaunchApply(applyResult);
-		} catch (UpdateDeferredException e) {
-			LOGGER.warn("Launch apply transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(UpdateType.UPDATE, changelogs).restart(true);
-		} catch (Exception e) {
+		runReviewedFlow(new ApplyFlow("Launch apply", () -> new ReLauncher(UpdateType.UPDATE, changelogs).restart(true), e -> {
 			LOGGER.error("Failed to apply the selected modpack; no projection changes were made outside the existing transaction guarantees", e);
-			if (!preload && !abortedByPlayer(e)) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
-		} finally {
-			try {
-				if (preload) projectionLoader.loadSelectedActiveProjection();
-			} catch (Exception e) {
-				LOGGER.error("Failed to load the active modpack projection after launch apply", e);
-			}
-			close();
+			if (!preload && !abortedByPlayer(e)) showUpdateFailure(e);
+		}, this::closeLaunchApply), () -> launchApply(applyFirstInstall));
+	}
+
+	/** The launch apply's own steps: resolve the target, prepare without a preview, and commit the approved plan. */
+	private void launchApply(boolean applyFirstInstall) throws Exception {
+		if (selectedTarget == null || serverModpackContent == null) {
+			LOGGER.info("Skipping launch apply because no resolved target is available");
+			return;
 		}
+		requireLiveConnection();
+		firstConnection = !new ClientGenerationStore(storage).hasLocalState(selectedTarget.manifest().modpackId());
+		consentedLocalModFiles = Map.of();
+		if (firstConnection && !applyFirstInstall) {
+			try (var cache = FileCache.open(storage.fileCacheDirectory())) {
+				objectAcquisition.acquireTargetObjects(selectedTarget.flatTarget(), cache, false);
+			}
+			LOGGER.info("Launch apply is waiting for first-install review");
+			return;
+		}
+		long start = System.currentTimeMillis();
+		sourceCatalogue.startSourceFetch();
+		ClientUpdatePlanBuilder.PreparedPlan prepared = prepareReview(false, false).prepared();
+		if (planWritesUnverifiedJar(prepared.plan())) {
+			LOGGER.warn("Launch apply aborted: unverified jars will not be written during preload; leaving the live pack unchanged");
+			return;
+		}
+		if (!firstConnection && !requiresReconciliation(prepared, storedTarget())) {
+			LOGGER.info("Launch apply reused the active projection");
+			return;
+		}
+		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = pendingReview(prepared);
+		reviewed.review().approve();
+		ApplyResult applyResult = commitReviewedPlan(reviewed);
+		LOGGER.info("Launch apply completed; restart required: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
+		finishLaunchApply(applyResult);
+	}
+
+	/** Launch apply's close handling: hot-load the active projection when preloading, then close. */
+	private void closeLaunchApply() {
+		try {
+			if (preload) projectionLoader.loadSelectedActiveProjection();
+		} catch (Exception e) {
+			LOGGER.error("Failed to load the active modpack projection after launch apply", e);
+		}
+		close();
 	}
 
 	private void finishLaunchApply(ApplyResult applyResult) {
@@ -553,7 +542,7 @@ public class ModpackUpdater implements AutoCloseable {
 				return;
 			}
 			close();
-			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			showUpdateFailure(e);
 			return;
 		}
 	}
@@ -572,7 +561,7 @@ public class ModpackUpdater implements AutoCloseable {
 				try {
 					applyInstalledSwitch();
 				} catch (Exception e) {
-					if (!abortedByPlayer(e)) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+					if (!abortedByPlayer(e)) showUpdateFailure(e);
 				}
 			};
 			if (!ScreenManager.preview(preview, getModpackName(), this, (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), this::close)) {
@@ -580,7 +569,7 @@ public class ModpackUpdater implements AutoCloseable {
 				close();
 			}
 		} catch (Exception e) {
-			if (!abortedByPlayer(e)) ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			if (!abortedByPlayer(e)) showUpdateFailure(e);
 			close();
 		}
 	}
@@ -597,26 +586,20 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private ApplyStatus applyApprovedPlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed, long start) {
-		try {
-			if (isCancelledByPlayer()) return ApplyStatus.FAILED;
-			ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
-			recordChangelogs(prepared, selectedTarget);
-			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
-			changelogs.setRestartReasons(applyResult.reasonIds());
+		if (isCancelledByPlayer()) {
+			close();
+			return ApplyStatus.FAILED;
+		}
+		return runReviewedFlow(new ApplyFlow("Update", () -> {
+			if (!isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
+		}, e -> {
+			if (abortedByPlayer(e)) LOGGER.warn("Modpack update apply was aborted by the player", e);
+			else showUpdateFailure(e);
+		}, this::close), () -> {
+			ApplyResult applyResult = commitReviewedPlan(reviewed);
 			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 			removalLifecycle.restartAfterApply(applyResult);
-			return ApplyStatus.APPLIED;
-		} catch (UpdateDeferredException e) {
-			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			if (!isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
-			return ApplyStatus.DEFERRED;
-		} catch (Exception e) {
-			if (abortedByPlayer(e)) LOGGER.warn("Modpack update apply was aborted by the player", e);
-			else ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
-			return ApplyStatus.FAILED;
-		} finally {
-			close();
-		}
+		});
 	}
 
 	private void requireLiveConnection() throws IOException {
@@ -635,34 +618,73 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private void recordChangelogs(ClientUpdatePlanBuilder.PreparedPlan prepared, SelectedModpackTarget target) throws IOException {
-		String installedToken = installedToken(target.manifest().modpackId());
-		UpdatePreview applied = updatePreview(prepared.plan(), target, installedToken);
+		UpdatePreview applied = updatePreview(prepared.plan(), target, InstalledTokenRule.ACTIVE_BOOKMARK);
 		changelogs.replaceWith(applied.withReferences(sourceCatalogue.resolveMainPageReferences(prepared)));
 		LOGGER.info("Prepared update changes: {} changed, {} removed", changelogs.changedFiles().size(), changelogs.removedFiles().size());
 	}
 
-	/** Acquires all mutable target inputs before creating the plan that the player reviews. */
-	private ClientUpdatePlanBuilder.PreparedPlan preparePlanForReview() throws Exception {
-		return prepareSelectedPlan(true);
+	/**
+	 * The reviewed apply harness owning the shared tails of every flow once: a deferred transaction warns with the
+	 * flow's name and takes the flow's deferred restart, a failure goes to the flow's failure handling, and every
+	 * exit closes through the flow's close handling. The body is the flow's own steps; the harness absorbs none of
+	 * its decisions.
+	 */
+	private ApplyStatus runReviewedFlow(ApplyFlow flow, FlowBody body) {
+		try {
+			body.run();
+			return ApplyStatus.APPLIED;
+		} catch (UpdateDeferredException e) {
+			LOGGER.warn("{} transaction {} is waiting for the detached helper to release {}", flow.name(), e.getTransactionId(), e.getBlockedPath());
+			flow.deferredRestart().run();
+			return ApplyStatus.DEFERRED;
+		} catch (Exception e) {
+			flow.failed().accept(e);
+			return ApplyStatus.FAILED;
+		} finally {
+			flow.closed().run();
+		}
 	}
 
-	private ClientUpdatePlanBuilder.PreparedPlan prepareSelectedPlan(boolean playerFacing) throws Exception {
-		sourceCatalogue.startSourceFetch();
+	/** The shared commit of a reviewed plan: changelogs, then the transactional commit with its restart decision. */
+	private ApplyResult commitReviewedPlan(ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed) throws Exception {
+		recordChangelogs(reviewed.prepared(), selectedTarget);
+		return applyPreparedPlan(reviewed, selectedTarget);
+	}
+
+	/** A fresh pending review of a prepared plan, not yet approved by anyone. */
+	private static ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> pendingReview(ClientUpdatePlanBuilder.PreparedPlan prepared) {
+		return new ReviewedClientPlan<>(prepared, ReviewedUpdatePlan.pending(prepared.plan()));
+	}
+
+	/** The failure tail every flow shares: the player-facing update failure on the current screen. */
+	private static void showUpdateFailure(Exception e) {
+		ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+	}
+
+	/**
+	 * The shared preparation pipeline of every review: acquire the target's mutable objects, reconcile editable state,
+	 * and build the plan with its pending review. The switch flow prepares the plan objects up front; the preview
+	 * assembly stays the flow's own step, cut at the flow's installed-token rule.
+	 */
+	private ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> prepareReview(boolean playerFacing, boolean prepareObjects) throws Exception {
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			requireLiveConnection();
 			objectAcquisition.acquireTargetObjects(selectedTarget.flatTarget(), cache, playerFacing);
 			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
-			return planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
+			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
+			if (prepareObjects) planBuilder.preparePlanObjects(prepared.plan(), selectedTarget.flatTarget());
+			return pendingReview(prepared);
 		}
 	}
 
 	private PreviewRequestResult requestUpdatePreview() throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
-		ClientUpdatePlanBuilder.PreparedPlan prepared = preparePlanForReview();
+		sourceCatalogue.startSourceFetch();
+		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = prepareReview(true, false);
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
-		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = new ReviewedClientPlan<>(prepared, ReviewedUpdatePlan.pending(prepared.plan()));
 		reviewedUpdatePlan = reviewed;
+		ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
 		if (firstConnection && confirmationState.get() == ConfirmationState.PREVIEWING) {
 			reviewed.review().approve();
 			if (!confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
@@ -717,15 +739,21 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private boolean requestPreparedPlanPreview(ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
-		UpdatePreview preview = updatePreview(prepared.plan(), selectedTarget, installedToken(selectedTarget.manifest().modpackId()))
+		UpdatePreview preview = updatePreview(prepared.plan(), selectedTarget, InstalledTokenRule.ACTIVE_BOOKMARK)
 				.withReferences(sourceCatalogue.resolveMainPageReferences(prepared));
 		return ScreenManager.preview(preview, getModpackName(), this,
 				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction);
 	}
 
-	private String installedToken(String modpackId) throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
-		return state != null && modpackId.equals(state.modpackId) ? state.contentToken : "";
+	/** Which installed state cuts a preview's journal tail: only a matching active bookmark, or the mirror's last entry as the switch flow's fallback. */
+	private enum InstalledTokenRule {
+		ACTIVE_BOOKMARK, ACTIVE_OR_MIRROR_HEAD;
+
+		String installedToken(ClientStorage storage, String modpackId) throws IOException {
+			ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+			if (state != null && modpackId.equals(state.modpackId)) return state.contentToken;
+			return this == ACTIVE_OR_MIRROR_HEAD ? new JournalMirror(storage).lastEntryToken(modpackId).orElse("") : "";
+		}
 	}
 
 	/**
@@ -740,23 +768,11 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	/** Assembles the player-facing preview of one target advance: journal tail, featured notes, and feature manifest. */
-	private UpdatePreview updatePreview(UpdatePlan plan, SelectedModpackTarget target, String installedToken) throws IOException {
+	/** Assembles the player-facing preview of one target advance: journal tail, featured notes, and feature manifest, cut at the flow's installed-token rule. */
+	private UpdatePreview updatePreview(UpdatePlan plan, SelectedModpackTarget target, InstalledTokenRule tokenRule) throws IOException {
 		List<JournalEntry> journal = new JournalMirror(storage).entries(target.manifest().modpackId());
-		return UpdatePreview.create(plan, target.selection(), UpdatePreview.Mode.UPDATE, featuredNotes(journal, installedToken), updateJournal(journal, installedToken))
+		return UpdatePreview.forUpdate(plan, target.selection(), journal, tokenRule.installedToken(storage, target.manifest().modpackId()))
 				.withFeatureManifest(target.manifest());
-	}
-
-	/** The journal entries published after the installed state: after the installed token, or the whole journal when it is gone. */
-	private static List<JournalEntry> updateJournal(List<JournalEntry> journal, String installedToken) {
-		for (int index = journal.size() - 1; index >= 0; index--)
-			if (journal.get(index).contentToken().equals(installedToken)) return journal.subList(index + 1, journal.size());
-		return journal;
-	}
-
-	private static String featuredNotes(List<JournalEntry> journal, String installedToken) {
-		List<JournalEntry> range = updateJournal(journal, installedToken);
-		return range.isEmpty() ? "" : range.get(range.size() - 1).notes();
 	}
 
 	private PreviewRequestResult previewResult(ApplyStatus status) {
@@ -884,6 +900,14 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private enum PreviewRequestResult {
 		PREVIEW_SHOWN, PREVIEW_NOT_SHOWN, APPLIED, DEFERRED, FAILED
+	}
+
+	/** One reviewed flow's own tail decisions, stated by the flow instead of absorbed into the harness. */
+	private record ApplyFlow(String name, Runnable deferredRestart, Consumer<Exception> failed, Runnable closed) {}
+
+	@FunctionalInterface
+	private interface FlowBody {
+		void run() throws Exception;
 	}
 
 }

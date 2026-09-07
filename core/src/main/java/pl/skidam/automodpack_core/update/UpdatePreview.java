@@ -52,6 +52,19 @@ public final class UpdatePreview {
 		return create(decision, selection, mode, "", List.of());
 	}
 
+	/** Update preview of one target advance: the journal entries published after the installed state and its newest entry's patch notes. */
+	public static UpdatePreview forUpdate(UpdatePlan decision, ResolvedSelection selection, List<JournalEntry> journal, String installedToken) {
+		List<JournalEntry> tail = journalTail(journal, installedToken);
+		return create(decision, selection, Mode.UPDATE, tail.isEmpty() ? "" : tail.get(tail.size() - 1).notes(), tail);
+	}
+
+	/** The journal entries published after the installed state: after the installed token, or the whole journal when it is gone. */
+	public static List<JournalEntry> journalTail(List<JournalEntry> journal, String installedToken) {
+		for (int index = journal.size() - 1; index >= 0; index--)
+			if (journal.get(index).contentToken().equals(installedToken)) return journal.subList(index + 1, journal.size());
+		return journal;
+	}
+
 	/** The canonical logical consequences decided during reconciliation planning. */
 	public ChangeSet changeSet() {
 		return changeSet;
