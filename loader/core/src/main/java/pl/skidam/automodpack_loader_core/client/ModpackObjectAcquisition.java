@@ -79,7 +79,7 @@ final class ModpackObjectAcquisition {
 		}
 	}
 
-	Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingTargetObjects(ModpackJsons.ModpackContentFields target, FileCache cache) {
+	Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingTargetObjects(ModpackJsons.ModpackContentFields target, FileCache cache) throws IOException {
 		Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items = target.list == null ? List.of() : target.list;
 		return ModpackUtils.identifyUncachedFiles(uniqueObjects(items), cache, storage);
 	}

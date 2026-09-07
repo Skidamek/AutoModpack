@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -23,12 +25,69 @@ import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.ImmutableFiles;
+import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Measures and explicitly maintains the client shared object store. */
 public final class ClientObjectStore {
 
 	private ClientObjectStore() {}
+
+	/** How a store object that fails its named tripwire is handled before acquisition populates it. */
+	public enum CorruptObjectPolicy {
+		/** Evicts the corrupt object quietly and lets a failed eviction propagate; the caller immediately reacquires the bytes itself. */
+		EVICT_QUIETLY,
+		/** Evicts the corrupt object with the standard warning and reports a failed eviction in the acquisition result. */
+		EVICT_AND_REPORT,
+		/** Keeps a corrupt object in place; the verified copy replaces it atomically. */
+		KEEP
+	}
+
+	/** The outcome of one verified acquisition, carrying the failed eviction when the caller reports it. */
+	public record Acquisition(Outcome outcome, IOException evictionFailure) {
+		public enum Outcome {
+			PRESENT, COPIED, MISSING_SOURCE, EVICTION_FAILED
+		}
+
+		/** Whether the store already held the verified object before this acquisition ran. */
+		public boolean present() {
+			return outcome == Outcome.PRESENT;
+		}
+
+		/** Whether the store does not hold the verified object after this acquisition ran. */
+		public boolean missing() {
+			return outcome != Outcome.PRESENT && outcome != Outcome.COPIED;
+		}
+	}
+
+	/**
+	 * The one verified acquisition into the client CAS: keeps a store object that already passes its named tripwire,
+	 * otherwise handles a corrupt object per {@code corruptObjectPolicy} and copies the first candidate answering to
+	 * the same named identity into the store. A failed eviction surfaces as {@link Acquisition.Outcome#EVICTION_FAILED}
+	 * with its cause, or as {@code IOException} under {@link CorruptObjectPolicy#EVICT_QUIETLY} for callers that
+	 * reacquire the bytes themselves.
+	 */
+	public static Acquisition acquireVerified(Path storeObject, String sha1, long size, List<Path> candidates, FileCache cache, CorruptObjectPolicy corruptObjectPolicy) throws IOException {
+		if (FileIntegrity.matchesNamed(storeObject, size, sha1, cache)) return new Acquisition(Acquisition.Outcome.PRESENT, null);
+		IOException evictionFailure = null;
+		if (corruptObjectPolicy != CorruptObjectPolicy.KEEP && Files.exists(storeObject)) {
+			if (corruptObjectPolicy == CorruptObjectPolicy.EVICT_AND_REPORT) LOGGER.warn("Evicting corrupt store object {}", sha1);
+			try {
+				ImmutableFiles.deleteIfExists(storeObject);
+			} catch (IOException e) {
+				if (corruptObjectPolicy == CorruptObjectPolicy.EVICT_QUIETLY) throw e;
+				evictionFailure = e;
+			}
+		}
+		if (evictionFailure != null) return new Acquisition(Acquisition.Outcome.EVICTION_FAILED, evictionFailure);
+		for (Path candidate : candidates) {
+			if (!FileIntegrity.matchesObject(candidate, storeObject, size, sha1, cache)) continue;
+			VerifiedFileTransfer.copyAtomicImmutable(candidate, storeObject, size, sha1, cache);
+			return new Acquisition(Acquisition.Outcome.COPIED, null);
+		}
+		return new Acquisition(Acquisition.Outcome.MISSING_SOURCE, null);
+	}
 
 	/**
 	 * Stores one immutable byte sequence in the client CAS under its content hash, keeping any already valid object.
