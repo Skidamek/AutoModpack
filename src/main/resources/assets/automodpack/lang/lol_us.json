@@ -374,6 +374,7 @@
   "automodpack.vault.restoreInactivePack": "switch 2 dis modpak fus. restorin putz filez bak in da live game.",
   "automodpack.vault.restoreManagedFiles": "restorin putz game filez bak. modpak filez come bak wif nex updayt.",
   "automodpack.vault.restoreApplies": "putz %s bak ware it wuz.",
+  "automodpack.vault.restoreStillOwned": "dis modpak still uz dis path. use sav kopi instead.",
   "automodpack.management.deactivateTooltip": "turnz da modpak off. filez stay so u can turn it on agen. magic.",
   "automodpack.management.stopSyncingTooltip": "keepz ebery file exactly as it iz and stopz applyin servr updates til u resum.",
   "automodpack.management.resumeSyncingTooltip": "syncs dis pack to da servr current generation.",

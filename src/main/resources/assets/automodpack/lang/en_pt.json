@@ -374,6 +374,7 @@
   "automodpack.vault.restoreInactivePack": "Switch to this modpack first. Restorin' puts files back in the live game.",
   "automodpack.vault.restoreManagedFiles": "Restore puts game files back. Modpack files return with the next update.",
   "automodpack.vault.restoreApplies": "Puts %s back where it was.",
+  "automodpack.vault.restoreStillOwned": "Dis modpack still be usin' this path. Stash a copy instead.",
   "automodpack.management.deactivateTooltip": "Takes the modpack off duty. Its files stay, so ye can man it again.",
   "automodpack.management.stopSyncingTooltip": "Keeps e'ery file exactly as it be and stops takin' the server's updates 'til ye resume.",
   "automodpack.management.resumeSyncingTooltip": "Syncs this pack to the server's current generation.",

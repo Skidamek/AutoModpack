@@ -384,6 +384,7 @@
   "automodpack.vault.restoreInactivePack": "Najpierw przełącz się na ten modpack. Przywracanie odkłada pliki z powrotem do aktywnej gry.",
   "automodpack.vault.restoreManagedFiles": "Przywracanie odkłada pliki gry. Pliki modpacka wrócą z następną aktualizacją.",
   "automodpack.vault.restoreApplies": "Odkłada %s z powrotem na swoje miejsce.",
+  "automodpack.vault.restoreStillOwned": "Modpack nadal używa tej ścieżki. Zamiast tego użyj Zapisz kopię.",
   "automodpack.management.deactivateTooltip": "Wyłącza modpack. Jego pliki zostają, więc możesz go ponownie włączyć.",
   "automodpack.management.stopSyncingTooltip": "Zachowuje każdy plik dokładnie taki, jaki jest, i przestaje stosować aktualizacje serwera do wznowienia.",
   "automodpack.management.resumeSyncingTooltip": "Synchronizuje ten modpack z aktualną generacją serwera.",

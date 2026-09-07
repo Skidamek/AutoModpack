@@ -374,6 +374,7 @@
   "automodpack.vault.restoreInactivePack": "Először válts erre a modpackre. A visszaállítás a fájlokat az élő játékba teszi vissza.",
   "automodpack.vault.restoreManagedFiles": "A visszaállítás játékfájlokat tesz vissza. A modpack fájljai a következő frissítéssel térnek vissza.",
   "automodpack.vault.restoreApplies": "A(z) %s visszakerül a helyére.",
+  "automodpack.vault.restoreStillOwned": "A modpack még használja ezt az útvonalat. Használd inkább a Másolat mentése lehetőséget.",
   "automodpack.management.deactivateTooltip": "Kikapcsolja a modpacket. A fájljai megmaradnak, így újra aktiválhatod.",
   "automodpack.management.stopSyncingTooltip": "Minden fájlt pontosan úgy tart meg, ahogy van, és a folytatásig nem alkalmaz szerverfrissítéseket.",
   "automodpack.management.resumeSyncingTooltip": "Szinkronizálja ezt a modpackot a szerver jelenlegi generációjával.",
