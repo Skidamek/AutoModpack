@@ -3,10 +3,8 @@ package pl.skidam.automodpack.client.ui.screen;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -28,20 +26,22 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.widget.ChangeBrowserWidget;
+import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
 /** Shared vanilla-style file browser used for installed catalogues and generation diffs. */
 public class ChangeBrowserScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 600;
 	private static final int GAP = 6;
 	private static final int LINE_STEP = 10;
+	private static final int PICKER_ROW_HEIGHT = 14;
 	private final Screen parent;
 	private final Component heading;
 	private final Component description;
@@ -49,7 +49,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private final boolean warnUnverified;
 	private final long downloadBytes;
 	private ChangeSet changes;
-	private final Map<String, String> featureNames;
+	private final Map<String, String> groupNames;
 	private final BrowserAction auxiliaryAction;
 	private boolean closed;
 	private boolean cacheLookupStarted;
@@ -57,13 +57,14 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private final Set<String> collapsedFolders = new TreeSet<>();
 	private String search = "";
 	private String selectedContent = "";
-	private String selectedFeature = "";
+	private String selectedGroup;
 	private Boolean selectedSource = null;
 	private String selectedPath = "";
 	private ChangeBrowserWidget browser;
+	private RowListWidget groupPicker;
 	private EditBox searchField;
 	private Button contentButton;
-	private Button featureButton;
+	private Button groupButton;
 	private Button sourceButton;
 	private int browserTop;
 	private int browserBottom;
@@ -74,26 +75,27 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private String summaryText;
 	private final List<Button> paneButtons = new ArrayList<>();
 
-	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames) {
-		this(parent, heading, description, changes, featureNames, null, List.of(), false, 0);
+	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> groupNames) {
+		this(parent, heading, description, changes, groupNames, null, List.of(), false, 0, "");
 	}
 
-	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction) {
-		this(parent, heading, description, changes, featureNames, auxiliaryAction, List.of(), false, 0);
+	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> groupNames, BrowserAction auxiliaryAction) {
+		this(parent, heading, description, changes, groupNames, auxiliaryAction, List.of(), false, 0, "");
 	}
 
 	/** The preamble is a pre-wrapped text block (for example an entry's full patch notes) drawn between the description and the browser. */
-	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> featureNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble, boolean warnUnverified, long downloadBytes) {
+	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> groupNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble, boolean warnUnverified, long downloadBytes, String initialGroup) {
 		super(heading);
 		this.parent = parent;
 		this.heading = Objects.requireNonNull(heading, "browser heading");
 		this.description = Objects.requireNonNull(description, "browser description");
 		this.preamble = preamble == null ? List.of() : List.copyOf(preamble);
 		this.changes = Objects.requireNonNull(changes, "browser changes");
-		this.featureNames = Map.copyOf(featureNames == null ? Map.of() : featureNames);
+		this.groupNames = Map.copyOf(groupNames == null ? Map.of() : groupNames);
 		this.auxiliaryAction = auxiliaryAction;
 		this.warnUnverified = warnUnverified;
 		this.downloadBytes = Math.max(0, downloadBytes);
+		this.selectedGroup = initialGroup == null ? "" : initialGroup;
 	}
 
 	@Override
@@ -121,9 +123,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			rebuildBrowser();
 		});
 		this.contentButton = buttonWidget(controlsLeft, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleContent());
-		this.featureButton = buttonWidget(controlsLeft + GAP + controlWidth, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleFeature());
+		this.groupButton = buttonWidget(controlsLeft + GAP + controlWidth, controlsY, controlWidth, 20, VersionedText.literal(""), button -> toggleGroupPicker());
 		this.addRenderableWidget(this.contentButton);
-		this.addRenderableWidget(this.featureButton);
+		this.addRenderableWidget(this.groupButton);
 		if (warnUnverified) {
 			this.sourceButton = buttonWidget(controlsLeft + (GAP + controlWidth) * 2, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleSource());
 			this.addRenderableWidget(this.sourceButton);
@@ -131,7 +133,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		updateControlLabels();
 		List<ActionRow> actionRows = buildActionRows();
 		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
-		if (auxiliaryAction != null) actionButtons.get(actionButtons.size() - 2).active = auxiliaryAction.active();
+		if (auxiliaryAction != null) actionButtons.get(actionButtons.size() - 1).active = auxiliaryAction.active();
 		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
 		int summaryY = footerTop - this.font.lineHeight - 5;
 		// The pane reserves all three bands — path, facts, action rail — so selection never moves the layout.
@@ -144,25 +146,25 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		addPaneActions(this.paneActionsY);
 	}
 
-	/** The selected file's pane buttons on the details line: one per storefront link, then Copy hash. */
+	/** The selection's fixed details rail: Modrinth, CurseForge and Copy hash keep their places and just enable per selection. */
 	private void addPaneActions(int topY) {
 		for (Button button : paneButtons) this.removeWidget(button);
 		paneButtons.clear();
-		List<PlatformLink> platforms = platformLinks();
 		String hash = selectedHash();
-		if (platforms.isEmpty() && hash == null) return;
-		List<PaneAction> actions = new ArrayList<>();
-		for (PlatformLink platform : platforms) actions.add(new PaneAction(platform.label(), button -> Util.getPlatform().openUri(platform.url()), false));
-		if (hash != null) actions.add(new PaneAction(VersionedText.translatable("automodpack.browser.copyHash"), button -> Minecraft.getInstance().keyboardHandler.setClipboard(hash), true));
-		List<ActionAreaLayout.Action> geometry = new ArrayList<>();
-		for (int index = 0; index < actions.size(); index++) geometry.add(new ActionAreaLayout.Action(String.valueOf(index), ActionAreaLayout.Role.OPTIONAL));
-		ActionAreaLayout.Layout layout = ActionAreaLayout.fromTop(panelLeft(ActionAreaLayout.FOOTER_RAIL), topY, panelWidth(ActionAreaLayout.FOOTER_RAIL), ActionAreaLayout.GAP, List.of(new ActionAreaLayout.Row(ActionAreaLayout.RowKind.AUXILIARY, geometry)));
-		List<ActionAreaLayout.Placement> placements = layout.placements();
-		for (int index = 0; index < placements.size(); index++) {
-			ActionAreaLayout.Placement placement = placements.get(index);
-			PaneAction action = actions.get(index);
-			Button button = buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), action.label(), action.onPress());
-			if (action.copyHash()) setTooltip(button, VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
+		List<ActionAreaLayout.Action> geometry = List.of(
+				new ActionAreaLayout.Action("modrinth", ActionAreaLayout.Role.OPTIONAL),
+				new ActionAreaLayout.Action("curseforge", ActionAreaLayout.Role.OPTIONAL),
+				new ActionAreaLayout.Action("hash", ActionAreaLayout.Role.OPTIONAL));
+		ActionAreaLayout.Layout layout = ActionAreaLayout.fromTop(panelLeft(ActionAreaLayout.FOOTER_RAIL), topY, panelWidth(ActionAreaLayout.FOOTER_RAIL), ActionAreaLayout.GAP,
+				List.of(new ActionAreaLayout.Row(ActionAreaLayout.RowKind.AUXILIARY, geometry)));
+		for (ActionAreaLayout.Placement placement : layout.placements()) {
+			Button button = switch (placement.id()) {
+				case "modrinth" -> buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.modrinth"), press -> openPage(platformUrl("modrinth")));
+				case "curseforge" -> buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.curseforge"), press -> openPage(platformUrl("curseforge")));
+				default -> buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.copyHash"), press -> copyHash());
+			};
+			button.active = placement.id().equals("hash") ? hash != null : platformUrl(placement.id()) != null;
+			if (placement.id().equals("hash") && hash != null) setTooltip(button, VersionedText.translatable("automodpack.browser.copyHashTooltip").append("\n" + hash));
 			paneButtons.add(button);
 			this.addRenderableWidget(button);
 		}
@@ -170,28 +172,30 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	private List<ActionRow> buildActionRows() {
 		List<ActionRow> actionRows = new ArrayList<>();
-		if (auxiliaryAction != null) actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this)), secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+		if (auxiliaryAction != null) actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
+				optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this))));
 		else actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		return actionRows;
 	}
 
 	/** One representative hash for the selected file: the hash of the state written on disk. */
 	private String selectedHash() {
-		ChangeBrowserProjection.FileRow file = this.browser == null ? null : this.browser.selectedFile();
+		ChangeBrowserProjection.FileRow file = pickerOpen() ? null : this.browser == null ? null : this.browser.selectedFile();
 		return file == null ? null : file.writtenHash();
 	}
 
 	private void rebuildBrowser() {
 		if (this.minecraft == null) return;
-		if (this.browser != null) this.removeWidget(this.browser);
 		ChangeBrowserProjection.Filter filter = new ChangeBrowserProjection.Filter(search,
-				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedFeature.isBlank() ? Set.of() : Set.of(selectedFeature), selectedSource);
+				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedGroup.isBlank() ? Set.of() : Set.of(selectedGroup), selectedSource);
 		this.currentProjection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE, filter).collapse(collapsedFolders);
-		this.browser = new ChangeBrowserWidget(this.currentProjection, collapsedFolders, featureNames, warnUnverified, referencesResolved, this::toggleFolder, this::onFileSelected,
+		recomputeSummary();
+		if (pickerOpen()) return;
+		if (this.browser != null) this.removeWidget(this.browser);
+		this.browser = new ChangeBrowserWidget(this.currentProjection, collapsedFolders, groupNames, warnUnverified, referencesResolved, this::toggleFolder, this::onFileSelected,
 				this.minecraft, this.width, this.height, browserTop, browserBottom);
 		this.addRenderableWidget(this.browser);
 		this.browser.selectPath(selectedPath);
-		recomputeSummary();
 	}
 
 	/** The totals line under the browser, computed from the cached projection whenever the projection changes. */
@@ -226,15 +230,55 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		rebuildBrowser();
 	}
 
-	private void cycleFeature() {
-		selectedFeature = next(selectedFeature, features());
+	private void cycleSource() {
+		selectedSource = selectedSource == null ? Boolean.FALSE : selectedSource.booleanValue() ? null : Boolean.TRUE;
 		updateControlLabels();
 		rebuildBrowser();
 	}
 
-	private void cycleSource() {
-		selectedSource = selectedSource == null ? Boolean.FALSE : selectedSource.booleanValue() ? null : Boolean.TRUE;
-		updateControlLabels();
+	private boolean pickerOpen() {
+		return groupPicker != null;
+	}
+
+	/** Opens the group filter as a dropdown panel under its button; the browser list steps aside while it is up. */
+	private void toggleGroupPicker() {
+		if (pickerOpen()) {
+			closeGroupPicker();
+			return;
+		}
+		if (this.browser != null) this.removeWidget(this.browser);
+		int width = panelWidth(PANEL_WIDTH);
+		List<String> optionIds = new ArrayList<>();
+		optionIds.add("");
+		List<String> ids = new ArrayList<>(groupIds());
+		ids.sort(Comparator.comparing(this::groupName, String.CASE_INSENSITIVE_ORDER));
+		optionIds.addAll(ids);
+		List<RowListWidget.Row> rows = new ArrayList<>(optionIds.size());
+		for (String optionId : optionIds) {
+			String label = optionId.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups").getString() : groupName(optionId);
+			ChatFormatting color = optionId.equals(selectedGroup) ? ChatFormatting.YELLOW : ChatFormatting.WHITE;
+			rows.add(new RowListWidget.Row(List.of(VersionedText.literal(truncateToWidth(this.font, label, width - 12)).withStyle(color))));
+		}
+		/*? if >=1.19.4 {*/
+		int pickerTop = groupButton.getY() + ActionAreaLayout.BUTTON_HEIGHT;
+		/*?} else {*/
+		/*int pickerTop = groupButton.y + ActionAreaLayout.BUTTON_HEIGHT;
+		*//*?}*/
+		int visibleRows = Math.max(1, Math.min(optionIds.size(), (browserBottom - pickerTop) / PICKER_ROW_HEIGHT));
+		this.groupPicker = new RowListWidget(this.minecraft, this.width, this.height, width, pickerTop, pickerTop + visibleRows * PICKER_ROW_HEIGHT, PICKER_ROW_HEIGHT, rows,
+				index -> pickGroup(optionIds.get(index)), null);
+		this.addRenderableWidget(this.groupPicker);
+	}
+
+	private void pickGroup(String groupId) {
+		selectedGroup = groupId;
+		closeGroupPicker();
+	}
+
+	private void closeGroupPicker() {
+		if (groupPicker == null) return;
+		this.removeWidget(groupPicker);
+		this.groupPicker = null;
 		rebuildBrowser();
 	}
 
@@ -244,10 +288,15 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		return List.copyOf(values);
 	}
 
-	private List<String> features() {
+	private List<String> groupIds() {
 		Set<String> values = new TreeSet<>();
 		for (ChangeSet.Change change : changes.changes()) for (ChangeSet.Occurrence occurrence : change.occurrences()) values.addAll(occurrence.featureIds());
 		return List.copyOf(values);
+	}
+
+	private String groupName(String groupId) {
+		String name = groupNames.get(groupId);
+		return name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : name;
 	}
 
 	private static String next(String current, List<String> values) {
@@ -260,12 +309,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private void updateControlLabels() {
 		if (contentButton != null) contentButton.setMessage(VersionedText.translatable("automodpack.browser.contentFilter",
 				selectedContent.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable("automodpack.browser.content." + selectedContent).getString()));
-		if (featureButton != null) {
-			featureButton.active = !features().isEmpty();
-			String label = featureNames.get(selectedFeature);
-			if (selectedFeature.isBlank()) label = VersionedText.translatable("automodpack.browser.all").getString();
-			else if (label == null || label.isBlank()) label = VersionedText.translatable("automodpack.browser.unknownFeature").getString();
-			featureButton.setMessage(VersionedText.translatable("automodpack.browser.featureFilter", label));
+		if (groupButton != null) {
+			groupButton.active = !groupIds().isEmpty();
+			groupButton.setMessage(VersionedText.translatable("automodpack.browser.groupFilter",
+					selectedGroup.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : groupName(selectedGroup)));
 		}
 		if (sourceButton != null) sourceButton.setMessage(VersionedText.translatable("automodpack.browser.sourceFilter",
 				selectedSource == null ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom").getString()));
@@ -286,14 +333,14 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				changes = referenced;
 				// In-place refresh instead of a full screen rebuild, so the search field keeps its content and focus.
 				/*? if >=1.21.4 {*/
-				double scrollAmount = this.browser.scrollAmount();
+				double scrollAmount = this.browser == null ? 0 : this.browser.scrollAmount();
 				/*?} else {*/
-				/*double scrollAmount = this.browser.getScrollAmount();
+				/*double scrollAmount = this.browser == null ? 0 : this.browser.getScrollAmount();
 				*//*?}*/
 				rebuildBrowser();
+				if (pickerOpen() || this.browser == null) return;
 				// Both vanilla setters clamp, so a stale scroll from the smaller old list is safe.
 				this.browser.setScrollAmount(scrollAmount);
-				recomputeSummary();
 				addPaneActions(this.paneActionsY);
 			});
 		});
@@ -313,33 +360,25 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		return true;
 	}
 
-	private List<PlatformLink> platformLinks() {
-		if (selectedPath == null || selectedPath.isBlank()) return List.of();
-		LinkedHashMap<String, PlatformLink> distinct = new LinkedHashMap<>();
+	/** The selected file's first cached page URL for the platform, or null when it has none. */
+	private String platformUrl(String platform) {
+		if (selectedPath == null || selectedPath.isBlank()) return null;
 		for (ChangeSet.Change change : changes.changes()) {
 			if (!change.logicalPath().equals(selectedPath)) continue;
-			for (ChangeSet.Occurrence occurrence : change.occurrences()) {
-				for (String reference : occurrence.references()) {
-					PlatformLink link = toPlatformLink(reference);
-					distinct.putIfAbsent(link.key(), link);
-				}
-			}
+			for (ChangeSet.Occurrence occurrence : change.occurrences())
+				for (String reference : occurrence.references())
+					if (ChangeBrowserWidget.platform(reference).equals(platform)) return reference;
 		}
-		return List.copyOf(distinct.values());
+		return null;
 	}
 
-	private static PlatformLink toPlatformLink(String url) {
-		try {
-			URI uri = new URI(url);
-			String host = uri.getHost();
-			if (host == null || host.isBlank()) return new PlatformLink("open", VersionedText.translatable("automodpack.changelog.openPage"), url);
-			String lower = host.toLowerCase(Locale.ROOT);
-			if (lower.equals("modrinth.com") || lower.endsWith(".modrinth.com")) return new PlatformLink("modrinth", VersionedText.translatable("automodpack.browser.modrinth"), url);
-			if (lower.equals("curseforge.com") || lower.endsWith(".curseforge.com") || lower.equals("curseforge.net") || lower.endsWith(".curseforge.net")) return new PlatformLink("curseforge", VersionedText.translatable("automodpack.browser.curseforge"), url);
-			return new PlatformLink(lower, VersionedText.literal(host), url);
-		} catch (URISyntaxException | IllegalArgumentException ignored) {
-			return new PlatformLink("open", VersionedText.translatable("automodpack.changelog.openPage"), url);
-		}
+	private void openPage(String url) {
+		if (url != null) Util.getPlatform().openUri(url);
+	}
+
+	private void copyHash() {
+		String hash = selectedHash();
+		if (hash != null) Minecraft.getInstance().keyboardHandler.setClipboard(hash);
 	}
 
 	private void back() {
@@ -363,7 +402,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.summaryY, TextColors.WHITE);
 		if (currentProjection == null || currentProjection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
-		ChangeBrowserProjection.FileRow selected = this.browser == null ? null : this.browser.selectedFile();
+		ChangeBrowserProjection.FileRow selected = pickerOpen() || this.browser == null ? null : this.browser.selectedFile();
 		if (selected == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.selectHint").withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop, TextColors.WHITE);
 		else {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selected.path(), contentWidth)).withStyle(ChatFormatting.WHITE), this.width / 2, this.paneTop, TextColors.WHITE);
@@ -376,6 +415,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
+		if (pickerOpen()) {
+			closeGroupPicker();
+			return false;
+		}
 		return handleBackOnEscape(this::back);
 	}
 
@@ -385,24 +428,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		super.removed();
 	}
 
-	private record PlatformLink(String key, Component label, String url) {
-		private PlatformLink {
-			key = Objects.requireNonNull(key, "platform key");
-			label = Objects.requireNonNull(label, "platform label");
-			url = Objects.requireNonNull(url, "platform url");
-		}
-	}
-
-	private record PaneAction(Component label, Button.OnPress onPress, boolean copyHash) {
-		private PaneAction {
-			label = Objects.requireNonNull(label, "pane action label");
-			onPress = Objects.requireNonNull(onPress, "pane action press");
-		}
-	}
-
 	public record BrowserAction(Component label, Consumer<Screen> action, boolean active) {
 		public BrowserAction {
-			label = Objects.requireNonNull(label, "browser action label");
+			label = Objects.requireNonNull(label, "browser action");
 			action = Objects.requireNonNull(action, "browser action");
 		}
 	}

@@ -52,7 +52,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 			actions.add(pack.detached()
 					? new Action("automodpack.management.resumeSyncing", this::resumeSyncing, VersionedText.translatable("automodpack.management.resumeSyncingTooltip"))
 					: new Action("automodpack.management.stopSyncing", this::stopSyncing, VersionedText.translatable("automodpack.management.stopSyncingTooltip")));
-		actions.add(new Action("automodpack.management.groups", this::openFeatures));
+		actions.add(new Action("automodpack.management.groups", this::openGroups));
 		actions.add(new Action("automodpack.management.packFiles", this::openFiles));
 		actions.add(new Action("automodpack.management.history", this::openHistory));
 		if (pack.active()) actions.add(new Action("automodpack.management.deactivate", this::deactivate, VersionedText.translatable("automodpack.management.deactivateTooltip")));
@@ -69,14 +69,14 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 			}
 			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, rowActions.toArray(ActionDefinition[]::new)));
 		}
+		// Back closes the grid: one action area under the header, so the menu never floats apart from its footer.
+		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
 		for (Button button : addActionAreaAt(PANEL_WIDTH, actionGridTop(), rows.toArray(ActionRow[]::new))) actionButtons.add(button);
 		// Destructive verbs say what they do before the player commits: Deactivate keeps files, Remove deletes them.
 		for (int index = 0; index < actions.size() && index < actionButtons.size(); index++) {
 			Component tooltip = actions.get(index).tooltip();
 			if (tooltip != null) setTooltip(actionButtons.get(index), tooltip);
 		}
-		this.addActionArea(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
 		updateActions();
 	}
 
@@ -122,7 +122,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		controller.repair(this, pack, this::updateCompleted);
 	}
 
-	private void openFeatures() {
+	private void openGroups() {
 		if (busy) return;
 		ScreenImpl.setScreen(ModpackSelectionScreen.forInstalledRecord(this, pack.record(), false, false));
 	}
@@ -180,7 +180,8 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	}
 
 	private void updateActions() {
-		for (int index = 0; index < actionButtons.size(); index++) {
+		// The trailing Back row never locks: the player can always leave, even mid-operation.
+		for (int index = 0; index < actionButtons.size() - 1; index++) {
 			boolean primary = index == 0;
 			actionButtons.get(index).active = !busyVisible && (!primary || !pack.active() || pack.connectionAvailable() && !upToDate);
 		}
@@ -200,15 +201,14 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		return y + ActionAreaLayout.GAP;
 	}
 
-	/** Picks the widest column count whose grid stays clear of the footer rail; 3 columns still keeps every button at or above the 88px minimum width. */
+	/** Picks the widest column count whose grid — including its Back row — stays clear of the bottom edge; 3 columns still keeps every button at or above the 88px minimum width. */
 	private int actionColumns(int actionCount) {
-		int footerTop = actionAreaTop(PANEL_WIDTH, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(VersionedText.translatable("automodpack.back"), button -> {})));
 		int gridTop = actionGridTop();
+		int bottomLimit = this.height - 28;
 		for (int columns = 2; columns <= 3; columns++) {
-			int rows = (actionCount + columns - 1) / columns;
+			int rows = (actionCount + columns - 1) / columns + 1;
 			int bottom = gridTop + rows * ActionAreaLayout.BUTTON_HEIGHT + (rows - 1) * ActionAreaLayout.GAP;
-			if (bottom <= footerTop - ActionAreaLayout.GAP) return columns;
+			if (bottom <= bottomLimit - ActionAreaLayout.GAP) return columns;
 		}
 		return 3;
 	}

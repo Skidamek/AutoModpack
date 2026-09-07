@@ -69,14 +69,20 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		List<ActionRow> actionRows = List.of(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
-		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new)) - 6;
-		if (!entries.isEmpty()) {
-			int width = panelWidth(PANEL_WIDTH);
-			List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
-			for (int index = 0; index < entries.size(); index++) rows.add(row(entries.get(index), width - TEXT_MARGIN * 2));
-			this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, width, LIST_TOP, listBottom, ROW_HEIGHT, rows, this::openEntry, this::showComponentTooltip));
+		ActionRow[] rowArray = actionRows.toArray(ActionRow[]::new);
+		if (entries.isEmpty()) {
+			this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
+			return;
 		}
-		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
+		int width = panelWidth(PANEL_WIDTH);
+		int rowsHeight = entries.size() * ROW_HEIGHT;
+		List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
+		for (int index = 0; index < entries.size(); index++) rows.add(row(entries.get(index), width - TEXT_MARGIN * 2));
+		// The entries and their action row form one block: centered when they fit, scrolling above the pinned action when they do not.
+		BlockLayout layout = layoutBlockWithActions(LIST_TOP, rowsHeight, 6, rowArray);
+		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rowArray);
+		int listBottom = layout.scrolls() ? layout.actionsTop() - 6 : layout.contentTop() + rowsHeight;
+		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, width, layout.contentTop(), listBottom, ROW_HEIGHT, rows, this::openEntry, this::showComponentTooltip));
 	}
 
 	/** One journal entry as a self-contained row: date, first note lines, and the diff summary. */
@@ -144,7 +150,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, platformCacheDirectory());
 			this.minecraft.execute(() -> {
 				if (closed) return;
-				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, Map.of(), restoreAction, notes, false, 0));
+				ScreenImpl.setScreen(new ChangeBrowserScreen(this, heading, description, referenced, Map.of(), restoreAction, notes, false, 0, ""));
 			});
 		});
 	}

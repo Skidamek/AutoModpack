@@ -29,6 +29,7 @@ import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -292,11 +293,22 @@ final class InstalledModpackController {
 	}
 
 	void openFiles(Screen parent, Pack pack) {
-		Map<String, String> featureNames = new TreeMap<>();
-		pack.record().manifest().groups().forEach((groupId, group) -> featureNames.put(groupId,
-				group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : group.displayName()));
 		ScreenImpl.setScreen(new ChangeBrowserScreen(parent, VersionedText.translatable("automodpack.files.title", pack.name()),
-				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), featureNames));
+				VersionedText.translatable("automodpack.files.description"), ChangeSet.catalogue(pack.record().manifest()), groupNames(pack.record().manifest())));
+	}
+
+	/** Display names for the active pack's groups, for browsers that only see group ids, like the changelog. */
+	Map<String, String> activeGroupNames() {
+		PackDocument record = activeRecord(activeModpackId());
+		return record == null ? Map.of() : groupNames(record.manifest());
+	}
+
+	/** A group id to display-name map for a manifest; unnamed groups fall back to "Unknown group". */
+	static Map<String, String> groupNames(GroupManifest manifest) {
+		Map<String, String> names = new TreeMap<>();
+		manifest.groups().forEach((groupId, group) -> names.put(groupId,
+				group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : group.displayName()));
+		return Map.copyOf(names);
 	}
 
 	void openPreservedFiles(Screen parent, Runnable released) {
