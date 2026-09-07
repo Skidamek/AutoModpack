@@ -374,6 +374,7 @@
   "automodpack.vault.restoreInactivePack": "Wechsle zuerst zu diesem Modpack. Wiederherstellen legt Dateien ins laufende Spiel zurück.",
   "automodpack.vault.restoreManagedFiles": "Wiederherstellen legt Spieldateien zurück. Modpack-Dateien kommen mit dem nächsten Update.",
   "automodpack.vault.restoreApplies": "Legt %s wieder an seinen Platz.",
+  "automodpack.vault.restoreStillOwned": "Das Modpack nutzt diesen Pfad noch. Verwende stattdessen Kopie speichern.",
   "automodpack.management.deactivateTooltip": "Schaltet das Modpack aus. Die Dateien bleiben, damit du es wieder aktivieren kannst.",
   "automodpack.management.stopSyncingTooltip": "Behält jede Datei genau bei, wie sie ist, und wendet keine Server-Updates an, bis du fortsetzt.",
   "automodpack.management.resumeSyncingTooltip": "Synchronisiert dieses Modpack mit der aktuellen Generation des Servers.",

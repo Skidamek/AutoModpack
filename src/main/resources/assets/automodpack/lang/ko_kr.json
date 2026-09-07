@@ -369,6 +369,7 @@
   "automodpack.vault.restoreInactivePack": "먼저 이 모드팩으로 전환하세요. 복원하면 파일이 실행 중인 게임으로 돌아갑니다.",
   "automodpack.vault.restoreManagedFiles": "복원은 게임 파일을 되돌립니다. 모드팩 파일은 다음 업데이트와 함께 돌아옵니다.",
   "automodpack.vault.restoreApplies": "%s을(를) 원래 자리에 되돌립니다.",
+  "automodpack.vault.restoreStillOwned": "모드팩이 아직 이 경로를 사용하고 있습니다. 대신 사본 저장을 쓰세요.",
   "automodpack.management.deactivateTooltip": "모드팩을 끕니다. 파일은 남으니 다시 활성화할 수 있습니다.",
   "automodpack.management.stopSyncingTooltip": "모든 파일을 그대로 유지하며, 재개할 때까지 서버 업데이트를 적용하지 않습니다.",
   "automodpack.management.resumeSyncingTooltip": "이 모드팩을 서버의 현재 세대와 동기화합니다.",

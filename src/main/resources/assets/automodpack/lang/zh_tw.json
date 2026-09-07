@@ -369,6 +369,7 @@
   "automodpack.vault.restoreInactivePack": "請先切換到此模組包。還原會將檔案放回執行中的遊戲。",
   "automodpack.vault.restoreManagedFiles": "還原會放回遊戲檔案。模組包檔案會隨下次更新一起回來。",
   "automodpack.vault.restoreApplies": "將 %s 放回原處。",
+  "automodpack.vault.restoreStillOwned": "模組包仍在使用此路徑。請改用「儲存副本」。",
   "automodpack.management.deactivateTooltip": "關閉此模組包。檔案會留下，所以你可以再次啟用。",
   "automodpack.management.stopSyncingTooltip": "讓所有檔案完全保持原樣，並在你恢復之前停止套用伺服器更新。",
   "automodpack.management.resumeSyncingTooltip": "將此模組包同步到伺服器目前的世代。",

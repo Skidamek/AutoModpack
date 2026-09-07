@@ -384,6 +384,7 @@
   "automodpack.vault.restoreInactivePack": "Napiyrsz przełōncz sie na tyn modpak. Prziwrōcanie dŏ pliki nazŏd do aktywnyj gry.",
   "automodpack.vault.restoreManagedFiles": "Prziwrōcanie dŏ pliki gry nazŏd. Pliki modpaka wrōcōm ze nastympnōm aktualizacyjōm.",
   "automodpack.vault.restoreApplies": "Dŏ %s nazŏd na jego plac.",
+  "automodpack.vault.restoreStillOwned": "Modpak nadal używo tyj ścieżki. Użyj zamiast tego Zapisz kopijo.",
   "automodpack.management.deactivateTooltip": "Wyłōnczo modpak. Jego pliki ôstawiōm, więc możesz go znowu włōnczyć.",
   "automodpack.management.stopSyncingTooltip": "Zachowuje kożdy zbiôr dokładnie taki, jaki je, i przestaje stosować aktualizacyje serwera do wznowienia.",
   "automodpack.management.resumeSyncingTooltip": "Synchronizuje ten modpack z aktualnōm generacyjōm serwera.",

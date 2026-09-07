@@ -384,6 +384,7 @@
   "automodpack.vault.restoreInactivePack": "Спочатку ввімкніть цей модпак. Повернення кладе файли назад у гру.",
   "automodpack.vault.restoreManagedFiles": "Повернення кладе ігрові файли на місце. Файли модпака повернуться з наступним оновленням.",
   "automodpack.vault.restoreApplies": "Кладе %s туди, де він був.",
+  "automodpack.vault.restoreStillOwned": "Модпак ще використовує цей шлях. Натомість збережіть копію.",
   "automodpack.management.deactivateTooltip": "Вимикає модпак. Його файли залишаються, його можна ввімкнути знову.",
   "automodpack.management.stopSyncingTooltip": "Зберігає кожен файл точно таким, як він є, і припиняє застосовувати оновлення сервера до відновлення.",
   "automodpack.management.resumeSyncingTooltip": "Синхронізує цей модпак з актуальним поколінням сервера.",

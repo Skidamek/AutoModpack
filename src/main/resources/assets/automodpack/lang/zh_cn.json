@@ -369,6 +369,7 @@
   "automodpack.vault.restoreInactivePack": "请先切换到此整合包。恢复会把文件放回正在运行的游戏。",
   "automodpack.vault.restoreManagedFiles": "恢复会放回游戏文件。整合包文件会随下次更新一起回来。",
   "automodpack.vault.restoreApplies": "将 %s 放回原处。",
+  "automodpack.vault.restoreStillOwned": "整合包仍在使用此路径。请改用“保存副本”。",
   "automodpack.management.deactivateTooltip": "关闭此整合包。文件会留下，所以你可以再次启用。",
   "automodpack.management.stopSyncingTooltip": "让所有文件完全保持原样，并在你恢复之前停止应用服务器更新。",
   "automodpack.management.resumeSyncingTooltip": "将此模组包同步到服务器当前的世代。",
