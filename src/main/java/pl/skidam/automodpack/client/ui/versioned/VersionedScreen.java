@@ -187,6 +187,48 @@ public class VersionedScreen extends Screen {
 		return buildActionArea(footerWidth, bottomY, false, rows).layout().top();
 	}
 
+	/** The total height of the given rows: one button height each plus the row gap. */
+	protected final int actionAreaHeight(ActionRow... rows) {
+		int visible = 0;
+		for (ActionRow row : rows) if (!row.actions().isEmpty()) visible++;
+		return visible == 0 ? 0 : visible * ActionAreaLayout.BUTTON_HEIGHT + (visible - 1) * ActionAreaLayout.GAP;
+	}
+
+	/** Where a content block and its action rows land: the whole block floats centered when it fits, pins to the bottom edge otherwise. */
+	protected record BlockLayout(int contentTop, int actionsTop, boolean scrolls) {}
+
+	/**
+	 * Lays content of the given height out with its action rows as one block between the top reserve and
+	 * the footer anchor. A fitting block centers in the space and the rows sit right under the content;
+	 * only a real overflow scrolls the content while the rows pin above the bottom edge.
+	 */
+	protected final BlockLayout layoutBlockWithActions(int topReserve, int contentHeight, int bottomMargin, ActionRow... rows) {
+		int bottomAnchor = this.height - 28;
+		int actionsTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, bottomAnchor, rows);
+		int blockHeight = contentHeight + ActionAreaLayout.GAP + actionAreaHeight(rows);
+		int available = actionsTop - bottomMargin - topReserve;
+		if (blockHeight <= available) {
+			int contentTop = topReserve + (available - blockHeight) / 2;
+			return new BlockLayout(contentTop, contentTop + contentHeight + ActionAreaLayout.GAP, false);
+		}
+		return new BlockLayout(topReserve, actionsTop, true);
+	}
+
+	/** One laid-out dialog: the body window from {@link #layoutDialogColumn} plus where its action rows go. */
+	protected record DialogLayout(DialogColumn column, int actionsTop) {}
+
+	/** The dialog version of {@link #layoutBlockWithActions}: body plus optional pinned stack plus action rows as one centered block when it fits. */
+	protected final DialogLayout layoutDialogWithActions(int topReserve, int bodyHeight, int stackHeight, ActionRow... rows) {
+		BlockLayout block = layoutBlockWithActions(topReserve, bodyHeight + (stackHeight > 0 ? ActionAreaLayout.SEAM + stackHeight : 0), 4, rows);
+		if (!block.scrolls()) {
+			// stackTop is where the stack starts, mirroring layoutDialogColumn: right under the body, with the rows after the budgeted stack.
+			DialogColumn column = new DialogColumn(block.contentTop(), block.contentTop() + bodyHeight + TextScrollWidget.CONTENT_PADDING, false, block.contentTop() + bodyHeight + ActionAreaLayout.SEAM);
+			return new DialogLayout(column, block.actionsTop());
+		}
+		return new DialogLayout(layoutDialogColumn(topReserve, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows), bodyHeight, stackHeight),
+				actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows));
+	}
+
 	private List<Button> addActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
 		ActionArea area = buildActionArea(footerWidth, anchorY, fromTop, rows);
 		List<Button> buttons = new ArrayList<>(area.layout().placements().size());
