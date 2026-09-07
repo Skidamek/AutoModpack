@@ -32,6 +32,8 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEntry> implements RowViewport {
 	public static final int LINE_STEP = 10;
 	private static final int TEXT_MARGIN = 6;
+	/** The hovered-row wash: soft enough to sit under text, strong enough to read as a control. */
+	private static final int HOVER_COLOR = 0x40FFFFFF;
 	private final int contentWidth;
 	private final int rowHeight;
 	private final IntConsumer rowPicked;
@@ -195,10 +197,12 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 			int lineWidth = Math.max(1, entryWidth - TEXT_MARGIN * 2);
 			int lines = row.lines().size();
 			int textY = y + Math.max(0, (rowHeight - lines * LINE_STEP) / 2) + 1;
+			// A hovered row washes over, so rows read as clickable and not as static text.
+			if (hovered) matrices.fill(x, y, x + entryWidth, y + rowHeight, HOVER_COLOR);
 			for (MutableComponent line : row.lines()) {
 				MutableComponent drawn = line;
 				if (minecraft.font.width(line) > lineWidth) drawn = VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, line.getString(), lineWidth)).withStyle(line.getStyle());
-				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + TEXT_MARGIN, textY, TextColors.WHITE);
+				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + Math.max(0, (entryWidth - minecraft.font.width(drawn)) / 2), textY, TextColors.WHITE);
 				textY += LINE_STEP;
 			}
 			if (hovered && row.tooltip() != null && tooltipShower != null) tooltipShower.showTooltip(matrices, row.tooltip(), mouseX, mouseY);
