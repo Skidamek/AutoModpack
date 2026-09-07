@@ -31,6 +31,7 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_loader_core.client.ManifestFetcher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
@@ -44,7 +45,7 @@ final class ClientLoginUpdateFlow {
 
 	static CompletableFuture<LoginUpdateResponse> reconcile(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, ClientStorage storage) {
-		return ModpackUtils.requestServerModpackContentAsync(storage, connectionInfo, secret, true).thenComposeAsync(manifestResult -> {
+		return ManifestFetcher.requestServerModpackContentAsync(storage, connectionInfo, secret, true).thenComposeAsync(manifestResult -> {
 			if (!manifestResult.successful()) {
 				disconnectImmediately(handler);
 				presentManifestFailure(manifestResult);
@@ -114,7 +115,7 @@ final class ClientLoginUpdateFlow {
 		});
 	}
 
-	private static void presentManifestFailure(ModpackUtils.ManifestFetchResult result) {
+	private static void presentManifestFailure(ManifestFetcher.ManifestFetchResult result) {
 		Throwable failure = result.failure() == null ? new IOException("Modpack manifest fetch returned no failure cause") : result.failure();
 		if (DownloadClient.findCause(failure, CertificateTrustCancelledException.class) != null) return;
 		CertificatePinMismatchException mismatch = DownloadClient.findCause(failure, CertificatePinMismatchException.class);
@@ -123,7 +124,7 @@ final class ClientLoginUpdateFlow {
 					.withDiagnosticDetails("Origin: " + mismatch.getOrigin(), "Expected fingerprint: " + mismatch.getExpectedFingerprint(),
 							"Presented fingerprint: " + mismatch.getPresentedFingerprint());
 			ScreenManager.failure(request);
-		} else if (result.state() == ModpackUtils.ManifestFetchState.OPERATION_FAILED) {
+		} else if (result.state() == ManifestFetcher.ManifestFetchState.OPERATION_FAILED) {
 			presentFailure(failure, "automodpack.error.hostContent", FailureCategory.HOST);
 		} else {
 			presentFailure(failure, "automodpack.error.connection", FailureCategory.CONNECTION);

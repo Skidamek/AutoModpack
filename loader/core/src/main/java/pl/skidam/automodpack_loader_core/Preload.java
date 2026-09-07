@@ -32,8 +32,8 @@ import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_loader_core.client.ClientPendingUpdateRecovery;
+import pl.skidam.automodpack_loader_core.client.ManifestFetcher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
@@ -221,7 +221,7 @@ public class Preload {
 			return;
 		}
 
-		var manifestResult = ModpackUtils.requestServerModpackContent(storage, connectionInfo, secret, false);
+		var manifestResult = ManifestFetcher.requestServerModpackContent(storage, connectionInfo, secret, false);
 		SelectedModpackTarget selectedTarget = loadStoredTarget();
 		DownloadClient downloadClient = null;
 		if (manifestResult.successful()) {
