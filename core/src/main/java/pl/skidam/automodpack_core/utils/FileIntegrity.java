@@ -102,7 +102,7 @@ public final class FileIntegrity {
 			if (leftAttributes.isSymbolicLink() || rightAttributes.isSymbolicLink()) return false;
 			String leftKey = FileCache.fingerprint(left, leftAttributes).fileKey();
 			String rightKey = FileCache.fingerprint(right, rightAttributes).fileKey();
-			if (leftKey != null && rightKey != null && !"null".equals(leftKey) && !"null".equals(rightKey)) return leftKey.equals(rightKey);
+			if (leftKey != null && rightKey != null) return leftKey.equals(rightKey);
 			return Files.isSameFile(left, right);
 		} catch (IOException e) {
 			return false;

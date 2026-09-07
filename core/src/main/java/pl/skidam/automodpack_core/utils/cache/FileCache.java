@@ -251,7 +251,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
 		WindowsFileStat.Snapshot nativeStat = WindowsFileStat.read(path);
 		long changeTimeNanos = nativeStat != null ? nativeStat.changeTimeNanos() : unixChangeTimeNanos(path);
-		String fileKey = nativeStat != null ? nativeStat.fileKey() : attrs.fileKey() == null ? "null" : attrs.fileKey().toString();
+		String fileKey = nativeStat != null ? nativeStat.fileKey() : attrs.fileKey() == null ? null : attrs.fileKey().toString();
 		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos, attrs.size(), fileKey);
 	}
 
@@ -297,11 +297,11 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		return statsMatch(cached, fingerprint) && !isRacyTimestamp(cached, fingerprint);
 	}
 
-	/** Git {@code ce_match_stat}: size, mtime, ctime, creation time, and inode/file key. */
+	/** Git {@code ce_match_stat}: size, mtime, ctime, creation time, and inode/file key. An unknown key (null) matches only another unknown. */
 	static boolean statsMatch(CachedFile cached, FileFingerprint fingerprint) {
 		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
 				&& cached.creationTimeNanos() == fingerprint.creationTimeNanos() && cached.changeTimeNanos() == fingerprint.changeTimeNanos()
-				&& cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey());
+				&& Objects.equals(cached.fileKey(), fingerprint.fileKey());
 	}
 
 	/**
@@ -311,7 +311,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	 */
 	static boolean immutableStatsMatch(CachedFile cached, FileFingerprint fingerprint) {
 		return cached != null && cached.contentHash() != null && cached.size() == fingerprint.size() && cached.lastModifiedNanos() == fingerprint.lastModifiedNanos()
-				&& cached.fileKey() != null && cached.fileKey().equals(fingerprint.fileKey());
+				&& Objects.equals(cached.fileKey(), fingerprint.fileKey());
 	}
 
 	/**
