@@ -61,6 +61,8 @@ class FakeBridge:
         self.preservation_restored = False
         self.preservation_copy_saved = False
         self.vault_claim_selected = False
+        self.conflict_jar_unowned = False
+        self.switch_count = 0
         self.vault_message: str | None = None
         self.storage_running = False
         self.baseline_snapshots: dict[Path, bytes] = {}
@@ -125,13 +127,13 @@ class FakeBridge:
                 "other": self._group_list_rows(),
                 "textFields": [],
             },
-            "group_inspector": {
-                "screenClass": "GroupInspectorScreen",
+            "group_files": {
+                "screenClass": "ChangeBrowserScreen",
                 "buttons": [{"id": 39, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
             },
             "feature_conflict": {
-                "screenClass": "FeatureConflictScreen",
+                "screenClass": "GroupConflictScreen",
                 "buttons": [{"id": 50, "text": "Use Alternative", "enabled": True, "visible": True},
                             {"id": 51, "text": "Back", "enabled": True, "visible": True}],
                 "textFields": [],
@@ -288,8 +290,8 @@ class FakeBridge:
         elif element_id == 10 and self.screen == "skip_verification":
             self.screen = "cert"
         elif element_id == 38 and self.screen == "groups":
-            self.screen = "group_inspector"
-        elif element_id == 39 and self.screen == "group_inspector":
+            self.screen = "group_files"
+        elif element_id == 39 and self.screen == "group_files":
             self.screen = "groups"
         elif element_id == 3:
             # Download on the honesty confirm approves the plan and applies it directly.
@@ -370,6 +372,7 @@ class FakeBridge:
                     self._capture_editable_overlay(self.selected_pack)
                     self.selected_pack = self.pending_pack
                     self.pending_pack = None
+                    self.switch_count += 1
                 self._write_modpack()
                 self._restore_editable_overlay(self.selected_pack)
                 self.screen = "restart"
@@ -460,6 +463,7 @@ class FakeBridge:
             self.selected_claim_path = None
             self.selected_claim_pack = None
             self.vault_message = None
+            self.conflict_jar_unowned = True
             self.screen = "preservation"
         elif element_id == 83 and self.screen == "preservation":
             self._select_vault_claim("packaaa", "config/amp-autotest-gamma.cfg")
@@ -887,6 +891,9 @@ class FakeBridge:
 
     def _selected_claim_restorable(self) -> bool:
         if not self.vault_claim_selected or self.selected_claim_pack is None:
+            return False
+        # The conflict jar is still projected by its freshly applied pack; a later pack apply cycle drops it.
+        if self.selected_claim_pack == "packbbb" and self.switch_count < 1:
             return False
         return self.selected_pack == {"packaaa": "A", "packbbb": "B"}[self.selected_claim_pack]
 
