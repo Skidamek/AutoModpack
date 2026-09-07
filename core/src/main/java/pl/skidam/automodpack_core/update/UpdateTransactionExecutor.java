@@ -113,7 +113,7 @@ public final class UpdateTransactionExecutor {
 	private void preparePendingReplacement() throws IOException {
 		ClientStorage storage = context.storage();
 		if (Files.exists(storage.repairJournalFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("An offline repair must finish before an update can start");
-		UpdateTransaction pending = readPersistedTransaction();
+		UpdateTransaction pending = UpdateTransaction.read(storage.transactionFile());
 		if (pending == null) return;
 		if (pending.phase == UpdateTransaction.Phase.COMMITTED) {
 			cleanupTransactionDirectories(pending);
@@ -166,7 +166,7 @@ public final class UpdateTransactionExecutor {
 
 	private Execution recoverPersisted(String expectedTransactionId) throws IOException {
 		return withFileCache(cache -> {
-			UpdateTransaction pending = readPersistedTransaction();
+			UpdateTransaction pending = UpdateTransaction.read(context.storage().transactionFile());
 			if (pending == null) return new Execution(UpdateTransaction.Status.SUCCESS, null, null, null, null);
 			if (expectedTransactionId != null && !expectedTransactionId.equals(pending.transactionId))
 				throw new IOException("The requested update transaction was superseded by a newer pending request");
@@ -194,18 +194,6 @@ public final class UpdateTransactionExecutor {
 	private ClientConfigJsons.ClientConfigFieldsV3 readClientConfig() {
 		return ConfigTools.read(context.storage().clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
-	}
-
-	private UpdateTransaction readPersistedTransaction() throws IOException {
-		if (!Files.exists(context.storage().transactionFile(), LinkOption.NOFOLLOW_LINKS)) return null;
-		try {
-			return ConfigTools.read(context.storage().transactionFile(), UpdateTransaction.class)
-					.orElseThrow(() -> new IOException("Persisted update transaction is missing"));
-		} catch (IOException e) {
-			throw e;
-		} catch (RuntimeException e) {
-			throw new IOException("Persisted update transaction is invalid", e);
-		}
 	}
 
 	private Execution executePersisted(UpdateTransaction transaction) throws IOException {
@@ -499,49 +487,28 @@ public final class UpdateTransactionExecutor {
 
 	private void captureBaselines(UpdateTransaction transaction) throws IOException {
 		if (transaction.plannedBaselineCaptures.isEmpty()) return;
-		Path baselinePath = context.storage().baselineFile(transaction.modpackId);
-		ClientStorageJsons.ClientBaselineFields baseline = readBaseline(baselinePath, transaction.modpackId);
-		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
-		for (ClientStorageJsons.ClientBaselineFields.EntryFields entry : baseline.entries) entries.put(entry.logicalPath, entry);
+		ClientBaseline baseline = ClientBaseline.read(context.storage(), transaction.modpackId);
+		Map<String, ClientBaseline.Entry> entries = new TreeMap<>(baseline.entriesByPath());
 		boolean changed = false;
 		for (BaselineCapture capture : transaction.plannedBaselineCaptures) {
 			String logicalPath = capture.relativePath();
 			if (entries.containsKey(logicalPath)) continue;
 			Path source = resolve(capture.root(), capture.relativePath(), transaction);
-			ClientStorageJsons.ClientBaselineFields.EntryFields entry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
-			entry.logicalPath = logicalPath;
-			entry.baselineGenerationId = "";
+			ClientBaseline.Entry entry;
 			if (capture.absent()) {
 				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Baseline path was expected to be absent: " + source);
-				entry.absent = true;
-				entry.objectHash = "";
-				entry.size = -1;
+				entry = new ClientBaseline.Entry(logicalPath, "", -1, true, "");
 			} else {
 				if (!FileIntegrity.matches(source, capture.expectedSize(), capture.expectedHash(), fileCache)) throw new IOException("Baseline source changed: " + source);
 				Path object = context.storage().objectFile(capture.expectedHash());
 				VerifiedFileTransfer.copyAtomicImmutable(source, object, capture.expectedSize(), capture.expectedHash(), fileCache);
-				entry.objectHash = capture.expectedHash().toLowerCase(Locale.ROOT);
-				entry.size = capture.expectedSize();
+				entry = new ClientBaseline.Entry(logicalPath, capture.expectedHash().toLowerCase(Locale.ROOT), capture.expectedSize(), false, "");
 			}
 			entries.put(logicalPath, entry);
 			changed = true;
 		}
 		if (!changed) return;
-		baseline.entries = new ArrayList<>(entries.values());
-		Files.createDirectories(baselinePath.getParent());
-		ConfigTools.writeAtomic(baselinePath, baseline);
-	}
-
-	private ClientStorageJsons.ClientBaselineFields readBaseline(Path path, String modpackId) throws IOException {
-		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
-			ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
-			empty.modpackId = modpackId;
-			return empty;
-		}
-		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Baseline state is not a regular file");
-		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(path, ClientStorageJsons.ClientBaselineFields.class).orElseThrow(() -> new IOException("Baseline state is empty"));
-		if (baseline.schemaVersion != 1 || !modpackId.equals(baseline.modpackId) || baseline.entries == null) throw new IOException("Baseline state identity is invalid");
-		return baseline;
+		new ClientBaseline(transaction.modpackId, new ArrayList<>(entries.values())).write(context.storage());
 	}
 
 	private void claimSelection(UpdateTransaction transaction) throws IOException {

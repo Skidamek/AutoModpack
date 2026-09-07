@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.PinnedMods;
 import pl.skidam.automodpack_core.modpack.ModpackId;
@@ -79,7 +78,7 @@ public final class UpdatePlanner {
 	}
 
 	public record SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest, Map<String, FileState> previousEditableOverlays,
-			ClientStorageJsons.ClientBaselineFields baseline, Set<String> availableBaselineObjects) {
+			ClientBaseline baseline, Set<String> availableBaselineObjects) {
 		public SelectionContext(String previousModpackId, ModpackJsons.ModpackContentFields previousManifest) {
 			this(previousModpackId, previousManifest, Map.of(), null, Set.of());
 		}
@@ -97,7 +96,7 @@ public final class UpdatePlanner {
 		}
 	}
 
-	public record RemovalInput(ModpackJsons.ModpackContentFields installedManifest, ClientStorageJsons.ClientBaselineFields baseline,
+	public record RemovalInput(ModpackJsons.ModpackContentFields installedManifest, ClientBaseline baseline,
 			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, GeneratedCopyState generatedCopies, ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig) {
 		public RemovalInput {
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
@@ -117,22 +116,11 @@ public final class UpdatePlanner {
 		if (input.generatedCopies() != null && (!installed.modpackId.equals(input.generatedCopies().modpackId())
 				|| !packTarget.contentToken().equals(input.generatedCopies().contentToken())))
 			throw new IllegalArgumentException("Removal generated-copy state identity is invalid");
-		if (input.baseline() == null || !installed.modpackId.equals(input.baseline().modpackId) || input.baseline().entries == null)
+		if (input.baseline() == null || !installed.modpackId.equals(input.baseline().modpackId()))
 			throw new IllegalArgumentException("Removal baseline identity is invalid");
 		if (input.plannedClientConfig() == null) throw new IllegalArgumentException("Removal client config is missing");
 
-		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselines = new TreeMap<>();
-		for (var entry : input.baseline().entries) {
-			if (entry == null || entry.logicalPath == null || !LogicalPath.normalize(entry.logicalPath).equals(entry.logicalPath)
-					|| baselines.put(entry.logicalPath, entry) != null)
-				throw new IllegalArgumentException("Removal baseline contains duplicate or incomplete entries");
-			if (entry.absent) {
-				if (entry.objectHash == null || !entry.objectHash.isEmpty() || entry.size != -1)
-					throw new IllegalArgumentException("Absent removal baseline contains file metadata");
-			} else if (!HashUtils.isSha1(entry.objectHash) || entry.size < 0) {
-				throw new IllegalArgumentException("Removal baseline file metadata is invalid");
-			}
-		}
+		Map<String, ClientBaseline.Entry> baselines = input.baseline().entriesByPath();
 		Map<FileKey, FileState> projected = new HashMap<>(input.files());
 		Set<FileKey> projectedScope = new HashSet<>(input.files().keySet());
 		Map<FileKey, Operation> operations = new HashMap<>();
@@ -166,7 +154,7 @@ public final class UpdatePlanner {
 			if (state == null || !state.regularFile() || state.sha1() == null) continue;
 			OwnershipLedger.Content current = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!ledgerEntry.historicalHashes().contains(current)) continue;
-			ClientStorageJsons.ClientBaselineFields.EntryFields baseline = baselines.get(ledgerEntry.logicalPath());
+			ClientBaseline.Entry baseline = baselines.get(ledgerEntry.logicalPath());
 			if (restoreOwnedLiveFile(key, state, baseline, input.availableBaselineObjects(), true, projected, operations, preservations))
 				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}
@@ -320,7 +308,7 @@ public final class UpdatePlanner {
 	}
 
 	private static ChangeSet consequences(List<Operation> operations, Map<FileKey, FileState> originalFiles, ModpackJsons.ModpackContentFields target,
-			OwnershipLedger ledger, Set<RestartReason> restartReasons, boolean removal, ClientStorageJsons.ClientBaselineFields baseline) {
+			OwnershipLedger ledger, Set<RestartReason> restartReasons, boolean removal, ClientBaseline baseline) {
 		Map<FileKey, Operation> operationsByFile = operations.stream().collect(Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), Function.identity()));
 		Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetFiles = target.list == null ? Map.of() : sortedItems(target.list);
 		List<ChangeSet.Change> changes = new ArrayList<>();
@@ -343,7 +331,7 @@ public final class UpdatePlanner {
 		}
 
 		Set<String> targetPaths = targetFiles.keySet();
-		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries = removal ? baselineEntries(baseline) : Map.of();
+		Map<String, ClientBaseline.Entry> baselineEntries = removal ? baseline.entriesByPath() : Map.of();
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
 			if (!removal && targetPaths.contains(ledgerEntry.logicalPath())) continue;
 			Optional<FileKey> optionalKey = managedCleanupKey(ledgerEntry.logicalPath());
@@ -372,9 +360,8 @@ public final class UpdatePlanner {
 		return ChangeSet.of(changes, effects);
 	}
 
-	private static boolean consequenceBaselineMatches(FileState current, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
-		return baseline != null && !baseline.absent && HashUtils.isSha1(baseline.objectHash)
-				&& baseline.size >= 0 && current.regularFile() && baseline.size == current.size() && baseline.objectHash.equalsIgnoreCase(current.sha1());
+	private static boolean consequenceBaselineMatches(FileState current, ClientBaseline.Entry baseline) {
+		return baseline != null && !baseline.absent() && current.regularFile() && baseline.size() == current.size() && baseline.objectHash().equalsIgnoreCase(current.sha1());
 	}
 
 	private static void planBaselineCaptures(Map<FileKey, FileState> original, Map<FileKey, Operation> operations,
@@ -399,7 +386,7 @@ public final class UpdatePlanner {
 	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> installedPaths, Set<String> targetPaths, SelectionContext selection, boolean preserveReplacedBytes,
 			Map<FileKey, FileState> projected,
 			Map<FileKey, Operation> operations, List<Preservation> preservations, EnumSet<RestartReason> restartReasons) {
-		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselines = selection == null ? Map.of() : baselineEntries(selection.baseline(), ledger.modpackId());
+		Map<String, ClientBaseline.Entry> baselines = selection == null || selection.baseline() == null ? Map.of() : selection.baseline().entriesByPath();
 		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
 			if (!installedPaths.contains(entry.logicalPath()) || targetPaths.contains(entry.logicalPath())) continue;
 			Optional<FileKey> candidateKey = managedCleanupKey(entry.logicalPath());
@@ -409,7 +396,7 @@ public final class UpdatePlanner {
 			if (state == null || !state.regularFile() || state.sha1() == null) continue;
 			OwnershipLedger.Content content = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!entry.historicalHashes().contains(content)) continue;
-			ClientStorageJsons.ClientBaselineFields.EntryFields baseline = baselines.get(entry.logicalPath());
+			ClientBaseline.Entry baseline = baselines.get(entry.logicalPath());
 			if (selection == null || selection.baseline() == null) {
 				preservations.add(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size()));
 				delete(operations, projected, key, state.sha1());
@@ -421,38 +408,25 @@ public final class UpdatePlanner {
 		}
 	}
 
-	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline, String modpackId) {
-		if (baseline == null || !Objects.equals(modpackId, baseline.modpackId) || baseline.entries == null) return Map.of();
-		return baselineEntries(baseline);
+	private static boolean baselineMatches(FileState state, ClientBaseline.Entry baseline) {
+		return !baseline.absent() && matches(state, baseline.objectHash(), baseline.size());
 	}
 
-	private static Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> baselineEntries(ClientStorageJsons.ClientBaselineFields baseline) {
-		if (baseline == null || baseline.entries == null) return Map.of();
-		Map<String, ClientStorageJsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
-		for (var entry : baseline.entries) if (entry != null && entry.logicalPath != null) entries.put(LogicalPath.normalize(entry.logicalPath), entry);
-		return entries;
-	}
-
-	private static boolean baselineMatches(FileState state, ClientStorageJsons.ClientBaselineFields.EntryFields baseline) {
-		return !baseline.absent && HashUtils.isSha1(baseline.objectHash) && baseline.size >= 0 && matches(state, baseline.objectHash, baseline.size);
-	}
-
-	private static boolean restoreOwnedLiveFile(FileKey key, FileState state, ClientStorageJsons.ClientBaselineFields.EntryFields baseline,
+	private static boolean restoreOwnedLiveFile(FileKey key, FileState state, ClientBaseline.Entry baseline,
 			Set<String> availableBaselineObjects, boolean preserveReplacedBytes, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, List<Preservation> preservations) {
 		if (baseline != null && baselineMatches(state, baseline)) return false;
 		String currentHash = state.sha1().toLowerCase(Locale.ROOT);
 		// Callers prove these exact bytes belong to the installed selection before a missing
 		// baseline is interpreted as no pre-install file to restore.
-		if (baseline == null || baseline.absent) {
+		if (baseline == null || baseline.absent()) {
 			preservations.add(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
 			delete(operations, projected, key, currentHash);
 			return true;
 		}
-		if (!HashUtils.isSha1(baseline.objectHash) || baseline.size < 0) return false;
-		String baselineHash = HashUtils.normalizeSha1(baseline.objectHash);
+		String baselineHash = baseline.objectHash();
 		if (!availableBaselineObjects.contains(baselineHash)) return false;
 		if (preserveReplacedBytes) preservations.add(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
-		install(operations, projected, key, baselineHash, baseline.size, currentHash);
+		install(operations, projected, key, baselineHash, baseline.size(), currentHash);
 		return true;
 	}
 

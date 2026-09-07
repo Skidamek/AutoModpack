@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,7 +17,6 @@ import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -84,13 +82,7 @@ class UpdatePreviewTest {
 	void removalDoesNotReportLiveFileAlreadyMatchingBaseline() {
 		ModpackJsons.ModpackContentFields installed = manifest(item("config/kept.json", OLD_HASH, 7, "config"),
 				entry("config/kept.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
-		ClientStorageJsons.ClientBaselineFields baseline = new ClientStorageJsons.ClientBaselineFields();
-		baseline.modpackId = installed.modpackId;
-		ClientStorageJsons.ClientBaselineFields.EntryFields baselineEntry = new ClientStorageJsons.ClientBaselineFields.EntryFields();
-		baselineEntry.logicalPath = "config/kept.json";
-		baselineEntry.objectHash = OLD_HASH;
-		baselineEntry.size = 7;
-		baseline.entries = new ArrayList<>(List.of(baselineEntry));
+		ClientBaseline baseline = new ClientBaseline(installed.modpackId, List.of(new ClientBaseline.Entry("config/kept.json", OLD_HASH, 7, false, "")));
 		Map<FileKey, FileState> files = Map.of(
 				new FileKey(Root.PROJECTION, "config/kept.json"), new FileState(OLD_HASH, 7, true),
 				new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true));

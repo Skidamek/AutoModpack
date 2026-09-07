@@ -224,22 +224,9 @@ public final class ClientObjectStore {
 
 	private static void collectBaselines(ClientStorage storage, ExpectedSizes retained) throws IOException {
 		for (Path modpack : childDirectories(storage.baselinesDirectory(), "client baselines")) {
-			String modpackId = modpack.getFileName().toString();
-			requireModpackId(modpackId, "client baseline directory");
-			Path baseline = modpack.resolve("baseline.json");
-			if (!Files.exists(baseline, LinkOption.NOFOLLOW_LINKS)) continue;
-			FileTrees.requireRegularFile(baseline, "client baseline");
-			ClientStorageJsons.ClientBaselineFields fields = readJson(baseline, ClientStorageJsons.ClientBaselineFields.class, "client baseline");
-			if (fields.schemaVersion != 1 || !modpackId.equals(fields.modpackId) || fields.entries == null) throw new IOException("Client baseline identity is invalid: " + baseline);
-			for (var entry : fields.entries) {
-				if (entry == null || entry.logicalPath == null || entry.objectHash == null) throw new IOException("Client baseline entry is incomplete: " + baseline);
-				if (entry.absent) {
-					if (!entry.objectHash.isEmpty() || entry.size != -1) throw new IOException("Absent client baseline entry has content: " + baseline);
-				} else {
-					if (entry.size < 0) throw new IOException("Client baseline entry size is invalid: " + baseline);
-					retained.require(entry.objectHash, entry.size, "client baseline");
-				}
-			}
+			String modpackId = requireModpackId(modpack.getFileName().toString(), "client baseline directory");
+			for (ClientBaseline.Entry entry : ClientBaseline.read(storage, modpackId).entries())
+				if (!entry.absent()) retained.require(entry.objectHash(), entry.size(), "client baseline");
 		}
 	}
 
@@ -279,13 +266,11 @@ public final class ClientObjectStore {
 	}
 
 	private static void collectTransaction(ClientStorage storage, ExpectedSizes retained) throws IOException {
-		Path transactionPath = storage.transactionFile();
-		if (!Files.exists(transactionPath, LinkOption.NOFOLLOW_LINKS)) return;
-		FileTrees.requireRegularFile(transactionPath, "client transaction");
-		UpdateTransaction transaction = readJson(transactionPath, UpdateTransaction.class, "client transaction");
+		UpdateTransaction transaction = UpdateTransaction.read(storage.transactionFile());
+		if (transaction == null) return;
 		if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION || transaction.operations == null || transaction.projectedFinalState == null
 				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null || transaction.plannedConflicts == null)
-			throw new IOException("Client transaction fields are incomplete: " + transactionPath);
+			throw new IOException("Client transaction fields are incomplete: " + storage.transactionFile());
 		for (UpdatePlan.Operation operation : transaction.operations) {
 			if (operation == null) throw new IOException("Client transaction contains an incomplete operation");
 			retained.ifPresent(operation.expectedObjectHash(), operation.expectedSize(), "in-flight transaction operation");

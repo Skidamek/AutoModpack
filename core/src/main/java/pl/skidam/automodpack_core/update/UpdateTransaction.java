@@ -1,6 +1,10 @@
 package pl.skidam.automodpack_core.update;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -11,6 +15,7 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
@@ -64,6 +69,17 @@ public final class UpdateTransaction {
 	public String resultMessage;
 
 	public UpdateTransaction() {}
+
+	/** Reads the persisted transaction file, returning null when none exists; corrupt state or non-regular files are IO failures. */
+	public static UpdateTransaction read(Path path) throws IOException {
+		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return null;
+		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Persisted update transaction is not a regular file: " + path);
+		try {
+			return ConfigTools.read(path, UpdateTransaction.class).orElseThrow(() -> new IOException("Persisted update transaction is empty: " + path));
+		} catch (RuntimeException e) {
+			throw new IOException("Persisted update transaction is invalid: " + path, e);
+		}
+	}
 
 	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
 			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {

@@ -24,6 +24,7 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.update.ClientBaseline;
 import pl.skidam.automodpack_core.update.ClientOverlaySnapshot;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -106,7 +107,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	record RemovalPreparation(UpdatePlan plan, ModpackJsons.ModpackContentFields installed,
-			ClientStorageJsons.ClientBaselineFields baseline, SelectionIntent expectedPriorIntent, ClientConfigJsons.ClientConfigFieldsV3 currentConfig,
+			ClientBaseline baseline, SelectionIntent expectedPriorIntent, ClientConfigJsons.ClientConfigFieldsV3 currentConfig,
 			ClientConfigJsons.ClientConfigFieldsV3 plannedConfig, Map<UpdatePlan.FileKey, UpdatePlan.FileState> files,
 			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		RemovalPreparation {
@@ -115,7 +116,7 @@ final class ClientUpdatePlanBuilder {
 		}
 	}
 
-	private record AvailableBaseline(ClientStorageJsons.ClientBaselineFields fields, Set<String> objectHashes) {}
+	private record AvailableBaseline(ClientBaseline baseline, Set<String> objectHashes) {}
 
 	/** Inspection phase: observes live, overlay and projection state and produces the plan; expects {@link #reconcileEditableState} to have run already. */
 	PreparedPlan buildPlan(Input input, FileCache cache, ModFileCache modCache) throws Exception {
@@ -166,7 +167,7 @@ final class ClientUpdatePlanBuilder {
 
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			AvailableBaseline availableBaseline = readAvailableBaseline(installed.modpackId, cache);
-			ClientStorageJsons.ClientBaselineFields baseline = availableBaseline.fields();
+			ClientBaseline baseline = availableBaseline.baseline();
 			ClientProjectionView.Snapshot projection = projectionView.snapshot(cache);
 			// Deliberate, documented side effect: the baseline above had to observe pre-reconciliation state, while the inspection below must observe post-reconciliation state.
 			reconcileEditableState(cache, projection, null);
@@ -240,21 +241,14 @@ final class ClientUpdatePlanBuilder {
 			overlaySnapshots.put(previousId, snapshot);
 		}
 		AvailableBaseline baseline = readAvailableBaseline(previousId, cache);
-		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), baseline.fields(), baseline.objectHashes());
+		return new UpdatePlanner.SelectionContext(previousId, previousManifest, snapshot.files(), baseline.baseline(), baseline.objectHashes());
 	}
 
 	private AvailableBaseline readAvailableBaseline(String modpackId, FileCache cache) throws IOException {
-		ClientStorageJsons.ClientBaselineFields baseline = ConfigTools.read(storage.baselineFile(modpackId), ClientStorageJsons.ClientBaselineFields.class).orElseGet(() -> {
-			ClientStorageJsons.ClientBaselineFields empty = new ClientStorageJsons.ClientBaselineFields();
-			empty.modpackId = modpackId;
-			return empty;
-		});
+		ClientBaseline baseline = ClientBaseline.read(storage, modpackId);
 		Set<String> availableObjects = new HashSet<>();
-		if (baseline.entries != null) for (var entry : baseline.entries) {
-			if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
-			String hash = entry.objectHash.toLowerCase(Locale.ROOT);
-			if (FileIntegrity.matchesNamed(storage.objectFile(hash), entry.size, hash, cache)) availableObjects.add(hash);
-		}
+		for (ClientBaseline.Entry entry : baseline.entries())
+			if (FileIntegrity.matchesNamed(storage.objectFile(entry.objectHash()), entry.size(), entry.objectHash(), cache)) availableObjects.add(entry.objectHash());
 		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
 	}
 
