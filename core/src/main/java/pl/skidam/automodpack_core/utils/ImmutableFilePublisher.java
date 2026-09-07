@@ -151,6 +151,7 @@ public final class ImmutableFilePublisher {
 		Objects.requireNonNull(target, "target");
 		Path parent = target.toAbsolutePath().normalize().getParent();
 		if (parent == null) throw new IOException("Immutable target has no parent: " + target);
+		OsPaths.requirePublishableFile(target);
 		Files.createDirectories(parent);
 		return parent;
 	}

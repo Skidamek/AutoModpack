@@ -190,6 +190,7 @@ public final class VerifiedFileTransfer {
 	private static Path requireTargetParent(Path targetFile) throws IOException {
 		Path parent = targetFile.toAbsolutePath().normalize().getParent();
 		if (parent == null) throw new IOException("Target path has no parent: " + targetFile);
+		OsPaths.requirePublishableFile(targetFile);
 		Files.createDirectories(parent);
 		return parent;
 	}
