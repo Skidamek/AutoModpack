@@ -50,14 +50,10 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		preservedCount = controller.preservedClaimCount();
-		int actionY = this.height - 28;
 		ActionRow maintenanceRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY,
 				optionalAction(VersionedText.translatable("automodpack.storage.verify"), button -> verify()),
 				primaryAction(VersionedText.translatable("automodpack.storage.confirm"), button -> compact()));
 		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> closeToParent()));
-		List<Button> buttons = addActionArea(PANEL_WIDTH, actionY, maintenanceRow, footerRow);
-		buttons.get(0).active = !busy && !closed;
-		buttons.get(1).active = !busy && !closed;
 
 		// One pinned status line rides with the column, so the busy/complete feedback never moves.
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
@@ -78,7 +74,11 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
 					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())).getString(), wrapWidth));
 		}
-		DialogColumn column = layoutDialogColumn(32, actionAreaTop(PANEL_WIDTH, actionY, maintenanceRow, footerRow), lines.size() * LINE_HEIGHT, LINE_HEIGHT);
+		DialogLayout layout = layoutDialogWithActions(32, lines.size() * LINE_HEIGHT, LINE_HEIGHT, maintenanceRow, footerRow);
+		List<Button> buttons = addActionAreaAt(PANEL_WIDTH, layout.actionsTop(), maintenanceRow, footerRow);
+		buttons.get(0).active = !busy && !closed;
+		buttons.get(1).active = !busy && !closed;
+		DialogColumn column = layout.column();
 		statusY = column.stackTop();
 		this.addCenteredScrollBody(PANEL_WIDTH, column.bodyTop(), column.bodyBottom(), lines);
 	}

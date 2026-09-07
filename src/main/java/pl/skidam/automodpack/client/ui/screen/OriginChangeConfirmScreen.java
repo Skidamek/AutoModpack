@@ -45,9 +45,9 @@ public final class OriginChangeConfirmScreen extends VersionedScreen {
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.originChange.refuse"), button -> refused.run()),
 				primaryAction(VersionedText.translatable("automodpack.originChange.allow"), button -> allowed.run()));
-		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
-		DialogColumn column = layoutDialogColumn(42, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer), lines.size() * LINE_HEIGHT, 0);
-		addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), lines);
+		DialogLayout layout = layoutDialogWithActions(42, lines.size() * LINE_HEIGHT, 0, footer);
+		addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
+		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 
 	@Override

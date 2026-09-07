@@ -7,7 +7,6 @@ import java.util.List;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.Util;
@@ -26,10 +25,6 @@ public class ErrorScreen extends VersionedScreen {
 
 	private final Screen parent;
 	private final FailureRequest request;
-	private Button backButton;
-	private Button logsButton;
-	private Button copyButton;
-	private Button retryButton;
 	private boolean copied;
 	private int categoryY;
 
@@ -55,8 +50,8 @@ public class ErrorScreen extends VersionedScreen {
 							primaryAction(VersionedText.translatable("automodpack.error.retry"), button -> retry()),
 							optionalAction(VersionedText.translatable("automodpack.error.openLogs"), button -> openLogs())),
 					actionRow(ActionAreaLayout.RowKind.FOOTER,
-							optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails()),
-							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
+							optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails())));
 		} else {
 			rows = List.of(
 					actionRow(ActionAreaLayout.RowKind.AUXILIARY,
@@ -65,30 +60,17 @@ public class ErrorScreen extends VersionedScreen {
 					actionRow(ActionAreaLayout.RowKind.FOOTER,
 							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		}
-		List<Button> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
-		if (request.retryAction() != null) {
-			retryButton = buttons.get(0);
-			logsButton = buttons.get(1);
-			copyButton = buttons.get(2);
-			backButton = buttons.get(3);
-		} else {
-			retryButton = null;
-			logsButton = buttons.get(0);
-			copyButton = buttons.get(1);
-			backButton = buttons.get(2);
-		}
-
 		// Pinned header: title line at 36, the "copied" confirmation at 62 while it shows, the category right under it.
 		categoryY = 62 + (copied ? 16 : 0);
-		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
 		int wrapWidth = Math.max(1, this.width - 30);
 		List<MutableComponent> lines = new ArrayList<>();
 		String summary = VersionedText.translatable(request.messageKey(), request.translationArguments()).getString();
 		lines.addAll(wrapParagraph(this.font, summary, wrapWidth, ChatFormatting.GRAY));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.error.details").getString(), wrapWidth, ChatFormatting.GRAY));
-		DialogColumn column = layoutDialogColumn(categoryY + 16, footerTop, lines.size() * LINE_HEIGHT, 0);
-		this.addScrollBody(wrapWidth, column.bodyTop(), column.bodyBottom(), lines, true);
+		DialogLayout layout = layoutDialogWithActions(categoryY + 16, lines.size() * LINE_HEIGHT, 0, rows.toArray(ActionRow[]::new));
+		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rows.toArray(ActionRow[]::new));
+		this.addScrollBody(wrapWidth, layout.column().bodyTop(), layout.column().bodyBottom(), lines, true);
 	}
 
 	private void back() {

@@ -55,7 +55,6 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		super.init();
 		initWidgets();
 		if (!inputText.isEmpty()) this.textField.setValue(inputText);
-		this.addRenderableWidget(this.textField);
 		this.setInitialFocus(this.textField);
 	}
 
@@ -85,11 +84,11 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 				}),
 				optionalAction(VersionedText.translatable("automodpack.skip"), button -> ScreenImpl.setScreen(new SkipVerificationScreen(this, this.validatedCallback))),
 				primaryAction(VersionedText.translatable("automodpack.validation.verify"), button -> verifyFingerprint()));
-		List<Button> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
-		this.verifyButton = buttons.get(2);
-		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
 		int stackHeight = stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + hintLines.size() * LINE_HEIGHT;
-		DialogColumn column = layoutDialogColumn(42, footerTop, prose.size() * LINE_HEIGHT, stackHeight);
+		DialogLayout layout = layoutDialogWithActions(42, prose.size() * LINE_HEIGHT, stackHeight, footer);
+		List<Button> buttons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
+		this.verifyButton = buttons.get(2);
+		DialogColumn column = layout.column();
 		this.addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), prose);
 		stackTop = column.stackTop();
 		fieldY = stackTop + stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM;

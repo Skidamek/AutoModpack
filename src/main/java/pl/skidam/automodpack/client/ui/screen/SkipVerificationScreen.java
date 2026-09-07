@@ -47,7 +47,6 @@ public class SkipVerificationScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		initWidgets();
-		this.addRenderableWidget(this.textField);
 		this.setInitialFocus(this.textField);
 	}
 
@@ -70,12 +69,12 @@ public class SkipVerificationScreen extends VersionedScreen {
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(verificationScreen)),
 				primaryAction(VersionedText.translatable("automodpack.skip"), button -> confirmSkip()));
-		List<Button> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
+		int stackHeight = stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + LINE_HEIGHT;
+		DialogLayout layout = layoutDialogWithActions(42, prose.size() * LINE_HEIGHT, stackHeight, footer);
+		List<Button> buttons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
 		this.confirmButton = buttons.get(1);
 		this.confirmButton.active = false;
-		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
-		int stackHeight = stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + LINE_HEIGHT;
-		DialogColumn column = layoutDialogColumn(42, footerTop, prose.size() * LINE_HEIGHT, stackHeight);
+		DialogColumn column = layout.column();
 		this.addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), prose);
 		stackTop = column.stackTop();
 		fieldY = stackTop + stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM;

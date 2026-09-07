@@ -52,10 +52,10 @@ public final class PinMismatchScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.pinMismatch.dont").getString(), wrapWidth, ChatFormatting.RED));
 		ActionRow copyRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails()));
 		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
-		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, copyRow, footerRow);
 		// The body starts below the pinned header; the "copied" confirmation shifts it down one line while it shows.
-		DialogColumn column = layoutDialogColumn(42 + (copied ? LINE_HEIGHT : 0), actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, copyRow, footerRow), lines.size() * LINE_HEIGHT, 0);
-		addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), lines);
+		DialogLayout layout = layoutDialogWithActions(42 + (copied ? LINE_HEIGHT : 0), lines.size() * LINE_HEIGHT, 0, copyRow, footerRow);
+		addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), copyRow, footerRow);
+		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 
 	private List<MutableComponent> wrappedFingerprint(String label, String fingerprint, int wrapWidth) {
