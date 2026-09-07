@@ -284,7 +284,7 @@ public final class UpdateTransactionExecutor {
 
 	/** Builds and swaps the incoming projection unless the active tree already matches; no-ops when the projection was published earlier. */
 	private void publishProjection(UpdateTransaction transaction) throws IOException {
-		if (transaction.operations.isEmpty() && verifyProjectionQuietly(context.storage().activeDirectory(), transaction.projectedFinalState)) return;
+		if (verifyProjectionQuietly(context.storage().activeDirectory(), transaction.projectedFinalState)) return;
 		buildIncomingProjection(transaction);
 		setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
 		setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
@@ -482,7 +482,7 @@ public final class UpdateTransactionExecutor {
 				if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
 				String relative = UpdateTransactionValidator.normalizeOperationPath(projection.relativize(path).toString());
 				ProjectedFile expectedFile = expected.remove(relative);
-				if (expectedFile == null || !FileIntegrity.matches(path, expectedFile.expectedSize(), expectedFile.expectedHash(), fileCache))
+				if (expectedFile == null || !FileIntegrity.matchesObject(path, context.storage().objectFile(expectedFile.expectedHash()), expectedFile.expectedSize(), expectedFile.expectedHash(), fileCache))
 					throw new IOException("Client projection file verification failed: " + path);
 			}
 		}

@@ -116,7 +116,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		super(recordsDirectory, "file cache");
 	}
 
-	/** Applies a Git-style persisted stat cache; explicit integrity repair uses rehash(). */
+	/** Git worktree identity. Named CAS objects use {@link #matchesImmutable}; explicit repair uses {@link #rehash()}. */
 	public String getOrComputeHash(Path file) throws IOException {
 		BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
 		return getOrComputeHashWithAttributes(file, attrs);

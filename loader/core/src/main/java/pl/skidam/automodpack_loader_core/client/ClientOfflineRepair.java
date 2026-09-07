@@ -5,7 +5,6 @@ import static pl.skidam.automodpack_core.Constants.THIS_MOD_JAR;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -76,7 +75,7 @@ public final class ClientOfflineRepair {
 				long size = parseSize(item.size);
 				Path source = verifiedSource(item.file, size, item.sha1, cache);
 				if (source == null) continue;
-				FileInspection.Mod mod = modCache.getModOrNull(source, cache);
+				FileInspection.Mod mod = modCache.getModOrNull(source, item.sha1, cache);
 				if (mod != null && !Collections.disjoint(mod.services(), services)) paths.add(LogicalPath.normalize(item.file));
 			}
 		}
@@ -84,8 +83,12 @@ public final class ClientOfflineRepair {
 	}
 
 	private Path verifiedSource(String logicalPath, long size, String hash, FileCache cache) {
-		for (Path candidate : List.of(storage.activePath(logicalPath), storage.gamePath(logicalPath), storage.objectFile(hash)))
-			if (FileIntegrity.matches(candidate, size, hash, cache)) return candidate;
+		Path object = storage.objectFile(hash);
+		if (FileIntegrity.matchesNamed(object, size, hash, cache)) return object;
+		Path active = storage.activePath(logicalPath);
+		if (FileIntegrity.matchesObject(active, object, size, hash, cache)) return active;
+		Path live = storage.gamePath(logicalPath);
+		if (FileIntegrity.matches(live, size, hash, cache)) return live;
 		return null;
 	}
 

@@ -9,7 +9,11 @@ import java.nio.file.StandardCopyOption;
 
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
-/** Durable file installation operations that verify size and SHA-1 before publication. */
+/**
+ * Durable file installation. Ingress (untrusted bytes) hashes while copying. A source that already
+ * passes {@link FileIntegrity#matchesNamed} is copied or linked without a second SHA-1; the destination
+ * cache record is seeded from the advertised hash.
+ */
 public final class VerifiedFileTransfer {
 	private VerifiedFileTransfer() {}
 
@@ -22,14 +26,14 @@ public final class VerifiedFileTransfer {
 	}
 
 	private static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, boolean immutable, FileCache cache) throws IOException {
-		if (cache != null && immutable && FileIntegrity.matchesNamed(targetFile, expectedSize, expectedSha1, cache) || FileIntegrity.matches(targetFile, expectedSize, expectedSha1, cache)) {
+		if (targetMatches(targetFile, expectedSize, expectedSha1, immutable, cache)) {
 			if (immutable) ImmutableFiles.protect(targetFile);
 			record(cache, targetFile, expectedSha1);
 			return false;
 		}
 		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 
-		Path temporary = copyToVerifiedTemporary(sourceFile, targetFile, expectedSize, expectedSha1);
+		Path temporary = copyToTemporary(sourceFile, targetFile, expectedSize, expectedSha1, cache);
 		try {
 			if (immutable) ImmutableFiles.protect(temporary);
 			DurableFiles.replace(temporary, targetFile);
@@ -71,16 +75,12 @@ public final class VerifiedFileTransfer {
 	}
 
 	public static boolean linkAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
-		if (FileIntegrity.matches(targetFile, expectedSize, expectedSha1, cache)) {
+		if (FileIntegrity.matchesObject(targetFile, sourceFile, expectedSize, expectedSha1, cache)) {
 			ImmutableFiles.protect(targetFile);
 			record(cache, targetFile, expectedSha1);
 			return false;
 		}
-		if (cache != null) {
-			if (!FileIntegrity.matchesNamed(sourceFile, expectedSize, expectedSha1, cache)) throw new IOException("Source file failed size/SHA-1 verification: " + sourceFile);
-		} else {
-			requireValidSource(sourceFile, expectedSize, expectedSha1, null);
-		}
+		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 		ImmutableFiles.protect(sourceFile);
 		Path parent = requireTargetParent(targetFile);
 		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
@@ -89,15 +89,13 @@ public final class VerifiedFileTransfer {
 			try {
 				Files.createLink(temporary, sourceFile);
 			} catch (UnsupportedOperationException | FileSystemException unsupportedLink) {
-				if (!expectedSha1.equalsIgnoreCase(HashUtils.copyAndSha1(sourceFile, temporary))) throw new IOException("Linked file failed SHA-1 verification: " + temporary);
+				copyNamedOrHashed(sourceFile, temporary, expectedSize, expectedSha1, cache);
 			}
 			if (Files.size(temporary) != expectedSize) throw new IOException("Linked file failed size verification: " + temporary);
 			ImmutableFiles.protect(temporary);
 			DurableFiles.replace(temporary, targetFile);
 			FileTrees.forceDirectory(parent);
 			ImmutableFiles.protect(targetFile);
-			// Seed the projection-path record so later lookups do not hash; the named source record stays valid
-			// because the immutable tripwire compares size, mtime, and inode, none of which link() or chmod() move.
 			record(cache, targetFile, expectedSha1);
 			return true;
 		} finally {
@@ -144,9 +142,19 @@ public final class VerifiedFileTransfer {
 		}
 	}
 
+	private static boolean targetMatches(Path targetFile, long expectedSize, String expectedSha1, boolean immutable, FileCache cache) {
+		if (cache != null && immutable) return FileIntegrity.matchesNamed(targetFile, expectedSize, expectedSha1, cache);
+		return FileIntegrity.matches(targetFile, expectedSize, expectedSha1, cache);
+	}
+
 	private static void requireValidSource(Path sourceFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
+		if (namedSource(sourceFile, expectedSize, expectedSha1, cache)) return;
 		if (!FileIntegrity.matches(sourceFile, expectedSize, expectedSha1, cache))
 			throw new IOException("Source file failed size/SHA-1 verification: " + sourceFile);
+	}
+
+	private static boolean namedSource(Path sourceFile, long expectedSize, String expectedSha1, FileCache cache) {
+		return cache != null && FileIntegrity.matchesNamed(sourceFile, expectedSize, expectedSha1, cache);
 	}
 
 	private static void record(FileCache cache, Path file, String sha1) throws IOException {
@@ -154,20 +162,29 @@ public final class VerifiedFileTransfer {
 		cache.overwriteCache(file, sha1);
 	}
 
-	private static Path copyToVerifiedTemporary(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
+	private static Path copyToTemporary(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		Path parent = requireTargetParent(targetFile);
 		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
 		boolean valid = false;
 		try {
-			String copied = HashUtils.copyAndSha1(sourceFile, temporary);
+			copyNamedOrHashed(sourceFile, temporary, expectedSize, expectedSha1, cache);
 			ImmutableFiles.allowOwnerWrite(temporary);
 			FileTrees.forceFile(temporary);
-			valid = Files.size(temporary) == expectedSize && expectedSha1.equalsIgnoreCase(copied);
-			if (!valid) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
+			valid = true;
 			return temporary;
 		} finally {
 			if (!valid) Files.deleteIfExists(temporary);
 		}
+	}
+
+	private static void copyNamedOrHashed(Path sourceFile, Path temporary, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
+		if (namedSource(sourceFile, expectedSize, expectedSha1, cache)) {
+			Files.copy(sourceFile, temporary, StandardCopyOption.REPLACE_EXISTING);
+			if (Files.size(temporary) != expectedSize) throw new IOException("Copied file failed size verification: " + temporary);
+			return;
+		}
+		String copied = HashUtils.copyAndSha1(sourceFile, temporary);
+		if (Files.size(temporary) != expectedSize || !expectedSha1.equalsIgnoreCase(copied)) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
 	}
 
 	private static Path requireTargetParent(Path targetFile) throws IOException {
@@ -176,5 +193,4 @@ public final class VerifiedFileTransfer {
 		Files.createDirectories(parent);
 		return parent;
 	}
-
 }
