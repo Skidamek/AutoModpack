@@ -47,9 +47,9 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.detached.syncAnytime").getString(), wrapWidth));
 		ActionRow auxiliary = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.detached.syncNow"), button -> syncToServer()));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.detached.continueJoin"), button -> continuePlaying()));
-		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, auxiliary, footer);
-		int bottomLimit = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, auxiliary, footer) - 4;
-		addCenteredScrollBody(BODY, 46, bottomLimit, lines);
+		DialogLayout layout = layoutDialogWithActions(46, lines.size() * LINE_HEIGHT, 0, auxiliary, footer);
+		addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), auxiliary, footer);
+		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 
 	private void continuePlaying() {
