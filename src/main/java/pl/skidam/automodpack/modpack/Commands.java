@@ -460,10 +460,8 @@ public class Commands {
 					reportGenerationDetails(context, ready.state(), true, false);
 					if (ready.state().parent().isEmpty())
 						send(context, "Guarded publication is unavailable until an unguarded root publication exists", ChatFormatting.YELLOW, false);
-				} else if (result instanceof ModpackExecutor.PreviewBusy busy) {
-					send(context, "PREVIEW FAILED: " + busy.detail(), ChatFormatting.RED, false);
-				} else if (result instanceof ModpackExecutor.PreviewFailed failed) {
-					send(context, "PREVIEW FAILED: " + failed.failure().getClass().getSimpleName(), ChatFormatting.RED, false);
+				} else if (result instanceof ModpackExecutor.PreviewResult.Rejected rejected) {
+					send(context, "PREVIEW FAILED: " + rejected.detail(), ChatFormatting.RED, false);
 				}
 				return;
 			}
@@ -477,16 +475,8 @@ public class Commands {
 				headline(context, "NO_CHANGES", start, noChanges.state().contentToken(), ChatFormatting.YELLOW, true);
 				reportGenerationDetails(context, noChanges.state(), false, true);
 				noChanges.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
-			} else if (result instanceof ModpackExecutor.PublishGuardMismatch mismatch) {
-				send(context, "FAILED: " + mismatch.detail(), ChatFormatting.RED, true);
-			} else if (result instanceof ModpackExecutor.PublishInvalidGuard invalid) {
-				send(context, "FAILED: " + invalid.detail(), ChatFormatting.RED, true);
-			} else if (result instanceof ModpackExecutor.PublishGuardUnsupported unsupported) {
-				send(context, "FAILED: " + unsupported.detail(), ChatFormatting.RED, true);
-			} else if (result instanceof ModpackExecutor.PublishBusy busy) {
-				send(context, "FAILED: " + busy.detail(), ChatFormatting.RED, true);
-			} else if (result instanceof ModpackExecutor.PublishFailed failed) {
-				send(context, "FAILED: " + failed.failure().getClass().getSimpleName(), ChatFormatting.RED, true);
+			} else if (result instanceof ModpackExecutor.PublishResult.Rejected rejected) {
+				send(context, "FAILED: " + rejected.detail(), ChatFormatting.RED, true);
 			}
 		});
 		return Command.SINGLE_SUCCESS;
@@ -542,12 +532,8 @@ public class Commands {
 						VersionedText.literal("content token ").append(copyable(shortToken(reverted.current().contentToken()), reverted.current().contentToken())),
 						ChatFormatting.WHITE, true);
 				reverted.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
-			} else if (result instanceof ModpackExecutor.RevertBusy busy) {
-				send(context, "FAILED: " + busy.detail(), ChatFormatting.RED, true);
-			} else if (result instanceof ModpackExecutor.RevertInvalidTarget invalid) {
-				send(context, "FAILED: " + invalid.detail(), ChatFormatting.RED, true);
-			} else if (result instanceof ModpackExecutor.RevertFailed failed) {
-				send(context, "FAILED: " + failed.failure().getClass().getSimpleName(), ChatFormatting.RED, true);
+			} else if (result instanceof ModpackExecutor.RevertResult.Rejected rejected) {
+				send(context, "FAILED: " + rejected.detail(), ChatFormatting.RED, true);
 			}
 		});
 		return Command.SINGLE_SUCCESS;

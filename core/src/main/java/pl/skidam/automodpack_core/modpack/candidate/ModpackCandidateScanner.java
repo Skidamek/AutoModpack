@@ -107,11 +107,9 @@ public final class ModpackCandidateScanner {
 		Map<String, StagedObject> objects = new TreeMap<>();
 		Map<String, CandidateProvenance> provenance = new TreeMap<>();
 		List<ExcludedCandidate> exclusions = new ArrayList<>(ruleExclusions);
-		List<ShadowedCandidate> shadows = new ArrayList<>();
 		try {
 			for (PathResult result : results) {
 				exclusions.addAll(result.exclusions);
-				if (result.shadow != null) shadows.add(result.shadow);
 				if (result.selected == null || result.file == null) continue;
 				GroupManifest.GroupFile file = result.file;
 				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new ModpackJsons.CompleteModpackContentFields.GroupFileFields(
@@ -149,7 +147,7 @@ public final class ModpackCandidateScanner {
 			GroupManifest manifest = GroupManifestValidator.validate(fields);
 			if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
 				throw new CandidateBuildException("Candidate contains no published files");
-			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions, shadows);
+			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions);
 		} catch (Exception e) {
 			cleanup(results, e);
 			if (e instanceof CandidateBuildException candidateBuildException) throw candidateBuildException;
@@ -174,16 +172,13 @@ public final class ModpackCandidateScanner {
 				object = snapshot.object();
 			}
 		}
-		ShadowedCandidate shadow = pair.explicit != null && pair.synced != null
-				? new ShadowedCandidate(pair.explicit, pair.synced, ShadowedCandidate.Relationship.NOT_COMPARED)
-				: null;
 		CandidateProvenance provenance = null;
 		if (selected != null && file != null) {
 			PathRuleSet.Decision editable = rules.allowEditsInFiles().evaluate(selected.logicalPath());
 			file = new GroupManifest.GroupFile(file.size(), file.type(), editable.included(), file.sha1(), file.murmur());
 			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
-		return new PathResult(selected, file, object, provenance, exclusions, shadow, pair.explicit != null ? pair.explicit : pair.synced);
+		return new PathResult(selected, file, object, provenance, exclusions, pair.explicit != null ? pair.explicit : pair.synced);
 	}
 
 	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
@@ -312,7 +307,6 @@ public final class ModpackCandidateScanner {
 			StagedObject object,
 			CandidateProvenance provenance,
 			List<ExcludedCandidate> exclusions,
-			ShadowedCandidate shadow,
 			CandidateSource sourceForOrdering) {}
 
 	public record Request(

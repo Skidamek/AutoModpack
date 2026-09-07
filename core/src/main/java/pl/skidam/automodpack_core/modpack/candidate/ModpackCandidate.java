@@ -9,8 +9,7 @@ public record ModpackCandidate(
 		GroupManifest manifest,
 		NavigableMap<String, StagedObject> objects,
 		NavigableMap<String, CandidateProvenance> provenance,
-		List<ExcludedCandidate> exclusions,
-		List<ShadowedCandidate> shadows) implements AutoCloseable {
+		List<ExcludedCandidate> exclusions) implements AutoCloseable {
 	public ModpackCandidate {
 		TreeMap<String, StagedObject> stagedObjects = new TreeMap<>();
 		if (objects != null)
@@ -26,7 +25,6 @@ public record ModpackCandidate(
 		if (provenance != null) provenanceMap.putAll(provenance);
 		provenance = Collections.unmodifiableNavigableMap(provenanceMap);
 		exclusions = exclusions == null ? List.of() : exclusions.stream().sorted().toList();
-		shadows = shadows == null ? List.of() : shadows.stream().sorted().toList();
 	}
 
 	@Override

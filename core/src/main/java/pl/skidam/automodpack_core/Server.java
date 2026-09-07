@@ -40,10 +40,8 @@ public class Server {
 
 		if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
 			LOGGER.info("Modpack generation completed!");
-		} else if (generation instanceof ModpackExecutor.PublishFailed failed) {
-			LOGGER.error("Failed to generate modpack", failed.failure());
-		} else {
-			LOGGER.error("Failed to generate modpack: operation was rejected");
+		} else if (generation instanceof ModpackExecutor.PublishResult.Rejected rejected) {
+			LOGGER.error("Failed to generate modpack: {}", rejected.detail(), rejected.cause());
 		}
 
 		LOGGER.info("Starting server on port {}", serverConfig.bindPort);

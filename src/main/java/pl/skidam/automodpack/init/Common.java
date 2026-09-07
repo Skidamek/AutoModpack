@@ -41,10 +41,8 @@ public class Common {
 			var generation = modpackExecutor.publish();
 			if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
 				LOGGER.info("Modpack generation completed! took {}ms", System.currentTimeMillis() - genStart);
-			} else if (generation instanceof ModpackExecutor.PublishFailed failed) {
-				LOGGER.error("Failed to generate modpack", failed.failure());
-			} else {
-				LOGGER.error("Failed to generate modpack: operation was rejected");
+			} else if (generation instanceof ModpackExecutor.PublishResult.Rejected rejected) {
+				LOGGER.error("Failed to generate modpack: {}", rejected.detail(), rejected.cause());
 			}
 		} else {
 			LOGGER.info("Loading last modpack...");
@@ -52,10 +50,8 @@ public class Common {
 			var generation = modpackExecutor.loadLast();
 			if (generation instanceof ModpackExecutor.Loaded loaded) {
 				LOGGER.info("Modpack loaded at content {}! took {}ms", loaded.current().contentToken(), System.currentTimeMillis() - genStart);
-			} else if (generation instanceof ModpackExecutor.LoadFailed failed) {
-				LOGGER.error("Failed to load modpack", failed.failure());
-			} else {
-				LOGGER.error("Failed to load modpack: operation was rejected");
+			} else if (generation instanceof ModpackExecutor.LoadResult.Rejected rejected) {
+				LOGGER.error("Failed to load modpack: {}", rejected.detail(), rejected.cause());
 			}
 		}
 	}

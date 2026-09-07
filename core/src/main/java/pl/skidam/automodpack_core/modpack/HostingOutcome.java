@@ -12,5 +12,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 public interface HostingOutcome {
 
 	/** The hosting view of the generation this outcome commits; empty when the outcome commits no generation. */
-	Optional<GenerationHosting> hosted();
+	default Optional<GenerationHosting> hosted() {
+		return Optional.empty();
+	}
 }
