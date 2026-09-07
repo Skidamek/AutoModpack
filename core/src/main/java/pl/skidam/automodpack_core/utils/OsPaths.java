@@ -8,10 +8,14 @@ import java.util.Objects;
  * OS publishable-path tripwire for durable AutoModpack writes.
  *
  * <p>
- * Receipts: Win32 {@code MAX_PATH} is 260 WCHARs including the terminating NUL (MSDN {@code CreateFile}), so a usable
- * path string is 259 characters. Classic Windows APIs refuse longer paths unless the process opts into long paths;
- * Minecraft launchers typically do not. POSIX {@code NAME_MAX} and Windows component length are 255. macOS
- * {@code PATH_MAX} is 1024; Linux is 4096.
+ * Receipts: Win32 classic {@code MAX_PATH} is 260 WCHARs including the terminating NUL (MSDN "Maximum File Path
+ * Limitation"), so a usable path string is 259 characters, and stock Windows refuses longer paths. When the machine
+ * opts into long paths ({@code LongPathsEnabled} registry value, MSDN "Enable long paths in Windows 10, version
+ * 1607, and later"), the extended-length maximum is approximately 32,767 characters. POSIX {@code NAME_MAX} and the
+ * Windows component length are 255 on every volume ({@code lpMaximumComponentLength}). macOS {@code PATH_MAX} is
+ * 1024; Linux is 4096. The JVM's own NIO opens long paths through the {@code \\?\} prefix either way, but the
+ * surrounding ecosystem (Explorer, shells, user tooling) cannot until the registry opt-in, so that opt-in is what
+ * the Windows budget follows.
  * </p>
  *
  * <p>
@@ -24,8 +28,10 @@ import java.util.Objects;
 public final class OsPaths {
 	/** MSDN MAX_PATH including NUL. */
 	public static final int WINDOWS_MAX_PATH = 260;
-	/** Usable characters in a Win32 path string (MAX_PATH minus NUL). */
+	/** Usable characters in a classic Win32 path string (MAX_PATH minus NUL). */
 	public static final int WINDOWS_USABLE_PATH = WINDOWS_MAX_PATH - 1;
+	/** MSDN extended-length maximum (approximate), minus the same NUL overhead as the classic budget. */
+	public static final int WINDOWS_LONG_USABLE_PATH = 32767 - 1;
 	/** Windows / POSIX file-name component limit. */
 	public static final int MAX_COMPONENT = 255;
 	/** {@code File.createTempFile} appends {@code Long.toString(Math.abs(n))}; Long.MAX_VALUE is 19 digits. */
@@ -56,16 +62,23 @@ public final class OsPaths {
 	}
 
 	static void requirePublishable(Path path, PlatformUtils.OperatingSystem os, int tempFilenameOverhead) throws IOException {
+		boolean classicBudgetWouldOverflow = os == PlatformUtils.OperatingSystem.WINDOWS && nativeString(path, os).length() + tempFilenameOverhead > WINDOWS_USABLE_PATH;
+		requirePublishable(path, os, tempFilenameOverhead, classicBudgetWouldOverflow && WindowsLongPaths.areEnabled());
+	}
+
+	static void requirePublishable(Path path, PlatformUtils.OperatingSystem os, int tempFilenameOverhead, boolean longPathsEnabled) throws IOException {
 		Objects.requireNonNull(path, "path");
 		Objects.requireNonNull(os, "operating system");
 		if (tempFilenameOverhead < 0) throw new IllegalArgumentException("Publication temp overhead is negative");
 		Path absolute = path.toAbsolutePath().normalize();
 		String nativePath = nativeString(absolute, os);
-		int maxPath = maxPath(os);
+		int maxPath = maxPath(os, longPathsEnabled);
 		int publishedLength = nativePath.length() + tempFilenameOverhead;
-		if (publishedLength > maxPath)
+		if (publishedLength > maxPath) {
+			String hint = os == PlatformUtils.OperatingSystem.WINDOWS && !longPathsEnabled ? ". Enable Win32 long paths (LongPathsEnabled) or use a shorter game path" : "";
 			throw new IOException("Path exceeds the " + os.name() + " publishable limit of " + maxPath + " characters (path is " + nativePath.length() + ", publication temp adds "
-					+ tempFilenameOverhead + "): " + absolute);
+					+ tempFilenameOverhead + ")" + hint + ": " + absolute);
+		}
 		int count = absolute.getNameCount();
 		for (int index = 0; index < count; index++) {
 			String component = absolute.getName(index).toString();
@@ -81,9 +94,9 @@ public final class OsPaths {
 		return os == PlatformUtils.OperatingSystem.WINDOWS ? value.replace('/', '\\') : value;
 	}
 
-	static int maxPath(PlatformUtils.OperatingSystem os) {
+	static int maxPath(PlatformUtils.OperatingSystem os, boolean longPathsEnabled) {
 		return switch (os) {
-			case WINDOWS -> WINDOWS_USABLE_PATH;
+			case WINDOWS -> longPathsEnabled ? WINDOWS_LONG_USABLE_PATH : WINDOWS_USABLE_PATH;
 			case MACOS -> MACOS_USABLE_PATH;
 			case LINUX, OTHER -> LINUX_USABLE_PATH;
 		};
