@@ -66,21 +66,28 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 				optionalAction(VersionedText.translatable("automodpack.pinnedMods.button"), press -> ScreenImpl.setScreen(new PinnedModsScreen(this))));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
 		ActionRow[] actionRows = {management, footer};
-		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
-		if (preservedCount == 0) setTooltip(actionButtons.get(0), VersionedText.translatable("automodpack.vault.empty"));
-		if (entries.isEmpty()) return;
-		int rowWidth = panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2;
-		List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
-		for (InstalledModpackController.Pack entry : entries) {
-			String source = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal").getString();
-			// State is carried by color, not bracket markers: green = active pack, white = installed pack.
-			rows.add(new RowListWidget.Row(List.of(
-					VersionedText.literal(truncateToWidth(this.font, entry.name(), rowWidth)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE),
-					VersionedText.literal(truncateToWidth(this.font, source, rowWidth)).withStyle(ChatFormatting.GRAY))));
+		List<Button> actionButtons;
+		if (entries.isEmpty()) {
+			actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
+		} else {
+			int rowsHeight = entries.size() * ROW_HEIGHT;
+			int rowWidth = panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2;
+			List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
+			for (InstalledModpackController.Pack entry : entries) {
+				String source = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal").getString();
+				// State is carried by color, not bracket markers: green = active pack, white = installed pack.
+				rows.add(new RowListWidget.Row(List.of(
+						VersionedText.literal(truncateToWidth(this.font, entry.name(), rowWidth)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE),
+						VersionedText.literal(truncateToWidth(this.font, source, rowWidth)).withStyle(ChatFormatting.GRAY))));
+			}
+			// The list and its actions form one block: centered when the packs fit, scrolling above the pinned actions when they do not.
+			BlockLayout layout = layoutBlockWithActions(LIST_TOP, rowsHeight, 8, actionRows);
+			actionButtons = this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), actionRows);
+			int listBottom = layout.scrolls() ? layout.actionsTop() - 8 : layout.contentTop() + rowsHeight;
+			this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), layout.contentTop(), listBottom, ROW_HEIGHT, rows,
+					index -> open(entries.get(index)), null));
 		}
-		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows) - 8;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), LIST_TOP, listBottom, ROW_HEIGHT, rows,
-				index -> open(entries.get(index)), null));
+		if (preservedCount == 0) setTooltip(actionButtons.get(0), VersionedText.translatable("automodpack.vault.empty"));
 	}
 
 	private void open(InstalledModpackController.Pack entry) {

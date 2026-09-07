@@ -94,12 +94,6 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		actions.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, primaryActions.toArray(ActionDefinition[]::new)));
 		actions.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> back())));
 		ActionRow[] actionRows = actions.toArray(ActionRow[]::new);
-		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
-		int actionIndex = 0;
-		if (showKeepAll) actionButtons.get(actionIndex++).active = !busy;
-		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();
-		if (canUpdate) actionButtons.get(actionIndex).active = !busy;
-		if (candidates.isEmpty()) return;
 		List<RowListWidget.Row> listRows = new ArrayList<>(candidates.size());
 		for (OfflineRepair.EditableResetCandidate candidate : candidates) {
 			// Membership in selectedEditablePaths is the reset consent, so the row renders unchecked
@@ -109,8 +103,17 @@ public final class OfflineRepairScreen extends VersionedScreen {
 					VersionedText.translatable(resetConsent ? "automodpack.repair.editableKeep" : "automodpack.repair.editableKeepChecked", candidate.logicalPath()).getString(), width - 12))),
 					editableTooltip(resetConsent, candidate.logicalPath())));
 		}
-		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows) - 8;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), listTop, listBottom, ROW_HEIGHT, listRows,
+		// The candidates and their actions form one block: centered when they fit, scrolling above the pinned actions when they do not.
+		int rowsHeight = listRows.size() * ROW_HEIGHT;
+		BlockLayout layout = layoutBlockWithActions(listTop, rowsHeight, 8, actionRows);
+		List<Button> actionButtons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), actionRows);
+		int actionIndex = 0;
+		if (showKeepAll) actionButtons.get(actionIndex++).active = !busy;
+		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();
+		if (canUpdate) actionButtons.get(actionIndex).active = !busy;
+		if (candidates.isEmpty()) return;
+		int listBottom = layout.scrolls() ? layout.actionsTop() - 8 : layout.contentTop() + rowsHeight;
+		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), layout.contentTop(), listBottom, ROW_HEIGHT, listRows,
 				index -> {
 					if (!busy) toggleEditable(candidates.get(index).logicalPath());
 				}, this::showComponentTooltip));
