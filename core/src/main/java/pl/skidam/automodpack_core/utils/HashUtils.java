@@ -23,7 +23,7 @@ import java.util.Locale;
 public final class HashUtils {
 	public static final int SHA1_HEX_LENGTH = 40;
 	private static final String SHA_1 = "SHA-1";
-	private static final int STREAM_BUFFER = 64 * 1024;
+	private static final int STREAM_BUFFER = 32 * 1024;
 	private static final int MURMUR_M = 0x5bd1e995;
 	private static final int MURMUR_R = 24;
 	private static final int MURMUR_SEED = 1;
