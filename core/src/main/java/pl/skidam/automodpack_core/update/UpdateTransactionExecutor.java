@@ -140,7 +140,7 @@ public final class UpdateTransactionExecutor {
 	/** Reports mutable input drift that requires a fresh plan before live mutation can continue. */
 	public boolean hasMutableInputDrift(UpdateTransaction transaction) throws IOException {
 		return withFileCache(cache -> {
-			if (!isModpackTransaction(transaction)) return false;
+			if (transaction == null) return false;
 			boolean configChanged = configurationChangedAfterPlanning(transaction);
 			if (projectionPublicationStarted(transaction))
 				return configChanged || transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
@@ -152,7 +152,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private boolean configurationChangedAfterPlanning(UpdateTransaction transaction) throws IOException {
-		if (!isModpackTransaction(transaction)) return false;
+		if (transaction == null) return false;
 		if (transaction.expectedClientConfig == null) return true;
 		ClientConfigJsons.ClientConfigFieldsV3 current = readClientConfig();
 		if (current.equals(transaction.expectedClientConfig)) return false;
@@ -219,7 +219,7 @@ public final class UpdateTransactionExecutor {
 		AtomicReference<Operation> current = new AtomicReference<>();
 		Path blockedPath = null;
 		boolean publicationStarted = projectionPublicationStarted(transaction);
-		boolean liveAlreadyApplied = isModpackTransaction(transaction) && (publicationStarted || managedStateMatches(transaction));
+		boolean liveAlreadyApplied = transaction != null && (publicationStarted || managedStateMatches(transaction));
 		boolean preserveNewerSelection = publicationStarted && selectionChangedAfterPlanning(transaction);
 		try {
 			transaction.resultStatus = null;
@@ -227,9 +227,7 @@ public final class UpdateTransactionExecutor {
 			transaction.resultPath = null;
 			transaction.resultMessage = null;
 			setPhase(transaction, UpdateTransaction.Phase.PREPARING);
-			if (isModpackTransaction(transaction)) {
-				applyModpackTransaction(transaction, current, publicationStarted, liveAlreadyApplied, preserveNewerSelection);
-			} else applyOperations(transaction, current);
+			applyModpackTransaction(transaction, current, publicationStarted, liveAlreadyApplied, preserveNewerSelection);
 			ClientObjectStore.publishOwnership(context.storage());
 			setPhase(transaction, UpdateTransaction.Phase.COMMITTED);
 			cleanupTransactionDirectories(transaction);
@@ -323,10 +321,6 @@ public final class UpdateTransactionExecutor {
 		} catch (IOException journalFailure) {
 			cause.addSuppressed(journalFailure);
 		}
-	}
-
-	private boolean isModpackTransaction(UpdateTransaction transaction) {
-		return UpdateTransactionValidator.isModpackPurpose(transaction.purpose);
 	}
 
 	private void setPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) throws IOException {
@@ -551,14 +545,12 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void claimSelection(UpdateTransaction transaction) throws IOException {
-		if (!isModpackTransaction(transaction)) return;
 		ClientSelectionStore selections = new ClientSelectionStore(context.storage().selectionFile());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) selections.compareAndSet(transaction.modpackId, transaction.expectedPriorIntent(), transaction.targetIntent());
 		else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) selections.remove(transaction.modpackId, transaction.expectedPriorIntent());
 	}
 
 	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {
-		if (!isModpackTransaction(transaction)) return;
 		if (selectionChangedAfterPlanning(transaction)) throw new IOException("Group selection changed after planning for modpack " + transaction.modpackId);
 	}
 

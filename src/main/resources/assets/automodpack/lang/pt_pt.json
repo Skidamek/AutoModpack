@@ -232,7 +232,6 @@
   "automodpack.selection.metrics.other": "(%s ficheiros, %s)",
   "automodpack.selection.status.dependencyUnavailable": "(dependência indisponível)",
   "automodpack.selection.status.available": "Disponível",
-  "automodpack.selection.status.stale": "A escolha guardada já não está disponível",
   "automodpack.selection.blockedBy": "Indisponível porque esta funcionalidade requer %s",
   "automodpack.selection.conflictsWith": "Em conflito com %s",
   "automodpack.selection.conflictTitle": "Substituir as funcionalidades em conflito?",

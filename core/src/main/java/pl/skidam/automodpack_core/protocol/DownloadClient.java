@@ -424,8 +424,6 @@ public class DownloadClient implements AutoCloseable {
 		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
 	}
 
-	/** Downloads one authenticated historical catalogue advertised by the current generation index. */
-
 	/** Copies a protocol frame into a remaining file length without truncating remaining through int. */
 	static int writableFrameBytes(int frameLength, long remaining) {
 		if (frameLength < 0) throw new IllegalArgumentException("frameLength must be non-negative");

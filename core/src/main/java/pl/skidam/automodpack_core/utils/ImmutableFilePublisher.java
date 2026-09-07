@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.file.FileAlreadyExistsException;
@@ -19,27 +18,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public final class ImmutableFilePublisher {
 	private static final ConcurrentHashMap<Path, ReentrantLock> JVM_LOCKS = new ConcurrentHashMap<>();
 	private ImmutableFilePublisher() {}
-
-	public static boolean publishBytes(Path target, byte[] bytes, ExistingFileValidator existingFileValidator) throws IOException {
-		Objects.requireNonNull(target, "target");
-		Objects.requireNonNull(bytes, "bytes");
-		Path parent = requireParent(target);
-		if (validateExisting(target, existingFileValidator, null)) {
-			ImmutableFiles.protect(target);
-			if (!ImmutableFiles.isProtected(target)) throw new IOException("Published immutable file is writable: " + target);
-			return false;
-		}
-		Path temporary = Files.createTempFile(parent, ".immutable-", ".tmp");
-		try {
-			write(temporary, bytes);
-			ImmutableFiles.protect(temporary);
-			boolean published = publishTemporary(temporary, target, existingFileValidator);
-			if (!ImmutableFiles.isProtected(target)) throw new IOException("Published immutable file is writable: " + target);
-			return published;
-		} finally {
-			Files.deleteIfExists(temporary);
-		}
-	}
 
 	/** Publishes a verified immutable source, using a copy only when a hard link is unavailable. */
 	public static boolean publishFile(Path source, Path target, ExistingFileValidator existingFileValidator) throws IOException {
@@ -137,14 +115,6 @@ public final class ImmutableFilePublisher {
 		Path ancestor = parent.getParent();
 		if (name == null || ancestor == null) throw new IOException("Immutable target directory cannot host a publication lock: " + parent);
 		return ancestor.resolve("." + name + ".publication.lock").normalize();
-	}
-
-	private static void write(Path temporary, byte[] bytes) throws IOException {
-		try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
-			ByteBuffer buffer = ByteBuffer.wrap(bytes);
-			while (buffer.hasRemaining()) channel.write(buffer);
-			channel.force(true);
-		}
 	}
 
 	private static Path requireParent(Path target) throws IOException {

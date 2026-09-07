@@ -468,7 +468,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					: VersionedText.translatable("automodpack.selection.blockedBy", names(groupResolution.relatedGroups())).getString();
 			case EXCLUDED -> VersionedText.translatable("automodpack.selection.status.excluded").getString();
 			case CONFLICT -> VersionedText.translatable("automodpack.selection.conflictsWith", names(groupResolution.relatedGroups())).getString();
-			case STALE -> VersionedText.translatable("automodpack.selection.status.stale").getString();
 		};
 	}
 
@@ -525,7 +524,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			case AVAILABLE -> VersionedText.translatable("automodpack.selection.status.available").getString();
 			case BLOCKED -> explanation.relatedGroups().isEmpty() ? VersionedText.translatable("automodpack.selection.status.dependencyUnavailable").getString() : "";
 			case EXCLUDED -> VersionedText.translatable("automodpack.selection.status.excluded").getString();
-			case STALE -> VersionedText.translatable("automodpack.selection.status.stale").getString();
 			default -> "";
 		};
 	}

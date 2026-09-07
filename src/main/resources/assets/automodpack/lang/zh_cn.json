@@ -228,7 +228,6 @@
   "automodpack.selection.metrics.other": "（%s 个文件，%s）",
   "automodpack.selection.status.dependencyUnavailable": "（依赖不可用）",
   "automodpack.selection.status.available": "可用",
-  "automodpack.selection.status.stale": "已保存的选择不再可用",
   "automodpack.selection.blockedBy": "不可用，因为此功能需要 %s",
   "automodpack.selection.conflictsWith": "与 %s 冲突",
   "automodpack.selection.conflictTitle": "要替换冲突的功能吗？",

@@ -7,10 +7,6 @@ public record SelectionIntent(NavigableSet<String> requestedGroups, NavigableSet
 		this(requestedGroups, Set.of(), Set.of());
 	}
 
-	public SelectionIntent(Collection<String> requestedGroups, Collection<String> excludedGroups) {
-		this(requestedGroups, Set.of(), excludedGroups);
-	}
-
 	public SelectionIntent(Collection<String> requestedGroups, Collection<String> requestedCategories, Collection<String> excludedGroups) {
 		this(requestedGroups, requestedCategories, excludedGroups, null);
 	}

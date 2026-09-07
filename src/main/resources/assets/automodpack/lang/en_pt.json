@@ -232,7 +232,6 @@
   "automodpack.selection.metrics.other": "(%s files, %s)",
   "automodpack.selection.status.dependencyUnavailable": "(dependency missin')",
   "automodpack.selection.status.available": "Available",
-  "automodpack.selection.status.stale": "Saved pick be gone",
   "automodpack.selection.blockedBy": "Can't use this. It needs %s",
   "automodpack.selection.conflictsWith": "Fights with %s",
   "automodpack.selection.conflictTitle": "Replace the fightin' features?",
