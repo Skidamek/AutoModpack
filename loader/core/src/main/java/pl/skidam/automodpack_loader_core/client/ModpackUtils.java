@@ -145,7 +145,7 @@ public class ModpackUtils {
 		}
 		long size;
 		try {
-			size = Long.parseLong(serverItem.size);
+			size = serverItem.size;
 		} catch (NumberFormatException e) {
 			return FileVerification.MISMATCH;
 		}
@@ -157,7 +157,7 @@ public class ModpackUtils {
 	public static void populateStoreFromCWD(Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileCache cache, ClientStorage storage) {
 		for (var entry : filesToUpdate) {
 			Path storeFile = storage.objectFile(entry.sha1);
-			long expectedSize = Long.parseLong(entry.size);
+			long expectedSize = entry.size;
 
 			if (FileIntegrity.matchesNamed(storeFile, expectedSize, entry.sha1, cache)) {
 				LOGGER.debug("Verified file already exists in store: {}", entry.file);
@@ -191,7 +191,7 @@ public class ModpackUtils {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
 			Path storeFile = storage.objectFile(entry.sha1);
-			if (FileIntegrity.matchesNamed(storeFile, Long.parseLong(entry.size), entry.sha1, cache)) continue;
+			if (FileIntegrity.matchesNamed(storeFile, entry.size, entry.sha1, cache)) continue;
 			if (Files.exists(storeFile)) {
 				try {
 					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);

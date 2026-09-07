@@ -56,7 +56,7 @@ public final class SelectedTreeComposer {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> items = new LinkedHashSet<>();
 		for (var entry : files.entrySet()) {
 			GroupManifest.GroupFile file = entry.getValue();
-			items.add(new ModpackJsons.ModpackContentFields.ModpackContentItem(entry.getKey(), String.valueOf(file.size()), file.type(), file.editable(), file.sha1(), file.murmur()));
+			items.add(new ModpackJsons.ModpackContentFields.ModpackContentItem(entry.getKey(), file.size(), file.type(), file.editable(), file.sha1(), file.murmur()));
 		}
 		return items;
 	}
@@ -65,7 +65,7 @@ public final class SelectedTreeComposer {
 		Set<ModpackJsons.ModpackContentFields.ModpackContentItem> items = new LinkedHashSet<>();
 		for (String groupId : groupIds) for (var entry : manifest.groups().get(groupId).files().entrySet()) {
 			GroupManifest.GroupFile file = entry.getValue();
-			items.add(new ModpackJsons.ModpackContentFields.ModpackContentItem(entry.getKey(), String.valueOf(file.size()), file.type(), file.editable(), file.sha1(), file.murmur()));
+			items.add(new ModpackJsons.ModpackContentFields.ModpackContentItem(entry.getKey(), file.size(), file.type(), file.editable(), file.sha1(), file.murmur()));
 		}
 		return items;
 	}

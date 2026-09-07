@@ -72,7 +72,7 @@ public final class ClientOfflineRepair {
 		TreeSet<String> paths = new TreeSet<>();
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			for (var item : target.flatTarget().list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type)).toList()) {
-				long size = parseSize(item.size);
+				long size = item.size;
 				Path source = verifiedSource(item.file, size, item.sha1, cache);
 				if (source == null) continue;
 				FileInspection.Mod mod = modCache.getModOrNull(source, item.sha1, cache);
@@ -92,13 +92,4 @@ public final class ClientOfflineRepair {
 		return null;
 	}
 
-	private static long parseSize(String value) throws IOException {
-		try {
-			long size = Long.parseLong(value);
-			if (size < 0) throw new IllegalArgumentException("Negative size");
-			return size;
-		} catch (RuntimeException e) {
-			throw new IOException("Installed repair target contains an invalid size: " + value, e);
-		}
-	}
 }

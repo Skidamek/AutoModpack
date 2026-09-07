@@ -295,10 +295,10 @@ final class ClientUpdatePlanBuilder {
 				continue;
 			}
 			long size = Files.size(live);
-			String hash = FileIntegrity.observedHash(live, Long.parseLong(item.size), item.sha1, cache);
+			String hash = FileIntegrity.observedHash(live, item.size, item.sha1, cache);
 			UpdatePlan.FileState state = new UpdatePlan.FileState(hash, size, true);
 			if (projection.matchesPendingGameState(item.file, state)) continue;
-			if (item.sha1.equalsIgnoreCase(state.sha1()) && Long.parseLong(item.size) == state.size()) {
+			if (item.sha1.equalsIgnoreCase(state.sha1()) && item.size == state.size()) {
 				Files.deleteIfExists(overlay);
 				deletedPaths.remove(LogicalPath.normalize(item.file));
 				continue;
@@ -324,7 +324,7 @@ final class ClientUpdatePlanBuilder {
 	/** A drifted file the pack owns: the drifted bytes go to the vault and the live file gets the pack version back, without a review. */
 	private UpdatePlan.FileState resetDriftedFile(FileCache cache, ModpackJsons.ModpackContentFields activeTarget, ModpackJsons.ModpackContentFields.ModpackContentItem item,
 			Path live, UpdatePlan.FileState drift, PreservationVault.Reason reason) throws IOException {
-		long packSize = Long.parseLong(item.size);
+		long packSize = item.size;
 		Path object = storage.objectFile(item.sha1);
 		if (!FileIntegrity.matchesNamed(object, packSize, item.sha1, cache)) {
 			LOGGER.warn("Pack version is unavailable locally; keeping the drifted file in place: {}", item.file);
@@ -344,7 +344,7 @@ final class ClientUpdatePlanBuilder {
 		if (targetItem == null || !targetItem.sha1.equalsIgnoreCase(item.sha1) || ModpackPathPolicy.isActiveMod(relative, item.type)) return;
 		Path live = livePath(item);
 		if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) return;
-		long packSize = Long.parseLong(item.size);
+		long packSize = item.size;
 		long size = Files.size(live);
 		if (size == packSize && FileIntegrity.matchesNamed(live, packSize, item.sha1, cache)) return;
 		UpdatePlan.FileState state = new UpdatePlan.FileState(cache.getOrComputeHash(live), size, true);
@@ -362,7 +362,7 @@ final class ClientUpdatePlanBuilder {
 		if (target.list == null) return;
 		for (var item : target.list) {
 			Path object = storage.objectFile(item.sha1);
-			long size = Long.parseLong(item.size);
+			long size = item.size;
 			if (FileIntegrity.matchesNamed(object, size, item.sha1, cache)) continue;
 			for (Path source : sourceResolver.apply(item)) if (populateStoreObject(source, object, size, item.sha1, cache)) break;
 		}
@@ -432,10 +432,7 @@ final class ClientUpdatePlanBuilder {
 
 	private static void putAdvertisedLive(Map<String, UpdatePlan.FileState> advertised, ModpackJsons.ModpackContentFields.ModpackContentItem item) {
 		if (item == null || item.file == null || item.sha1 == null) return;
-		try {
-			advertised.put(LogicalPath.normalize(item.file), new UpdatePlan.FileState(item.sha1, Long.parseLong(item.size), true));
-		} catch (NumberFormatException ignored) {
-		}
+		advertised.put(LogicalPath.normalize(item.file), new UpdatePlan.FileState(item.sha1, item.size, true));
 	}
 
 	private GeneratedCopyState readGeneratedCopyState(ModpackJsons.ModpackContentFields manifest, SelectionIntent intent) throws IOException {
@@ -455,7 +452,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private Path resolvedObject(ModpackJsons.ModpackContentFields.ModpackContentItem item, ClientProjectionView.Snapshot projection, FileCache cache) {
-		long size = Long.parseLong(item.size);
+		long size = item.size;
 		Path object = storage.objectFile(item.sha1);
 		if (FileIntegrity.matchesNamed(object, size, item.sha1, cache)) return object;
 		for (Path candidate : projection.sourceCandidates(item.file)) {
@@ -471,7 +468,7 @@ final class ClientUpdatePlanBuilder {
 			Path source = resolvedObject(item, projection, cache);
 			if (source == null) continue;
 			FileInspection.Mod mod = modCache.getModOrNull(source, item.sha1, cache);
-			if (mod != null) mods.add(new UpdatePlan.ModInfo(LogicalPath.normalize(item.file), item.sha1, Long.parseLong(item.size), mod.IDs(), mod.deps()));
+			if (mod != null) mods.add(new UpdatePlan.ModInfo(LogicalPath.normalize(item.file), item.sha1, item.size, mod.IDs(), mod.deps()));
 		}
 		return mods;
 	}
@@ -501,7 +498,7 @@ final class ClientUpdatePlanBuilder {
 				String logicalPath = LogicalPath.normalize(item.file);
 				Path inspectionPath = inspectionDirectory.resolve(logicalPath).normalize();
 				if (!inspectionPath.startsWith(inspectionDirectory)) throw new IOException("Mod inspection path escaped its temporary directory: " + item.file);
-				materializeInspectionCopy(source, inspectionPath, Long.parseLong(item.size), item.sha1, cache);
+				materializeInspectionCopy(source, inspectionPath, item.size, item.sha1, cache);
 			}
 
 			List<UpdatePlan.NestedCopy> copies = new ArrayList<>();

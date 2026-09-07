@@ -71,13 +71,13 @@ public class ModpackJsons {
 
 		public static class ModpackContentItem {
 			public final String file;
-			public final String size;
+			public final long size;
 			public final String type;
 			public final boolean editable;
 			public final String sha1;
 			public final String murmur;
 
-			public ModpackContentItem(String file, String size, String type, boolean editable, String sha1, String murmur) {
+			public ModpackContentItem(String file, long size, String type, boolean editable, String sha1, String murmur) {
 				this.file = file;
 				this.size = size;
 				this.type = type;
@@ -96,8 +96,8 @@ public class ModpackJsons {
 				if (this == obj) return true;
 				if (obj == null || getClass() != obj.getClass()) return false;
 				ModpackContentItem that = (ModpackContentItem) obj;
-				return editable == that.editable
-						&& Objects.equals(file, that.file) && Objects.equals(size, that.size) && Objects.equals(type, that.type)
+				return editable == that.editable && size == that.size
+						&& Objects.equals(file, that.file) && Objects.equals(type, that.type)
 						&& Objects.equals(sha1, that.sha1) && Objects.equals(murmur, that.murmur);
 			}
 

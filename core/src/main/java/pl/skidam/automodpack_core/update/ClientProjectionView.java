@@ -149,15 +149,9 @@ public final class ClientProjectionView {
 				String relative = LogicalPath.normalize(active.relativize(path).toString());
 				long size = Files.size(path);
 				var item = published.get(relative);
-				if (item != null) {
-					try {
-						long expectedSize = Long.parseLong(item.size);
-						if (expectedSize == size && FileIntegrity.matchesObject(path, storage.objectFile(item.sha1), expectedSize, item.sha1, cache)) {
-							files.put(relative, new UpdatePlan.FileState(HashUtils.normalizeSha1(item.sha1), size, true));
-							continue;
-						}
-					} catch (NumberFormatException ignored) {
-					}
+				if (item != null && item.size == size && FileIntegrity.matchesObject(path, storage.objectFile(item.sha1), item.size, item.sha1, cache)) {
+					files.put(relative, new UpdatePlan.FileState(HashUtils.normalizeSha1(item.sha1), size, true));
+					continue;
 				}
 				files.put(relative, new UpdatePlan.FileState(cache.getOrComputeHash(path), size, true));
 			}

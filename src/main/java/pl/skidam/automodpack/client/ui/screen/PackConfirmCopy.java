@@ -49,7 +49,7 @@ final class PackConfirmCopy {
 	static long selectedBytes(SelectedModpackTarget target) {
 		if (target.flatTarget().list == null) return 0;
 		long bytes = 0;
-		for (var item : target.flatTarget().list) bytes += Long.parseLong(item.size);
+		for (var item : target.flatTarget().list) bytes += item.size;
 		return bytes;
 	}
 
@@ -60,7 +60,7 @@ final class PackConfirmCopy {
 	/** The selected target's size for one file path, or 0 when the path is not part of the target. */
 	static long selectedJarSize(SelectedModpackTarget target, String path) {
 		if (target.flatTarget().list == null) return 0;
-		for (var item : target.flatTarget().list) if (path.equals(item.file)) return Math.max(0, Long.parseLong(item.size));
+		for (var item : target.flatTarget().list) if (path.equals(item.file)) return Math.max(0, item.size);
 		return 0;
 	}
 
