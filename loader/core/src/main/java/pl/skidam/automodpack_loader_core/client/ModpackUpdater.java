@@ -152,7 +152,7 @@ public class ModpackUpdater implements AutoCloseable {
 		try {
 			recordChangelogs(prepared, selectedTarget);
 			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
-			changelogs.setRestartReasons(applyResult.reasonDescriptions());
+			changelogs.setRestartReasons(applyResult.reasonIds());
 			removalLifecycle.restartAfterApply(applyResult);
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Installed modpack switch transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
@@ -602,7 +602,7 @@ public class ModpackUpdater implements AutoCloseable {
 			ClientUpdatePlanBuilder.PreparedPlan prepared = reviewed.prepared();
 			recordChangelogs(prepared, selectedTarget);
 			ApplyResult applyResult = applyPreparedPlan(reviewed, selectedTarget);
-			changelogs.setRestartReasons(applyResult.reasonDescriptions());
+			changelogs.setRestartReasons(applyResult.reasonIds());
 			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
 			removalLifecycle.restartAfterApply(applyResult);
 			return ApplyStatus.APPLIED;
@@ -629,7 +629,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (!reviewed.review().isApproved()) throw new IllegalStateException("Update plan has not been approved");
 		ClientUpdatePlanBuilder.PreparedPlan applied = executePlan(reviewed, target);
 		ApplyResult result = RestartDecision.applyResult(applied.plan());
-		changelogs.setRestartReasons(result.reasonDescriptions());
+		changelogs.setRestartReasons(result.reasonIds());
 		if (result.requiresRestart()) LOGGER.info("Restart required because: {}", String.join(", ", result.reasonDescriptions()));
 		return result;
 	}
