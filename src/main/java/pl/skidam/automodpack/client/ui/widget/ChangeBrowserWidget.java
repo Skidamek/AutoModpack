@@ -52,7 +52,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 	private final Consumer<String> folderToggle;
 	private final Consumer<ChangeBrowserProjection.FileRow> selectionChanged;
 
-	public ChangeBrowserWidget(ChangeBrowserProjection.Projection projection, Set<String> collapsedFolders, Map<String, String> featureNames, boolean warnUnverified, boolean referencesResolved,
+	public ChangeBrowserWidget(ChangeBrowserProjection.Projection projection, Set<String> collapsedFolders, Map<String, String> groupNames, boolean warnUnverified, boolean referencesResolved,
 			Consumer<String> folderToggle, Consumer<ChangeBrowserProjection.FileRow> selectionChanged, Minecraft client, int width, int height, int top, int bottom) {
 		/*? if <1.20.3 {*/
 		/*super(client, width, height, top, bottom, ROW_HEIGHT);
@@ -70,7 +70,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		this.referencesResolved = referencesResolved;
 		this.selectionChanged = selectionChanged;
 		Set<String> collapsed = Set.copyOf(collapsedFolders == null ? Set.of() : collapsedFolders);
-		Map<String, String> names = Map.copyOf(featureNames == null ? Map.of() : featureNames);
+		Map<String, String> names = Map.copyOf(groupNames == null ? Map.of() : groupNames);
 		for (ChangeBrowserProjection.Row row : projection.rows()) this.addEntry(new Entry(row, collapsed.contains(row.path()), names));
 	}
 	/*? if <1.19.4 {*/
@@ -140,13 +140,13 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 	public final class Entry extends ObjectSelectionList.Entry<Entry> {
 		private final ChangeBrowserProjection.Row row;
 		private final boolean collapsed;
-		private final Map<String, String> featureNames;
+		private final Map<String, String> groupNames;
 		private final List<Badge> badges;
 
-		private Entry(ChangeBrowserProjection.Row row, boolean collapsed, Map<String, String> featureNames) {
+		private Entry(ChangeBrowserProjection.Row row, boolean collapsed, Map<String, String> groupNames) {
 			this.row = Objects.requireNonNull(row, "browser row");
 			this.collapsed = collapsed;
-			this.featureNames = featureNames;
+			this.groupNames = groupNames;
 			this.badges = badges(row);
 		}
 
@@ -201,7 +201,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			if (hovered) tooltip(matrices, mouseX, mouseY);
 		}
 
-		private record Badge(String text, String key, int color) {}
+		private record Badge(String text, int color) {}
 
 		/** Right-aligned first-line tags: the storefronts publishing this file's written state, or the custom mark for plain jars. */
 		private List<Badge> badges(ChangeBrowserProjection.Row row) {
@@ -216,25 +216,20 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 					else if (platform.equals("curseforge")) curseforge = true;
 				}
 			}
-			if (modrinth) badges.add(new Badge("MR", "automodpack.browser.modrinth", BADGE_MODRINTH_COLOR));
-			if (curseforge) badges.add(new Badge("CF", "automodpack.browser.curseforge", BADGE_CURSEFORGE_COLOR));
-			if (referencesResolved && badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.translatable("automodpack.browser.custom").getString(), "automodpack.browser.custom", warnUnverified ? BADGE_CUSTOM_UNVERIFIED_COLOR : BADGE_CUSTOM_COLOR));
+			if (modrinth) badges.add(new Badge("MR", BADGE_MODRINTH_COLOR));
+			if (curseforge) badges.add(new Badge("CF", BADGE_CURSEFORGE_COLOR));
+			if (referencesResolved && badges.isEmpty() && file.path().toLowerCase(Locale.ROOT).endsWith(".jar")) badges.add(new Badge(VersionedText.translatable("automodpack.browser.custom").getString(), warnUnverified ? BADGE_CUSTOM_UNVERIFIED_COLOR : BADGE_CUSTOM_COLOR));
 			return badges;
 		}
 
 		private void tooltip(VersionedMatrices matrices, int mouseX, int mouseY) {
 			if (!(row instanceof ChangeBrowserProjection.FileRow file)) return;
-			List<String> lines = new ArrayList<>();
-			lines.add(row.path());
-			String written = file.writtenHash();
-			String previous = file.previousHash();
-			String hash = shortHash(written);
-			if (hash != null) lines.add("sha1: " + hash);
-			if (previous != null && written != null && !previous.equals(written)) lines.add(shortHash(previous) + " -> " + shortHash(written));
-			List<String> badgeNames = badges.stream().filter(badge -> badge.key() != null).map(badge -> VersionedText.translatable(badge.key()).getString()).toList();
-			String identity = projectIdentity(file, badgeNames);
-			if (!identity.isEmpty()) lines.add(identity);
-			VersionedScreen.showComponentTooltip(minecraft.font, matrices, VersionedText.literal(String.join("\n", lines)), mouseX, mouseY);
+			// One short line: the project identity and the groups supplying the file. Everything else lives in the details pane.
+			String identity = projectIdentity(file);
+			String groups = String.join(", ", visibleGroups(file));
+			String line = identity.isEmpty() ? groups : groups.isEmpty() ? identity : identity + " · " + groups;
+			if (line.isEmpty()) return;
+			VersionedScreen.showComponentTooltip(minecraft.font, matrices, VersionedText.literal(line), mouseX, mouseY);
 		}
 
 		private String marker() {
@@ -265,9 +260,15 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			Long beforeSize = file.kind() != ChangeSet.Kind.MODIFIED && file.kind() != ChangeSet.Kind.METADATA_ONLY ? null : file.beforeSize();
 			if (beforeSize != null && beforeSize.longValue() != file.size()) parts.add(VersionedText.translatable("automodpack.browser.wasSize", UiFormat.formatSize(beforeSize)).getString());
 			if (!file.contentKinds().isEmpty()) parts.add(String.join(", ", file.contentKinds().stream().map(ChangeBrowserWidget::contentName).toList()));
-			List<String> visibleFeatures = file.features().stream().map(featureNames::get).filter(name -> name != null && !name.isBlank()).distinct().sorted().toList();
-			if (!visibleFeatures.isEmpty()) parts.add(String.join(", ", visibleFeatures));
+			List<String> visibleGroups = visibleGroups(file);
+			if (!visibleGroups.isEmpty()) parts.add(String.join(", ", visibleGroups));
 			return String.join(" | ", parts);
+		}
+
+		/** The file's group display names, alphabetically; ids without a name fall back to "Unknown group". */
+		private List<String> visibleGroups(ChangeBrowserProjection.FileRow file) {
+			return file.features().stream().map(groupNames::get).map(name -> name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : name)
+					.distinct().sorted(String.CASE_INSENSITIVE_ORDER).toList();
 		}
 
 		/** The row's fact line, shared with the browser screen's details pane. */
@@ -291,8 +292,8 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 
 		private String effectName(ChangeSet.Effect effect) {
 			if (effect.category().startsWith("group.")) {
-				String name = featureNames.get(effect.value());
-				return name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : name;
+				String name = groupNames.get(effect.value());
+				return name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : name;
 			}
 			return VersionedText.translatable("automodpack.ui.general").getString();
 		}
@@ -337,7 +338,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 	}
 
 	/** Storefront a reference URL belongs to, or "" for every other host; badges only cover the vetted platforms. */
-	private static String platform(String url) {
+	public static String platform(String url) {
 		try {
 			String host = new URI(url).getHost();
 			if (host == null || host.isBlank()) return "";
@@ -350,8 +351,8 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		}
 	}
 
-	/** "slug (Modrinth), slug (CurseForge)" from the file's storefront references, once as "slug (Modrinth, CurseForge)" when both agree, else the plain platform names. */
-	private static String projectIdentity(ChangeBrowserProjection.FileRow file, List<String> badgeNames) {
+	/** "slug (Modrinth), slug (CurseForge)" from the file's storefront references, once as "slug (Modrinth, CurseForge)" when both agree, else "" when no slug is known. */
+	private static String projectIdentity(ChangeBrowserProjection.FileRow file) {
 		Map<String, String> slugs = new LinkedHashMap<>();
 		for (ChangeSet.Occurrence occurrence : file.occurrences())
 			for (String reference : occurrence.references()) {
@@ -362,7 +363,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			}
 		String modrinth = slugs.get("modrinth");
 		String curseforge = slugs.get("curseforge");
-		if (modrinth == null && curseforge == null) return String.join(", ", badgeNames);
+		if (modrinth == null && curseforge == null) return "";
 		if (modrinth != null && modrinth.equals(curseforge)) return modrinth + " (" + platformName("modrinth") + ", " + platformName("curseforge") + ")";
 		List<String> entries = new ArrayList<>();
 		if (modrinth != null) entries.add(modrinth + " (" + platformName("modrinth") + ")");
@@ -384,10 +385,6 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		} catch (URISyntaxException | IllegalArgumentException ignored) {
 			return null;
 		}
-	}
-
-	private static String shortHash(String hash) {
-		return hash == null ? null : hash.substring(0, Math.min(12, hash.length()));
 	}
 
 	private static String kindName(ChangeSet.Kind kind) {

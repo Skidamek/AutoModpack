@@ -16,11 +16,16 @@ import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 public final class ChangelogScreen extends ChangeBrowserScreen {
 	public ChangelogScreen(Screen parent, Changelogs changelogs) {
 		super(parent, VersionedText.translatable("automodpack.changelog.title"),
-				VersionedText.translatable("automodpack.changelog.latestNote", latestNote(changelogs)), changelogs.changeSet(), Map.of(),
+				VersionedText.translatable("automodpack.changelog.latestNote", latestNote(changelogs)), changelogs.changeSet(), activeGroupNames(),
 				new BrowserAction(VersionedText.translatable("automodpack.management.history"),
 						screen -> ScreenImpl.setScreen(new ContentHistoryScreen(screen, new HistoryViewRequest(changelogs.journal(), newestSeq(changelogs.journal()), "", () -> {}))),
 						!changelogs.journal().isEmpty()));
 		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
+	}
+
+	/** The applied update belongs to the active pack, whose manifest names its groups; with no pack installed the filter stays on "All". */
+	private static Map<String, String> activeGroupNames() {
+		return new InstalledModpackController().activeGroupNames();
 	}
 
 	/** The applied update sits at the head of the journal, so it is the generation the game currently runs. */

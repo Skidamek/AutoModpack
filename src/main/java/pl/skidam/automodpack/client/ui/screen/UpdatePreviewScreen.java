@@ -58,11 +58,12 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	protected void init() {
 		super.init();
 		List<ActionRow> rows = buildRows();
-		List<Button> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
+		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
+		List<MutableComponent> body = buildBodyLines();
+		DialogLayout layout = layoutDialogWithActions(42, body.size() * LINE_HEIGHT, 0, rowArray);
+		List<Button> buttons = this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rowArray);
 		setTooltip(buttons.get(buttons.size() - 2), ChangeSummary.diffLegend());
-		int topY = 42;
-		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new)) - 4;
-		this.addCenteredScrollBody(PANEL_WIDTH, topY, bottomY, buildBodyLines());
+		this.addCenteredScrollBody(PANEL_WIDTH, layout.column().bodyTop(), layout.column().bodyBottom(), body);
 	}
 
 	private List<ActionRow> buildRows() {
@@ -141,7 +142,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	private void openFiles() {
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this,
-				VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(reviewKey(mode)), changes, preview.featureNames(), null, List.of(), true, preview.uncachedAcquisitionBytes()));
+				VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(reviewKey(mode)), changes, preview.featureNames(), null, List.of(), true, preview.uncachedAcquisitionBytes(),
+				""));
 	}
 
 	private void openHistory() {

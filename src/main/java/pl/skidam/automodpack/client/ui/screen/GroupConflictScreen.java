@@ -14,8 +14,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
-/** Confirms the deterministic replacement of selected features after a direct conflict. */
-public final class FeatureConflictScreen extends VersionedScreen {
+/** Confirms the deterministic replacement of selected groups after a direct conflict. */
+public final class GroupConflictScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = ActionAreaLayout.FOOTER_RAIL;
 
 	private final Screen parent;
@@ -23,11 +23,11 @@ public final class FeatureConflictScreen extends VersionedScreen {
 	private final String conflictingNames;
 	private final Runnable replace;
 
-	public FeatureConflictScreen(Screen parent, String preferredName, String conflictingNames, Runnable replace) {
+	public GroupConflictScreen(Screen parent, String preferredName, String conflictingNames, Runnable replace) {
 		super(VersionedText.translatable("automodpack.selection.conflictTitle"));
 		this.parent = Objects.requireNonNull(parent, "conflict parent");
-		this.preferredName = Objects.requireNonNull(preferredName, "preferred feature name");
-		this.conflictingNames = Objects.requireNonNull(conflictingNames, "conflicting feature names");
+		this.preferredName = Objects.requireNonNull(preferredName, "preferred group name");
+		this.conflictingNames = Objects.requireNonNull(conflictingNames, "conflicting group names");
 		this.replace = Objects.requireNonNull(replace, "replacement action");
 	}
 
@@ -36,13 +36,13 @@ public final class FeatureConflictScreen extends VersionedScreen {
 		super.init();
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.selection.keepCurrent"), button -> ScreenImpl.setScreen(parent)),
-				primaryAction(VersionedText.translatable("automodpack.selection.useFeature", preferredName).withStyle(ChatFormatting.BOLD), button -> confirm()));
-		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
+				primaryAction(VersionedText.translatable("automodpack.selection.useGroup", preferredName).withStyle(ChatFormatting.BOLD), button -> confirm()));
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
 		String description = VersionedText.translatable("automodpack.selection.conflictDescription", preferredName, conflictingNames, preferredName, preferredName).getString();
 		List<MutableComponent> lines = wrapParagraph(this.font, description, wrapWidth, ChatFormatting.GRAY);
-		DialogColumn column = layoutDialogColumn(42, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer), lines.size() * LINE_HEIGHT, 0);
-		this.addCenteredScrollBody(PANEL_WIDTH, column.bodyTop(), column.bodyBottom(), lines);
+		DialogLayout layout = layoutDialogWithActions(42, lines.size() * LINE_HEIGHT, 0, footer);
+		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
+		this.addCenteredScrollBody(PANEL_WIDTH, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 
 	private void confirm() {

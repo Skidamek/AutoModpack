@@ -25,6 +25,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.GroupSelectionList;
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -224,9 +225,22 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (item.kind() == GroupSelectionList.Kind.GROUP) inspect(item.id());
 	}
 
+	/** The "?" on a group row opens the file browser pre-filtered to that group — the row tooltip already carries the group's metadata. */
 	private void inspect(String groupId) {
 		if (!groups.containsKey(groupId)) return;
-		ScreenImpl.setScreen(new GroupInspectorScreen(this, manifest, groupId));
+		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.literal(displayName(groupId)),
+				VersionedText.translatable("automodpack.browser.groupDescription"), groupChanges(groupId), Map.of(groupId, displayName(groupId)), null, List.of(), false, 0, groupId));
+	}
+
+	/** The group's shipped files as a preserved catalogue for the shared browser. */
+	private ChangeSet groupChanges(String groupId) {
+		List<ChangeSet.Change> changes = new ArrayList<>();
+		for (var entry : groups.get(groupId).files().entrySet()) {
+			GroupManifest.GroupFile file = entry.getValue();
+			ChangeSet.Occurrence occurrence = new ChangeSet.Occurrence("catalogue", entry.getKey(), file.size(), null, null, file.sha1(), file.type(), List.of(groupId), List.of());
+			changes.add(new ChangeSet.Change(entry.getKey(), ChangeSet.Kind.PRESERVED, List.of(occurrence)));
+		}
+		return ChangeSet.of(changes);
 	}
 
 	public boolean isUpdateFlow() {
@@ -294,7 +308,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, effectivePlatform(), exception.resolution()).orElse(null);
 			if (replacement != null) {
 				ScreenImpl.setScreen(
-						new FeatureConflictScreen(this, preferredName, names(replacement.conflictingGroups()), () -> applySelectionChange(replacement.intent().withPlatform(override()), Set.of(), preferredName)));
+						new GroupConflictScreen(this, preferredName, names(replacement.conflictingGroups()), () -> applySelectionChange(replacement.intent().withPlatform(override()), Set.of(), preferredName)));
 				return;
 			}
 			resolutionError = preferredGroups.isEmpty()
@@ -477,7 +491,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private MutableComponent rowLabel(String groupId, GroupManifest.Group group) {
-		if (group == null) return VersionedText.translatable("automodpack.browser.unknownFeature");
+		if (group == null) return VersionedText.translatable("automodpack.browser.unknownGroup");
 
 		String name = displayName(groupId);
 		GroupResolution explanation = resolution.resolution(groupId);
@@ -546,14 +560,14 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		for (String value : values) {
 			if (result.length() > 0) result.append(", ");
 			GroupManifest.Group related = groups.get(value);
-			result.append(related == null || related.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : related.displayName());
+			result.append(related == null || related.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : related.displayName());
 		}
 		return result.length() == 0 ? VersionedText.translatable("automodpack.ui.none").getString() : result.toString();
 	}
 
 	private String displayName(String groupId) {
 		GroupManifest.Group group = groups.get(groupId);
-		return group == null || group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownFeature").getString() : group.displayName();
+		return group == null || group.displayName().isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : group.displayName();
 	}
 
 	private boolean hasOptionalCategoryGroups(String category) {

@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TreeMap;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -119,10 +118,8 @@ final class PackConfirmCopy {
 		return updater.reviewCatalogue();
 	}
 
-	static Map<String, String> featureNames(GroupManifest manifest) {
-		Map<String, String> names = new TreeMap<>();
-		manifest.groups().forEach((id, group) -> names.put(id, group.displayName().isBlank() ? id : group.displayName()));
-		return names;
+	static Map<String, String> groupNames(GroupManifest manifest) {
+		return InstalledModpackController.groupNames(manifest);
 	}
 
 	static boolean canCustomize(GroupManifest manifest) {
