@@ -106,42 +106,40 @@ public final class PreservationVault {
 		Instant time = requireInstant(preservedAt);
 		String claimId = claimId(pack, generation, normalizedReason, normalizedRoot, path, hash, size);
 
-		{
-			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
-				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields existing = fields.claims.stream().filter(claim -> claimId.equals(claim.claimId)).findFirst().orElse(null);
-				Path source = storage.rootedPath(normalizedRoot, pack, path);
-				Path object = object(storage, hash);
-				if (existing != null) {
-					if (!FileIntegrity.matchesNamed(object, size, hash, cache)) repairObjectFromSource(storage, source, object, hash, size, cache);
-					if (!FileIntegrity.matchesNamed(object, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
-					return toClaim(storage, existing);
-				}
-
-				validateSource(storage, pack, normalizedRoot, source);
-				if (!FileIntegrity.matches(source, size, hash, cache)) throw new IOException("Preservation source changed after planning: " + source);
-				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash, cache);
-				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) throw new IOException("Preserved object verification failed: " + object);
-
-				// The vault keeps one recoverable claim per path and content: a new receipt for bytes it
-				// already holds supersedes the older provenance instead of duplicating the row.
-				fields.claims = new ArrayList<>(fields.claims.stream().filter(held -> claimId.equals(held.claimId) || !sameContent(held, normalizedRoot, path, hash, size)).toList());
-				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = new ClientStorageJsons.ClientPreservationVaultFields.ClaimFields();
-				claim.claimId = claimId;
-				claim.originalPath = path;
-				claim.sourceRoot = normalizedRoot.name();
-				claim.objectHash = hash;
-				claim.size = size;
-				claim.modpackId = pack;
-				claim.contentToken = generation;
-				claim.reason = normalizedReason.name();
-				claim.preservedAt = time.toString();
-				fields.claims = new ArrayList<>(fields.claims);
-				fields.claims.add(claim);
-				fields.claims.sort(CLAIM_ORDER);
-				write(storage, pack, fields);
-				return toClaim(storage, claim);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
+			ClientStorageJsons.ClientPreservationVaultFields.ClaimFields existing = fields.claims.stream().filter(claim -> claimId.equals(claim.claimId)).findFirst().orElse(null);
+			Path source = storage.rootedPath(normalizedRoot, pack, path);
+			Path object = object(storage, hash);
+			if (existing != null) {
+				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) repairObjectFromSource(storage, source, object, hash, size, cache);
+				if (!FileIntegrity.matchesNamed(object, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
+				return toClaim(storage, existing);
 			}
+
+			validateSource(storage, pack, normalizedRoot, source);
+			if (!FileIntegrity.matches(source, size, hash, cache)) throw new IOException("Preservation source changed after planning: " + source);
+			if (!FileIntegrity.matchesNamed(object, size, hash, cache)) VerifiedFileTransfer.copyAtomicImmutable(source, object, size, hash, cache);
+			if (!FileIntegrity.matchesNamed(object, size, hash, cache)) throw new IOException("Preserved object verification failed: " + object);
+
+			// The vault keeps one recoverable claim per path and content: a new receipt for bytes it
+			// already holds supersedes the older provenance instead of duplicating the row.
+			fields.claims = new ArrayList<>(fields.claims.stream().filter(held -> claimId.equals(held.claimId) || !sameContent(held, normalizedRoot, path, hash, size)).toList());
+			ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = new ClientStorageJsons.ClientPreservationVaultFields.ClaimFields();
+			claim.claimId = claimId;
+			claim.originalPath = path;
+			claim.sourceRoot = normalizedRoot.name();
+			claim.objectHash = hash;
+			claim.size = size;
+			claim.modpackId = pack;
+			claim.contentToken = generation;
+			claim.reason = normalizedReason.name();
+			claim.preservedAt = time.toString();
+			fields.claims = new ArrayList<>(fields.claims);
+			fields.claims.add(claim);
+			fields.claims.sort(CLAIM_ORDER);
+			write(storage, pack, fields);
+			return toClaim(storage, claim);
 		}
 	}
 
