@@ -475,7 +475,7 @@ final class ClientUpdatePlanBuilder {
 		if (!Files.isDirectory(storage.modsDirectory())) return List.of();
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
 		try (Stream<Path> stream = Files.list(storage.modsDirectory())) {
-			for (Path path : stream.filter(Files::isRegularFile).sorted().toList()) {
+			for (Path path : stream.filter(Files::isRegularFile).toList()) {
 				FileInspection.Mod mod = modCache.getModOrNull(path, cache);
 				if (mod != null) {
 					String relativePath = LogicalPath.normalize(storage.gameDirectory().relativize(path.toAbsolutePath().normalize()).toString());

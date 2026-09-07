@@ -37,7 +37,6 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * observation is force-rehashed before it can become a repair source.
  */
 public final class OfflineRepair {
-	private static final Comparator<Finding> FINDING_ORDER = Comparator.comparing((Finding finding) -> finding.place().ordinal()).thenComparing(Finding::logicalPath);
 	private static final Comparator<EditableResetCandidate> EDITABLE_ORDER = Comparator.comparing(EditableResetCandidate::logicalPath);
 	private final ClientStorage storage;
 
@@ -407,7 +406,6 @@ public final class OfflineRepair {
 			findings.add(new Finding(value.place(), value.logicalPath(), value.content().hash(), value.content().size(), condition,
 					observation == null || observation.unsupported() ? null : observation.hash(), observation == null || observation.unsupported() ? -1 : observation.size(), repairable));
 		}
-		findings.sort(FINDING_ORDER);
 		List<EditableResetCandidate> editableCandidates = editable.values().stream().sorted(EDITABLE_ORDER).toList();
 		long bytes = 0;
 		for (Observation observation : observations.values()) if (!observation.unsupported()) bytes = Math.addExact(bytes, observation.size());

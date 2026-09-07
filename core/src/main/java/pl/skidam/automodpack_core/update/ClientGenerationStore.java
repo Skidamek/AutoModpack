@@ -247,7 +247,7 @@ public final class ClientGenerationStore {
 		if (!Files.exists(packRoot, LinkOption.NOFOLLOW_LINKS)) return;
 		FileTrees.requireDirectory(packRoot, "client generated-copy state");
 		try (Stream<Path> generations = Files.list(packRoot)) {
-			for (Path generation : generations.sorted().toList()) {
+			for (Path generation : generations.toList()) {
 				FileTrees.requireNoSymbolicLink(generation, "client generated-copy state");
 				if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
 				String token = generation.getFileName().toString();

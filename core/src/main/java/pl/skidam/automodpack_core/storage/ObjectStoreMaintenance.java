@@ -121,12 +121,12 @@ public final class ObjectStoreMaintenance {
 		FileTrees.requireDirectory(objectsDirectory, "immutable objects");
 		try (Stream<Path> shards = Files.list(objectsDirectory)) {
 			List<Path> result = new ArrayList<>();
-			for (Path shard : shards.sorted().toList()) {
+			for (Path shard : shards.toList()) {
 				if (Files.isSymbolicLink(shard)) throw new IOException("Immutable object store contains a symbolic link: " + shard);
 				if (Files.isRegularFile(shard, LinkOption.NOFOLLOW_LINKS)) continue;
 				if (!Files.isDirectory(shard, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Immutable object store contains an unsupported entry: " + shard);
 				try (Stream<Path> files = Files.list(shard)) {
-					for (Path file : files.sorted().toList()) {
+					for (Path file : files.toList()) {
 						if (Files.isSymbolicLink(file)) throw new IOException("Immutable object store contains a symbolic link: " + file);
 						if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Immutable object store contains an unsupported entry: " + file);
 						if (DataRootResolver.isObjectFile(objectsDirectory, file)) result.add(file);
