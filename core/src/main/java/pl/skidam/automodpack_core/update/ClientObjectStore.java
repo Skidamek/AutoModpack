@@ -249,7 +249,7 @@ public final class ClientObjectStore {
 				String modpackId = modpack.getFileName().toString();
 				requireModpackId(modpackId, "client overlay directory");
 				try (Stream<Path> files = Files.walk(modpack)) {
-					for (Path file : files.filter(path -> !path.equals(modpack)).sorted().toList()) {
+					for (Path file : files.filter(path -> !path.equals(modpack)).toList()) {
 						FileTrees.requireNoSymbolicLink(file, "client overlay");
 						if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) retained.optional(metadata.getOrComputeHash(file), Files.size(file), "client overlay");
 					}
@@ -377,7 +377,7 @@ public final class ClientObjectStore {
 		FileTrees.requireDirectory(root, description);
 		try (Stream<Path> paths = Files.list(root)) {
 			List<Path> result = new ArrayList<>();
-			for (Path path : paths.sorted().toList()) {
+			for (Path path : paths.toList()) {
 				FileTrees.requireNoSymbolicLink(path, description);
 				if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) result.add(path);
 				else if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " contains an unsupported entry: " + path);
@@ -391,7 +391,7 @@ public final class ClientObjectStore {
 		FileTrees.requireDirectory(directory, description);
 		try (Stream<Path> paths = Files.walk(directory)) {
 			List<Path> result = new ArrayList<>();
-			for (Path path : paths.filter(candidate -> !candidate.equals(directory)).sorted().toList()) {
+			for (Path path : paths.filter(candidate -> !candidate.equals(directory)).toList()) {
 				FileTrees.requireNoSymbolicLink(path, description);
 				if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) result.add(path);
 			}
@@ -405,19 +405,19 @@ public final class ClientObjectStore {
 		FileTrees.requireDirectory(root, "client generated-copy state");
 		List<Path> result = new ArrayList<>();
 		try (Stream<Path> packs = Files.list(root)) {
-			for (Path pack : packs.sorted().toList()) {
+			for (Path pack : packs.toList()) {
 				FileTrees.requireNoSymbolicLink(pack, "client generated-copy state");
 				if (!Files.isDirectory(pack, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + pack);
 				requireModpackId(pack.getFileName().toString(), "client generated-copy directory");
 				try (Stream<Path> generations = Files.list(pack)) {
-					for (Path generation : generations.sorted().toList()) {
+					for (Path generation : generations.toList()) {
 						FileTrees.requireNoSymbolicLink(generation, "client generated-copy state");
 						if (!Files.isDirectory(generation, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client generated-copy state contains an unsupported entry: " + generation);
 						String contentToken = generation.getFileName().toString();
 						if (!HashUtils.isCanonicalSha1(contentToken))
 							throw new IOException("Client generated-copy directory is not canonical: " + contentToken);
 						try (Stream<Path> states = Files.list(generation)) {
-							for (Path state : states.sorted().toList()) {
+							for (Path state : states.toList()) {
 								FileTrees.requireNoSymbolicLink(state, "client generated-copy state");
 								String name = state.getFileName().toString();
 								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || name.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !name.endsWith(".json")
