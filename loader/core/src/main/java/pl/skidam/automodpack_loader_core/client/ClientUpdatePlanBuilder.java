@@ -221,11 +221,9 @@ final class ClientUpdatePlanBuilder {
 			var item = itemsByHash.get(operation.expectedObjectHash().toLowerCase(Locale.ROOT));
 			if (item == null) throw new IOException("Planned CAS object is unavailable: " + operation.expectedObjectHash());
 			List<Path> candidates = projection.sourceCandidates(item.file);
-			Path source = candidates.stream().filter(candidate -> FileIntegrity.matchesObject(candidate, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache)
-					|| FileIntegrity.matches(candidate, operation.expectedSize(), operation.expectedObjectHash(), cache)).findFirst().orElse(null);
+			Path source = candidates.stream().filter(candidate -> FileIntegrity.matchesObject(candidate, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache)).findFirst().orElse(null);
 			if (source == null) source = livePath(item);
-			if (!FileIntegrity.matchesObject(source, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache)
-					&& !FileIntegrity.matches(source, operation.expectedSize(), operation.expectedObjectHash(), cache))
+			if (!FileIntegrity.matchesObject(source, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache))
 				throw new IOException("Required object is absent from CAS and verified live locations: " + operation.expectedObjectHash());
 			VerifiedFileTransfer.copyAtomicImmutable(source, storeFile, operation.expectedSize(), operation.expectedObjectHash(), cache);
 		}
@@ -369,7 +367,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileCache cache) throws IOException {
-		if (!FileIntegrity.matchesNamed(source, size, sha1, cache) && !FileIntegrity.matches(source, size, sha1, cache)) return false;
+		if (!FileIntegrity.matchesObject(source, object, size, sha1, cache)) return false;
 		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, sha1, cache);
 		cache.overwriteCache(object, sha1);
 		return true;
@@ -456,7 +454,7 @@ final class ClientUpdatePlanBuilder {
 		Path object = storage.objectFile(item.sha1);
 		if (FileIntegrity.matchesNamed(object, size, item.sha1, cache)) return object;
 		for (Path candidate : projection.sourceCandidates(item.file)) {
-			if (FileIntegrity.matchesObject(candidate, object, size, item.sha1, cache) || FileIntegrity.matches(candidate, size, item.sha1, cache)) return candidate;
+			if (FileIntegrity.matchesObject(candidate, object, size, item.sha1, cache)) return candidate;
 		}
 		return null;
 	}

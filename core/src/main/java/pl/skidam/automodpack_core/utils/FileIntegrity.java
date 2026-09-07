@@ -19,9 +19,9 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
  * overlay, editable live files, and user mods that are not a CAS inode.</li>
  * <li>{@link #matchesNamed} is the named-object tripwire (size, mtime, inode). Use it for the canonical CAS
  * path. ctime/ChangeTime is ignored because {@code link()} and {@code chmod()} bump it on the shared inode.</li>
- * <li>{@link #matchesObject} is published pack bytes: the canonical object passes {@link #matchesNamed}, and
- * {@code file} is that inode or a distinct copy that itself passes the named tripwire. Projection hardlinks
- * and directory renames stay a stat.</li>
+ * <li>{@link #matchesObject} is published pack bytes: {@code file} is the canonical object's inode, or a
+ * distinct named copy answering to the same named tripwire. Projection hardlinks and directory renames stay a
+ * stat; worktree identity is a different question and is never asked here.</li>
  * </ul>
  * SHA-1 runs at ingress, when a tripwire is missing or disturbed, and during explicit fsck. A hot-path CAS hit
  * never hashes.
@@ -85,8 +85,9 @@ public final class FileIntegrity {
 
 	/**
 	 * Whether {@code file} is the advertised CAS bytes. A hardlink of a still-valid canonical object is
-	 * those bytes regardless of path, so a projection rename stays a stat. If the file is a distinct copy,
-	 * or the canonical object is gone, the named tripwire runs on {@code file} itself.
+	 * those bytes regardless of path, so a projection rename stays a stat. A distinct copy answers to the
+	 * named tripwire, which rehashes only when that tripwire is disturbed; worktree identity would rehash
+	 * on the ctime our own {@code link()} and {@code chmod()} bump at every publication.
 	 */
 	public static boolean matchesObject(Path file, Path canonicalObject, long expectedSize, String expectedSha1, FileCache cache) {
 		if (matchesNamed(canonicalObject, expectedSize, expectedSha1, cache) && sameInode(file, canonicalObject)) return true;
