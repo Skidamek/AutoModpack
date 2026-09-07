@@ -64,10 +64,10 @@ class DownloadClientTest {
 	void fileFrameCopyDoesNotOverflowForSizesAbove2GiB() {
 		long remaining = 2230765895L;
 		assertEquals(-2064201401, (int) remaining);
-		assertEquals(1024, DownloadClient.writableFrameBytes(1024, remaining));
-		assertEquals(MAX_CHUNK_SIZE, DownloadClient.writableFrameBytes(MAX_CHUNK_SIZE, remaining));
-		assertEquals(100, DownloadClient.writableFrameBytes(1024, 100L));
-		assertEquals(0, DownloadClient.writableFrameBytes(1024, 0L));
+		assertEquals(1024, ProtocolFrameCodec.writableFrameBytes(1024, remaining));
+		assertEquals(MAX_CHUNK_SIZE, ProtocolFrameCodec.writableFrameBytes(MAX_CHUNK_SIZE, remaining));
+		assertEquals(100, ProtocolFrameCodec.writableFrameBytes(1024, 100L));
+		assertEquals(0, ProtocolFrameCodec.writableFrameBytes(1024, 0L));
 	}
 
 	@Test
@@ -85,8 +85,8 @@ class DownloadClientTest {
 		X509Certificate issued = issueCertificate(new X500Name(issuer.getSubjectX500Principal().getName()), new X500Name("CN=Issued"), null,
 				NetUtils.generateKeyPair(), issuerKeyPair, Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600));
 
-		assertTrue(DownloadClient.isSelfSigned(selfSigned));
-		assertFalse(DownloadClient.isSelfSigned(issued));
+		assertTrue(CustomizableTrustManager.isSelfSigned(selfSigned));
+		assertFalse(CustomizableTrustManager.isSelfSigned(issued));
 	}
 
 	@Test
@@ -96,7 +96,7 @@ class DownloadClientTest {
 		X509Certificate certificate = issueCertificate(subject, subject, null, keyPair, keyPair, Instant.now().minusSeconds(7200),
 				Instant.now().minusSeconds(3600));
 
-		assertTrue(DownloadClient.isSelfSigned(certificate));
+		assertTrue(CustomizableTrustManager.isSelfSigned(certificate));
 	}
 
 	@Test

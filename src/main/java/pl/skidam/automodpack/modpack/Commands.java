@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.modpack;
 
 import pl.skidam.automodpack_core.config.ConnectionJsons;
-import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -32,10 +31,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
@@ -336,17 +332,14 @@ public class Commands {
 
 	private static int reload(CommandContext<CommandSourceStack> context) {
 		Util.backgroundExecutor().execute(() -> {
-			Path serverConfigPath = GameDirectory.current().resolve(StoragePaths.SERVER_CONFIG_FILE).normalize();
-			var tempServerConfig = ConfigTools.read(serverConfigPath, ServerConfigJsons.ServerConfigFieldsV3.class).orElse(null);
-			if (tempServerConfig != null) {
-				ConfigUtils.normalizeServerConfig(tempServerConfig, true);
-				boolean restartRequired = connectionRuntimeChanged(serverConfig, tempServerConfig);
-				serverConfig = tempServerConfig;
-				send(context, "AutoModpack server config reloaded!", ChatFormatting.GREEN, true);
-				if (restartRequired) send(context, "Connection settings changed. Run /automodpack host restart to apply them.", ChatFormatting.YELLOW, false);
-			} else {
+			var reloaded = ConfigUtils.reloadServerConfig();
+			if (reloaded.isEmpty()) {
 				send(context, "Error while reloading config file!", ChatFormatting.RED, true);
+				return;
 			}
+			send(context, "AutoModpack server config reloaded!", ChatFormatting.GREEN, true);
+			if (reloaded.get().connectionSettingsChanged())
+				send(context, "Connection settings changed. Run /automodpack host restart to apply them.", ChatFormatting.YELLOW, false);
 		});
 
 		return Command.SINGLE_SUCCESS;
@@ -408,12 +401,6 @@ public class Commands {
 		} else {
 			send(context, "Couldn't start server!", ChatFormatting.RED, true);
 		}
-	}
-
-	private static boolean connectionRuntimeChanged(ServerConfigJsons.ServerConfigFieldsV3 previous, ServerConfigJsons.ServerConfigFieldsV3 current) {
-		return previous.connectionMode != current.connectionMode || previous.bindPort != current.bindPort || previous.modpackHost != current.modpackHost
-				|| previous.disableInternalTLS != current.disableInternalTLS || previous.bandwidthLimit != current.bandwidthLimit
-				|| !Objects.equals(previous.bindAddress, current.bindAddress);
 	}
 
 	private static int modpackHostAbout(CommandContext<CommandSourceStack> context) {
@@ -491,38 +478,16 @@ public class Commands {
 	private static int previewRevertGeneration(CommandContext<CommandSourceStack> context) {
 		long targetSeq = parseSeq(context);
 		if (targetSeq < 1) return 0;
-		try {
-			List<JournalEntry> history = modpackExecutor.technicalHistory(HISTORY_TAIL_LIMIT);
-			JournalEntry target = findRevertTarget(history, targetSeq);
-			if (target == null) {
-				send(context, "FAILED: journal target was not found", ChatFormatting.RED, true);
-				return 0;
-			}
-			reportRevertTarget(context, target, history);
-			send(context, "Confirmation required: /automodpack generate revert " + targetSeq + " confirm", ChatFormatting.YELLOW, false);
-			return Command.SINGLE_SUCCESS;
-		} catch (IOException e) {
-			send(context, "FAILED: could not read the modpack journal: " + e.getMessage(), ChatFormatting.RED, true);
-			return 0;
-		}
+		if (!resolveAndReportRevertTarget(context, targetSeq)) return 0;
+		send(context, "Confirmation required: /automodpack generate revert " + targetSeq + " confirm", ChatFormatting.YELLOW, false);
+		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int revertGeneration(CommandContext<CommandSourceStack> context) {
 		long targetSeq = parseSeq(context);
 		if (targetSeq < 1) return 0;
 		String notes = optionalArgument(context, "notes");
-		try {
-			List<JournalEntry> history = modpackExecutor.technicalHistory(HISTORY_TAIL_LIMIT);
-			JournalEntry target = findRevertTarget(history, targetSeq);
-			if (target == null) {
-				send(context, "FAILED: journal target was not found", ChatFormatting.RED, true);
-				return 0;
-			}
-			reportRevertTarget(context, target, history);
-		} catch (IOException e) {
-			send(context, "FAILED: could not read the modpack journal: " + e.getMessage(), ChatFormatting.RED, true);
-			return 0;
-		}
+		if (!resolveAndReportRevertTarget(context, targetSeq)) return 0;
 		Util.backgroundExecutor().execute(() -> {
 			long start = System.currentTimeMillis();
 			send(context, "Reverting the modpack to #" + targetSeq + "...", ChatFormatting.YELLOW, true);
@@ -550,6 +515,23 @@ public class Commands {
 		}
 	}
 
+	/** The shared resolve-and-report prologue of the revert handlers; feedback is sent and false returned when the target is missing or the journal unreadable. */
+	private static boolean resolveAndReportRevertTarget(CommandContext<CommandSourceStack> context, long targetSeq) {
+		try {
+			List<JournalEntry> history = modpackExecutor.technicalHistory(HISTORY_TAIL_LIMIT);
+			JournalEntry target = findRevertTarget(history, targetSeq);
+			if (target == null) {
+				send(context, "FAILED: journal target was not found", ChatFormatting.RED, true);
+				return false;
+			}
+			reportRevertTarget(context, target, history);
+			return true;
+		} catch (IOException e) {
+			send(context, "FAILED: could not read the modpack journal: " + e.getMessage(), ChatFormatting.RED, true);
+			return false;
+		}
+	}
+
 	private static JournalEntry findRevertTarget(List<JournalEntry> history, long targetSeq) {
 		return history.stream().filter(entry -> entry.seq() == targetSeq).findFirst().orElse(null);
 	}
@@ -558,28 +540,11 @@ public class Commands {
 		send(context, "Revert target", ChatFormatting.YELLOW, "#" + target.seq() + " " + target.createdAt(), ChatFormatting.WHITE, true);
 		send(context, "Target content", ChatFormatting.WHITE, copyable(target.contentToken()), ChatFormatting.YELLOW, false);
 		if (!target.notes().isBlank()) send(context, "Target patch notes: " + firstLine(target.notes()), ChatFormatting.GRAY, false);
-		if (!history.isEmpty() && history.get(history.size() - 1).seq() != target.seq())
-			send(context, "Changes from current: " + changesSince(history, target), ChatFormatting.YELLOW, false);
-	}
-
-	/** The net content effect between one journal entry and the current head, folded from the per-entry changes between them. */
-	private static String changesSince(List<JournalEntry> history, JournalEntry target) {
-		Map<String, JournalEntry.Change> newest = new LinkedHashMap<>();
-		for (JournalEntry entry : history) {
-			if (entry.seq() <= target.seq()) continue;
-			for (JournalEntry.Change change : entry.changes()) newest.put(change.path(), change);
+		if (!history.isEmpty() && history.get(history.size() - 1).seq() != target.seq()) {
+			JournalEntry.Summary netChanges = JournalEntry.changesSince(history, target);
+			send(context, "Changes from current: +" + netChanges.added() + " added, " + netChanges.changed() + " changed, " + netChanges.removed() + " removed",
+					ChatFormatting.YELLOW, false);
 		}
-		int added = 0;
-		int changed = 0;
-		int removed = 0;
-		for (JournalEntry.Change change : newest.values()) {
-			switch (change.kind()) {
-				case ADDED -> added++;
-				case CHANGED -> changed++;
-				case REMOVED -> removed++;
-			}
-		}
-		return "+" + added + " added, " + changed + " changed, " + removed + " removed";
 	}
 
 	private static int generationHistory(CommandContext<CommandSourceStack> context) {

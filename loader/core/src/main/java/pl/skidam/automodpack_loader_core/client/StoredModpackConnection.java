@@ -4,7 +4,6 @@ import java.io.IOException;
 
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
@@ -39,7 +38,7 @@ public final class StoredModpackConnection implements AutoCloseable {
 		ConnectionJsons.ConnectionInfo connection = new ConnectionJsons.ConnectionInfo(stored.origin, stored.endpoint, stored.connectionMode,
 				CertificateTrustStore.getFingerprint(stored.origin), null);
 		stored.approvedOrigins().forEach(connection::approveOrigin);
-		Secrets.Secret secret = SecretsStore.getClientSecret(storage, modpackId, stored.origin);
+		Secrets.Secret secret = ConnectionStore.getClientSecret(storage, modpackId, stored.origin);
 		return new Seeded(connection, secret == null ? Secrets.anonymousSecret() : secret, secret == null);
 	}
 

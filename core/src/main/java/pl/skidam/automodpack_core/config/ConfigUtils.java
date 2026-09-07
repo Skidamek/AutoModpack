@@ -11,6 +11,26 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ConfigUtils {
 
+	/** One completed server-config reload: the config now installed as the global server config and whether hosting must restart. */
+	public record ReloadedServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config, boolean connectionSettingsChanged) {}
+
+	/** Reads, normalizes and saves the server config file, then swaps it into the running global; empty when the file is unreadable. */
+	public static Optional<ReloadedServerConfig> reloadServerConfig() {
+		Optional<ServerConfigJsons.ServerConfigFieldsV3> read = ConfigTools.read(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class);
+		if (read.isEmpty()) return Optional.empty();
+		ServerConfigJsons.ServerConfigFieldsV3 config = read.get();
+		normalizeServerConfig(config, true);
+		boolean connectionSettingsChanged = connectionRuntimeChanged(serverConfig, config);
+		serverConfig = config;
+		return Optional.of(new ReloadedServerConfig(config, connectionSettingsChanged));
+	}
+
+	private static boolean connectionRuntimeChanged(ServerConfigJsons.ServerConfigFieldsV3 previous, ServerConfigJsons.ServerConfigFieldsV3 current) {
+		return previous.connectionMode != current.connectionMode || previous.bindPort != current.bindPort || previous.modpackHost != current.modpackHost
+				|| previous.disableInternalTLS != current.disableInternalTLS || previous.bandwidthLimit != current.bandwidthLimit
+				|| !Objects.equals(previous.bindAddress, current.bindAddress);
+	}
+
 	public static ServerConfigJsons.ServerConfigFieldsV3 loadOrCreateServerConfig() {
 		ServerConfigJsons.ServerConfigFieldsV3 config = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 		String before = ConfigTools.GSON.toJson(config);
@@ -51,36 +71,18 @@ public class ConfigUtils {
 					LOGGER.warn("Ignored null group declaration '{}'.", groupEntry.getKey());
 					continue;
 				}
-				group.syncedFiles = normalizeSyncedFiles(group.syncedFiles, pattern);
-				group.allowEditsInFiles = normalizePathRules(group.allowEditsInFiles, "allowEditsInFiles", pattern);
+				group.syncedFiles = normalizePathSet(group.syncedFiles, "syncedFiles", pattern, true);
+				group.allowEditsInFiles = normalizePathSet(group.allowEditsInFiles, "allowEditsInFiles", pattern, false);
 			}
 		}
 	}
 
-	private static Set<String> normalizeSyncedFiles(Set<String> syncedFiles, Pattern hostModpackPattern) {
-		if (syncedFiles == null || syncedFiles.isEmpty()) return new LinkedHashSet<>();
-
-		Set<String> fixedSyncedFiles = new LinkedHashSet<>(syncedFiles.size());
-		for (var file : syncedFiles) {
-			if (file == null) {
-				LOGGER.warn("Ignored null entry in syncedFiles.");
-				continue;
-			}
-			var trimmed = file.trim();
-			if (trimmed.isEmpty()) {
-				LOGGER.warn("Ignored empty entry in syncedFiles.");
-				continue;
-			}
-			if (hostModpackPattern.matcher(trimmed).find()) {
-				LOGGER.info("Removed redundant syncedFiles entry '{}': paths under '/automodpack/host-modpack/' are implicitly synced.", file);
-			} else {
-				fixedSyncedFiles.add(prefixSlash(file));
-			}
-		}
-		return fixedSyncedFiles;
-	}
-
-	private static Set<String> normalizePathRules(Set<String> files, String configKey, Pattern hostModpackPattern) {
+	/**
+	 * Trims, prefix-normalizes and logs away broken entries of one path set. {@code dropHostModpackPaths} selects the
+	 * syncedFiles rule (paths under '/automodpack/host-modpack/' are implicitly synced, so entries there are removed)
+	 * over the path-rules rule (the prefix is stripped from the kept entry).
+	 */
+	private static Set<String> normalizePathSet(Set<String> files, String configKey, Pattern hostModpackPattern, boolean dropHostModpackPaths) {
 		if (files == null || files.isEmpty()) return new LinkedHashSet<>();
 
 		Set<String> normalizedFiles = new LinkedHashSet<>(files.size());
@@ -94,11 +96,19 @@ public class ConfigUtils {
 				LOGGER.warn("Ignored empty entry in {}.", configKey);
 				continue;
 			}
-			var fixed = hostModpackPattern.matcher(trimmed).replaceFirst("");
-			if (!fixed.equals(trimmed)) {
-				LOGGER.info("Normalized {} entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", configKey, file, fixed);
+			if (dropHostModpackPaths) {
+				if (hostModpackPattern.matcher(trimmed).find()) {
+					LOGGER.info("Removed redundant {} entry '{}': paths under '/automodpack/host-modpack/' are implicitly synced.", configKey, file);
+					continue;
+				}
+				normalizedFiles.add(prefixSlash(file));
+			} else {
+				var fixed = hostModpackPattern.matcher(trimmed).replaceFirst("");
+				if (!fixed.equals(trimmed)) {
+					LOGGER.info("Normalized {} entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", configKey, file, fixed);
+				}
+				normalizedFiles.add(prefixSlash(fixed));
 			}
-			normalizedFiles.add(prefixSlash(fixed));
 		}
 		return normalizedFiles;
 	}

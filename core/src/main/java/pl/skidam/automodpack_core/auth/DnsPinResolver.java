@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.auth;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.normalizeFingerprint;
 
-import java.net.IDN;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -26,6 +25,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 /**
  * Resolves an admin-published certificate fingerprint from DNS under the
@@ -105,7 +105,7 @@ public final class DnsPinResolver {
 		}
 
 		CompletableFuture<LookupResult> resolvePinAsync(String minecraftHost) {
-			Optional<String> normalizedHost = normalizeDnsHost(minecraftHost);
+			Optional<String> normalizedHost = AddressHelpers.normalizeDnsHost(minecraftHost);
 			if (normalizedHost.isEmpty()) return CompletableFuture.completedFuture(new NoPolicy(NoPolicyReason.IP_LITERAL));
 
 			String host = normalizedHost.get();
@@ -334,7 +334,7 @@ public final class DnsPinResolver {
 	}
 
 	public static String formatRecord(String minecraftHost, String fingerprint) {
-		String owner = normalizeDnsHost(minecraftHost).orElseThrow(() -> new IllegalArgumentException("Minecraft address must be a DNS hostname"));
+		String owner = AddressHelpers.normalizeDnsHost(minecraftHost).orElseThrow(() -> new IllegalArgumentException("Minecraft address must be a DNS hostname"));
 		return RECORD_PREFIX + owner + ". IN TXT \"v=" + RECORD_VERSION + ";fp=" + normalizeFingerprint(fingerprint) + "\"";
 	}
 
@@ -364,30 +364,6 @@ public final class DnsPinResolver {
 		return decoded.toString().trim();
 	}
 
-	static boolean isIpLiteral(String host) {
-		if (host == null) return false;
-		String value = stripIpv6Brackets(host.trim());
-		if (value.contains(":")) return true;
-		if (!value.matches("\\d{1,3}(\\.\\d{1,3}){3}")) return false;
-		for (String octet : value.split("\\.")) {
-			if (Integer.parseInt(octet) > 255) return false;
-		}
-		return true;
-	}
-
-	private static Optional<String> normalizeDnsHost(String host) {
-		if (host == null) return Optional.empty();
-		String normalized = host.trim();
-		if (normalized.isEmpty() || isIpLiteral(normalized)) return Optional.empty();
-		if (normalized.endsWith(".")) normalized = normalized.substring(0, normalized.length() - 1);
-		try {
-			normalized = IDN.toASCII(normalized, IDN.USE_STD3_ASCII_RULES).toLowerCase(Locale.ROOT);
-		} catch (IllegalArgumentException e) {
-			return Optional.empty();
-		}
-		return normalized.isBlank() ? Optional.empty() : Optional.of(normalized);
-	}
-
 	private static boolean isAmp1Record(String txt) {
 		if (txt == null) return false;
 		for (String rawPart : txt.split(";", -1)) {
@@ -399,9 +375,5 @@ public final class DnsPinResolver {
 			}
 		}
 		return false;
-	}
-
-	private static String stripIpv6Brackets(String host) {
-		return host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
 	}
 }

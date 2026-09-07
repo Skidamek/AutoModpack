@@ -82,7 +82,7 @@ public final class VerifiedFileTransfer {
 		}
 		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 		ImmutableFiles.protect(sourceFile);
-		Path parent = requireTargetParent(targetFile);
+		Path parent = OsPaths.requirePublishableParent(targetFile, "Target path");
 		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
 		Files.deleteIfExists(temporary);
 		try {
@@ -112,7 +112,7 @@ public final class VerifiedFileTransfer {
 		if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1))
 			throw new IOException("Downloaded file failed size/SHA-1 verification: " + temporary);
 		ImmutableFiles.protect(temporary);
-		Path targetParent = requireTargetParent(targetFile);
+		Path targetParent = OsPaths.requirePublishableParent(targetFile, "Target path");
 		boolean crossFileSystem = false;
 		try {
 			DurableFiles.replace(temporary, targetFile);
@@ -163,7 +163,7 @@ public final class VerifiedFileTransfer {
 	}
 
 	private static Path copyToTemporary(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
-		Path parent = requireTargetParent(targetFile);
+		Path parent = OsPaths.requirePublishableParent(targetFile, "Target path");
 		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
 		boolean valid = false;
 		try {
@@ -185,13 +185,5 @@ public final class VerifiedFileTransfer {
 		}
 		String copied = HashUtils.copyAndSha1(sourceFile, temporary);
 		if (Files.size(temporary) != expectedSize || !expectedSha1.equalsIgnoreCase(copied)) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
-	}
-
-	private static Path requireTargetParent(Path targetFile) throws IOException {
-		Path parent = targetFile.toAbsolutePath().normalize().getParent();
-		if (parent == null) throw new IOException("Target path has no parent: " + targetFile);
-		OsPaths.requirePublishableFile(targetFile);
-		Files.createDirectories(parent);
-		return parent;
 	}
 }

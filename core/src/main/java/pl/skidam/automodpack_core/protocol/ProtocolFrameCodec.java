@@ -127,6 +127,13 @@ public final class ProtocolFrameCodec {
 
 	public record Frame(byte[] data, int length) {}
 
+	/** Copies a protocol frame into a remaining file length without truncating remaining through int. */
+	public static int writableFrameBytes(int frameLength, long remaining) {
+		if (frameLength < 0) throw new IllegalArgumentException("frameLength must be non-negative");
+		if (remaining <= 0L) return 0;
+		return (int) Math.min(frameLength, remaining);
+	}
+
 	private static void writeHeader(DataOutputStream output, int compressedLength, int originalLength) throws IOException {
 		output.writeInt(compressedLength);
 		output.writeInt(originalLength);

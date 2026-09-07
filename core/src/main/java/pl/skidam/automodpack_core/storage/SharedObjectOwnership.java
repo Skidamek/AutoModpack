@@ -1,12 +1,9 @@
 package pl.skidam.automodpack_core.storage;
 
 import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -17,6 +14,7 @@ import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
+import pl.skidam.automodpack_core.utils.FileLocks;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -109,20 +107,15 @@ public final class SharedObjectOwnership {
 		return component;
 	}
 
-	private static <T> T withLock(DataRootResolver.Location location, LockedOperation<T> operation) throws IOException {
+	private static <T> T withLock(DataRootResolver.Location location, FileLocks.LockedOperation<T> operation) throws IOException {
 		Path lockPath = location.layout().objectOwnershipLockFile();
 		FileTrees.createManagedDirectory(location.root(), "shared data directory");
 		ReentrantLock jvmLock = JVM_LOCKS.computeIfAbsent(lockPath, ignored -> new ReentrantLock());
 		jvmLock.lock();
-		try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS); FileLock ignored = channel.lock()) {
-			return operation.run();
+		try {
+			return FileLocks.withLock(lockPath, LinkOption.NOFOLLOW_LINKS, operation);
 		} finally {
 			jvmLock.unlock();
 		}
-	}
-
-	@FunctionalInterface
-	private interface LockedOperation<T> {
-		T run() throws IOException;
 	}
 }
