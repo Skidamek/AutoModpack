@@ -53,7 +53,7 @@ public final class ActionAreaLayout {
 	/**
 	 * Lays rows out from top to bottom. Every visible row fills the rail with an even split through a
 	 * 4px seam; leftover pixels go to the last button so the row's right edge equals left + width.
-	 * A lone FOOTER action heading the area keeps the canonical lone-button width, centered in the rail.
+	 * A lone FOOTER row keeps the canonical lone-button width, centered in the rail, wherever it sits.
 	 */
 	public static Layout fromTop(int left, int top, int width, int rowGap, List<Row> rows) {
 		int safeWidth = Math.max(1, width);
@@ -63,7 +63,7 @@ public final class ActionAreaLayout {
 		for (Row row : rows) {
 			if (row.actions().isEmpty()) continue;
 			if (!placements.isEmpty()) cursor += safeGap;
-			placements.addAll(placements.isEmpty() && row.kind() == RowKind.FOOTER && row.actions().size() == 1 ? layoutLoneFooter(left, cursor, safeWidth, row) : layoutRow(left, cursor, safeWidth, row));
+			placements.addAll(row.kind() == RowKind.FOOTER && row.actions().size() == 1 ? layoutLoneFooter(left, cursor, safeWidth, row) : layoutRow(left, cursor, safeWidth, row));
 			cursor += BUTTON_HEIGHT;
 		}
 		return new Layout(placements, top, cursor);
