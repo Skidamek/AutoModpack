@@ -30,6 +30,7 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileTrees;
+import pl.skidam.automodpack_core.utils.OsPaths;
 
 public final class ConfigTools {
 	public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
@@ -75,6 +76,7 @@ public final class ConfigTools {
 		byte[] bytes = GSON.toJson(value).getBytes(StandardCharsets.UTF_8);
 		Path parent = path.toAbsolutePath().normalize().getParent();
 		if (parent == null) throw new IOException("Configuration path has no parent: " + path);
+		OsPaths.requirePublishableConfig(path);
 		Files.createDirectories(parent);
 
 		Path temporary = parent.resolve("." + path.getFileName() + "." + UUID.randomUUID() + ".tmp");
