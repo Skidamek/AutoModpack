@@ -5,10 +5,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
@@ -28,7 +26,6 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PreservationVault;
-import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 import pl.skidam.automodpack_loader_core.screen.FailureCategory;
@@ -49,7 +46,6 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private String pendingDeleteClaimId;
 	private final Map<String, List<PlatformReferences.Page>> platformPagesByClaimId = new HashMap<>();
 	private final Map<String, String> packNames = new HashMap<>();
-	private final Set<String> activePacks = new HashSet<>();
 	private boolean loading;
 	private boolean busy;
 	private boolean restoreFailed;
@@ -95,7 +91,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		Button restore = actionButtons.get(0);
 		Button saveCopy = actionButtons.get(1);
 		Button delete = actionButtons.get(2);
-		restore.active = !busy && canRestore(selected);
+		restore.active = !busy && selected != null && selected.canRestoreOriginal();
 		setTooltip(restore, restoreTooltip(selected));
 		saveCopy.active = !busy && selected != null;
 		setTooltip(saveCopy, VersionedText.translatable("automodpack.vault.saveCopyMoves"));
@@ -105,13 +101,12 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	/** The gate names itself: why Restore is unavailable for this row, or what it will do. */
 	private MutableComponent restoreTooltip(PreservationVault.Claim selected) {
 		if (selected == null) return VersionedText.translatable("automodpack.vault.restorePickFirst");
-		if (!activePacks.contains(selected.modpackId())) return VersionedText.translatable("automodpack.vault.restoreInactivePack");
-		if (selected.sourceRoot() != UpdatePlan.Root.GAME_DIR) return VersionedText.translatable("automodpack.vault.restoreManagedFiles");
-		return VersionedText.translatable("automodpack.vault.restoreApplies", selected.originalPath());
-	}
-
-	private boolean canRestore(PreservationVault.Claim selected) {
-		return selected != null && activePacks.contains(selected.modpackId()) && selected.sourceRoot() == UpdatePlan.Root.GAME_DIR;
+		return switch (selected.originalRestore()) {
+			case INACTIVE_PACK -> VersionedText.translatable("automodpack.vault.restoreInactivePack");
+			case NOT_GAME_DIR -> VersionedText.translatable("automodpack.vault.restoreManagedFiles");
+			case STILL_OWNED -> VersionedText.translatable("automodpack.vault.restoreStillOwned");
+			case AVAILABLE -> VersionedText.translatable("automodpack.vault.restoreApplies", selected.originalPath());
+		};
 	}
 
 	private void load() {
@@ -130,11 +125,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		if (closed) return;
 		snapshots = List.copyOf(loaded);
 		packNames.clear();
-		activePacks.clear();
-		for (InstalledModpackController.Pack pack : controller.installed()) {
-			packNames.put(pack.modpackId(), pack.name());
-			if (pack.active()) activePacks.add(pack.modpackId());
-		}
+		for (InstalledModpackController.Pack pack : controller.installed()) packNames.put(pack.modpackId(), pack.name());
 		loading = false;
 		busy = false;
 		if (selectedClaimId != null && claims().stream().noneMatch(claim -> claim.claimId().equals(selectedClaimId))) selectedClaimId = null;
@@ -196,7 +187,7 @@ public final class PreservationVaultScreen extends VersionedScreen {
 
 	private void restore() {
 		PreservationVault.Claim claim = selected();
-		if (claim == null || busy || !canRestore(claim)) return;
+		if (claim == null || busy || !claim.canRestoreOriginal()) return;
 		run(() -> controller.restorePreservedFile(claim.modpackId(), claim.claimId()), true);
 	}
 

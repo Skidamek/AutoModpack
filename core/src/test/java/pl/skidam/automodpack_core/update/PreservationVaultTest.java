@@ -85,8 +85,10 @@ class PreservationVaultTest {
 				Files.size(source), Instant.parse("2026-08-12T10:00:00Z"));
 		Files.delete(source);
 
+		assertEquals(PreservationVault.OriginalRestore.INACTIVE_PACK, claim.originalRestore());
 		assertThrows(IOException.class, () -> PreservationVault.restoreOriginal(storage, MODPACK_ID, claim.claimId()));
 		installActiveRecord(storage, "mods/server.jar");
+		assertEquals(PreservationVault.OriginalRestore.AVAILABLE, PreservationVault.read(storage, MODPACK_ID).claims().get(0).originalRestore());
 		Path restored = PreservationVault.restoreOriginal(storage, MODPACK_ID, claim.claimId());
 
 		assertEquals("local-mod", Files.readString(restored, StandardCharsets.UTF_8));
@@ -126,8 +128,24 @@ class PreservationVaultTest {
 		new GeneratedCopyState(MODPACK_ID, active.packTarget().contentToken(), UpdateTransaction.digest(active.selection().intent()),
 				List.of(new GeneratedCopyState.Entry("mods/generated.jar", hash, 10))).write(storage);
 
+		assertEquals(PreservationVault.OriginalRestore.STILL_OWNED, PreservationVault.read(storage, MODPACK_ID).claims().get(0).originalRestore());
 		assertThrows(IOException.class, () -> PreservationVault.restoreOriginal(storage, MODPACK_ID, claim.claimId()));
 		assertFalse(Files.exists(source));
+	}
+
+	@Test
+	void originalRestoreIsUnavailableWhileTheActivePackStillOwnsThePath() throws Exception {
+		ClientStorage storage = storage();
+		Path source = Files.writeString(storage.gamePath("mods/owned.jar"), "player-bytes", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(source);
+		PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.LOCAL_DRIFT, Root.GAME_DIR, "mods/owned.jar", hash, Files.size(source));
+		installActiveRecord(storage, "mods/owned.jar");
+
+		PreservationVault.Claim loaded = PreservationVault.read(storage, MODPACK_ID).claims().get(0);
+		assertEquals(PreservationVault.OriginalRestore.STILL_OWNED, loaded.originalRestore());
+		assertFalse(loaded.canRestoreOriginal());
+		assertThrows(IOException.class, () -> PreservationVault.restoreOriginal(storage, MODPACK_ID, loaded.claimId()));
+		assertEquals(1, PreservationVault.read(storage, MODPACK_ID).claims().size());
 	}
 
 	@Test

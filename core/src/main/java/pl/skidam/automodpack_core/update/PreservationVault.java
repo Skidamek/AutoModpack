@@ -55,12 +55,24 @@ public final class PreservationVault {
 		LOCAL_DRIFT
 	}
 
+	public enum OriginalRestore {
+		AVAILABLE,
+		INACTIVE_PACK,
+		NOT_GAME_DIR,
+		STILL_OWNED
+	}
+
 	public record Claim(String claimId, String originalPath, Root sourceRoot, String objectHash, long size, String modpackId, String contentToken, Reason reason,
-			Instant preservedAt) {
+			Instant preservedAt, OriginalRestore originalRestore) {
 		public Claim {
 			Objects.requireNonNull(sourceRoot, "source root");
 			Objects.requireNonNull(reason, "preservation reason");
 			Objects.requireNonNull(preservedAt, "preservation time");
+			Objects.requireNonNull(originalRestore, "original restore");
+		}
+
+		public boolean canRestoreOriginal() {
+			return originalRestore == OriginalRestore.AVAILABLE;
 		}
 	}
 
@@ -103,7 +115,7 @@ public final class PreservationVault {
 				if (existing != null) {
 					if (!FileIntegrity.matchesNamed(object, size, hash, cache)) repairObjectFromSource(storage, source, object, hash, size, cache);
 					if (!FileIntegrity.matchesNamed(object, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
-					return toClaim(existing);
+					return toClaim(storage, existing);
 				}
 
 				validateSource(storage, pack, normalizedRoot, source);
@@ -128,7 +140,7 @@ public final class PreservationVault {
 				fields.claims.add(claim);
 				fields.claims.sort(CLAIM_ORDER);
 				write(storage, pack, fields);
-				return toClaim(claim);
+				return toClaim(storage, claim);
 			}
 		}
 	}
@@ -180,7 +192,7 @@ public final class PreservationVault {
 		String pack = ModpackId.requireValid(modpackId);
 		ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 		List<Claim> claims = new ArrayList<>();
-		for (ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim : fields.claims) claims.add(toClaim(claim));
+		for (ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim : fields.claims) claims.add(toClaim(storage, claim));
 		return new Snapshot(pack, claims);
 	}
 
@@ -225,8 +237,7 @@ public final class PreservationVault {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
-				if (Root.valueOf(claim.sourceRoot) != Root.GAME_DIR) throw new IOException("Only game-directory claims can be restored to their original path");
-				requireActiveUnownedPath(storage, pack, claim.originalPath);
+				requireOriginalRestore(storage, pack, Root.valueOf(claim.sourceRoot), claim.originalPath);
 				Path destination = storage.gamePath(claim.originalPath);
 				copyWithoutOverwrite(storage.gameDirectory(), object(storage, claim.objectHash), destination, claim.size, claim.objectHash, cache);
 				releaseClaim(storage, pack, fields, id);
@@ -264,35 +275,47 @@ public final class PreservationVault {
 		});
 	}
 
-	private static void requireActiveUnownedPath(ClientStorage storage, String modpackId, String logicalPath) throws IOException {
+	private static void requireOriginalRestore(ClientStorage storage, String modpackId, Root sourceRoot, String logicalPath) throws IOException {
+		switch (originalRestore(storage, modpackId, sourceRoot, logicalPath)) {
+			case AVAILABLE -> {
+			}
+			case INACTIVE_PACK -> throw new IOException("The modpack must be active before a file can be restored to its original path");
+			case NOT_GAME_DIR -> throw new IOException("Only game-directory claims can be restored to their original path");
+			case STILL_OWNED -> throw new IOException("The active modpack still owns " + logicalPath);
+		}
+	}
+
+	/** Whether Restore can put this claim back on its original live path. Save copy stays available either way. */
+	public static OriginalRestore originalRestore(ClientStorage storage, String modpackId, Root sourceRoot, String logicalPath) throws IOException {
+		if (sourceRoot != Root.GAME_DIR) return OriginalRestore.NOT_GAME_DIR;
+		String pack = ModpackId.requireValid(modpackId);
+		String path = LogicalPath.normalize(logicalPath);
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
-		if (activeState == null || !modpackId.equals(activeState.modpackId)) throw new IOException("The modpack must be active before a file can be restored to its original path");
-		SelectedModpackTarget activeTarget = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current())
-				.orElseThrow(() -> new IOException("The active generation target is missing"));
-		if (!modpackId.equals(activeTarget.manifest().modpackId())) throw new IOException("Active generation belongs to another modpack");
+		if (activeState == null || !pack.equals(activeState.modpackId)) return OriginalRestore.INACTIVE_PACK;
+		SelectedModpackTarget activeTarget = new ClientGenerationStore(storage).readActiveTarget(ClientPlatform.current()).orElse(null);
+		if (activeTarget == null || !pack.equals(activeTarget.manifest().modpackId())) return OriginalRestore.INACTIVE_PACK;
 		String contentToken = activeTarget.packTarget().contentToken();
 		String selectionDigest = UpdateTransaction.digest(activeTarget.selection().intent());
-		boolean generated = GeneratedCopyState.read(storage, modpackId, contentToken, selectionDigest).entries().stream()
-				.anyMatch(entry -> logicalPath.equals(entry.logicalPath()));
-		if (generated) throw new IOException("The active modpack still owns generated file " + logicalPath);
-		boolean projected = activeTarget.flatTarget().list != null && activeTarget.flatTarget().list.stream().anyMatch(item -> logicalPath.equals(LogicalPath.normalize(item.file)));
-		if (!projected) return;
-		OwnershipLedger.Entry ledgerEntry = activeTarget.document().ownershipLedger().entries().get(logicalPath);
-		if (ledgerEntry == null || ledgerEntry.currentStatus() != OwnershipLedger.Status.PRESENT) throw new IOException("Active target and ownership ledger disagree about " + logicalPath);
-		throw new IOException("The active modpack still owns " + logicalPath);
+		boolean generated = GeneratedCopyState.read(storage, pack, contentToken, selectionDigest).entries().stream().anyMatch(entry -> path.equals(entry.logicalPath()));
+		if (generated) return OriginalRestore.STILL_OWNED;
+		boolean projected = activeTarget.flatTarget().list != null && activeTarget.flatTarget().list.stream().anyMatch(item -> path.equals(LogicalPath.normalize(item.file)));
+		if (!projected) return OriginalRestore.AVAILABLE;
+		OwnershipLedger.Entry ledgerEntry = activeTarget.document().ownershipLedger().entries().get(path);
+		if (ledgerEntry == null || ledgerEntry.currentStatus() != OwnershipLedger.Status.PRESENT) throw new IOException("Active target and ownership ledger disagree about " + path);
+		return OriginalRestore.STILL_OWNED;
 	}
 
 	private static void copyWithoutOverwrite(Path constrainedRoot, Path source, Path destination, long size, String hash, FileCache cache) throws IOException {
 		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
 		if (!FileIntegrity.matchesNamed(source, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
-			if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matches(destination, size, hash, cache))
+			if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matchesNamed(destination, size, hash, cache))
 				throw new IOException("Restore destination already exists: " + destination);
 			return;
 		}
 		VerifiedFileTransfer.copyCreateOnly(source, destination, size, hash, cache);
 		FileTrees.requireNoSymbolicLinkDescendants(constrainedRoot, destination, "restore destination");
-		if (!FileIntegrity.matches(destination, size, hash, cache)) throw new IOException("Restored file failed verification: " + destination);
+		if (!FileIntegrity.matchesNamed(destination, size, hash, cache)) throw new IOException("Restored file failed verification: " + destination);
 	}
 
 	private static boolean sameContent(ClientStorageJsons.ClientPreservationVaultFields.ClaimFields held, Root root, String path, String hash, long size) {
@@ -373,7 +396,13 @@ public final class PreservationVault {
 		} catch (RuntimeException e) {
 			throw new IOException("Preservation timestamp is invalid", e);
 		}
-		return new Claim(id, path, root, hash, fields.size, pack, generation, reason, time);
+		return new Claim(id, path, root, hash, fields.size, pack, generation, reason, time, OriginalRestore.INACTIVE_PACK);
+	}
+
+	private static Claim toClaim(ClientStorage storage, ClientStorageJsons.ClientPreservationVaultFields.ClaimFields fields) throws IOException {
+		Claim parsed = toClaim(fields);
+		return new Claim(parsed.claimId(), parsed.originalPath(), parsed.sourceRoot(), parsed.objectHash(), parsed.size(), parsed.modpackId(), parsed.contentToken(), parsed.reason(),
+				parsed.preservedAt(), originalRestore(storage, parsed.modpackId(), parsed.sourceRoot(), parsed.originalPath()));
 	}
 
 	private static String claimId(String modpackId, String contentToken, Reason reason, Root sourceRoot, String path, String hash, long size) {
