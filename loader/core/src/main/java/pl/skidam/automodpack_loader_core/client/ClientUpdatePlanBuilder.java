@@ -247,7 +247,7 @@ final class ClientUpdatePlanBuilder {
 		ClientBaseline baseline = ClientBaseline.read(storage, modpackId);
 		Set<String> availableObjects = new HashSet<>();
 		for (ClientBaseline.Entry entry : baseline.entries())
-			if (FileIntegrity.matchesNamed(storage.objectFile(entry.objectHash()), entry.size(), entry.objectHash(), cache)) availableObjects.add(entry.objectHash());
+			if (!entry.absent() && FileIntegrity.matchesNamed(storage.objectFile(entry.objectHash()), entry.size(), entry.objectHash(), cache)) availableObjects.add(entry.objectHash());
 		return new AvailableBaseline(baseline, Set.copyOf(availableObjects));
 	}
 
