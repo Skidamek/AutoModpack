@@ -202,7 +202,7 @@ class ClientObjectStoreTest {
 	}
 
 	private static String store(ClientStorage storage, byte[] bytes) throws Exception {
-		Path temporary = Files.createTempFile(storage.incomingDirectory(), "object-", ".tmp");
+		Path temporary = Files.createTempFile(storage.stagingDirectory(), "object-", ".tmp");
 		Files.write(temporary, bytes);
 		String hash = HashUtils.getHash(temporary);
 		Path destination = storage.objectFile(hash);

@@ -493,7 +493,7 @@ final class ClientUpdatePlanBuilder {
 
 	private List<UpdatePlan.NestedCopy> inspectNestedCopies(ModpackJsons.ModpackContentFields target, FileCache cache, ClientProjectionView.Snapshot projection) throws IOException {
 		if (!modpackLoader.discoversNestedConflicts()) return List.of();
-		Path inspectionDirectory = Files.createTempDirectory(storage.incomingDirectory(), "inspection-");
+		Path inspectionDirectory = Files.createTempDirectory(storage.stagingDirectory(), "inspection-");
 		try {
 			for (var item : target.list.stream().filter(value -> ModpackPathPolicy.isActiveMod(LogicalPath.normalize(value.file), value.type)).toList()) {
 				Path source = resolvedObject(item, projection, cache);

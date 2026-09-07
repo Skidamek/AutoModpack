@@ -173,7 +173,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, newPlan, newTarget);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
-		Files.move(storage.activeDirectory(), storage.backupProjectionDirectory());
+		Files.move(storage.activeDirectory(), storage.backupDirectory());
 		Files.createDirectories(storage.activeDirectory().resolve("mods"));
 		Files.writeString(storage.activePath("mods/partial.jar"), "partial", StandardCharsets.UTF_8);
 
@@ -181,7 +181,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
 		assertFalse(Files.exists(storage.activePath("mods/partial.jar")));
-		assertFalse(Files.exists(storage.backupProjectionDirectory()));
+		assertFalse(Files.exists(storage.backupDirectory()));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
 
@@ -269,8 +269,8 @@ class UpdateTransactionExecutorTest {
 			assertTrue(view.sourceCandidates("mods/mailbox-deferred.jar").contains(storage.objectFile(deferredHash)));
 		}
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-old.jar"), oldBytes.length, oldHash));
-		Files.createDirectories(storage.incomingProjectionDirectory());
-		Files.writeString(storage.incomingProjectionDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.incomingDirectory());
+		Files.writeString(storage.incomingDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
 
 		byte[] latestBytes = "mailbox-latest".getBytes(StandardCharsets.UTF_8);
 		String latestHash = store(storage, latestBytes);
@@ -282,9 +282,9 @@ class UpdateTransactionExecutorTest {
 		assertTrue(executor.commit(latestPlan, latestTarget).success());
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-latest.jar"), latestBytes.length, latestHash));
 		assertFalse(Files.exists(storage.activePath("mods/mailbox-deferred.jar")));
-		assertFalse(Files.exists(storage.incomingProjectionDirectory().resolve("stale.txt")));
-		assertFalse(Files.exists(storage.incomingProjectionDirectory()));
-		assertFalse(Files.exists(storage.backupProjectionDirectory()));
+		assertFalse(Files.exists(storage.incomingDirectory().resolve("stale.txt")));
+		assertFalse(Files.exists(storage.incomingDirectory()));
+		assertFalse(Files.exists(storage.backupDirectory()));
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
 

@@ -386,8 +386,7 @@ public final class OfflineRepair {
 			Path sourceRoot = storage.root(claim.sourceRoot(), modpackId);
 			Path source = storage.rootedPath(claim.sourceRoot(), modpackId, claim.originalPath());
 			observe(source, sourceRoot, fileCache, observations);
-			Path savedRoot = storage.restoredClaimDirectory(modpackId, claim.contentToken(), claim.claimId());
-			observe(LogicalPath.resolve(savedRoot, claim.originalPath()), savedRoot, fileCache, observations);
+			observe(RecoveredFiles.path(storage, claim.originalPath(), claim.claimId()), RecoveredFiles.directory(storage), fileCache, observations);
 		}
 
 		Set<String> ownedLiveMods = new TreeSet<>();

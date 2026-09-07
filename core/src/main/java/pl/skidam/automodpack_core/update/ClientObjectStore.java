@@ -40,7 +40,7 @@ public final class ClientObjectStore {
 		if (!HashUtils.sha1(bytes).equals(hash)) throw new IOException("Object bytes do not match their content hash: " + hash);
 		Path object = storage.objectFile(hash);
 		if (FileIntegrity.matches(object, bytes.length, hash)) return;
-		Path temporary = Files.createTempFile(storage.incomingDirectory(), ".object-", ".tmp");
+		Path temporary = Files.createTempFile(storage.stagingDirectory(), ".object-", ".tmp");
 		try {
 			Files.write(temporary, bytes);
 			Files.createDirectories(object.getParent());
@@ -186,7 +186,7 @@ public final class ClientObjectStore {
 		ObjectStoreMaintenance.FileTotals overlays = fileTotals(regularFiles(storage.overlaysDirectory(), "client overlays"));
 		ObjectStoreMaintenance.FileTotals baselines = fileTotals(regularFiles(storage.baselinesDirectory(), "client baselines"));
 		ObjectStoreMaintenance.FileTotals preservation = fileTotals(regularFiles(storage.preservationDirectory(), "client preservation vault"));
-		ObjectStoreMaintenance.FileTotals incoming = fileTotals(regularFiles(storage.incomingDirectory(), "client incoming staging"));
+		ObjectStoreMaintenance.FileTotals incoming = fileTotals(regularFiles(storage.incomingDirectory(), "client incoming projection"));
 		ObjectStoreMaintenance.FileTotals backup = fileTotals(regularFiles(storage.backupDirectory(), "client projection backups"));
 		return new StorageReport(objects.count(), objects.bytes(), references.hashes().size(), referenceTotals.expectedBytes(), referenceTotals.validCount(), referenceTotals.validBytes(),
 				referenceTotals.missingCount(), referenceTotals.invalidCount(), active.count(), active.bytes(), metadata.count(), metadata.bytes(), overlays.count(), overlays.bytes(),

@@ -121,7 +121,7 @@ public final class UpdateTransactionExecutor {
 			return;
 		}
 		validator.validatePendingReplacementEnvelope(pending);
-		if (Files.exists(storage.backupProjectionDirectory(), LinkOption.NOFOLLOW_LINKS)
+		if (Files.exists(storage.backupDirectory(), LinkOption.NOFOLLOW_LINKS)
 				&& !verifyProjectionQuietly(storage.activeDirectory(), pending.projectedFinalState))
 			throw new IOException("A deferred projection publication must finish before its request can be replaced");
 		cleanupTransactionDirectories(pending);
@@ -440,7 +440,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void buildIncomingProjection(UpdateTransaction transaction) throws IOException {
-		Path incoming = context.storage().incomingProjectionDirectory();
+		Path incoming = context.storage().incomingDirectory();
 		FileTrees.delete(incoming);
 		Files.createDirectories(incoming);
 		for (ProjectedFile projected : transaction.projectedFinalState) {
@@ -455,8 +455,8 @@ public final class UpdateTransactionExecutor {
 
 	private void swapProjection(UpdateTransaction transaction) throws IOException {
 		Path active = context.storage().activeDirectory();
-		Path incoming = context.storage().incomingProjectionDirectory();
-		Path backup = context.storage().backupProjectionDirectory();
+		Path incoming = context.storage().incomingDirectory();
+		Path backup = context.storage().backupDirectory();
 		if (verifyProjectionQuietly(active, transaction.projectedFinalState)) {
 			FileTrees.delete(incoming);
 			FileTrees.delete(backup);
@@ -499,8 +499,8 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void cleanupTransactionDirectories(UpdateTransaction transaction) throws IOException {
-		FileTrees.delete(context.storage().incomingProjectionDirectory());
-		FileTrees.delete(context.storage().backupProjectionDirectory());
+		FileTrees.delete(context.storage().incomingDirectory());
+		FileTrees.delete(context.storage().backupDirectory());
 	}
 
 	private void captureBaselines(UpdateTransaction transaction) throws IOException {
