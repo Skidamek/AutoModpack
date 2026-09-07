@@ -94,7 +94,7 @@ final class RemovalLifecycle {
 			}
 			changelogs.replaceWith(applied);
 			ApplyResult applyResult = RestartDecision.applyResult(preparation.plan());
-			changelogs.setRestartReasons(applyResult.reasonDescriptions());
+			changelogs.setRestartReasons(applyResult.reasonIds());
 			if (applyResult.requiresRestart()) restartAfterApply(applyResult);
 			else updateLoopDetector.clear();
 			return new ModpackUpdater.LifecycleApply(true, applyResult.requiresRestart());

@@ -8,10 +8,12 @@ import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
+import pl.skidam.automodpack.client.ui.ChangeSummary;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -42,32 +44,44 @@ public class RestartScreen extends VersionedScreen {
 				secondaryAction(VersionedText.translatable("automodpack.restart.cancel"), button -> ScreenImpl.setScreen(null)),
 				primaryAction(VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
-		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
-		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
+		List<MutableComponent> lines = buildBodyLines();
+		DialogLayout layout = layoutDialogWithActions(42, lines.size() * LINE_HEIGHT, 0, rowArray);
+		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rowArray);
+		this.addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
+	}
+
+	/** The whole restart dialog as one centered column: what to do, what changed, why a restart is needed. */
+	private List<MutableComponent> buildBodyLines() {
 		int wrapWidth = Math.max(1, panelWidth(BODY) - 8);
-		int changed = changelogs == null ? 0 : changelogs.changedFiles().size();
-		int removed = changelogs == null ? 0 : changelogs.removedFiles().size();
-		String reason = changelogs == null || changelogs.restartReasons().isEmpty()
-				? VersionedText.translatable("automodpack.summary.restartRequired").getString()
-				: VersionedText.translatable("automodpack.summary.restartReason", String.join(", ", changelogs.restartReasons())).getString();
-		String notes = changelogs == null ? "" : changelogs.latestPatchNotes();
 		List<MutableComponent> lines = new ArrayList<>();
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.description").getString(), wrapWidth));
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.secDescription").getString(), wrapWidth));
-		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.summary.filesChanged", changed).getString(), wrapWidth, ChatFormatting.GRAY));
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.summary.filesRemoved", removed).getString(), wrapWidth, ChatFormatting.GRAY));
-		lines.addAll(wrapParagraph(this.font, reason, wrapWidth, ChatFormatting.YELLOW));
-		lines.add(blankLine());
-		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.patchNotes.latest").getString(), wrapWidth, ChatFormatting.YELLOW));
-		lines.addAll(wrapParagraph(this.font, notes.isBlank() ? VersionedText.translatable("automodpack.patchNotes.none").getString() : notes, wrapWidth));
-		int preserved = changelogs == null ? 0 : changelogs.changeSet().summary().preservedFiles();
-		if (preserved > 0) {
-			lines.add(blankLine());
-			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.preservedFiles", preserved).getString(), wrapWidth, ChatFormatting.GRAY));
+		if (changelogs != null) {
+			ChangeSet.Summary summary = changelogs.changeSet().summary();
+			boolean hasDiff = summary.addedFiles() > 0 || summary.modifiedFiles() > 0 || summary.removedFiles() > 0 || summary.preservedFiles() > 0 || summary.unsafeFiles() > 0;
+			if (hasDiff) {
+				lines.add(blankLine());
+				lines.addAll(ChangeSummary.diffLines(summary.addedFiles(), summary.modifiedFiles(), summary.removedFiles(), summary.preservedFiles(), summary.unsafeFiles()));
+			}
+			List<String> reasons = changelogs.restartReasons();
+			if (!reasons.isEmpty()) {
+				lines.add(blankLine());
+				lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.reasonsTitle").getString(), wrapWidth, ChatFormatting.YELLOW));
+				for (String reason : reasons)
+					lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.reason." + reason).getString(), wrapWidth, ChatFormatting.GRAY));
+			}
+			if (summary.preservedFiles() > 0) {
+				lines.add(blankLine());
+				lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.restart.preservedFiles", summary.preservedFiles()).getString(), wrapWidth, ChatFormatting.GRAY));
+			}
+			String notes = changelogs.latestPatchNotes();
+			if (!notes.isBlank()) {
+				lines.add(blankLine());
+				lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.patchNotes.latest").getString(), wrapWidth, ChatFormatting.YELLOW));
+				lines.addAll(wrapParagraph(this.font, notes, wrapWidth));
+			}
 		}
-		DialogColumn column = layoutDialogColumn(42, footerTop, lines.size() * LINE_HEIGHT, 0);
-		this.addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), lines);
+		return lines;
 	}
 
 	@Override
