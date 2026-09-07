@@ -663,12 +663,12 @@ public class ModpackUpdater implements AutoCloseable {
 
 	/**
 	 * The shared preparation pipeline of every review: acquire the target's mutable objects, reconcile editable state,
-	 * and build the plan with its pending review. The switch flow prepares the plan objects up front; the preview
-	 * assembly stays the flow's own step, cut at the flow's installed-token rule.
+	 * and build the plan with its pending review. The switch flow prepares the plan objects up front and runs without a
+	 * live connection; the flows that need one call {@link #requireLiveConnection()} themselves. The preview assembly
+	 * stays the flow's own step, cut at the flow's installed-token rule.
 	 */
 	private ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> prepareReview(boolean playerFacing, boolean prepareObjects) throws Exception {
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
-			requireLiveConnection();
 			objectAcquisition.acquireTargetObjects(selectedTarget.flatTarget(), cache, playerFacing);
 			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
@@ -681,6 +681,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		sourceCatalogue.startSourceFetch();
+		requireLiveConnection();
 		ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> reviewed = prepareReview(true, false);
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		reviewedUpdatePlan = reviewed;
