@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -41,6 +42,18 @@ class FileIntegrityTest {
 		assertTrue(FileIntegrity.matches(file, Files.size(file), hash));
 		Files.writeString(file, "other-bytes", StandardCharsets.UTF_8);
 		assertFalse(FileIntegrity.matches(file, Files.size(file), hash));
+	}
+
+	@Test
+	void observedHashReusesTheAdvertisedIdentityWhenTheNamedTripwireHolds() throws Exception {
+		Path file = Files.writeString(temporaryDirectory.resolve("live.bin"), "pack-bytes", StandardCharsets.UTF_8);
+		long size = Files.size(file);
+		String hash = HashUtils.getHash(file);
+		try (FileCache cache = FileCache.open(temporaryDirectory.resolve("file-cache"))) {
+			assertEquals(hash, FileIntegrity.observedHash(file, size, hash, cache));
+			Files.writeString(file, "other-bytes", StandardCharsets.UTF_8);
+			assertNotEquals(hash, FileIntegrity.observedHash(file, size, hash, cache));
+		}
 	}
 
 	@Test

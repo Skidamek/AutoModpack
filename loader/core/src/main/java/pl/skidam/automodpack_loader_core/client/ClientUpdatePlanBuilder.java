@@ -294,8 +294,8 @@ final class ClientUpdatePlanBuilder {
 				deletedPaths.add(LogicalPath.normalize(item.file));
 				continue;
 			}
-			String hash = cache.getOrComputeHash(live);
 			long size = Files.size(live);
+			String hash = FileIntegrity.observedHash(live, Long.parseLong(item.size), item.sha1, cache);
 			UpdatePlan.FileState state = new UpdatePlan.FileState(hash, size, true);
 			if (projection.matchesPendingGameState(item.file, state)) continue;
 			if (item.sha1.equalsIgnoreCase(state.sha1()) && Long.parseLong(item.size) == state.size()) {
@@ -332,7 +332,7 @@ final class ClientUpdatePlanBuilder {
 		}
 		PreservationVault.replaceClaim(storage, activeTarget.modpackId, activeTarget.contentToken, reason, UpdatePlan.Root.GAME_DIR, item.file, drift.sha1(), drift.size());
 		VerifiedFileTransfer.copyAtomic(object, live, packSize, item.sha1, cache);
-		return new UpdatePlan.FileState(cache.rehash(live), Files.size(live), true);
+		return new UpdatePlan.FileState(item.sha1, packSize, true);
 	}
 
 	/** Silently resets client-side drift of an unchanged server-provided non-mod file so it never becomes an update prompt; the server changing the file stays a reviewable update. */
@@ -344,9 +344,12 @@ final class ClientUpdatePlanBuilder {
 		if (targetItem == null || !targetItem.sha1.equalsIgnoreCase(item.sha1) || ModpackPathPolicy.isActiveMod(relative, item.type)) return;
 		Path live = livePath(item);
 		if (!Files.isRegularFile(live, LinkOption.NOFOLLOW_LINKS)) return;
-		UpdatePlan.FileState state = new UpdatePlan.FileState(cache.getOrComputeHash(live), Files.size(live), true);
+		long packSize = Long.parseLong(item.size);
+		long size = Files.size(live);
+		if (size == packSize && FileIntegrity.matchesNamed(live, packSize, item.sha1, cache)) return;
+		UpdatePlan.FileState state = new UpdatePlan.FileState(cache.getOrComputeHash(live), size, true);
 		if (projection.matchesPendingGameState(item.file, state)) return;
-		if (state.sha1().equalsIgnoreCase(item.sha1) && Long.parseLong(item.size) == state.size()) return;
+		if (state.sha1().equalsIgnoreCase(item.sha1) && packSize == state.size()) return;
 		resetDriftedFile(cache, activeTarget, item, live, state, PreservationVault.Reason.LOCAL_DRIFT);
 	}
 
@@ -366,7 +369,7 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private static boolean populateStoreObject(Path source, Path object, long size, String sha1, FileCache cache) throws IOException {
-		if (!FileIntegrity.matches(source, size, sha1, cache)) return false;
+		if (!FileIntegrity.matchesNamed(source, size, sha1, cache) && !FileIntegrity.matches(source, size, sha1, cache)) return false;
 		VerifiedFileTransfer.copyAtomicImmutable(source, object, size, sha1, cache);
 		cache.overwriteCache(object, sha1);
 		return true;
@@ -383,6 +386,7 @@ final class ClientUpdatePlanBuilder {
 			overlaySnapshots.put(target.modpackId, targetOverlay);
 		}
 		for (var entry : targetOverlay.files().entrySet()) files.put(new UpdatePlan.FileKey(UpdatePlan.Root.OVERLAY, entry.getKey()), entry.getValue());
+		Map<String, UpdatePlan.FileState> advertisedLive = advertisedLiveFiles(target, installed);
 		Set<String> gamePaths = new HashSet<>();
 		if (target.list != null) target.list.forEach(item -> gamePaths.add(item.file));
 		if (installed != null && installed.list != null) installed.list.forEach(item -> gamePaths.add(item.file));
@@ -395,16 +399,16 @@ final class ClientUpdatePlanBuilder {
 			});
 		for (String gamePath : gamePaths) {
 			Path path = storage.gamePath(gamePath);
-			if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, UpdatePlan.Root.GAME_DIR, storage.gameDirectory(), path, cache);
+			if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, UpdatePlan.Root.GAME_DIR, storage.gameDirectory(), path, cache, advertisedLive);
 		}
 		for (String gamePath : projection.gamePaths()) {
 			Path path = storage.gamePath(gamePath);
-			if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, UpdatePlan.Root.GAME_DIR, storage.gameDirectory(), path, cache);
+			if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, UpdatePlan.Root.GAME_DIR, storage.gameDirectory(), path, cache, advertisedLive);
 		}
 		if (Files.isDirectory(storage.modsDirectory(), LinkOption.NOFOLLOW_LINKS)) {
 			try (Stream<Path> stream = Files.list(storage.modsDirectory())) {
 				for (Path path : stream.filter(candidate -> Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)).toList())
-					putFileState(files, UpdatePlan.Root.GAME_DIR, storage.gameDirectory(), path, cache);
+					putFileState(files, UpdatePlan.Root.GAME_DIR, storage.gameDirectory(), path, cache, advertisedLive);
 			}
 		}
 		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
@@ -414,9 +418,24 @@ final class ClientUpdatePlanBuilder {
 			UpdatePlan.FileKey key = cleanupKey.get();
 			if (key.root() != UpdatePlan.Root.GAME_DIR) continue;
 			Path path = storage.gameDirectory().resolve(key.relativePath()).normalize();
-			if (path.startsWith(storage.gameDirectory()) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, key.root(), storage.gameDirectory(), path, cache);
+			if (path.startsWith(storage.gameDirectory()) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, key.root(), storage.gameDirectory(), path, cache, advertisedLive);
 		}
 		return files;
+	}
+
+	private static Map<String, UpdatePlan.FileState> advertisedLiveFiles(ModpackJsons.ModpackContentFields target, ModpackJsons.ModpackContentFields installed) {
+		Map<String, UpdatePlan.FileState> advertised = new HashMap<>();
+		if (installed != null && installed.list != null) for (var item : installed.list) putAdvertisedLive(advertised, item);
+		if (target != null && target.list != null) for (var item : target.list) putAdvertisedLive(advertised, item);
+		return advertised;
+	}
+
+	private static void putAdvertisedLive(Map<String, UpdatePlan.FileState> advertised, ModpackJsons.ModpackContentFields.ModpackContentItem item) {
+		if (item == null || item.file == null || item.sha1 == null) return;
+		try {
+			advertised.put(LogicalPath.normalize(item.file), new UpdatePlan.FileState(item.sha1, Long.parseLong(item.size), true));
+		} catch (NumberFormatException ignored) {
+		}
 	}
 
 	private GeneratedCopyState readGeneratedCopyState(ModpackJsons.ModpackContentFields manifest, SelectionIntent intent) throws IOException {
@@ -426,11 +445,13 @@ final class ClientUpdatePlanBuilder {
 	}
 
 	private void putFileState(Map<UpdatePlan.FileKey, UpdatePlan.FileState> files, UpdatePlan.Root root, Path rootPath, Path path,
-			FileCache cache) throws IOException {
+			FileCache cache, Map<String, UpdatePlan.FileState> advertisedLive) throws IOException {
 		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return;
 		String relative = LogicalPath.normalize(rootPath.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString());
-		String hash = cache.getOrComputeHash(path);
-		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true));
+		long size = Files.size(path);
+		UpdatePlan.FileState advertised = advertisedLive.get(relative);
+		String hash = advertised != null && advertised.regularFile() ? FileIntegrity.observedHash(path, advertised.size(), advertised.sha1(), cache) : cache.getOrComputeHash(path);
+		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, size, true));
 	}
 
 	private Path resolvedObject(ModpackJsons.ModpackContentFields.ModpackContentItem item, ClientProjectionView.Snapshot projection, FileCache cache) {

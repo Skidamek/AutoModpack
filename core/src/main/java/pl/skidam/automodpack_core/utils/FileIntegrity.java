@@ -59,6 +59,15 @@ public final class FileIntegrity {
 	}
 
 	/**
+	 * Hash of {@code file} for observation. If the named tripwire still agrees with the advertised
+	 * identity, that hash is returned and the bytes are not read. Otherwise this is {@link #identityHash}.
+	 */
+	public static String observedHash(Path file, long expectedSize, String expectedSha1, FileCache cache) {
+		if (matchesNamed(file, expectedSize, expectedSha1, cache)) return HashUtils.normalizeSha1(expectedSha1);
+		return identityHash(file, cache);
+	}
+
+	/**
 	 * Whether a named immutable object is still the advertised bytes. With a cache this is the named
 	 * tripwire (size, mtime, inode), rehashing only when that fingerprint is disturbed. Without a cache, a
 	 * regular file of the advertised size.

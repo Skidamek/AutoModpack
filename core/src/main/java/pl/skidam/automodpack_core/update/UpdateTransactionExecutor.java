@@ -339,7 +339,7 @@ public final class UpdateTransactionExecutor {
 			if (operation.operation() != OperationType.INSTALL_OBJECT || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
-			if (FileIntegrity.matches(target, operation.expectedSize(), operation.expectedObjectHash(), fileCache)) continue;
+			if (FileIntegrity.matchesNamed(target, operation.expectedSize(), operation.expectedObjectHash(), fileCache)) continue;
 			verifyExpectedExisting(operation, target);
 			Path source = context.storage().objectFile(operation.expectedObjectHash());
 			VerifiedFileTransfer.copyAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
@@ -411,7 +411,7 @@ public final class UpdateTransactionExecutor {
 			if (projected.root() == Root.PROJECTION) continue;
 			Path target = resolve(projected.root(), projected.relativePath(), transaction);
 			if (projected.present()) {
-				if (!FileIntegrity.matches(target, projected.expectedSize(), projected.expectedHash(), fileCache))
+				if (!FileIntegrity.matchesNamed(target, projected.expectedSize(), projected.expectedHash(), fileCache))
 					throw new UpdateReplanRequiredException(target, "Projected target changed during update: " + target);
 			} else
 				if (Files.exists(target, LinkOption.NOFOLLOW_LINKS))
