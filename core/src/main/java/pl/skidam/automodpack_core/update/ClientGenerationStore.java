@@ -132,7 +132,9 @@ public final class ClientGenerationStore {
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 			for (var file : ContentTree.fromManifest(manifest).files().entrySet()) {
 				if (FileIntegrity.matchesNamed(storage.objectFile(file.getValue().sha1()), file.getValue().size(), file.getValue().sha1(), cache)) continue;
-				if (FileIntegrity.matches(storage.gamePath(file.getKey()), file.getValue().size(), file.getValue().sha1(), cache)) continue;
+				if (FileIntegrity.matchesNamed(storage.gamePath(file.getKey()), file.getValue().size(), file.getValue().sha1(), cache)
+						|| FileIntegrity.matches(storage.gamePath(file.getKey()), file.getValue().size(), file.getValue().sha1(), cache))
+					continue;
 				return false;
 			}
 		}

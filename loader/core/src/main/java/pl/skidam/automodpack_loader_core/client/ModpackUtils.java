@@ -174,7 +174,7 @@ public class ModpackUtils {
 			}
 
 			Path fileInCWD = storage.gamePath(entry.file);
-			if (FileIntegrity.matches(fileInCWD, expectedSize, entry.sha1, cache)) {
+			if (FileIntegrity.matchesNamed(fileInCWD, expectedSize, entry.sha1, cache) || FileIntegrity.matches(fileInCWD, expectedSize, entry.sha1, cache)) {
 				LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
 				try {
 					VerifiedFileTransfer.copyAtomicImmutable(fileInCWD, storeFile, expectedSize, entry.sha1, cache);

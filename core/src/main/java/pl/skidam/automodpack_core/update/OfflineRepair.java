@@ -200,7 +200,6 @@ public final class OfflineRepair {
 			assertPinned(request);
 			FileTrees.requireNoSymbolicLinkDescendants(storage.objectsDirectory(), expected.path(), "Repair object path");
 			if (VerifiedFileTransfer.copyAtomicImmutable(source, expected.path(), expected.content().size(), expected.content().hash(), fileCache)) repairedCas++;
-			fileCache.rehash(expected.path());
 		}
 
 		Analysis withRepairedCas = analyze(request, fileCache);
@@ -217,7 +216,6 @@ public final class OfflineRepair {
 					? VerifiedFileTransfer.linkAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache)
 					: VerifiedFileTransfer.copyAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache);
 			if (repaired) repairedFiles++;
-			fileCache.rehash(expected.path());
 		}
 		return new RepairCounts(repairedCas, repairedFiles);
 	}
@@ -286,7 +284,7 @@ public final class OfflineRepair {
 			Path live = storage.gamePath(fields.logicalPath);
 			Path object = storage.objectFile(fields.defaultHash).normalize();
 			if (!FileIntegrity.matchesNamed(object, fields.defaultSize, fields.defaultHash, fileCache)) throw new IOException("Editable default is unavailable locally: " + fields.logicalPath);
-			boolean alreadyReset = FileIntegrity.matches(live, fields.defaultSize, fields.defaultHash, fileCache);
+			boolean alreadyReset = FileIntegrity.matchesNamed(live, fields.defaultSize, fields.defaultHash, fileCache);
 			if (!alreadyReset) {
 				if (fields.absent) {
 					if (Files.exists(live, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Editable file changed after repair was journaled: " + fields.logicalPath);
@@ -299,7 +297,6 @@ public final class OfflineRepair {
 							fields.currentHash, fields.currentSize);
 				FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), live, "Repair path");
 				VerifiedFileTransfer.copyAtomic(object, live, fields.defaultSize, fields.defaultHash, fileCache);
-				fileCache.rehash(live);
 				reset++;
 			}
 			Files.deleteIfExists(storage.overlayFile(journal.modpackId, fields.logicalPath));
