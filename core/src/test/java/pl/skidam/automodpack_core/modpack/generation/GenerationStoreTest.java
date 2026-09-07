@@ -197,7 +197,7 @@ class GenerationStoreTest {
 		group.description = "multi";
 		group.files = entries;
 		fields.groups = new TreeMap<>(Map.of("main", group));
-		return new ModpackCandidate(GroupManifestValidator.validate(fields), staged, new TreeMap<>(), List.of(), List.of());
+		return new ModpackCandidate(GroupManifestValidator.validate(fields), staged, new TreeMap<>(), List.of());
 	}
 
 	private ModpackCandidate candidate(String description, String content) throws IOException {
@@ -212,7 +212,7 @@ class GenerationStoreTest {
 		group.files = Map.of("config/example.txt", new ModpackJsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(content.length()), "config", false, hash, null));
 		fields.groups = new TreeMap<>(Map.of("main", group));
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
-		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, stagedObject(staged, hash, content.length()))), new TreeMap<>(), List.of(), List.of());
+		return new ModpackCandidate(manifest, new TreeMap<>(Map.of(hash, stagedObject(staged, hash, content.length()))), new TreeMap<>(), List.of());
 	}
 
 	private StagedObject stagedObject(Path staged, String hash, long size) throws IOException {

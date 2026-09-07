@@ -49,7 +49,8 @@ class ModpackExecutorTest {
 		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, tempDir.resolve("data").toAbsolutePath().normalize().toString());
 		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot);
 		try {
-			assertInstanceOf(ModpackExecutor.PublishGuardUnsupported.class, executor.publishIfContent("0".repeat(40)));
+			assertEquals("A state guard is unavailable before the root generation is published",
+					assertInstanceOf(ModpackExecutor.PublishResult.Rejected.class, executor.publishIfContent("0".repeat(40))).detail());
 			ModpackExecutor.PreviewResult preview = executor.preview();
 			ModpackExecutor.PreviewReady ready = assertInstanceOf(ModpackExecutor.PreviewReady.class, preview);
 			assertTrue(Files.notExists(generationRoot.resolve(StoragePaths.SERVER_JOURNAL_FILE.getFileName().toString())));
@@ -72,7 +73,9 @@ class ModpackExecutorTest {
 			assertTrue(Files.exists(notes));
 
 			Files.writeString(source, "two", StandardCharsets.UTF_8);
-			assertInstanceOf(ModpackExecutor.PublishGuardMismatch.class, executor.publishIfContent(rootToken));
+			ModpackExecutor.PublishResult.Rejected mismatch = assertInstanceOf(ModpackExecutor.PublishResult.Rejected.class, executor.publishIfContent(rootToken));
+			assertEquals("Fresh candidate content does not match the requested guard", mismatch.detail());
+			assertNull(mismatch.cause());
 			assertTrue(Files.exists(notes));
 
 			String nextToken = assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview()).state().contentToken();
@@ -127,7 +130,8 @@ class ModpackExecutorTest {
 		try {
 			Future<ModpackExecutor.PublishResult> first = operationExecutor.submit(() -> executor.publish());
 			assertTrue(entered.await(5, TimeUnit.SECONDS));
-			assertInstanceOf(ModpackExecutor.PreviewBusy.class, executor.preview());
+			assertEquals("Another modpack operation is already in progress",
+					assertInstanceOf(ModpackExecutor.PreviewResult.Rejected.class, executor.preview()).detail());
 			release.countDown();
 			assertInstanceOf(ModpackExecutor.Published.class, first.get());
 		} finally {

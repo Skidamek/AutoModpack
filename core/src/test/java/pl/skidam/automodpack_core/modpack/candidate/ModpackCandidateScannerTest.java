@@ -58,11 +58,6 @@ class ModpackCandidateScannerTest {
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
 
-		assertEquals(1, candidate.shadows().size());
-		ShadowedCandidate shadow = candidate.shadows().get(0);
-		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, shadow.selected().kind());
-		assertEquals(CandidateSource.SourceKind.SYNCED_ROOT, shadow.shadowed().kind());
-		assertEquals(ShadowedCandidate.Relationship.NOT_COMPARED, shadow.relationship());
 		CandidateProvenance provenance = candidate.provenance().get(ModpackCandidate.provenanceKey("main", "config/example.txt"));
 		assertNotNull(provenance);
 		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, provenance.selectedSource().kind());
@@ -124,7 +119,6 @@ class ModpackCandidateScannerTest {
 		assertEquals(ExcludedCandidate.Reason.DISABLED_FILE, exclusion.reason());
 		assertEquals("config/example.disabled", exclusion.source().logicalPath());
 		assertFalse(exclusion.message().isBlank());
-		assertEquals(1, candidate.shadows().size());
 	}
 
 	@Test

@@ -75,7 +75,7 @@ public class ModpackExecutor {
 
 	public PreviewResult preview(String inlineNotes) {
 		OperationLease operation = acquire(false);
-		if (operation == null) return new PreviewBusy("Another modpack operation is already in progress");
+		if (operation == null) return new PreviewResult.Rejected("Another modpack operation is already in progress", null);
 		try (operation) {
 			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
 			try (ModpackCandidate candidate = buildCandidate(current, false)) {
@@ -86,7 +86,7 @@ public class ModpackExecutor {
 			}
 		} catch (Exception e) {
 			LOGGER.error("Failed to preview modpack generation", e);
-			return new PreviewFailed(e);
+			return new PreviewResult.Rejected(e.getClass().getSimpleName(), e);
 		}
 	}
 
@@ -104,21 +104,21 @@ public class ModpackExecutor {
 
 	public PublishResult publishIfContent(String expectedContentToken, String inlineNotes) {
 		if (!HashUtils.isCanonicalSha1(expectedContentToken))
-			return new PublishInvalidGuard("Guard token must be a canonical 40-character lowercase SHA-1");
+			return new PublishResult.Rejected("Guard token must be a canonical 40-character lowercase SHA-1", null);
 		return publishInternal(expectedContentToken, inlineNotes);
 	}
 
 	public RevertResult revert(long targetSeq, String inlineNotes) {
-		if (targetSeq < 1) return new RevertInvalidTarget("Rollback target must be a positive journal sequence");
+		if (targetSeq < 1) return new RevertResult.Rejected("Rollback target must be a positive journal sequence", null);
 		OperationLease operation = acquire(true);
-		if (operation == null) return new RevertBusy("Another modpack operation is already in progress");
+		if (operation == null) return new RevertResult.Rejected("Another modpack operation is already in progress", null);
 		try (operation) {
 			return bindHosting(revertLocked(targetSeq, inlineNotes));
 		} catch (IllegalArgumentException e) {
-			return new RevertInvalidTarget(e.getMessage() == null ? "Invalid rollback target" : e.getMessage());
+			return new RevertResult.Rejected(e.getMessage() == null ? "Invalid rollback target" : e.getMessage(), e);
 		} catch (Exception e) {
 			LOGGER.error("Failed to publish modpack revert", e);
-			return new RevertFailed(e);
+			return new RevertResult.Rejected(e.getClass().getSimpleName(), e);
 		}
 	}
 
@@ -155,12 +155,12 @@ public class ModpackExecutor {
 
 	private PublishResult publishInternal(String expectedContentToken, String inlineNotes) {
 		OperationLease operation = acquire(true);
-		if (operation == null) return new PublishBusy("Another modpack operation is already in progress");
+		if (operation == null) return new PublishResult.Rejected("Another modpack operation is already in progress", null);
 		try (operation) {
 			return bindHosting(publishLocked(expectedContentToken, inlineNotes));
 		} catch (Exception e) {
 			LOGGER.error("Failed to publish modpack generation", e);
-			return new PublishFailed(e);
+			return new PublishResult.Rejected(e.getClass().getSimpleName(), e);
 		}
 	}
 
@@ -170,13 +170,13 @@ public class ModpackExecutor {
 		try {
 			GenerationStore.Current current = generationStore.loadCurrent().orElse(null);
 			if (expectedContentToken != null && current == null)
-				return new PublishGuardUnsupported("A state guard is unavailable before the root generation is published");
+				return new PublishResult.Rejected("A state guard is unavailable before the root generation is published", null);
 			try (ModpackCandidate candidate = buildCandidate(current, true)) {
 				GenerationDiff diff = GenerationDiff.between(current == null ? null : current.manifest(), candidate.manifest());
 				String token = ContentTree.tokenOf(candidate.manifest());
 				CandidateState candidateState = candidateState(current, candidate, token, diff, Optional.empty());
 				if (expectedContentToken != null && !expectedContentToken.equals(token))
-					return new PublishGuardMismatch(candidateState, "Fresh candidate content does not match the requested guard");
+					return new PublishResult.Rejected("Fresh candidate content does not match the requested guard", null);
 
 				if (current != null && current.contentToken().equals(token))
 					return new NoChanges(candidateState.withoutPatchNotesSource(), currentDocument(current), List.of(), generationStore.hosting());
@@ -196,13 +196,13 @@ public class ModpackExecutor {
 
 	public LoadResult loadLast() {
 		OperationLease operation = acquire(false);
-		if (operation == null) return new LoadBusy("Another modpack operation is already in progress");
+		if (operation == null) return new LoadResult.Rejected("Another modpack operation is already in progress", null);
 		try (operation) {
 			GenerationStore.Current current = generationStore.loadCurrent().orElseThrow(() -> new IOException("No modpack journal exists"));
 			return bindHosting(new Loaded(currentDocument(current), generationStore.hosting()));
 		} catch (Exception e) {
 			LOGGER.error("Failed to load the current modpack generation", e);
-			return new LoadFailed(e);
+			return new LoadResult.Rejected(e.getClass().getSimpleName(), e);
 		}
 	}
 
@@ -324,9 +324,9 @@ public class ModpackExecutor {
 		creationExecutor.shutdown();
 	}
 
-	public record CandidateSummary(int groups, int files, int objects, List<ExcludedCandidate> excluded, int shadows, GenerationDiff.Summary diff) {
+	public record CandidateSummary(int groups, int files, int objects, List<ExcludedCandidate> excluded, GenerationDiff.Summary diff) {
 		public CandidateSummary {
-			if (groups < 0 || files < 0 || objects < 0 || shadows < 0) throw new IllegalArgumentException("Negative generation summary count");
+			if (groups < 0 || files < 0 || objects < 0) throw new IllegalArgumentException("Negative generation summary count");
 			Objects.requireNonNull(excluded, "excluded");
 			excluded = List.copyOf(excluded);
 			Objects.requireNonNull(diff, "diff");
@@ -338,11 +338,11 @@ public class ModpackExecutor {
 
 		static CandidateSummary from(ModpackCandidate candidate, GenerationDiff diff) {
 			int files = candidate.manifest().groups().values().stream().mapToInt(group -> group.files().size()).sum();
-			return new CandidateSummary(candidate.manifest().groups().size(), files, candidate.objects().size(), candidate.exclusions(), candidate.shadows().size(), diff.summary());
+			return new CandidateSummary(candidate.manifest().groups().size(), files, candidate.objects().size(), candidate.exclusions(), diff.summary());
 		}
 
 		static CandidateSummary empty() {
-			return new CandidateSummary(0, 0, 0, List.of(), 0, new GenerationDiff.Summary(0, 0, 0, 0, 0));
+			return new CandidateSummary(0, 0, 0, List.of(), new GenerationDiff.Summary(0, 0, 0, 0, 0));
 		}
 	}
 
@@ -365,7 +365,15 @@ public class ModpackExecutor {
 		}
 	}
 
-	public sealed interface PreviewResult permits PreviewReady, PreviewBusy, PreviewFailed {}
+	public sealed interface PreviewResult permits PreviewReady, PreviewResult.Rejected {
+
+		/** The preview produced no generation; the detail explains the refusal or failure. */
+		record Rejected(String detail, Throwable cause) implements PreviewResult {
+			public Rejected {
+				detail = Objects.requireNonNull(detail);
+			}
+		}
+	}
 
 	public record PreviewReady(CandidateState state) implements PreviewResult {
 		public PreviewReady {
@@ -374,19 +382,15 @@ public class ModpackExecutor {
 		}
 	}
 
-	public record PreviewBusy(String detail) implements PreviewResult {
-		public PreviewBusy {
-			detail = Objects.requireNonNull(detail);
+	public sealed interface RevertResult extends HostingOutcome permits Reverted, RevertResult.Rejected {
+
+		/** The revert produced no generation; the detail explains the refusal or failure. */
+		record Rejected(String detail, Throwable cause) implements RevertResult {
+			public Rejected {
+				detail = Objects.requireNonNull(detail);
+			}
 		}
 	}
-
-	public record PreviewFailed(Throwable failure) implements PreviewResult {
-		public PreviewFailed {
-			Objects.requireNonNull(failure, "failure");
-		}
-	}
-
-	public sealed interface RevertResult extends HostingOutcome permits Reverted, RevertBusy, RevertInvalidTarget, RevertFailed {}
 
 	public record Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting) implements RevertResult {
 		public Reverted {
@@ -402,40 +406,15 @@ public class ModpackExecutor {
 		}
 	}
 
-	public record RevertBusy(String detail) implements RevertResult {
-		public RevertBusy {
-			detail = Objects.requireNonNull(detail);
-		}
+	public sealed interface PublishResult extends HostingOutcome permits Published, NoChanges, PublishResult.Rejected {
 
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
-		}
-	}
-
-	public record RevertInvalidTarget(String detail) implements RevertResult {
-		public RevertInvalidTarget {
-			detail = Objects.requireNonNull(detail);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
+		/** The publication produced no generation; the detail explains the refusal or failure. */
+		record Rejected(String detail, Throwable cause) implements PublishResult {
+			public Rejected {
+				detail = Objects.requireNonNull(detail);
+			}
 		}
 	}
-
-	public record RevertFailed(Throwable failure) implements RevertResult {
-		public RevertFailed {
-			failure = Objects.requireNonNull(failure);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
-		}
-	}
-
-	public sealed interface PublishResult extends HostingOutcome permits Published, NoChanges, PublishBusy, PublishInvalidGuard, PublishGuardUnsupported, PublishGuardMismatch, PublishFailed {}
 
 	public record Published(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting) implements PublishResult {
 		public Published {
@@ -471,64 +450,15 @@ public class ModpackExecutor {
 		}
 	}
 
-	public record PublishBusy(String detail) implements PublishResult {
-		public PublishBusy {
-			detail = Objects.requireNonNull(detail);
-		}
+	public sealed interface LoadResult extends HostingOutcome permits Loaded, LoadResult.Rejected {
 
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
-		}
-	}
-
-	public record PublishInvalidGuard(String detail) implements PublishResult {
-		public PublishInvalidGuard {
-			detail = Objects.requireNonNull(detail);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
+		/** The load produced no generation; the detail explains the refusal or failure. */
+		record Rejected(String detail, Throwable cause) implements LoadResult {
+			public Rejected {
+				detail = Objects.requireNonNull(detail);
+			}
 		}
 	}
-
-	public record PublishGuardUnsupported(String detail) implements PublishResult {
-		public PublishGuardUnsupported {
-			detail = Objects.requireNonNull(detail);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
-		}
-	}
-
-	public record PublishGuardMismatch(CandidateState state, String detail) implements PublishResult {
-		public PublishGuardMismatch {
-			Objects.requireNonNull(state, "state");
-			detail = Objects.requireNonNull(detail);
-			if (state.patchNotesSource().isPresent()) throw new IllegalArgumentException("Guard mismatch cannot resolve patch notes");
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
-		}
-	}
-
-	public record PublishFailed(Throwable failure) implements PublishResult {
-		public PublishFailed {
-			failure = Objects.requireNonNull(failure);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
-		}
-	}
-
-	public sealed interface LoadResult extends HostingOutcome permits Loaded, LoadBusy, LoadFailed {}
 
 	public record Loaded(PackDocument current, GenerationHosting hosting) implements LoadResult {
 		public Loaded {
@@ -539,28 +469,6 @@ public class ModpackExecutor {
 		@Override
 		public Optional<GenerationHosting> hosted() {
 			return Optional.of(hosting);
-		}
-	}
-
-	public record LoadBusy(String detail) implements LoadResult {
-		public LoadBusy {
-			detail = Objects.requireNonNull(detail);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
-		}
-	}
-
-	public record LoadFailed(Throwable failure) implements LoadResult {
-		public LoadFailed {
-			failure = Objects.requireNonNull(failure);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.empty();
 		}
 	}
 }
