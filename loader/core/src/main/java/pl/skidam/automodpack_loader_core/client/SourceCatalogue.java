@@ -59,7 +59,7 @@ final class SourceCatalogue {
 			ModpackJsons.ModpackContentFields catalogue = target.completeTarget();
 			if (catalogue.list != null)
 				for (var item : catalogue.list)
-					addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
+					addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.type);
 		}
 		sourceFetchManager = newSourceFetchManager(new ArrayList<>(unique.values()));
 		if (sourceFetchManager != null) sourceFetchManager.fetch();
@@ -97,7 +97,7 @@ final class SourceCatalogue {
 
 	FetchManager sourceFetch(Collection<ModpackJsons.ModpackContentFields.ModpackContentItem> items) {
 		Map<String, FetchManager.FetchData> unique = new LinkedHashMap<>();
-		for (var item : items) addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.size, item.type);
+		for (var item : items) addSourceFetchData(unique, item.file, item.sha1, item.murmur, item.type);
 		List<FetchManager.FetchData> fetchData = new ArrayList<>(unique.values());
 		if (fetchData.isEmpty()) return null;
 		FetchManager current = sourceFetchManager;
@@ -114,9 +114,9 @@ final class SourceCatalogue {
 		return manager;
 	}
 
-	private static void addSourceFetchData(Map<String, FetchManager.FetchData> unique, String file, String sha1, String murmur, String size, String type) {
+	private static void addSourceFetchData(Map<String, FetchManager.FetchData> unique, String file, String sha1, String murmur, String type) {
 		if (!ModpackContentType.isSourceFetchable(type) || sha1 == null || sha1.isBlank()) return;
-		unique.putIfAbsent(sha1, new FetchManager.FetchData(file, sha1, murmur, size, type));
+		unique.putIfAbsent(sha1, new FetchManager.FetchData(file, sha1, murmur, type));
 	}
 
 	ChangeSet.ReferenceProvider resolveMainPageReferences(ClientUpdatePlanBuilder.PreparedPlan prepared) {

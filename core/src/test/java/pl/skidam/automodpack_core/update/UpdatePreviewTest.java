@@ -136,7 +136,7 @@ class UpdatePreviewTest {
 	}
 
 	private static ModpackJsons.ModpackContentFields.ModpackContentItem item(String path, String hash, long size, String type) {
-		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, Long.toString(size), type, false, hash, "0");
+		return new ModpackJsons.ModpackContentFields.ModpackContentItem(path, size, type, false, hash, "0");
 	}
 
 	private static ModpackJsons.ModpackContentFields manifest(Object... values) {

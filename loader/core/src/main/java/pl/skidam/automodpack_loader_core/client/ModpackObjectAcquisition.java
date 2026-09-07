@@ -98,7 +98,7 @@ final class ModpackObjectAcquisition {
 
 		if (connectionInfo == null || !connectionInfo.isComplete() || downloadClient == null) throw new IOException("Modpack transfer session is unavailable");
 		long start = System.currentTimeMillis();
-		long totalBytes = missing.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
+		long totalBytes = missing.stream().mapToLong(item -> item.size).sum();
 		FetchManager fetchManager = sourceCatalogue.sourceFetch(missing);
 		try {
 			if (!downloadModpack(missing, start, totalBytes, fetchManager, playerFacing))
@@ -147,7 +147,7 @@ final class ModpackObjectAcquisition {
 				failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
 				failedDownloadCategories.put(serverItem, category);
 			};
-			downloadManager.download(downloadFile, serverItem.sha1, serverItem.murmur, serverItem.type, sources, Long.parseLong(serverItem.size), () -> {}, failureCallback);
+			downloadManager.download(downloadFile, serverItem.sha1, serverItem.murmur, serverItem.type, sources, serverItem.size, () -> {}, failureCallback);
 		}
 
 		downloadManager.joinAll();

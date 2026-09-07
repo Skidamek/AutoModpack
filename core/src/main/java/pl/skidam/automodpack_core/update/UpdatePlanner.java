@@ -252,8 +252,8 @@ public final class UpdatePlanner {
 				install(operations, projected, new FileKey(Root.OVERLAY, relative), overlay.sha1(), overlay.size());
 			if (overlay == null && projected.containsKey(new FileKey(Root.OVERLAY, relative)))
 				delete(operations, projected, new FileKey(Root.OVERLAY, relative), projected.get(new FileKey(Root.OVERLAY, relative)).sha1());
-			if (!matches(existing, item.sha1, parseSize(item.size)))
-				install(operations, projected, modpackKey, item.sha1, parseSize(item.size));
+			if (!matches(existing, item.sha1, item.size))
+				install(operations, projected, modpackKey, item.sha1, item.size);
 
 			boolean copyToLive = !PinnedMods.protects(protectedIds, idsForPath(input.targetMods(), relative)) && (!activeMod || forceCopyPaths.contains(relative) || overlay != null);
 			FileKey liveKey = liveKey(item);
@@ -263,7 +263,7 @@ public final class UpdatePlanner {
 					if (live != null) delete(operations, projected, liveKey, live.sha1());
 				} else {
 					String liveHash = overlay == null ? item.sha1 : overlay.sha1();
-					long liveSize = overlay == null ? parseSize(item.size) : overlay.size();
+					long liveSize = overlay == null ? item.size : overlay.size();
 					if (!matches(live, liveHash, liveSize)) {
 						FileState consented = input.consentedLocalModFiles().get(relative);
 						install(operations, projected, liveKey, liveHash, liveSize, consented == null ? null : consented.sha1());
@@ -667,13 +667,4 @@ public final class UpdatePlanner {
 		return Set.of();
 	}
 
-	private static long parseSize(String size) {
-		try {
-			long parsed = Long.parseLong(size);
-			if (parsed < 0) throw new IllegalArgumentException("Negative file size");
-			return parsed;
-		} catch (RuntimeException e) {
-			throw new IllegalArgumentException("Invalid file size: " + size, e);
-		}
-	}
 }

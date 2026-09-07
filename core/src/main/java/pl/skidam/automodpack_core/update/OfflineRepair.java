@@ -353,7 +353,7 @@ public final class OfflineRepair {
 		Map<String, Observation> overlays = inspectOverlay(modpackId, fileCache, observations);
 		for (var item : request.activeTarget().flatTarget().list.stream().sorted(Comparator.comparing(value -> LogicalPath.normalize(value.file))).toList()) {
 			String logicalPath = LogicalPath.normalize(item.file);
-			Content content = new Content(item.sha1, parseSize(item.size));
+			Content content = new Content(item.sha1, item.size);
 			addExpected(expected, new Expected(Place.CAS, logicalPath, storage.objectsDirectory(), storage.objectFile(content.hash()).normalize(), content));
 			addExpected(expected, new Expected(Place.PROJECTION, logicalPath, storage.activeDirectory(), storage.activePath(logicalPath), content));
 
@@ -522,16 +522,6 @@ public final class OfflineRepair {
 
 	private static boolean matches(Observation observation, Content content) {
 		return observation != null && !observation.unsupported() && observation.size() == content.size() && observation.hash().equals(content.hash());
-	}
-
-	private static long parseSize(String value) {
-		try {
-			long size = Long.parseLong(value);
-			if (size < 0) throw new IllegalArgumentException("Negative size");
-			return size;
-		} catch (RuntimeException e) {
-			throw new IllegalArgumentException("Invalid installed file size: " + value, e);
-		}
 	}
 
 	private static Map<Content, List<Path>> immutableSources(Map<Content, List<Path>> values) {

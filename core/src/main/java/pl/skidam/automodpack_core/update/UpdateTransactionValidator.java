@@ -258,7 +258,7 @@ public final class UpdateTransactionValidator {
 			if (item == null || item.type == null || item.type.isBlank()) throw new IOException("Manifest item is incomplete");
 			String relative = normalizeManifestPath(item.file);
 			if (!normalizedPaths.add(relative)) throw new IOException("Manifest contains duplicate normalized path: " + relative);
-			parseNonnegativeSize(item.size);
+			if (item.size < 0) throw new IOException("Manifest file has a negative size: " + relative);
 			validateHash(item.sha1, "manifest SHA-1");
 		}
 		try {
@@ -474,7 +474,7 @@ public final class UpdateTransactionValidator {
 			String relative = normalizeManifestPath(item.file);
 			ProjectedFile projected = finalState.get(new FileKey(Root.PROJECTION, relative));
 			if (projected == null || !projected.present()) throw new IOException("Manifest file is absent from projected final state: " + relative);
-			if (!item.sha1.equalsIgnoreCase(projected.expectedHash()) || parseNonnegativeSize(item.size) != projected.expectedSize())
+			if (!item.sha1.equalsIgnoreCase(projected.expectedHash()) || item.size != projected.expectedSize())
 				throw new IOException("Manifest file does not match projected final state: " + relative);
 		}
 	}
@@ -513,16 +513,6 @@ public final class UpdateTransactionValidator {
 			return normalized;
 		} catch (IllegalArgumentException e) {
 			throw new IOException("Unsafe operation path", e);
-		}
-	}
-
-	static long parseNonnegativeSize(String value) throws IOException {
-		try {
-			long size = Long.parseLong(value);
-			if (size < 0) throw new NumberFormatException("negative");
-			return size;
-		} catch (RuntimeException e) {
-			throw new IOException("Invalid nonnegative file size", e);
 		}
 	}
 
