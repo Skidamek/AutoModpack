@@ -66,7 +66,7 @@ public final class SharedObjectOwnership {
 		if (Files.isSymbolicLink(owners) || !Files.isDirectory(owners, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Shared object ownership root is not a directory: " + owners);
 		TreeSet<String> result = new TreeSet<>();
 		try (Stream<Path> paths = Files.list(owners)) {
-			for (Path path : paths.sorted().toList()) {
+			for (Path path : paths.toList()) {
 				if (path.getFileName().toString().endsWith(".tmp")) {
 					// A crash during a receipt write leaves a transient ConfigTools temporary; it is never a receipt.
 					Files.deleteIfExists(path);
