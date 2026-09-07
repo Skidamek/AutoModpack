@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -27,6 +28,7 @@ import pl.skidam.automodpack_core.update.PreservationVault.Reason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
 import pl.skidam.automodpack_core.update.UpdatePlan.ConflictAction;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 class PreservationVaultTest {
@@ -97,22 +99,41 @@ class PreservationVaultTest {
 	}
 
 	@Test
-	void saveCopyUsesAStablePathReleasesTheClaimAndNeverOverwritesDifferentBytes() throws Exception {
+	void saveCopyPlacesTwoClaimsForTheSameOriginalPathSideBySide() throws Exception {
+		ClientStorage storage = storage();
+		Path source = Files.writeString(storage.gamePath("config/local.txt"), "local", StandardCharsets.UTF_8);
+		String firstHash = HashUtils.getHash(source);
+		PreservationVault.Claim firstClaim = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/local.txt", firstHash,
+				Files.size(source));
+		Path first = PreservationVault.saveCopy(storage, MODPACK_ID, firstClaim.claimId());
+		assertEquals(RecoveredFiles.path(storage, "config/local.txt", firstClaim.claimId()), first);
+		assertEquals("local", Files.readString(first, StandardCharsets.UTF_8));
+
+		Path changed = Files.writeString(storage.gamePath("config/local.txt"), "local-v2", StandardCharsets.UTF_8);
+		String secondHash = HashUtils.getHash(changed);
+		PreservationVault.Claim secondClaim = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.MODPACK_DEACTIVATION, Root.GAME_DIR, "config/local.txt", secondHash,
+				Files.size(changed));
+		Path second = PreservationVault.saveCopy(storage, MODPACK_ID, secondClaim.claimId());
+		assertEquals("local-v2", Files.readString(second, StandardCharsets.UTF_8));
+		assertEquals("local", Files.readString(first, StandardCharsets.UTF_8));
+		assertNotEquals(first, second);
+		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().isEmpty());
+	}
+
+	@Test
+	void saveCopyRefusesToOverwriteDifferentBytesAtTheClaimPath() throws Exception {
 		ClientStorage storage = storage();
 		Path source = Files.writeString(storage.gamePath("config/local.txt"), "local", StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(source);
-		PreservationVault.Claim claim = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/local.txt", hash,
-				Files.size(source));
-
-		Path first = PreservationVault.saveCopy(storage, MODPACK_ID, claim.claimId());
-		assertEquals("local", Files.readString(first, StandardCharsets.UTF_8));
-		assertTrue(PreservationVault.read(storage, MODPACK_ID).claims().isEmpty());
-		assertThrows(IOException.class, () -> PreservationVault.saveCopy(storage, MODPACK_ID, claim.claimId()));
-		PreservationVault.Claim repeated = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/local.txt", hash,
-				Files.size(source));
-		Files.writeString(first, "different", StandardCharsets.UTF_8);
+		long size = Files.size(source);
+		PreservationVault.Claim claim = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/local.txt", hash, size);
+		Path recovered = PreservationVault.saveCopy(storage, MODPACK_ID, claim.claimId());
+		Files.writeString(recovered, "different", StandardCharsets.UTF_8);
+		PreservationVault.Claim repeated = PreservationVault.preserve(storage, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/local.txt", hash, size);
 		assertThrows(IOException.class, () -> PreservationVault.saveCopy(storage, MODPACK_ID, repeated.claimId()));
+		assertEquals("different", Files.readString(recovered, StandardCharsets.UTF_8));
 		assertEquals(1, PreservationVault.read(storage, MODPACK_ID).claims().size());
+		assertTrue(FileIntegrity.matches(storage.objectFile(hash), size, hash));
 	}
 
 	@Test

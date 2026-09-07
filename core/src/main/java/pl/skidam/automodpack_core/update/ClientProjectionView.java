@@ -117,8 +117,8 @@ public final class ClientProjectionView {
 				|| transaction.phase == UpdateTransaction.Phase.COMMITTED)
 			return true;
 		try {
-			return Files.exists(storage.incomingProjectionDirectory(), LinkOption.NOFOLLOW_LINKS)
-					|| Files.exists(storage.backupProjectionDirectory(), LinkOption.NOFOLLOW_LINKS);
+			return Files.exists(storage.incomingDirectory(), LinkOption.NOFOLLOW_LINKS)
+					|| Files.exists(storage.backupDirectory(), LinkOption.NOFOLLOW_LINKS);
 		} catch (RuntimeException e) {
 			return false;
 		}
@@ -307,7 +307,7 @@ public final class ClientProjectionView {
 		public List<Path> sourceCandidates(String relativePath) {
 			String relative = LogicalPath.normalize(relativePath);
 			List<Path> candidates = new ArrayList<>();
-			if (pending != null) candidates.add(resolve(storage.incomingProjectionDirectory(), relative));
+			if (pending != null) candidates.add(resolve(storage.incomingDirectory(), relative));
 			candidates.add(storage.activePath(relative));
 			UpdatePlan.FileState expected = files.get(relative);
 			if (expected != null && expected.sha1() != null) candidates.add(storage.objectFile(expected.sha1()));

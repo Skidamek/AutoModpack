@@ -225,6 +225,14 @@ public final class ClientStorage {
 		return backupDirectory;
 	}
 
+	public Path recoveredDirectory() {
+		return gameDirectory.resolve(RECOVERED_DIR).normalize();
+	}
+
+	public Path stagingDirectory() {
+		return dataLocation.layout().stagingDirectory();
+	}
+
 	public Path stateFile() {
 		return stateFile;
 	}
@@ -315,14 +323,6 @@ public final class ClientStorage {
 		return preservationPackDirectory(modpackId).resolve("claims.json").normalize();
 	}
 
-	public Path restoredClaimDirectory(String modpackId, String contentToken, String claimId) {
-		String generation = contentToken == null || contentToken.isEmpty() ? "unversioned" : requireDigest(contentToken, "generation ID");
-		Path root = gameDirectory.resolve(RECOVERED_DIR).resolve(ModpackId.requireValid(modpackId)).resolve(generation).normalize();
-		Path claim = root.resolve(requireDigest(claimId, "preservation claim ID")).normalize();
-		if (!claim.startsWith(root)) throw new IllegalArgumentException("Restored copy path escaped its modpack root");
-		return claim;
-	}
-
 	public Path bootstrapFile() {
 		return bootstrapFile;
 	}
@@ -402,14 +402,6 @@ public final class ClientStorage {
 		return baselinesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve("baseline.json").normalize();
 	}
 
-	public Path incomingProjectionDirectory() {
-		return gameDirectory.resolve(CLIENT_INCOMING_PROJECTION_DIR).normalize();
-	}
-
-	public Path backupProjectionDirectory() {
-		return gameDirectory.resolve(CLIENT_BACKUP_PROJECTION_DIR).normalize();
-	}
-
 	public String overlayDigest(String modpackId) throws IOException {
 		return ClientOverlaySnapshot.capture(this, modpackId, null).digest();
 	}
@@ -429,8 +421,7 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(overlaysDirectory, "client overlays");
 		FileTrees.createManagedDirectory(baselinesDirectory, "client baselines");
 		FileTrees.createManagedDirectory(generatedCopiesDirectory, "client generated-copy state");
-		FileTrees.createManagedDirectory(incomingDirectory, "client incoming staging root");
-		FileTrees.createManagedDirectory(backupDirectory, "client projection backup root");
+		FileTrees.createManagedDirectory(stagingDirectory(), "shared publication staging");
 		FileTrees.createManagedDirectory(preservationDirectory, "client preservation root");
 		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
 	}
@@ -500,8 +491,8 @@ public final class ClientStorage {
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
 				historyDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile,
-				journalTempFile, incomingProjectionDirectory(), backupProjectionDirectory());
-		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, knownHostsFile, knownHostsLockFile);
+				journalTempFile);
+		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, stagingDirectory(), knownHostsFile, knownHostsLockFile);
 	}
 
 	private static void validateWithin(Path parent, Path... children) {

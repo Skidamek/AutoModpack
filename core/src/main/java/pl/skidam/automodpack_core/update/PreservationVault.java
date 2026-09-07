@@ -246,7 +246,7 @@ public final class PreservationVault {
 		});
 	}
 
-	/** Saves a deterministic copy without changing the active modpack. Success releases the claim. */
+	/** Saves {@code automodpack/recovered/{originalPath}}. The claim is released only after that copy verifies; CAS bytes stay. */
 	public static Path saveCopy(ClientStorage storage, String modpackId, String claimId) throws IOException {
 		String pack = ModpackId.requireValid(modpackId);
 		String id = requireHash(claimId, "preservation claim ID");
@@ -254,8 +254,7 @@ public final class PreservationVault {
 			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
 				ClientStorageJsons.ClientPreservationVaultFields fields = readFields(storage, pack);
 				ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim = requireClaim(fields, id);
-				Path root = storage.restoredClaimDirectory(pack, claim.contentToken, id);
-				Path destination = LogicalPath.resolve(root, claim.originalPath);
+				Path destination = RecoveredFiles.destination(storage, claim.originalPath, id);
 				copyWithoutOverwrite(storage.gameDirectory(), object(storage, claim.objectHash), destination, claim.size, claim.objectHash, cache);
 				releaseClaim(storage, pack, fields, id);
 				return destination;
@@ -310,7 +309,7 @@ public final class PreservationVault {
 		if (!FileIntegrity.matchesNamed(source, size, hash, cache)) throw new IOException("Preserved object is missing or corrupt: " + hash);
 		if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
 			if (!Files.isRegularFile(destination, LinkOption.NOFOLLOW_LINKS) || !FileIntegrity.matchesNamed(destination, size, hash, cache))
-				throw new IOException("Restore destination already exists: " + destination);
+				throw new IOException("Refusing to overwrite a different file at " + destination);
 			return;
 		}
 		VerifiedFileTransfer.copyCreateOnly(source, destination, size, hash, cache);
