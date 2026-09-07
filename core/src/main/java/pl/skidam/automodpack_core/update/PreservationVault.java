@@ -351,7 +351,7 @@ public final class PreservationVault {
 		if (fields.schemaVersion != 1 || !modpackId.equals(fields.modpackId) || fields.claims == null) throw new IOException("Preservation manifest identity is invalid");
 		Set<String> ids = new HashSet<>();
 		for (ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim : fields.claims) {
-			Claim parsed = toClaim(claim);
+			ClaimIdentity parsed = toIdentity(claim);
 			if (!modpackId.equals(parsed.modpackId()) || !ids.add(parsed.claimId())) throw new IOException("Preservation manifest contains duplicate or foreign claims");
 			String expectedId = claimId(parsed.modpackId(), parsed.contentToken(), parsed.reason(), parsed.sourceRoot(), parsed.originalPath(), parsed.objectHash(), parsed.size());
 			if (!expectedId.equals(parsed.claimId())) throw new IOException("Preservation claim identity is invalid");
@@ -373,7 +373,17 @@ public final class PreservationVault {
 		readFields(storage, modpackId);
 	}
 
-	private static Claim toClaim(ClientStorageJsons.ClientPreservationVaultFields.ClaimFields fields) throws IOException {
+	private static Claim toClaim(ClientStorage storage, ClientStorageJsons.ClientPreservationVaultFields.ClaimFields fields) throws IOException {
+		ClaimIdentity identity = toIdentity(fields);
+		return new Claim(identity.claimId(), identity.originalPath(), identity.sourceRoot(), identity.objectHash(), identity.size(), identity.modpackId(), identity.contentToken(),
+				identity.reason(), identity.preservedAt(), originalRestore(storage, identity.modpackId(), identity.sourceRoot(), identity.originalPath()));
+	}
+
+	/** The persisted, validated claim fields. Ownership of the original live path is a live question and is answered separately. */
+	private record ClaimIdentity(String claimId, String originalPath, Root sourceRoot, String objectHash, long size, String modpackId, String contentToken, Reason reason,
+			Instant preservedAt) {}
+
+	private static ClaimIdentity toIdentity(ClientStorageJsons.ClientPreservationVaultFields.ClaimFields fields) throws IOException {
 		if (fields == null) throw new IOException("Preservation claim is missing");
 		String id = requireHash(fields.claimId, "preservation claim ID");
 		String path = requirePath(fields.originalPath);
@@ -395,13 +405,7 @@ public final class PreservationVault {
 		} catch (RuntimeException e) {
 			throw new IOException("Preservation timestamp is invalid", e);
 		}
-		return new Claim(id, path, root, hash, fields.size, pack, generation, reason, time, OriginalRestore.INACTIVE_PACK);
-	}
-
-	private static Claim toClaim(ClientStorage storage, ClientStorageJsons.ClientPreservationVaultFields.ClaimFields fields) throws IOException {
-		Claim parsed = toClaim(fields);
-		return new Claim(parsed.claimId(), parsed.originalPath(), parsed.sourceRoot(), parsed.objectHash(), parsed.size(), parsed.modpackId(), parsed.contentToken(), parsed.reason(),
-				parsed.preservedAt(), originalRestore(storage, parsed.modpackId(), parsed.sourceRoot(), parsed.originalPath()));
+		return new ClaimIdentity(id, path, root, hash, fields.size, pack, generation, reason, time);
 	}
 
 	private static String claimId(String modpackId, String contentToken, Reason reason, Root sourceRoot, String path, String hash, long size) {
