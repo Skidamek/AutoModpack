@@ -22,7 +22,7 @@ public final class ImmutableFilePublisher {
 	/** Publishes a verified immutable source, using a copy only when a hard link is unavailable. */
 	public static boolean publishFile(Path source, Path target, ExistingFileValidator existingFileValidator) throws IOException {
 		Objects.requireNonNull(source, "source");
-		Path parent = requireParent(target);
+		Path parent = OsPaths.requirePublishableParent(target, "Immutable target");
 		if (validateExisting(target, existingFileValidator, null)) {
 			ImmutableFiles.protect(target);
 			return false;
@@ -43,7 +43,7 @@ public final class ImmutableFilePublisher {
 	/** Publishes a create-only writable copy without ever linking the target to the source inode. */
 	public static boolean publishCreateOnlyCopy(Path source, Path target, ExistingFileValidator existingFileValidator) throws IOException {
 		Objects.requireNonNull(source, "source");
-		Path parent = requireParent(target);
+		Path parent = OsPaths.requirePublishableParent(target, "Immutable target");
 		if (validateExisting(target, existingFileValidator, null)) return false;
 		return publishCopy(source, target, parent, existingFileValidator, null, false);
 	}
@@ -69,7 +69,7 @@ public final class ImmutableFilePublisher {
 
 	private static boolean publishTemporary(Path temporary, Path target, ExistingFileValidator existingFileValidator) throws IOException {
 		Objects.requireNonNull(temporary, "temporary");
-		Path parent = requireParent(target);
+		Path parent = OsPaths.requirePublishableParent(target, "Immutable target");
 		if (validateExisting(target, existingFileValidator, null)) return false;
 		boolean published = false;
 		try {
@@ -115,15 +115,6 @@ public final class ImmutableFilePublisher {
 		Path ancestor = parent.getParent();
 		if (name == null || ancestor == null) throw new IOException("Immutable target directory cannot host a publication lock: " + parent);
 		return ancestor.resolve("." + name + ".publication.lock").normalize();
-	}
-
-	private static Path requireParent(Path target) throws IOException {
-		Objects.requireNonNull(target, "target");
-		Path parent = target.toAbsolutePath().normalize().getParent();
-		if (parent == null) throw new IOException("Immutable target has no parent: " + target);
-		OsPaths.requirePublishableFile(target);
-		Files.createDirectories(parent);
-		return parent;
 	}
 
 	private static boolean validateExisting(Path target, ExistingFileValidator existingFileValidator, Exception publicationRace) throws IOException {

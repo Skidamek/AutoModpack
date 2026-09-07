@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.getFingerprint;
 import static pl.skidam.automodpack_core.protocol.NetUtils.normalizeFingerprint;
 
 import java.net.Socket;
+import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -114,9 +115,21 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 		try {
 			defaultCheck.check();
 		} catch (CertificateException e) {
-			if (chain == null || chain.length == 0 || !DownloadClient.isSelfSigned(chain[0])) throw e;
+			if (chain == null || chain.length == 0 || !isSelfSigned(chain[0])) throw e;
 			deferredCertificate = chain[0];
 			deferredFailure = e;
+		}
+	}
+
+	/** A certificate genuinely signed by its own key, not merely one whose subject equals its issuer. */
+	static boolean isSelfSigned(X509Certificate certificate) {
+		if (certificate == null || !certificate.getSubjectX500Principal().equals(certificate.getIssuerX500Principal())) return false;
+
+		try {
+			certificate.verify(certificate.getPublicKey());
+			return true;
+		} catch (GeneralSecurityException e) {
+			return false;
 		}
 	}
 

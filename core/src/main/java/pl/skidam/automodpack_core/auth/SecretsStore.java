@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.auth;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
@@ -11,7 +10,6 @@ import java.util.concurrent.ConcurrentMap;
 import pl.skidam.automodpack_core.config.AuthJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.storage.StoragePaths;
-import pl.skidam.automodpack_core.update.ClientStorage;
 
 public class SecretsStore {
 	private static class SecretsCache {
@@ -70,21 +68,5 @@ public class SecretsStore {
 
 	public static void saveHostSecret(String uuid, Secrets.Secret secret) {
 		hostSecrets.save(uuid, secret);
-	}
-
-	public static Secrets.Secret getClientSecret(ClientStorage storage, String modpackId, InetSocketAddress origin) {
-		try {
-			return ConnectionStore.getClientSecret(storage, modpackId, origin);
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to load client secret", e);
-		}
-	}
-
-	public static void saveClientSecret(ClientStorage storage, String modpackId, InetSocketAddress origin, Secrets.Secret secret) throws IllegalArgumentException {
-		try {
-			ConnectionStore.saveClientSecret(storage, modpackId, origin, secret);
-		} catch (IOException e) {
-			throw new ConfigTools.ConfigException("Failed to save client secret", e);
-		}
 	}
 }

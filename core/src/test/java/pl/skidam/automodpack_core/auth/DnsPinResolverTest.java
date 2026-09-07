@@ -11,6 +11,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.utils.AddressHelpers;
+
 class DnsPinResolverTest {
 
 	private static final String FP_A = "a".repeat(64);
@@ -75,11 +77,11 @@ class DnsPinResolverTest {
 
 	@Test
 	void detectsOnlyValidIpLiterals() {
-		assertTrue(DnsPinResolver.isIpLiteral("192.168.1.1"));
-		assertTrue(DnsPinResolver.isIpLiteral("::1"));
-		assertTrue(DnsPinResolver.isIpLiteral("[2001:db8::1]"));
-		assertFalse(DnsPinResolver.isIpLiteral("999.168.1.1"));
-		assertFalse(DnsPinResolver.isIpLiteral("example.com"));
+		assertTrue(AddressHelpers.isIpLiteral("192.168.1.1"));
+		assertTrue(AddressHelpers.isIpLiteral("::1"));
+		assertTrue(AddressHelpers.isIpLiteral("[2001:db8::1]"));
+		assertFalse(AddressHelpers.isIpLiteral("999.168.1.1"));
+		assertFalse(AddressHelpers.isIpLiteral("example.com"));
 	}
 
 	@Test

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 
@@ -55,6 +56,19 @@ public final class OsPaths {
 
 	public static void requirePublishableDirectory(Path path) throws IOException {
 		requirePublishable(path, PlatformUtils.operatingSystem(), 0);
+	}
+
+	/**
+	 * The absolute normalized parent of one publish target, created when missing. The target itself must pass
+	 * {@link #requirePublishableFile}; {@code description} names the target kind in the no-parent failure message.
+	 */
+	public static Path requirePublishableParent(Path target, String description) throws IOException {
+		Objects.requireNonNull(target, "target");
+		Path parent = target.toAbsolutePath().normalize().getParent();
+		if (parent == null) throw new IOException(description + " has no parent: " + target);
+		requirePublishableFile(target);
+		Files.createDirectories(parent);
+		return parent;
 	}
 
 	public static void requirePublishableFile(Path path, int tempFilenameOverhead) throws IOException {

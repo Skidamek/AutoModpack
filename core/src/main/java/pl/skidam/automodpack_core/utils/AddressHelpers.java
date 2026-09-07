@@ -7,6 +7,7 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 
 public class AddressHelpers {
 	private static final int MINECRAFT_DEFAULT_PORT = 25565;
@@ -74,6 +75,38 @@ public class AddressHelpers {
 		} catch (NumberFormatException e) {
 			throw new IllegalArgumentException("Port must be in 1..65535", e);
 		}
+	}
+
+	/**
+	 * Non-throwing normalization for consumers that want a pure DNS name: empty for null, blank, IP literals and hosts
+	 * IDN rejects. Same trailing-dot strip and IDN flags ({@code USE_STD3_ASCII_RULES}, ROOT lowercase) as {@link #format}.
+	 */
+	public static Optional<String> normalizeDnsHost(String host) {
+		if (host == null) return Optional.empty();
+		String normalized = host.trim();
+		if (normalized.isEmpty() || isIpLiteral(normalized)) return Optional.empty();
+		if (normalized.endsWith(".")) normalized = normalized.substring(0, normalized.length() - 1);
+		try {
+			normalized = IDN.toASCII(normalized, IDN.USE_STD3_ASCII_RULES).toLowerCase(Locale.ROOT);
+		} catch (IllegalArgumentException e) {
+			return Optional.empty();
+		}
+		return normalized.isBlank() ? Optional.empty() : Optional.of(normalized);
+	}
+
+	public static boolean isIpLiteral(String host) {
+		if (host == null) return false;
+		String value = stripIpv6Brackets(host.trim());
+		if (value.contains(":")) return true;
+		if (!value.matches("\\d{1,3}(\\.\\d{1,3}){3}")) return false;
+		for (String octet : value.split("\\.")) {
+			if (Integer.parseInt(octet) > 255) return false;
+		}
+		return true;
+	}
+
+	private static String stripIpv6Brackets(String host) {
+		return host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
 	}
 
 	private static String normalizeHost(String host) {

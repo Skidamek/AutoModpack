@@ -2,12 +2,9 @@ package pl.skidam.automodpack_core.auth;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -17,6 +14,7 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.FileLocks;
 
 /** Shared per-user route and client-secret state keyed by modpack identity. */
 public final class ConnectionStore {
@@ -24,13 +22,13 @@ public final class ConnectionStore {
 
 	public static ConnectionJsons.ConnectionRecordFields read(ClientStorage storage, String modpackId) throws IOException {
 		Path file = file(storage, modpackId);
-		return withLock(storage.connectionLockFile(modpackId), () -> readUnlocked(file));
+		return FileLocks.withLock(storage.connectionLockFile(modpackId), () -> readUnlocked(file));
 	}
 
 	public static void update(ClientStorage storage, String modpackId, Consumer<ConnectionJsons.ConnectionRecordFields> update) throws IOException {
 		Objects.requireNonNull(update, "update");
 		Path file = file(storage, modpackId);
-		withLock(storage.connectionLockFile(modpackId), () -> {
+		FileLocks.withLock(storage.connectionLockFile(modpackId), () -> {
 			ConnectionJsons.ConnectionRecordFields fields = readUnlocked(file);
 			normalize(fields);
 			update.accept(fields);
@@ -75,17 +73,5 @@ public final class ConnectionStore {
 
 	private static void normalize(ConnectionJsons.ConnectionRecordFields fields) {
 		if (fields.secrets == null) fields.secrets = new HashMap<>();
-	}
-
-	private static <T> T withLock(Path lockPath, LockedOperation<T> operation) throws IOException {
-		Files.createDirectories(lockPath.getParent());
-		try (FileChannel channel = FileChannel.open(lockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE); FileLock ignored = channel.lock()) {
-			return operation.run();
-		}
-	}
-
-	@FunctionalInterface
-	private interface LockedOperation<T> {
-		T run() throws IOException;
 	}
 }

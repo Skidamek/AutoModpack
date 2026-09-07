@@ -1,18 +1,15 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /** Vanilla `servers.dat` in the game directory. Written at bootstrap import so Minecraft loads the entry on the same launch. */
 public final class ServerListFile {
@@ -61,23 +58,12 @@ public final class ServerListFile {
 	}
 
 	private static void writeRoot(Path file, Nbt.Compound root) throws IOException {
-		Path parent = file.toAbsolutePath().normalize().getParent();
-		if (parent == null) throw new IOException("servers.dat path has no parent: " + file);
-		Files.createDirectories(parent);
-		Path temporary = parent.resolve("." + file.getFileName() + "." + UUID.randomUUID() + ".tmp");
-		try {
-			try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(temporary, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)))) {
-				Nbt.writeNamedCompound(out, root);
-				out.flush();
-			}
-			try {
-				DurableFiles.replace(temporary, file);
-			} catch (AtomicMoveNotSupportedException e) {
-				throw new IOException("The filesystem cannot durably replace " + file + "; use a major local filesystem with atomic rename support", e);
-			}
-		} finally {
-			Files.deleteIfExists(temporary);
+		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+		try (DataOutputStream out = new DataOutputStream(buffer)) {
+			Nbt.writeNamedCompound(out, root);
+			out.flush();
 		}
+		DurableFiles.writeAtomic(file, buffer.toByteArray());
 	}
 
 	private static Nbt.Compound emptyRoot() {

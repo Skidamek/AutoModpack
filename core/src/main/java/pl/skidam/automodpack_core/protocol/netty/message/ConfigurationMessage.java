@@ -19,6 +19,11 @@ public abstract class ConfigurationMessage {
 		return type;
 	}
 
+	/** The one wire encoding of this message: [version][type][payload]; every transport sinks these bytes. */
+	public byte[] toBytes() {
+		return new byte[]{version, type};
+	}
+
 	public void toByteBuf(ByteBuf buf) {
 		buf.writeByte(version);
 		buf.writeByte(type);

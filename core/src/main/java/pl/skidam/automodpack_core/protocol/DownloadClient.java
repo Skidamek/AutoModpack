@@ -9,7 +9,6 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -45,7 +44,11 @@ import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
+import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationChunkSizeMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationCompressionMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationEchoMessage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchOptions;
@@ -296,7 +299,7 @@ public class DownloadClient implements AutoCloseable {
 		return decision.handle((trusted, error) -> {
 			if (error != null) {
 				closeQuietly(candidate.socket());
-				Throwable cause = unwrap(error);
+				Throwable cause = Throwables.unwrap(error);
 				if (cause instanceof CertificateTrustCancelledException cancelled) throw new CompletionException(cancelled);
 				throw new CompletionException(new IOException("Certificate trust decision failed", cause));
 			}
@@ -384,7 +387,7 @@ public class DownloadClient implements AutoCloseable {
 						if (connection != null) closeQuietly(connection);
 						waiter.completeExceptionally(new IOException("Download client is closed"));
 					} else if (error != null) {
-						waiter.completeExceptionally(unwrap(error));
+						waiter.completeExceptionally(Throwables.unwrap(error));
 					} else {
 						allConnections.add(connection);
 						waiter.complete(connection);
@@ -422,41 +425,6 @@ public class DownloadClient implements AutoCloseable {
 
 	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
 		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
-	}
-
-	/** Copies a protocol frame into a remaining file length without truncating remaining through int. */
-	static int writableFrameBytes(int frameLength, long remaining) {
-		if (frameLength < 0) throw new IllegalArgumentException("frameLength must be non-negative");
-		if (remaining <= 0L) return 0;
-		return (int) Math.min(frameLength, remaining);
-	}
-
-	static boolean isSelfSigned(X509Certificate certificate) {
-		if (certificate == null || !certificate.getSubjectX500Principal().equals(certificate.getIssuerX500Principal())) return false;
-
-		try {
-			certificate.verify(certificate.getPublicKey());
-			return true;
-		} catch (GeneralSecurityException e) {
-			return false;
-		}
-	}
-
-	public static <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
-		Throwable current = throwable;
-		while (current != null) {
-			if (type.isInstance(current)) return type.cast(current);
-			current = current.getCause();
-		}
-		return null;
-	}
-
-	public static Throwable unwrap(Throwable throwable) {
-		Throwable current = throwable;
-		while ((current instanceof CompletionException || current instanceof ExecutionException) && current.getCause() != null) {
-			current = current.getCause();
-		}
-		return current;
 	}
 
 	static void closeQuietly(AutoCloseable closeable) {
@@ -595,7 +563,7 @@ class Connection implements AutoCloseable {
 		try (OutputStream fos = LocalFileWriter.open(destination)) {
 			while (receivedBytes < expectedFileSize) {
 				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
-				int toWrite = DownloadClient.writableFrameBytes(dataFrame.length(), expectedFileSize - receivedBytes);
+				int toWrite = ProtocolFrameCodec.writableFrameBytes(dataFrame.length(), expectedFileSize - receivedBytes);
 				if (toWrite <= 0) throw new IOException("File frame did not advance the download");
 				fos.write(dataFrame.data(), 0, toWrite);
 				receivedBytes += toWrite;
@@ -609,58 +577,35 @@ class Connection implements AutoCloseable {
 	}
 
 	private CompressionType sendCompressionConfig(CompressionType desiredCompression) throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		DataOutputStream dos = new DataOutputStream(baos);
-		dos.writeByte(protocolVersion);
-		dos.writeByte(CONFIGURATION_COMPRESSION_TYPE);
-		dos.writeByte(desiredCompression.wireId());
+		writeAndFlush(new ConfigurationCompressionMessage(protocolVersion, desiredCompression).toBytes());
 
-		out.write(baos.toByteArray());
-		out.flush();
-
-		byte version = in.readByte();
-		if (version >= 1 && version < protocolVersion) protocolVersion = version;
-
-		byte type = in.readByte();
-		if (type != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected response: " + type);
-
-		CompressionType negotiated;
-		try {
-			negotiated = CompressionType.fromWireId(in.readByte());
-		} catch (IllegalArgumentException e) {
-			throw new IOException("Unsupported compression response", e);
-		}
-		return negotiated;
+		byte version = readConfigResponseHeader(CONFIGURATION_COMPRESSION_TYPE);
+		return ConfigurationCompressionMessage.readFrom(version, in).getCompressionType();
 	}
 
 	private int sendChunkSizeConfig(int desiredChunkSize) throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		DataOutputStream dos = new DataOutputStream(baos);
-		dos.writeByte(protocolVersion);
-		dos.writeByte(CONFIGURATION_CHUNK_SIZE_TYPE);
-		dos.writeInt(desiredChunkSize);
+		writeAndFlush(new ConfigurationChunkSizeMessage(protocolVersion, desiredChunkSize).toBytes());
 
-		out.write(baos.toByteArray());
-		out.flush();
-
-		byte version = in.readByte();
-		if (version >= 1 && version < protocolVersion) protocolVersion = version;
-
-		byte type = in.readByte();
-		if (type != CONFIGURATION_CHUNK_SIZE_TYPE) throw new IOException("Unexpected response: " + type);
-
-		int negotiated = in.readInt();
-		if (negotiated < MIN_CHUNK_SIZE || negotiated > MAX_CHUNK_SIZE) throw new IOException("Chunk size out of bounds: " + negotiated);
-		return negotiated;
+		byte version = readConfigResponseHeader(CONFIGURATION_CHUNK_SIZE_TYPE);
+		return ConfigurationChunkSizeMessage.readFrom(version, in).getChunkSize();
 	}
 
 	private void sendEchoConfig() throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		DataOutputStream dos = new DataOutputStream(baos);
-		dos.writeByte(protocolVersion);
-		dos.writeByte(CONFIGURATION_ECHO_TYPE);
-		out.write(baos.toByteArray());
+		writeAndFlush(new ConfigurationEchoMessage(protocolVersion).toBytes());
+	}
+
+	private void writeAndFlush(byte[] payload) throws IOException {
+		out.write(payload);
 		out.flush();
+	}
+
+	/** Reads and verifies the [version][type] header of one configuration reply, adopting the server's protocol version when it is older. */
+	private byte readConfigResponseHeader(byte expectedType) throws IOException {
+		byte version = in.readByte();
+		if (version >= 1 && version < protocolVersion) protocolVersion = version;
+		byte type = in.readByte();
+		if (type != expectedType) throw new IOException("Unexpected response: " + type);
+		return version;
 	}
 
 	@Override

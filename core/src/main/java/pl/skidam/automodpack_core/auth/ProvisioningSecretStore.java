@@ -4,16 +4,12 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.PROVISIONING_SECRE
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.utils.DurableFiles;
-import pl.skidam.automodpack_core.utils.FileTrees;
 
 /** Operator provisioning secret. Lives in credentials/, not server-config.json. */
 public final class ProvisioningSecretStore {
@@ -65,22 +61,8 @@ public final class ProvisioningSecretStore {
 
 	private static void writeFile(String secret) {
 		Path file = PROVISIONING_SECRET_FILE.toAbsolutePath().normalize();
-		Path parent = file.getParent();
-		if (parent == null) throw new ConfigTools.ConfigException("Provisioning secret path has no parent: " + file);
 		try {
-			Files.createDirectories(parent);
-			Path temporary = parent.resolve("." + file.getFileName() + "." + UUID.randomUUID() + ".tmp");
-			try {
-				Files.writeString(temporary, secret + "\n", StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-				try {
-					DurableFiles.replace(temporary, file);
-				} catch (AtomicMoveNotSupportedException e) {
-					throw new IOException("The filesystem cannot durably replace " + file + "; use a major local filesystem with atomic rename support", e);
-				}
-				FileTrees.forceDirectory(parent);
-			} finally {
-				Files.deleteIfExists(temporary);
-			}
+			DurableFiles.writeAtomic(file, (secret + "\n").getBytes(StandardCharsets.UTF_8));
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save provisioning secret", e);
 		}

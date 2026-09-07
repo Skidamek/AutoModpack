@@ -91,17 +91,11 @@ public class FileInspection {
 		if (isJarInvalid(file)) return false;
 
 		try (FileSystem fs = FileSystems.newFileSystem(file)) {
-			String loader = getLoader();
-			String entryPathString = loader == null ? null : switch (loader) {
-				case "neoforge" -> "META-INF/neoforge.mods.toml";
-				case "fabric" -> "fabric.mod.json";
-				case "forge" -> "META-INF/mods.toml";
-				default -> null;
-			};
+			String entryPathString = metadataPathForLoader(getLoader());
 
 			if (entryPathString != null && Files.exists(fs.getPath(entryPathString))) return true;
 
-			if (("forge".equals(loader) || "neoforge".equals(loader)) && hasSpecificServices(fs)) return true;
+			if (("forge".equals(getLoader()) || "neoforge".equals(getLoader())) && hasSpecificServices(fs)) return true;
 		} catch (IOException e) {
 			LOGGER.error("Error examining JarJar in {}", e);
 		}
@@ -350,14 +344,18 @@ public class FileInspection {
 		return obj.has(key) ? obj.get(key).getAsString() : null;
 	}
 
-	private static Path getMetadataPath(FileSystem fs) {
-		String loader = getLoader();
-		String preferredEntry = loader == null ? null : switch (loader) {
+	/** The metadata file the running loader prefers, or null when the running loader has none. */
+	private static String metadataPathForLoader(String loader) {
+		return loader == null ? null : switch (loader) {
 			case "neoforge" -> "META-INF/neoforge.mods.toml";
 			case "fabric" -> "fabric.mod.json";
 			case "forge" -> "META-INF/mods.toml";
 			default -> null;
 		};
+	}
+
+	private static Path getMetadataPath(FileSystem fs) {
+		String preferredEntry = metadataPathForLoader(getLoader());
 
 		if (preferredEntry != null) {
 			Path p = fs.getPath(preferredEntry);

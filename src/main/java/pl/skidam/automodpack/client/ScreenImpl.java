@@ -8,7 +8,6 @@ import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -19,6 +18,7 @@ import pl.skidam.automodpack_loader_core.screen.FailureRequest;
 import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
+import pl.skidam.automodpack_core.utils.Throwables;
 
 import java.util.Optional;
 import java.util.Locale;
@@ -236,7 +236,7 @@ public class ScreenImpl implements ScreenService {
 				case MULTIPLAYER -> multiplayerScreen();
 				case TITLE -> new TitleScreen();
 			};
-			CertificatePinMismatchException mismatch = DownloadClient.findCause(request.cause(), CertificatePinMismatchException.class);
+			CertificatePinMismatchException mismatch = Throwables.findCause(request.cause(), CertificatePinMismatchException.class);
 			if (mismatch != null) {
 				Screens.setScreen(new PinMismatchScreen(parent, mismatch.getOrigin(), mismatch.getExpectedFingerprint(), mismatch.getPresentedFingerprint()));
 				return;
