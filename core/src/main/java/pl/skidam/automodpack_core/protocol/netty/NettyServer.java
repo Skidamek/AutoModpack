@@ -46,6 +46,7 @@ public class NettyServer {
 	private MultithreadEventLoopGroup eventLoopGroup;
 	private ChannelFuture serverChannel;
 	private volatile boolean sharedMagicEnabled;
+	private volatile boolean holepunchActive;
 	private String certificateFingerprint;
 	private SslContext sslCtx;
 
@@ -117,7 +118,7 @@ public class NettyServer {
 			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 				LOGGER.info("Hosting modpack through Minecraft Login holepunch; bindPort is not used");
 				TrafficShaper.startShared();
-				ServerHolepunchBridge.register(this);
+				holepunchActive = ServerHolepunchBridge.register(this);
 				return Optional.empty();
 			}
 
@@ -201,6 +202,7 @@ public class NettyServer {
 	public synchronized boolean stop() {
 		boolean stopped = true;
 		sharedMagicEnabled = false;
+		holepunchActive = false;
 		ServerHolepunchBridge.close();
 
 		try {
@@ -231,7 +233,7 @@ public class NettyServer {
 	}
 
 	public boolean isRunning() {
-		return sharedMagicEnabled || ServerHolepunchBridge.isRegistered() || serverChannel != null && serverChannel.channel().isOpen();
+		return sharedMagicEnabled || holepunchActive || serverChannel != null && serverChannel.channel().isOpen();
 	}
 
 	public SslContext getSslCtx() {
