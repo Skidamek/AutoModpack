@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static pl.skidam.automodpack_core.protocol.NetUtils.MAX_CHUNK_SIZE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -313,7 +314,9 @@ public class HolepunchSocket extends Socket {
 
 	private static void writeToConnection(HolepunchConnection connection, ByteBuffer data) throws IOException {
 		try {
-			connection.write(data).toCompletableFuture().get(30, TimeUnit.SECONDS);
+			// A write can only stall here if the peer stops draining the socket; surface that inside
+			// the same network window every other wait in the protocol uses.
+			connection.write(data).toCompletableFuture().get(NETWORK_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new IOException("write interrupted", e);
