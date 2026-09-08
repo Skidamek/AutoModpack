@@ -114,6 +114,7 @@ flow:
       all:
         - screen: PackConfirmScreen
         - element: { key: automodpack.confirm.ack, enabled: true }
+        - element: { key: automodpack.update.rollbackDetaches }
   - do: screenshot
     name: capture the rollback unverified write confirm
     file: rollback-unverified
@@ -126,7 +127,7 @@ flow:
     until:
       all:
         - screen: PackConfirmScreen
-        - element: { text: Update, enabled: true }
+        - element: { text: Restore, enabled: true }
   - do: click
     name: review the revert files
     select: { text: Review files }
@@ -146,10 +147,10 @@ flow:
     until:
       all:
         - screen: PackConfirmScreen
-        - element: { text: Update, enabled: true }
+        - element: { text: Restore, enabled: true }
   - do: click
     name: apply the rollback through the reviewed swap
-    select: { text: Update }
+    select: { text: Restore }
   - do: wait_file_content
     name: wait for the reverted file in the projection
     path: "${active_dir}/config/amp-autotest-alpha.txt"

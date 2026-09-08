@@ -223,7 +223,7 @@ public class ScreenImpl implements ScreenService {
 
 		public static void preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
 			Screen parent = returnTarget(flowParent());
-			if (updater != null && preview.mode() == UpdatePreview.Mode.UPDATE && updater.planWritesUnverifiedJar(preview.plan())) {
+			if (updater != null && (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && updater.planWritesUnverifiedJar(preview.plan())) {
 				Screens.setScreen(new PackConfirmScreen(parent, updater, preview, continueAction, cancelAction));
 				return;
 			}

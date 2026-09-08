@@ -92,6 +92,10 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private List<MutableComponent> buildBodyLines() {
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 20);
 		List<MutableComponent> lines = new ArrayList<>();
+		if (mode == UpdatePreview.Mode.ROLLBACK) {
+			lines.add(VersionedText.translatable("automodpack.update.rollbackDetaches").withStyle(ChatFormatting.YELLOW));
+			lines.add(blankLine());
+		}
 		String patchNotes = preview.latestPatchNotes();
 		if (!patchNotes.isBlank()) {
 			lines.add(VersionedText.translatable("automodpack.patchNotes.latest").withStyle(ChatFormatting.GRAY));
@@ -161,11 +165,12 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(reviewKey(mode)).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
 	}
 
-	private static String titleKey(UpdatePreview.Mode mode) {
+	static String titleKey(UpdatePreview.Mode mode) {
 		return switch (mode) {
 			case UPDATE -> "automodpack.update.title";
 			case DEACTIVATION -> "automodpack.update.deactivationTitle";
 			case REMOVAL -> "automodpack.update.removalTitle";
+			case ROLLBACK -> "automodpack.update.rollbackTitle";
 		};
 	}
 
@@ -174,22 +179,25 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			case UPDATE -> "automodpack.update.updateNamed";
 			case DEACTIVATION -> "automodpack.update.deactivateNamed";
 			case REMOVAL -> "automodpack.update.removeNamed";
+			case ROLLBACK -> "automodpack.update.rollbackNamed";
 		};
 	}
 
-	private static String reviewKey(UpdatePreview.Mode mode) {
+	static String reviewKey(UpdatePreview.Mode mode) {
 		return switch (mode) {
 			case UPDATE -> "automodpack.update.reviewUpdate";
 			case DEACTIVATION -> "automodpack.update.reviewDeactivation";
 			case REMOVAL -> "automodpack.update.reviewRemoval";
+			case ROLLBACK -> "automodpack.update.reviewRollback";
 		};
 	}
 
-	private static String actionKey(UpdatePreview.Mode mode) {
+	static String actionKey(UpdatePreview.Mode mode) {
 		return switch (mode) {
 			case UPDATE -> "automodpack.update.apply";
 			case DEACTIVATION -> "automodpack.update.deactivate";
 			case REMOVAL -> "automodpack.update.remove";
+			case ROLLBACK -> "automodpack.update.rollbackApply";
 		};
 	}
 

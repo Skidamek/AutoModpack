@@ -41,7 +41,7 @@ final class GenerationRollback {
 				updater = new ModpackUpdater(target, null, null, storage);
 				if (updater.requiresSelectedTargetDownload())
 					throw new IOException("This version's files are no longer kept on this computer, so it cannot be restored");
-				UpdatePreview preview = updater.previewInstalledSwitch();
+				UpdatePreview preview = updater.previewInstalledSwitch().withMode(UpdatePreview.Mode.ROLLBACK);
 				ModpackUpdater finalUpdater = updater;
 				boolean shown = ScreenManager.preview(preview, modpackName, finalUpdater,
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> apply(finalUpdater, release)),
