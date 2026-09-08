@@ -103,17 +103,16 @@ public final class OfflineRepairScreen extends VersionedScreen {
 					VersionedText.translatable(resetConsent ? "automodpack.repair.editableKeep" : "automodpack.repair.editableKeepChecked", candidate.logicalPath()).getString(), width - 12))),
 					editableTooltip(resetConsent, candidate.logicalPath())));
 		}
-		// The candidates and their actions form one block: centered when they fit, scrolling above the pinned actions when they do not.
-		int rowsHeight = listRows.size() * ROW_HEIGHT;
-		BlockLayout layout = layoutBlockWithActions(listTop, rowsHeight, 8, actionRows);
-		List<Button> actionButtons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), actionRows);
+		// The list fills the space between the header state and the pinned actions; only a real overflow scrolls.
+		int actionsBottom = this.height - 28;
+		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionsBottom, actionRows) - 8;
+		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, actionsBottom, actionRows);
 		int actionIndex = 0;
 		if (showKeepAll) actionButtons.get(actionIndex++).active = !busy;
 		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();
 		if (canUpdate) actionButtons.get(actionIndex).active = !busy;
 		if (candidates.isEmpty()) return;
-		int listBottom = layout.scrolls() ? layout.actionsTop() - 8 : layout.contentTop() + rowsHeight;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), layout.contentTop(), listBottom, ROW_HEIGHT, listRows,
+		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), listTop, listBottom, ROW_HEIGHT, listRows,
 				index -> {
 					if (!busy) toggleEditable(candidates.get(index).logicalPath());
 				}, this::showComponentTooltip));

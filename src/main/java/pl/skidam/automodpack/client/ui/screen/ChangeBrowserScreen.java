@@ -27,7 +27,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.ChangeBrowserWidget;
-import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.change.PlatformReferences;
@@ -41,7 +40,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private static final int PANEL_WIDTH = 600;
 	private static final int GAP = 6;
 	private static final int LINE_STEP = 10;
-	private static final int PICKER_ROW_HEIGHT = 14;
 	private final Screen parent;
 	private final Component heading;
 	private final Component description;
@@ -61,10 +59,11 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private Boolean selectedSource = null;
 	private String selectedPath = "";
 	private ChangeBrowserWidget browser;
-	private RowListWidget groupPicker;
 	private EditBox searchField;
 	private Button contentButton;
-	private Button groupButton;
+	private final List<Button> groupTabs = new ArrayList<>();
+	private final List<String> groupTabIds = new ArrayList<>();
+	private int groupTabWidth;
 	private Button sourceButton;
 	private int browserTop;
 	private int browserBottom;
@@ -109,10 +108,15 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int searchWidth = narrow ? panelWidth : 280;
 		int searchY = 35 + preambleHeight;
 		int controlsY = (narrow ? 59 : 35) + preambleHeight;
-		int controlsLeft = narrow ? panelLeft : panelLeft + searchWidth + GAP;
-		int controlCount = warnUnverified ? 3 : 2;
+		// The group switch is the tab row above the list; Content and Source stay cycle buttons in the search row.
+		int controlCount = warnUnverified ? 2 : 1;
 		int controlWidth = Math.max(1, (panelWidth - (narrow ? GAP * controlCount : searchWidth + GAP * (controlCount + 1))) / controlCount);
-		this.browserTop = (narrow ? 83 : 59) + preambleHeight;
+		if (!narrow) {
+			// Fewer cycle buttons than before must not widen one into a plank; the search field absorbs the slack instead.
+			controlWidth = Math.min(controlWidth, 180);
+			searchWidth = Math.max(1, panelWidth - controlCount * controlWidth - GAP * (controlCount + 1));
+		}
+		int controlsLeft = narrow ? panelLeft : panelLeft + searchWidth + GAP;
 		this.searchField = fieldWidget(panelLeft, searchY, searchWidth, VersionedText.translatable("automodpack.browser.search"), null, Integer.MAX_VALUE);
 		this.searchField.setValue(search);
 		String searchHint = VersionedText.translatable("automodpack.browser.search").getString();
@@ -123,12 +127,35 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			rebuildBrowser();
 		});
 		this.contentButton = buttonWidget(controlsLeft, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleContent());
-		this.groupButton = buttonWidget(controlsLeft + GAP + controlWidth, controlsY, controlWidth, 20, VersionedText.literal(""), button -> toggleGroupPicker());
 		this.addRenderableWidget(this.contentButton);
-		this.addRenderableWidget(this.groupButton);
 		if (warnUnverified) {
-			this.sourceButton = buttonWidget(controlsLeft + (GAP + controlWidth) * 2, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleSource());
+			this.sourceButton = buttonWidget(controlsLeft + (GAP + controlWidth), controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleSource());
 			this.addRenderableWidget(this.sourceButton);
+		}
+		this.groupTabs.clear();
+		this.groupTabIds.clear();
+		this.groupTabWidth = 0;
+		if (groupIds().isEmpty()) {
+			this.browserTop = (narrow ? 83 : 59) + preambleHeight;
+		} else {
+			int tabsY = (narrow ? 83 : 59) + preambleHeight;
+			this.browserTop = tabsY + ActionAreaLayout.BUTTON_HEIGHT;
+			this.groupTabIds.add("");
+			List<String> ids = new ArrayList<>(groupIds());
+			ids.sort(Comparator.comparing(this::groupName, String.CASE_INSENSITIVE_ORDER));
+			this.groupTabIds.addAll(ids);
+			// The tabs are one action row flush on the list band: the browser steps down so the tab row rides on its top edge.
+			List<ActionAreaLayout.Action> tabActions = new ArrayList<>(this.groupTabIds.size());
+			for (int index = 0; index < this.groupTabIds.size(); index++) tabActions.add(new ActionAreaLayout.Action("tab" + index, ActionAreaLayout.Role.OPTIONAL));
+			ActionAreaLayout.Layout tabLayout = ActionAreaLayout.fromTop(panelLeft, tabsY, panelWidth, 0, List.of(new ActionAreaLayout.Row(ActionAreaLayout.RowKind.AUXILIARY, tabActions)));
+			this.groupTabWidth = tabLayout.placements().get(0).width();
+			for (ActionAreaLayout.Placement placement : tabLayout.placements()) {
+				int optionIndex = Integer.parseInt(placement.id().substring(3));
+				Button tab = buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.literal(""), button -> pickGroup(this.groupTabIds.get(optionIndex)));
+				this.groupTabs.add(tab);
+				this.addRenderableWidget(tab);
+			}
+			updateGroupTabLabels();
 		}
 		updateControlLabels();
 		List<ActionRow> actionRows = buildActionRows();
@@ -180,7 +207,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	/** One representative hash for the selected file: the hash of the state written on disk. */
 	private String selectedHash() {
-		ChangeBrowserProjection.FileRow file = pickerOpen() ? null : this.browser == null ? null : this.browser.selectedFile();
+		ChangeBrowserProjection.FileRow file = this.browser == null ? null : this.browser.selectedFile();
 		return file == null ? null : file.writtenHash();
 	}
 
@@ -190,7 +217,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedGroup.isBlank() ? Set.of() : Set.of(selectedGroup), selectedSource);
 		this.currentProjection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE, filter).collapse(collapsedFolders);
 		recomputeSummary();
-		if (pickerOpen()) return;
 		if (this.browser != null) this.removeWidget(this.browser);
 		this.browser = new ChangeBrowserWidget(this.currentProjection, collapsedFolders, groupNames, warnUnverified, referencesResolved, this::toggleFolder, this::onFileSelected,
 				this.minecraft, this.width, this.height, browserTop, browserBottom);
@@ -236,50 +262,21 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		rebuildBrowser();
 	}
 
-	private boolean pickerOpen() {
-		return groupPicker != null;
-	}
-
-	/** Opens the group filter as a dropdown panel under its button; the browser list steps aside while it is up. */
-	private void toggleGroupPicker() {
-		if (pickerOpen()) {
-			closeGroupPicker();
-			return;
-		}
-		if (this.browser != null) this.removeWidget(this.browser);
-		int width = panelWidth(PANEL_WIDTH);
-		List<String> optionIds = new ArrayList<>();
-		optionIds.add("");
-		List<String> ids = new ArrayList<>(groupIds());
-		ids.sort(Comparator.comparing(this::groupName, String.CASE_INSENSITIVE_ORDER));
-		optionIds.addAll(ids);
-		List<RowListWidget.Row> rows = new ArrayList<>(optionIds.size());
-		for (String optionId : optionIds) {
-			String label = optionId.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups").getString() : groupName(optionId);
-			ChatFormatting color = optionId.equals(selectedGroup) ? ChatFormatting.YELLOW : ChatFormatting.WHITE;
-			rows.add(new RowListWidget.Row(List.of(VersionedText.literal(truncateToWidth(this.font, label, width - 12)).withStyle(color))));
-		}
-		/*? if >=1.19.4 {*/
-		int pickerTop = groupButton.getY() + ActionAreaLayout.BUTTON_HEIGHT;
-		/*?} else {*/
-		/*int pickerTop = groupButton.y + ActionAreaLayout.BUTTON_HEIGHT;
-		*//*?}*/
-		int visibleRows = Math.max(1, Math.min(optionIds.size(), (browserBottom - pickerTop) / PICKER_ROW_HEIGHT));
-		this.groupPicker = new RowListWidget(this.minecraft, this.width, this.height, width, pickerTop, pickerTop + visibleRows * PICKER_ROW_HEIGHT, PICKER_ROW_HEIGHT, rows,
-				index -> pickGroup(optionIds.get(index)), null);
-		this.addRenderableWidget(this.groupPicker);
-	}
-
+	/** The tab row's click: switch the group filter in place, restyle the tabs, and refresh the browser. */
 	private void pickGroup(String groupId) {
 		selectedGroup = groupId;
-		closeGroupPicker();
+		updateGroupTabLabels();
+		rebuildBrowser();
 	}
 
-	private void closeGroupPicker() {
-		if (groupPicker == null) return;
-		this.removeWidget(groupPicker);
-		this.groupPicker = null;
-		rebuildBrowser();
+	/** The active group tab reads selected: yellow, like every selected row in this UI. */
+	private void updateGroupTabLabels() {
+		for (int index = 0; index < groupTabs.size(); index++) {
+			String optionId = groupTabIds.get(index);
+			String label = optionId.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups").getString() : groupName(optionId);
+			ChatFormatting color = optionId.equals(selectedGroup) ? ChatFormatting.YELLOW : ChatFormatting.WHITE;
+			groupTabs.get(index).setMessage(VersionedText.literal(truncateToWidth(this.font, label, Math.max(1, groupTabWidth - 8))).withStyle(color));
+		}
 	}
 
 	private List<String> contentKinds() {
@@ -309,11 +306,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private void updateControlLabels() {
 		if (contentButton != null) contentButton.setMessage(VersionedText.translatable("automodpack.browser.contentFilter",
 				selectedContent.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable("automodpack.browser.content." + selectedContent).getString()));
-		if (groupButton != null) {
-			groupButton.active = !groupIds().isEmpty();
-			groupButton.setMessage(VersionedText.translatable("automodpack.browser.groupFilter",
-					selectedGroup.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : groupName(selectedGroup)));
-		}
 		if (sourceButton != null) sourceButton.setMessage(VersionedText.translatable("automodpack.browser.sourceFilter",
 				selectedSource == null ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom").getString()));
 	}
@@ -338,7 +330,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				/*double scrollAmount = this.browser == null ? 0 : this.browser.getScrollAmount();
 				*//*?}*/
 				rebuildBrowser();
-				if (pickerOpen() || this.browser == null) return;
+				if (this.browser == null) return;
 				// Both vanilla setters clamp, so a stale scroll from the smaller old list is safe.
 				this.browser.setScrollAmount(scrollAmount);
 				addPaneActions(this.paneActionsY);
@@ -402,7 +394,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.summaryY, TextColors.WHITE);
 		if (currentProjection == null || currentProjection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
-		ChangeBrowserProjection.FileRow selected = pickerOpen() || this.browser == null ? null : this.browser.selectedFile();
+		ChangeBrowserProjection.FileRow selected = this.browser == null ? null : this.browser.selectedFile();
 		if (selected == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.selectHint").withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop, TextColors.WHITE);
 		else {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selected.path(), contentWidth)).withStyle(ChatFormatting.WHITE), this.width / 2, this.paneTop, TextColors.WHITE);
@@ -415,10 +407,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		if (pickerOpen()) {
-			closeGroupPicker();
-			return false;
-		}
 		return handleBackOnEscape(this::back);
 	}
 

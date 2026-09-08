@@ -370,7 +370,6 @@
   "automodpack.restart.reason.CHANGED_LOADER_VERSION": "The mod loader version changed",
   "automodpack.restart.reason.CHANGED_GROUP_SELECTION": "Your group selection changed",
   "automodpack.restart.reason.SELECTED_MODPACK": "The selected modpack changed",
-  "automodpack.browser.groupFilter": "Group: %s",
   "automodpack.browser.unknownGroup": "Unknown group",
   "automodpack.browser.allGroups": "All groups",
   "automodpack.browser.groupDescription": "Files supplied by this group"
