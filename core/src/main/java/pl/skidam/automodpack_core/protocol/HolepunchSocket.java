@@ -136,10 +136,19 @@ public class HolepunchSocket extends Socket {
 		return closed;
 	}
 
+	// java.net.Socket semantics: connectedness survives close, so JDK callers probing the socket never get lied to.
+
 	@Override
 	public boolean isConnected() {
-		return connection != null && !closed;
+		return connection != null;
 	}
+
+	/** There is no file descriptor to half-close; the SSL layer's EOF handling calls this on a peer close and expects it to succeed. */
+	@Override
+	public void shutdownInput() {}
+
+	@Override
+	public void shutdownOutput() {}
 
 	@Override
 	public synchronized void close() {

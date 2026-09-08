@@ -51,7 +51,8 @@ class HolepunchSocketTest {
 			socket.close();
 			assertEquals(-1, read.join());
 		});
-		assertFalse(socket.isConnected());
+		// java.net.Socket semantics: connectedness survives close.
+		assertTrue(socket.isConnected());
 	}
 
 	@Test
