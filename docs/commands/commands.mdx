@@ -10,4 +10,7 @@
 - `/automodpack host fingerprint` - Get the [certificate fingerprint](../technicals/certificate) of the modpack host.
 - `/automodpack host fingerprint dns <minecraft-hostname>` - Generate a DNSSEC record that lets clients authenticate the host's self-signed certificate automatically.
 - `/automodpack host fingerprint share <minecraft-address>` - Generate plain and pinned copyable addresses without storing the fingerprint in Minecraft's server list.
+- `/automodpack group` - List of modpack groups. `--full` for more details .
+- `/automodpack group new "groupName"` - Create new group.
+- `/automodpack group remove "groupName"` - Remove already existing group. `--yes` to delete immediately, without confirming.
 - `/automodpack config reload` - Reload config files.
