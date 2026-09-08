@@ -344,14 +344,15 @@ public class FileInspection {
 		return obj.has(key) ? obj.get(key).getAsString() : null;
 	}
 
+	private record LoaderMetadata(String loader, String path) {}
+
+	/** Every recognized mod-metadata location, in probe order. */
+	private static final List<LoaderMetadata> METADATA_LOCATIONS = List.of(new LoaderMetadata("neoforge", "META-INF/neoforge.mods.toml"), new LoaderMetadata("fabric", "fabric.mod.json"),
+			new LoaderMetadata("forge", "META-INF/mods.toml"));
+
 	/** The metadata file the running loader prefers, or null when the running loader has none. */
 	private static String metadataPathForLoader(String loader) {
-		return loader == null ? null : switch (loader) {
-			case "neoforge" -> "META-INF/neoforge.mods.toml";
-			case "fabric" -> "fabric.mod.json";
-			case "forge" -> "META-INF/mods.toml";
-			default -> null;
-		};
+		return METADATA_LOCATIONS.stream().filter(location -> location.loader().equals(loader)).findFirst().map(LoaderMetadata::path).orElse(null);
 	}
 
 	private static Path getMetadataPath(FileSystem fs) {
@@ -362,9 +363,9 @@ public class FileInspection {
 			if (Files.exists(p)) return p;
 		}
 
-		for (String fallback : List.of("META-INF/neoforge.mods.toml", "fabric.mod.json", "META-INF/mods.toml")) {
-			if (fallback.equals(preferredEntry)) continue;
-			Path p = fs.getPath(fallback);
+		for (LoaderMetadata location : METADATA_LOCATIONS) {
+			if (location.path().equals(preferredEntry)) continue;
+			Path p = fs.getPath(location.path());
 			if (Files.exists(p)) return p;
 		}
 		return null;
