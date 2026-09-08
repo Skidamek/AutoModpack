@@ -38,9 +38,11 @@ public final class ServerHolepunchBridge {
 
 	private ServerHolepunchBridge() {}
 
-	public static synchronized void register(NettyServer server) {
-		if (!serverConfig.modpackHost || serverConfig.connectionMode != ModpackConnectionMode.HOLEPUNCH || registration != null) return;
+	/** Registers the takeover application; returns false when holepunch hosting is off or already registered. */
+	public static synchronized boolean register(NettyServer server) {
+		if (!serverConfig.modpackHost || serverConfig.connectionMode != ModpackConnectionMode.HOLEPUNCH || registration != null) return false;
 		registration = NettyChannelRegistry.register(maxPendingWriteBytes(), application(server));
+		return true;
 	}
 
 	public static synchronized boolean isRegistered() {
