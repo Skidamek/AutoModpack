@@ -86,12 +86,11 @@ public final class PinnedModsScreen extends VersionedScreen {
 		for (Row row : rows) {
 			listRows.add(new RowListWidget.Row(List.of(rowLabel(row, rowWidth)), VersionedText.translatable(row.present ? "automodpack.pinnedMods.liveTooltip" : "automodpack.pinnedMods.missingTooltip")));
 		}
-		// The pins and their actions form one block: centered when they fit, scrolling above the pinned actions when they do not.
-		BlockLayout layout = layoutBlockWithActions(LIST_TOP, listRows.size() * ROW_HEIGHT, 8, actionRows);
-		addActionAreaAt(FOOTER_WIDTH, layout.actionsTop(), actionRows);
-		int listBottom = layout.scrolls() ? layout.actionsTop() - 8 : layout.contentTop() + listRows.size() * ROW_HEIGHT;
-		RowListWidget list = new RowListWidget(this.minecraft, this.width, this.height, width, layout.contentTop(), listBottom, ROW_HEIGHT, listRows, index -> toggle(rows.get(index)), this::showComponentTooltip);
+		// The list fills the space between the input row and the pinned actions; only a real overflow scrolls.
+		int listBottom = actionAreaTop(FOOTER_WIDTH, this.height - 28, actionRows) - 8;
+		RowListWidget list = new RowListWidget(this.minecraft, this.width, this.height, width, LIST_TOP, listBottom, ROW_HEIGHT, listRows, index -> toggle(rows.get(index)), this::showComponentTooltip);
 		this.addRenderableWidget(list);
+		addActionArea(FOOTER_WIDTH, this.height - 28, actionRows);
 	}
 
 	private List<Row> rows() {
