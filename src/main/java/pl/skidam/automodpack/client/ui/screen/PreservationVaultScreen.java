@@ -102,7 +102,10 @@ public final class PreservationVaultScreen extends VersionedScreen {
 	private MutableComponent restoreTooltip(PreservationVault.Claim selected) {
 		if (selected == null) return VersionedText.translatable("automodpack.vault.restorePickFirst");
 		return switch (selected.originalRestore()) {
-			case INACTIVE_PACK -> VersionedText.translatable("automodpack.vault.restoreInactivePack");
+			// A pack that is still installed can be activated again; a removed one cannot, so only a copy remains.
+			case INACTIVE_PACK -> packNames.containsKey(selected.modpackId())
+					? VersionedText.translatable("automodpack.vault.restoreInactivePack")
+					: VersionedText.translatable("automodpack.vault.restoreRemovedPack");
 			case NOT_GAME_DIR -> VersionedText.translatable("automodpack.vault.restoreManagedFiles");
 			case STILL_OWNED -> VersionedText.translatable("automodpack.vault.restoreStillOwned");
 			case AVAILABLE -> VersionedText.translatable("automodpack.vault.restoreApplies", selected.originalPath());
