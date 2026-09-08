@@ -219,6 +219,8 @@
   "automodpack.firstConnect.unavailableOldChoices": "Korábban kiválasztott csoportok, amelyek már nincsenek: %s",
   "automodpack.selection.platformSummary": "Platform: %s  Kiválasztott csoportok: %s",
   "automodpack.selection.platformTooltip": "Váltja az opcionális csoportok feloldásához használt platformot. Az észlelt platformra visszaállás ismét az észlelést követi.",
+  "automodpack.selection.platformButton": "OS: %s",
+  "automodpack.selection.platformDetected": "%s (észlelve)",
   "automodpack.selection.category": "Kategória: %s",
   "automodpack.selection.requiredAlways": "Kötelező: mindig benne van",
   "automodpack.selection.defaultSelected": "Alapértelmezett: ki van választva, amíg el nem távolítod",

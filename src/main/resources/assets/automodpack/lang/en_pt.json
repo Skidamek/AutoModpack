@@ -219,6 +219,8 @@
   "automodpack.firstConnect.unavailableOldChoices": "Old group picks no longer around: %s",
   "automodpack.selection.platformSummary": "Platform: %s  Selected groups: %s",
   "automodpack.selection.platformTooltip": "Cycles the platform used to resolve optional groups. Cycling back to the detected platform follows detection again.",
+  "automodpack.selection.platformButton": "OS: %s",
+  "automodpack.selection.platformDetected": "%s (spied)",
   "automodpack.selection.category": "Category: %s",
   "automodpack.selection.requiredAlways": "Required: always in",
   "automodpack.selection.defaultSelected": "Default: selected unless ye toss it",

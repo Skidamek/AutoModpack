@@ -219,6 +219,8 @@
   "automodpack.firstConnect.unavailableOldChoices": "old groupz u pickd r gone: %s",
   "automodpack.selection.platformSummary": "platform: %s  pickd groups: %s",
   "automodpack.selection.platformTooltip": "Cycles da platform used to pick optional groups. Goin bak to da detected platform goes bak to auto detect.",
+  "automodpack.selection.platformButton": "OS: %s",
+  "automodpack.selection.platformDetected": "%s (detectd)",
   "automodpack.selection.category": "kategury: %s",
   "automodpack.selection.requiredAlways": "must has: always in",
   "automodpack.selection.defaultSelected": "defawlt: pickd unless u yeet it",
