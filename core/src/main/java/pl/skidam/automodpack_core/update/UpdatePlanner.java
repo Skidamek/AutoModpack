@@ -129,7 +129,6 @@ public final class UpdatePlanner {
 			FileState state = session.projected(key);
 			if (state != null && state.regularFile() && hashesEqual(state.sha1(), item.sha1)) {
 				session.delete(key, item.sha1);
-				session.restart(RestartReason.REMOVED_NON_MODPACK_FILES);
 			}
 		}
 
@@ -151,8 +150,7 @@ public final class UpdatePlanner {
 			OwnershipLedger.Content current = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!ledgerEntry.historicalHashes().contains(current)) continue;
 			ClientBaseline.Entry baseline = baselines.get(ledgerEntry.logicalPath());
-			if (restoreOwnedLiveFile(key, state, baseline, input.availableBaselineObjects(), true, session))
-				session.restart(RestartReason.APPLIED_SERVER_DELETIONS);
+			restoreOwnedLiveFile(key, state, baseline, input.availableBaselineObjects(), true, session);
 		}
 
 		return session.finalState(installed.modpackId, packTarget, input.plannedClientConfig(), input.files(), installed, ledger, true, input.baseline(), List.of());
@@ -207,7 +205,7 @@ public final class UpdatePlanner {
 			FileState previousOverlay = input.selection() == null ? null : input.selection().previousEditableOverlays().get(entry.getKey());
 			if (previousOverlay != null && previousOverlay.regularFile() && live != null && hashesEqual(live.sha1(), previousOverlay.sha1())) {
 				session.delete(liveKey, previousOverlay.sha1());
-				session.restart(RestartReason.REMOVED_NON_MODPACK_FILES);
+				noteStandardModsMutation(liveKey, true, session);
 			}
 		}
 		for (FileKey key : session.projectedKeys()) {
@@ -374,11 +372,10 @@ public final class UpdatePlanner {
 			if (selection == null || selection.baseline() == null) {
 				session.preserve(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size()));
 				session.delete(key, state.sha1());
-				session.restart(RestartReason.APPLIED_SERVER_DELETIONS);
+				noteStandardModsMutation(key, true, session);
 				continue;
 			}
-			if (restoreOwnedLiveFile(key, state, baseline, selection.availableBaselineObjects(), preserveReplacedBytes, session))
-				session.restart(RestartReason.APPLIED_SERVER_DELETIONS);
+			restoreOwnedLiveFile(key, state, baseline, selection.availableBaselineObjects(), preserveReplacedBytes, session);
 		}
 	}
 
@@ -395,12 +392,14 @@ public final class UpdatePlanner {
 		if (baseline == null || baseline.absent()) {
 			session.preserve(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
 			session.delete(key, currentHash);
+			noteStandardModsMutation(key, true, session);
 			return true;
 		}
 		String baselineHash = baseline.objectHash();
 		if (!availableBaselineObjects.contains(baselineHash)) return false;
 		if (preserveReplacedBytes) session.preserve(new Preservation(key.root(), key.relativePath(), currentHash, state.size()));
 		session.install(key, baselineHash, baseline.size(), currentHash);
+		noteStandardModsMutation(key, false, session);
 		return true;
 	}
 
@@ -416,8 +415,13 @@ public final class UpdatePlanner {
 			if (!entry.historicalHashes().contains(content)) continue;
 			session.preserve(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size(), PreservationProof.SERVER_LEDGER));
 			session.delete(key, state.sha1());
-			session.restart(RestartReason.APPLIED_SERVER_DELETIONS);
+			noteStandardModsMutation(key, true, session);
 		}
+	}
+
+	private static void noteStandardModsMutation(FileKey key, boolean deleted, PlanningSession session) {
+		if (key.root() != Root.GAME_DIR || !ModpackPathPolicy.isModPath(key.relativePath())) return;
+		session.restart(deleted ? RestartReason.REMOVED_STANDARD_MODS : RestartReason.CORRECTED_FILE_LOCATIONS);
 	}
 
 	public static Optional<FileKey> managedCleanupKey(String logicalPath) {

@@ -43,13 +43,11 @@ final class RestartDecision {
 	/** Player-facing description of one restart reason, shown with the changelogs. */
 	static String describe(UpdatePlan.RestartReason reason) {
 		return switch (reason) {
-			case REMOVED_NON_MODPACK_FILES -> "files removed from the modpack were deleted from the game directory";
 			case REMOVED_LOCAL_MODS -> "player-approved local mods were preserved and removed from the game directory";
 			case CORRECTED_FILE_LOCATIONS -> "standard-directory mods were copied or updated";
 			case FIXED_NESTED_MODS -> "conflicting nested mods were copied to the standard mods directory";
 			case REMOVED_DUPLICATE_MODS -> "duplicate standard-directory mods were removed";
 			case REMOVED_STANDARD_MODS -> "modpack-owned mods were removed from the standard mods directory";
-			case APPLIED_SERVER_DELETIONS -> "server-requested mod deletions were applied";
 			case CHANGED_LOADER_VERSION -> "launcher loader-version metadata changed";
 			case CHANGED_GROUP_SELECTION -> "the selected modpack groups changed";
 			case SELECTED_MODPACK -> "the selected stable modpack changed";
@@ -57,20 +55,36 @@ final class RestartDecision {
 	}
 
 	/**
-	 * Restart type for the launch-time apply restart. Deliberately keyed on {@code firstConnection}: a first install
-	 * always restarts as a full download, and only then does a changed stable modpack selection count as a select.
+	 * Restart type for the launch-time apply restart. A first install reads as a full download even though the fresh
+	 * pack also matches {@code SELECTED_MODPACK}; only a later changed selection counts as a select.
 	 */
 	static UpdateType launchRestartType(boolean firstConnection, Set<UpdatePlan.RestartReason> reasons) {
 		return firstConnection ? UpdateType.FULL : reasons.contains(UpdatePlan.RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : UpdateType.UPDATE;
 	}
 
 	/**
-	 * Restart type for a post-apply restart. Deliberately keyed on {@code fullDownload} instead of
-	 * {@code firstConnection}; the launch-time flow answers with {@link #launchRestartType}, and the two conditions
-	 * stay separate until unifying them is an explicitly made decision.
+	 * Restart type for a post-apply restart in a running game. An explicit stable pack selection outranks a full
+	 * download there because the player chose it; that is the opposite priority of {@link #launchRestartType}, and
+	 * both orderings are load-bearing.
 	 */
 	static UpdateType applyRestartType(boolean fullDownload, Set<UpdatePlan.RestartReason> reasons) {
 		return reasons.contains(UpdatePlan.RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
+	}
+
+	/**
+	 * Preload runs before the loader reads anything, so the fresh projection can be hot-loaded in the same boot. Only
+	 * changes this boot cannot absorb demand a restart: a loader-version swap (the running JVM was started by the old
+	 * loader) and standard-mods-directory corrections the loader wiring does not re-scan.
+	 */
+	static boolean requiresRestartAtPreload(Set<UpdatePlan.RestartReason> reasons) {
+		return reasons.stream().anyMatch(RestartDecision::isBootCritical);
+	}
+
+	private static boolean isBootCritical(UpdatePlan.RestartReason reason) {
+		return switch (reason) {
+			case CHANGED_LOADER_VERSION, REMOVED_LOCAL_MODS, CORRECTED_FILE_LOCATIONS, FIXED_NESTED_MODS, REMOVED_DUPLICATE_MODS, REMOVED_STANDARD_MODS -> true;
+			case CHANGED_GROUP_SELECTION, SELECTED_MODPACK -> false;
+		};
 	}
 
 	/** Fingerprint of the applied correction state so two rapid automatic restarts for the same state can be suppressed. */
