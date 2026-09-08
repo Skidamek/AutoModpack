@@ -154,10 +154,6 @@ public class HolepunchSocket extends Socket {
 		}
 	}
 
-	void feedPlainReadData(byte[] data) {
-		in.feed(data);
-	}
-
 	void feedCamouflagedReadData(byte[] data) {
 		TlsRecordCamouflage.Pair camouflage = trafficCamouflage;
 		if (camouflage != null && data.length != 0) {

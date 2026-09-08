@@ -58,7 +58,7 @@ class HolepunchSocketTest {
 	void pausesReadsWhenInboundQueueHitsTripwire() throws Exception {
 		StubConnection connection = new StubConnection();
 		try (HolepunchSocket socket = new HolepunchSocket(connection)) {
-			socket.feedPlainReadData(new byte[HolepunchSocket.MAX_QUEUED_READ_BYTES]);
+			socket.handler().onRead(ByteBuffer.wrap(new byte[HolepunchSocket.MAX_QUEUED_READ_BYTES]));
 			assertEquals(1, connection.pauses.get());
 			assertEquals(0, connection.resumes.get());
 			assertEquals(HolepunchSocket.MAX_QUEUED_READ_BYTES, socket.getInputStream().readNBytes(HolepunchSocket.MAX_QUEUED_READ_BYTES).length);
