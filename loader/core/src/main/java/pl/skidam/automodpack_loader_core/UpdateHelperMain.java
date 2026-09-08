@@ -17,9 +17,12 @@ import pl.skidam.automodpack_core.update.SelfUpdateSwap;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 
 public final class UpdateHelperMain {
-	private static final int MAX_ATTEMPTS = 8;
-	private static final long INITIAL_BACKOFF_MILLIS = 250;
-	private static final long MAX_BACKOFF_MILLIS = 2_000;
+	// Receipts: in-repo, 11s of retries lost an on-access lock race. Microsoft Defender cloud block holds a file 10s by default,
+	// extendable to 60s (Configure extended cloud check). Geometric 500ms→5s over 20 attempts sleeps ~82.5s, past that 60s cap
+	// with slack for a local archive scan of one jar (Defender's "expensive file" log threshold is 3s; there is no documented RTP cap).
+	private static final int MAX_ATTEMPTS = 20;
+	private static final long INITIAL_BACKOFF_MILLIS = 500;
+	private static final long MAX_BACKOFF_MILLIS = 5_000;
 
 	private UpdateHelperMain() {}
 
@@ -43,20 +46,35 @@ public final class UpdateHelperMain {
 				try {
 					lease = leaseChannel.tryLock();
 				} catch (OverlappingFileLockException e) {
+					log("Another update helper already holds the lease; exiting");
 					return 0;
 				}
-				if (lease == null) return 0;
+				if (lease == null) {
+					log("Another update helper already holds the lease; exiting");
+					return 0;
+				}
 				try (lease) {
 					try {
-						ProcessHandle.of(parentPid).ifPresent(parent -> parent.onExit().join());
+						ProcessHandle.of(parentPid).ifPresent(parent -> {
+							log("Waiting for the game process " + parentPid + " to exit");
+							parent.onExit().join();
+						});
 
 						UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
 						long backoff = INITIAL_BACKOFF_MILLIS;
 						for (int attempt = 1;; attempt++) {
-							boolean selfUpdateApplied = recoverSelfUpdate(gameDirectory, dataLocation);
+							recoverSelfUpdate(gameDirectory, dataLocation);
 							UpdateTransactionExecutor.Execution execution = executor.recoverLatest();
-							if (selfUpdateApplied && execution.success()) return 0;
-							if (execution.replanRequired() || attempt >= MAX_ATTEMPTS) return 1;
+							if (execution.success()) {
+								log("Pending update transaction recovered on attempt " + attempt);
+								return 0;
+							}
+							log("Update recovery attempt " + attempt + " failed: status " + execution.status() + ", operation " + execution.operation() + ", blocked path " + execution.blockedPath()
+									+ ", message " + execution.message());
+							if (execution.replanRequired() || attempt >= MAX_ATTEMPTS) {
+								log("Update helper gave up; the transaction stays pending and the next game launch will retry it");
+								return 1;
+							}
 							Thread.sleep(backoff);
 							backoff = Math.min(MAX_BACKOFF_MILLIS, backoff * 2);
 						}
@@ -69,6 +87,11 @@ public final class UpdateHelperMain {
 			failure.printStackTrace();
 			return 1;
 		}
+	}
+
+	/** Narrates on stdout because the helper runs on a bare log4j default config whose root level would drop info lines; the launcher captures this stream into last-helper-run.log. */
+	private static void log(String message) {
+		System.out.println("[AutoModpack update helper] " + message);
 	}
 
 	private static boolean recoverSelfUpdate(Path gameDirectory, DataRootResolver.Location dataLocation) {

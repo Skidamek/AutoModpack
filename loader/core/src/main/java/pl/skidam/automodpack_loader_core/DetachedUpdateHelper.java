@@ -2,11 +2,18 @@ package pl.skidam.automodpack_loader_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_DIR;
+import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LEASE_FILE;
+import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -47,9 +54,36 @@ public final class DetachedUpdateHelper {
 		if (!Files.isRegularFile(javaExecutable)) throw new IOException("Java executable is missing: " + javaExecutable);
 		String classpath = String.join(File.pathSeparator, helperJar.toString(), runtimeDependency(Gson.class).toString(), runtimeDependency(LogManager.class).toString(),
 				runtimeDependency(LoggerContext.class).toString());
-		new ProcessBuilder(javaExecutable.toString(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid()))
-				.directory(GameDirectory.current().toFile()).inheritIO().start();
-		LOGGER.info("Launched detached update helper for the latest pending transaction from {}", helperJar);
+		// The game process exits right after this launch, so inherited streams would die with it; the helper's story must outlive the game in a file.
+		// Append: a second helper that loses the lease still starts with this redirect already open, and must not truncate the running helper's log.
+		Path helperLog = GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize();
+		new ProcessBuilder(javaExecutable.toString(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid())).directory(GameDirectory.current().toFile())
+				.redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(helperLog.toFile())).start();
+		LOGGER.info("Launched detached update helper for the latest pending transaction from {}; its output goes to {}", helperJar, helperLog);
+	}
+
+	/**
+	 * True after waiting out a helper that already held the lease. False when none was running, so this boot can count a deferred restart.
+	 */
+	public static boolean awaitRunningHelper() throws IOException {
+		Path leaseFile = GameDirectory.current().resolve(HELPER_LEASE_FILE).toAbsolutePath().normalize();
+		if (!Files.isRegularFile(leaseFile, LinkOption.NOFOLLOW_LINKS)) return false;
+		try (FileChannel channel = FileChannel.open(leaseFile, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
+			FileLock probe;
+			try {
+				probe = channel.tryLock();
+			} catch (OverlappingFileLockException e) {
+				return false;
+			}
+			if (probe != null) {
+				probe.release();
+				return false;
+			}
+			LOGGER.info("Waiting for the detached update helper to finish");
+			try (FileLock ignored = channel.lock()) {
+				return true;
+			}
+		}
 	}
 
 	public static void cleanupOldHelperJars() {

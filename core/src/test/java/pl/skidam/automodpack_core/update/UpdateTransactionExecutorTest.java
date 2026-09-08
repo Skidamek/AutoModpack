@@ -186,6 +186,74 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void abandonRestoresBackupWhenFinalizeHasNotCommitted() throws Exception {
+		ClientStorage storage = storage();
+		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
+		String oldHash = store(storage, oldBytes);
+		SelectedModpackTarget oldTarget = target(storage, "mods/old.jar", "mod", false, oldHash, oldBytes.length);
+		UpdateTransactionExecutor executor = executor(storage);
+		assertTrue(executor.commit(plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget).success());
+
+		byte[] newBytes = "new-projection".getBytes(StandardCharsets.UTF_8);
+		String newHash = store(storage, newBytes);
+		SelectedModpackTarget newTarget = nextTarget(storage, oldTarget, "mods/new.jar", newHash, newBytes.length, Instant.parse("2026-01-02T00:00:00Z"));
+		UpdatePlan newPlan = plan(newTarget, clientConfig(newTarget.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
+		UpdateTransaction transaction = createTransaction(storage, newPlan, newTarget);
+		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		Files.move(storage.activeDirectory(), storage.backupDirectory());
+		Files.createDirectories(storage.activeDirectory().resolve("mods"));
+		Files.writeString(storage.activePath("mods/partial.jar"), "partial", StandardCharsets.UTF_8);
+		Files.createDirectories(storage.incomingDirectory());
+		Files.writeString(storage.incomingDirectory().resolve("stale.txt"), "stale", StandardCharsets.UTF_8);
+
+		Path stuckJournal = executor.abandonStuckPublication(transaction);
+
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/old.jar"), oldBytes.length, oldHash));
+		assertFalse(Files.exists(storage.activePath("mods/partial.jar")));
+		assertFalse(Files.exists(storage.backupDirectory()));
+		assertFalse(Files.exists(storage.incomingDirectory()));
+		assertFalse(Files.exists(storage.transactionFile()));
+		assertTrue(Files.isRegularFile(stuckJournal));
+		assertEquals(oldTarget.packTarget().contentToken(), storage.readActiveState().contentToken);
+	}
+
+	@Test
+	void abandonKeepsActiveWhenFinalizeAlreadyCommitted() throws Exception {
+		ClientStorage storage = storage();
+		byte[] oldBytes = "old-projection".getBytes(StandardCharsets.UTF_8);
+		String oldHash = store(storage, oldBytes);
+		SelectedModpackTarget oldTarget = target(storage, "mods/old.jar", "mod", false, oldHash, oldBytes.length);
+		UpdateTransactionExecutor executor = executor(storage);
+		assertTrue(executor.commit(plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget).success());
+
+		byte[] newBytes = "new-projection".getBytes(StandardCharsets.UTF_8);
+		String newHash = store(storage, newBytes);
+		SelectedModpackTarget newTarget = nextTarget(storage, oldTarget, "mods/new.jar", newHash, newBytes.length, Instant.parse("2026-01-02T00:00:00Z"));
+		UpdatePlan newPlan = plan(newTarget, clientConfig(newTarget.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, newHash, newBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, newHash, newBytes.length)));
+		UpdateTransaction transaction = createTransaction(storage, newPlan, newTarget);
+		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
+		Files.move(storage.activeDirectory(), storage.backupDirectory());
+		Files.createDirectories(storage.activePath("mods"));
+		Files.write(storage.activePath("mods/new.jar"), newBytes);
+		storage.writeActiveState(newTarget.manifest().modpackId(), newTarget.packTarget().contentToken(), newTarget.document().ownershipLedger().toFields());
+
+		executor.abandonStuckPublication(transaction);
+
+		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
+		assertFalse(Files.exists(storage.backupDirectory()));
+		assertFalse(Files.exists(storage.transactionFile()));
+		assertEquals(newTarget.packTarget().contentToken(), storage.readActiveState().contentToken);
+	}
+
+	@Test
 	void gameDirectoryDriftRequestsAReplanWithoutOverwritingTheNewBytes() throws Exception {
 		ClientStorage storage = storage();
 		byte[] expectedBytes = "expected-game-file".getBytes(StandardCharsets.UTF_8);

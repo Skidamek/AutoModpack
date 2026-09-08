@@ -25,6 +25,7 @@ public final class StoragePaths {
 	public static final Path CLIENT_ACTIVE_STATE_FILE = CLIENT_DIR.resolve("active-state.json");
 	public static final Path CLIENT_SELECTION_FILE = CLIENT_DIR.resolve("selections.json");
 	public static final Path CLIENT_RESTART_LOOP_STATE_FILE = CLIENT_DIR.resolve("restart-state.json");
+	public static final Path CLIENT_STUCK_TRANSACTION_STATE_FILE = CLIENT_DIR.resolve("stuck-transaction-state.json");
 	public static final Path CLIENT_TRANSACTION_FILE = CLIENT_DIR.resolve("update-transaction.json");
 	public static final Path CLIENT_REPAIR_FILE = CLIENT_DIR.resolve("repair.json");
 	public static final Path CLIENT_MUTATION_LOCK_FILE = CLIENT_DIR.resolve("mutation.lock");
@@ -36,6 +37,7 @@ public final class StoragePaths {
 	public static final Path SELF_UPDATE_FILE = AUTOMODPACK_DIR.resolve("self-update.json");
 	public static final Path HELPER_DIR = AUTOMODPACK_DIR.resolve("helper");
 	public static final Path HELPER_LEASE_FILE = HELPER_DIR.resolve("running.lock");
+	public static final Path HELPER_LOG_FILE = HELPER_DIR.resolve("last-helper-run.log");
 
 	public static final Path SERVER_DIR = AUTOMODPACK_DIR.resolve("server");
 	public static final Path SERVER_PROJECTION_FILE = SERVER_DIR.resolve("current-projection.json");

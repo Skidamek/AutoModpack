@@ -6,6 +6,7 @@ import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
@@ -159,6 +161,37 @@ public final class UpdateTransactionExecutor {
 	/** Recovers the current mailbox contents, never a transaction captured by an earlier process. */
 	public Execution recoverLatest() throws IOException {
 		return ClientStorageMutation.run(context.storage(), () -> recoverPersisted(null));
+	}
+
+	/**
+	 * The stuck-update escape: drop in-flight publication, keep the last finalized generation, and retire the journal.
+	 * {@code backup/} is the previous committed tree only while finalize has not yet written {@code active-state.json}.
+	 */
+	public Path abandonStuckPublication(UpdateTransaction transaction) throws IOException {
+		Objects.requireNonNull(transaction, "transaction");
+		return ClientStorageMutation.run(context.storage(), () -> abandonStuckPublicationPersisted(transaction));
+	}
+
+	private Path abandonStuckPublicationPersisted(UpdateTransaction transaction) throws IOException {
+		ClientStorage storage = context.storage();
+		Path active = storage.activeDirectory();
+		Path backup = storage.backupDirectory();
+		FileTrees.delete(storage.incomingDirectory());
+		if (!generationAlreadyFinalized(transaction) && Files.isDirectory(backup, LinkOption.NOFOLLOW_LINKS)) {
+			FileTrees.delete(active);
+			FileTrees.moveRecoverableDirectory(backup, active);
+		} else {
+			FileTrees.delete(backup);
+		}
+		Path stuckJournal = storage.clientDirectory().resolve("update-transaction.stuck-" + UUID.randomUUID() + ".json");
+		Files.move(storage.transactionFile(), stuckJournal, StandardCopyOption.REPLACE_EXISTING);
+		return stuckJournal;
+	}
+
+	private boolean generationAlreadyFinalized(UpdateTransaction transaction) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields state = context.storage().readActiveState();
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL || transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION) return state == null;
+		return state != null && transaction.contentToken != null && transaction.contentToken.equals(state.contentToken);
 	}
 
 	/** Reports mutable input drift that requires a fresh plan before live mutation can continue. */
