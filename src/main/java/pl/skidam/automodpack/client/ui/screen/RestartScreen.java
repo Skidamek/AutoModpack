@@ -39,8 +39,10 @@ public class RestartScreen extends VersionedScreen {
 		super.init();
 		assert this.minecraft != null;
 		boolean hasChangelogs = changelogs != null && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty() || !changelogs.latestPatchNotes().isBlank());
+		int preservedFiles = hasChangelogs ? changelogs.changeSet().summary().preservedFiles() : 0;
 		List<ActionRow> rows = new ArrayList<>();
 		if (hasChangelogs) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.changelog.view"), button -> ScreenManager.changelog(this, changelogs))));
+		if (preservedFiles > 0) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.preservedFilesCount", preservedFiles), button -> openVault())));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.restart.cancel"), button -> ScreenImpl.setScreen(null)),
 				primaryAction(VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
@@ -84,6 +86,11 @@ public class RestartScreen extends VersionedScreen {
 			}
 		}
 		return lines;
+	}
+
+	/** The vault is one click away from the screen that just preserved the files. */
+	private void openVault() {
+		new InstalledModpackController().openPreservedFiles(this, this::rebuild);
 	}
 
 	@Override
