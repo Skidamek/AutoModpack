@@ -312,6 +312,7 @@ public class ModpackUpdater implements AutoCloseable {
 	public void finishAttachWithoutChanges() throws IOException {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 		storage.setDetached(selectedTarget.manifest().modpackId(), false);
+		LOGGER.info("Modpack {} is attached again: syncing to the server's current generation", selectedTarget.manifest().modpackId());
 	}
 
 	/** When {@code showWaitingScreen} is false a player-facing screen already owns the wait and shows its own busy state. */
@@ -821,6 +822,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (attaching) {
 			try {
 				storage.setDetached(target.manifest().modpackId(), false);
+				LOGGER.info("Modpack {} is attached again: the applied sync ends detachment", target.manifest().modpackId());
 			} catch (IOException e) {
 				throw new IOException("Modpack generation committed but detachment could not be cleared", e);
 			}
