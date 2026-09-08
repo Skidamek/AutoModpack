@@ -1,8 +1,13 @@
 package pl.skidam.automodpack_core.protocol.netty;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.net.SocketAddress;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelPipeline;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -15,9 +20,30 @@ import pl.skidam.automodpack_core.protocol.netty.handler.ErrorPrinter;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolMessageDecoder;
 import pl.skidam.automodpack_core.protocol.netty.handler.ServerMessageHandler;
 
-/** Installs the common post-handshake transfer pipeline for every transport. */
+/** Installs the shared server pipeline for every transport: handshake framing, TLS, then the post-handshake transfer. */
 public final class ProtocolPipeline {
 	private ProtocolPipeline() {}
+
+	/**
+	 * Installs the server transfer pipeline: error printer, traffic shaper, any wire-side handlers, TLS, then the post-handshake pipeline. Wire-side handlers sit between the shaper and
+	 * TLS, on the wire side of it. Returns the TLS handler, or null when TLS termination is handled externally.
+	 */
+	public static SslHandler installServer(Channel channel, NettyServer server, SocketAddress remoteAddress, ChannelHandler... wireSideHandlers) {
+		ChannelPipeline pipeline = channel.pipeline();
+		pipeline.addLast("error-printer-first", new ErrorPrinter());
+		pipeline.addLast("traffic-shaper", TrafficShaper.handler());
+		for (ChannelHandler wireSideHandler : wireSideHandlers) {
+			pipeline.addLast(wireSideHandler);
+		}
+		SslHandler sslHandler = server.getSslCtx() == null ? null : server.getSslCtx().newHandler(channel.alloc());
+		if (sslHandler != null) {
+			pipeline.addLast("tls", sslHandler);
+		} else {
+			LOGGER.debug("TLS termination handled externally: {}", remoteAddress);
+		}
+		install(channel, server, remoteAddress);
+		return sslHandler;
+	}
 
 	public static void install(Channel channel, NettyServer server, SocketAddress remoteAddress) {
 		channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);

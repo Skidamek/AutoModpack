@@ -14,7 +14,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.MessageToMessageEncoder;
 import io.netty.handler.ssl.SslHandler;
@@ -24,8 +23,6 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.ProtocolPipeline;
-import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
-import pl.skidam.automodpack_core.protocol.netty.handler.ErrorPrinter;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.server.netty.HolepunchChannelApplication;
 import pl.skidam.mcholepunch.server.netty.NettyChannelRegistry;
@@ -69,18 +66,10 @@ public final class ServerHolepunchBridge {
 		SocketAddress remoteAddress = channel.remoteAddress();
 		channels.add(channel);
 		channel.closeFuture().addListener(future -> channels.remove(channel));
-		ChannelPipeline pipeline = channel.pipeline();
-		pipeline.addLast("error-printer-first", new ErrorPrinter());
-		pipeline.addLast("traffic-shaper", TrafficShaper.handler());
-		// Both camouflage handlers sit on the wire side of the TLS handler: inbound records are
-		// decamouflaged before TLS decrypts them, and outbound records are camouflaged after TLS
-		// encrypts them. A single pipeline position serves both directions with opposite relative
-		// order, so wrapping TLS with the pair would camouflage plaintext on the way out.
-		pipeline.addLast("holepunch-camouflage-encoder", new CamouflageEncoder(connection));
-		pipeline.addLast("holepunch-camouflage-decoder", new CamouflageDecoder(connection));
-		SslHandler sslHandler = server.getSslCtx() == null ? null : server.getSslCtx().newHandler(channel.alloc());
+		// The camouflage pair is wire-side of TLS: inbound records decamouflage before TLS decrypts
+		// them, outbound records camouflage after TLS encrypts them.
+		SslHandler sslHandler = ProtocolPipeline.installServer(channel, server, remoteAddress, new CamouflageEncoder(connection), new CamouflageDecoder(connection));
 		if (sslHandler != null) {
-			pipeline.addLast("tls", sslHandler);
 			sslHandler.handshakeFuture().addListener(future -> {
 				if (future.isSuccess()) {
 					connection.commitTransportUpgrade().exceptionally(error -> {
@@ -92,10 +81,7 @@ public final class ServerHolepunchBridge {
 					LOGGER.debug("TLS handshake failed via holepunch: {}", remoteAddress, future.cause());
 				}
 			});
-		} else {
-			LOGGER.debug("TLS termination handled externally for holepunch connection: {}", remoteAddress);
 		}
-		ProtocolPipeline.install(channel, server, remoteAddress);
 		LOGGER.debug("Holepunched AutoModpack connection handed over: {}", remoteAddress);
 	}
 
