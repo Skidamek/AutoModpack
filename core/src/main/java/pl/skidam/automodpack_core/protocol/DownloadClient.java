@@ -131,7 +131,7 @@ public class DownloadClient implements AutoCloseable {
 			}
 		}, NET_EXECUTOR).thenCompose(this::validateCandidate).thenApplyAsync(candidate -> {
 			try {
-				return openConfiguredConnection(candidate);
+				return configuredConnection(candidate);
 			} catch (IOException e) {
 				throw new CompletionException(e);
 			}
@@ -317,27 +317,15 @@ public class DownloadClient implements AutoCloseable {
 		});
 	}
 
-	private Connection openConfiguredConnection(TlsCandidate candidate) throws IOException {
+	/** Turns a validated candidate into a configured connection, releasing the socket when the negotiation fails. */
+	private Connection configuredConnection(TlsCandidate candidate) throws IOException {
 		try {
-			return configuredConnection(candidate.socket());
-		} catch (IOException first) {
+			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
+			return new Connection(candidate.socket(), secretBytes);
+		} catch (IOException e) {
 			closeQuietly(candidate.socket());
-			// A transient transport close here must not fail the whole fetch; one fresh connection settles it.
-			LOGGER.info("Modpack connection closed while negotiating with the server; retrying once");
-			TlsCandidate retry = openTlsCandidate();
-			try {
-				return configuredConnection(retry.socket());
-			} catch (IOException second) {
-				closeQuietly(retry.socket());
-				second.addSuppressed(first);
-				throw second;
-			}
+			throw e;
 		}
-	}
-
-	private Connection configuredConnection(SSLSocket socket) throws IOException {
-		socket.setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
-		return new Connection(socket, secretBytes);
 	}
 
 	private static <T> CompletableFuture<T> rejectCandidate(TlsCandidate candidate, Throwable error) {
