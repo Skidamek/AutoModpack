@@ -114,7 +114,6 @@ flow:
       all:
         - screen: PackConfirmScreen
         - element: { key: automodpack.confirm.ack, enabled: true }
-        - element: { key: automodpack.update.rollbackDetaches }
   - do: screenshot
     name: capture the rollback unverified write confirm
     file: rollback-unverified
