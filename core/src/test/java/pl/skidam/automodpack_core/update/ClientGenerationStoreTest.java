@@ -206,7 +206,7 @@ class ClientGenerationStoreTest {
 	}
 
 	@Test
-	void listingSkipsPacksWhoseGenerationCannotBeReconstructed() throws Exception {
+	void listingListsOnlyConsentedPacksAndStillFailsLoudlyOnCorruptGenerations() throws Exception {
 		ClientStorage storage = storage();
 		String firstHash = store(storage, "first-object");
 		String secondHash = store(storage, "second-object");
@@ -214,11 +214,39 @@ class ClientGenerationStoreTest {
 		PackDocument second = document(SECOND_PACK, secondHash, Files.size(storage.objectFile(secondHash)), TestPacks.CREATED);
 		TestPacks.stageGeneration(storage, first);
 		TestPacks.stageGeneration(storage, second);
-		Files.delete(storage.objectFile(first.policySha1()));
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
 
-		assertEquals(List.of(FIRST_PACK, SECOND_PACK), new ClientGenerationStore(storage).installedPackIds());
-		assertThrows(IOException.class, () -> new ClientGenerationStore(storage).newestDocument(FIRST_PACK));
+		// Both mirrors exist, but neither pack was ever accepted: a fetch alone is cache, never an install.
+		assertTrue(generations.installedPackIds().isEmpty());
+		Files.delete(storage.objectFile(first.policySha1()));
+		assertThrows(IOException.class, () -> generations.newestDocument(FIRST_PACK));
+
+		new ClientSelectionStore(storage.selectionFile()).compareAndSet(SECOND_PACK, null, new SelectionIntent(Set.of("main")));
+		assertEquals(List.of(SECOND_PACK), new ClientGenerationStore(storage).installedPackIds());
 		assertEquals(second, new ClientGenerationStore(storage).newestDocument(SECOND_PACK));
+	}
+
+	@Test
+	void compactionReclaimsNeverConsentedFetchesWhole() throws Exception {
+		ClientStorage storage = storage();
+		String keptHash = store(storage, "kept-object");
+		String fetchedHash = store(storage, "fetched-object");
+		PackDocument kept = document(FIRST_PACK, keptHash, Files.size(storage.objectFile(keptHash)), TestPacks.CREATED);
+		PackDocument fetched = document(SECOND_PACK, fetchedHash, Files.size(storage.objectFile(fetchedHash)), TestPacks.CREATED);
+		TestPacks.stageGeneration(storage, kept);
+		TestPacks.stageGeneration(storage, fetched);
+		storage.writeActiveState(FIRST_PACK, kept.contentToken(), kept.ownershipLedger().toFields());
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+
+		// The cancelled install is cache: the accepted pack's history and objects survive, the fetch's do not.
+		ClientGenerationStore.CompactionResult result = generations.compact();
+
+		assertEquals(List.of(FIRST_PACK), generations.installedPackIds());
+		assertFalse(Files.exists(storage.historyPackDirectory(SECOND_PACK)));
+		assertTrue(Files.exists(storage.objectFile(keptHash)));
+		assertFalse(Files.exists(storage.objectFile(fetchedHash)));
+		assertFalse(Files.exists(storage.objectFile(fetched.policySha1())));
+		assertEquals(2, result.collection().deletedObjectCount());
 	}
 
 	@Test

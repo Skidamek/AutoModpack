@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -46,8 +48,8 @@ public final class ClientGenerationStore {
 		this.storage = Objects.requireNonNull(storage);
 	}
 
-	/** Every modpack id with a local journal mirror; a mirror exists exactly when the pack has been fetched from a server. */
-	public List<String> installedPackIds() throws IOException {
+	/** Every modpack id with a local journal mirror, consent or not: the mirror is cache a head fetch writes, never a record of an install. */
+	public List<String> mirroredPackIds() throws IOException {
 		Path root = storage.historyDirectory();
 		if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		FileTrees.requireDirectory(root, "client journal mirrors");
@@ -62,10 +64,17 @@ public final class ClientGenerationStore {
 		}
 	}
 
+	/** Every installed pack: fetched from a server AND locally consented. A fetch alone is cache; only {@link #hasLocalState} is an install. */
+	public List<String> installedPackIds() throws IOException {
+		List<String> installed = new ArrayList<>();
+		for (String modpackId : mirroredPackIds()) if (hasLocalState(modpackId)) installed.add(modpackId);
+		return List.copyOf(installed);
+	}
+
 	/**
-	 * Whether this pack ever committed locally: it holds the active pointer or a stored group selection. The mirror
-	 * cannot answer this, because it is already fetched when the first install's review starts. Deactivation keeps the
-	 * selection, so a deactivated pack is still not a first install; removal forgets both.
+	 * Whether this pack ever committed locally: it holds the active pointer or a stored group selection. This is the one
+	 * consent predicate: the mirror cannot answer it, because the mirror is already fetched when the first install's
+	 * review starts. Deactivation keeps the selection, so a deactivated pack is still not a first install; removal forgets both.
 	 */
 	public boolean hasLocalState(String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
@@ -210,6 +219,9 @@ public final class ClientGenerationStore {
 
 	private CompactionResult compactLocked() throws IOException {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot compact client history while an update transaction is active: " + storage.transactionFile());
+		// Never-consented mirrors are a fetch's cache, so compaction reclaims them whole; keeping them would pin
+		// their objects forever and leave a mirror whose policy documents the collection just deleted.
+		for (String modpackId : mirroredPackIds()) if (!hasLocalState(modpackId)) FileTrees.delete(storage.historyPackDirectory(modpackId));
 		ExpectedSizes kept = new ExpectedSizes();
 		List<KeptPack> keptPacks = new ArrayList<>();
 		for (String modpackId : installedPackIds()) {
@@ -310,8 +322,10 @@ public final class ClientGenerationStore {
 	 * loses its immutability so the owner can edit, delete, and rearrange every file of the kept state.
 	 */
 	public void declareDetached(String modpackId) throws IOException {
+		boolean wasDetached = storage.isDetached(modpackId);
 		storage.setDetached(modpackId, true);
 		unprotectProjection();
+		if (!wasDetached) LOGGER.info("Modpack {} is detached: every file stays as it is and server updates stop until you resume syncing", modpackId);
 	}
 
 	private void unprotectProjection() throws IOException {

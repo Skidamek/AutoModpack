@@ -256,8 +256,10 @@ public final class ClientObjectStore {
 		ExpectedSizes retained = new ExpectedSizes();
 		// The journal mirror is the client's only history store, so every hash any of its entries names is kept:
 		// each entry's policy document, every change target, and every replaced source. The active generation's
-		// tree is the set of change targets up to its entry, so the mirror sweep covers it as well.
-		for (String modpackId : new ClientGenerationStore(storage).installedPackIds()) {
+		// tree is the set of change targets up to its entry, so the mirror sweep covers it as well. The sweep is
+		// consent-free on purpose: every existing mirror keeps its bytes, and only the manual compaction drops a
+		// never-consented mirror whole, so a collection outside it can never leave a mirror dangling.
+		for (String modpackId : new ClientGenerationStore(storage).mirroredPackIds()) {
 			for (JournalEntry entry : new JournalMirror(storage).entries(modpackId)) {
 				retained.optional(entry.policySha1(), -1, "journal policy document");
 				for (JournalEntry.Change change : entry.changes()) {
