@@ -345,6 +345,14 @@ def _v_stage_modpack(ctx: Context, step):
     )
     if record_only:
         shutil.rmtree(root)
+        # The manager lists only packs the client has accepted, so a record-only fixture
+        # carries an empty stored selection - the same marker a deactivated pack keeps.
+        selection_store = client_root / "selections.json"
+        selections = {}
+        if selection_store.exists():
+            selections = json.loads(selection_store.read_text(encoding="utf-8")).get("selections", {})
+        selections[modpack_id] = {"requestedGroups": [], "excludedGroups": []}
+        selection_store.write_text(json.dumps({"DO_NOT_CHANGE_IT": 1, "selections": selections}, indent=2) + "\n", encoding="utf-8")
         ctx.vars["staged_pack_id"] = modpack_id
         return
     state = {

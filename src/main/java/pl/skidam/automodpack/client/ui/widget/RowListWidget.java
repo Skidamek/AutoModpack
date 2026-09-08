@@ -59,12 +59,18 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 		}
 	}
 
-	public RowListWidget(Minecraft client, int width, int height, int contentWidth, int top, int bottom, int rowHeight, List<Row> rows, IntConsumer rowPicked, TooltipShower tooltipShower) {
+	public RowListWidget(Minecraft client, int width, int height, int contentWidth, int left, int top, int bottom, int rowHeight, List<Row> rows, IntConsumer rowPicked, TooltipShower tooltipShower) {
 		/*? if <1.20.3 {*/
 		/*super(client, width, height, top, bottom, rowHeight);
 		*//*?} else {*/
 		super(client, width, Math.max(rowHeight, bottom - top), top, rowHeight);
 		/*?}*/
+		// Entries take their x from the list's position at add time, so the offset must land before they are added.
+		/*? if >=1.20.3 {*/
+		this.setX(left);
+		/*?} else {*/
+		/*this.setLeftPos(left);
+		*//*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.rowHeight = rowHeight;
 		this.rowPicked = Objects.requireNonNull(rowPicked, "row pick");
@@ -76,15 +82,6 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 		this.setRenderTopAndBottom(false);
 		*//*?}*/
 		for (Row row : Objects.requireNonNull(rows, "rows")) this.addEntry(new RowEntry(row));
-	}
-
-	/** Offsets the list window horizontally; the vertical place comes from the constructor, and only the horizontal mover is shared by every version. */
-	public void placeAt(int left) {
-		/*? if >=1.20.3 {*/
-		this.setX(left);
-		/*?} else {*/
-		/*this.setLeftPos(left);
-		*//*?}*/
 	}
 
 	@Override

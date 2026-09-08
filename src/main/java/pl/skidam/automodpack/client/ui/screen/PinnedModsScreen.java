@@ -88,7 +88,7 @@ public final class PinnedModsScreen extends VersionedScreen {
 		}
 		// The list fills the space between the input row and the pinned actions; only a real overflow scrolls.
 		int listBottom = actionAreaTop(FOOTER_WIDTH, this.height - 28, actionRows) - 8;
-		RowListWidget list = new RowListWidget(this.minecraft, this.width, this.height, width, LIST_TOP, listBottom, ROW_HEIGHT, listRows, index -> toggle(rows.get(index)), this::showComponentTooltip);
+		RowListWidget list = new RowListWidget(this.minecraft, this.width, this.height, width, 0, LIST_TOP, listBottom, ROW_HEIGHT, listRows, index -> toggle(rows.get(index)), this::showComponentTooltip);
 		this.addRenderableWidget(list);
 		addActionArea(FOOTER_WIDTH, this.height - 28, actionRows);
 	}

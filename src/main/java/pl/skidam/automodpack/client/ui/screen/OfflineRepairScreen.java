@@ -112,7 +112,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();
 		if (canUpdate) actionButtons.get(actionIndex).active = !busy;
 		if (candidates.isEmpty()) return;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), listTop, listBottom, ROW_HEIGHT, listRows,
+		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, listTop, listBottom, ROW_HEIGHT, listRows,
 				index -> {
 					if (!busy) toggleEditable(candidates.get(index).logicalPath());
 				}, this::showComponentTooltip));

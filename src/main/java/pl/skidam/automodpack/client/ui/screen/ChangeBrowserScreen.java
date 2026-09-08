@@ -4,6 +4,7 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -61,14 +62,22 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private String selectedPath = "";
 	private ChangeBrowserWidget browser;
 	private RowListWidget groupPicker;
+	private RowListWidget contentPicker;
+	private RowListWidget sourcePicker;
 	private EditBox searchField;
 	private Button contentButton;
 	private Button groupButton;
 	private Button sourceButton;
-	// The group picker geometry, kept as plain fields so the menu and its chevron need no widget accessor branching.
+	// The dropdown geometry as plain fields, so the menus and their chevrons need no widget accessor branching.
+	private int contentButtonLeft;
+	private int contentButtonTop;
+	private int contentButtonWidth;
 	private int groupButtonLeft;
 	private int groupButtonTop;
 	private int groupButtonWidth;
+	private int sourceButtonLeft;
+	private int sourceButtonTop;
+	private int sourceButtonWidth;
 	private int browserTop;
 	private int browserBottom;
 	private int summaryY;
@@ -125,7 +134,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			searchField.setSuggestion(value.isEmpty() ? searchHint : "");
 			rebuildBrowser();
 		});
-		this.contentButton = buttonWidget(controlsLeft, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleContent());
+		this.contentButtonLeft = controlsLeft;
+		this.contentButtonTop = controlsY;
+		this.contentButtonWidth = controlWidth;
+		this.contentButton = buttonWidget(contentButtonLeft, contentButtonTop, controlWidth, 20, VersionedText.literal(""), button -> toggleContentMenu());
 		this.groupButtonLeft = controlsLeft + (GAP + controlWidth);
 		this.groupButtonTop = controlsY;
 		this.groupButtonWidth = controlWidth;
@@ -133,7 +145,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.addRenderableWidget(this.contentButton);
 		this.addRenderableWidget(this.groupButton);
 		if (warnUnverified) {
-			this.sourceButton = buttonWidget(controlsLeft + (GAP + controlWidth) * 2, controlsY, controlWidth, 20, VersionedText.literal(""), button -> cycleSource());
+			this.sourceButtonLeft = controlsLeft + (GAP + controlWidth) * 2;
+			this.sourceButtonTop = controlsY;
+			this.sourceButtonWidth = controlWidth;
+			this.sourceButton = buttonWidget(sourceButtonLeft, sourceButtonTop, controlWidth, 20, VersionedText.literal(""), button -> toggleSourceMenu());
 			this.addRenderableWidget(this.sourceButton);
 		}
 		updateControlLabels();
@@ -186,7 +201,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	/** One representative hash for the selected file: the hash of the state written on disk. */
 	private String selectedHash() {
-		ChangeBrowserProjection.FileRow file = pickerOpen() ? null : this.browser == null ? null : this.browser.selectedFile();
+		ChangeBrowserProjection.FileRow file = anyMenuOpen() ? null : this.browser == null ? null : this.browser.selectedFile();
 		return file == null ? null : file.writtenHash();
 	}
 
@@ -196,7 +211,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedGroup.isBlank() ? Set.of() : Set.of(selectedGroup), selectedSource);
 		this.currentProjection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE, filter).collapse(collapsedFolders);
 		recomputeSummary();
-		if (pickerOpen()) return;
+		if (anyMenuOpen()) return;
 		if (this.browser != null) this.removeWidget(this.browser);
 		this.browser = new ChangeBrowserWidget(this.currentProjection, collapsedFolders, groupNames, warnUnverified, referencesResolved, this::toggleFolder, this::onFileSelected,
 				this.minecraft, this.width, this.height, browserTop, browserBottom);
@@ -230,28 +245,65 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		rebuildBrowser();
 	}
 
-	private void cycleContent() {
-		selectedContent = next(selectedContent, contentKinds());
+	private boolean anyMenuOpen() {
+		return groupPicker != null || contentPicker != null || sourcePicker != null;
+	}
+
+	/** Closes every open dropdown menu; the caller decides whether the browser needs a refresh afterwards. */
+	private void closeMenus() {
+		for (RowListWidget menu : Arrays.asList(groupPicker, contentPicker, sourcePicker)) if (menu != null) this.removeWidget(menu);
+		groupPicker = null;
+		contentPicker = null;
+		sourcePicker = null;
+	}
+
+	private void toggleContentMenu() {
+		boolean wasOpen = contentPicker != null;
+		closeMenus();
+		if (wasOpen) return;
+		List<String> ids = new ArrayList<>();
+		ids.add("");
+		ids.addAll(contentKinds());
+		List<Component> options = new ArrayList<>(ids.size());
+		for (String id : ids)
+			options.add(id.isBlank() ? VersionedText.translatable("automodpack.browser.all") : VersionedText.translatable("automodpack.browser.content." + id));
+		this.contentPicker = openMenuPanel(contentButtonLeft, contentButtonTop + ActionAreaLayout.BUTTON_HEIGHT + 2, contentButtonWidth, browserBottom, options,
+				Math.max(0, ids.indexOf(selectedContent)), index -> pickContent(ids.get(index)));
+	}
+
+	private void pickContent(String kind) {
+		selectedContent = kind;
+		closeMenus();
 		updateControlLabels();
 		rebuildBrowser();
 	}
 
-	private void cycleSource() {
-		selectedSource = selectedSource == null ? Boolean.FALSE : selectedSource.booleanValue() ? null : Boolean.TRUE;
-		updateControlLabels();
-		rebuildBrowser();
+	private void toggleSourceMenu() {
+		boolean wasOpen = sourcePicker != null;
+		closeMenus();
+		if (wasOpen) return;
+		List<Boolean> ids = Arrays.asList(null, Boolean.TRUE, Boolean.FALSE);
+		List<Component> options = List.of(
+				VersionedText.translatable("automodpack.browser.all"),
+				VersionedText.translatable("automodpack.browser.source.published"),
+				VersionedText.translatable("automodpack.browser.source.custom"));
+		int selected = selectedSource == null ? 0 : selectedSource.booleanValue() ? 1 : 2;
+		this.sourcePicker = openMenuPanel(sourceButtonLeft, sourceButtonTop + ActionAreaLayout.BUTTON_HEIGHT + 2, sourceButtonWidth, browserBottom, options, selected,
+				index -> pickSource(ids.get(index)));
 	}
 
-	private boolean pickerOpen() {
-		return groupPicker != null;
+	private void pickSource(Boolean source) {
+		selectedSource = source;
+		closeMenus();
+		updateControlLabels();
+		rebuildBrowser();
 	}
 
 	/** Opens the group filter as a menu panel under its button: one row per group, the selection in yellow, scrolling when groups overflow. */
 	private void toggleGroupPicker() {
-		if (pickerOpen()) {
-			closeGroupPicker();
-			return;
-		}
+		boolean wasOpen = groupPicker != null;
+		closeMenus();
+		if (wasOpen) return;
 		if (this.browser != null) this.removeWidget(this.browser);
 		int pickerTop = groupButtonTop + ActionAreaLayout.BUTTON_HEIGHT + 2;
 		List<String> optionIds = new ArrayList<>();
@@ -268,13 +320,8 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	private void pickGroup(String groupId) {
 		selectedGroup = groupId;
-		closeGroupPicker();
-	}
-
-	private void closeGroupPicker() {
-		if (groupPicker == null) return;
-		this.removeWidget(groupPicker);
-		this.groupPicker = null;
+		closeMenus();
+		updateControlLabels();
 		rebuildBrowser();
 	}
 
@@ -293,13 +340,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private String groupName(String groupId) {
 		String name = groupNames.get(groupId);
 		return name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : name;
-	}
-
-	private static String next(String current, List<String> values) {
-		if (values.isEmpty()) return "";
-		if (current.isBlank()) return values.get(0);
-		int index = values.indexOf(current);
-		return index < 0 || index + 1 >= values.size() ? "" : values.get(index + 1);
 	}
 
 	private void updateControlLabels() {
@@ -357,8 +397,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	}
 
 	private void drawGroupChevron(VersionedMatrices matrices) {
-		if (groupButton == null || !groupButton.active || pickerOpen()) return;
-		drawMenuChevron(matrices, groupButtonLeft, groupButtonTop, groupButtonWidth, groupButton.getMessage());
+		if (contentButton != null && contentPicker == null) drawMenuChevron(matrices, contentButtonLeft, contentButtonTop, contentButtonWidth, contentButton.getMessage());
+		if (groupButton != null && groupButton.active && groupPicker == null) drawMenuChevron(matrices, groupButtonLeft, groupButtonTop, groupButtonWidth, groupButton.getMessage());
+		if (sourceButton != null && sourcePicker == null) drawMenuChevron(matrices, sourceButtonLeft, sourceButtonTop, sourceButtonWidth, sourceButton.getMessage());
 	}
 
 	/** The selected file's first cached page URL for the platform, or null when it has none. */
@@ -389,7 +430,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		/*? if <26.1 {*/
-		/*if (!pickerOpen() && this.browser != null) this.browser.render(matrices.getContext(), mouseX, mouseY, delta);
+		/*if (!anyMenuOpen() && this.browser != null) this.browser.render(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?}*/
 		int contentWidth = panelWidth(PANEL_WIDTH);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, heading.getString(), contentWidth)).withStyle(ChatFormatting.BOLD), this.width / 2, 8, TextColors.WHITE);
@@ -404,7 +445,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.summaryY, TextColors.WHITE);
 		if (currentProjection == null || currentProjection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
-		ChangeBrowserProjection.FileRow selected = pickerOpen() || this.browser == null ? null : this.browser.selectedFile();
+		ChangeBrowserProjection.FileRow selected = anyMenuOpen() || this.browser == null ? null : this.browser.selectedFile();
 		if (selected == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.selectHint").withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop, TextColors.WHITE);
 		else {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selected.path(), contentWidth)).withStyle(ChatFormatting.WHITE), this.width / 2, this.paneTop, TextColors.WHITE);
@@ -417,8 +458,9 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		if (pickerOpen()) {
-			closeGroupPicker();
+		if (anyMenuOpen()) {
+			closeMenus();
+			rebuildBrowser();
 			return false;
 		}
 		return handleBackOnEscape(this::back);
