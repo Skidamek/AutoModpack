@@ -65,9 +65,9 @@ public final class PackConfirmScreen extends VersionedScreen {
 		this.laterCancel = null;
 	}
 
-	/** Confirm before writing unverified jars on a later update. */
+	/** Confirm before writing unverified jars on a later update or generation rollback. */
 	public PackConfirmScreen(Screen parent, ModpackUpdater updater, UpdatePreview preview, Runnable continueAction, Runnable cancelAction) {
-		super(VersionedText.translatable("automodpack.update.title"));
+		super(VersionedText.translatable(UpdatePreviewScreen.titleKey(preview.mode())));
 		this.updater = Objects.requireNonNull(updater, "updater");
 		this.firstInstall = false;
 		this.unverified = true;
@@ -110,7 +110,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
 		if (unverified) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, checkboxAction(PackConfirmCopy.ackLabel(), acknowledged, value -> onAckToggled(value))));
 		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
-		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : "automodpack.update.apply");
+		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : UpdatePreviewScreen.actionKey(laterPreview.mode()));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(cancelLabel, button -> cancel()),
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
@@ -181,6 +181,10 @@ public final class PackConfirmScreen extends VersionedScreen {
 		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.computerRisk(), wrapWidth, ChatFormatting.RED));
 		bottomLines.add(blankLine());
 		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.sharedCommands(), wrapWidth, ChatFormatting.YELLOW));
+		if (laterPreview != null && laterPreview.mode() == UpdatePreview.Mode.ROLLBACK) {
+			bottomLines.add(blankLine());
+			bottomLines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.update.rollbackDetaches").getString(), wrapWidth, ChatFormatting.YELLOW));
+		}
 
 		int topHeight = topLines.size() * LINE_HEIGHT;
 		int bottomHeight = bottomLines.size() * LINE_HEIGHT;
@@ -299,8 +303,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 					PackConfirmCopy.catalogue(updater), PackConfirmCopy.groupNames(target.manifest()), null, List.of(), true, PackConfirmCopy.selectedBytes(target), ""));
 			return;
 		}
-		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.update.reviewUpdate"), laterPreview.changeSet(),
-				laterPreview.featureNames(), null, List.of(), true, laterPreview.uncachedAcquisitionBytes(), ""));
+		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(UpdatePreviewScreen.reviewKey(laterPreview.mode())),
+				laterPreview.changeSet(), laterPreview.featureNames(), null, List.of(), true, laterPreview.uncachedAcquisitionBytes(), ""));
 	}
 
 	private void openHistory() {

@@ -121,6 +121,11 @@ public final class UpdatePreview {
 		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet.withReferences(provider), featureNames);
 	}
 
+	/** Re-labels the presentation mode without changing any planned disposition. */
+	public UpdatePreview withMode(Mode mode) {
+		return new UpdatePreview(decision, groupConsequences, patchNotes, journal, mode, changeSet, featureNames);
+	}
+
 	public long addedBytes() {
 		return bytesOf(ChangeSet.Kind.ADDED);
 	}
@@ -182,6 +187,7 @@ public final class UpdatePreview {
 	public enum Mode {
 		UPDATE,
 		DEACTIVATION,
-		REMOVAL
+		REMOVAL,
+		ROLLBACK
 	}
 }
