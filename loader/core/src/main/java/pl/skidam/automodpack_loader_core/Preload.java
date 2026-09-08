@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_loader_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -40,8 +41,14 @@ import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class Preload {
+	// Three deferred restarts for the same transaction id, then the next failed recover rolls back. The id is the episode; the count does not expire.
+	private static final int MAX_DEFERRED_RESTARTS = 3;
+	// AWT preload dialog; Minecraft locale files are not loaded yet.
+	private static final String DEFERRED_POPUP_MESSAGE = "The modpack update paused on a busy file. Restart again; if this window keeps appearing, please send your latest log file.";
+
 	private ClientStorage storage;
 	private boolean trustedBootstrapApply;
+	private boolean rolledBackStuckUpdate;
 
 	public Preload() {
 		try {
@@ -91,7 +98,10 @@ public class Preload {
 	}
 
 	private void recoverPendingTransaction() throws IOException {
-		if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) return;
+		if (!Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) {
+			deferredRecoveryGuard().clear();
+			return;
+		}
 
 		UpdateTransaction transaction;
 		try {
@@ -101,6 +111,9 @@ public class Preload {
 			quarantineTransaction(e);
 			return;
 		}
+
+		LOGGER.info("Recovering pending update transaction {} (purpose {}, phase {}, recorded result {}, operation {}, path {}, message {})", transaction.transactionId, transaction.purpose,
+				transaction.phase, transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 
 		try {
 			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
@@ -146,18 +159,46 @@ public class Preload {
 	}
 
 	private void finishPendingRecovery(UpdateTransactionExecutor.Execution execution, UpdateTransaction original) throws IOException {
+		UpdateTransaction deferred = execution.transaction() == null ? original : execution.transaction();
+		if (!execution.success() && DetachedUpdateHelper.awaitRunningHelper()) {
+			LOGGER.info("The detached update helper finished; retrying recovery of transaction {}", deferred.transactionId);
+			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
+			execution = executor.recoverLatest();
+			deferred = execution.transaction() == null ? original : execution.transaction();
+		}
 		if (!execution.success()) {
+			logDeferredRecovery(deferred, execution);
+			if (deferredRecoveryGuard().evaluateAndRecord(deferred.transactionId) == UpdateLoopDetector.Decision.SUPPRESS) {
+				Path stuckJournal = UpdateTransactionSupport.executor().abandonStuckPublication(deferred);
+				deferredRecoveryGuard().clear();
+				rolledBackStuckUpdate = true;
+				LOGGER.error("The same update transaction {} failed after {} deferred restarts; kept the last finalized generation and retired the transaction to {}", deferred.transactionId,
+						MAX_DEFERRED_RESTARTS, stuckJournal.toAbsolutePath().normalize());
+				LOGGER.error("If the update keeps failing, send that file together with {} and the latest log", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
+				return;
+			}
 			DetachedUpdateHelper.launch();
-			new ReLauncher(UpdateType.UPDATE, null).restart(true);
-			UpdateTransaction deferred = execution.transaction() == null ? original : execution.transaction();
+			new ReLauncher(UpdateType.UPDATE, null, DEFERRED_POPUP_MESSAGE).restart(true);
 			throw new UpdateDeferredException(deferred.transactionId, execution.blockedPath(), execution.message());
 		}
-		UpdateTransaction recovered = execution.transaction() == null ? original : execution.transaction();
-		if (recovered.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
+		deferredRecoveryGuard().clear();
+		if (deferred.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			clientConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
 		}
-		LOGGER.info("Recovered update transaction {}", recovered.transactionId);
+		LOGGER.info("Recovered update transaction {}", deferred.transactionId);
+	}
+
+	private void logDeferredRecovery(UpdateTransaction transaction, UpdateTransactionExecutor.Execution execution) {
+		LOGGER.error("The pending modpack update did not finish: transaction {} (purpose {}, phase {}) ended with status {}", transaction.transactionId, transaction.purpose, transaction.phase,
+				execution.status());
+		LOGGER.error("Blocked operation {}, blocked path {}, message {}", execution.operation(), execution.blockedPath(), execution.message());
+		LOGGER.error("Journal-recorded result: status {}, operation {}, path {}, message {}", transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
+		LOGGER.error("The full transaction journal is at {}", storage.transactionFile().toAbsolutePath().normalize());
+	}
+
+	private UpdateLoopDetector deferredRecoveryGuard() {
+		return new UpdateLoopDetector(storage.stuckTransactionStateFile(), System::currentTimeMillis, MAX_DEFERRED_RESTARTS, null);
 	}
 
 	private void quarantineTransaction(Exception reason) throws IOException {
@@ -170,6 +211,13 @@ public class Preload {
 	private void updateAll() {
 		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
 			SelfUpdater.update();
+			return;
+		}
+
+		// A stuck update was just rolled back; this launch only boots the restored pack and the next one syncs normally again.
+		if (rolledBackStuckUpdate) {
+			LOGGER.info("Booting the restored modpack without contacting the server");
+			if (hasActiveProjection()) loadLocalModpack(null, null);
 			return;
 		}
 

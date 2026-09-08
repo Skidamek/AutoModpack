@@ -59,6 +59,7 @@ public final class ClientStorage {
 	private final Path mutationLockFile;
 	private final Path selectionFile;
 	private final Path restartLoopStateFile;
+	private final Path stuckTransactionStateFile;
 	private final Path clientConfigFile;
 	private final Path modpackContentTempFile;
 	private final Path preservationDirectory;
@@ -92,6 +93,7 @@ public final class ClientStorage {
 		this.mutationLockFile = this.gameDirectory.resolve(CLIENT_MUTATION_LOCK_FILE).normalize();
 		this.selectionFile = this.gameDirectory.resolve(CLIENT_SELECTION_FILE).normalize();
 		this.restartLoopStateFile = this.gameDirectory.resolve(CLIENT_RESTART_LOOP_STATE_FILE).normalize();
+		this.stuckTransactionStateFile = this.gameDirectory.resolve(CLIENT_STUCK_TRANSACTION_STATE_FILE).normalize();
 		this.clientConfigFile = this.gameDirectory.resolve(CLIENT_CONFIG_FILE).normalize();
 		this.modpackContentTempFile = this.gameDirectory.resolve(CLIENT_CONTENT_TEMP_FILE).normalize();
 		this.preservationDirectory = this.gameDirectory.resolve(CLIENT_PRESERVATION_DIR).normalize();
@@ -251,6 +253,10 @@ public final class ClientStorage {
 
 	public Path selectionFile() {
 		return selectionFile;
+	}
+
+	public Path stuckTransactionStateFile() {
+		return stuckTransactionStateFile;
 	}
 
 	public Path restartLoopStateFile() {
@@ -490,7 +496,7 @@ public final class ClientStorage {
 		validateWithin(gameDirectory, automodpackDirectory);
 		validateWithin(automodpackDirectory, clientDirectory, clientConfigFile, bootstrapFile, gameDirectory.resolve(RECOVERED_DIR));
 		validateWithin(clientDirectory, overlaysDirectory, baselinesDirectory, generatedCopiesDirectory, activeDirectory, incomingDirectory, backupDirectory, preservationDirectory,
-				historyDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, modpackContentTempFile,
+				historyDirectory, stateFile, transactionFile, repairJournalFile, mutationLockFile, selectionFile, restartLoopStateFile, stuckTransactionStateFile, modpackContentTempFile,
 				journalTempFile);
 		validateWithin(dataDirectory, objectsDirectory, fileCacheDirectory, modCacheDirectory, platformCacheDirectory, packsDirectory, stagingDirectory(), knownHostsFile, knownHostsLockFile);
 	}

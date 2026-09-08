@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,22 @@ class UpdateLoopDetectorTest {
 		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("same-state"));
 		detector.clear();
 		assertEquals(UpdateLoopDetector.Decision.RESTART, detector(stateFile, now).evaluateAndRecord("same-state"));
+	}
+
+	@Test
+	void customPolicyWithoutWindowDoesNotExpire() {
+		Path stateFile = tempDir.resolve("stuck-transaction-state.json");
+		AtomicLong now = new AtomicLong(1_000);
+
+		UpdateLoopDetector detector = new UpdateLoopDetector(stateFile, now::get, 3, null);
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("stuck-transaction"));
+		now.addAndGet(Duration.ofDays(30).toMillis());
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("stuck-transaction"));
+		now.addAndGet(Duration.ofDays(30).toMillis());
+		assertEquals(UpdateLoopDetector.Decision.RESTART, detector.evaluateAndRecord("stuck-transaction"));
+		now.addAndGet(Duration.ofDays(30).toMillis());
+		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, detector.evaluateAndRecord("stuck-transaction"));
+		assertEquals(UpdateLoopDetector.Decision.SUPPRESS, new UpdateLoopDetector(stateFile, now::get, 3, null).evaluateAndRecord("stuck-transaction"));
 	}
 
 	private UpdateLoopDetector detector(Path stateFile, AtomicLong now) {

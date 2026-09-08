@@ -18,15 +18,17 @@ public class ReLauncher {
 	private final Changelogs changelogs;
 
 	public ReLauncher(UpdateType updateType) {
-		this.updateType = updateType;
-		this.changelogs = null;
-		this.updateMessage = "Successfully updated AutoModpack!";
+		this(updateType, null, "Successfully updated AutoModpack!");
 	}
 
 	public ReLauncher(UpdateType updateType, Changelogs changelogs) {
+		this(updateType, changelogs, "Successfully updated the modpack!");
+	}
+
+	public ReLauncher(UpdateType updateType, Changelogs changelogs, String updateMessage) {
 		this.updateType = updateType;
 		this.changelogs = changelogs;
-		this.updateMessage = "Successfully updated the modpack!";
+		this.updateMessage = updateMessage;
 	}
 
 	public final void restart(boolean shutdownInPreload, Runnable... callbacks) {
