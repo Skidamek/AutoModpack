@@ -102,7 +102,7 @@
   "automodpack.browser.kind.removed": "Removed",
   "automodpack.browser.kind.preserved": "Preserved files",
   "automodpack.browser.kind.preserved_changed": "Kept local change",
-  "automodpack.browser.kind.preserved_unavailable": "Kept unavailable file",
+  "automodpack.browser.kind.preserved_unavailable": "Kept pack file, original unavailable",
   "automodpack.browser.kind.preserved_outside": "Kept outside pack",
   "automodpack.browser.kind.unsafe": "Needs attention",
   "automodpack.browser.kind.metadata_only": "Metadata changed",
