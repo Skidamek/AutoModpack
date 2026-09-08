@@ -11,13 +11,11 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.haproxy.HAProxyMessage;
-import io.netty.handler.ssl.SslContext;
 import io.netty.util.ReferenceCountUtil;
 
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.ProtocolPipeline;
-import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 import pl.skidam.automodpack_core.protocol.netty.detectors.AMMHDetector;
 import pl.skidam.automodpack_core.protocol.netty.detectors.HAProxyDetector;
 import pl.skidam.automodpack_core.protocol.netty.detectors.MatchResult;
@@ -25,7 +23,6 @@ import pl.skidam.automodpack_core.protocol.netty.detectors.MatchResult;
 public class ProtocolServerHandler extends ByteToMessageDecoder {
 
 	private final NettyServer server;
-	private final SslContext sslCtx;
 	private final ModpackConnectionMode connectionMode;
 	private final boolean sharedMinecraftSocket;
 	private boolean proxyCheckFinished;
@@ -38,7 +35,6 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 		}
 
 		this.server = server;
-		this.sslCtx = server.getSslCtx();
 		this.connectionMode = connectionMode;
 		this.sharedMinecraftSocket = sharedMinecraftSocket;
 		this.proxyCheckFinished = sharedMinecraftSocket;
@@ -135,21 +131,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 			if (handler != this) ctx.pipeline().remove(handler);
 		});
 
-		setupPipeline(ctx);
+		ProtocolPipeline.installServer(ctx.channel(), server, remoteAddress);
 		if (ctx.pipeline().context(this) != null) ctx.pipeline().remove(this);
-	}
-
-	private void setupPipeline(ChannelHandlerContext ctx) {
-		ctx.pipeline().addLast("error-printer-first", new ErrorPrinter());
-		ctx.pipeline().addLast("traffic-shaper", TrafficShaper.handler());
-
-		if (sslCtx != null) {
-			ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
-			LOGGER.debug("Pipeline: TLS Enabled");
-		} else {
-			LOGGER.debug("Pipeline: TLS termination handled externally");
-		}
-
-		ProtocolPipeline.install(ctx.channel(), server, remoteAddress);
 	}
 }
