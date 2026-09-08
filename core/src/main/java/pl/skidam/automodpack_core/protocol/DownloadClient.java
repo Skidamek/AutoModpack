@@ -319,22 +319,25 @@ public class DownloadClient implements AutoCloseable {
 
 	private Connection openConfiguredConnection(TlsCandidate candidate) throws IOException {
 		try {
-			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
-			return new Connection(candidate.socket(), secretBytes);
+			return configuredConnection(candidate.socket());
 		} catch (IOException first) {
 			closeQuietly(candidate.socket());
-			if (!sessionTrust.hasAccepted()) throw first;
-			LOGGER.warn("Modpack connection closed while waiting for certificate trust; reconnecting", first);
+			// A transient transport close here must not fail the whole fetch; one fresh connection settles it.
+			LOGGER.info("Modpack connection closed while negotiating with the server; retrying once");
 			TlsCandidate retry = openTlsCandidate();
 			try {
-				retry.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
-				return new Connection(retry.socket(), secretBytes);
+				return configuredConnection(retry.socket());
 			} catch (IOException second) {
 				closeQuietly(retry.socket());
 				second.addSuppressed(first);
 				throw second;
 			}
 		}
+	}
+
+	private Connection configuredConnection(SSLSocket socket) throws IOException {
+		socket.setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
+		return new Connection(socket, secretBytes);
 	}
 
 	private static <T> CompletableFuture<T> rejectCandidate(TlsCandidate candidate, Throwable error) {
