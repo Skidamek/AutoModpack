@@ -81,7 +81,7 @@ public final class ClientPendingUpdateRecovery {
 		PackDocument pendingDocument = generations.document(pending);
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		boolean configStillDescribesThePendingInput = active == null
-				? currentConfig.selectedModpackId == null || currentConfig.selectedModpackId.isBlank()
+				? !currentConfig.hasSelectedModpack()
 				: Objects.equals(currentConfig.selectedModpackId, active.modpackId);
 		PackDocument record;
 		if (configStillDescribesThePendingInput || pending.modpackId.equals(currentConfig.selectedModpackId))

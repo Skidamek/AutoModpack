@@ -61,6 +61,10 @@ final class ProjectionLoader {
 		if (!Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) return;
 		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
 		if (state == null) return;
+		if (!clientConfig.hasSelectedModpack()) {
+			LOGGER.warn("Skipping active modpack load after preload because an active projection exists but no modpack is selected");
+			return;
+		}
 		if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 			LOGGER.warn("Skipping active modpack load after preload because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
 			return;

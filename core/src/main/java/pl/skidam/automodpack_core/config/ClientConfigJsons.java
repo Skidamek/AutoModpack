@@ -38,6 +38,11 @@ public class ClientConfigJsons {
 			return copy;
 		}
 
+		/** Blank is the unset sentinel: no modpack selected yet; anything else must be a valid ID. */
+		public boolean hasSelectedModpack() {
+			return selectedModpackId != null && !selectedModpackId.isBlank();
+		}
+
 		public ClientConfigFieldsV3 withPlayMusic(boolean playMusic) {
 			ClientConfigFieldsV3 copy = new ClientConfigFieldsV3(this);
 			copy.playMusic = playMusic;
