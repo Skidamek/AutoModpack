@@ -77,7 +77,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		}
 		// The list fills the space between the header and the pinned actions; only a real overflow scrolls.
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows) - 8;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), LIST_TOP, listBottom, ROW_HEIGHT, rows,
+		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, LIST_TOP, listBottom, ROW_HEIGHT, rows,
 				index -> open(entries.get(index)), null));
 		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
 		if (preservedCount == 0) setTooltip(actionButtons.get(0), VersionedText.translatable("automodpack.vault.empty"));

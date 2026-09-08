@@ -362,8 +362,7 @@ public class VersionedScreen extends Screen {
 					.withStyle(index == selected ? ChatFormatting.YELLOW : ChatFormatting.WHITE))));
 		int visibleRows = Math.max(1, Math.min(options.size(), (bottomLimit - top) / MENU_ROW_HEIGHT));
 		// Four pixels of slack absorb vanilla's phantom-scroll constant, so a fitting menu never shows a scrollbar.
-		RowListWidget menu = new RowListWidget(this.minecraft, width, this.height, width, top, top + visibleRows * MENU_ROW_HEIGHT + 4, MENU_ROW_HEIGHT, rows, onPick, null);
-		menu.placeAt(left);
+		RowListWidget menu = new RowListWidget(this.minecraft, width, this.height, width, left, top, top + visibleRows * MENU_ROW_HEIGHT + 4, MENU_ROW_HEIGHT, rows, onPick, null);
 		this.addRenderableWidget(menu);
 		return menu;
 	}

@@ -22,6 +22,23 @@ flow:
         - element: { text: "Visuals (", checked: false }
         - element: { text: "Category: Visuals", checked: false }
   - do: click
+    name: open the OS dropdown
+    select: { text: "OS: " }
+  - do: wait_for
+    name: show the platform menu with every option
+    until:
+      all:
+        - element: { text: "Windows" }
+        - element: { text: "Linux (" }
+        - element: { text: "macOS" }
+        - element: { text: "Other" }
+  - do: screenshot
+    name: capture the OS dropdown
+    file: ui-navigation-os-dropdown
+  - do: click
+    name: close the OS dropdown
+    select: { text: "OS: " }
+  - do: click
     name: select only the child group
     select: { text: "Visuals (", checked: false }
   - do: wait_for
