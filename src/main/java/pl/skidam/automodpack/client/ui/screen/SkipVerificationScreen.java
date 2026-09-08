@@ -35,6 +35,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 	private int fieldY;
 	private List<MutableComponent> stackLines = List.of();
 	private int stackTop;
+	private int titleTop;
 
 	public SkipVerificationScreen(Screen verificationScreen, Runnable validatedCallback) {
 		super(VersionedText.translatable("automodpack.validation.skip.title"));
@@ -70,7 +71,8 @@ public class SkipVerificationScreen extends VersionedScreen {
 				secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(verificationScreen)),
 				primaryAction(VersionedText.translatable("automodpack.skip"), button -> confirmSkip()));
 		int stackHeight = stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + LINE_HEIGHT;
-		DialogLayout layout = layoutDialogWithActions(42, prose.size() * LINE_HEIGHT, stackHeight, footer);
+		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, prose.size() * LINE_HEIGHT, stackHeight, footer);
+		this.titleTop = layout.titleTop();
 		List<Button> buttons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
 		this.confirmButton = buttons.get(1);
 		this.confirmButton.active = false;
@@ -117,7 +119,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.skip.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.LIGHT_RED);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.skip.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.LIGHT_RED);
 		drawCenteredLines(matrices, stackLines, stackTop);
 		if (ticksRemaining > 0)
 			drawCenteredTextWithShadow(matrices, this.font,

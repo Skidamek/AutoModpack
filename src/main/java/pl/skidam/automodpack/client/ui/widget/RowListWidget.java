@@ -78,6 +78,15 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 		for (Row row : Objects.requireNonNull(rows, "rows")) this.addEntry(new RowEntry(row));
 	}
 
+	/** Offsets the list window horizontally; the vertical place comes from the constructor, and only the horizontal mover is shared by every version. */
+	public void placeAt(int left) {
+		/*? if >=1.20.3 {*/
+		this.setX(left);
+		/*?} else {*/
+		/*this.setLeftPos(left);
+		*//*?}*/
+	}
+
 	@Override
 	public void revealRow(int index) {
 		RowEntry entry = this.children().get(index);

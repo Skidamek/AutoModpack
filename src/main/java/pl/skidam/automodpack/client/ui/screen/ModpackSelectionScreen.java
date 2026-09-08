@@ -25,6 +25,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.GroupSelectionList;
+import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -47,8 +48,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public class ModpackSelectionScreen extends VersionedScreen {
 
 	private static final int ROW_WIDTH = 500;
-	/** Square on purpose: the platform override is an escape hatch for failed auto-detection, not an invitation. */
-	private static final int PLATFORM_BUTTON_SIZE = 20;
 	/** Vanilla checkbox geometry: the box plus the gap before its label. */
 	private static final int CHECKBOX_LABEL_OFFSET = 24;
 
@@ -84,6 +83,13 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private boolean closed;
 	private boolean switchInFlight;
 	private Button saveButton;
+	private Button platformButton;
+	private RowListWidget platformMenu;
+	// The dropdown geometry as plain fields, so the menu and its chevron need no widget accessor branching.
+	private int platformButtonLeft;
+	private int platformButtonTop;
+	private int platformButtonWidth;
+	private int listBottom;
 
 	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
 		this(parent, manifest, null, null, null, () -> {}, null, false, false, null);
@@ -183,12 +189,15 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.saveButton.active = canSave();
 		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.translatable("automodpack.selection.noChanges"));
 		int listTop = 80;
-		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - 8;
+		listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - 8;
 		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(ROW_WIDTH), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
-		Button platformButton = buttonWidget(panelLeft(ROW_WIDTH) + panelWidth(ROW_WIDTH) - PLATFORM_BUTTON_SIZE, 24, PLATFORM_BUTTON_SIZE, PLATFORM_BUTTON_SIZE,
-				VersionedText.literal("OS"), press -> cyclePlatform());
-		setTooltip(platformButton, VersionedText.translatable("automodpack.selection.platformTooltip"));
-		this.addRenderableWidget(platformButton);
+		String platformLabel = platformLabel();
+		this.platformButtonWidth = Math.max(90, Math.min(160, this.font.width(platformLabel) + 26));
+		this.platformButtonLeft = panelLeft(ROW_WIDTH) + panelWidth(ROW_WIDTH) - this.platformButtonWidth;
+		this.platformButtonTop = 24;
+		this.platformButton = buttonWidget(this.platformButtonLeft, this.platformButtonTop, this.platformButtonWidth, 20, VersionedText.literal(platformLabel), press -> togglePlatformMenu());
+		setTooltip(this.platformButton, VersionedText.translatable("automodpack.selection.platformTooltip"));
+		this.addRenderableWidget(this.platformButton);
 	}
 
 	private List<GroupSelectionList.Item> listItems() {
@@ -584,10 +593,48 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return ClientPlatform.effective(currentIntent());
 	}
 
-	private void cyclePlatform() {
+	private String platformLabel() {
+		return VersionedText.translatable("automodpack.selection.platformButton", platformDisplay(effectivePlatform())).getString();
+	}
+
+	private static String platformDisplay(ClientPlatform platform) {
+		return switch (platform) {
+			case WINDOWS -> "Windows";
+			case LINUX -> "Linux";
+			case MACOS -> "macOS";
+			case OTHER -> "Other";
+		};
+	}
+
+	private boolean platformMenuOpen() {
+		return platformMenu != null;
+	}
+
+	/** The OS dropdown: the same menu panel as the file browser's group filter, with the detected platform marked in the list. */
+	private void togglePlatformMenu() {
+		if (platformMenuOpen()) {
+			closePlatformMenu();
+			return;
+		}
 		ClientPlatform[] platforms = ClientPlatform.values();
-		ClientPlatform candidate = platformOverride == null ? platforms[(detectedPlatform.ordinal() + 1) % platforms.length] : platforms[(platformOverride.ordinal() + 1) % platforms.length];
-		platformOverride = candidate == detectedPlatform ? null : candidate;
+		List<Component> options = new ArrayList<>(platforms.length);
+		for (ClientPlatform platform : platforms)
+			options.add(platform == detectedPlatform
+					? VersionedText.translatable("automodpack.selection.platformDetected", platformDisplay(platform))
+					: VersionedText.literal(platformDisplay(platform)));
+		this.platformMenu = openMenuPanel(platformButtonLeft, platformButtonTop + ActionAreaLayout.BUTTON_HEIGHT + 2, platformButtonWidth, listBottom, options, effectivePlatform().ordinal(),
+				index -> pickPlatform(platforms[index]));
+	}
+
+	private void closePlatformMenu() {
+		if (platformMenu == null) return;
+		this.removeWidget(platformMenu);
+		this.platformMenu = null;
+	}
+
+	private void pickPlatform(ClientPlatform platform) {
+		platformOverride = platform == detectedPlatform ? null : platform;
+		closePlatformMenu();
 		applySelectionChange(currentIntent(), Set.of(), null);
 	}
 
@@ -628,35 +675,36 @@ public class ModpackSelectionScreen extends VersionedScreen {
 						VersionedText.translatable("automodpack.selection.updateOnLaunchDisabled").withStyle(ChatFormatting.RED), this.width / 2,
 						this.height / 2 - 45, TextColors.WHITE);
 			}
+			return;
+		}
+		drawMenuChevron(matrices, platformButtonLeft, platformButtonTop, platformButtonWidth, platformButton.getMessage());
+		MutableComponent description = managerEntry && !isActiveModpack()
+				? VersionedText.translatable("automodpack.packManager.switchDescription")
+				: VersionedText.translatable("automodpack.selection.description");
+		// The header stack shares the rail with the platform dropdown (y 24..44), so the description
+		// wraps inside the space left of it and the summary waits until that zone ends.
+		int railLeft = panelLeft(ROW_WIDTH);
+		int railWidth = panelWidth(ROW_WIDTH);
+		List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - platformButtonWidth - 8);
+		if (descriptionLines.size() > 2) descriptionLines = descriptionLines.subList(0, 2);
+		for (int index = 0; index < descriptionLines.size(); index++)
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), railLeft, 22 + index * 11, TextColors.WHITE);
+		drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", effectivePlatform().id(), resolution.selectedGroups().size())
+				.withStyle(platformOverride == null ? ChatFormatting.GRAY : ChatFormatting.YELLOW), railLeft, 44, TextColors.WHITE);
+		// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
+		if (!resolutionError.isEmpty()) {
+			drawWrappedStatus(matrices, VersionedText.literal(resolutionError).withStyle(ChatFormatting.RED));
+		} else if (pendingUpdater == null || pendingUpdater.getSourceAvailability().totalFiles() == 0) {
+			if (!rows.isEmpty()) drawWrappedStatus(matrices, VersionedText.translatable("automodpack.selection.categoryExplanation").withStyle(ChatFormatting.DARK_GRAY));
 		} else {
-			MutableComponent description = managerEntry && !isActiveModpack()
-					? VersionedText.translatable("automodpack.packManager.switchDescription")
-					: VersionedText.translatable("automodpack.selection.description");
-			// The header stack shares the rail with the platform button (y 24..44), so the description
-			// wraps inside the space left of it and the summary waits until that zone ends.
-			int railLeft = panelLeft(ROW_WIDTH);
-			int railWidth = panelWidth(ROW_WIDTH);
-			List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - PLATFORM_BUTTON_SIZE - 8);
-			if (descriptionLines.size() > 2) descriptionLines = descriptionLines.subList(0, 2);
-			for (int index = 0; index < descriptionLines.size(); index++)
-				drawTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), railLeft, 22 + index * 11, TextColors.WHITE);
-			drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", effectivePlatform().id(), resolution.selectedGroups().size())
-					.withStyle(platformOverride == null ? ChatFormatting.GRAY : ChatFormatting.YELLOW), railLeft, 44, TextColors.WHITE);
-			// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
-			if (!resolutionError.isEmpty()) {
-				drawWrappedStatus(matrices, VersionedText.literal(resolutionError).withStyle(ChatFormatting.RED));
-			} else if (pendingUpdater == null || pendingUpdater.getSourceAvailability().totalFiles() == 0) {
-				if (!rows.isEmpty()) drawWrappedStatus(matrices, VersionedText.translatable("automodpack.selection.categoryExplanation").withStyle(ChatFormatting.DARK_GRAY));
-			} else {
-				ModpackUpdater.SourceAvailability availability = pendingUpdater.getSourceAvailability();
-				String sourceStatus = VersionedText.translatable(availability.cancelled()
-						? "automodpack.selection.sourcesCancelled"
-						: !availability.complete()
-								? "automodpack.selection.sourcesResolving"
-								: "automodpack.selection.sourcesResolved",
-						availability.resolvedFiles(), availability.totalFiles()).getString();
-				drawWrappedStatus(matrices, VersionedText.literal(sourceStatus).withStyle(ChatFormatting.GRAY));
-			}
+			ModpackUpdater.SourceAvailability availability = pendingUpdater.getSourceAvailability();
+			String sourceStatus = VersionedText.translatable(availability.cancelled()
+					? "automodpack.selection.sourcesCancelled"
+					: !availability.complete()
+							? "automodpack.selection.sourcesResolving"
+							: "automodpack.selection.sourcesResolved",
+					availability.resolvedFiles(), availability.totalFiles()).getString();
+			drawWrappedStatus(matrices, VersionedText.literal(sourceStatus).withStyle(ChatFormatting.GRAY));
 		}
 	}
 
@@ -672,6 +720,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
+		if (platformMenuOpen()) {
+			closePlatformMenu();
+			return false;
+		}
 		return handleBackOnEscape(this::back);
 	}
 

@@ -24,6 +24,7 @@ public class RestartScreen extends VersionedScreen {
 
 	private final UpdateType updateType;
 	private final Changelogs changelogs;
+	private int titleTop;
 
 	public RestartScreen(UpdateType updateType, Changelogs changelogs) {
 		super(VersionedText.translatable("automodpack.restart.title"));
@@ -45,7 +46,8 @@ public class RestartScreen extends VersionedScreen {
 				primaryAction(VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		List<MutableComponent> lines = buildBodyLines();
-		DialogLayout layout = layoutDialogWithActions(42, lines.size() * LINE_HEIGHT, 0, rowArray);
+		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, rowArray);
+		this.titleTop = layout.titleTop();
 		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rowArray);
 		this.addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
@@ -87,7 +89,7 @@ public class RestartScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font,
-				VersionedText.translatable("automodpack.restart." + updateType.toString()).withStyle(ChatFormatting.BOLD), this.width / 2, 14,
+				VersionedText.translatable("automodpack.restart." + updateType.toString()).withStyle(ChatFormatting.BOLD), this.width / 2, titleTop,
 				TextColors.WHITE);
 	}
 
