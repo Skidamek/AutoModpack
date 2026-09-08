@@ -202,6 +202,12 @@ public class Jsons {
 		public Set<String> allowEditsInFiles = Set.of();
 		public Set<String> overwriteEditableFiles = Set.of();
 		public Set<String> forceCopyFilesToStandardLocation = Set.of();
+
+		// Filenames of this group's own resourcepack files (must be a subset of syncedFiles' matches)
+		// that the client should automatically enable in-game when this group is active. Left null
+		// (rather than defaulting to an empty set) so ConfigUtils.normalizeServerConfig can tell "key
+		// missing from an old config file" apart from "key present and empty", and add it to disk.
+		public Set<String> autoApplyResourcePacks = null;
 	}
 
 	public static class ServerCoreConfigFields {
@@ -270,6 +276,11 @@ public class Jsons {
 			public Set<String> breaksWith = Set.of();
 			public Set<String> requires = Set.of();
 
+			// Filenames (see ModpackContentItem.file) of this group's own resourcepack files that the
+			// client should automatically enable in-game when this group is active. Mirrors
+			// GroupDeclaration.autoApplyResourcePacks.
+			public Set<String> autoApplyResourcePacks = Set.of();
+
 			// Populated by the scanner: relative paths of the ModpackContentItems in this group.
 			public Set<String> files = new HashSet<>();
 
@@ -283,6 +294,7 @@ public class Jsons {
 				this.recommended = declaration.recommended;
 				this.breaksWith = declaration.breaksWith;
 				this.requires = declaration.requires;
+				this.autoApplyResourcePacks = declaration.autoApplyResourcePacks == null ? Set.of() : declaration.autoApplyResourcePacks;
 			}
 		}
 
@@ -383,6 +395,25 @@ public class Jsons {
 
 			public ModpackSelection(Set<String> selectedGroups) {
 				this.selectedGroups = selectedGroups;
+			}
+		}
+	}
+
+	// Per-modpack record of resource pack filenames (see GroupDeclaration.autoApplyResourcePacks)
+	// the player manually disabled after AutoModpack auto-enabled them, so later joins don't
+	// re-enable something the player deliberately turned off. Keyed by modpack id, same as
+	// ClientSelectionManagerFields.
+	public static class ClientResourcePackStateFields {
+		public int DO_NOT_CHANGE_IT = 1; // file version
+		public Map<String, ModpackResourcePackState> modpacks = new HashMap<>();
+
+		public static class ModpackResourcePackState {
+			public Set<String> userDisabled = new HashSet<>();
+
+			public ModpackResourcePackState() {}
+
+			public ModpackResourcePackState(Set<String> userDisabled) {
+				this.userDisabled = userDisabled;
 			}
 		}
 	}

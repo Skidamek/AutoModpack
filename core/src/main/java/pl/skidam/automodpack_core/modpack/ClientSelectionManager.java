@@ -239,4 +239,37 @@ public class ClientSelectionManager {
 
 		return allowed;
 	}
+
+	/**
+	 * Filenames declared for resource pack auto-apply (GroupDeclaration.autoApplyResourcePacks) by
+	 * whichever of {@code content}'s groups actually have a matching resourcepack item present.
+	 * {@code content} is expected to already be selection-filtered (see filterToSelection), so a
+	 * file only shows up here if its group was selected - this is a pure lookup, not a
+	 * re-resolution of group selection.
+	 */
+	public static Set<String> autoApplyResourcePackFiles(Jsons.ModpackContentFields content) {
+		if (content == null || content.groups == null || content.groups.isEmpty() || content.list == null) return Set.of();
+
+		Set<String> presentResourcePackFiles = new HashSet<>();
+		content.list.forEach(item -> {
+			if ("resourcepack".equals(item.type)) presentResourcePackFiles.add(item.file);
+		});
+		if (presentResourcePackFiles.isEmpty()) return Set.of();
+
+		Set<String> fileNames = new LinkedHashSet<>();
+		content.groups.values().forEach(group -> {
+			if (group == null || group.autoApplyResourcePacks == null || group.autoApplyResourcePacks.isEmpty() || group.files == null) return;
+			for (String file : group.files) {
+				if (!presentResourcePackFiles.contains(file)) continue;
+				String fileName = fileName(file);
+				if (group.autoApplyResourcePacks.contains(fileName)) fileNames.add(fileName);
+			}
+		});
+		return fileNames;
+	}
+
+	private static String fileName(String file) {
+		int lastSlash = file.lastIndexOf('/');
+		return lastSlash < 0 ? file : file.substring(lastSlash + 1);
+	}
 }
