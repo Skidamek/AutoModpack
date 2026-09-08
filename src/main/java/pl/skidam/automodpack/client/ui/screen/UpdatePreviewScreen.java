@@ -40,6 +40,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final Runnable cancelAction;
 	private final ChangeSet changes;
 	private boolean finished;
+	private int titleTop;
 
 	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction,
 			Runnable cancelAction) {
@@ -60,7 +61,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		List<ActionRow> rows = buildRows();
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		List<MutableComponent> body = buildBodyLines();
-		DialogLayout layout = layoutDialogWithActions(42, body.size() * LINE_HEIGHT, 0, rowArray);
+		DialogLayout layout = layoutDialogWithActions(28, 2 * LINE_HEIGHT, body.size() * LINE_HEIGHT, 0, rowArray);
+		this.titleTop = layout.titleTop();
 		List<Button> buttons = this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rowArray);
 		setTooltip(buttons.get(buttons.size() - 2), ChangeSummary.diffLegend());
 		this.addCenteredScrollBody(PANEL_WIDTH, layout.column().bodyTop(), layout.column().bodyBottom(), body);
@@ -154,9 +156,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String title = VersionedText.translatable(modpackName.isBlank() ? titleKey(mode) : namedTitleKey(mode), modpackName).getString();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, 14,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, titleTop,
 				TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(reviewKey(mode)).withStyle(ChatFormatting.GRAY), this.width / 2, 29, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(reviewKey(mode)).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
 	}
 
 	private static String titleKey(UpdatePreview.Mode mode) {

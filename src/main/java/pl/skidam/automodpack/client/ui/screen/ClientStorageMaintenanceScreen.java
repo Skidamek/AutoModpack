@@ -39,6 +39,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 	private Future<?> work;
 	private int preservedCount;
 	private int statusY;
+	private int titleTop;
 
 	public ClientStorageMaintenanceScreen(Screen parent, InstalledModpackController controller) {
 		super(VersionedText.translatable("automodpack.storage.title"));
@@ -74,7 +75,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.verificationReceipt", verificationReport.validReferencedObjectCount(), verificationReport.referencedObjectCount(),
 					UiFormat.formatSize(verificationReport.validReferencedObjectBytes())).getString(), wrapWidth));
 		}
-		DialogLayout layout = layoutDialogWithActions(32, lines.size() * LINE_HEIGHT, LINE_HEIGHT, maintenanceRow, footerRow);
+		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, LINE_HEIGHT, maintenanceRow, footerRow);
+		this.titleTop = layout.titleTop();
 		List<Button> buttons = addActionAreaAt(PANEL_WIDTH, layout.actionsTop(), maintenanceRow, footerRow);
 		buttons.get(0).active = !busy && !closed;
 		buttons.get(1).active = !busy && !closed;
@@ -170,7 +172,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.storage.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
 		if (busy) {
 			String message = operation == Operation.VERIFY ? "automodpack.storage.verifying" : "automodpack.storage.running";
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(message).withStyle(ChatFormatting.YELLOW), this.width / 2, statusY, TextColors.WHITE);

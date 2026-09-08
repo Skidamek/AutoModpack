@@ -23,6 +23,7 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 	private final Runnable continueJoin;
 	private final Runnable syncNow;
 	private boolean finished;
+	private int titleTop;
 
 	public DetachedJoinPromptScreen(Screen parent, String modpackName, boolean headMatchesActive, Runnable continueJoin, Runnable syncNow) {
 		super(VersionedText.translatable("automodpack.detached.title"));
@@ -47,7 +48,9 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.detached.syncAnytime").getString(), wrapWidth));
 		ActionRow auxiliary = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.detached.syncNow"), button -> syncToServer()));
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.detached.continueJoin"), button -> continuePlaying()));
-		DialogLayout layout = layoutDialogWithActions(46, lines.size() * LINE_HEIGHT, 0, auxiliary, footer);
+		int headerLines = modpackName.isBlank() ? 1 : 2;
+		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, auxiliary, footer);
+		this.titleTop = layout.titleTop();
 		addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), auxiliary, footer);
 		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
@@ -67,8 +70,8 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.detached.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
-		if (!modpackName.isBlank()) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(modpackName).withStyle(ChatFormatting.GRAY), this.width / 2, 30, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.detached.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
+		if (!modpackName.isBlank()) drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(modpackName).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
 	}
 
 	@Override

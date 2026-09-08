@@ -26,7 +26,7 @@ public class ErrorScreen extends VersionedScreen {
 	private final Screen parent;
 	private final FailureRequest request;
 	private boolean copied;
-	private int categoryY;
+	private int titleTop;
 
 	public ErrorScreen(Screen parent, FailureRequest request) {
 		super(VersionedText.translatable("automodpack.error.title"));
@@ -60,15 +60,16 @@ public class ErrorScreen extends VersionedScreen {
 					actionRow(ActionAreaLayout.RowKind.FOOTER,
 							secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		}
-		// Pinned header: title line at 36, the "copied" confirmation at 62 while it shows, the category right under it.
-		categoryY = 62 + (copied ? 16 : 0);
+		// The header is part of the centered block: title, the "copied" confirmation while it shows, then the category.
+		int headerLines = 2 + (copied ? 1 : 0);
 		int wrapWidth = Math.max(1, this.width - 30);
 		List<MutableComponent> lines = new ArrayList<>();
 		String summary = VersionedText.translatable(request.messageKey(), request.translationArguments()).getString();
 		lines.addAll(wrapParagraph(this.font, summary, wrapWidth, ChatFormatting.GRAY));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.error.details").getString(), wrapWidth, ChatFormatting.GRAY));
-		DialogLayout layout = layoutDialogWithActions(categoryY + 16, lines.size() * LINE_HEIGHT, 0, rows.toArray(ActionRow[]::new));
+		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, rows.toArray(ActionRow[]::new));
+		this.titleTop = layout.titleTop();
 		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rows.toArray(ActionRow[]::new));
 		this.addScrollBody(wrapWidth, layout.column().bodyTop(), layout.column().bodyBottom(), lines, true);
 	}
@@ -100,10 +101,10 @@ public class ErrorScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font,
 				VersionedText.translatable("automodpack.error.titleLine", VersionedText.translatable("automodpack.error").getString()).withStyle(ChatFormatting.RED),
-				this.width / 2, 36, TextColors.WHITE);
-		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, 62, TextColors.WHITE);
+				this.width / 2, titleTop, TextColors.WHITE);
+		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.category", VersionedText.translatable(request.category().translationKey())).withStyle(ChatFormatting.GRAY),
-				this.width / 2, categoryY, TextColors.WHITE);
+				this.width / 2, titleTop + (copied ? 2 : 1) * LINE_HEIGHT, TextColors.WHITE);
 	}
 
 	@Override

@@ -26,6 +26,7 @@ public final class PinMismatchScreen extends VersionedScreen {
 	private final String expectedFingerprint;
 	private final String presentedFingerprint;
 	private boolean copied;
+	private int titleTop;
 
 	public PinMismatchScreen(Screen parent, String origin, String expectedFingerprint, String presentedFingerprint) {
 		super(VersionedText.translatable("automodpack.pinMismatch.title"));
@@ -52,8 +53,10 @@ public final class PinMismatchScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.pinMismatch.dont").getString(), wrapWidth, ChatFormatting.RED));
 		ActionRow copyRow = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.error.copyDetails"), button -> copyDetails()));
 		ActionRow footerRow = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
-		// The body starts below the pinned header; the "copied" confirmation shifts it down one line while it shows.
-		DialogLayout layout = layoutDialogWithActions(42 + (copied ? LINE_HEIGHT : 0), lines.size() * LINE_HEIGHT, 0, copyRow, footerRow);
+		// The header is part of the centered block: title and origin, plus the "copied" confirmation line while it shows.
+		int headerLines = 2 + (copied ? 1 : 0);
+		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, copyRow, footerRow);
+		this.titleTop = layout.titleTop();
 		addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), copyRow, footerRow);
 		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
@@ -72,9 +75,9 @@ public final class PinMismatchScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.pinMismatch.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.LIGHT_RED);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(origin).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD), this.width / 2, 28, TextColors.WHITE);
-		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, 40, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.pinMismatch.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.LIGHT_RED);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(origin).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
+		if (copied) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.error.copied").withStyle(ChatFormatting.GREEN), this.width / 2, titleTop + 2 * LINE_HEIGHT, TextColors.WHITE);
 	}
 
 	@Override

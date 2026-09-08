@@ -20,6 +20,7 @@ public final class OriginChangeConfirmScreen extends VersionedScreen {
 	private final String newOrigin;
 	private final Runnable allowed;
 	private final Runnable refused;
+	private int titleTop;
 
 	public OriginChangeConfirmScreen(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
 		super(VersionedText.translatable("automodpack.originChange.title"));
@@ -45,14 +46,15 @@ public final class OriginChangeConfirmScreen extends VersionedScreen {
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.originChange.refuse"), button -> refused.run()),
 				primaryAction(VersionedText.translatable("automodpack.originChange.allow"), button -> allowed.run()));
-		DialogLayout layout = layoutDialogWithActions(42, lines.size() * LINE_HEIGHT, 0, footer);
+		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, footer);
+		this.titleTop = layout.titleTop();
 		addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
 		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.originChange.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.originChange.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
 	}
 
 	@Override

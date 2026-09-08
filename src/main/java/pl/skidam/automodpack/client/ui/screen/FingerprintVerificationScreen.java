@@ -40,6 +40,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 	private List<MutableComponent> stackLines = List.of();
 	private List<MutableComponent> hintLines = List.of();
 	private int stackTop;
+	private int titleTop;
 
 	public FingerprintVerificationScreen(Screen parent, String serverFingerprint, String origin, Runnable validatedCallback, Runnable canceledCallback) {
 		super(VersionedText.translatable("automodpack.validation.title"));
@@ -85,7 +86,8 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 				optionalAction(VersionedText.translatable("automodpack.skip"), button -> ScreenImpl.setScreen(new SkipVerificationScreen(this, this.validatedCallback))),
 				primaryAction(VersionedText.translatable("automodpack.validation.verify"), button -> verifyFingerprint()));
 		int stackHeight = stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + hintLines.size() * LINE_HEIGHT;
-		DialogLayout layout = layoutDialogWithActions(42, prose.size() * LINE_HEIGHT, stackHeight, footer);
+		DialogLayout layout = layoutDialogWithActions(28, 2 * LINE_HEIGHT, prose.size() * LINE_HEIGHT, stackHeight, footer);
+		this.titleTop = layout.titleTop();
 		List<Button> buttons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
 		this.verifyButton = buttons.get(2);
 		DialogColumn column = layout.column();
@@ -128,8 +130,8 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.title").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(originDisplay).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD), this.width / 2, 28, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(originDisplay).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
 		drawCenteredLines(matrices, stackLines, stackTop);
 		drawCenteredLines(matrices, hintLines, fieldY + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM);
 	}

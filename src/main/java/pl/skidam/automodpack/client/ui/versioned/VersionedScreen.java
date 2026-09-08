@@ -26,6 +26,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 
+import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
 
 /*? if >= 1.21.9 {*/
@@ -214,19 +215,25 @@ public class VersionedScreen extends Screen {
 		return new BlockLayout(topReserve, actionsTop, true);
 	}
 
-	/** One laid-out dialog: the body window from {@link #layoutDialogColumn} plus where its action rows go. */
-	protected record DialogLayout(DialogColumn column, int actionsTop) {}
+	/** One laid-out dialog: where the title line(s) sit, the body window, and where the action rows go. */
+	protected record DialogLayout(DialogColumn column, int actionsTop, int titleTop) {}
 
-	/** The dialog version of {@link #layoutBlockWithActions}: body plus optional pinned stack plus action rows as one centered block when it fits. */
-	protected final DialogLayout layoutDialogWithActions(int topReserve, int bodyHeight, int stackHeight, ActionRow... rows) {
-		BlockLayout block = layoutBlockWithActions(topReserve, bodyHeight + (stackHeight > 0 ? ActionAreaLayout.SEAM + stackHeight : 0), 4, rows);
+	/**
+	 * The dialog version of {@link #layoutBlockWithActions}: title, body and optional pinned stack plus action rows as
+	 * one centered block, the way vanilla centers a confirm dialog around its message. The title travels with the
+	 * block; only a body that cannot fit scrolls, while the title pins above it.
+	 */
+	protected final DialogLayout layoutDialogWithActions(int topReserve, int titleHeight, int bodyHeight, int stackHeight, ActionRow... rows) {
+		int header = titleHeight + (titleHeight > 0 ? LINE_HEIGHT : 0);
+		BlockLayout block = layoutBlockWithActions(topReserve, header + bodyHeight + (stackHeight > 0 ? ActionAreaLayout.SEAM + stackHeight : 0), 4, rows);
 		if (!block.scrolls()) {
+			int bodyTop = block.contentTop() + header;
 			// stackTop is where the stack starts, mirroring layoutDialogColumn: right under the body, with the rows after the budgeted stack.
-			DialogColumn column = new DialogColumn(block.contentTop(), block.contentTop() + bodyHeight + TextScrollWidget.CONTENT_PADDING, false, block.contentTop() + bodyHeight + ActionAreaLayout.SEAM);
-			return new DialogLayout(column, block.actionsTop());
+			DialogColumn column = new DialogColumn(bodyTop, bodyTop + bodyHeight + TextScrollWidget.CONTENT_PADDING, false, bodyTop + bodyHeight + ActionAreaLayout.SEAM);
+			return new DialogLayout(column, block.actionsTop(), block.contentTop());
 		}
-		return new DialogLayout(layoutDialogColumn(topReserve, actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows), bodyHeight, stackHeight),
-				actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows));
+		int actionsTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows);
+		return new DialogLayout(layoutDialogColumn(topReserve + header, actionsTop, bodyHeight, stackHeight), actionsTop, topReserve);
 	}
 
 	private List<Button> addActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
@@ -338,6 +345,41 @@ public class VersionedScreen extends Screen {
 
 	protected static MutableComponent blankLine() {
 		return VersionedText.literal("");
+	}
+
+	/** Row height of the menu panels that open under dropdown buttons. */
+	public static final int MENU_ROW_HEIGHT = 14;
+
+	/**
+	 * One menu panel under a dropdown button: one row per option, the selected one yellow like every selected row here,
+	 * scrolling when the options overflow the given bottom limit. The panel spans exactly the button's width, like a
+	 * vanilla menu. The caller owns the widget and closes it.
+	 */
+	protected RowListWidget openMenuPanel(int left, int top, int width, int bottomLimit, List<Component> options, int selected, java.util.function.IntConsumer onPick) {
+		List<RowListWidget.Row> rows = new ArrayList<>(options.size());
+		for (int index = 0; index < options.size(); index++)
+			rows.add(new RowListWidget.Row(List.of(VersionedText.literal(truncateToWidth(this.font, options.get(index).getString(), Math.max(1, width - 12)))
+					.withStyle(index == selected ? ChatFormatting.YELLOW : ChatFormatting.WHITE))));
+		int visibleRows = Math.max(1, Math.min(options.size(), (bottomLimit - top) / MENU_ROW_HEIGHT));
+		// Four pixels of slack absorb vanilla's phantom-scroll constant, so a fitting menu never shows a scrollbar.
+		RowListWidget menu = new RowListWidget(this.minecraft, width, this.height, width, top, top + visibleRows * MENU_ROW_HEIGHT + 4, MENU_ROW_HEIGHT, rows, onPick, null);
+		menu.placeAt(left);
+		this.addRenderableWidget(menu);
+		return menu;
+	}
+
+	/**
+	 * The dropdown affordance: a small filled chevron right after a dropdown button's label. The vanilla font carries no
+	 * triangle glyph on every version, so the three pixel rows are drawn by hand and travel with the centered label.
+	 */
+	protected void drawMenuChevron(VersionedMatrices matrices, int left, int top, int width, Component label) {
+		int labelWidth = this.font.width(label);
+		int chevron = left + Math.max(0, (width - labelWidth) / 2 + labelWidth + 3);
+		int first = top + 7;
+		int color = 0xFFB0B0B0;
+		matrices.fill(chevron, first, chevron + 5, first + 1, color);
+		matrices.fill(chevron + 1, first + 1, chevron + 4, first + 2, color);
+		matrices.fill(chevron + 2, first + 2, chevron + 3, first + 3, color);
 	}
 
 	/** The vanilla font line height; every dialog line advance goes through this constant, never a raw 9. */

@@ -22,6 +22,7 @@ public final class GroupConflictScreen extends VersionedScreen {
 	private final String preferredName;
 	private final String conflictingNames;
 	private final Runnable replace;
+	private int titleTop;
 
 	public GroupConflictScreen(Screen parent, String preferredName, String conflictingNames, Runnable replace) {
 		super(VersionedText.translatable("automodpack.selection.conflictTitle"));
@@ -40,7 +41,8 @@ public final class GroupConflictScreen extends VersionedScreen {
 		int wrapWidth = Math.max(1, panelWidth(PANEL_WIDTH) - 8);
 		String description = VersionedText.translatable("automodpack.selection.conflictDescription", preferredName, conflictingNames, preferredName, preferredName).getString();
 		List<MutableComponent> lines = wrapParagraph(this.font, description, wrapWidth, ChatFormatting.GRAY);
-		DialogLayout layout = layoutDialogWithActions(42, lines.size() * LINE_HEIGHT, 0, footer);
+		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, footer);
+		this.titleTop = layout.titleTop();
 		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
 		this.addCenteredScrollBody(PANEL_WIDTH, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
@@ -52,7 +54,7 @@ public final class GroupConflictScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.conflictTitle").withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.conflictTitle").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.WHITE);
 	}
 
 	@Override
