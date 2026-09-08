@@ -92,11 +92,13 @@ public class VersionedScreen extends Screen {
 
 		// Render the rest of our screen
 		versionedRender(matrices, mouseX, mouseY, delta);
-		renderLegacyTooltips(matrices, mouseX, mouseY);
 
 		/*? if <1.20.6 {*/
 		/*super.render(matrices.getContext(), mouseX, mouseY, delta);
-		*//*?}*/
+		renderLegacyTooltips(matrices, mouseX, mouseY);
+		*//*?} else {*/
+		renderLegacyTooltips(matrices, mouseX, mouseY);
+		/*?}*/
 	}
 
 	// This method is to be override by the child classes
@@ -296,7 +298,11 @@ public class VersionedScreen extends Screen {
 		/*?} elif >=1.20 {*/
 		/*if (Minecraft.getInstance().screen instanceof VersionedScreen versioned) versioned.setTooltipForNextRenderPass(tooltip);
 		*//*?} else {*/
-		/*if (Minecraft.getInstance().screen instanceof VersionedScreen versioned) versioned.renderTooltip(matrices.getContext(), tooltip, mouseX, mouseY);
+		/*// The batch flushes around the tooltip: pending text bakes before the background paints, and
+		// the tooltip bakes before whatever text is drawn later - both survive the depth interaction.
+		Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
+		if (Minecraft.getInstance().screen instanceof VersionedScreen versioned) versioned.renderTooltip(matrices.getContext(), tooltip, mouseX, mouseY);
+		Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
 		*//*?}*/
 	}
 
