@@ -474,16 +474,11 @@ class Connection implements AutoCloseable {
 		this.in = new DataInputStream(new BufferedInputStream(this.socket.getInputStream()));
 		this.out = new DataOutputStream(new BufferedOutputStream(this.socket.getOutputStream()));
 
-		try {
-			if (!CompressionFactory.isAvailable(compressionType)) compressionType = CompressionType.GZIP;
-			compressionType = sendCompressionConfig(compressionType);
-			compressionCodec = CompressionFactory.createCodec(compressionType);
-			chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
-			sendEchoConfig();
-		} catch (IOException e) {
-			LOGGER.error("Failed to configure connection", e);
-			throw e;
-		}
+		if (!CompressionFactory.isAvailable(compressionType)) compressionType = CompressionType.GZIP;
+		compressionType = sendCompressionConfig(compressionType);
+		compressionCodec = CompressionFactory.createCodec(compressionType);
+		chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
+		sendEchoConfig();
 	}
 
 	public boolean isActive() {
