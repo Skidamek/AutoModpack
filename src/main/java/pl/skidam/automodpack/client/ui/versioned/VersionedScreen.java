@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
 import java.util.ArrayList;
+import java.util.function.IntConsumer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -355,7 +356,7 @@ public class VersionedScreen extends Screen {
 	 * scrolling when the options overflow the given bottom limit. The panel spans exactly the button's width, like a
 	 * vanilla menu. The caller owns the widget and closes it.
 	 */
-	protected RowListWidget openMenuPanel(int left, int top, int width, int bottomLimit, List<Component> options, int selected, java.util.function.IntConsumer onPick) {
+	protected RowListWidget openMenuPanel(int left, int top, int width, int bottomLimit, List<Component> options, int selected, IntConsumer onPick) {
 		List<RowListWidget.Row> rows = new ArrayList<>(options.size());
 		for (int index = 0; index < options.size(); index++)
 			rows.add(new RowListWidget.Row(List.of(VersionedText.literal(truncateToWidth(this.font, options.get(index).getString(), Math.max(1, width - 12)))
