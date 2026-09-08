@@ -219,6 +219,8 @@
   "automodpack.firstConnect.unavailableOldChoices": "Ранее выбранные группы, которых больше нет: %s",
   "automodpack.selection.platformSummary": "Платформа: %s  Выбрано групп: %s",
   "automodpack.selection.platformTooltip": "Переключает платформу, используемую для подбора необязательных групп. Возврат к определённой платформе снова включает автоопределение.",
+  "automodpack.selection.platformButton": "ОС: %s",
+  "automodpack.selection.platformDetected": "%s (определено)",
   "automodpack.selection.category": "Категория: %s",
   "automodpack.selection.requiredAlways": "Обязательная: всегда включена",
   "automodpack.selection.defaultSelected": "По умолчанию: выбрана, пока вы её не уберёте",

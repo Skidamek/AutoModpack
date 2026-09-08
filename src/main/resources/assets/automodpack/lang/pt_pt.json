@@ -219,6 +219,8 @@
   "automodpack.firstConnect.unavailableOldChoices": "Grupos escolhidos antes que já não estão disponíveis: %s",
   "automodpack.selection.platformSummary": "Plataforma: %s  Grupos selecionados: %s",
   "automodpack.selection.platformTooltip": "Percorre a plataforma usada para resolver os grupos opcionais. Voltar à plataforma detetada volta à deteção automática.",
+  "automodpack.selection.platformButton": "SO: %s",
+  "automodpack.selection.platformDetected": "%s (detetado)",
   "automodpack.selection.category": "Categoria: %s",
   "automodpack.selection.requiredAlways": "Obrigatório: sempre incluído",
   "automodpack.selection.defaultSelected": "Predefinição: selecionado, a menos que o retires",

@@ -216,6 +216,8 @@
   "automodpack.firstConnect.unavailableOldChoices": "以前选过、现已不可用的分组：%s",
   "automodpack.selection.platformSummary": "平台：%s  已选分组：%s",
   "automodpack.selection.platformTooltip": "切换解析可选分组所用的平台。循环回检测到的平台后即恢复自动检测。",
+  "automodpack.selection.platformButton": "操作系统：%s",
+  "automodpack.selection.platformDetected": "%s（已检测）",
   "automodpack.selection.category": "类别：%s",
   "automodpack.selection.requiredAlways": "必需：始终包含",
   "automodpack.selection.defaultSelected": "默认：已选中，除非你去掉它",
