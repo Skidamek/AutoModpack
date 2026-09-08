@@ -212,6 +212,30 @@ class FileCacheTest {
 	}
 
 	@Test
+	void namedObjectTripwirePublishesTheObservedHashWhenTheAnswerIsFalse() throws Exception {
+		Path object = temporaryDirectory.resolve("object.bin");
+		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
+		Path cacheDirectory = temporaryDirectory.resolve("file-cache");
+		String expectedSha1;
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			expectedSha1 = cache.getOrComputeHash(object);
+		}
+		Files.writeString(object, "other-bytes", StandardCharsets.UTF_8);
+		try (FileCache cache = FileCache.open(cacheDirectory)) {
+			assertFalse(cache.matchesImmutable(object, Files.size(object), expectedSha1));
+			// The false answer was paid for with a full read, so it must seed the tripwire instead of being dropped.
+			try (var records = Files.walk(cacheDirectory)) {
+				assertTrue(records.filter(path -> path.getFileName().toString().endsWith(".json")).findAny().isPresent());
+			}
+			String observedSha1 = cache.getOrComputeHash(object);
+			assertFalse(cache.matchesImmutable(object, Files.size(object), expectedSha1));
+			assertTrue(cache.matchesImmutable(object, Files.size(object), observedSha1));
+			Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
+			assertTrue(cache.matchesImmutable(object, Files.size(object), expectedSha1));
+		}
+	}
+
+	@Test
 	void namedObjectTripwireTrustsChangeTimeBumpsFromOurOwnHardlinks() throws Exception {
 		Path object = temporaryDirectory.resolve("object.bin");
 		Files.writeString(object, "named-bytes", StandardCharsets.UTF_8);
@@ -245,7 +269,7 @@ class FileCacheTest {
 		long validatedAt = 1_700_000_000L * 1_000_000_000L;
 		long futureModified = validatedAt + 2 * 1_000_000_000L;
 		FileCache.FileFingerprint racy = new FileCache.FileFingerprint(futureModified, 1L, 2L, 4L, "key");
-		FileCache.CachedFile record = new FileCache.CachedFile("path", "hash", futureModified, 1L, 2L, 4L, "key", validatedAt);
+		FileCache.CachedFile record = new FileCache.CachedFile("path", "hash", futureModified, 1L, 2L, 4L, "key", validatedAt, null);
 
 		assertTrue(FileCache.statsMatch(record, racy));
 		assertFalse(FileCache.isCacheValid(record, racy));
@@ -256,7 +280,7 @@ class FileCacheTest {
 		long validatedAt = 1_700_000_000L * 1_000_000_000L;
 		long olderModified = validatedAt - 1;
 		FileCache.FileFingerprint fingerprint = new FileCache.FileFingerprint(olderModified, 1L, Long.MIN_VALUE, 4L, "key");
-		FileCache.CachedFile record = new FileCache.CachedFile("path", "hash", olderModified, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
+		FileCache.CachedFile record = new FileCache.CachedFile("path", "hash", olderModified, 1L, Long.MIN_VALUE, 4L, "key", validatedAt, null);
 
 		assertTrue(FileCache.statsMatch(record, fingerprint));
 		assertTrue(FileCache.isCacheValid(record, fingerprint));
@@ -266,7 +290,7 @@ class FileCacheTest {
 	void immutableTripwireUsesStatMatchEvenWhenWorktreeCacheIsRacy() {
 		long validatedAt = 1_700_000_000L * 1_000_000_000L;
 		FileCache.FileFingerprint racy = new FileCache.FileFingerprint(validatedAt, 1L, Long.MIN_VALUE, 4L, "key");
-		FileCache.CachedFile record = new FileCache.CachedFile("path", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", validatedAt, 1L, Long.MIN_VALUE, 4L, "key", validatedAt);
+		FileCache.CachedFile record = new FileCache.CachedFile("path", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", validatedAt, 1L, Long.MIN_VALUE, 4L, "key", validatedAt, null);
 
 		assertTrue(FileCache.statsMatch(record, racy));
 		assertFalse(FileCache.isCacheValid(record, racy));
