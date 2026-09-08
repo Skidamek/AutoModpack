@@ -21,6 +21,9 @@ flow:
         - screen: ModpackSelectionScreen
         - element: { text: "Visuals (", checked: false }
         - element: { text: "Category: Visuals", checked: false }
+  - do: screenshot
+    name: capture the rows before the OS menu
+    file: ui-navigation-os-baseline
   - do: click
     name: open the OS dropdown
     select: { text: "OS: " }
@@ -38,6 +41,9 @@ flow:
   - do: click
     name: close the OS dropdown
     select: { text: "OS: " }
+  - do: screenshot
+    name: capture the rows after the OS menu closed
+    file: ui-navigation-os-closed
   - do: click
     name: select only the child group
     select: { text: "Visuals (", checked: false }
