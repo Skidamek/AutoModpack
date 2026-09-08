@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.protocol;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.MAX_CHUNK_SIZE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.NETWORK_TIMEOUT;
 
@@ -72,8 +73,10 @@ public class HolepunchSocket extends Socket {
 
 			@Override
 			public void onClosed(HolepunchFailure failure) {
+				boolean localClose = closed;
 				closed = true;
 				in.feedEnd();
+				if (!localClose) LOGGER.info("Holepunch transport closed unexpectedly: [{}] {}", failure.kind(), failure.getMessage());
 			}
 		};
 	}
