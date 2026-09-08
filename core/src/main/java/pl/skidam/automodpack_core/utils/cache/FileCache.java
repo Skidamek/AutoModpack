@@ -49,10 +49,6 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 		public CachedFile() {}
 
-		public CachedFile(String path, String contentHash, long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey, long validatedAtNanos) {
-			this(path, contentHash, lastModifiedNanos, creationTimeNanos, changeTimeNanos, size, fileKey, validatedAtNanos, null);
-		}
-
 		public CachedFile(String path, String contentHash, long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey, long validatedAtNanos, String murmur) {
 			this.path = path;
 			this.contentHash = contentHash;
@@ -193,9 +189,10 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	/**
 	 * Whether {@code file} is still the named immutable bytes. A matching record is trusted without
-	 * reading content. A missing or disturbed record forces one full read before the tripwire is
-	 * seeded or refreshed, so a true answer always means the bytes were seen at least once. The
-	 * tripwire compares only what a content write changes (size, mtime, inode): our own publication
+	 * reading content; a missing or disturbed record forces one stable full read that is published
+	 * either way, so every answer — true or false — reflects bytes seen at the current fingerprint
+	 * and repeated asks of unchanged disturbed bytes are answered by stat alone. The tripwire
+	 * compares only what a content write changes (size, mtime, inode): our own publication
 	 * ({@code link()}, {@code chmod()}) bumps inode ctime by design, and treating that as disturb
 	 * forced full rehashes of multi-gigabyte objects.
 	 */
@@ -208,14 +205,10 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		String sha1 = HashUtils.normalizeSha1(expectedSha1);
 		String pathKey = absPath.toString();
 		synchronized (lock(pathKey)) {
-			FileFingerprint fingerprint = fingerprint(absPath, attrs);
 			CachedFile cached = readRecord(pathKey, CachedFile.class);
-			if (immutableStatsMatch(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
-			String actual = HashUtils.getHash(absPath);
-			if (actual == null || !sha1.equalsIgnoreCase(actual)) return false;
-			writeRecord(pathKey, new CachedFile(pathKey, sha1, fingerprint.lastModifiedNanos(), fingerprint.creationTimeNanos(), fingerprint.changeTimeNanos(), fingerprint.size(), fingerprint.fileKey(),
-					validationTimeNanos(), cached == null ? null : cached.murmur()));
-			return true;
+			if (immutableStatsMatch(cached, fingerprint(absPath, attrs))) return sha1.equalsIgnoreCase(cached.contentHash());
+			String observed = getOrComputeHashWithAttributes(absPath, attrs);
+			return observed != null && sha1.equalsIgnoreCase(observed);
 		}
 	}
 
