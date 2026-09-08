@@ -18,6 +18,7 @@ import pl.skidam.automodpack_core.protocol.LocalStorageException;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
+import pl.skidam.automodpack_core.utils.DownloadScheduler;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -38,6 +39,8 @@ public class DownloadManager {
 
 	private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
+	// Domain label for transfers served by the attached AutoModpack host client instead of a remote platform source.
+	private static final String INTERNAL_CLIENT_SOURCE = "internal_client";
 
 	private final ExecutorService downloadExecutor;
 
@@ -54,12 +57,13 @@ public class DownloadManager {
 	private final Map<FileInspection.HashPathPair, Path> activeTemporaryFiles = new ConcurrentHashMap<>();
 	private final Map<FileInspection.HashPathPair, AcquisitionResult> acquisitionResults = new ConcurrentHashMap<>();
 
-	private final Map<String, Integer> activeDownloadsPerSource = new ConcurrentHashMap<>();
+	private final DownloadScheduler scheduler = new DownloadScheduler();
 
 	// --- PROGRESS TRACKING ---
 	private final AtomicLong totalBytesToDownload = new AtomicLong(0);
 	private final AtomicLong totalBytesDownloaded = new AtomicLong(0);
 	private int totalFilesAdded = 0;
+	private int enqueueSequence = 0;
 	private int downloadedCount = 0;
 
 	private final Semaphore semaphore = new Semaphore(0);
@@ -88,7 +92,7 @@ public class DownloadManager {
 		FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
 		if (queuedDownloads.containsKey(hashPathPair)) return;
 
-		QueuedDownload task = new QueuedDownload(file, new ArrayList<>(sources), murmur, fileType, fileSize, 0, successCallback, failureCallback);
+		QueuedDownload task = new QueuedDownload(file, new ArrayList<>(sources), murmur, fileType, fileSize, enqueueSequence++, 0, successCallback, failureCallback);
 		queuedDownloads.put(hashPathPair, task);
 		totalFilesAdded++;
 		downloadNext();
@@ -97,129 +101,32 @@ public class DownloadManager {
 	private synchronized void downloadNext() {
 		if (downloadsInProgress.size() >= MAX_DOWNLOADS_IN_PROGRESS || queuedDownloads.isEmpty()) return;
 
-		// --- 1. CALCULATE METRICS ---
+		// SCHEDULING: the largest queued file first (ties in enqueue order), then among its candidate domains the one
+		// whose measured speed makes backlog-plus-this-file finish soonest. Domains this task already burned its
+		// attempts on are withheld (candidateDomains); dead links are handled at attempt time.
+		List<Map.Entry<FileInspection.HashPathPair, QueuedDownload>> entries = new ArrayList<>(queuedDownloads.entrySet());
+		entries.sort(Comparator.comparingInt(entry -> entry.getValue().seq));
+		List<DownloadScheduler.QueuedFile<FileInspection.HashPathPair>> queue = new ArrayList<>(entries.size());
+		for (Map.Entry<FileInspection.HashPathPair, QueuedDownload> entry : entries) queue.add(new DownloadScheduler.QueuedFile<>(entry.getKey(), entry.getValue().fileSize, candidateDomains(entry.getValue())));
+		Map<String, Long> inFlightBacklog = new HashMap<>();
+		for (DownloadData data : downloadsInProgress.values()) inFlightBacklog.merge(data.activeDomain, Math.max(0, data.remainingBytes.get()), Long::sum);
 
-		long totalBytes = totalBytesToDownload.get();
-		if (totalBytes <= 0) totalBytes = 1;
-		if (totalFilesAdded <= 0) totalFilesAdded = 1;
-
-		// Dynamic Average (Pivot for Big vs Small)
-		long avgSize = totalBytes / totalFilesAdded;
-
-		// Calculate Progress Percentages (0.00 to 1.00)
-		double byteProgress = (double) totalBytesDownloaded.get() / totalBytes;
-		double fileProgress = (double) downloadedCount / totalFilesAdded;
-
-		// Calculate LAG
-		// Example: 50% Bytes Done, 40% Files Done -> Lag = 0.10 (BAD)
-		double lag = byteProgress - fileProgress;
-
-		// --- 2. DETERMINE SHARES (Proportional Control) ---
-		// We decide what % of our threads should be working on Big Files.
-		double targetBigShare;
-
-		if (lag > 0.02) targetBigShare = 0.0; // Panic (>2% Behind): 0% Big, 100% Small
-		else if (lag > 0.005) targetBigShare = 0.2; // Warning (>0.5% Behind): 20% Big (1/5)
-		else if (lag < -0.15) targetBigShare = 1.0; // Ahead (>15%): 100% Big
-		else if (lag < -0.10) targetBigShare = 0.8; // Ahead (>10%): 80% Big (4/5)
-		else if (lag < -0.05) targetBigShare = 0.6; // Ahead (>5%): 60% Big (3/5)
-		else targetBigShare = 0.4; // Balanced: 40% Big (2/5)
-
-		int slotsForBig = (int) Math.round(MAX_DOWNLOADS_IN_PROGRESS * targetBigShare);
-		int slotsForSmall = MAX_DOWNLOADS_IN_PROGRESS - slotsForBig;
-
-		// --- 3. COUNT CURRENT STATE ---
-
-		int activeBig = 0;
-		int activeSmall = 0;
-		for (DownloadData d : downloadsInProgress.values()) {
-			if (d.fileSize > avgSize) activeBig++;
-			else activeSmall++;
-		}
-
-		// --- 4. DECISION ---
-
-		boolean preferBig = activeBig < slotsForBig || activeSmall > slotsForSmall;
-
-		// --- 5. AVAILABILITY CHECK ---
-
-		boolean hasBig = false;
-		boolean hasSmall = false;
-
-		// Fast scan
-		for (QueuedDownload t : queuedDownloads.values()) {
-			if (t.fileSize > avgSize) hasBig = true;
-			else hasSmall = true;
-			if (hasBig && hasSmall) break; // Found both
-		}
-
-		// Fallback Logic
-		if (preferBig && !hasBig) preferBig = false; // Wanted Big, but none left. Take Small.
-		if (!preferBig && !hasSmall) preferBig = true; // Wanted Small, but none left. Take Big.
-
-		// --- 6. SELECT BEST FILE ---
-
-		FileInspection.HashPathPair bestKey = null;
-		QueuedDownload bestTask = null;
-		String bestSource = null;
-		int lowestLoad = Integer.MAX_VALUE;
-
-		for (Map.Entry<FileInspection.HashPathPair, QueuedDownload> entry : queuedDownloads.entrySet()) {
-			QueuedDownload task = entry.getValue();
-			boolean isBig = task.fileSize > avgSize;
-
-			// FILTER: Strict Type Check
-			if (isBig != preferBig) continue;
-
-			String source = predictSource(task);
-			int activeInSource = activeDownloadsPerSource.getOrDefault(source, 0);
-
-			// Source Cap (Optional: set to 2 or 3 per source if needed)
-			if (activeInSource >= MAX_DOWNLOADS_IN_PROGRESS) continue;
-
-			// Load Balancing: Pick least busy source
-			if (activeInSource < lowestLoad) {
-				lowestLoad = activeInSource;
-				bestKey = entry.getKey();
-				bestTask = task;
-				bestSource = source;
-			}
-		}
-
-		// FINAL FALLBACK:
-		// If strict filtering failed (e.g. we wanted Small but all Small domains are capped),
-		// we MUST pick something else to avoid idling threads.
-		if (bestTask == null) {
-			// Try to find *any* valid download regardless of size
-			for (Map.Entry<FileInspection.HashPathPair, QueuedDownload> entry : queuedDownloads.entrySet()) {
-				QueuedDownload task = entry.getValue();
-				String source = predictSource(task);
-				if (activeDownloadsPerSource.getOrDefault(source, 0) < MAX_DOWNLOADS_IN_PROGRESS) {
-					bestKey = entry.getKey();
-					bestTask = task;
-					bestSource = source;
-					break;
-				}
-			}
-		}
-
-		if (bestTask == null) return;
+		DownloadScheduler.Pick<FileInspection.HashPathPair> pick = scheduler.pick(queue, inFlightBacklog);
+		if (pick == null) return;
 
 		// --- EXECUTE ---
-		queuedDownloads.remove(bestKey);
-		activeDownloadsPerSource.merge(bestSource, 1, Integer::sum);
+		QueuedDownload task = queuedDownloads.remove(pick.identity());
+		if (task == null) return; // The queue was cleared (cancel) between the snapshot and the removal.
+		final FileInspection.HashPathPair key = pick.identity();
+		final String activeDomain = pick.sourceDomain();
 
-		final FileInspection.HashPathPair key = bestKey;
-		final QueuedDownload task = bestTask;
-		final String activeDomain = bestSource;
-
-		LOGGER.info("Queuning download for: {} {} {}", task.file, task.fileSize, activeDomain);
+		LOGGER.info("Queueing download for: {} {} {}", task.file, task.fileSize, activeDomain);
 
 		CompletableFuture<Void> future = new CompletableFuture<>();
-		downloadsInProgress.put(key, new DownloadData(future, task.file, activeDomain, task.fileSize));
+		DownloadData data = new DownloadData(future, task.file, activeDomain, task.fileSize);
+		downloadsInProgress.put(key, data);
 		if (cancelled || downloadExecutor.isShutdown()) {
 			downloadsInProgress.remove(key);
-			activeDownloadsPerSource.compute(activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
 			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
 			semaphore.release();
 			return;
@@ -227,7 +134,7 @@ public class DownloadManager {
 		try {
 			downloadExecutor.execute(() -> {
 				try {
-					processDownloadTask(key, task);
+					processDownloadTask(key, task, data);
 					future.complete(null);
 				} catch (Throwable error) {
 					LOGGER.error("Fatal error executing download task for {}", task.file.getFileName(), error);
@@ -236,23 +143,30 @@ public class DownloadManager {
 			});
 		} catch (RejectedExecutionException error) {
 			downloadsInProgress.remove(key);
-			activeDownloadsPerSource.compute(activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
 			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
 			semaphore.release();
 			future.completeExceptionally(error);
 		} catch (RuntimeException error) {
 			downloadsInProgress.remove(key);
-			activeDownloadsPerSource.compute(activeDomain, (source, count) -> (count == null || count <= 1) ? null : count - 1);
 			future.completeExceptionally(error);
 			throw error;
 		}
 	}
 
-	private String predictSource(QueuedDownload task) {
-		int numberOfIndexes = task.sources.size();
-		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
-		if (task.sources.size() > sourceIndex) return getDomainFromUrl(task.sources.get(sourceIndex).url());
-		return "internal_client";
+	// Files with no platform sources can still come from the attached host client; that is labelled as its own domain so the scheduler can weigh it like any other source.
+	// Domains this task already burned its attempts on are withheld, so a retry dispatches to a different source instead of re-picking the same one.
+	private List<String> candidateDomains(QueuedDownload task) {
+		if (task.sources.isEmpty()) return List.of(INTERNAL_CLIENT_SOURCE);
+		List<String> domains = task.sources.stream().map(source -> getDomainFromUrl(source.url())).toList();
+		List<String> candidates = domains.stream().filter(domain -> task.domainFailures.getOrDefault(domain, 0) < MAX_DOWNLOAD_ATTEMPTS).toList();
+		return candidates.isEmpty() ? domains : candidates;
+	}
+
+	private int sourceIndexForDomain(QueuedDownload task, String domain) {
+		for (int i = 0; i < task.sources.size(); i++) {
+			if (getDomainFromUrl(task.sources.get(i).url()).equals(domain)) return i;
+		}
+		return -1;
 	}
 
 	private String getDomainFromUrl(String url) {
@@ -267,7 +181,7 @@ public class DownloadManager {
 		}
 	}
 
-	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task) {
+	private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data) {
 		Path storeFile = dataLayout.objectFile(hashPathPair.hash());
 		boolean success = false;
 		boolean interrupted = false;
@@ -282,7 +196,7 @@ public class DownloadManager {
 				success = true;
 			} else {
 				// DOWNLOAD REQUIRED. A corrupt object is never a cache hit.
-				success = attemptDownload(hashPathPair, task, storeFile, cache);
+				success = attemptDownload(hashPathPair, task, data, storeFile, cache);
 			}
 		} catch (InterruptedException e) {
 			interrupted = true;
@@ -300,11 +214,14 @@ public class DownloadManager {
 		}
 	}
 
-	private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path storeFile, FileCache cache) throws InterruptedException {
+	private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, DownloadData data, Path storeFile, FileCache cache) throws InterruptedException {
 		refreshDeadLinkSources(hashPathPair.hash(), task);
 		int numberOfIndexes = task.sources.size();
-		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
-		DownloadSource source = (task.sources.size() > sourceIndex) ? task.sources.get(sourceIndex) : null;
+		// The scheduler chose the domain for this dispatch; the attempts-based rotation only takes over when that domain
+		// is gone (fresh metadata replaced the source list, which also reset the attempts).
+		int chosenIndex = sourceIndexForDomain(task, data.activeDomain);
+		int sourceIndex = chosenIndex >= 0 ? chosenIndex : Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
+		DownloadSource source = (numberOfIndexes > sourceIndex) ? task.sources.get(sourceIndex) : null;
 		Path tempStoreFile = null;
 
 		try {
@@ -319,11 +236,20 @@ public class DownloadManager {
 				return false;
 			}
 
+			long attemptStart = System.nanoTime();
+			AtomicLong attemptBytes = new AtomicLong(0);
+			// One hook for everything the written bytes mean: global progress, display speed, this attempt's sample and the in-flight backlog left for the scheduler.
+			IntConsumer progressAction = bytes -> {
+				updateNetworkProgress(bytes);
+				attemptBytes.addAndGet(bytes);
+				data.remainingBytes.addAndGet(-bytes);
+			};
+			boolean platformTransfer = source != null && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes;
 			try {
-				if (source != null && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
-					httpDownloader.download(source, tempStoreFile, this::updateNetworkProgress);
+				if (platformTransfer) {
+					httpDownloader.download(source, tempStoreFile, progressAction);
 				} else if (downloadClient != null) {
-					hostDownloadFile(hashPathPair, tempStoreFile, this::updateNetworkProgress);
+					hostDownloadFile(hashPathPair, tempStoreFile, progressAction);
 				} else {
 					task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 					return false;
@@ -337,13 +263,16 @@ public class DownloadManager {
 				if (isDeadPlatformLink(source, e)) markDeadPlatformLink(hashPathPair.hash(), task);
 				else if (source != null && source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
 					LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
-					task.attempts = (sourceIndex + 1) * MAX_DOWNLOAD_ATTEMPTS - 1;
+					task.domainFailures.merge(data.activeDomain, MAX_DOWNLOAD_ATTEMPTS, Integer::sum);
 				}
 				return false;
 			} catch (IOException e) {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				LOGGER.warn("Remote source failed for CAS object {}", hashPathPair.hash(), e);
 				return false;
+			} finally {
+				// Every byte that arrived is real bandwidth data for the path it actually travelled, whatever happened to the transfer.
+				if (attemptBytes.get() > 0) scheduler.report(platformTransfer ? data.activeDomain : INTERNAL_CLIENT_SOURCE, attemptBytes.get(), System.nanoTime() - attemptStart);
 			}
 
 			if (!FileIntegrity.matches(tempStoreFile, task.fileSize, hashPathPair.hash())) {
@@ -390,16 +319,14 @@ public class DownloadManager {
 		task.sources.clear();
 		task.sources.addAll(fresh);
 		task.attempts = 0;
+		task.domainFailures.clear();
 	}
 
 	private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, boolean success, boolean interrupted) {
 		DownloadData data = downloadsInProgress.remove(key);
-
-		if (data != null && data.activeDomain != null) {
-			synchronized (this) {
-				activeDownloadsPerSource.compute(data.activeDomain, (k, v) -> (v == null || v <= 1) ? null : v - 1);
-			}
-		}
+		// A failed attempt counts against the domain that served it, so the retry dispatches elsewhere before the
+		// attempts budget forces the task to give up.
+		if (data != null && !success && !interrupted) task.domainFailures.merge(data.activeDomain, 1, Integer::sum);
 
 		try {
 			if (success) {
@@ -531,18 +458,21 @@ public class DownloadManager {
 		public final String murmur;
 		public final String fileType;
 		public final long fileSize;
+		public final int seq;
+		public final Map<String, Integer> domainFailures = new HashMap<>();
 		public int attempts;
 		public final Runnable successCallback;
 		public final Consumer<FailureCategory> failureCallback;
 		public FailureCategory lastFailureCategory;
 		public boolean needsMetadataRefetch;
 
-		public QueuedDownload(Path f, List<DownloadSource> sources, String murmur, String fileType, long size, int a, Runnable s, Consumer<FailureCategory> fa) {
+		public QueuedDownload(Path f, List<DownloadSource> sources, String murmur, String fileType, long size, int seq, int a, Runnable s, Consumer<FailureCategory> fa) {
 			file = f;
 			this.sources = sources;
 			this.murmur = murmur;
 			this.fileType = fileType;
 			fileSize = size;
+			this.seq = seq;
 			attempts = a;
 			successCallback = s;
 			failureCallback = fa;
@@ -554,12 +484,14 @@ public class DownloadManager {
 		public Path file;
 		public String activeDomain;
 		public long fileSize;
+		public final AtomicLong remainingBytes;
 
 		DownloadData(CompletableFuture<Void> f, Path p, String d, long s) {
 			future = f;
 			file = p;
 			activeDomain = d;
 			fileSize = s;
+			remainingBytes = new AtomicLong(s);
 		}
 
 		public String getFileName() {
