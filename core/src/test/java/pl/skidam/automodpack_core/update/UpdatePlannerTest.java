@@ -226,7 +226,8 @@ class UpdatePlannerTest {
 		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR
 				&& operation.relativePath().equals("mods/old.jar") && operation.operation() == OperationType.DELETE
 				&& OLD_HASH.equals(operation.expectedExistingHash())));
-		assertTrue(plan.restartReasons().contains(RestartReason.APPLIED_SERVER_DELETIONS));
+		assertTrue(plan.restartReasons().contains(RestartReason.REMOVED_STANDARD_MODS));
+		assertEquals(1, plan.restartReasons().size());
 		assertEquals(List.of(new Preservation(Root.GAME_DIR, "mods/old.jar", OLD_HASH, 8)), plan.preservations());
 		assertEquals(List.of(new BaselineCapture(Root.GAME_DIR, "mods/old.jar", OLD_HASH, 8, false)), plan.baselineCaptures());
 	}

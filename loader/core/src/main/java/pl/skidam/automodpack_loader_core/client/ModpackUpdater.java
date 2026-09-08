@@ -451,7 +451,10 @@ public class ModpackUpdater implements AutoCloseable {
 			removalLifecycle.restartAfterApply(applyResult);
 			return;
 		}
-		if (!applyResult.requiresRestart()) return;
+		if (!RestartDecision.requiresRestartAtPreload(applyResult.restartReasons())) {
+			LOGGER.info("Launch apply needs no restart at preload; hot-loading the fresh pack in this boot");
+			return;
+		}
 		new ReLauncher(RestartDecision.launchRestartType(firstConnection, applyResult.restartReasons()), changelogs).restart(true);
 	}
 
