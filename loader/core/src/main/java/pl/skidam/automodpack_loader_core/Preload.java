@@ -222,7 +222,7 @@ public class Preload {
 		}
 
 		StoredModpackConnection.Seeded seeded = null;
-		if (clientConfig.selectedModpackId != null && !clientConfig.selectedModpackId.isBlank()) {
+		if (clientConfig.hasSelectedModpack()) {
 			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 				LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
 				clientConfig = clientConfig.withSelectedModpackId("");
@@ -315,6 +315,8 @@ public class Preload {
 
 	private boolean hasActiveProjection() {
 		try {
+			// An unset selection is the fresh install: nothing selected, nothing to load, nothing worth saying.
+			if (!clientConfig.hasSelectedModpack()) return false;
 			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 				LOGGER.warn("Skipping active modpack load because the configured selected modpack ID is invalid: {}", clientConfig.selectedModpackId);
 				return false;
