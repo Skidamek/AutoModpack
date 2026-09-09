@@ -26,6 +26,7 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.storage.StoragePaths;
+import pl.skidam.automodpack_core.utils.Throwables;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -474,7 +475,7 @@ public class Commands {
 
 	/** The generation is committed, but the live host may still serve the previous view; only an explicit restart rebinds it. */
 	private static void reportHostingFailure(CommandContext<CommandSourceStack> context, Optional<Throwable> failure) {
-		failure.ifPresent(cause -> send(context, "HOSTING SWAP FAILED: " + ModpackExecutor.detail(cause)
+		failure.ifPresent(cause -> send(context, "HOSTING SWAP FAILED: " + Throwables.detail(cause)
 				+ ". The generation is committed; run /automodpack host restart to rebind hosting.",
 				ChatFormatting.RED, true));
 	}
