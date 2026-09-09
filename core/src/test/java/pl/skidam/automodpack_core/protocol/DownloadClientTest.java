@@ -165,13 +165,11 @@ class DownloadClientTest {
 		KeyPair keyPair = NetUtils.generateKeyPair();
 		X509Certificate certificate = NetUtils.selfSign(keyPair);
 		CompletableFuture<Boolean> decision = new CompletableFuture<>();
-		Duration productionInterval = DownloadClient.preConfigurationKeepaliveInterval;
-		DownloadClient.preConfigurationKeepaliveInterval = Duration.ofMillis(100);
 
 		try (TransferServer server = new TransferServer(keyPair, certificate)) {
 			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
 					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
-			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
+			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision, Duration.ofMillis(100));
 
 			long deadline = System.currentTimeMillis() + 5000;
 			while (server.keepalivesAbsorbed() < 2 && System.currentTimeMillis() < deadline)
@@ -186,8 +184,6 @@ class DownloadClientTest {
 				assertEquals(-1, server.postConfigurationByte().get(5, TimeUnit.SECONDS));
 			}
 			assertEquals(1, server.acceptedConnections());
-		} finally {
-			DownloadClient.preConfigurationKeepaliveInterval = productionInterval;
 		}
 	}
 

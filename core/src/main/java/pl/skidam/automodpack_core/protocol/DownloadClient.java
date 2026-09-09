@@ -71,14 +71,12 @@ public class DownloadClient implements AutoCloseable {
 	private static final ScheduledExecutorService PRE_CONFIGURATION_KEEPALIVE_EXECUTOR = Executors.newSingleThreadScheduledExecutor(
 			new CustomThreadFactoryBuilder().setNameFormat("AutoModpack PreConfigurationKeepalive #%d").setDaemon(true).build());
 
-	/** The production cadence is {@link NetUtils#PRE_CONFIGURATION_KEEPALIVE_INTERVAL}; tests shorten it to observe heartbeats quickly. */
-	static volatile Duration preConfigurationKeepaliveInterval = PRE_CONFIGURATION_KEEPALIVE_INTERVAL;
-
 	private static final int MAX_CONNECTIONS = 5;
 
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final byte[] secretBytes;
 	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
+	private final Duration preConfigurationKeepaliveInterval;
 	private final CustomizableTrustManager.SessionTrust sessionTrust;
 	private final TransportRoute route;
 	private final Object poolLock = new Object();
@@ -94,21 +92,28 @@ public class DownloadClient implements AutoCloseable {
 	private record TlsCandidate(SSLSocket socket, CustomizableTrustManager trustManager) {}
 
 	private DownloadClient(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
-			TransportRoute route) {
+			Duration preConfigurationKeepaliveInterval, TransportRoute route) {
 		this.connectionInfo = connectionInfo;
 		this.secretBytes = secretBytes == null ? null : secretBytes.clone();
 		this.trustCallback = trustCallback;
+		this.preConfigurationKeepaliveInterval = preConfigurationKeepaliveInterval;
 		this.route = route;
 		this.sessionTrust = new CustomizableTrustManager.SessionTrust(AddressHelpers.formatAddress(connectionInfo.origin), connectionInfo.expectedFingerprint);
 	}
 
 	public static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
+		return createAsync(connectionInfo, secretBytes, trustCallback, PRE_CONFIGURATION_KEEPALIVE_INTERVAL);
+	}
+
+	/** The keepalive interval is injectable so tests can observe heartbeats at a fast cadence; production runs at {@link NetUtils#PRE_CONFIGURATION_KEEPALIVE_INTERVAL}. */
+	static CompletableFuture<DownloadClient> createAsync(ConnectionJsons.ConnectionInfo connectionInfo, byte[] secretBytes,
+			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback, Duration preConfigurationKeepaliveInterval) {
 		if (connectionInfo == null || !connectionInfo.isComplete())
 			return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing"));
 
 		return resolveRouteAsync(connectionInfo).thenCompose(route -> {
-			DownloadClient client = new DownloadClient(connectionInfo, secretBytes, trustCallback, route);
+			DownloadClient client = new DownloadClient(connectionInfo, secretBytes, trustCallback, preConfigurationKeepaliveInterval, route);
 			return client.openConnectionAsync().thenApply(connection -> {
 				synchronized (client.poolLock) {
 					client.allConnections.add(connection);
@@ -357,7 +362,7 @@ public class DownloadClient implements AutoCloseable {
 
 		private PreConfigurationKeepalive(SSLSocket socket) {
 			this.socket = socket;
-			Duration interval = preConfigurationKeepaliveInterval;
+			Duration interval = DownloadClient.this.preConfigurationKeepaliveInterval;
 			this.task = PRE_CONFIGURATION_KEEPALIVE_EXECUTOR.scheduleWithFixedDelay(this::tick, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
 		}
 
