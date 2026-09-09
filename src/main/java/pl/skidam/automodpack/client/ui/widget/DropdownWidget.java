@@ -140,22 +140,28 @@ public final class DropdownWidget extends Button {
 	public void renderMenu(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
 		if (menu == null) return;
 		VersionedMatrices matrices = new VersionedMatrices(graphics);
+		VersionedScreen.beginOverlay(matrices);
 		drawPanel(matrices);
 		menu.extractRenderState(graphics, mouseX, mouseY, delta);
+		VersionedScreen.endOverlay(matrices);
 	}
 	/*?} elif >=1.20 {*/
 	/*public void renderMenu(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
 		if (menu == null) return;
 		VersionedMatrices matrices = new VersionedMatrices(graphics);
+		VersionedScreen.beginOverlay(matrices);
 		drawPanel(matrices);
 		menu.render(graphics, mouseX, mouseY, delta);
+		VersionedScreen.endOverlay(matrices);
 	}
 	*//*?} else {*/
 	/*public void renderMenu(PoseStack matrices, int mouseX, int mouseY, float delta) {
 		if (menu == null) return;
 		VersionedMatrices versionedMatrices = new VersionedMatrices();
+		VersionedScreen.beginOverlay(versionedMatrices);
 		drawPanel(versionedMatrices);
 		menu.render(matrices, mouseX, mouseY, delta);
+		VersionedScreen.endOverlay(versionedMatrices);
 	}
 	*//*?}*/
 
