@@ -299,7 +299,7 @@ public class ModpackExecutor {
 	}
 
 	/** The guard's or failure's own words when it has any; the class name is only the last resort. */
-	private static String detail(Throwable e) {
+	public static String detail(Throwable e) {
 		return e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
 	}
 
@@ -422,7 +422,7 @@ public class ModpackExecutor {
 		}
 	}
 
-	public record Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements RevertResult {
+	public record Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements RevertResult, CommittedOutcome {
 		public Reverted {
 			Objects.requireNonNull(current, "current");
 			if (targetSeq < 1) throw new IllegalArgumentException("Invalid rollback target sequence");
@@ -432,16 +432,6 @@ public class ModpackExecutor {
 
 		public Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting) {
 			this(current, targetSeq, warnings, hosting, null);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.of(hosting);
-		}
-
-		@Override
-		public Optional<Throwable> hostingFailure() {
-			return Optional.ofNullable(hostingSwapFailure);
 		}
 
 		@Override
@@ -465,7 +455,7 @@ public class ModpackExecutor {
 		}
 	}
 
-	public record Published(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements PublishResult {
+	public record Published(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements PublishResult, CommittedOutcome {
 		public Published {
 			Objects.requireNonNull(state, "state");
 			Objects.requireNonNull(current, "current");
@@ -481,22 +471,12 @@ public class ModpackExecutor {
 		}
 
 		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.of(hosting);
-		}
-
-		@Override
-		public Optional<Throwable> hostingFailure() {
-			return Optional.ofNullable(hostingSwapFailure);
-		}
-
-		@Override
 		public Published withHostingFailure(Throwable failure) {
 			return new Published(state, current, warnings, hosting, failure);
 		}
 	}
 
-	public record NoChanges(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements PublishResult {
+	public record NoChanges(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements PublishResult, CommittedOutcome {
 		public NoChanges {
 			Objects.requireNonNull(state, "state");
 			Objects.requireNonNull(current, "current");
@@ -509,16 +489,6 @@ public class ModpackExecutor {
 
 		public NoChanges(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting) {
 			this(state, current, warnings, hosting, null);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.of(hosting);
-		}
-
-		@Override
-		public Optional<Throwable> hostingFailure() {
-			return Optional.ofNullable(hostingSwapFailure);
 		}
 
 		@Override
@@ -542,7 +512,7 @@ public class ModpackExecutor {
 		}
 	}
 
-	public record Loaded(PackDocument current, GenerationHosting hosting, Throwable hostingSwapFailure) implements LoadResult {
+	public record Loaded(PackDocument current, GenerationHosting hosting, Throwable hostingSwapFailure) implements LoadResult, CommittedOutcome {
 		public Loaded {
 			Objects.requireNonNull(current, "current");
 			Objects.requireNonNull(hosting, "hosting");
@@ -550,16 +520,6 @@ public class ModpackExecutor {
 
 		public Loaded(PackDocument current, GenerationHosting hosting) {
 			this(current, hosting, null);
-		}
-
-		@Override
-		public Optional<GenerationHosting> hosted() {
-			return Optional.of(hosting);
-		}
-
-		@Override
-		public Optional<Throwable> hostingFailure() {
-			return Optional.ofNullable(hostingSwapFailure);
 		}
 
 		@Override
