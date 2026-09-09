@@ -30,7 +30,7 @@ public final class JournalMirror {
 		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client journal mirror is not a regular file: " + file);
 		try {
-			return Journal.open(file).entries();
+			return Journal.openComplete(file).entries();
 		} catch (RuntimeException e) {
 			throw new IOException("Client journal mirror is invalid: " + file, e);
 		}
@@ -59,7 +59,7 @@ public final class JournalMirror {
 	/** Verifies the fetched journal file parses completely, then swaps it in as the pack's mirror under the mutation lock. */
 	public void replaceFrom(String modpackId, Path fetchedFile) throws IOException {
 		ModpackId.requireValid(modpackId);
-		List<JournalEntry> entries = Journal.open(fetchedFile).entries();
+		List<JournalEntry> entries = Journal.openComplete(fetchedFile).entries();
 		ClientStorageMutation.run(storage, () -> {
 			replaceFromLocked(modpackId, entries.size(), fetchedFile);
 			return null;
@@ -67,7 +67,7 @@ public final class JournalMirror {
 	}
 
 	private void replaceFromLocked(String modpackId, int verifiedEntries, Path fetchedFile) throws IOException {
-		if (Journal.open(fetchedFile).length() != verifiedEntries) throw new IOException("Fetched journal changed while it was swapped into the mirror");
+		if (Journal.openComplete(fetchedFile).length() != verifiedEntries) throw new IOException("Fetched journal changed while it was swapped into the mirror");
 		Path mirror = storage.historyJournalFile(modpackId);
 		Files.createDirectories(mirror.getParent());
 		Files.move(fetchedFile, mirror, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);

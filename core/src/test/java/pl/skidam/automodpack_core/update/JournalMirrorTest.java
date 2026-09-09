@@ -68,7 +68,7 @@ class JournalMirrorTest {
 		Path garbage = Files.createTempFile(storage.gameDirectory(), "journal-", ".temp");
 		Files.writeString(garbage, "definitely not jsonl", StandardCharsets.UTF_8);
 
-		assertThrows(RuntimeException.class, () -> mirror.replaceFrom(MODPACK_ID, garbage));
+		assertThrows(IOException.class, () -> mirror.replaceFrom(MODPACK_ID, garbage));
 
 		assertFalse(mirror.exists(MODPACK_ID));
 		assertTrue(mirror.entries(MODPACK_ID).isEmpty());
