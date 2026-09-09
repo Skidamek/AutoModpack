@@ -272,6 +272,25 @@ class ModpackCandidateScannerTest {
 		assertFalse(Files.exists(staging, LinkOption.NOFOLLOW_LINKS));
 	}
 
+	@Test
+	void reservedWindowsNamesAreExcludedWhereverTheyAppear() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config/CON"));
+		Files.writeString(groups.resolve("main/config/CON/nested.txt"), "under a reserved directory name", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/aux.tar.gz"), "reserved file stem", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/kept.txt"), "kept", StandardCharsets.UTF_8);
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group("/config/**")), true);
+
+		assertTrue(candidate.manifest().groups().get("main").files().containsKey("config/kept.txt"));
+		assertEquals(2, candidate.exclusions().size());
+		for (ExcludedCandidate exclusion : candidate.exclusions()) {
+			assertEquals(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, exclusion.reason());
+			assertTrue(exclusion.message().contains("Windows clients"));
+		}
+	}
+
 	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean autoExclude) throws Exception {
 		Executor direct = Runnable::run;
 		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, declarations, false,
