@@ -18,11 +18,12 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 
 /** The append-only history of one modpack lineage: one entry per content change. */
 public final class Journal {
-	private static final Gson COMPACT = new GsonBuilder().disableHtmlEscaping().create();
+	private static final Gson COMPACT = new GsonBuilder().disableHtmlEscaping().registerTypeHierarchyAdapter(Enum.class, new ConfigTools.StrictEnumTypeAdapter()).create();
 
 	private final Path file;
 	private List<JournalEntry> entries;

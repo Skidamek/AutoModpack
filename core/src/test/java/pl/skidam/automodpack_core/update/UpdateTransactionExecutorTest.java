@@ -458,7 +458,7 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
-	void refusesPlanBeforePersistingTargetWhenAnotherTransactionIsActive() throws Exception {
+	void corruptPendingTransactionIsSetAsideAndDoesNotBlockANewPlan() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "blocked-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(storage, bytes);
@@ -468,7 +468,11 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/blocked.jar", true, hash, bytes.length)));
 		Files.writeString(storage.transactionFile(), "active", StandardCharsets.UTF_8);
 
-		assertThrows(IOException.class, () -> executor(storage).commit(plan, target));
+		// An unparseable pending transaction is evidence, not a blocker: it is set aside and the fresh plan proceeds.
+		assertTrue(executor(storage).commit(plan, target).success());
+		try (var leftovers = Files.list(storage.transactionFile().getParent())) {
+			assertTrue(leftovers.anyMatch(path -> path.getFileName().toString().startsWith("update-transaction.json.corrupt-")));
+		}
 	}
 
 	@Test

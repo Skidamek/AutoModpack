@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -70,14 +72,25 @@ public final class UpdateTransaction {
 
 	public UpdateTransaction() {}
 
-	/** Reads the persisted transaction file, returning null when none exists; corrupt state or non-regular files are IO failures. */
+	/** Reads the persisted transaction file, returning null when none exists; a corrupt transaction is set aside as evidence and treated as absent, since the replan recovery rebuilds from the leftover directories. */
 	public static UpdateTransaction read(Path path) throws IOException {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return null;
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Persisted update transaction is not a regular file: " + path);
 		try {
 			return ConfigTools.read(path, UpdateTransaction.class).orElseThrow(() -> new IOException("Persisted update transaction is empty: " + path));
 		} catch (RuntimeException e) {
-			throw new IOException("Persisted update transaction is invalid: " + path, e);
+			setAsideCorrupt(path, e);
+			return null;
+		}
+	}
+
+	private static void setAsideCorrupt(Path path, RuntimeException cause) {
+		Path aside = path.resolveSibling(path.getFileName() + ".corrupt-" + System.currentTimeMillis());
+		try {
+			Files.move(path, aside);
+			LOGGER.error("Persisted update transaction is unreadable and was set aside as {}: {}", aside, cause.getMessage());
+		} catch (IOException moveFailure) {
+			LOGGER.error("Persisted update transaction is unreadable and could not be set aside: {}", path, cause);
 		}
 	}
 
