@@ -3,10 +3,10 @@ package pl.skidam.automodpack.client.ui.versioned;
 import java.util.ArrayList;
 import java.util.function.IntConsumer;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.WeakHashMap;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -23,9 +23,17 @@ import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+
+/*? if <1.19.4 {*/
+/*import net.minecraft.client.gui.components.Widget;
+*//*?} else {*/
+import net.minecraft.client.gui.components.Renderable;
+/*?}*/
 
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
@@ -40,10 +48,6 @@ import net.minecraft.client.renderer.RenderPipelines;
 /*import net.minecraft.client.renderer.RenderType;
 import java.util.function.Function;
 *//*?}*/
-
-/*? if > 1.19.2 {*/
-import net.minecraft.client.gui.components.Tooltip;
-/*?}*/
 
 /*? if <1.20 {*/
 /*import com.mojang.blaze3d.systems.RenderSystem;
@@ -65,40 +69,80 @@ public class VersionedScreen extends Screen {
 		super(title);
 	}
 
+	// Vanilla keeps its render list private on every version, so the screen mirrors it to control when widgets draw.
+	/*? if <1.19.4 {*/
+	/*private final List<Widget> renderOrder = new ArrayList<>();
+	*//*?} else {*/
+	private final List<Renderable> renderOrder = new ArrayList<>();
+	/*?}*/
+
+	/*? if <1.19.4 {*/
+	/*@Override
+	protected <T extends GuiEventListener & Widget & NarratableEntry> T addRenderableWidget(T widget) {
+		T added = super.addRenderableWidget(widget);
+		renderOrder.add(widget);
+		return added;
+	}
+
+	private void renderWidgets(PoseStack matrices, int mouseX, int mouseY, float delta) {
+		for (Widget widget : renderOrder) widget.render(matrices, mouseX, mouseY, delta);
+	}
+	*//*?} elif <26.1 {*/
+	/*@Override
+	protected <T extends GuiEventListener & Renderable & NarratableEntry> T addRenderableWidget(T widget) {
+		T added = super.addRenderableWidget(widget);
+		renderOrder.add(widget);
+		return added;
+	}
+
+	private void renderWidgets(GuiGraphics matrices, int mouseX, int mouseY, float delta) {
+		for (Renderable renderable : renderOrder) renderable.render(matrices, mouseX, mouseY, delta);
+	}
+	*//*?}*/
+
+	@Override
+	protected void removeWidget(GuiEventListener listener) {
+		super.removeWidget(listener);
+		renderOrder.remove(listener);
+	}
+
+	@Override
+	protected void clearWidgets() {
+		super.clearWidgets();
+		renderOrder.clear();
+	}
+
+	/**
+	 * The one frame order on every version: background, widgets, the screen's own content over them, then the
+	 * tooltip on top. Vanilla splits these phases differently per version (widgets over custom content on the
+	 * legacy render, custom content over widgets since 1.20.6), which made every overlay's stacking a gamble.
+	 */
 	/*? if <1.20 {*/
 	/*@Override
 	public void render(PoseStack matrix, int mouseX, int mouseY, float delta) {
 		VersionedMatrices matrices = new VersionedMatrices();
+		super.renderBackground(matrix);
+		this.renderWidgets(matrix, mouseX, mouseY, delta);
 	*//*?} elif >=26.1 {*/
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor matrix, int mouseX, int mouseY, float delta) {
 		VersionedMatrices matrices = new VersionedMatrices(matrix);
-	/*?} else {*/
+		super.extractRenderState(matrix, mouseX, mouseY, delta);
+	/*?} elif <1.20.2 {*/
 	/*@Override
 	public void render(GuiGraphics matrix, int mouseX, int mouseY, float delta) {
 		VersionedMatrices matrices = new VersionedMatrices(matrix);
+		super.renderBackground(matrices.getContext());
+		this.renderWidgets(matrices.getContext(), mouseX, mouseY, delta);
+	*//*?} else {*/
+	/*@Override
+	public void render(GuiGraphics matrix, int mouseX, int mouseY, float delta) {
+		VersionedMatrices matrices = new VersionedMatrices(matrix);
+		super.renderBackground(matrices.getContext(), mouseX, mouseY, delta);
+		this.renderWidgets(matrices.getContext(), mouseX, mouseY, delta);
 	*//*?}*/
-
-		// Render background
-		/*? if <1.20.2 {*/
-		/*super.renderBackground(matrices.getContext());
-		*//*?} elif <1.20.6 {*/
-		/*super.renderBackground(matrices.getContext(), mouseX, mouseY, delta);
-		*//*?} elif >=26.1 {*/
-		super.extractRenderState(matrix, mouseX, mouseY, delta);
-		/*?} else {*/
-		/*super.render(matrix, mouseX, mouseY, delta);
-		*//*?}*/
-
-		// Render the rest of our screen
 		versionedRender(matrices, mouseX, mouseY, delta);
-
-		/*? if <1.20.6 {*/
-		/*super.render(matrices.getContext(), mouseX, mouseY, delta);
-		renderLegacyTooltips(matrices, mouseX, mouseY);
-		*//*?} else {*/
-		renderLegacyTooltips(matrices, mouseX, mouseY);
-		/*?}*/
+		renderTooltips(matrices, mouseX, mouseY);
 	}
 
 	// This method is to be override by the child classes
@@ -281,29 +325,57 @@ public class VersionedScreen extends Screen {
 	}
 
 	/** Shows the tooltip while the pointer stays inside the given text bounds, matching vanilla hover-on-text behavior. */
-	protected final void showHoverTooltip(VersionedMatrices matrices, Component tooltip, int x, int y, int width, int mouseX, int mouseY) {
+	protected final void showHoverTooltip(Component tooltip, int x, int y, int width, int mouseX, int mouseY) {
 		if (mouseX < x || mouseX >= x + width || mouseY < y || mouseY >= y + this.font.lineHeight) return;
-		showComponentTooltip(matrices, tooltip, mouseX, mouseY);
+		showComponentTooltip(tooltip, mouseX, mouseY);
 	}
 
-	/** Shows the tooltip wherever the pointer currently is; row lists call this only while a tooltip-carrying row is hovered. */
-	protected final void showComponentTooltip(VersionedMatrices matrices, Component tooltip, int mouseX, int mouseY) {
-		showComponentTooltip(this.font, matrices, tooltip, mouseX, mouseY);
+	/** Claims the frame's tooltip at the pointer; works as a static twin too, so list rows outside the screen hierarchy can call it. */
+	public static void showComponentTooltip(Component tooltip, int mouseX, int mouseY) {
+		VersionedScreen versioned = currentScreen();
+		if (versioned != null) versioned.frameTooltip = tooltip;
 	}
 
-	/** Static twin so widgets outside the screen hierarchy (list rows) can show tooltips on every version. */
-	public static void showComponentTooltip(Font font, VersionedMatrices matrices, Component tooltip, int mouseX, int mouseY) {
-		/*? if >=1.21.8 {*/
-		matrices.getContext().setComponentTooltipForNextFrame(font, List.of(tooltip), mouseX, mouseY);
-		/*?} elif >=1.20 {*/
-		/*if (Minecraft.getInstance().screen instanceof VersionedScreen versioned) versioned.setTooltipForNextRenderPass(tooltip);
-		*//*?} else {*/
-		/*// The batch flushes around the tooltip: pending text bakes before the background paints, and
-		// the tooltip bakes before whatever text is drawn later - both survive the depth interaction.
-		Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
-		if (Minecraft.getInstance().screen instanceof VersionedScreen versioned) versioned.renderTooltip(matrices.getContext(), tooltip, mouseX, mouseY);
-		Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
+	public static void setTooltip(AbstractWidget widget, Component tooltip) {
+		Objects.requireNonNull(widget, "tooltip widget");
+		Objects.requireNonNull(tooltip, "tooltip");
+		VersionedScreen versioned = currentScreen();
+		if (versioned != null) versioned.widgetTooltips.put(widget, tooltip);
+	}
+
+	/** The screen the game currently shows when it is one of ours; the accessor is renamed on 26.2. */
+	private static VersionedScreen currentScreen() {
+		/*? if >=26.2 {*/
+		return Minecraft.getInstance().gui.screen() instanceof VersionedScreen versioned ? versioned : null;
+		/*?} else {*/
+		/*return Minecraft.getInstance().screen instanceof VersionedScreen versioned ? versioned : null;
 		*//*?}*/
+	}
+
+	// One tooltip per frame: a row or list hover claims it first, else the first hovered widget with a registered tooltip draws.
+	// Vanilla attaches tooltips to widgets and paints them per version; here the screen owns both, so the look cannot fork.
+	private Component frameTooltip;
+	private final Map<AbstractWidget, Component> widgetTooltips = new LinkedHashMap<>();
+
+	@Override
+	protected void init() {
+		super.init();
+		// Cleared on re-init so replaced widgets cannot answer for their successors.
+		widgetTooltips.clear();
+	}
+
+	private void renderTooltips(VersionedMatrices matrices, int mouseX, int mouseY) {
+		Component tooltip = frameTooltip;
+		frameTooltip = null;
+		if (tooltip == null) {
+			for (Map.Entry<AbstractWidget, Component> entry : widgetTooltips.entrySet()) {
+				if (entry.getKey().isMouseOver(mouseX, mouseY)) {
+					tooltip = entry.getValue();
+					break;
+				}
+			}
+		}
+		if (tooltip != null) VersionedTooltips.draw(this.font, matrices, tooltip, mouseX, mouseY, this.width, this.height);
 	}
 
 	/*? if <1.19.3 {*/
@@ -526,42 +598,6 @@ public class VersionedScreen extends Screen {
 		return button;
 	}
 	*//*?}*/
-
-	/*? > 1.19.2 {*/
-	public static void setTooltip(AbstractWidget widget, Component tooltip) {
-		widget.setTooltip(Tooltip.create(tooltip));
-	}
-
-	/*?} else {*/
-	/*public static void setTooltip(AbstractWidget widget, Component tooltip) {
-		// Legacy widgets have no tooltip API, so the current screen remembers the pair and draws it while hovered.
-		Objects.requireNonNull(widget, "tooltip widget");
-		Objects.requireNonNull(tooltip, "tooltip");
-		if (Minecraft.getInstance().screen instanceof VersionedScreen versioned) versioned.legacyTooltips.put(widget, tooltip);
-	}
-	*//*?}*/
-
-	/** Widget tooltips on versions without a tooltip API; cleared on re-init so replaced widgets cannot answer for their successors. */
-	private final WeakHashMap<AbstractWidget, Component> legacyTooltips = new WeakHashMap<>();
-
-	@Override
-	protected void init() {
-		super.init();
-		legacyTooltips.clear();
-	}
-
-	/** Draws the registered widget tooltip under the pointer; only compiled for versions that cannot attach one to the widget. */
-	private void renderLegacyTooltips(VersionedMatrices matrices, int mouseX, int mouseY) {
-		/*? if <1.19.3 {*/
-		/*if (legacyTooltips.isEmpty()) return;
-		for (Map.Entry<AbstractWidget, Component> entry : legacyTooltips.entrySet()) {
-			if (entry.getKey().isMouseOver(mouseX, mouseY)) {
-				showComponentTooltip(this.font, matrices, entry.getValue(), mouseX, mouseY);
-				return;
-			}
-		}
-		*//*?}*/
-	}
 
 	protected static final class ActionDefinition {
 		private final Component message;

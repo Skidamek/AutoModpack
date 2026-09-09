@@ -95,6 +95,19 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		return selected == null || !(selected.row instanceof ChangeBrowserProjection.FileRow file) ? null : file;
 	}
 
+	/** The list's current scroll, so an in-place rebuild can put it back; the vanilla accessor is renamed across versions. */
+	public double preservedScrollAmount() {
+		/*? if >=1.21.4 {*/
+		return this.scrollAmount();
+		/*?} else {*/
+		/*return this.getScrollAmount();
+		*//*?}*/
+	}
+
+	public void restoreScrollAmount(double amount) {
+		this.setScrollAmount(amount);
+	}
+
 	/** The selected row's fact line, or null when nothing is selected. */
 	public String facts() {
 		Entry selected = this.getSelected();
@@ -229,7 +242,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			String groups = String.join(", ", visibleGroups(file));
 			String line = identity.isEmpty() ? groups : groups.isEmpty() ? identity : identity + " · " + groups;
 			if (line.isEmpty()) return;
-			VersionedScreen.showComponentTooltip(minecraft.font, matrices, VersionedText.literal(line), mouseX, mouseY);
+			VersionedScreen.showComponentTooltip(VersionedText.literal(line), mouseX, mouseY);
 		}
 
 		private String marker() {
