@@ -14,6 +14,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,9 +25,12 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -48,6 +52,7 @@ import pl.skidam.automodpack_core.protocol.netty.message.configuration.Configura
 import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationCompressionMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationEchoMessage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
@@ -62,6 +67,13 @@ public class DownloadClient implements AutoCloseable {
 		return t;
 	});
 
+	/** One daemon thread heartbeats every candidate parked on a certificate-trust decision. */
+	private static final ScheduledExecutorService PRE_CONFIGURATION_KEEPALIVE_EXECUTOR = Executors.newSingleThreadScheduledExecutor(
+			new CustomThreadFactoryBuilder().setNameFormat("AutoModpack PreConfigurationKeepalive #%d").setDaemon(true).build());
+
+	/** The production cadence is {@link NetUtils#PRE_CONFIGURATION_KEEPALIVE_INTERVAL}; tests shorten it to observe heartbeats quickly. */
+	static volatile Duration preConfigurationKeepaliveInterval = PRE_CONFIGURATION_KEEPALIVE_INTERVAL;
+
 	private static final int MAX_CONNECTIONS = 5;
 
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
@@ -73,8 +85,9 @@ public class DownloadClient implements AutoCloseable {
 	private final Deque<Connection> availableConnections = new ArrayDeque<>();
 	private final Deque<CompletableFuture<Connection>> connectionWaiters = new ArrayDeque<>();
 	private final Set<Connection> allConnections = Collections.newSetFromMap(new IdentityHashMap<>());
+	private final Set<PreConfigurationKeepalive> preConfigurationKeepalives = ConcurrentHashMap.newKeySet();
 	private int openingConnections;
-	private boolean closed;
+	private volatile boolean closed;
 
 	private record TransportRoute(InetSocketAddress directAddress, HolepunchRoute holepunchRoute) {}
 
@@ -189,6 +202,8 @@ public class DownloadClient implements AutoCloseable {
 		if (connectionInfo.connectionMode != ModpackConnectionMode.HOLEPUNCH) {
 			Socket socket = new Socket();
 			socket.connect(route.directAddress(), NETWORK_TIMEOUT_MILLIS);
+			// Helps plain TCP NAT mappings survive the parked trust decision; zero protocol impact.
+			socket.setKeepAlive(true);
 			return socket;
 		}
 
@@ -296,7 +311,11 @@ public class DownloadClient implements AutoCloseable {
 			return rejectCandidate(candidate, new IOException("Certificate trust callback failed", e));
 		}
 
+		PreConfigurationKeepalive keepalive = startPreConfigurationKeepalive(candidate);
 		return decision.handle((trusted, error) -> {
+			// The heartbeat must be gone before the negotiation writes start, so a straggler keepalive record can
+			// never land after the configuration echo and misframe the configured connection.
+			keepalive.retire();
 			if (error != null) {
 				closeQuietly(candidate.socket());
 				Throwable cause = Throwables.unwrap(error);
@@ -315,6 +334,63 @@ public class DownloadClient implements AutoCloseable {
 				throw new CompletionException(e);
 			}
 		});
+	}
+
+	/**
+	 * Keeps the transport warm while the human decides on certificate trust: every interval the candidate writes a
+	 * configuration-phase keepalive the server absorbs silently, so idle NAT mappings and relay bindings never decay
+	 * under the parked connection. Retired when the trust decision settles, the client closes, or the socket dies.
+	 */
+	private PreConfigurationKeepalive startPreConfigurationKeepalive(TlsCandidate candidate) {
+		PreConfigurationKeepalive keepalive = new PreConfigurationKeepalive(candidate.socket());
+		preConfigurationKeepalives.add(keepalive);
+		return keepalive;
+	}
+
+	/** One parked candidate's heartbeat; the write gate makes retirement wait for an in-flight keepalive write. */
+	private final class PreConfigurationKeepalive {
+
+		private final SSLSocket socket;
+		private final ScheduledFuture<?> task;
+		private final Object writeGate = new Object();
+		private boolean retired;
+
+		private PreConfigurationKeepalive(SSLSocket socket) {
+			this.socket = socket;
+			Duration interval = preConfigurationKeepaliveInterval;
+			this.task = PRE_CONFIGURATION_KEEPALIVE_EXECUTOR.scheduleWithFixedDelay(this::tick, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
+		}
+
+		private void tick() {
+			boolean dead;
+			synchronized (writeGate) {
+				dead = retired || closed || socket.isClosed();
+				if (!dead) {
+					try {
+						OutputStream out = socket.getOutputStream();
+						out.write(new byte[]{LATEST_SUPPORTED_PROTOCOL_VERSION, CONFIGURATION_KEEPALIVE_TYPE});
+						out.flush();
+					} catch (IOException died) {
+						dead = true;
+					}
+				}
+				if (dead) retired = true;
+			}
+			if (dead) retireTask();
+		}
+
+		/** Stops the heartbeat and returns only after any in-flight keepalive write has finished. */
+		private void retire() {
+			synchronized (writeGate) {
+				retired = true;
+			}
+			retireTask();
+		}
+
+		private void retireTask() {
+			task.cancel(false);
+			preConfigurationKeepalives.remove(this);
+		}
 	}
 
 	/** Turns a validated candidate into a configured connection, releasing the socket when the negotiation fails. */
@@ -432,6 +508,7 @@ public class DownloadClient implements AutoCloseable {
 		synchronized (poolLock) {
 			if (closed) return;
 			closed = true;
+			preConfigurationKeepalives.forEach(PreConfigurationKeepalive::retire);
 			connections = new ArrayList<>(allConnections);
 			waiters = new ArrayList<>(connectionWaiters);
 			allConnections.clear();
