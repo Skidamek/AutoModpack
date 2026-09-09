@@ -41,6 +41,9 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 /** A native selection list for the shared tree/list change projection. */
 public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowserWidget.Entry> {
 	private static final int ROW_HEIGHT = 30;
+	/** The hovered wash reads as "you can click this"; the selected wash is the stronger one that stays. */
+	private static final int HOVER_COLOR = 0x20FFFFFF;
+	private static final int SELECTED_COLOR = 0x40FFFFFF;
 	private static final int BADGE_SPACING = 4;
 	private static final int BADGE_MARGIN = 6;
 	private static final int BADGE_MODRINTH_COLOR = 0xFF00AF5C;
@@ -60,10 +63,14 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		super(client, width, Math.max(ROW_HEIGHT, bottom - top), top, ROW_HEIGHT);
 		/*?}*/
 		this.centerListVertically = false;
-		/*? if <1.20.6 {*/
-		/*// Vanilla's list render repaints opaque dirt bands across the whole screen above and below the list;
-		// with the screen's text and action rows drawn before the list, those bands erase them (invisible: same dirt as the background).
+		// Vanilla draws list chrome through different machinery on every version; our lists draw none of it.
+		// Anything that needs a panel (the dropdown menus) draws its own.
+		/*? if <1.21.1 {*/
+		/*this.setRenderBackground(false);
 		this.setRenderTopAndBottom(false);
+		*//*?}*/
+		/*? if <1.20.4 {*/
+		/*this.setRenderSelection(false);
 		*//*?}*/
 		this.folderToggle = Objects.requireNonNull(folderToggle, "folder toggle");
 		this.warnUnverified = warnUnverified;
@@ -88,6 +95,42 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		super.render(graphics, mouseX, mouseY, delta);
 		VersionedScissor.disable();
 	}
+	*//*?}*/
+
+	/*? if >=26.1 {*/
+	@Override
+	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
+
+	@Override
+	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	/*?} elif >=1.21.10 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	*//*?} elif >=1.21.1 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
+	*//*?} elif >=1.20.4 {*/
+	/*@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
 	*//*?}*/
 
 	public ChangeBrowserProjection.FileRow selectedFile() {
@@ -193,6 +236,10 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		*//*?}*/
 
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth, int mouseX, int mouseY, boolean hovered) {
+			// The vanilla selection outline is chrome we strip, so the rows carry their own state washes.
+			boolean selected = getSelected() == this;
+			if (selected) matrices.fill(x, y, x + entryWidth, y + ROW_HEIGHT, SELECTED_COLOR);
+			else if (hovered) matrices.fill(x, y, x + entryWidth, y + ROW_HEIGHT, HOVER_COLOR);
 			int indent = Math.min(72, row.depth() * 12);
 			int badgeWidth = 0;
 			for (Badge badge : badges) badgeWidth += minecraft.font.width(badge.text()) + BADGE_SPACING;
