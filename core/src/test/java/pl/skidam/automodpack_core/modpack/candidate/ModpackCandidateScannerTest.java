@@ -274,7 +274,7 @@ class ModpackCandidateScannerTest {
 
 	private ModpackCandidate scan(Path server, Path groups, Map<String, ServerConfigJsons.GroupDeclaration> declarations, boolean autoExclude) throws Exception {
 		Executor direct = Runnable::run;
-		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, declarations,
+		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", server, groups, declarations, false,
 				autoExclude, false, tempDir.resolve("staging"), direct, null, null, null, true);
 		return new ModpackCandidateScanner().scan(request);
 	}
