@@ -178,19 +178,21 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.platformDropdown = dropdownWidget(listLeft() + listWidth() - platformButtonWidth, 24, platformButtonWidth, 20, VersionedText.literal(platformLabel));
 		setTooltip(this.platformDropdown, VersionedText.translatable("automodpack.selection.platformTooltip"));
 		List<ClientPlatform> choices = platformChoices();
-		this.platformDropdown.setOptions(platformOptions(), choices.indexOf(effectivePlatform()), listBottom, index -> pickPlatform(choices.get(index)));
+		// The saved platform may no longer be declared by a refreshed manifest; the detected platform is always a choice.
+		int selected = choices.indexOf(effectivePlatform());
+		if (selected < 0) selected = choices.indexOf(detectedPlatform);
+		this.platformDropdown.setOptions(platformOptions(choices), selected, listBottom, index -> pickPlatform(choices.get(index)));
 	}
 
 	/** The detectable platforms plus every platform the loaded manifest declares, so a declared-only group stays reachable by explicit choice. */
 	private List<ClientPlatform> platformChoices() {
 		List<ClientPlatform> choices = new ArrayList<>(ClientPlatform.builtIns());
-		for (GroupManifest.Group group : groups.values()) for (ClientPlatform platform : group.compatiblePlatforms()) if (!choices.contains(platform)) choices.add(platform);
+		for (ClientPlatform platform : manifest.declaredPlatforms()) if (!choices.contains(platform)) choices.add(platform);
 		return choices;
 	}
 
 	/** The OS dropdown options: every platform choice, with the detected one marked in the list. */
-	private List<Component> platformOptions() {
-		List<ClientPlatform> choices = platformChoices();
+	private List<Component> platformOptions(List<ClientPlatform> choices) {
 		List<Component> options = new ArrayList<>(choices.size());
 		for (ClientPlatform platform : choices)
 			options.add(detectedPlatform.equals(platform)

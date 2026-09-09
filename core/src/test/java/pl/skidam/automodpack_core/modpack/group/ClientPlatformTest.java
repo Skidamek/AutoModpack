@@ -15,8 +15,8 @@ class ClientPlatformTest {
 	}
 
 	@Test
-	void parseInternsEqualIds() {
-		assertSame(ClientPlatform.parse("android"), ClientPlatform.parse("ANDROID"));
+	void parseIsValueEqualById() {
+		assertEquals(ClientPlatform.parse("android"), ClientPlatform.parse("ANDROID"));
 		assertEquals(ClientPlatform.parse("android"), ClientPlatform.parse("android"));
 		assertNotEquals(ClientPlatform.parse("android"), ClientPlatform.OTHER);
 	}

@@ -111,7 +111,7 @@ public final class GroupManifestValidator {
 				GroupManifest.Group group = groupEntry.getValue();
 				if (!group.supports(platform)) continue;
 				for (String path : group.files().keySet()) {
-					if (platform == ClientPlatform.WINDOWS) validateWindowsPath(groupId, path, errors);
+					if (ClientPlatform.WINDOWS.equals(platform)) validateWindowsPath(groupId, path, errors);
 					aliases.computeIfAbsent(platformPathKey(path, platform), ignored -> new ArrayList<>()).add(new PathOwner(groupId, path));
 					if (ModpackPathPolicy.isActiveMod(path, group.files().get(path).type()))
 						modBasenameAliases.computeIfAbsent(platformPathKey(path.substring(path.lastIndexOf('/') + 1), platform), ignored -> new ArrayList<>())
@@ -165,7 +165,7 @@ public final class GroupManifestValidator {
 	}
 
 	private static String platformPathKey(String path, ClientPlatform platform) {
-		if (platform != ClientPlatform.WINDOWS && platform != ClientPlatform.MACOS) return path;
+		if (!ClientPlatform.WINDOWS.equals(platform) && !ClientPlatform.MACOS.equals(platform)) return path;
 		return Normalizer.normalize(path, Normalizer.Form.NFD).toLowerCase(Locale.ROOT);
 	}
 
@@ -290,7 +290,7 @@ public final class GroupManifestValidator {
 
 	private static Set<ClientPlatform> validatePlatforms(String groupId, Set<String> input, List<String> errors) {
 		if (input == null || input.isEmpty()) return Set.of();
-		Set<ClientPlatform> platforms = new TreeSet<>(Comparator.comparing(ClientPlatform::id));
+		Set<ClientPlatform> platforms = new TreeSet<>();
 		for (String value : input) {
 			try {
 				platforms.add(ClientPlatform.parse(value));
@@ -303,9 +303,8 @@ public final class GroupManifestValidator {
 
 	/** Every platform any rule may match on: the detectable built-ins plus the names the manifest itself declares. */
 	private static Set<ClientPlatform> coveredPlatforms(GroupManifest manifest) {
-		Set<ClientPlatform> platforms = new TreeSet<>(Comparator.comparing(ClientPlatform::id));
-		platforms.addAll(ClientPlatform.builtIns());
-		for (GroupManifest.Group group : manifest.groups().values()) platforms.addAll(group.compatiblePlatforms());
+		Set<ClientPlatform> platforms = new TreeSet<>(ClientPlatform.builtIns());
+		platforms.addAll(manifest.declaredPlatforms());
 		return platforms;
 	}
 

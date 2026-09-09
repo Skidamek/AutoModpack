@@ -2,25 +2,21 @@ package pl.skidam.automodpack_core.modpack.group;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /**
  * A platform by its canonical lowercase id. The three desktop platforms are the only ones detection can ever
  * produce, but a server admin may declare any other name in a group's {@code compatiblePlatforms}, and a client
- * may then explicitly select that group - equal ids share one interned instance.
+ * may then explicitly select that group. Instances are value-equal by id: built-in ids always yield the built-in
+ * constant, while admin-declared names parse to fresh instances.
  */
-public final class ClientPlatform {
+public final class ClientPlatform implements Comparable<ClientPlatform> {
 	public static final ClientPlatform WINDOWS = new ClientPlatform("windows");
 	public static final ClientPlatform LINUX = new ClientPlatform("linux");
 	public static final ClientPlatform MACOS = new ClientPlatform("macos");
 	/** Everything outside the first-class desktop trio - mobile launchers, the BSDs, anything new. */
 	public static final ClientPlatform OTHER = new ClientPlatform("other");
-
-	private static final ConcurrentMap<String, ClientPlatform> INTERNED = new ConcurrentHashMap<>(Map.of(WINDOWS.id, WINDOWS, LINUX.id, LINUX, MACOS.id, MACOS, OTHER.id, OTHER));
 
 	private static final List<ClientPlatform> BUILT_INS = List.of(WINDOWS, LINUX, MACOS, OTHER);
 
@@ -53,11 +49,17 @@ public final class ClientPlatform {
 		if (value == null) throw new IllegalArgumentException("Platform is null");
 		String id = value.strip().toLowerCase(Locale.ROOT);
 		if (id.isEmpty()) throw new IllegalArgumentException("Platform name is blank");
-		return INTERNED.computeIfAbsent(id, ClientPlatform::new);
+		for (ClientPlatform builtIn : BUILT_INS) if (builtIn.id.equals(id)) return builtIn;
+		return new ClientPlatform(id);
 	}
 
 	public String id() {
 		return id;
+	}
+
+	@Override
+	public int compareTo(ClientPlatform other) {
+		return id.compareTo(other.id);
 	}
 
 	@Override

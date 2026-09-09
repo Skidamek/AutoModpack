@@ -16,6 +16,13 @@ public record GroupManifest(
 		groups = immutableMap(groups);
 	}
 
+	/** The platforms this manifest's groups declare, in id order; most groups declare none. */
+	public Set<ClientPlatform> declaredPlatforms() {
+		Set<ClientPlatform> platforms = new TreeSet<>();
+		for (Group group : groups.values()) platforms.addAll(group.compatiblePlatforms());
+		return platforms;
+	}
+
 	public ModpackJsons.CompleteModpackContentFields toFields() {
 		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = modpackId;
@@ -66,7 +73,7 @@ public record GroupManifest(
 
 	private static Set<ClientPlatform> immutablePlatforms(Collection<ClientPlatform> input) {
 		if (input == null || input.isEmpty()) return Set.of();
-		Set<ClientPlatform> platforms = new TreeSet<>(Comparator.comparing(ClientPlatform::id));
+		Set<ClientPlatform> platforms = new TreeSet<>();
 		platforms.addAll(input);
 		return Collections.unmodifiableSet(platforms);
 	}
