@@ -23,4 +23,9 @@ public final class Throwables {
 		}
 		return current;
 	}
+
+	/** The failure's own words when it has any; the class name is only the last resort. */
+	public static String detail(Throwable throwable) {
+		return throwable.getMessage() == null || throwable.getMessage().isBlank() ? throwable.getClass().getSimpleName() : throwable.getMessage();
+	}
 }

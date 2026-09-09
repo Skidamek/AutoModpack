@@ -27,6 +27,7 @@ import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.Throwables;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
@@ -100,7 +101,7 @@ public class ModpackExecutor {
 			}
 		} catch (Exception e) {
 			LOGGER.error("Failed to preview modpack generation", e);
-			return new PreviewResult.Rejected(e.getClass().getSimpleName(), e);
+			return new PreviewResult.Rejected(Throwables.detail(e), e);
 		}
 	}
 
@@ -132,7 +133,7 @@ public class ModpackExecutor {
 			return new RevertResult.Rejected(e.getMessage() == null ? "Invalid rollback target" : e.getMessage(), e);
 		} catch (Exception e) {
 			LOGGER.error("Failed to publish modpack revert", e);
-			return new RevertResult.Rejected(detail(e), e);
+			return new RevertResult.Rejected(Throwables.detail(e), e);
 		}
 	}
 
@@ -174,7 +175,7 @@ public class ModpackExecutor {
 			return bindHosting(publishLocked(expectedContentToken, inlineNotes));
 		} catch (Exception e) {
 			LOGGER.error("Failed to publish modpack generation", e);
-			return new PublishResult.Rejected(detail(e), e);
+			return new PublishResult.Rejected(Throwables.detail(e), e);
 		}
 	}
 
@@ -216,7 +217,7 @@ public class ModpackExecutor {
 			return bindHosting(new Loaded(currentDocument(current), generationStore.hosting()));
 		} catch (Exception e) {
 			LOGGER.error("Failed to load the current modpack generation", e);
-			return new LoadResult.Rejected(e.getClass().getSimpleName(), e);
+			return new LoadResult.Rejected(Throwables.detail(e), e);
 		}
 	}
 
@@ -296,11 +297,6 @@ public class ModpackExecutor {
 			return failed;
 		}
 		return result;
-	}
-
-	/** The guard's or failure's own words when it has any; the class name is only the last resort. */
-	public static String detail(Throwable e) {
-		return e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
 	}
 
 	private void consumePatchNotes(GenerationPatchNotes.Resolution notes) {
