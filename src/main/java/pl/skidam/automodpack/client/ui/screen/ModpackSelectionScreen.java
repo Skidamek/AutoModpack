@@ -668,7 +668,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", effectivePlatform().id(), resolution.selectedGroups().size())
 				.withStyle(platformOverride == null ? ChatFormatting.GRAY : ChatFormatting.YELLOW), railLeft, 44, TextColors.WHITE);
 		// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
-		// They sit exactly where the platform menu opens, so the menu replaces them while it is open.
+		// The platform menu opens right over them, and an open menu covers what it floats above.
 		if (!menuOpen()) {
 			if (!resolutionError.isEmpty()) {
 				drawWrappedStatus(matrices, VersionedText.literal(resolutionError).withStyle(ChatFormatting.RED));
