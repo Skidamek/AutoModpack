@@ -37,6 +37,15 @@ public class NetUtils {
 	// flow-control pauses outlast a connect-grade deadline. It only has to catch a dead peer, not
 	// a slow pipe, so it sits far past any healthy inter-frame gap.
 	public static final Duration TRANSFER_IDLE_TIMEOUT = Duration.ofSeconds(60);
+	// The pre-configuration lifetime tripwire: while the human decides on certificate trust the server must never reap
+	// the socket for idleness, so pre-configuration sockets are bounded only by this one window. It sits an order of
+	// magnitude past the transfer idle deadline (60 s) and far past the connect-grade network timeout (15 s) - generous
+	// for a slow human reading the fingerprint plus a slow first TLS handshake, tight enough that a client which died at
+	// the screen cannot pin a server socket forever.
+	public static final Duration PRE_CONFIGURATION_LIFETIME = Duration.ofMinutes(10);
+	// Pre-configuration keepalive cadence: NAT mappings and holepunch relay bindings typically decay after 30-60s of
+	// silence, so a 20s heartbeat sits well inside that band while costing the parked client one two-byte write.
+	public static final Duration PRE_CONFIGURATION_KEEPALIVE_INTERVAL = Duration.ofSeconds(20);
 	public static final Duration HTTP_TIMEOUT = Duration.ofSeconds(5);
 	public static final int NETWORK_TIMEOUT_MILLIS = Math.toIntExact(NETWORK_TIMEOUT.toMillis());
 	public static final int TRANSFER_IDLE_TIMEOUT_MILLIS = Math.toIntExact(TRANSFER_IDLE_TIMEOUT.toMillis());
@@ -61,6 +70,8 @@ public class NetUtils {
 	public static final byte CONFIGURATION_ECHO_TYPE = 0x40;
 	public static final byte CONFIGURATION_COMPRESSION_TYPE = 0x41;
 	public static final byte CONFIGURATION_CHUNK_SIZE_TYPE = 0x42;
+	// A client parked on its certificate-trust decision heartbeats these; the server absorbs them silently.
+	public static final byte CONFIGURATION_KEEPALIVE_TYPE = 0x4F;
 
 	// Chunk size
 	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB

@@ -120,7 +120,8 @@ public final class StableSourceSnapshotter {
 	}
 
 	/** Windows reserves these device names before any extension, so con.txt is as uncreatable as con; the stem before the first dot is what gets compared. */
-	private static final Set<String> RESERVED_WINDOWS_NAMES = Set.of("con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9");
+	private static final Set<String> RESERVED_WINDOWS_NAMES = Set.of("con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6",
+			"lpt7", "lpt8", "lpt9");
 
 	static boolean isReservedWindowsName(String component) {
 		int extension = component.indexOf('.');

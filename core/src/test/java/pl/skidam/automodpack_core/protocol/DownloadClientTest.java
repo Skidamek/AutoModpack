@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_CHUNK_SIZE_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_COMPRESSION_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_ECHO_TYPE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_KEEPALIVE_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.END_OF_TRANSMISSION;
 import static pl.skidam.automodpack_core.protocol.NetUtils.FILE_REQUEST_TYPE;
 import static pl.skidam.automodpack_core.protocol.NetUtils.MAX_CHUNK_SIZE;
@@ -25,6 +26,7 @@ import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
@@ -155,6 +157,37 @@ class DownloadClientTest {
 			decision.complete(false);
 			assertThrows(Exception.class, () -> clientFuture.get(5, TimeUnit.SECONDS));
 			assertEquals(1, server.acceptedConnections());
+		}
+	}
+
+	@Test
+	void trustWaitKeepsTransportWarmAndStopsAfterConfiguration() throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		CompletableFuture<Boolean> decision = new CompletableFuture<>();
+		Duration productionInterval = DownloadClient.preConfigurationKeepaliveInterval;
+		DownloadClient.preConfigurationKeepaliveInterval = Duration.ofMillis(100);
+
+		try (TransferServer server = new TransferServer(keyPair, certificate)) {
+			ConnectionJsons.ConnectionInfo connectionInfo = new ConnectionJsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
+			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
+
+			long deadline = System.currentTimeMillis() + 5000;
+			while (server.keepalivesAbsorbed() < 2 && System.currentTimeMillis() < deadline)
+				Thread.sleep(20);
+			assertTrue(server.keepalivesAbsorbed() >= 2, "the client parked on the trust decision must heartbeat periodically");
+			assertFalse(clientFuture.isDone());
+
+			decision.complete(true);
+			try (DownloadClient ignored = clientFuture.get(5, TimeUnit.SECONDS)) {
+				server.configured().get(5, TimeUnit.SECONDS);
+				// The heartbeat retires with the trust decision: the configured connection hears only silence.
+				assertEquals(-1, server.postConfigurationByte().get(5, TimeUnit.SECONDS));
+			}
+			assertEquals(1, server.acceptedConnections());
+		} finally {
+			DownloadClient.preConfigurationKeepaliveInterval = productionInterval;
 		}
 	}
 
@@ -332,7 +365,9 @@ class DownloadClientTest {
 		private final SSLServerSocket server;
 		private final ExecutorService executor = Executors.newSingleThreadExecutor();
 		private final AtomicInteger acceptedConnections = new AtomicInteger();
+		private final AtomicInteger keepalivesAbsorbed = new AtomicInteger();
 		private final CompletableFuture<Integer> earlyApplicationByte = new CompletableFuture<>();
+		private final CompletableFuture<Integer> postConfigurationByte = new CompletableFuture<>();
 		private final CompletableFuture<Void> configured = new CompletableFuture<>();
 		private volatile SSLSocket socket;
 
@@ -351,8 +386,16 @@ class DownloadClientTest {
 			return acceptedConnections.get();
 		}
 
+		int keepalivesAbsorbed() {
+			return keepalivesAbsorbed.get();
+		}
+
 		CompletableFuture<Integer> earlyApplicationByte() {
 			return earlyApplicationByte;
+		}
+
+		CompletableFuture<Integer> postConfigurationByte() {
+			return postConfigurationByte;
 		}
 
 		CompletableFuture<Void> configured() {
@@ -369,19 +412,34 @@ class DownloadClientTest {
 				DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 
 				socket.setSoTimeout(300);
+				int early;
 				try {
-					earlyApplicationByte.complete(in.readUnsignedByte());
+					early = in.readUnsignedByte();
 				} catch (SocketTimeoutException e) {
-					earlyApplicationByte.complete(-1);
+					early = -1;
 				}
+				earlyApplicationByte.complete(early);
 
 				socket.setSoTimeout(5000);
-				int version = in.readUnsignedByte();
-				int compressionType = in.readUnsignedByte();
+				int version;
+				int type;
+				if (early >= 0) {
+					// The early probe consumed the version byte of the first frame on the wire.
+					version = early;
+					type = in.readUnsignedByte();
+				} else {
+					version = in.readUnsignedByte();
+					type = in.readUnsignedByte();
+				}
+				while (type == CONFIGURATION_KEEPALIVE_TYPE) {
+					keepalivesAbsorbed.incrementAndGet();
+					version = in.readUnsignedByte();
+					type = in.readUnsignedByte();
+				}
+				if (type != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected compression request");
 				int compression = in.readUnsignedByte();
-				if (compressionType != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected compression request");
 				out.writeByte(version);
-				out.writeByte(compressionType);
+				out.writeByte(CONFIGURATION_COMPRESSION_TYPE);
 				out.writeByte(compression);
 				out.flush();
 
@@ -397,9 +455,17 @@ class DownloadClientTest {
 				in.readUnsignedByte();
 				if (in.readUnsignedByte() != CONFIGURATION_ECHO_TYPE) throw new IOException("Unexpected echo request");
 				configured.complete(null);
+
+				socket.setSoTimeout(400);
+				try {
+					postConfigurationByte.complete(in.readUnsignedByte());
+				} catch (SocketTimeoutException e) {
+					postConfigurationByte.complete(-1);
+				}
 			} catch (Exception e) {
 				if (!earlyApplicationByte.isDone()) earlyApplicationByte.completeExceptionally(e);
 				if (!configured.isDone()) configured.completeExceptionally(e);
+				if (!postConfigurationByte.isDone()) postConfigurationByte.completeExceptionally(e);
 			}
 		}
 
