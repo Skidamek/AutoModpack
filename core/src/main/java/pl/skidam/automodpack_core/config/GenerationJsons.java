@@ -14,7 +14,6 @@ public class GenerationJsons {
 		public String createdAt = "";
 		public String notes = "";
 		public long restoreOf = -1;
-		public boolean snapshot;
 		public List<JournalChangeFields> changes = List.of();
 	}
 

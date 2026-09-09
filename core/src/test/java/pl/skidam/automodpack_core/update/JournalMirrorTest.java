@@ -78,8 +78,9 @@ class JournalMirrorTest {
 	private static Path fetchedJournal(ClientStorage storage, String headToken, String olderToken) throws IOException {
 		Path file = Files.createTempFile(storage.gameDirectory(), "fetched-journal-", ".jsonl");
 		Journal journal = Journal.open(file);
-		journal.append(new JournalEntry(1, olderToken, sha1("policy-one"), TestPacks.CREATED, "First", JournalEntry.NO_RESTORE, true, List.of()));
-		journal.append(new JournalEntry(2, headToken, sha1("policy-two"), TestPacks.CREATED, "Second", JournalEntry.NO_RESTORE, false,
+		journal.append(new JournalEntry(1, olderToken, sha1("policy-one"), TestPacks.CREATED, "First", JournalEntry.NO_RESTORE,
+				List.of(new JournalEntry.Change("mods/test.jar", null, olderToken, 1))));
+		journal.append(new JournalEntry(2, headToken, sha1("policy-two"), TestPacks.CREATED, "Second", JournalEntry.NO_RESTORE,
 				List.of(new JournalEntry.Change("mods/test.jar", olderToken, headToken, 1))));
 		return file;
 	}

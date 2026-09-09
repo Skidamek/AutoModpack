@@ -71,7 +71,7 @@ public final class TestPacks {
 		ContentTree previous = journal.isEmpty() ? ContentTree.empty() : journal.treeAt(journal.head().seq());
 		ContentTree next = ContentTree.fromManifest(document.manifest());
 		journal.append(new JournalEntry(journal.isEmpty() ? 1 : journal.head().seq() + 1, document.contentToken(), document.policySha1(), document.createdAt(), "", JournalEntry.NO_RESTORE,
-				journal.isEmpty(), diff(previous, next)));
+				diff(previous, next)));
 	}
 
 	private static List<JournalEntry.Change> diff(ContentTree previous, ContentTree next) {
