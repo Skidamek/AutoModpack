@@ -6,9 +6,7 @@ import static pl.skidam.automodpack_core.Constants.MOD_ID;
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Locale;
 import java.util.Objects;
-import java.util.Set;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -20,6 +18,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.JarUtils;
+import pl.skidam.automodpack_core.utils.OsPaths;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 
@@ -112,20 +111,11 @@ public final class StableSourceSnapshotter {
 		for (Path component : Path.of(logicalPath))
 			if (component.toString().startsWith(".")) return new Exclusion(ExcludedCandidate.Reason.HIDDEN_FILE, "hidden file or directory");
 		for (Path component : Path.of(logicalPath))
-			if (isReservedWindowsName(component.toString())) return new Exclusion(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, "'" + component + "' cannot be created on Windows clients");
+			if (OsPaths.isReservedWindowsDeviceName(component.toString())) return new Exclusion(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, "'" + component + "' cannot be created on Windows clients");
 		if (logicalPath.endsWith(".tmp")) return new Exclusion(ExcludedCandidate.Reason.TEMPORARY_FILE, "temporary file");
 		if (logicalPath.endsWith(".disabled")) return new Exclusion(ExcludedCandidate.Reason.DISABLED_FILE, "disabled file");
 		if (logicalPath.endsWith(".bak")) return new Exclusion(ExcludedCandidate.Reason.BACKUP_FILE, "backup file");
 		return null;
-	}
-
-	/** Windows reserves these device names before any extension, so con.txt is as uncreatable as con; the stem before the first dot is what gets compared. */
-	private static final Set<String> RESERVED_WINDOWS_NAMES = Set.of("con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6",
-			"lpt7", "lpt8", "lpt9");
-
-	static boolean isReservedWindowsName(String component) {
-		int extension = component.indexOf('.');
-		return RESERVED_WINDOWS_NAMES.contains((extension < 0 ? component : component.substring(0, extension)).toLowerCase(Locale.ROOT));
 	}
 
 	/** The AutoModpack jar itself never becomes a candidate; clients receive it through the bootstrap flow, so it is not an exclusion event either. */

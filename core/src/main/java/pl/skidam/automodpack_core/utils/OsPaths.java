@@ -3,7 +3,9 @@ package pl.skidam.automodpack_core.utils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * OS publishable-path tripwire for durable AutoModpack writes.
@@ -45,6 +47,21 @@ public final class OsPaths {
 	private static final int MACOS_USABLE_PATH = 1024 - 1;
 
 	private OsPaths() {}
+
+	/**
+	 * Windows refuses these device names before any extension, so con.txt is as uncreatable as con; the stem before the first dot is
+	 * what gets compared, case-insensitively. Receipt: Microsoft's reserved-name list ("Naming Files, Paths, and Namespaces"),
+	 * which since the Windows 11 docs update includes COM0 and LPT0 alongside COM1-9 and LPT1-9.
+	 */
+	private static final Set<String> RESERVED_WINDOWS_DEVICE_NAMES = Set.of("con", "prn", "aux", "nul", "com0", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+			"lpt0", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9");
+
+	/** Whether one path component uses a name Windows reserves for devices, whatever its extension. */
+	public static boolean isReservedWindowsDeviceName(String component) {
+		int extension = component.indexOf('.');
+		String stem = extension < 0 ? component : component.substring(0, extension);
+		return RESERVED_WINDOWS_DEVICE_NAMES.contains(stem.toLowerCase(Locale.ROOT));
+	}
 
 	public static void requirePublishableFile(Path path) throws IOException {
 		requirePublishableFile(path, VERIFIED_TEMP_OVERHEAD);

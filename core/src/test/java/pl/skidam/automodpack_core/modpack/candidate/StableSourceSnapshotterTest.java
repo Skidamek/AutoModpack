@@ -4,18 +4,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
+import pl.skidam.automodpack_core.utils.OsPaths;
+
 class StableSourceSnapshotterTest {
 	@Test
 	void reservedWindowsNamesMatchBeforeAnyExtension() {
-		assertTrue(StableSourceSnapshotter.isReservedWindowsName("CON"));
-		assertTrue(StableSourceSnapshotter.isReservedWindowsName("con"));
-		assertTrue(StableSourceSnapshotter.isReservedWindowsName("con.txt"));
-		assertTrue(StableSourceSnapshotter.isReservedWindowsName("AUX.tar.gz"));
-		assertTrue(StableSourceSnapshotter.isReservedWindowsName("Nul"));
-		assertTrue(StableSourceSnapshotter.isReservedWindowsName("lpt9"));
-		assertFalse(StableSourceSnapshotter.isReservedWindowsName("com10"));
-		assertFalse(StableSourceSnapshotter.isReservedWindowsName("connection"));
-		assertFalse(StableSourceSnapshotter.isReservedWindowsName("auxiliary.tar.gz"));
-		assertFalse(StableSourceSnapshotter.isReservedWindowsName("normal.txt"));
+		assertTrue(OsPaths.isReservedWindowsDeviceName("CON"));
+		assertTrue(OsPaths.isReservedWindowsDeviceName("con"));
+		assertTrue(OsPaths.isReservedWindowsDeviceName("con.txt"));
+		assertTrue(OsPaths.isReservedWindowsDeviceName("AUX.tar.gz"));
+		assertTrue(OsPaths.isReservedWindowsDeviceName("Nul"));
+		assertTrue(OsPaths.isReservedWindowsDeviceName("lpt0"));
+		assertTrue(OsPaths.isReservedWindowsDeviceName("lpt9"));
+		assertTrue(OsPaths.isReservedWindowsDeviceName("com0.tar.gz"));
+		assertFalse(OsPaths.isReservedWindowsDeviceName("com10"));
+		assertFalse(OsPaths.isReservedWindowsDeviceName("connection"));
+		assertFalse(OsPaths.isReservedWindowsDeviceName("auxiliary.tar.gz"));
+		assertFalse(OsPaths.isReservedWindowsDeviceName("normal.txt"));
 	}
 }
