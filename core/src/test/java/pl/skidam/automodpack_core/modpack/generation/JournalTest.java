@@ -40,6 +40,23 @@ class JournalTest {
 	}
 
 	@Test
+	void tornNewlineAfterACompleteEntryIsRepairedInsteadOfFusingTheNextAppend() throws Exception {
+		Path file = tempDir.resolve("journal.jsonl");
+		Journal journal = Journal.open(file);
+		journal.append(entry(1, "one"));
+		String torn = Files.readString(file, StandardCharsets.UTF_8).stripTrailing();
+		Files.writeString(file, torn, StandardCharsets.UTF_8);
+
+		Journal reopened = Journal.open(file);
+		assertEquals(1, reopened.length());
+
+		reopened.append(entry(2, "two"));
+		Journal afterAppend = Journal.open(file);
+		assertEquals(2, afterAppend.length());
+		assertEquals(2, afterAppend.head().seq());
+	}
+
+	@Test
 	void malformedLineBeforeTheTailIsCorruption() throws Exception {
 		Path file = tempDir.resolve("journal.jsonl");
 		Journal journal = Journal.open(file);
