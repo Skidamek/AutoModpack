@@ -51,7 +51,12 @@ public final class ConfigTools {
 	private static Gson buildGson() {
 		GsonBuilder builder = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting();
 		CUSTOM_JSON_ADAPTERS.forEach(builder::registerTypeAdapter);
-		return builder.registerTypeHierarchyAdapter(Enum.class, new StrictEnumTypeAdapter()).create();
+		return strictEnums(builder).create();
+	}
+
+	/** Registers the strict enum adapter every durable-state Gson must carry, so unknown enum names fail loudly instead of deserializing to null. */
+	public static GsonBuilder strictEnums(GsonBuilder builder) {
+		return builder.registerTypeHierarchyAdapter(Enum.class, new StrictEnumTypeAdapter());
 	}
 
 	public static <T> Optional<T> read(Path path, Class<T> type) {
