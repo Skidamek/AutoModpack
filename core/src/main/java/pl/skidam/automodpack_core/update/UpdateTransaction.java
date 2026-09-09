@@ -18,6 +18,7 @@ import java.util.UUID;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.ConfigTools.ConfigParseException;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
@@ -72,13 +73,16 @@ public final class UpdateTransaction {
 
 	public UpdateTransaction() {}
 
-	/** Reads the persisted transaction file, returning null when none exists; a corrupt transaction is set aside as evidence and treated as absent, since the replan recovery rebuilds from the leftover directories. */
+	/**
+	 * Reads the persisted transaction file, returning null when none exists; unparseable content is set aside as evidence and treated as absent, since the replan recovery rebuilds from the leftover directories, while
+	 * read failures propagate.
+	 */
 	public static UpdateTransaction read(Path path) throws IOException {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return null;
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Persisted update transaction is not a regular file: " + path);
 		try {
 			return ConfigTools.read(path, UpdateTransaction.class).orElseThrow(() -> new IOException("Persisted update transaction is empty: " + path));
-		} catch (RuntimeException e) {
+		} catch (ConfigParseException e) {
 			setAsideCorrupt(path, e);
 			return null;
 		}
