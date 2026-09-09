@@ -45,10 +45,14 @@ public final class ClientPlatform implements Comparable<ClientPlatform> {
 		return BUILT_INS;
 	}
 
+	/** Receipt: the longest real platform name is a handful of characters and group ids cap at 64, so this is generous headroom for a persisted selection value and map key. */
+	private static final int MAX_ID_LENGTH = 64;
+
 	public static ClientPlatform parse(String value) {
 		if (value == null) throw new IllegalArgumentException("Platform is null");
 		String id = value.strip().toLowerCase(Locale.ROOT);
 		if (id.isEmpty()) throw new IllegalArgumentException("Platform name is blank");
+		if (id.length() > MAX_ID_LENGTH) throw new IllegalArgumentException("Platform name is longer than " + MAX_ID_LENGTH + " characters");
 		for (ClientPlatform builtIn : BUILT_INS) if (builtIn.id.equals(id)) return builtIn;
 		return new ClientPlatform(id);
 	}
