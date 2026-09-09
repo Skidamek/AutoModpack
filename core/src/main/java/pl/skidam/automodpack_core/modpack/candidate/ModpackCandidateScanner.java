@@ -48,7 +48,7 @@ public final class ModpackCandidateScanner {
 			}
 		}
 
-		List<GroupRules> synchronizedGroups = rulesByGroup.values().stream().filter(rules -> !rules.syncedFiles().isEmpty()).toList();
+		List<GroupRules> synchronizedGroups = request.hostModpackOnly() ? List.of() : rulesByGroup.values().stream().filter(rules -> !rules.syncedFiles().isEmpty()).toList();
 		if (!synchronizedGroups.isEmpty()) {
 			Set<String> scanRoots = new TreeSet<>();
 			for (GroupRules rules : synchronizedGroups) scanRoots.addAll(rules.syncedFiles().safeScanRoots());
@@ -319,6 +319,8 @@ public final class ModpackCandidateScanner {
 			Path serverRoot,
 			Path groupRoot,
 			Map<String, ServerConfigJsons.GroupDeclaration> groups,
+			/** Standalone hosting serves only the host-modpack group directories; the server-root sync rules are a modded-server concept. */
+			boolean hostModpackOnly,
 			boolean autoExcludeUnnecessaryFiles,
 			boolean autoExcludeServerSideMods,
 			Path stagingDirectory,

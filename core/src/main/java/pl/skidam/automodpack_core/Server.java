@@ -4,8 +4,6 @@ import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_CONFIG_FILE;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Objects;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
@@ -25,10 +23,8 @@ public class Server {
 			LOGGER.error("Failed to load standalone host configuration");
 			return;
 		}
-		// Standalone host serves only what is already in host-modpack, so no group pulls in CWD files.
-		if (serverConfig.groups != null) serverConfig.groups.values().stream().filter(Objects::nonNull).forEach(group -> group.syncedFiles = new HashSet<>());
-		serverConfig.validateSecrets = false;
-		ConfigTools.writeAtomic(SERVER_CONFIG_FILE, serverConfig);
+		// Standalone semantics are runtime-only: consumers read standaloneHost, the config file keeps the admin's own content.
+		standaloneHost = true;
 
 		if (serverConfig.bindPort == -1) {
 			LOGGER.error("Host port not set in config!");
