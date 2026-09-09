@@ -1,8 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.TextColors;
-import pl.skidam.automodpack.client.ui.UiFormat;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -24,6 +21,8 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.TextColors;
+import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -96,7 +95,8 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	}
 
 	/** The preamble is a pre-wrapped text block (for example an entry's full patch notes) drawn between the description and the browser. */
-	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> groupNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble, boolean warnUnverified, long downloadBytes, String initialGroup) {
+	public ChangeBrowserScreen(Screen parent, Component heading, Component description, ChangeSet changes, Map<String, String> groupNames, BrowserAction auxiliaryAction, List<? extends MutableComponent> preamble,
+			boolean warnUnverified, long downloadBytes, String initialGroup) {
 		super(heading);
 		this.parent = parent;
 		this.heading = Objects.requireNonNull(heading, "browser heading");
@@ -180,8 +180,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				List.of(new ActionAreaLayout.Row(ActionAreaLayout.RowKind.AUXILIARY, geometry)));
 		for (ActionAreaLayout.Placement placement : layout.placements()) {
 			Button button = switch (placement.id()) {
-				case "modrinth" -> buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.modrinth"), press -> openPage(platformUrl("modrinth")));
-				case "curseforge" -> buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.curseforge"), press -> openPage(platformUrl("curseforge")));
+				case "modrinth" ->
+					buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.modrinth"), press -> openPage(platformUrl("modrinth")));
+				case "curseforge" ->
+					buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.curseforge"), press -> openPage(platformUrl("curseforge")));
 				default -> buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), VersionedText.translatable("automodpack.browser.copyHash"), press -> copyHash());
 			};
 			button.active = placement.id().equals("hash") ? hash != null : platformUrl(placement.id()) != null;
@@ -193,9 +195,11 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	private List<ActionRow> buildActionRows() {
 		List<ActionRow> actionRows = new ArrayList<>();
-		if (auxiliaryAction != null) actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
-				optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this))));
-		else actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
+		if (auxiliaryAction != null)
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()),
+					optionalAction(auxiliaryAction.label(), button -> auxiliaryAction.action().accept(this))));
+		else
+			actionRows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back())));
 		return actionRows;
 	}
 
@@ -343,15 +347,19 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	}
 
 	private void updateControlLabels() {
-		if (contentButton != null) contentButton.setMessage(VersionedText.translatable("automodpack.browser.contentFilter",
-				selectedContent.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable("automodpack.browser.content." + selectedContent).getString()));
+		if (contentButton != null)
+			contentButton.setMessage(VersionedText.translatable("automodpack.browser.contentFilter",
+					selectedContent.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable("automodpack.browser.content." + selectedContent).getString()));
 		if (groupButton != null) {
 			groupButton.active = !groupIds().isEmpty();
 			groupButton.setMessage(VersionedText.translatable("automodpack.browser.groupFilter",
 					selectedGroup.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups").getString() : groupName(selectedGroup)));
 		}
-		if (sourceButton != null) sourceButton.setMessage(VersionedText.translatable("automodpack.browser.sourceFilter",
-				selectedSource == null ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom").getString()));
+		if (sourceButton != null)
+			sourceButton.setMessage(VersionedText.translatable("automodpack.browser.sourceFilter",
+					selectedSource == null
+							? VersionedText.translatable("automodpack.browser.all").getString()
+							: VersionedText.translatable(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom").getString()));
 	}
 
 	private void resolveCachedReferences() {
@@ -368,15 +376,11 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				if (closed || referenced == changes) return;
 				changes = referenced;
 				// In-place refresh instead of a full screen rebuild, so the search field keeps its content and focus.
-				/*? if >=1.21.4 {*/
-				double scrollAmount = this.browser == null ? 0 : this.browser.scrollAmount();
-				/*?} else {*/
-				/*double scrollAmount = this.browser == null ? 0 : this.browser.getScrollAmount();
-				*//*?}*/
+				double scrollAmount = this.browser == null ? 0 : this.browser.preservedScrollAmount();
 				rebuildBrowser();
 				if (this.browser == null) return;
 				// Both vanilla setters clamp, so a stale scroll from the smaller old list is safe.
-				this.browser.setScrollAmount(scrollAmount);
+				this.browser.restoreScrollAmount(scrollAmount);
 				addPaneActions(this.paneActionsY);
 			});
 		});
@@ -429,9 +433,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		/*? if <26.1 {*/
-		/*if (!anyMenuOpen() && this.browser != null) this.browser.render(matrices.getContext(), mouseX, mouseY, delta);
-		*//*?}*/
 		int contentWidth = panelWidth(PANEL_WIDTH);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, heading.getString(), contentWidth)).withStyle(ChatFormatting.BOLD), this.width / 2, 8, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, description.getString(), contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, 21, TextColors.WHITE);
@@ -448,11 +449,13 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		ChangeBrowserProjection.FileRow selected = anyMenuOpen() || this.browser == null ? null : this.browser.selectedFile();
 		if (selected == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.selectHint").withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop, TextColors.WHITE);
 		else {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selected.path(), contentWidth)).withStyle(ChatFormatting.WHITE), this.width / 2, this.paneTop, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selected.path(), contentWidth)).withStyle(ChatFormatting.WHITE), this.width / 2, this.paneTop,
+					TextColors.WHITE);
 			String facts = this.browser.facts();
 			String hash = selected.writtenHash();
 			if (hash != null) facts += " · sha1 " + hash.substring(0, Math.min(12, hash.length()));
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, facts, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop + this.font.lineHeight, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, facts, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop + this.font.lineHeight,
+					TextColors.WHITE);
 		}
 	}
 

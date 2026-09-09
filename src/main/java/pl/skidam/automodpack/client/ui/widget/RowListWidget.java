@@ -39,9 +39,9 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 	private final IntConsumer rowPicked;
 	private final TooltipShower tooltipShower;
 
-	/** Shows a component tooltip at the pointer; screens bridge this to their versioned tooltip rendering. */
+	/** Shows a component tooltip at the pointer; screens bridge this to the versioned tooltip rendering. */
 	public interface TooltipShower {
-		void showTooltip(VersionedMatrices matrices, Component tooltip, int mouseX, int mouseY);
+		void showTooltip(Component tooltip, int mouseX, int mouseY);
 	}
 
 	/** One row: pre-wrapped, pre-styled lines plus an optional hover tooltip. */
@@ -211,7 +211,7 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + Math.max(0, (entryWidth - minecraft.font.width(drawn)) / 2), textY, TextColors.WHITE);
 				textY += LINE_STEP;
 			}
-			if (hovered && row.tooltip() != null && tooltipShower != null) tooltipShower.showTooltip(matrices, row.tooltip(), mouseX, mouseY);
+			if (hovered && row.tooltip() != null && tooltipShower != null) tooltipShower.showTooltip(row.tooltip(), mouseX, mouseY);
 		}
 
 		/*? if >= 1.21.9 {*/

@@ -219,7 +219,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		MutableComponent name = VersionedText.literal(pack.name()).withStyle(ChatFormatting.BOLD);
 		drawCenteredTextWithShadow(matrices, this.font, name, this.width / 2, 12, TextColors.WHITE);
 		if (pack.connectionAvailable())
-			showHoverTooltip(matrices, VersionedText.translatable("automodpack.packDetails.server", pack.connectionOrigin()), this.width / 2 - this.font.width(name) / 2, 12, this.font.width(name), mouseX, mouseY);
+			showHoverTooltip(VersionedText.translatable("automodpack.packDetails.server", pack.connectionOrigin()), this.width / 2 - this.font.width(name) / 2, 12, this.font.width(name), mouseX, mouseY);
 		int y = 28;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		y += 16;
@@ -232,7 +232,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		y += 12;
 		String modpackId = VersionedText.translatable("automodpack.packDetails.id", pack.modpackId()).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, modpackId, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-		showHoverTooltip(matrices, VersionedText.literal(pack.modpackId()), this.width / 2 - this.font.width(modpackId) / 2, y, this.font.width(modpackId), mouseX, mouseY);
+		showHoverTooltip(VersionedText.literal(pack.modpackId()), this.width / 2 - this.font.width(modpackId) / 2, y, this.font.width(modpackId), mouseX, mouseY);
 		y += 12;
 		String contents = VersionedText.translatable("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
 				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes())).getString();
@@ -246,7 +246,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		String contentToken = pack.record().contentToken();
 		String generation = VersionedText.translatable("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), UiFormat.formatInstant(pack.record().createdAt())).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, generation, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-		showHoverTooltip(matrices, VersionedText.literal(contentToken), this.width / 2 - this.font.width(generation) / 2, y, this.font.width(generation), mouseX, mouseY);
+		showHoverTooltip(VersionedText.literal(contentToken), this.width / 2 - this.font.width(generation) / 2, y, this.font.width(generation), mouseX, mouseY);
 		if (busyVisible)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.working").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height - 44, TextColors.WHITE);
 	}
