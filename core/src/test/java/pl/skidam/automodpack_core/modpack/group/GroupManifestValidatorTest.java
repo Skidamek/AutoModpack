@@ -326,6 +326,41 @@ class GroupManifestValidatorTest {
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
+	@Test
+	void acceptsAdminDeclaredPlatformAndRejectsBlankNames() {
+		var fields = catalogue();
+		var group = group(file("a"));
+		group.compatiblePlatforms = Set.of("Android");
+		fields.groups = Map.of("main", group);
+
+		GroupManifest manifest = GroupManifestValidator.validate(fields);
+
+		assertTrue(manifest.groups().get("main").supports(ClientPlatform.parse("android")));
+		assertFalse(manifest.groups().get("main").supports(ClientPlatform.LINUX));
+
+		var blank = catalogue();
+		var blankGroup = group(file("a"));
+		blankGroup.compatiblePlatforms = Set.of("   ");
+		blank.groups = Map.of("main", blankGroup);
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(blank));
+	}
+
+	@Test
+	void validatesRulesForDeclaredOnlyPlatforms() {
+		var fields = catalogue();
+		var app = group(file("a"));
+		app.required = true;
+		app.compatiblePlatforms = Set.of("android");
+		app.requires = Set.of("win-lib");
+		var winLib = group(file("a"));
+		winLib.compatiblePlatforms = Set.of("windows");
+		fields.groups = linkedGroups("app", app, "win-lib", winLib);
+
+		// No detectable platform can see this graph, so only the declared android coverage can reject the impossible requirement.
+		GroupValidationException failure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+		assertTrue(failure.getMessage().contains("android"), failure.getMessage());
+	}
+
 	private static ModpackJsons.CompleteModpackContentFields catalogue() {
 		var fields = new ModpackJsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";

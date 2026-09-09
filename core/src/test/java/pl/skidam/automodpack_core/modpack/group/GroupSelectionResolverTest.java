@@ -127,6 +127,24 @@ class GroupSelectionResolverTest {
 		assertEquals(Set.of("preferred", "safe"), GroupSelectionResolver.resolve(manifest, replacement.intent(), ClientPlatform.LINUX).selectedGroups());
 	}
 
+	@Test
+	void declaredOnlyPlatformGroupIsNotAutoMatchedButIsSelectable() {
+		ClientPlatform android = ClientPlatform.parse("android");
+		GroupManifest.Group mobile = new GroupManifest.Group("Mobile", "", "", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(android), new TreeMap<>());
+		GroupManifest.Group desktop = new GroupManifest.Group("Desktop", "", "", false, true, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.LINUX), new TreeMap<>());
+		GroupManifest manifest = manifest(Map.of("mobile", mobile, "desktop", desktop));
+
+		// Auto-detection never yields android, so the group stays out of the default resolution...
+		ResolvedSelection defaults = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.current());
+		assertFalse(defaults.selectedGroups().contains("mobile"));
+		assertEquals(GroupResolution.Status.UNAVAILABLE, defaults.resolution("mobile").status());
+		assertEquals(Set.of("desktop"), defaults.selectedGroups());
+
+		// ...but an explicit choice of that platform selects it.
+		SelectionIntent intent = new SelectionIntent(List.of("mobile"), List.of(), List.of(), android);
+		assertTrue(GroupSelectionResolver.resolve(manifest, intent, android).selectedGroups().contains("mobile"));
+	}
+
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
 		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups));
 	}
