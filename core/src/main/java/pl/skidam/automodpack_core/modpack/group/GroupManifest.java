@@ -66,7 +66,9 @@ public record GroupManifest(
 
 	private static Set<ClientPlatform> immutablePlatforms(Collection<ClientPlatform> input) {
 		if (input == null || input.isEmpty()) return Set.of();
-		return Collections.unmodifiableSet(EnumSet.copyOf(input));
+		Set<ClientPlatform> platforms = new TreeSet<>(Comparator.comparing(ClientPlatform::id));
+		platforms.addAll(input);
+		return Collections.unmodifiableSet(platforms);
 	}
 
 	public record Group(

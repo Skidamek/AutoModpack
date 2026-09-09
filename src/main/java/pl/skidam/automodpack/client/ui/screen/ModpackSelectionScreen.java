@@ -135,7 +135,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				: this.expectedSelection == null ? GroupSelectionResolver.defaultIntent(manifest) : this.expectedSelection;
 		this.initialSelection = initial;
 		this.detectedPlatform = ClientPlatform.current();
-		this.platformOverride = initial.platform() == null || initial.platform() == detectedPlatform ? null : initial.platform();
+		this.platformOverride = initial.platform() == null || initial.platform().equals(detectedPlatform) ? null : initial.platform();
 		this.chosen.addAll(initial.requestedGroups());
 		this.chosenCategories.addAll(initial.requestedCategories());
 		this.excluded.addAll(initial.excludedGroups());
@@ -177,15 +177,23 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int platformButtonWidth = Math.max(90, Math.min(160, this.font.width(platformLabel) + 26));
 		this.platformDropdown = dropdownWidget(listLeft() + listWidth() - platformButtonWidth, 24, platformButtonWidth, 20, VersionedText.literal(platformLabel));
 		setTooltip(this.platformDropdown, VersionedText.translatable("automodpack.selection.platformTooltip"));
-		this.platformDropdown.setOptions(platformOptions(), effectivePlatform().ordinal(), listBottom, index -> pickPlatform(ClientPlatform.values()[index]));
+		List<ClientPlatform> choices = platformChoices();
+		this.platformDropdown.setOptions(platformOptions(), choices.indexOf(effectivePlatform()), listBottom, index -> pickPlatform(choices.get(index)));
 	}
 
-	/** The OS dropdown options: every platform, with the detected one marked in the list. */
+	/** The detectable platforms plus every platform the loaded manifest declares, so a declared-only group stays reachable by explicit choice. */
+	private List<ClientPlatform> platformChoices() {
+		List<ClientPlatform> choices = new ArrayList<>(ClientPlatform.builtIns());
+		for (GroupManifest.Group group : groups.values()) for (ClientPlatform platform : group.compatiblePlatforms()) if (!choices.contains(platform)) choices.add(platform);
+		return choices;
+	}
+
+	/** The OS dropdown options: every platform choice, with the detected one marked in the list. */
 	private List<Component> platformOptions() {
-		ClientPlatform[] platforms = ClientPlatform.values();
-		List<Component> options = new ArrayList<>(platforms.length);
-		for (ClientPlatform platform : platforms)
-			options.add(platform == detectedPlatform
+		List<ClientPlatform> choices = platformChoices();
+		List<Component> options = new ArrayList<>(choices.size());
+		for (ClientPlatform platform : choices)
+			options.add(detectedPlatform.equals(platform)
 					? VersionedText.translatable("automodpack.selection.platformDetected", platformDisplay(platform))
 					: VersionedText.literal(platformDisplay(platform)));
 		return options;
@@ -572,7 +580,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private ClientPlatform override() {
-		return platformOverride == detectedPlatform ? null : platformOverride;
+		return detectedPlatform.equals(platformOverride) ? null : platformOverride;
 	}
 
 	private ClientPlatform effectivePlatform() {
@@ -584,16 +592,15 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private static String platformDisplay(ClientPlatform platform) {
-		return switch (platform) {
-			case WINDOWS -> "Windows";
-			case LINUX -> "Linux";
-			case MACOS -> "macOS";
-			case OTHER -> "Other";
-		};
+		if (platform.equals(ClientPlatform.WINDOWS)) return "Windows";
+		if (platform.equals(ClientPlatform.LINUX)) return "Linux";
+		if (platform.equals(ClientPlatform.MACOS)) return "macOS";
+		if (platform.equals(ClientPlatform.OTHER)) return "Other";
+		return platform.id();
 	}
 
 	private void pickPlatform(ClientPlatform platform) {
-		platformOverride = platform == detectedPlatform ? null : platform;
+		platformOverride = detectedPlatform.equals(platform) ? null : platform;
 		applySelectionChange(currentIntent(), Set.of(), null);
 	}
 

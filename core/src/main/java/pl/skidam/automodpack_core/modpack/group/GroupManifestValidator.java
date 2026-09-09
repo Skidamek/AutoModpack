@@ -103,7 +103,7 @@ public final class GroupManifestValidator {
 	}
 
 	private static void validatePlatformPaths(GroupManifest manifest, List<String> errors) {
-		for (ClientPlatform platform : ClientPlatform.values()) {
+		for (ClientPlatform platform : coveredPlatforms(manifest)) {
 			Map<String, List<PathOwner>> aliases = new TreeMap<>();
 			Map<String, List<PathOwner>> modBasenameAliases = new TreeMap<>();
 			for (var groupEntry : manifest.groups().entrySet()) {
@@ -218,7 +218,7 @@ public final class GroupManifestValidator {
 	}
 
 	private static void validateDefaultAndIndividualSelections(GroupManifest manifest, List<String> errors) {
-		for (ClientPlatform platform : ClientPlatform.values()) {
+		for (ClientPlatform platform : coveredPlatforms(manifest)) {
 			try {
 				GroupSelectionResolver.resolveDefault(manifest, platform);
 			} catch (SelectionResolutionException e) {
@@ -275,7 +275,7 @@ public final class GroupManifestValidator {
 	}
 
 	private static boolean coSelectable(GroupManifest manifest, String first, String second) {
-		for (ClientPlatform platform : ClientPlatform.values()) {
+		for (ClientPlatform platform : coveredPlatforms(manifest)) {
 			GroupManifest.Group firstGroup = manifest.groups().get(first);
 			GroupManifest.Group secondGroup = manifest.groups().get(second);
 			if (!firstGroup.supports(platform) || !secondGroup.supports(platform)) continue;
@@ -290,7 +290,7 @@ public final class GroupManifestValidator {
 
 	private static Set<ClientPlatform> validatePlatforms(String groupId, Set<String> input, List<String> errors) {
 		if (input == null || input.isEmpty()) return Set.of();
-		EnumSet<ClientPlatform> platforms = EnumSet.noneOf(ClientPlatform.class);
+		Set<ClientPlatform> platforms = new TreeSet<>(Comparator.comparing(ClientPlatform::id));
 		for (String value : input) {
 			try {
 				platforms.add(ClientPlatform.parse(value));
@@ -298,6 +298,14 @@ public final class GroupManifestValidator {
 				errors.add("Group '" + groupId + "' has " + e.getMessage());
 			}
 		}
+		return platforms;
+	}
+
+	/** Every platform any rule may match on: the detectable built-ins plus the names the manifest itself declares. */
+	private static Set<ClientPlatform> coveredPlatforms(GroupManifest manifest) {
+		Set<ClientPlatform> platforms = new TreeSet<>(Comparator.comparing(ClientPlatform::id));
+		platforms.addAll(ClientPlatform.builtIns());
+		for (GroupManifest.Group group : manifest.groups().values()) platforms.addAll(group.compatiblePlatforms());
 		return platforms;
 	}
 
