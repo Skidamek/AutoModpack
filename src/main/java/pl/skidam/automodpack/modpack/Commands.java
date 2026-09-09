@@ -474,8 +474,8 @@ public class Commands {
 
 	/** The generation is committed, but the live host may still serve the previous view; only an explicit restart rebinds it. */
 	private static void reportHostingFailure(CommandContext<CommandSourceStack> context, Optional<Throwable> failure) {
-		failure.ifPresent(cause -> send(context, "HOSTING SWAP FAILED: " + (cause.getMessage() == null || cause.getMessage().isBlank()
-				? cause.getClass().getSimpleName() : cause.getMessage()) + ". The generation is committed; run /automodpack host restart to rebind hosting.",
+		failure.ifPresent(cause -> send(context, "HOSTING SWAP FAILED: " + ModpackExecutor.detail(cause)
+				+ ". The generation is committed; run /automodpack host restart to rebind hosting.",
 				ChatFormatting.RED, true));
 	}
 
