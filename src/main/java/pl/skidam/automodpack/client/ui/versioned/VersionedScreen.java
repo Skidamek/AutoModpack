@@ -104,6 +104,8 @@ public class VersionedScreen extends Screen {
 	}
 	*//*?}*/
 
+	// The mirror only exists where the frame runs the widget pass itself; 26.x walks the vanilla list.
+	/*? if <26.1 {*/
 	@Override
 	protected void removeWidget(GuiEventListener listener) {
 		super.removeWidget(listener);
@@ -115,6 +117,7 @@ public class VersionedScreen extends Screen {
 		super.clearWidgets();
 		renderOrder.clear();
 	}
+	/*?}*/
 
 	/**
 	 * The one frame order on every version: background, widgets, the screen's own content over them, then the
@@ -152,7 +155,7 @@ public class VersionedScreen extends Screen {
 
 	/** The one dropdown factory; registered so the frame can render its menu on top and close it on outside clicks. */
 	protected final DropdownWidget dropdownWidget(int x, int y, int width, int height, Component message) {
-		DropdownWidget dropdown = new DropdownWidget(this, this.minecraft, this.font, x, y, width, height, message);
+		DropdownWidget dropdown = new DropdownWidget(this.minecraft, this.font, x, y, width, height, message);
 		this.dropdowns.add(dropdown);
 		this.addRenderableWidget(dropdown);
 		return dropdown;
@@ -171,19 +174,11 @@ public class VersionedScreen extends Screen {
 		return open;
 	}
 
-	/** Registers a dropdown's menu panel in the screen: clickable and bridge-visible, but drawn only in the overlay pass. */
-	/*? if <1.19.4 {*/
-	/*public final <T extends GuiEventListener & Widget & NarratableEntry> void attachMenuChild(T menu) {
-		addWidget(menu);
-	}
-	*//*?} else {*/
-	public final <T extends GuiEventListener & NarratableEntry> void attachMenuChild(T menu) {
-		addWidget(menu);
-	}
-	/*?}*/
-
-	public final void detachMenuChild(GuiEventListener menu) {
-		removeWidget(menu);
+	/** The currently open dropdown menus; the frame renders them and the test bridge reads their rows. */
+	public final List<RowListWidget> openMenus() {
+		List<RowListWidget> menus = new ArrayList<>();
+		for (DropdownWidget dropdown : dropdowns) if (dropdown.isMenuOpen()) menus.add(dropdown.menu());
+		return menus;
 	}
 
 	private void renderMenus(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
@@ -207,6 +202,20 @@ public class VersionedScreen extends Screen {
 		return super.mouseClicked(mouseX, mouseY, button);
 	}
 	*//*?}*/
+
+	/*? if <1.20.2 {*/
+	/*@Override
+	public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+		for (DropdownWidget dropdown : dropdowns) if (dropdown.consumeMenuScroll(mouseX, mouseY, delta)) return true;
+		return super.mouseScrolled(mouseX, mouseY, delta);
+	}
+	*//*?} else {*/
+	@Override
+	public boolean mouseScrolled(double mouseX, double mouseY, double xDelta, double yDelta) {
+		for (DropdownWidget dropdown : dropdowns) if (dropdown.consumeMenuScroll(mouseX, mouseY, yDelta)) return true;
+		return super.mouseScrolled(mouseX, mouseY, xDelta, yDelta);
+	}
+	/*?}*/
 
 	// This method is to be override by the child classes
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
@@ -311,14 +320,14 @@ public class VersionedScreen extends Screen {
 	}
 
 	/** Where a content block and its action rows land: the whole block floats centered when it fits, pins to the bottom edge otherwise. */
-	protected record BlockLayout(int contentTop, int actionsTop, boolean scrolls) {}
+	private record BlockLayout(int contentTop, int actionsTop, boolean scrolls) {}
 
 	/**
 	 * Lays content of the given height out with its action rows as one block between the top reserve and
 	 * the footer anchor. A fitting block centers in the space and the rows sit right under the content;
 	 * only a real overflow scrolls the content while the rows pin above the bottom edge.
 	 */
-	protected final BlockLayout layoutBlockWithActions(int topReserve, int contentHeight, int bottomMargin, ActionRow... rows) {
+	private BlockLayout layoutBlockWithActions(int topReserve, int contentHeight, int bottomMargin, ActionRow... rows) {
 		int bottomAnchor = this.height - 28;
 		int actionsTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, bottomAnchor, rows);
 		int blockHeight = contentHeight + ActionAreaLayout.GAP + actionAreaHeight(rows);
@@ -520,98 +529,12 @@ public class VersionedScreen extends Screen {
 		return VersionedText.literal("");
 	}
 
-	/**
-	 * Begins a top-most overlay layer (dropdown menus, tooltips): everything until {@link #endOverlay} paints above
-	 * all screen content. This is the vanilla drawManaged recipe for tooltips - flush what is pending, step up one
-	 * z layer, draw, flush - because a plain later draw loses the race against the gui batch ordering on some
-	 * versions. 26.x gets a fresh stratum instead, which is its own version of the same guarantee.
-	 */
-	public static void beginOverlay(VersionedMatrices matrices) {
-		/*? if <1.20 {*/
-		/*Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
-		matrices.translate(0, 0, 400);
-		*//*?} elif <1.21.6 {*/
-		/*matrices.getContext().flush();
-		matrices.getContext().pose().translate(0.0F, 0.0F, 400.0F);
-		*//*?} elif >=26.1 {*/
-		matrices.getContext().nextStratum();
-		/*?}*/
-	}
-
-	public static void endOverlay(VersionedMatrices matrices) {
-		/*? if <1.20 {*/
-		/*matrices.translate(0, 0, -400);
-		Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
-		*//*?} elif <1.21.6 {*/
-		/*matrices.getContext().pose().translate(0.0F, 0.0F, -400.0F);
-		matrices.getContext().flush();
-		*//*?}*/
-	}
-
-	/**
-	 * The vanilla 26.1 tooltip panel sprites: on 26.1 they are the vanilla atlas entries themselves, so the panel
-	 * follows resource packs; below 26.1 they are bundled copies of the same textures. The atlas on 1.21.2-1.21.5
-	 * picks modded sprites up from the textures/gui/sprites folder, and below that the sprite is blitted by hand.
-	 */
-	public static void drawTooltipPanel(VersionedMatrices matrices, int x, int y, int width, int height) {
-		drawNineSlice(panelSprite(true), matrices, x, y, width, height, 10);
-		drawNineSlice(panelSprite(false), matrices, x, y, width, height, 9);
-	}
-
-	private static Identifier panelSprite(boolean frame) {
-		/*? if >=26.1 {*/
-		return Identifier.withDefaultNamespace(frame ? "tooltip/frame" : "tooltip/background");
-		/*?} else {*/
-		/*return Common.id("textures/gui/sprites/tooltip/" + (frame ? "frame" : "background") + ".png");
-		*//*?}*/
-	}
-
-	/**
-	 * Draws the vanilla 26.1 tooltip panel sprite nine-sliced over the rectangle: four crisp corners, stretched
-	 * edges and center. 1.21.2+ has the sprite pipeline do the nine-slicing from the texture metadata; older
-	 * versions draw the nine patches by hand from the same bundled 100x100 sprite.
-	 */
-	private static void drawNineSlice(Identifier texture, VersionedMatrices matrices, int x, int y, int width, int height, int border) {
-		/*? if <1.21.2 {*/
-		/*int b = Math.min(border, Math.min(width, height) / 2);
-		int right = x + width;
-		int bottom = y + height;
-		int innerW = 100 - 2 * b;
-		int innerH = 100 - 2 * b;
-		blitPatch(texture, matrices, x, y, b, b, 0, 0, b, b, 100, 100);
-		blitPatch(texture, matrices, right - b, y, b, b, 100 - b, 0, b, b, 100, 100);
-		blitPatch(texture, matrices, x, bottom - b, b, b, 0, 100 - b, b, b, 100, 100);
-		blitPatch(texture, matrices, right - b, bottom - b, b, b, 100 - b, 100 - b, b, b, 100, 100);
-		blitPatch(texture, matrices, x + b, y, width - 2 * b, b, b, 0, innerW, b, 100, 100);
-		blitPatch(texture, matrices, x + b, bottom - b, width - 2 * b, b, b, 100 - b, innerW, b, 100, 100);
-		blitPatch(texture, matrices, x, y + b, b, height - 2 * b, 0, b, b, innerH, 100, 100);
-		blitPatch(texture, matrices, right - b, y + b, b, height - 2 * b, 100 - b, b, b, innerH, 100, 100);
-		blitPatch(texture, matrices, x + b, y + b, width - 2 * b, height - 2 * b, b, b, innerW, innerH, 100, 100);
-		*//*?} elif <1.21.6 {*/
-		/*matrices.getContext().blitSprite(RenderType::guiTextured, texture, x, y, width, height);
-		*//*?} else {*/
-		matrices.getContext().blitSprite(RenderPipelines.GUI_TEXTURED, texture, x, y, width, height);
-		/*?}*/
-	}
-
-	/** One nine-slice patch: texture region (u, v, srcWidth, srcHeight) stretched into (x, y, destWidth, destHeight). */
-	/*? if <1.20 {*/
-	/*private static void blitPatch(Identifier texture, VersionedMatrices matrices, int x, int y, int destWidth, int destHeight, int u, int v, int srcWidth, int srcHeight, int textureWidth, int textureHeight) {
-		RenderSystem.setShaderTexture(0, texture);
-		GuiComponent.blit(matrices.getContext(), x, y, destWidth, destHeight, (float) u, (float) v, srcWidth, srcHeight, textureWidth, textureHeight);
-	}
-	*//*?} elif >=1.20 <1.21.2 {*/
-	/*private static void blitPatch(Identifier texture, VersionedMatrices matrices, int x, int y, int destWidth, int destHeight, int u, int v, int srcWidth, int srcHeight, int textureWidth, int textureHeight) {
-		matrices.getContext().blit(texture, x, y, destWidth, destHeight, (float) u, (float) v, srcWidth, srcHeight, textureWidth, textureHeight);
-	}
-	*//*?}*/
 	/** The vanilla font line height; every dialog line advance goes through this constant, never a raw 9. */
 	public static final int LINE_HEIGHT = 9;
 
 	/** Draws centered lines advancing by LINE_HEIGHT and returns the y below the last line. */
 	protected final int drawCenteredLines(VersionedMatrices matrices, List<? extends Component> lines, int y) {
 		for (Component line : lines) {
-			if (line == null) continue;
 			drawCenteredTextWithShadow(matrices, this.font, line instanceof MutableComponent mutable ? mutable : VersionedText.literal(line.getString()), this.width / 2, y, TextColors.WHITE);
 			y += LINE_HEIGHT;
 		}

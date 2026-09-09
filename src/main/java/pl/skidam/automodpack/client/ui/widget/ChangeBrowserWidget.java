@@ -21,7 +21,6 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
-import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
@@ -39,7 +38,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 /** A native selection list for the shared tree/list change projection. */
-public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowserWidget.Entry> {
+public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidget.Entry> {
 	private static final int ROW_HEIGHT = 30;
 	/** The hovered wash reads as "you can click this"; the selected wash is the stronger one that stays. */
 	private static final int HOVER_COLOR = 0x20FFFFFF;
@@ -57,21 +56,7 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 
 	public ChangeBrowserWidget(ChangeBrowserProjection.Projection projection, Set<String> collapsedFolders, Map<String, String> groupNames, boolean warnUnverified, boolean referencesResolved,
 			Consumer<String> folderToggle, Consumer<ChangeBrowserProjection.FileRow> selectionChanged, Minecraft client, int width, int height, int top, int bottom) {
-		/*? if <1.20.3 {*/
-		/*super(client, width, height, top, bottom, ROW_HEIGHT);
-		*//*?} else {*/
-		super(client, width, Math.max(ROW_HEIGHT, bottom - top), top, ROW_HEIGHT);
-		/*?}*/
-		this.centerListVertically = false;
-		// Vanilla draws list chrome through different machinery on every version; our lists draw none of it.
-		// Anything that needs a panel (the dropdown menus) draws its own.
-		/*? if <1.21.1 {*/
-		/*this.setRenderBackground(false);
-		this.setRenderTopAndBottom(false);
-		*//*?}*/
-		/*? if <1.20.4 {*/
-		/*this.setRenderSelection(false);
-		*//*?}*/
+		super(client, width, height, 0, top, bottom, Math.min(600, Math.max(1, width - 24)), ROW_HEIGHT);
 		this.folderToggle = Objects.requireNonNull(folderToggle, "folder toggle");
 		this.warnUnverified = warnUnverified;
 		this.referencesResolved = referencesResolved;
@@ -80,58 +65,6 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		Map<String, String> names = Map.copyOf(groupNames == null ? Map.of() : groupNames);
 		for (ChangeBrowserProjection.Row row : projection.rows()) this.addEntry(new Entry(row, collapsed.contains(row.path()), names));
 	}
-	/*? if <1.19.4 {*/
-	/*@Override
-	public void render(PoseStack matrices, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(matrices, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-	/*? if >=1.19.4 <1.20.3 {*/
-	/*@Override
-	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(graphics, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-
-	/*? if >=26.1 {*/
-	@Override
-	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	/*?} elif >=1.21.10 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	*//*?} elif >=1.21.1 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?} elif >=1.20.4 {*/
-	/*@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?}*/
 
 	public ChangeBrowserProjection.FileRow selectedFile() {
 		Entry selected = this.getSelected();
@@ -182,24 +115,6 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 			return;
 		}
 		if (selectionChanged != null) selectionChanged.accept(entry.row instanceof ChangeBrowserProjection.FileRow file ? file : null);
-	}
-
-	// The hit test and the scrollbar draw compare screen coordinates, so the position must be absolute;
-	// vanilla's own hook is relative on the versions that still call it, which ate every menu row click.
-	/*? if <1.20.3 {*/
-	/*protected int getScrollbarPosition() {
-		return this.x0 + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?} elif <1.21.5 {*/
-	/*protected int getScrollbarPosition() {
-		return this.getX() + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?}*/
-
-
-	@Override
-	public int getRowWidth() {
-		return Math.min(600, Math.max(1, this.width - 24));
 	}
 
 	public final class Entry extends ObjectSelectionList.Entry<Entry> {

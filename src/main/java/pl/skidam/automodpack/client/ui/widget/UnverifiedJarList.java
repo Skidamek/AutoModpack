@@ -12,7 +12,6 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
-import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 /*? if >= 1.21.9 {*/
@@ -28,9 +27,8 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 /** Nested list of unverified jar paths with their sizes for the unverified confirm screen. */
-public final class UnverifiedJarList extends ObjectSelectionList<UnverifiedJarList.Entry> {
+public final class UnverifiedJarList extends ChromelessList<UnverifiedJarList.Entry> {
 	public static final int ROW_HEIGHT = 12;
-	private final int contentWidth;
 
 	/** One unverified file: its path as shipped by the pack and its size, 0 when unknown. */
 	public record UnverifiedFile(String path, long size) {
@@ -41,94 +39,9 @@ public final class UnverifiedJarList extends ObjectSelectionList<UnverifiedJarLi
 	}
 
 	public UnverifiedJarList(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<UnverifiedFile> files) {
-		/*? if <1.20.3 {*/
-		/*super(client, width, height, top, bottom, ROW_HEIGHT);
-		*//*?} else {*/
-		super(client, width, Math.max(ROW_HEIGHT, bottom - top), top, ROW_HEIGHT);
-		/*?}*/
-		this.contentWidth = Math.max(1, contentWidth);
-		this.centerListVertically = false;
-		// Vanilla draws list chrome through different machinery on every version; our lists draw none of it.
-		// Anything that needs a panel (the dropdown menus) draws its own.
-		/*? if <1.21.1 {*/
-		/*this.setRenderBackground(false);
-		this.setRenderTopAndBottom(false);
-		*//*?}*/
-		/*? if <1.20.4 {*/
-		/*this.setRenderSelection(false);
-		*//*?}*/
+		super(client, width, height, 0, top, bottom, contentWidth, ROW_HEIGHT);
 		for (UnverifiedFile file : Objects.requireNonNull(files, "files")) this.addEntry(new Entry(file));
 		if (!this.children().isEmpty()) this.setSelected(this.children().get(0));
-	}
-	/*? if <1.19.4 {*/
-	/*@Override
-	public void render(PoseStack matrices, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(matrices, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-	/*? if >=1.19.4 <1.20.3 {*/
-	/*@Override
-	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(graphics, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-
-	/*? if >=26.1 {*/
-	@Override
-	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	/*?} elif >=1.21.10 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	*//*?} elif >=1.21.1 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?} elif >=1.20.4 {*/
-	/*@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?}*/
-
-	// The hit test and the scrollbar draw compare screen coordinates, so the position must be absolute;
-	// vanilla's own hook is relative on the versions that still call it, which ate every menu row click.
-	/*? if <1.20.3 {*/
-	/*protected int getScrollbarPosition() {
-		return this.x0 + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?} elif <1.21.5 {*/
-	/*protected int getScrollbarPosition() {
-		return this.getX() + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?}*/
-
-
-	@Override
-	public int getRowWidth() {
-		return this.contentWidth;
 	}
 
 	public final class Entry extends ObjectSelectionList.Entry<Entry> {

@@ -17,7 +17,6 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
-import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.update.PreservationVault;
 
@@ -34,31 +33,15 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 /** A native selection list of the files a modpack preserved, one claim per two-line row. */
-public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.Entry> implements RowViewport {
+public final class VaultListWidget extends ChromelessList<VaultListWidget.Entry> implements RowViewport {
 	private static final int ROW_HEIGHT = 24;
 	private static final int TEXT_MARGIN = 6;
 	/** Marks the claim the restore and save-copy actions act on; the vanilla selection outline is stripped chrome. */
 	private static final int SELECTED_COLOR = 0x40FFFFFF;
-	private final int contentWidth;
 	private final Consumer<PreservationVault.Claim> claimPicked;
 
 	public VaultListWidget(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<PreservationVault.Claim> claims, Map<String, String> packNames, Consumer<PreservationVault.Claim> claimPicked) {
-		/*? if <1.20.3 {*/
-		/*super(client, width, height, top, bottom, ROW_HEIGHT);
-		*//*?} else {*/
-		super(client, width, Math.max(ROW_HEIGHT, bottom - top), top, ROW_HEIGHT);
-		/*?}*/
-		this.contentWidth = Math.max(1, contentWidth);
-		this.centerListVertically = false;
-		// Vanilla draws list chrome through different machinery on every version; our lists draw none of it.
-		// Anything that needs a panel (the dropdown menus) draws its own.
-		/*? if <1.21.1 {*/
-		/*this.setRenderBackground(false);
-		this.setRenderTopAndBottom(false);
-		*//*?}*/
-		/*? if <1.20.4 {*/
-		/*this.setRenderSelection(false);
-		*//*?}*/
+		super(client, width, height, 0, top, bottom, contentWidth, ROW_HEIGHT);
 		this.claimPicked = Objects.requireNonNull(claimPicked, "claim pick");
 		Map<String, String> names = Map.copyOf(packNames == null ? Map.of() : packNames);
 		for (PreservationVault.Claim claim : Objects.requireNonNull(claims, "claims")) this.addEntry(new Entry(claim, names));
@@ -89,110 +72,14 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 	}
 
 	@Override
-	public void revealRow(int index) {
-		Entry entry = this.children().get(index);
-		/*? if >=1.21.9 {*/
-		this.scrollToEntry(entry);
-		/*?} else {*/
-		/*this.ensureVisible(entry);
-		*//*?}*/
-		entry.layoutEntry(this.getRowLeft(), this.getRowTop(index), this.getRowWidth());
+	protected void pinEntry(VaultListWidget.Entry entry, int index) {
+		entry.layoutEntry(getRowLeft(), getRowTop(index), getRowWidth());
 	}
 
-	/*? if <1.19.4 {*/
-	/*@Override
-	public void render(PoseStack matrices, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(matrices, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-	/*? if >=1.19.4 <1.20.3 {*/
-	/*@Override
-	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(graphics, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-
-	/*? if >=26.1 {*/
-	@Override
-	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	/*?} elif >=1.21.10 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	*//*?} elif >=1.21.1 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?} elif >=1.20.4 {*/
-	/*@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?}*/
 	@Override
 	public RowView rowView(int index) {
 		return new RowView(this.children().get(index).getNarration().getString(), true, null, false);
 	}
-
-	@Override
-	public int rowCount() {
-		return this.children().size();
-	}
-
-	@Override
-	public int rowLeft() {
-		return this.getRowLeft();
-	}
-
-	@Override
-	public int rowTop(int index) {
-		return this.getRowTop(index);
-	}
-
-	@Override
-	public int rowWidth() {
-		return this.contentWidth;
-	}
-
-	@Override
-	public int rowHeight() {
-		return ROW_HEIGHT;
-	}
-
-	// The hit test and the scrollbar draw compare screen coordinates, so the position must be absolute;
-	// vanilla's own hook is relative on the versions that still call it, which ate every menu row click.
-	/*? if <1.20.3 {*/
-	/*protected int getScrollbarPosition() {
-		return this.x0 + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?} elif <1.21.5 {*/
-	/*protected int getScrollbarPosition() {
-		return this.getX() + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?}*/
-
 
 	public final class Entry extends ObjectSelectionList.Entry<Entry> {
 		private final PreservationVault.Claim claim;

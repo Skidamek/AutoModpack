@@ -24,7 +24,9 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
+import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.RowViewport;
 /*? if >= 1.21.10 {*/
 import net.minecraft.client.input.MouseButtonEvent;
@@ -473,6 +475,11 @@ public final class AutoTestBridge {
 		LinkedHashSet<AbstractWidget> widgets = new LinkedHashSet<>();
 		List<RowViewport> rowViewports = new ArrayList<>();
 		for (GuiEventListener child : screen.children()) collectAttachedWidgets(child, widgets, rowViewports);
+		// Dropdown menus are not screen children (the frame renders them in its overlay pass), so their rows are
+		// collected through the screen itself.
+		if (screen instanceof VersionedScreen versioned) {
+			for (RowListWidget menu : versioned.openMenus()) rowViewports.add(menu);
+		}
 
 		List<GuiElement> result = new ArrayList<>();
 		int id = 0;

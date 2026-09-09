@@ -137,24 +137,19 @@ public final class PackConfirmScreen extends VersionedScreen {
 			ackCheckbox = widgets.get(widgetIndex);
 			// The risk acknowledgement stays locked until the read countdown ran out.
 			ackCheckbox.active = ticksRemaining <= 0;
-			cancelButton = widgets.get(widgetIndex + 1);
-			primaryButton = widgets.get(widgetIndex + 3);
-			primaryButton.active = ticksRemaining <= 0 && acknowledged;
-			this.setInitialFocus(cancelButton);
 		}
+		// The footer row is always last: cancel, review files, primary.
+		cancelButton = widgets.get(widgets.size() - 3);
+		primaryButton = widgets.get(widgets.size() - 1);
+		primaryButton.active = ticksRemaining <= 0 && acknowledged;
+		if (unverified) this.setInitialFocus(cancelButton);
 
 		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		layoutBody(bottomY);
 	}
 
-	/** The acknowledge checkbox flips only after the read timer ran out; the primary gate follows it. */
+	/** The acknowledge checkbox is inactive until the read timer ran out, so a flip is always a real consent. */
 	private void onAckToggled(boolean value) {
-		if (ticksRemaining > 0) {
-			acknowledged = false;
-			if (ackCheckbox != null) ackCheckbox.setMessage(ackMessage());
-			if (primaryButton != null) primaryButton.active = false;
-			return;
-		}
 		acknowledged = value;
 		if (primaryButton != null) primaryButton.active = acknowledged;
 	}
@@ -332,7 +327,6 @@ public final class PackConfirmScreen extends VersionedScreen {
 			// Matched installs have no ack box; the countdown only gates unverified risk.
 			if (ticksRemaining == 0 && ackCheckbox != null) {
 				ackCheckbox.setMessage(ackMessage());
-				ackCheckbox.active = ticksRemaining <= 0;
 			}
 			if (primaryButton != null) primaryButton.active = ticksRemaining <= 0 && acknowledged;
 		}

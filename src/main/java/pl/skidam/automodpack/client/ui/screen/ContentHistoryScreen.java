@@ -74,7 +74,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		for (int index = 0; index < entries.size(); index++) rows.add(row(entries.get(index), width - TEXT_MARGIN * 2));
 		// The list fills the space between the header and the pinned actions; only a real overflow scrolls.
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray) - 6;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, width, 0, LIST_TOP, listBottom, ROW_HEIGHT, rows, this::openEntry, VersionedScreen::showComponentTooltip));
+		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, width, 0, LIST_TOP, listBottom, ROW_HEIGHT, rows, this::openEntry));
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 	}
 
