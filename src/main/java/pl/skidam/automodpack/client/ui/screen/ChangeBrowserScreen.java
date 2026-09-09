@@ -27,7 +27,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.ChangeBrowserWidget;
-import pl.skidam.automodpack.client.ui.widget.RowListWidget;
+import pl.skidam.automodpack.client.ui.widget.DropdownWidget;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.change.PlatformReferences;
@@ -60,23 +60,10 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private Boolean selectedSource = null;
 	private String selectedPath = "";
 	private ChangeBrowserWidget browser;
-	private RowListWidget groupPicker;
-	private RowListWidget contentPicker;
-	private RowListWidget sourcePicker;
+	private DropdownWidget groupDropdown;
+	private DropdownWidget contentDropdown;
+	private DropdownWidget sourceDropdown;
 	private EditBox searchField;
-	private Button contentButton;
-	private Button groupButton;
-	private Button sourceButton;
-	// The dropdown geometry as plain fields, so the menus and their chevrons need no widget accessor branching.
-	private int contentButtonLeft;
-	private int contentButtonTop;
-	private int contentButtonWidth;
-	private int groupButtonLeft;
-	private int groupButtonTop;
-	private int groupButtonWidth;
-	private int sourceButtonLeft;
-	private int sourceButtonTop;
-	private int sourceButtonWidth;
 	private int browserTop;
 	private int browserBottom;
 	private int summaryY;
@@ -134,24 +121,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			searchField.setSuggestion(value.isEmpty() ? searchHint : "");
 			rebuildBrowser();
 		});
-		this.contentButtonLeft = controlsLeft;
-		this.contentButtonTop = controlsY;
-		this.contentButtonWidth = controlWidth;
-		this.contentButton = buttonWidget(contentButtonLeft, contentButtonTop, controlWidth, 20, VersionedText.literal(""), button -> toggleContentMenu());
-		this.groupButtonLeft = controlsLeft + (GAP + controlWidth);
-		this.groupButtonTop = controlsY;
-		this.groupButtonWidth = controlWidth;
-		this.groupButton = buttonWidget(groupButtonLeft, groupButtonTop, controlWidth, 20, VersionedText.literal(""), button -> toggleGroupPicker());
-		this.addRenderableWidget(this.contentButton);
-		this.addRenderableWidget(this.groupButton);
-		if (warnUnverified) {
-			this.sourceButtonLeft = controlsLeft + (GAP + controlWidth) * 2;
-			this.sourceButtonTop = controlsY;
-			this.sourceButtonWidth = controlWidth;
-			this.sourceButton = buttonWidget(sourceButtonLeft, sourceButtonTop, controlWidth, 20, VersionedText.literal(""), button -> toggleSourceMenu());
-			this.addRenderableWidget(this.sourceButton);
-		}
-		updateControlLabels();
 		List<ActionRow> actionRows = buildActionRows();
 		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
 		if (auxiliaryAction != null) actionButtons.get(actionButtons.size() - 1).active = auxiliaryAction.active();
@@ -163,8 +132,52 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		this.paneTop = paneTop;
 		this.browserBottom = paneTop - 4;
 		this.paneActionsY = paneTop + 2 * this.font.lineHeight + 2;
+		this.contentDropdown = dropdownWidget(controlsLeft, controlsY, controlWidth, 20, VersionedText.literal(""));
+		this.groupDropdown = dropdownWidget(controlsLeft + GAP + controlWidth, controlsY, controlWidth, 20, VersionedText.literal(""));
+		if (warnUnverified) this.sourceDropdown = dropdownWidget(controlsLeft + (GAP + controlWidth) * 2, controlsY, controlWidth, 20, VersionedText.literal(""));
+		refreshDropdowns();
 		rebuildBrowser();
 		addPaneActions(this.paneActionsY);
+	}
+
+	/** Re-sets every dropdown's label, options and highlight from the current selection and change set. */
+	private void refreshDropdowns() {
+		if (contentDropdown != null) {
+			contentDropdown.setMessage(VersionedText.translatable("automodpack.browser.contentFilter",
+					selectedContent.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable("automodpack.browser.content." + selectedContent).getString()));
+			List<String> ids = new ArrayList<>();
+			ids.add("");
+			ids.addAll(contentKinds());
+			List<Component> options = new ArrayList<>(ids.size());
+			for (String id : ids)
+				options.add(id.isBlank() ? VersionedText.translatable("automodpack.browser.all") : VersionedText.translatable("automodpack.browser.content." + id));
+			contentDropdown.setOptions(options, Math.max(0, ids.indexOf(selectedContent)), browserBottom, index -> pickContent(ids.get(index)));
+		}
+		if (groupDropdown != null) {
+			groupDropdown.active = !groupIds().isEmpty();
+			groupDropdown.setMessage(VersionedText.translatable("automodpack.browser.groupFilter",
+					selectedGroup.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups").getString() : groupName(selectedGroup)));
+			List<String> optionIds = new ArrayList<>();
+			optionIds.add("");
+			List<String> ids = new ArrayList<>(groupIds());
+			ids.sort(Comparator.comparing(this::groupName, String.CASE_INSENSITIVE_ORDER));
+			optionIds.addAll(ids);
+			List<Component> options = new ArrayList<>(optionIds.size());
+			for (String optionId : optionIds)
+				options.add(optionId.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups") : VersionedText.literal(groupName(optionId)));
+			groupDropdown.setOptions(options, Math.max(0, optionIds.indexOf(selectedGroup)), browserBottom, index -> pickGroup(optionIds.get(index)));
+		}
+		if (sourceDropdown != null) {
+			sourceDropdown.setMessage(VersionedText.translatable("automodpack.browser.sourceFilter",
+					selectedSource == null
+							? VersionedText.translatable("automodpack.browser.all").getString()
+							: VersionedText.translatable(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom").getString()));
+			List<Boolean> ids = Arrays.asList(null, Boolean.TRUE, Boolean.FALSE);
+			sourceDropdown.setOptions(List.of(
+					VersionedText.translatable("automodpack.browser.all"),
+					VersionedText.translatable("automodpack.browser.source.published"),
+					VersionedText.translatable("automodpack.browser.source.custom")), selectedSource == null ? 0 : selectedSource.booleanValue() ? 1 : 2, browserBottom, index -> pickSource(ids.get(index)));
+		}
 	}
 
 	/** The selection's fixed details rail: Modrinth, CurseForge and Copy hash keep their places and just enable per selection. */
@@ -205,7 +218,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	/** One representative hash for the selected file: the hash of the state written on disk. */
 	private String selectedHash() {
-		ChangeBrowserProjection.FileRow file = anyMenuOpen() ? null : this.browser == null ? null : this.browser.selectedFile();
+		ChangeBrowserProjection.FileRow file = menuOpen() ? null : this.browser == null ? null : this.browser.selectedFile();
 		return file == null ? null : file.writtenHash();
 	}
 
@@ -215,7 +228,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 				selectedContent.isBlank() ? Set.of() : Set.of(selectedContent), selectedGroup.isBlank() ? Set.of() : Set.of(selectedGroup), selectedSource);
 		this.currentProjection = ChangeBrowserProjection.project(changes, ChangeBrowserProjection.Mode.TREE, filter).collapse(collapsedFolders);
 		recomputeSummary();
-		if (anyMenuOpen()) return;
+		if (menuOpen()) return;
 		if (this.browser != null) this.removeWidget(this.browser);
 		this.browser = new ChangeBrowserWidget(this.currentProjection, collapsedFolders, groupNames, warnUnverified, referencesResolved, this::toggleFolder, this::onFileSelected,
 				this.minecraft, this.width, this.height, browserTop, browserBottom);
@@ -249,83 +262,21 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		rebuildBrowser();
 	}
 
-	private boolean anyMenuOpen() {
-		return groupPicker != null || contentPicker != null || sourcePicker != null;
-	}
-
-	/** Closes every open dropdown menu; the caller decides whether the browser needs a refresh afterwards. */
-	private void closeMenus() {
-		for (RowListWidget menu : Arrays.asList(groupPicker, contentPicker, sourcePicker)) if (menu != null) this.removeWidget(menu);
-		groupPicker = null;
-		contentPicker = null;
-		sourcePicker = null;
-	}
-
-	private void toggleContentMenu() {
-		boolean wasOpen = contentPicker != null;
-		closeMenus();
-		if (wasOpen) return;
-		List<String> ids = new ArrayList<>();
-		ids.add("");
-		ids.addAll(contentKinds());
-		List<Component> options = new ArrayList<>(ids.size());
-		for (String id : ids)
-			options.add(id.isBlank() ? VersionedText.translatable("automodpack.browser.all") : VersionedText.translatable("automodpack.browser.content." + id));
-		this.contentPicker = openMenuPanel(contentButtonLeft, contentButtonTop + ActionAreaLayout.BUTTON_HEIGHT + 2, contentButtonWidth, browserBottom, options,
-				Math.max(0, ids.indexOf(selectedContent)), index -> pickContent(ids.get(index)));
-	}
-
 	private void pickContent(String kind) {
 		selectedContent = kind;
-		closeMenus();
-		updateControlLabels();
+		refreshDropdowns();
 		rebuildBrowser();
-	}
-
-	private void toggleSourceMenu() {
-		boolean wasOpen = sourcePicker != null;
-		closeMenus();
-		if (wasOpen) return;
-		List<Boolean> ids = Arrays.asList(null, Boolean.TRUE, Boolean.FALSE);
-		List<Component> options = List.of(
-				VersionedText.translatable("automodpack.browser.all"),
-				VersionedText.translatable("automodpack.browser.source.published"),
-				VersionedText.translatable("automodpack.browser.source.custom"));
-		int selected = selectedSource == null ? 0 : selectedSource.booleanValue() ? 1 : 2;
-		this.sourcePicker = openMenuPanel(sourceButtonLeft, sourceButtonTop + ActionAreaLayout.BUTTON_HEIGHT + 2, sourceButtonWidth, browserBottom, options, selected,
-				index -> pickSource(ids.get(index)));
 	}
 
 	private void pickSource(Boolean source) {
 		selectedSource = source;
-		closeMenus();
-		updateControlLabels();
+		refreshDropdowns();
 		rebuildBrowser();
-	}
-
-	/** Opens the group filter as a menu panel under its button: one row per group, the selection in yellow, scrolling when groups overflow. */
-	private void toggleGroupPicker() {
-		boolean wasOpen = groupPicker != null;
-		closeMenus();
-		if (wasOpen) return;
-		if (this.browser != null) this.removeWidget(this.browser);
-		int pickerTop = groupButtonTop + ActionAreaLayout.BUTTON_HEIGHT + 2;
-		List<String> optionIds = new ArrayList<>();
-		optionIds.add("");
-		List<String> ids = new ArrayList<>(groupIds());
-		ids.sort(Comparator.comparing(this::groupName, String.CASE_INSENSITIVE_ORDER));
-		optionIds.addAll(ids);
-		List<Component> options = new ArrayList<>(optionIds.size());
-		for (String optionId : optionIds)
-			options.add(optionId.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups") : VersionedText.literal(groupName(optionId)));
-		this.groupPicker = openMenuPanel(groupButtonLeft, pickerTop, groupButtonWidth, browserBottom, options, optionIds.indexOf(selectedGroup),
-				index -> pickGroup(optionIds.get(index)));
 	}
 
 	private void pickGroup(String groupId) {
 		selectedGroup = groupId;
-		closeMenus();
-		updateControlLabels();
+		refreshDropdowns();
 		rebuildBrowser();
 	}
 
@@ -344,22 +295,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 	private String groupName(String groupId) {
 		String name = groupNames.get(groupId);
 		return name == null || name.isBlank() ? VersionedText.translatable("automodpack.browser.unknownGroup").getString() : name;
-	}
-
-	private void updateControlLabels() {
-		if (contentButton != null)
-			contentButton.setMessage(VersionedText.translatable("automodpack.browser.contentFilter",
-					selectedContent.isBlank() ? VersionedText.translatable("automodpack.browser.all").getString() : VersionedText.translatable("automodpack.browser.content." + selectedContent).getString()));
-		if (groupButton != null) {
-			groupButton.active = !groupIds().isEmpty();
-			groupButton.setMessage(VersionedText.translatable("automodpack.browser.groupFilter",
-					selectedGroup.isBlank() ? VersionedText.translatable("automodpack.browser.allGroups").getString() : groupName(selectedGroup)));
-		}
-		if (sourceButton != null)
-			sourceButton.setMessage(VersionedText.translatable("automodpack.browser.sourceFilter",
-					selectedSource == null
-							? VersionedText.translatable("automodpack.browser.all").getString()
-							: VersionedText.translatable(selectedSource.booleanValue() ? "automodpack.browser.source.published" : "automodpack.browser.source.custom").getString()));
 	}
 
 	private void resolveCachedReferences() {
@@ -400,12 +335,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		return true;
 	}
 
-	private void drawGroupChevron(VersionedMatrices matrices) {
-		if (contentButton != null && contentPicker == null) drawMenuChevron(matrices, contentButtonLeft, contentButtonTop, contentButtonWidth, contentButton.getMessage());
-		if (groupButton != null && groupButton.active && groupPicker == null) drawMenuChevron(matrices, groupButtonLeft, groupButtonTop, groupButtonWidth, groupButton.getMessage());
-		if (sourceButton != null && sourcePicker == null) drawMenuChevron(matrices, sourceButtonLeft, sourceButtonTop, sourceButtonWidth, sourceButton.getMessage());
-	}
-
 	/** The selected file's first cached page URL for the platform, or null when it has none. */
 	private String platformUrl(String platform) {
 		if (selectedPath == null || selectedPath.isBlank()) return null;
@@ -436,7 +365,6 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		int contentWidth = panelWidth(PANEL_WIDTH);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, heading.getString(), contentWidth)).withStyle(ChatFormatting.BOLD), this.width / 2, 8, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, description.getString(), contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, 21, TextColors.WHITE);
-		drawGroupChevron(matrices);
 		int preambleY = 34;
 		for (MutableComponent line : preamble) {
 			drawCenteredTextWithShadow(matrices, this.font, line, this.width / 2, preambleY, TextColors.WHITE);
@@ -446,7 +374,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, summary, contentWidth)).withStyle(ChatFormatting.GRAY), this.width / 2, this.summaryY, TextColors.WHITE);
 		if (currentProjection == null || currentProjection.rows().isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.empty").withStyle(ChatFormatting.GRAY), this.width / 2, browserTop + 24, TextColors.WHITE);
-		ChangeBrowserProjection.FileRow selected = anyMenuOpen() || this.browser == null ? null : this.browser.selectedFile();
+		ChangeBrowserProjection.FileRow selected = menuOpen() || this.browser == null ? null : this.browser.selectedFile();
 		if (selected == null) drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.browser.selectHint").withStyle(ChatFormatting.GRAY), this.width / 2, this.paneTop, TextColors.WHITE);
 		else {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, selected.path(), contentWidth)).withStyle(ChatFormatting.WHITE), this.width / 2, this.paneTop,
@@ -461,8 +389,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		if (anyMenuOpen()) {
-			closeMenus();
+		if (closeOpenMenus()) {
 			rebuildBrowser();
 			return false;
 		}

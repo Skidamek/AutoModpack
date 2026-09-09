@@ -76,10 +76,14 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 		this.rowPicked = Objects.requireNonNull(rowPicked, "row pick");
 		this.tooltipShower = tooltipShower;
 		this.centerListVertically = false;
-		/*? if <1.20.6 {*/
-		/*// Vanilla's list render repaints opaque dirt bands across the whole screen above and below the list;
-		// with the screen's text and action rows drawn before the list, those bands erase them (invisible: same dirt as the background).
+		// Vanilla draws list chrome through different machinery on every version; our lists draw none of it.
+		// Anything that needs a panel (the dropdown menus) draws its own.
+		/*? if <1.21.1 {*/
+		/*this.setRenderBackground(false);
 		this.setRenderTopAndBottom(false);
+		*//*?}*/
+		/*? if <1.20.4 {*/
+		/*this.setRenderSelection(false);
 		*//*?}*/
 		for (Row row : Objects.requireNonNull(rows, "rows")) this.addEntry(new RowEntry(row));
 	}
@@ -110,6 +114,42 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 		super.render(graphics, mouseX, mouseY, delta);
 		VersionedScissor.disable();
 	}
+	*//*?}*/
+
+	/*? if >=26.1 {*/
+	@Override
+	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
+
+	@Override
+	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	/*?} elif >=1.21.10 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	*//*?} elif >=1.21.1 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
+	*//*?} elif >=1.20.4 {*/
+	/*@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
 	*//*?}*/
 	@Override
 	public RowView rowView(int index) {

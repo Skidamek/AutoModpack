@@ -37,6 +37,8 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.Entry> implements RowViewport {
 	private static final int ROW_HEIGHT = 24;
 	private static final int TEXT_MARGIN = 6;
+	/** Marks the claim the restore and save-copy actions act on; the vanilla selection outline is stripped chrome. */
+	private static final int SELECTED_COLOR = 0x40FFFFFF;
 	private final int contentWidth;
 	private final Consumer<PreservationVault.Claim> claimPicked;
 
@@ -48,10 +50,14 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.centerListVertically = false;
-		/*? if <1.20.6 {*/
-		/*// Vanilla's list render repaints opaque dirt bands across the whole screen above and below the list;
-		// with the screen's text and action rows drawn before the list, those bands erase them (invisible: same dirt as the background).
+		// Vanilla draws list chrome through different machinery on every version; our lists draw none of it.
+		// Anything that needs a panel (the dropdown menus) draws its own.
+		/*? if <1.21.1 {*/
+		/*this.setRenderBackground(false);
 		this.setRenderTopAndBottom(false);
+		*//*?}*/
+		/*? if <1.20.4 {*/
+		/*this.setRenderSelection(false);
 		*//*?}*/
 		this.claimPicked = Objects.requireNonNull(claimPicked, "claim pick");
 		Map<String, String> names = Map.copyOf(packNames == null ? Map.of() : packNames);
@@ -108,6 +114,42 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 		super.render(graphics, mouseX, mouseY, delta);
 		VersionedScissor.disable();
 	}
+	*//*?}*/
+
+	/*? if >=26.1 {*/
+	@Override
+	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
+
+	@Override
+	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	/*?} elif >=1.21.10 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	*//*?} elif >=1.21.1 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
+	*//*?} elif >=1.20.4 {*/
+	/*@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
 	*//*?}*/
 	@Override
 	public RowView rowView(int index) {
@@ -211,6 +253,7 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 		*//*?}*/
 
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth) {
+			if (getSelected() == this) matrices.fill(x, y, x + entryWidth, y + ROW_HEIGHT, SELECTED_COLOR);
 			String size = UiFormat.formatSize(claim.size());
 			int lineWidth = Math.max(1, entryWidth - TEXT_MARGIN * 2 - minecraft.font.width(size));
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, fileName(), lineWidth)).withStyle(ChatFormatting.WHITE), x + TEXT_MARGIN, y + 4, TextColors.WHITE);
