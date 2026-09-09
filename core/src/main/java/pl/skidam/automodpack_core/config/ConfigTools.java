@@ -40,13 +40,19 @@ import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.OsPaths;
 
 public final class ConfigTools {
-	public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
-			.registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())
-			.registerTypeAdapter(ConnectionJsons.ConnectionInfo.class, new ConnectionInfoTypeAdapter())
-			.registerTypeAdapter(ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter())
-			.registerTypeHierarchyAdapter(Enum.class, new StrictEnumTypeAdapter()).create();
+	/** The custom JSON shapes registered on {@link #GSON}; the same set defines which types key-reflection may not inspect. */
+	private static final Map<Class<?>, Object> CUSTOM_JSON_ADAPTERS = Map.of(InetSocketAddress.class, new InetSocketAddressTypeAdapter(), ConnectionJsons.ConnectionInfo.class,
+			new ConnectionInfoTypeAdapter(), ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter());
+
+	public static final Gson GSON = buildGson();
 
 	private ConfigTools() {}
+
+	private static Gson buildGson() {
+		GsonBuilder builder = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting();
+		CUSTOM_JSON_ADAPTERS.forEach(builder::registerTypeAdapter);
+		return builder.registerTypeHierarchyAdapter(Enum.class, new StrictEnumTypeAdapter()).create();
+	}
 
 	public static <T> Optional<T> read(Path path, Class<T> type) {
 		if (!Files.isRegularFile(path)) return Optional.empty();
@@ -75,13 +81,13 @@ public final class ConfigTools {
 	}
 
 	public static <T> T parse(String json, Class<T> type) {
-		if (json == null) throw new ConfigException("Configuration JSON is null");
+		if (json == null) throw new ConfigParseException("Configuration JSON is null");
 		try {
 			T value = GSON.fromJson(json, type);
-			if (value == null) throw new ConfigException("Configuration JSON produced null for " + type.getSimpleName());
+			if (value == null) throw new ConfigParseException("Configuration JSON produced null for " + type.getSimpleName());
 			return value;
 		} catch (JsonParseException e) {
-			throw new ConfigException("Invalid JSON for " + type.getSimpleName(), e);
+			throw new ConfigParseException("Invalid JSON for " + type.getSimpleName(), e);
 		}
 	}
 
@@ -118,8 +124,8 @@ public final class ConfigTools {
 		}
 	}
 
-	/** Types whose JSON shape is decided by a registered custom type adapter or is a JSON primitive, so field reflection cannot describe their keys. */
-	private static final Set<Class<?>> OPAQUE_JSON_TYPES = Set.of(InetSocketAddress.class, ConnectionJsons.ConnectionInfo.class, ConnectionJsons.CertificateTrustEntry.class);
+	/** Types key-reflection may not inspect, derived from the {@link #CUSTOM_JSON_ADAPTERS} registry; JSON primitives are excluded separately. */
+	private static final Set<Class<?>> OPAQUE_JSON_TYPES = CUSTOM_JSON_ADAPTERS.keySet();
 
 	private static boolean isInspectable(Class<?> raw) {
 		return !raw.isPrimitive() && !raw.isArray() && !raw.isEnum() && !raw.isInterface() && !OPAQUE_JSON_TYPES.contains(raw) && raw != String.class && raw != Boolean.class
@@ -225,6 +231,17 @@ public final class ConfigTools {
 		}
 
 		public ConfigException(String message, Throwable cause) {
+			super(message, cause);
+		}
+	}
+
+	/** A configuration file's content is unparseable: wrong JSON shape, unknown value, or unusable result; distinct from IO trouble so callers can move broken files aside without hiding read failures. */
+	public static class ConfigParseException extends ConfigException {
+		public ConfigParseException(String message) {
+			super(message);
+		}
+
+		public ConfigParseException(String message, Throwable cause) {
 			super(message, cause);
 		}
 	}

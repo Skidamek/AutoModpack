@@ -45,7 +45,8 @@ class ConfigToolsTest {
 	void readOrCreateOnlyWritesDefaultsWhenAbsent() throws Exception {
 		Path config = temporaryDirectory.resolve("client.json");
 
-		ConfigTools.readOrCreate(config, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		ClientConfigJsons.ClientConfigFieldsV3 created = ConfigTools.readOrCreate(config, ClientConfigJsons.ClientConfigFieldsV3.class, ClientConfigJsons.ClientConfigFieldsV3::new);
+		assertEquals(3, created.DO_NOT_CHANGE_IT);
 		assertTrue(Files.isRegularFile(config));
 
 		String existing = "{\"selectedModpackId\":\"preserve\"}";
