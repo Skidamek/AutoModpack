@@ -1,12 +1,23 @@
 package pl.skidam.automodpack_core.config;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import com.google.gson.Gson;
@@ -17,9 +28,11 @@ import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
+import com.google.gson.annotations.SerializedName;
 
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -30,17 +43,23 @@ public final class ConfigTools {
 	public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
 			.registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())
 			.registerTypeAdapter(ConnectionJsons.ConnectionInfo.class, new ConnectionInfoTypeAdapter())
-			.registerTypeAdapter(ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter()).create();
+			.registerTypeAdapter(ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter())
+			.registerTypeHierarchyAdapter(Enum.class, new StrictEnumTypeAdapter()).create();
 
 	private ConfigTools() {}
 
 	public static <T> Optional<T> read(Path path, Class<T> type) {
 		if (!Files.isRegularFile(path)) return Optional.empty();
+		String json;
 		try {
-			return Optional.ofNullable(parse(Files.readString(path, StandardCharsets.UTF_8), type));
+			json = Files.readString(path, StandardCharsets.UTF_8);
 		} catch (IOException e) {
 			throw new ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
 		}
+		T value = parse(json, type);
+		List<String> unknown = unknownKeys(json, type);
+		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
+		return Optional.of(value);
 	}
 
 	public static <T> T readOrCreate(Path path, Class<T> type, Supplier<T> defaults) {
@@ -64,6 +83,61 @@ public final class ConfigTools {
 		} catch (JsonParseException e) {
 			throw new ConfigException("Invalid JSON for " + type.getSimpleName(), e);
 		}
+	}
+
+	/** JSON paths present in the document that match no field of the target class, so Gson silently drops them; empty for invalid JSON, which {@link #parse} reports instead. */
+	public static List<String> unknownKeys(String json, Class<?> type) {
+		List<String> unknown = new ArrayList<>();
+		try {
+			collectUnknownKeys(JsonParser.parseString(json), type, "", unknown);
+		} catch (JsonParseException e) {
+			return List.of();
+		}
+		return unknown;
+	}
+
+	private static void collectUnknownKeys(JsonElement element, Type type, String prefix, List<String> unknown) {
+		if (type instanceof ParameterizedType parameterized) {
+			Class<?> raw = (Class<?>) parameterized.getRawType();
+			Type[] arguments = parameterized.getActualTypeArguments();
+			if (element.isJsonArray() && Collection.class.isAssignableFrom(raw)) {
+				JsonArray array = element.getAsJsonArray();
+				for (int index = 0; index < array.size(); index++) collectUnknownKeys(array.get(index), arguments[0], prefix + "[" + index + "]", unknown);
+			} else if (element.isJsonObject() && Map.class.isAssignableFrom(raw) && arguments[0] == String.class) {
+				for (var entry : element.getAsJsonObject().entrySet()) collectUnknownKeys(entry.getValue(), arguments[1], prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey(), unknown);
+			}
+			return;
+		}
+		if (!(type instanceof Class<?> raw) || !isInspectable(raw) || !element.isJsonObject()) return;
+		Map<String, Field> fields = jsonFieldNames(raw);
+		for (var entry : element.getAsJsonObject().entrySet()) {
+			String path = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
+			Field field = fields.get(entry.getKey());
+			if (field == null) unknown.add(path);
+			else collectUnknownKeys(entry.getValue(), field.getGenericType(), path, unknown);
+		}
+	}
+
+	/** Types whose JSON shape is decided by a registered custom type adapter or is a JSON primitive, so field reflection cannot describe their keys. */
+	private static final Set<Class<?>> OPAQUE_JSON_TYPES = Set.of(InetSocketAddress.class, ConnectionJsons.ConnectionInfo.class, ConnectionJsons.CertificateTrustEntry.class);
+
+	private static boolean isInspectable(Class<?> raw) {
+		return !raw.isPrimitive() && !raw.isArray() && !raw.isEnum() && !raw.isInterface() && !OPAQUE_JSON_TYPES.contains(raw) && raw != String.class && raw != Boolean.class
+				&& raw != Character.class && !Number.class.isAssignableFrom(raw);
+	}
+
+	private static Map<String, Field> jsonFieldNames(Class<?> raw) {
+		Map<String, Field> names = new HashMap<>();
+		for (Field field : raw.getDeclaredFields()) {
+			if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers()) || field.isSynthetic()) continue;
+			SerializedName serializedName = field.getAnnotation(SerializedName.class);
+			if (serializedName == null) names.put(field.getName(), field);
+			else {
+				names.put(serializedName.value(), field);
+				for (String alternate : serializedName.alternate()) names.put(alternate, field);
+			}
+		}
+		return names;
 	}
 
 	public static void writeAtomic(Path path, Object value) throws IOException {
@@ -127,6 +201,21 @@ public final class ConfigTools {
 			var object = json.getAsJsonObject();
 			String reason = object.has("reason") ? object.get("reason").getAsString() : "TOFU";
 			return new ConnectionJsons.CertificateTrustEntry(object.get("fingerprint").getAsString(), reason);
+		}
+	}
+
+	/** Refuses unknown enum names with a clear error instead of silently yielding null elements inside persisted state. */
+	public static final class StrictEnumTypeAdapter implements JsonDeserializer<Enum<?>> {
+		@Override
+		@SuppressWarnings({"unchecked", "rawtypes"})
+		public Enum<?> deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
+			if (!json.isJsonPrimitive()) throw new JsonParseException("Enum " + ((Class<?>) type).getSimpleName() + " value must be a string name");
+			String name = json.getAsString();
+			try {
+				return Enum.valueOf((Class<? extends Enum>) type, name);
+			} catch (IllegalArgumentException e) {
+				throw new JsonParseException("Unknown " + ((Class<?>) type).getSimpleName() + " value '" + name + "'", e);
+			}
 		}
 	}
 
