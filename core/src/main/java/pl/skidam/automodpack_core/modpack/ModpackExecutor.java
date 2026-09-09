@@ -41,6 +41,7 @@ public class ModpackExecutor {
 	private final GenerationStore generationStore;
 	private final DataRootResolver.Layout dataLayout;
 	private final CandidateScan candidateScan;
+	private final HostingBinder hostingBinder;
 
 	public ModpackExecutor() {
 		this(GameDirectory.current(), HOST_MODPACK_DIR, GameDirectory.current().resolve(SERVER_DIR));
@@ -54,6 +55,13 @@ public class ModpackExecutor {
 
 	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
 			ThreadPoolExecutor creationExecutor) {
+		this(serverRoot, groupRoot, generationRoot, generationStore, candidateScan, creationExecutor, hosting -> {
+			if (hostServer != null) hostServer.replacePaths(hosting);
+		});
+	}
+
+	ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot, GenerationStore generationStore, CandidateScan candidateScan,
+			ThreadPoolExecutor creationExecutor, HostingBinder hostingBinder) {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.generationRoot = generationRoot.toAbsolutePath().normalize();
@@ -62,11 +70,17 @@ public class ModpackExecutor {
 		this.dataLayout = new DataRootResolver.Layout(this.generationStore.objectRoot().getParent());
 		this.candidateScan = Objects.requireNonNull(candidateScan);
 		this.creationExecutor = Objects.requireNonNull(creationExecutor);
+		this.hostingBinder = Objects.requireNonNull(hostingBinder);
 	}
 
 	@FunctionalInterface
 	interface CandidateScan {
 		ModpackCandidate scan(ModpackCandidateScanner.Request request) throws CandidateBuildException;
+	}
+
+	@FunctionalInterface
+	interface HostingBinder {
+		void bind(GenerationHosting hosting) throws Exception;
 	}
 
 	public PreviewResult preview() {
@@ -118,7 +132,7 @@ public class ModpackExecutor {
 			return new RevertResult.Rejected(e.getMessage() == null ? "Invalid rollback target" : e.getMessage(), e);
 		} catch (Exception e) {
 			LOGGER.error("Failed to publish modpack revert", e);
-			return new RevertResult.Rejected(e.getClass().getSimpleName(), e);
+			return new RevertResult.Rejected(detail(e), e);
 		}
 	}
 
@@ -160,7 +174,7 @@ public class ModpackExecutor {
 			return bindHosting(publishLocked(expectedContentToken, inlineNotes));
 		} catch (Exception e) {
 			LOGGER.error("Failed to publish modpack generation", e);
-			return new PublishResult.Rejected(e.getClass().getSimpleName(), e);
+			return new PublishResult.Rejected(detail(e), e);
 		}
 	}
 
@@ -266,16 +280,27 @@ public class ModpackExecutor {
 		}
 	}
 
-	/** Hosting follows the committed generation of every outcome that carries one, bound once here inside the operation lease instead of remembered per code path. */
+	/**
+	 * Hosting follows the committed generation of every outcome that carries one, bound once here inside the operation lease instead of remembered per code path; a failed swap is reported on the committed outcome, never
+	 * as a rejection of a durable commit.
+	 */
 	private <R extends HostingOutcome> R bindHosting(R result) {
-		result.hosted().ifPresent(this::replaceHosting);
+		GenerationHosting hosting = result.hosted().orElse(null);
+		if (hosting == null) return result;
+		try {
+			hostingBinder.bind(hosting);
+		} catch (Exception e) {
+			LOGGER.error("The generation committed, but the hosting swap failed", e);
+			@SuppressWarnings("unchecked")
+			R failed = (R) result.withHostingFailure(e);
+			return failed;
+		}
 		return result;
 	}
 
-	private void replaceHosting(GenerationHosting paths) {
-		if (hostServer != null) {
-			hostServer.replacePaths(paths);
-		}
+	/** The guard's or failure's own words when it has any; the class name is only the last resort. */
+	private static String detail(Throwable e) {
+		return e.getMessage() == null || e.getMessage().isBlank() ? e.getClass().getSimpleName() : e.getMessage();
 	}
 
 	private void consumePatchNotes(GenerationPatchNotes.Resolution notes) {
@@ -389,10 +414,15 @@ public class ModpackExecutor {
 			public Rejected {
 				detail = Objects.requireNonNull(detail);
 			}
+
+			@Override
+			public RevertResult withHostingFailure(Throwable failure) {
+				return this;
+			}
 		}
 	}
 
-	public record Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting) implements RevertResult {
+	public record Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements RevertResult {
 		public Reverted {
 			Objects.requireNonNull(current, "current");
 			if (targetSeq < 1) throw new IllegalArgumentException("Invalid rollback target sequence");
@@ -400,9 +430,23 @@ public class ModpackExecutor {
 			Objects.requireNonNull(hosting, "hosting");
 		}
 
+		public Reverted(PackDocument current, long targetSeq, List<String> warnings, GenerationHosting hosting) {
+			this(current, targetSeq, warnings, hosting, null);
+		}
+
 		@Override
 		public Optional<GenerationHosting> hosted() {
 			return Optional.of(hosting);
+		}
+
+		@Override
+		public Optional<Throwable> hostingFailure() {
+			return Optional.ofNullable(hostingSwapFailure);
+		}
+
+		@Override
+		public Reverted withHostingFailure(Throwable failure) {
+			return new Reverted(current, targetSeq, warnings, hosting, failure);
 		}
 	}
 
@@ -413,10 +457,15 @@ public class ModpackExecutor {
 			public Rejected {
 				detail = Objects.requireNonNull(detail);
 			}
+
+			@Override
+			public PublishResult withHostingFailure(Throwable failure) {
+				return this;
+			}
 		}
 	}
 
-	public record Published(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting) implements PublishResult {
+	public record Published(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements PublishResult {
 		public Published {
 			Objects.requireNonNull(state, "state");
 			Objects.requireNonNull(current, "current");
@@ -427,13 +476,27 @@ public class ModpackExecutor {
 			if (state.patchNotesSource().isEmpty()) throw new IllegalArgumentException("Published generation requires a resolved patch-note source");
 		}
 
+		public Published(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting) {
+			this(state, current, warnings, hosting, null);
+		}
+
 		@Override
 		public Optional<GenerationHosting> hosted() {
 			return Optional.of(hosting);
 		}
+
+		@Override
+		public Optional<Throwable> hostingFailure() {
+			return Optional.ofNullable(hostingSwapFailure);
+		}
+
+		@Override
+		public Published withHostingFailure(Throwable failure) {
+			return new Published(state, current, warnings, hosting, failure);
+		}
 	}
 
-	public record NoChanges(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting) implements PublishResult {
+	public record NoChanges(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting, Throwable hostingSwapFailure) implements PublishResult {
 		public NoChanges {
 			Objects.requireNonNull(state, "state");
 			Objects.requireNonNull(current, "current");
@@ -444,9 +507,23 @@ public class ModpackExecutor {
 			if (state.patchNotesSource().isPresent()) throw new IllegalArgumentException("No-change result cannot resolve patch notes");
 		}
 
+		public NoChanges(CandidateState state, PackDocument current, List<String> warnings, GenerationHosting hosting) {
+			this(state, current, warnings, hosting, null);
+		}
+
 		@Override
 		public Optional<GenerationHosting> hosted() {
 			return Optional.of(hosting);
+		}
+
+		@Override
+		public Optional<Throwable> hostingFailure() {
+			return Optional.ofNullable(hostingSwapFailure);
+		}
+
+		@Override
+		public NoChanges withHostingFailure(Throwable failure) {
+			return new NoChanges(state, current, warnings, hosting, failure);
 		}
 	}
 
@@ -457,18 +534,37 @@ public class ModpackExecutor {
 			public Rejected {
 				detail = Objects.requireNonNull(detail);
 			}
+
+			@Override
+			public LoadResult withHostingFailure(Throwable failure) {
+				return this;
+			}
 		}
 	}
 
-	public record Loaded(PackDocument current, GenerationHosting hosting) implements LoadResult {
+	public record Loaded(PackDocument current, GenerationHosting hosting, Throwable hostingSwapFailure) implements LoadResult {
 		public Loaded {
 			Objects.requireNonNull(current, "current");
 			Objects.requireNonNull(hosting, "hosting");
 		}
 
+		public Loaded(PackDocument current, GenerationHosting hosting) {
+			this(current, hosting, null);
+		}
+
 		@Override
 		public Optional<GenerationHosting> hosted() {
 			return Optional.of(hosting);
+		}
+
+		@Override
+		public Optional<Throwable> hostingFailure() {
+			return Optional.ofNullable(hostingSwapFailure);
+		}
+
+		@Override
+		public Loaded withHostingFailure(Throwable failure) {
+			return new Loaded(current, hosting, failure);
 		}
 	}
 }
