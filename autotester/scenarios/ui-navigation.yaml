@@ -11,6 +11,9 @@ flow:
     name: wait for the first-connection prompt
     timeout: 90s
     until: { screen: PackConfirmScreen }
+  - do: screenshot
+    name: capture the first-connection confirm with its acknowledge checkbox
+    file: ui-navigation-first-connect
   - do: click
     name: open group customization
     select: { text: Customize }
@@ -69,6 +72,27 @@ flow:
   - do: screenshot
     name: capture the group file browser
     file: ui-navigation-group-files
+  - do: click
+    name: open the group filter dropdown
+    select: { text: "Group: " }
+  - do: wait_for
+    name: show the group filter menu with the browser's groups
+    until:
+      all:
+        - element: { text: All groups }
+        - element: { text: Extra One }
+  - do: screenshot
+    name: capture the group filter dropdown
+    file: ui-navigation-group-dropdown
+  - do: click
+    name: widen the browser to every group
+    select: { text: All groups }
+  - do: wait_for
+    name: show the filter applied on the dropdown label
+    until: { element: { text: "Group: All groups" } }
+  - do: screenshot
+    name: capture the widened group browser
+    file: ui-navigation-group-filtered
   - do: click
     name: return from the group file browser
     select: { text: Back }
@@ -137,6 +161,9 @@ flow:
       all:
         - screen: PackConfirmScreen
         - element: { text: download, enabled: false }
+  - do: screenshot
+    name: capture the unverified write confirm
+    file: ui-navigation-write-confirm
   - do: click
     name: return from the second confirm
     select: { text: Customize }

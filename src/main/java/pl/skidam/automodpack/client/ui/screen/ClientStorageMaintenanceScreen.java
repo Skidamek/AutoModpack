@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
 
@@ -77,7 +77,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		}
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, LINE_HEIGHT, maintenanceRow, footerRow);
 		this.titleTop = layout.titleTop();
-		List<Button> buttons = addActionAreaAt(PANEL_WIDTH, layout.actionsTop(), maintenanceRow, footerRow);
+		List<AbstractWidget> buttons = addActionAreaAt(PANEL_WIDTH, layout.actionsTop(), maintenanceRow, footerRow);
 		buttons.get(0).active = !busy && !closed;
 		buttons.get(1).active = !busy && !closed;
 		DialogColumn column = layout.column();

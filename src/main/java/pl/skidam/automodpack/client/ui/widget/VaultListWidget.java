@@ -181,9 +181,18 @@ public final class VaultListWidget extends ObjectSelectionList<VaultListWidget.E
 		return ROW_HEIGHT;
 	}
 
-	protected int getScrollbarPosition() {
-		return Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
+	// The hit test and the scrollbar draw compare screen coordinates, so the position must be absolute;
+	// vanilla's own hook is relative on the versions that still call it, which ate every menu row click.
+	/*? if <1.20.3 {*/
+	/*protected int getScrollbarPosition() {
+		return this.x0 + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
 	}
+	*//*?} elif <1.21.5 {*/
+	/*protected int getScrollbarPosition() {
+		return this.getX() + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
+	}
+	*//*?}*/
+
 
 	public final class Entry extends ObjectSelectionList.Entry<Entry> {
 		private final PreservationVault.Claim claim;

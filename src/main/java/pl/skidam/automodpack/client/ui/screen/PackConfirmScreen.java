@@ -7,7 +7,6 @@ import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -15,7 +14,6 @@ import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.UiFormat;
-import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -49,8 +47,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private boolean acknowledged;
 	private boolean finished;
 	private int ticksRemaining = TIMER_TICKS;
-	private Button cancelButton;
-	private Button primaryButton;
+	private AbstractWidget cancelButton;
+	private AbstractWidget primaryButton;
 	private AbstractWidget ackCheckbox;
 	private String originFull = "";
 	private String originDisplay = "";
@@ -104,14 +102,21 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 		boolean leftover = firstInstall && updater.firstInstallLocalModCount() > 0;
 		boolean customize = PackConfirmCopy.canCustomize(updater.getSelectedTarget().manifest());
-		boolean notes = firstInstall ? Changelogs.hasNotes(updater.getFirstInstallPatchNotes())
+		boolean notes = firstInstall
+				? Changelogs.hasNotes(updater.getFirstInstallPatchNotes())
 				: laterPreview != null && Changelogs.hasNotes(laterPreview.journal());
 
 		List<ActionRow> rows = new ArrayList<>();
 		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.history"), button -> openHistory())));
-		if (leftover) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
+		if (leftover)
+			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, checkboxAction(PackConfirmCopy.leftoverLabel(updater.firstInstallLocalModCount()), keepExistingMods, value -> {
+				keepExistingMods = value;
+				updater.setFirstInstallLocalModCleanup(!keepExistingMods);
+				// The checkbox label is constant now; the rebuild only refreshes the existing-mods summary line.
+				rebuild();
+			})));
 		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
-		if (unverified) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.literal(" "), button -> {})));
+		if (unverified) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, checkboxAction(ackMessage(), acknowledged, value -> onAckToggled(value))));
 		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
 		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : "automodpack.update.apply");
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
@@ -119,18 +124,19 @@ public final class PackConfirmScreen extends VersionedScreen {
 				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
 				primaryAction(primaryLabel, button -> confirm())));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
-		List<Button> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
-		int buttonIndex = 0;
-		if (notes) buttonIndex++;
+		List<AbstractWidget> widgets = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
+		int widgetIndex = 0;
+		if (notes) widgetIndex++;
 		if (leftover) {
-			replacePlaceholderWithLeftover(buttons.get(buttonIndex));
-			buttonIndex++;
+			String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", updater.firstInstallLocalModPaths()), 240, 8));
+			VersionedScreen.setTooltip(widgets.get(widgetIndex), VersionedText.translatable("automodpack.confirm.leftoverTooltip", joined));
+			widgetIndex++;
 		}
-		if (customize) buttonIndex++;
+		if (customize) widgetIndex++;
 		if (unverified) {
-			replacePlaceholderWithAck(buttons.get(buttonIndex));
-			cancelButton = buttons.get(buttonIndex + 1);
-			primaryButton = buttons.get(buttonIndex + 3);
+			ackCheckbox = widgets.get(widgetIndex);
+			cancelButton = widgets.get(widgetIndex + 1);
+			primaryButton = widgets.get(widgetIndex + 3);
 			primaryButton.active = ticksRemaining <= 0 && acknowledged;
 			this.setInitialFocus(cancelButton);
 		}
@@ -139,48 +145,16 @@ public final class PackConfirmScreen extends VersionedScreen {
 		layoutBody(bottomY);
 	}
 
-	private void replacePlaceholderWithLeftover(Button placeholder) {
-		this.removeWidget(placeholder);
-		/*? if >=1.19.4 {*/
-		int x = placeholder.getX();
-		int y = placeholder.getY();
-		/*?} else {*/
-		/*int x = placeholder.x;
-		int y = placeholder.y;
-		*//*?}*/
-		Component label = PackConfirmCopy.leftoverLabel(updater.firstInstallLocalModCount());
-		AbstractWidget checkbox = new CheckboxWidget(this.font, x, y, placeholder.getWidth(), label, keepExistingMods, value -> {
-			keepExistingMods = value;
-			updater.setFirstInstallLocalModCleanup(!keepExistingMods);
-			// The checkbox label is constant now; the rebuild only refreshes the existing-mods summary line.
-			rebuild();
-		});
-		this.addRenderableWidget(checkbox);
-		String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", updater.firstInstallLocalModPaths()), 240, 8));
-		VersionedScreen.setTooltip(checkbox, VersionedText.translatable("automodpack.confirm.leftoverTooltip", joined));
-	}
-
-	private void replacePlaceholderWithAck(Button placeholder) {
-		this.removeWidget(placeholder);
-		/*? if >=1.19.4 {*/
-		int x = placeholder.getX();
-		int y = placeholder.getY();
-		/*?} else {*/
-		/*int x = placeholder.x;
-		int y = placeholder.y;
-		*//*?}*/
-		ackCheckbox = new CheckboxWidget(this.font, x, y, placeholder.getWidth(), ackMessage(), acknowledged, value -> {
-			if (ticksRemaining > 0) {
-				acknowledged = false;
-				ackCheckbox.setMessage(ackMessage());
-				if (primaryButton != null) primaryButton.active = false;
-				return;
-			}
-			acknowledged = value;
-			if (primaryButton != null) primaryButton.active = acknowledged;
-		});
-		ackCheckbox.active = ticksRemaining <= 0;
-		this.addRenderableWidget(ackCheckbox);
+	/** The acknowledge checkbox flips only after the read timer ran out; the primary gate follows it. */
+	private void onAckToggled(boolean value) {
+		if (ticksRemaining > 0) {
+			acknowledged = false;
+			if (ackCheckbox != null) ackCheckbox.setMessage(ackMessage());
+			if (primaryButton != null) primaryButton.active = false;
+			return;
+		}
+		acknowledged = value;
+		if (primaryButton != null) primaryButton.active = acknowledged;
 	}
 
 	private MutableComponent ackMessage() {
@@ -235,7 +209,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 		List<MutableComponent> all = new ArrayList<>(topLines);
 		all.add(blankLine());
-		for (UnverifiedJarList.UnverifiedFile file : unverifiedFiles) all.addAll(wrapParagraph(this.font, file.size() > 0 ? file.path() + " · " + UiFormat.formatSize(file.size()) : file.path(), wrapWidth, ChatFormatting.GRAY));
+		for (UnverifiedJarList.UnverifiedFile file : unverifiedFiles)
+			all.addAll(wrapParagraph(this.font, file.size() > 0 ? file.path() + " · " + UiFormat.formatSize(file.size()) : file.path(), wrapWidth, ChatFormatting.GRAY));
 		all.add(blankLine());
 		all.addAll(bottomLines);
 		this.addCenteredScrollBody(BODY, 42, bottomY, all);
@@ -320,10 +295,12 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private void openFiles() {
 		if (firstInstall) {
 			var target = updater.getSelectedTarget();
-			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"), PackConfirmCopy.catalogue(updater), PackConfirmCopy.groupNames(target.manifest()), null, List.of(), true, PackConfirmCopy.selectedBytes(target), ""));
+			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"),
+					PackConfirmCopy.catalogue(updater), PackConfirmCopy.groupNames(target.manifest()), null, List.of(), true, PackConfirmCopy.selectedBytes(target), ""));
 			return;
 		}
-		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.update.reviewUpdate"), laterPreview.changeSet(), laterPreview.featureNames(), null, List.of(), true, laterPreview.uncachedAcquisitionBytes(), ""));
+		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.update.reviewUpdate"), laterPreview.changeSet(),
+				laterPreview.featureNames(), null, List.of(), true, laterPreview.uncachedAcquisitionBytes(), ""));
 	}
 
 	private void openHistory() {

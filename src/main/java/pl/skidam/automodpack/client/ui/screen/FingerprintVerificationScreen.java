@@ -1,24 +1,25 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import pl.skidam.automodpack.client.ui.TextColors;
-
 import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
+
 import pl.skidam.automodpack.client.ScreenImpl;
+import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
+import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class FingerprintVerificationScreen extends VersionedScreen {
@@ -34,7 +35,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 			VersionedText.translatable("automodpack.validation.failed"),
 			VersionedText.translatable("automodpack.retry"));
 	private EditBox textField;
-	private Button verifyButton;
+	private AbstractWidget verifyButton;
 	private String originDisplay = "";
 	private int fieldY;
 	private List<MutableComponent> stackLines = List.of();
@@ -88,7 +89,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		int stackHeight = stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + hintLines.size() * LINE_HEIGHT;
 		DialogLayout layout = layoutDialogWithActions(28, 2 * LINE_HEIGHT, prose.size() * LINE_HEIGHT, stackHeight, footer);
 		this.titleTop = layout.titleTop();
-		List<Button> buttons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
+		List<AbstractWidget> buttons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
 		this.verifyButton = buttons.get(2);
 		DialogColumn column = layout.column();
 		this.addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), prose);
@@ -114,13 +115,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 			forceValidate();
 		} else {
 			Constants.LOGGER.error("Server fingerprint validation failed, try again");
-			if (this.minecraft != null) {
-				/*? if > 1.21.1 {*/
-				this.minecraft.gui.toastManager().addToast(failedToast);
-				/*?} else {*/
-				/*this.minecraft.getToasts().addToast(failedToast);
-				*//*?}*/
-			}
+			VersionedToasts.add(failedToast);
 		}
 	}
 
