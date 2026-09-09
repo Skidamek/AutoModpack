@@ -13,7 +13,6 @@ import org.jetbrains.annotations.NotNull;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
-import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 /*? if >= 1.21.9 {*/
@@ -29,20 +28,12 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 /** One scrollable vanilla list of pre-styled text rows; screens own the content, this owns scrolling, hit-testing and row picks. */
-public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEntry> implements RowViewport {
+public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> implements RowViewport {
 	public static final int LINE_STEP = 10;
 	private static final int TEXT_MARGIN = 6;
 	/** The hovered-row wash: soft enough to sit under text, strong enough to read as a control. */
 	private static final int HOVER_COLOR = 0x40FFFFFF;
-	private final int contentWidth;
-	private final int rowHeight;
 	private final IntConsumer rowPicked;
-	private final TooltipShower tooltipShower;
-
-	/** Shows a component tooltip at the pointer; screens bridge this to the versioned tooltip rendering. */
-	public interface TooltipShower {
-		void showTooltip(Component tooltip, int mouseX, int mouseY);
-	}
 
 	/** One row: pre-wrapped, pre-styled lines plus an optional hover tooltip. */
 	public record Row(List<MutableComponent> lines, Component tooltip) {
@@ -59,144 +50,10 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 		}
 	}
 
-	public RowListWidget(Minecraft client, int width, int height, int contentWidth, int left, int top, int bottom, int rowHeight, List<Row> rows, IntConsumer rowPicked, TooltipShower tooltipShower) {
-		/*? if <1.20.3 {*/
-		/*super(client, width, height, top, bottom, rowHeight);
-		*//*?} else {*/
-		super(client, width, Math.max(rowHeight, bottom - top), top, rowHeight);
-		/*?}*/
-		// Entries take their x from the list's position at add time, so the offset must land before they are added.
-		/*? if >=1.20.3 {*/
-		this.setX(left);
-		/*?} else {*/
-		/*this.setLeftPos(left);
-		*//*?}*/
-		this.contentWidth = Math.max(1, contentWidth);
-		this.rowHeight = rowHeight;
+	public RowListWidget(Minecraft client, int width, int screenHeight, int contentWidth, int left, int top, int bottom, int rowHeight, List<Row> rows, IntConsumer rowPicked) {
+		super(client, width, screenHeight, left, top, bottom, contentWidth, rowHeight);
 		this.rowPicked = Objects.requireNonNull(rowPicked, "row pick");
-		this.tooltipShower = tooltipShower;
-		this.centerListVertically = false;
-		// Vanilla draws list chrome through different machinery on every version; our lists draw none of it.
-		// Anything that needs a panel (the dropdown menus) draws its own.
-		/*? if <1.21.1 {*/
-		/*this.setRenderBackground(false);
-		this.setRenderTopAndBottom(false);
-		*//*?}*/
-		/*? if <1.20.4 {*/
-		/*this.setRenderSelection(false);
-		*//*?}*/
 		for (Row row : Objects.requireNonNull(rows, "rows")) this.addEntry(new RowEntry(row));
-	}
-
-	@Override
-	public void revealRow(int index) {
-		RowEntry entry = this.children().get(index);
-		/*? if >=1.21.9 {*/
-		this.scrollToEntry(entry);
-		/*?} else {*/
-		/*this.ensureVisible(entry);
-		*//*?}*/
-		entry.layoutEntry(this.getRowLeft(), this.getRowTop(index), this.getRowWidth());
-	}
-
-	/*? if <1.19.4 {*/
-	/*@Override
-	public void render(PoseStack matrices, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(matrices, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-	/*? if >=1.19.4 <1.20.3 {*/
-	/*@Override
-	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(graphics, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-
-	/*? if >=26.1 {*/
-	@Override
-	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	/*?} elif >=1.21.10 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	*//*?} elif >=1.21.1 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?} elif >=1.20.4 {*/
-	/*@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?}*/
-	@Override
-	public RowView rowView(int index) {
-		return new RowView(this.children().get(index).row().text(), true, null, false);
-	}
-
-	@Override
-	public int rowCount() {
-		return this.children().size();
-	}
-
-	@Override
-	public int rowLeft() {
-		return this.getRowLeft();
-	}
-
-	@Override
-	public int rowTop(int index) {
-		return this.getRowTop(index);
-	}
-
-	@Override
-	public int rowWidth() {
-		return this.contentWidth;
-	}
-
-	@Override
-	public int rowHeight() {
-		return rowHeight;
-	}
-
-	// The hit test and the scrollbar draw compare screen coordinates, so the position must be absolute;
-	// vanilla's own hook is relative on the versions that still call it, which ate every menu row click.
-	/*? if <1.20.3 {*/
-	/*protected int getScrollbarPosition() {
-		return this.x0 + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?} elif <1.21.5 {*/
-	/*protected int getScrollbarPosition() {
-		return this.getX() + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?}*/
-
-
-	@Override
-	public int getRowWidth() {
-		return this.contentWidth;
 	}
 
 	public final class RowEntry extends ObjectSelectionList.Entry<RowEntry> {
@@ -216,7 +73,7 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 			this.setX(x);
 			this.setY(y);
 			this.setWidth(width);
-			this.setHeight(rowHeight);
+			this.setHeight(rowHeight());
 			/*?}*/
 		}
 
@@ -251,16 +108,16 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth, int mouseX, int mouseY, boolean hovered) {
 			int lineWidth = Math.max(1, entryWidth - TEXT_MARGIN * 2);
 			int lines = row.lines().size();
-			int textY = y + Math.max(0, (rowHeight - lines * LINE_STEP) / 2) + 1;
+			int textY = y + Math.max(0, (rowHeight() - lines * LINE_STEP) / 2) + 1;
 			// A hovered row washes over, so rows read as clickable and not as static text.
-			if (hovered) matrices.fill(x, y, x + entryWidth, y + rowHeight, HOVER_COLOR);
+			if (hovered) matrices.fill(x, y, x + entryWidth, y + rowHeight(), HOVER_COLOR);
 			for (MutableComponent line : row.lines()) {
 				MutableComponent drawn = line;
 				if (minecraft.font.width(line) > lineWidth) drawn = VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, line.getString(), lineWidth)).withStyle(line.getStyle());
 				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + Math.max(0, (entryWidth - minecraft.font.width(drawn)) / 2), textY, TextColors.WHITE);
 				textY += LINE_STEP;
 			}
-			if (hovered && row.tooltip() != null && tooltipShower != null) tooltipShower.showTooltip(row.tooltip(), mouseX, mouseY);
+			if (hovered && row.tooltip() != null) VersionedScreen.showComponentTooltip(row.tooltip(), mouseX, mouseY);
 		}
 
 		/*? if >= 1.21.9 {*/
@@ -281,5 +138,15 @@ public final class RowListWidget extends ObjectSelectionList<RowListWidget.RowEn
 	private void activate(RowEntry entry) {
 		this.setSelected(entry);
 		rowPicked.accept(this.children().indexOf(entry));
+	}
+
+	@Override
+	public RowView rowView(int index) {
+		return new RowView(this.children().get(index).row().text(), true, null, false);
+	}
+
+	@Override
+	protected void pinEntry(RowEntry entry, int index) {
+		entry.layoutEntry(getRowLeft(), getRowTop(index), getRowWidth());
 	}
 }

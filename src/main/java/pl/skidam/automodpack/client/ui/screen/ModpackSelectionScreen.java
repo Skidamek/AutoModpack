@@ -77,7 +77,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final Set<String> excluded = new LinkedHashSet<>();
 	private ResolvedSelection resolution;
 	private String resolutionError = "";
-	private final List<Row> rows = new ArrayList<>();
 
 	private boolean saved = false;
 	private boolean closed;
@@ -150,7 +149,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			this.resolution = Objects.requireNonNull(e.resolution(), "Invalid selection did not include a partial resolution");
 			this.resolutionError = VersionedText.translatable("automodpack.selection.savedInvalid").getString();
 		}
-		rebuildRows();
 	}
 
 	@Override
@@ -206,23 +204,34 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private List<GroupSelectionList.Item> listItems() {
 		List<GroupSelectionList.Item> items = new ArrayList<>();
-		for (Row row : rows) {
-			if (row.groupId() == null) {
-				if (row.categoryId() == null) {
-					items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.CAPTION, "", sectionLabel(row), null, false, false, false, ""));
-					continue;
-				}
-				String category = row.categoryId();
-				items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, category, headerLabel(category), headerTooltip(category, hasOptionalCategoryGroups(category)),
-						categoryFullySelected(category), hasOptionalCategoryGroups(category), categoryPartiallySelected(category), headerCounter(category)));
-				continue;
+		items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.CAPTION, "", generalCaption(), null, false, false, false, ""));
+		for (var entry : groups.entrySet()) {
+			if (entry.getValue().category().isEmpty()) items.add(groupItem(entry.getKey()));
+		}
+		for (String category : sortedCategories()) {
+			items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.HEADER, category, headerLabel(category), headerTooltip(category, hasOptionalCategoryGroups(category)),
+					categoryFullySelected(category), hasOptionalCategoryGroups(category), categoryPartiallySelected(category), headerCounter(category)));
+			for (var entry : groups.entrySet()) {
+				if (category.equals(entry.getValue().category())) items.add(groupItem(entry.getKey()));
 			}
-			GroupManifest.Group group = groups.get(row.groupId());
-			boolean togglable = group != null && canToggle(row.groupId(), group);
-			items.add(new GroupSelectionList.Item(GroupSelectionList.Kind.GROUP, row.groupId(), rowLabel(row.groupId(), group), rowTooltip(row.groupId(), group), resolution.selectedGroups().contains(row.groupId()),
-					togglable, false, ""));
 		}
 		return List.copyOf(items);
+	}
+
+	private MutableComponent generalCaption() {
+		return VersionedText.literal(VersionedText.translatable("automodpack.ui.general").getString()).withStyle(ChatFormatting.BOLD);
+	}
+
+	private GroupSelectionList.Item groupItem(String groupId) {
+		GroupManifest.Group group = groups.get(groupId);
+		boolean togglable = group != null && canToggle(groupId, group);
+		return new GroupSelectionList.Item(GroupSelectionList.Kind.GROUP, groupId, rowLabel(groupId, group), rowTooltip(groupId, group), resolution.selectedGroups().contains(groupId), togglable, false, "");
+	}
+
+	private List<String> sortedCategories() {
+		Set<String> categories = new TreeSet<>();
+		for (GroupManifest.Group group : groups.values()) if (!group.category().isEmpty()) categories.add(group.category());
+		return List.copyOf(categories);
 	}
 
 	private void onListToggle(GroupSelectionList.Item item) {
@@ -273,7 +282,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private boolean canToggle(String groupId, GroupManifest.Group group) {
-		if (isMandatory(manifest, group)) return false;
+		if (group.required()) return false;
 		GroupResolution explanation = resolution.resolution(groupId);
 		if (explanation == null) return group.supports(effectivePlatform());
 		if (explanation.selected() && (resolution.requiredGroups().contains(groupId) || resolution.forcedGroups().contains(groupId)
@@ -306,7 +315,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private void toggle(String groupId) {
 		GroupManifest.Group group = groups.get(groupId);
 		if (group == null) return;
-		if (isMandatory(manifest, group)) return;
+		if (group.required()) return;
 		SelectionIntent previous = currentIntent();
 		SelectionIntent next = GroupSelectionResolver.prefer(manifest, previous, groupId, effectivePlatform()).withPlatform(override());
 		Set<String> preferred = resolution.selectedGroups().contains(groupId) ? Set.of() : Set.of(groupId);
@@ -400,22 +409,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		ScreenImpl.setScreen(parent);
 	}
 
-	private void rebuildRows() {
-		rows.clear();
-		rows.add(new Row(VersionedText.translatable("automodpack.ui.general").getString(), null, null));
-		for (var entry : groups.entrySet()) if (entry.getValue().category().isEmpty()) rows.add(new Row("", entry.getKey(), null));
-		Set<String> categories = new TreeSet<>();
-		for (GroupManifest.Group group : groups.values()) if (!group.category().isEmpty()) categories.add(group.category());
-		for (String category : categories) {
-			rows.add(new Row(categoryLabel(category), null, category));
-			for (var entry : groups.entrySet()) if (category.equals(entry.getValue().category())) rows.add(new Row("", entry.getKey(), category));
-		}
-	}
-
-	private MutableComponent sectionLabel(Row row) {
-		return VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD);
-	}
-
 	/** The header glyph names what the next click does: full = exclude all, empty = include all, partial = include the rest. */
 	private MutableComponent headerLabel(String category) {
 		long optional = optionalGroupCount(category);
@@ -505,25 +498,32 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private MutableComponent rowLabel(String groupId, GroupManifest.Group group) {
 		if (group == null) return VersionedText.translatable("automodpack.browser.unknownGroup");
 
-		String name = displayName(groupId);
 		GroupResolution explanation = resolution.resolution(groupId);
-		String metrics = UiFormat.plural(group.files().size(), "automodpack.selection.metrics", UiFormat.formatSize(groupBytes(group))).getString();
 		String status = statusWord(explanation);
-		if (isMandatory(manifest, group)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.GRAY, status);
+		int maxWidth = groupLabelWidth();
+		int textWidth = status.isEmpty() ? maxWidth : Math.max(1, maxWidth - this.font.width(" " + status));
+		String name = displayName(groupId);
+		String metrics = UiFormat.plural(group.files().size(), "automodpack.selection.metrics", UiFormat.formatSize(groupBytes(group))).getString();
+		MutableComponent label = VersionedText.literal(truncateToWidth(this.font, name + " " + metrics, textWidth)).withStyle(rowColor(groupId, group, explanation));
+		if (!status.isEmpty()) label.append(VersionedText.literal(" " + status).withStyle(ChatFormatting.GRAY));
+		return label;
+	}
+
+	/** The color is the load-bearing row state; the wording lives in the status word and the hover tooltip. */
+	private ChatFormatting rowColor(String groupId, GroupManifest.Group group, GroupResolution explanation) {
+		if (group.required()) return ChatFormatting.GRAY;
 		if (explanation != null && (explanation.reasons().contains(GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE) || explanation.status() == GroupResolution.Status.UNAVAILABLE
 				|| explanation.status() == GroupResolution.Status.BLOCKED || explanation.status() == GroupResolution.Status.CONFLICT))
-			return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.RED, status);
-		if (excluded.contains(groupId)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.YELLOW, status);
+			return ChatFormatting.RED;
+		if (excluded.contains(groupId)) return ChatFormatting.YELLOW;
 		if (resolution.selectedGroups().contains(groupId)) {
 			// A dependency lock is the load-bearing fact: the row cannot be unchecked while its dependent needs it.
-			if (resolution.dependencyGroups().contains(groupId)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.AQUA, status);
-			if (chosen.contains(groupId)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.GREEN, status);
-			return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.AQUA, status);
+			if (resolution.dependencyGroups().contains(groupId)) return ChatFormatting.AQUA;
+			if (chosen.contains(groupId)) return ChatFormatting.GREEN;
+			return ChatFormatting.AQUA;
 		}
-		if (resolution.forcedGroups().contains(groupId)) return rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.AQUA, status);
-		return group.defaultSelected()
-				? rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.YELLOW, status)
-				: rowLabel(formatRowLabel(name, metrics, status), ChatFormatting.GRAY, status);
+		if (resolution.forcedGroups().contains(groupId)) return ChatFormatting.AQUA;
+		return group.defaultSelected() ? ChatFormatting.YELLOW : ChatFormatting.GRAY;
 	}
 
 	/** The row's state word in the surviving status keys; statuses whose explanation is a full sentence stay hover-only. */
@@ -541,23 +541,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		};
 	}
 
-	private String formatRowLabel(String name, String metrics, String status) {
-		int maxWidth = groupLabelWidth();
-		return truncateToWidth(this.font, name + " " + metrics, status.isEmpty() ? maxWidth : Math.max(1, maxWidth - this.font.width(" " + status)));
-	}
-
-	private MutableComponent rowLabel(String text, ChatFormatting color, String status) {
-		MutableComponent label = VersionedText.literal(truncateToWidth(this.font, text, groupLabelWidth())).withStyle(color);
-		if (!status.isEmpty()) label.append(VersionedText.literal(" " + status).withStyle(ChatFormatting.GRAY));
-		return label;
-	}
-
 	private int groupLabelWidth() {
 		return Math.max(1, panelWidth(ROW_WIDTH) - CHECKBOX_LABEL_OFFSET - GroupSelectionList.INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM - 4);
-	}
-
-	private static boolean isMandatory(GroupManifest manifest, GroupManifest.Group group) {
-		return group.required();
 	}
 
 	private static long groupBytes(GroupManifest.Group group) {
@@ -670,7 +655,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (!resolutionError.isEmpty()) {
 			drawWrappedStatus(matrices, VersionedText.literal(resolutionError).withStyle(ChatFormatting.RED));
 		} else if (pendingUpdater == null || pendingUpdater.getSourceAvailability().totalFiles() == 0) {
-			if (!rows.isEmpty()) drawWrappedStatus(matrices, VersionedText.translatable("automodpack.selection.categoryExplanation").withStyle(ChatFormatting.GRAY));
+			if (!groups.isEmpty()) drawWrappedStatus(matrices, VersionedText.translatable("automodpack.selection.categoryExplanation").withStyle(ChatFormatting.GRAY));
 		} else {
 			ModpackUpdater.SourceAvailability availability = pendingUpdater.getSourceAvailability();
 			String sourceStatus = VersionedText.translatable(availability.cancelled()
@@ -700,5 +685,4 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return handleBackOnEscape(this::back);
 	}
 
-	private record Row(String section, String groupId, String categoryId) {}
 }

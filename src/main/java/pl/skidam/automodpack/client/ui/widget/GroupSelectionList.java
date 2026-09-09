@@ -16,7 +16,6 @@ import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
-import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
@@ -46,8 +45,8 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.centerListVertically = false;
-		// Vanilla draws list chrome through different machinery on every version; our lists draw none of it.
-		// Anything that needs a panel (the dropdown menus) draws its own.
+		// The only chrome handling this list carries itself: it is a ContainerObjectSelectionList, so it cannot
+		// sit on the shared ChromelessList base the other lists use. Keep it in sync with that base.
 		/*? if <1.21.1 {*/
 		/*this.setRenderBackground(false);
 		this.setRenderTopAndBottom(false);
@@ -55,30 +54,9 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		/*? if <1.20.4 {*/
 		/*this.setRenderSelection(false);
 		*//*?}*/
-		/*? if <1.20.4 {*/
-		/*this.setRenderSelection(false);
-		*//*?}*/
 		Consumer<Item> toggle = Objects.requireNonNull(onToggle, "onToggle");
 		Consumer<Item> inspect = Objects.requireNonNull(onInspect, "onInspect");
 		for (Item item : Objects.requireNonNull(items, "items")) this.addEntry(new Entry(item, toggle, inspect));
-	}
-
-	// The hit test and the scrollbar draw compare screen coordinates, so the position must be absolute;
-	// vanilla's own hook is relative on the versions that still call it, which ate every menu row click.
-	/*? if <1.20.3 {*/
-	/*protected int getScrollbarPosition() {
-		return this.x0 + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?} elif <1.21.5 {*/
-	/*protected int getScrollbarPosition() {
-		return this.getX() + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
-	}
-	*//*?}*/
-
-
-	@Override
-	public int getRowWidth() {
-		return this.contentWidth;
 	}
 
 	@Override
@@ -92,58 +70,6 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		entry.layoutRow(this.getRowLeft(), this.getRowTop(index), this.getRowWidth());
 	}
 
-	/*? if <1.19.4 {*/
-	/*@Override
-	public void render(PoseStack matrices, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(matrices, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-	/*? if >=1.19.4 <1.20.3 {*/
-	/*@Override
-	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		VersionedScissor.enable(minecraft, x0, y0, x1, y1);
-		super.render(graphics, mouseX, mouseY, delta);
-		VersionedScissor.disable();
-	}
-	*//*?}*/
-
-	/*? if >=26.1 {*/
-	@Override
-	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	/*?} elif >=1.21.10 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected boolean entriesCanBeSelected() {
-		return false;
-	}
-	*//*?} elif >=1.21.1 {*/
-	/*@Override
-	protected void renderListBackground(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderListSeparators(GuiGraphics guiGraphics) {}
-
-	@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?} elif >=1.20.4 {*/
-	/*@Override
-	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
-	*//*?}*/
 	@Override
 	public RowView rowView(int index) {
 		Item item = this.children().get(index).item();
@@ -151,27 +77,22 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		return new RowView(text, item.canToggle(), item.kind() == Kind.CAPTION ? null : item.selected(), item.partial());
 	}
 
-	@Override
 	public int rowCount() {
 		return this.children().size();
 	}
 
-	@Override
 	public int rowLeft() {
 		return this.getRowLeft();
 	}
 
-	@Override
 	public int rowTop(int index) {
 		return this.getRowTop(index);
 	}
 
-	@Override
 	public int rowWidth() {
 		return this.contentWidth;
 	}
 
-	@Override
 	public int rowHeight() {
 		return ROW_HEIGHT;
 	}
@@ -213,15 +134,15 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 				this.row = null;
 				this.infoButton = null;
 			} else {
-			int indent = item.kind() == Kind.GROUP ? CHILD_INDENT : 0;
-			int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - indent - INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM) : rowWidth;
-			AbstractWidget checkbox = item.kind() == Kind.HEADER
-					? new CategoryHeaderRow(minecraft.font, 0, 0, mainWidth, item.label(), state(item), item.counter(), () -> onToggle.accept(item))
-					: new CheckboxWidget(minecraft.font, 0, 0, mainWidth, item.label(), item.selected(), value -> {
-						if (value != item.selected()) onToggle.accept(item);
-					});
-			// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
-			checkbox.active = item.canToggle();
+				int indent = item.kind() == Kind.GROUP ? CHILD_INDENT : 0;
+				int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - indent - INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM) : rowWidth;
+				AbstractWidget checkbox = item.kind() == Kind.HEADER
+						? new CategoryHeaderRow(minecraft.font, 0, 0, mainWidth, item.label(), state(item), item.counter(), () -> onToggle.accept(item))
+						: new CheckboxWidget(minecraft.font, 0, 0, mainWidth, item.label(), item.selected(), value -> {
+							if (value != item.selected()) onToggle.accept(item);
+						});
+				// Locked rows and inert headers still show their state, but the box is dead: the resolution owns it.
+				checkbox.active = item.canToggle();
 				if (item.tooltip() != null) VersionedScreen.setTooltip(checkbox, item.tooltip());
 				this.row = checkbox;
 				if (item.kind() == Kind.GROUP) {
@@ -266,7 +187,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		/^? if <1.20 {^/
 		/^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			VersionedMatrices versionedMatrices = new VersionedMatrices();
-			^//^?} else {^/
+		^//^?} else {^/
 		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
 		/^?}^/
@@ -284,10 +205,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 			/*? if >=26.1 {*/
 			row.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
 			if (infoButton != null) infoButton.extractRenderState(matrices.getContext(), mouseX, mouseY, tickDelta);
-			/*?} elif >=1.20 {*/
-			/*row.render(matrices.getContext(), mouseX, mouseY, tickDelta);
-			if (infoButton != null) infoButton.render(matrices.getContext(), mouseX, mouseY, tickDelta);
-			*//*?} else {*/
+			/*?} else {*/
 			/*row.render(matrices.getContext(), mouseX, mouseY, tickDelta);
 			if (infoButton != null) infoButton.render(matrices.getContext(), mouseX, mouseY, tickDelta);
 			*//*?}*/

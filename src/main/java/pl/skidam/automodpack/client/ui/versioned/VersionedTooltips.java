@@ -35,14 +35,14 @@ public final class VersionedTooltips {
 		int textHeight = 9 * lines.size() + (lines.size() > 1 ? 2 : -2);
 		int x = clamp(anchorX + MOUSE_OFFSET, textWidth, screenWidth);
 		int y = clamp(anchorY + MOUSE_OFFSET, textHeight, screenHeight);
-		VersionedScreen.beginOverlay(matrices);
-		VersionedScreen.drawTooltipPanel(matrices, x - SPRITE_MARGIN, y - SPRITE_MARGIN, textWidth + 2 * SPRITE_MARGIN, textHeight + 2 * SPRITE_MARGIN);
+		VersionedPanels.beginOverlay(matrices);
+		VersionedPanels.drawTooltipPanel(matrices, x - SPRITE_MARGIN, y - SPRITE_MARGIN, textWidth + 2 * SPRITE_MARGIN, textHeight + 2 * SPRITE_MARGIN);
 		int textY = y;
 		for (int index = 0; index < lines.size(); index++) {
 			VersionedScreen.drawTextWithShadow(matrices, font, lines.get(index), x, textY, TextColors.WHITE);
 			textY += index == 0 ? VersionedScreen.LINE_HEIGHT + 2 : VersionedScreen.LINE_HEIGHT;
 		}
-		VersionedScreen.endOverlay(matrices);
+		VersionedPanels.endOverlay(matrices);
 	}
 
 	/** Keeps the box inside the window: past the right or bottom edge it slides back, never past the opposite margin. */

@@ -11,6 +11,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
+import pl.skidam.automodpack.client.ui.versioned.VersionedPanels;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
@@ -46,7 +47,6 @@ public final class DropdownWidget extends Button {
 	/** The sprite rect is the row rect plus this on every side: nine pixels of soft sprite edge plus three of padding. */
 	private static final int SPRITE_MARGIN = 12;
 
-	private final VersionedScreen owner;
 	private final Font font;
 	private final Minecraft minecraft;
 	private List<Component> options = List.of();
@@ -57,13 +57,12 @@ public final class DropdownWidget extends Button {
 	private int panelTop;
 	private int panelBottom;
 
-	public DropdownWidget(VersionedScreen owner, Minecraft minecraft, Font font, int x, int y, int width, int height, Component message) {
+	public DropdownWidget(Minecraft minecraft, Font font, int x, int y, int width, int height, Component message) {
 		/*? if <1.20 {*/
 		/*super(x, y, width, height, message, button -> {});
 		*//*?} else {*/
 		super(x, y, width, height, message, button -> {}, Button.DEFAULT_NARRATION);
 		/*?}*/
-		this.owner = owner;
 		this.minecraft = minecraft;
 		this.font = font;
 	}
@@ -81,9 +80,12 @@ public final class DropdownWidget extends Button {
 	}
 
 	public void closeMenu() {
-		if (menu == null) return;
-		owner.detachMenuChild(menu);
 		menu = null;
+	}
+
+	/** The open menu panel, for the frame's overlay pass and the test bridge; null while closed. */
+	public RowListWidget menu() {
+		return menu;
 	}
 
 	@Override
@@ -114,10 +116,9 @@ public final class DropdownWidget extends Button {
 				index -> {
 					closeMenu();
 					onPick.accept(index);
-				}, null);
+				});
 		panelTop = top;
 		panelBottom = top + visibleRows * MENU_ROW_HEIGHT + 4;
-		owner.attachMenuChild(menu);
 	}
 
 	/**
@@ -135,33 +136,48 @@ public final class DropdownWidget extends Button {
 		return false;
 	}
 
+	/** Routes the pointer wheel to the open menu while the pointer is over it. */
+	public boolean consumeMenuScroll(double mouseX, double mouseY, double amount) {
+		if (menu == null || !menu.isMouseOver(mouseX, mouseY)) return false;
+		menuScrolled(mouseX, mouseY, amount);
+		return true;
+	}
+
+	private void menuScrolled(double mouseX, double mouseY, double amount) {
+		/*? if <1.20.2 {*/
+		/*menu.mouseScrolled(mouseX, mouseY, amount);
+		*//*?} else {*/
+		menu.mouseScrolled(mouseX, mouseY, 0.0, amount);
+		/*?}*/
+	}
+
 	/** Renders the open menu panel; the screen calls this in its overlay pass, above content and widgets. */
 	/*? if >=26.1 {*/
 	public void renderMenu(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
 		if (menu == null) return;
 		VersionedMatrices matrices = new VersionedMatrices(graphics);
-		VersionedScreen.beginOverlay(matrices);
+		VersionedPanels.beginOverlay(matrices);
 		drawPanel(matrices);
 		menu.extractRenderState(graphics, mouseX, mouseY, delta);
-		VersionedScreen.endOverlay(matrices);
+		VersionedPanels.endOverlay(matrices);
 	}
 	/*?} elif >=1.20 {*/
 	/*public void renderMenu(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
 		if (menu == null) return;
 		VersionedMatrices matrices = new VersionedMatrices(graphics);
-		VersionedScreen.beginOverlay(matrices);
+		VersionedPanels.beginOverlay(matrices);
 		drawPanel(matrices);
 		menu.render(graphics, mouseX, mouseY, delta);
-		VersionedScreen.endOverlay(matrices);
+		VersionedPanels.endOverlay(matrices);
 	}
 	*//*?} else {*/
 	/*public void renderMenu(PoseStack matrices, int mouseX, int mouseY, float delta) {
 		if (menu == null) return;
 		VersionedMatrices versionedMatrices = new VersionedMatrices();
-		VersionedScreen.beginOverlay(versionedMatrices);
+		VersionedPanels.beginOverlay(versionedMatrices);
 		drawPanel(versionedMatrices);
 		menu.render(matrices, mouseX, mouseY, delta);
-		VersionedScreen.endOverlay(versionedMatrices);
+		VersionedPanels.endOverlay(versionedMatrices);
 	}
 	*//*?}*/
 
@@ -175,7 +191,7 @@ public final class DropdownWidget extends Button {
 
 	/** The same vanilla 26.1 tooltip panel the tooltips use, drawn around the menu rows. */
 	private void drawPanel(VersionedMatrices matrices) {
-		VersionedScreen.drawTooltipPanel(matrices, left() - SPRITE_MARGIN, panelTop - SPRITE_MARGIN, getWidth() + 2 * SPRITE_MARGIN, (panelBottom - panelTop) + 2 * SPRITE_MARGIN);
+		VersionedPanels.drawTooltipPanel(matrices, left() - SPRITE_MARGIN, panelTop - SPRITE_MARGIN, getWidth() + 2 * SPRITE_MARGIN, (panelBottom - panelTop) + 2 * SPRITE_MARGIN);
 	}
 
 	protected int left() {

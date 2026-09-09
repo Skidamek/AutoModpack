@@ -114,7 +114,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, listTop, listBottom, ROW_HEIGHT, listRows,
 				index -> {
 					if (!busy) toggleEditable(candidates.get(index).logicalPath());
-				}, VersionedScreen::showComponentTooltip));
+				}));
 	}
 
 	private void toggleEditable(String path) {
