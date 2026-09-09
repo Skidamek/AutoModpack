@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.OsPaths;
 
 public final class GroupManifestValidator {
 	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
@@ -174,13 +175,7 @@ public final class GroupManifestValidator {
 			String trimmed = component.stripTrailing();
 			if (trimmed.isEmpty() || !trimmed.equals(component) || component.endsWith(".") || component.matches(".*[<>:\"|?*\\\\\\p{Cntrl}].*"))
 				errors.add("windows: group '" + groupId + "' has illegal path component in '" + path + "'");
-			String device = trimmed;
-			int dot = device.indexOf('.');
-			if (dot >= 0) device = device.substring(0, dot);
-			String upper = device.toUpperCase(Locale.ROOT);
-			if (upper.equals("CON") || upper.equals("PRN") || upper.equals("AUX") || upper.equals("NUL")
-					|| upper.matches("(?:COM|LPT)[1-9]"))
-				errors.add("windows: group '" + groupId + "' uses reserved device name in '" + path + "'");
+			if (OsPaths.isReservedWindowsDeviceName(trimmed)) errors.add("windows: group '" + groupId + "' uses reserved device name in '" + path + "'");
 		}
 	}
 
