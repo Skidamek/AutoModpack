@@ -90,6 +90,7 @@ public final class VerifiedFileTransfer {
 				Files.createLink(temporary, sourceFile);
 			} catch (UnsupportedOperationException | FileSystemException unsupportedLink) {
 				copyNamedOrHashed(sourceFile, temporary, expectedSize, expectedSha1, cache);
+				FileTrees.forceFile(temporary);
 			}
 			if (Files.size(temporary) != expectedSize) throw new IOException("Linked file failed size verification: " + temporary);
 			ImmutableFiles.protect(temporary);
@@ -115,7 +116,7 @@ public final class VerifiedFileTransfer {
 		Path targetParent = OsPaths.requirePublishableParent(targetFile, "Target path");
 		boolean crossFileSystem = false;
 		try {
-			DurableFiles.replace(temporary, targetFile);
+			DurableFiles.replaceAtomically(temporary, targetFile);
 		} catch (AtomicMoveNotSupportedException crossFileSystemFailure) {
 			promoteAcrossFileSystems(temporary, targetFile, targetParent, expectedSize, expectedSha1, crossFileSystemFailure);
 			crossFileSystem = true;
