@@ -160,7 +160,7 @@ flow:
     select: { text: Back }
   - do: click
     name: accept the complete bootstrap
-    select: { text: Download }
+    select: { key: automodpack.firstConnect.download }
   - do: wait_file
     name: wait for the projected modpack marker
     path: "${active_dir}/${marker}"

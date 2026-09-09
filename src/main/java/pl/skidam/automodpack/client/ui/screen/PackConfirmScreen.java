@@ -135,6 +135,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 		if (customize) widgetIndex++;
 		if (unverified) {
 			ackCheckbox = widgets.get(widgetIndex);
+			// The risk acknowledgement stays locked until the read countdown ran out.
+			ackCheckbox.active = ticksRemaining <= 0;
 			cancelButton = widgets.get(widgetIndex + 1);
 			primaryButton = widgets.get(widgetIndex + 3);
 			primaryButton.active = ticksRemaining <= 0 && acknowledged;
