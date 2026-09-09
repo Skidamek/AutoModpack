@@ -65,6 +65,6 @@ class JournalTest {
 	private static JournalEntry entry(long seq, String content) {
 		String sha1 = HashUtils.sha1(content.getBytes(StandardCharsets.UTF_8));
 		return new JournalEntry(seq, sha1, HashUtils.sha1(("policy-" + seq).getBytes(StandardCharsets.UTF_8)), TestPacks.CREATED, "Entry " + seq, JournalEntry.NO_RESTORE,
-				false, List.of(new JournalEntry.Change("config/example.txt", null, sha1, content.length())));
+				List.of(new JournalEntry.Change("config/example.txt", null, sha1, content.length())));
 	}
 }

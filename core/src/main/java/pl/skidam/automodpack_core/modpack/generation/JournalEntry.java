@@ -17,7 +17,7 @@ import java.util.Objects;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 
 /** One immutable journal record: the content change a publish made and the policy it served. */
-public record JournalEntry(long seq, String contentToken, String policySha1, Instant createdAt, String notes, long restoreOf, boolean snapshot,
+public record JournalEntry(long seq, String contentToken, String policySha1, Instant createdAt, String notes, long restoreOf,
 		List<Change> changes) {
 	public static final long NO_RESTORE = -1;
 
@@ -29,8 +29,7 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		notes = validateNotes(notes);
 		if (restoreOf < JournalEntry.NO_RESTORE) throw new IllegalArgumentException("Invalid restore reference");
 		changes = List.copyOf(changes);
-		if (!snapshot && changes.isEmpty()) throw new IllegalArgumentException("A content entry must carry its changes");
-		if (snapshot && seq != 1) throw new IllegalArgumentException("Only the first journal entry can be a snapshot");
+		if (changes.isEmpty()) throw new IllegalArgumentException("A journal entry must carry its changes");
 	}
 
 	/** The per-entry change list kept server-side; summaries ride the wire instead. */
@@ -80,7 +79,6 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		fields.createdAt = createdAt.toString();
 		fields.notes = notes;
 		fields.restoreOf = restoreOf;
-		fields.snapshot = snapshot;
 		List<GenerationJsons.JournalChangeFields> changeFields = new ArrayList<>();
 		for (Change change : changes) changeFields.add(change.toFields());
 		fields.changes = changeFields;
@@ -101,8 +99,7 @@ public record JournalEntry(long seq, String contentToken, String policySha1, Ins
 		List<Change> changes = new ArrayList<>();
 		for (GenerationJsons.JournalChangeFields change : fields.changes == null ? List.<GenerationJsons.JournalChangeFields>of() : fields.changes)
 			changes.add(Change.fromFields(change));
-		return new JournalEntry(fields.seq, fields.contentToken, fields.policySha1, createdAt, fields.notes == null ? "" : fields.notes, fields.restoreOf, fields.snapshot,
-				changes);
+		return new JournalEntry(fields.seq, fields.contentToken, fields.policySha1, createdAt, fields.notes == null ? "" : fields.notes, fields.restoreOf, changes);
 	}
 
 	public record Change(String path, String fromSha1, String toSha1, long toSize) {

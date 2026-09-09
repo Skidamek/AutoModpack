@@ -121,7 +121,7 @@ public final class GenerationStore {
 			return new Publication(journal.head(), manifest, ledger, hosting());
 		}
 
-		JournalEntry entry = new JournalEntry(current == null ? 1 : current.seq() + 1, token, policySha1, Instant.now(), notes, JournalEntry.NO_RESTORE, false, changes);
+		JournalEntry entry = new JournalEntry(current == null ? 1 : current.seq() + 1, token, policySha1, Instant.now(), notes, JournalEntry.NO_RESTORE, changes);
 		journal.append(entry);
 		Current updated = new Current(entry.seq(), token, policySha1, entry.createdAt(), manifest, ledger, tree);
 		this.current = updated;
@@ -140,7 +140,7 @@ public final class GenerationStore {
 		OwnershipLedger ledger = OwnershipLedger.materialize(current.ledger(), manifest);
 
 		List<JournalEntry.Change> changes = diffTrees(current.tree(), targetTree);
-		JournalEntry entry = new JournalEntry(current.seq() + 1, target.contentToken(), target.policySha1(), Instant.now(), notes, targetSeq, false, changes);
+		JournalEntry entry = new JournalEntry(current.seq() + 1, target.contentToken(), target.policySha1(), Instant.now(), notes, targetSeq, changes);
 		journal.append(entry);
 
 		Current updated = new Current(entry.seq(), target.contentToken(), target.policySha1(), entry.createdAt(), manifest, ledger, targetTree);

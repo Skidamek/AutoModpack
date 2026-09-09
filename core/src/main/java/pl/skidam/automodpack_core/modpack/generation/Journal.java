@@ -67,8 +67,6 @@ public final class Journal {
 				break;
 			}
 		}
-		for (int index = 1; index < entries.size(); index++)
-			if (entries.get(index).snapshot()) throw new IOException("Journal " + file + " carries a snapshot entry that is not its root");
 		return List.copyOf(entries);
 	}
 
@@ -115,20 +113,12 @@ public final class Journal {
 		return entry;
 	}
 
-	/** Rebuilds the served file set as of the given entry by folding changes from the last snapshot. */
+	/** Rebuilds the served file set as of the given entry by folding the changes of every entry up to it. */
 	public ContentTree treeAt(long seq) {
 		JournalEntry target = entryAt(seq);
 		ContentTree tree = ContentTree.empty();
 		for (JournalEntry entry : entries) {
-			if (!entry.snapshot()) {
-				for (JournalEntry.Change change : entry.changes()) tree = apply(tree, change);
-			} else {
-				tree = ContentTree.empty();
-				for (JournalEntry.Change change : entry.changes()) {
-					if (change.toSha1() == null) throw new IllegalStateException("Snapshot entry " + entry.seq() + " removes a path");
-					tree = apply(tree, change);
-				}
-			}
+			for (JournalEntry.Change change : entry.changes()) tree = apply(tree, change);
 			if (entry.seq() == seq) break;
 		}
 		String token = tree.token();

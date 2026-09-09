@@ -129,9 +129,9 @@ class GenerationStoreTest {
 		GroupManifest manifestTwo = manifest("two", "content-two");
 		String policyOne = storePolicyObject(objects, manifestOne);
 		String policyTwo = storePolicyObject(objects, manifestTwo);
-		JournalEntry firstEntry = new JournalEntry(1, ContentTree.tokenOf(manifestOne), policyOne, TestPacks.CREATED, "First", JournalEntry.NO_RESTORE, false,
+		JournalEntry firstEntry = new JournalEntry(1, ContentTree.tokenOf(manifestOne), policyOne, TestPacks.CREATED, "First", JournalEntry.NO_RESTORE,
 				List.of(new JournalEntry.Change("config/example.txt", sha1("previous"), first, "content-one".length())));
-		JournalEntry secondEntry = new JournalEntry(2, ContentTree.tokenOf(manifestTwo), policyTwo, TestPacks.CREATED, "Second", JournalEntry.NO_RESTORE, false,
+		JournalEntry secondEntry = new JournalEntry(2, ContentTree.tokenOf(manifestTwo), policyTwo, TestPacks.CREATED, "Second", JournalEntry.NO_RESTORE,
 				List.of(new JournalEntry.Change("config/example.txt", first, second, "content-two".length())));
 		Files.createDirectories(state);
 		Files.writeString(state.resolve("journal.jsonl"),
