@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
 
@@ -79,7 +79,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows) - 8;
 		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, LIST_TOP, listBottom, ROW_HEIGHT, rows,
 				index -> open(entries.get(index)), null));
-		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
+		List<AbstractWidget> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
 		if (preservedCount == 0) setTooltip(actionButtons.get(0), VersionedText.translatable("automodpack.vault.empty"));
 	}
 

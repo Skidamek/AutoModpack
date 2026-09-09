@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -13,11 +14,11 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.WaitingPresentation;
-import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 
@@ -33,7 +34,7 @@ public class DownloadScreen extends VersionedScreen {
 	private final long startedAtNanos = System.nanoTime();
 	private long ticks = 0;
 	private boolean musicStarted = false;
-	private Button cancelButton;
+	private AbstractWidget cancelButton;
 	private Button muteMusicButton;
 	private Button playMusicButton;
 
@@ -66,13 +67,8 @@ public class DownloadScreen extends VersionedScreen {
 					AudioManager.stopMusic();
 				}))).get(0);
 
-		/*? if >= 1.19.4 {*/
-		int x = cancelButton.getX() + cancelButton.getWidth() + ActionAreaLayout.GAP;
-		int y = cancelButton.getY();
-		/*?} else {*/
-		/*int x = cancelButton.x + cancelButton.getWidth() + ActionAreaLayout.GAP;
-		int y = cancelButton.y;
-		*//*?}*/
+		int x = VersionedScreen.widgetX(cancelButton) + cancelButton.getWidth() + ActionAreaLayout.GAP;
+		int y = VersionedScreen.widgetY(cancelButton);
 
 		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
 			AudioManager.stopMusic();
@@ -159,7 +155,8 @@ public class DownloadScreen extends VersionedScreen {
 		updateUIState();
 
 		if (downloadManager != null && downloadManager.isRunning()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110,
+					TextColors.WHITE);
 			if (downloadsInProgress()) drawDownloadingFiles(matrices);
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 20, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 4, TextColors.WHITE);

@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -27,7 +27,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 	private final Screen parent;
 	private final InstalledModpackController controller;
 	private final InstalledModpackController.Pack pack;
-	private final List<Button> actionButtons = new ArrayList<>();
+	private final List<AbstractWidget> actionButtons = new ArrayList<>();
 	private boolean busy;
 	private boolean busyVisible;
 	private long busyAt;
@@ -71,7 +71,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		}
 		// Back closes the grid: one action area under the header, so the menu never floats apart from its footer.
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent))));
-		for (Button button : addActionAreaAt(PANEL_WIDTH, actionGridTop(), rows.toArray(ActionRow[]::new))) actionButtons.add(button);
+		for (AbstractWidget button : addActionAreaAt(PANEL_WIDTH, actionGridTop(), rows.toArray(ActionRow[]::new))) actionButtons.add(button);
 		// Destructive verbs say what they do before the player commits: Deactivate keeps files, Remove deletes them.
 		for (int index = 0; index < actions.size() && index < actionButtons.size(); index++) {
 			Component tooltip = actions.get(index).tooltip();

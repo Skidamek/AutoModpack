@@ -184,9 +184,18 @@ public final class ChangeBrowserWidget extends ObjectSelectionList<ChangeBrowser
 		if (selectionChanged != null) selectionChanged.accept(entry.row instanceof ChangeBrowserProjection.FileRow file ? file : null);
 	}
 
-	protected int getScrollbarPosition() {
-		return Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
+	// The hit test and the scrollbar draw compare screen coordinates, so the position must be absolute;
+	// vanilla's own hook is relative on the versions that still call it, which ate every menu row click.
+	/*? if <1.20.3 {*/
+	/*protected int getScrollbarPosition() {
+		return this.x0 + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
 	}
+	*//*?} elif <1.21.5 {*/
+	/*protected int getScrollbarPosition() {
+		return this.getX() + Math.min(this.width - 6, this.width / 2 + this.getRowWidth() / 2 + 6);
+	}
+	*//*?}*/
+
 
 	@Override
 	public int getRowWidth() {

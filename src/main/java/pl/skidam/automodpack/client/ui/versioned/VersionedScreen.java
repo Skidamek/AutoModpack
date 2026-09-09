@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
 import java.util.ArrayList;
+import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -35,6 +36,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.client.gui.components.Renderable;
 /*?}*/
 
+import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.DropdownWidget;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
@@ -276,6 +278,11 @@ public class VersionedScreen extends Screen {
 		return action(message, button -> {}, ActionAreaLayout.Role.OPTIONAL, false);
 	}
 
+	/** A checkbox in the action grid: one row of its own, built and placed like any other action. */
+	protected final ActionDefinition checkboxAction(Component message, boolean selected, Consumer<Boolean> onPress) {
+		return new ActionDefinition(message, null, ActionAreaLayout.Role.OPTIONAL, true, selected, onPress);
+	}
+
 	private ActionDefinition action(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled) {
 		return new ActionDefinition(message, onPress, role, enabled);
 	}
@@ -284,11 +291,11 @@ public class VersionedScreen extends Screen {
 		return new ActionRow(kind, List.of(actions));
 	}
 
-	protected final List<Button> addActionArea(int footerWidth, int bottomY, ActionRow... rows) {
+	protected final List<AbstractWidget> addActionArea(int footerWidth, int bottomY, ActionRow... rows) {
 		return addActionArea(footerWidth, bottomY, false, rows);
 	}
 
-	protected final List<Button> addActionAreaAt(int footerWidth, int topY, ActionRow... rows) {
+	protected final List<AbstractWidget> addActionAreaAt(int footerWidth, int topY, ActionRow... rows) {
 		return addActionArea(footerWidth, topY, true, rows);
 	}
 
@@ -344,17 +351,19 @@ public class VersionedScreen extends Screen {
 		return new DialogLayout(layoutDialogColumn(topReserve + header, actionsTop, bodyHeight, stackHeight), actionsTop, topReserve);
 	}
 
-	private List<Button> addActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
+	private List<AbstractWidget> addActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
 		ActionArea area = buildActionArea(footerWidth, anchorY, fromTop, rows);
-		List<Button> buttons = new ArrayList<>(area.layout().placements().size());
+		List<AbstractWidget> widgets = new ArrayList<>(area.layout().placements().size());
 		for (ActionAreaLayout.Placement placement : area.layout().placements()) {
 			ActionDefinition definition = area.definitions().get(placement.id());
-			Button button = buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), definition.message(), definition.onPress());
-			button.active = definition.enabled();
-			this.addRenderableWidget(button);
-			buttons.add(button);
+			AbstractWidget widget = definition.checkbox()
+					? new CheckboxWidget(this.font, placement.x(), placement.y(), placement.width(), definition.message(), definition.selected(), value -> definition.onCheck().accept(value))
+					: buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), definition.message(), definition.onPress());
+			widget.active = definition.enabled();
+			this.addRenderableWidget(widget);
+			widgets.add(widget);
 		}
-		return buttons;
+		return widgets;
 	}
 
 	private ActionArea buildActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
@@ -404,6 +413,23 @@ public class VersionedScreen extends Screen {
 		if (versioned != null) versioned.widgetTooltips.put(widget, tooltip);
 	}
 
+	/** The widget's left edge; the accessor is a field below 1.19.4 and a method since. */
+	public static int widgetX(AbstractWidget widget) {
+		/*? if >=1.19.4 {*/
+		return widget.getX();
+		/*?} else {*/
+		/*return widget.x;
+		*//*?}*/
+	}
+
+	public static int widgetY(AbstractWidget widget) {
+		/*? if >=1.19.4 {*/
+		return widget.getY();
+		/*?} else {*/
+		/*return widget.y;
+		*//*?}*/
+	}
+
 	/** The screen the game currently shows when it is one of ours; the accessor is renamed on 26.2. */
 	private static VersionedScreen currentScreen() {
 		/*? if >=26.2 {*/
@@ -428,6 +454,11 @@ public class VersionedScreen extends Screen {
 	}
 
 	private void renderTooltips(VersionedMatrices matrices, int mouseX, int mouseY) {
+		// An open menu is modal: the content under it keeps the pointer, so its tooltip must not poke through.
+		if (menuOpen()) {
+			frameTooltip = null;
+			return;
+		}
 		Component tooltip = frameTooltip;
 		frameTooltip = null;
 		if (tooltip == null) {
@@ -633,12 +664,22 @@ public class VersionedScreen extends Screen {
 		private final Button.OnPress onPress;
 		private final ActionAreaLayout.Role role;
 		private final boolean enabled;
+		private final boolean checkbox;
+		private final boolean selected;
+		private final Consumer<Boolean> onCheck;
 
 		private ActionDefinition(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled) {
+			this(message, onPress, role, enabled, false, null);
+		}
+
+		private ActionDefinition(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled, boolean selected, Consumer<Boolean> onCheck) {
 			this.message = message;
 			this.onPress = onPress;
 			this.role = role;
 			this.enabled = enabled;
+			this.checkbox = onCheck != null;
+			this.selected = selected;
+			this.onCheck = onCheck;
 		}
 
 		private Component message() {
@@ -655,6 +696,18 @@ public class VersionedScreen extends Screen {
 
 		private boolean enabled() {
 			return enabled;
+		}
+
+		private boolean checkbox() {
+			return checkbox;
+		}
+
+		private boolean selected() {
+			return selected;
+		}
+
+		private Consumer<Boolean> onCheck() {
+			return onCheck;
 		}
 	}
 

@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.Util;
@@ -87,10 +87,10 @@ public final class PreservationVaultScreen extends VersionedScreen {
 		VaultListWidget list = new VaultListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), LIST_TOP, listBottom, claims(), packNames, this::select);
 		list.selectClaim(selectedClaimId);
 		this.addRenderableWidget(list);
-		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new));
-		Button restore = actionButtons.get(0);
-		Button saveCopy = actionButtons.get(1);
-		Button delete = actionButtons.get(2);
+		List<AbstractWidget> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actions.toArray(ActionRow[]::new));
+		AbstractWidget restore = actionButtons.get(0);
+		AbstractWidget saveCopy = actionButtons.get(1);
+		AbstractWidget delete = actionButtons.get(2);
 		restore.active = !busy && selected != null && selected.canRestoreOriginal();
 		setTooltip(restore, restoreTooltip(selected));
 		saveCopy.active = !busy && selected != null;

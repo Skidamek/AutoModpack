@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -122,7 +123,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			rebuildBrowser();
 		});
 		List<ActionRow> actionRows = buildActionRows();
-		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
+		List<AbstractWidget> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
 		if (auxiliaryAction != null) actionButtons.get(actionButtons.size() - 1).active = auxiliaryAction.active();
 		int footerTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows.toArray(ActionRow[]::new));
 		int summaryY = footerTop - this.font.lineHeight - 5;

@@ -9,7 +9,6 @@ import java.util.concurrent.Future;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -106,7 +105,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		// The list fills the space between the header state and the pinned actions; only a real overflow scrolls.
 		int actionsBottom = this.height - 28;
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionsBottom, actionRows) - 8;
-		List<Button> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, actionsBottom, actionRows);
+		List<AbstractWidget> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, actionsBottom, actionRows);
 		int actionIndex = 0;
 		if (showKeepAll) actionButtons.get(actionIndex++).active = !busy;
 		actionButtons.get(actionIndex++).active = !busy && hasRepairWork();

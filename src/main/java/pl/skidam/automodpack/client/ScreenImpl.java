@@ -4,6 +4,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack.client.ui.screen.*;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -43,12 +44,7 @@ public class ScreenImpl implements ScreenService {
 		executeOnClient(() -> {
 			Toast toast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE, VersionedText.translatable("automodpack.restart.toast.title"),
 					VersionedText.translatable("automodpack.restart.toast.description"));
-			Minecraft minecraft = Minecraft.getInstance();
-			/*? if > 1.21.1 {*/
-			minecraft.gui.toastManager().addToast(toast);
-			/*?} else {*/
-			/*minecraft.getToasts().addToast(toast);
-			*//*?}*/
+			VersionedToasts.add(toast);
 		});
 	}
 

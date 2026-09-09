@@ -13,7 +13,7 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -82,7 +82,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private boolean saved = false;
 	private boolean closed;
 	private boolean switchInFlight;
-	private Button saveButton;
+	private AbstractWidget saveButton;
 	private DropdownWidget platformDropdown;
 	private int listBottom;
 
@@ -179,7 +179,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					reresolveDefault();
 				}),
 				primaryAction(VersionedText.translatable(saveLabel), press -> save()));
-		List<Button> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, footer);
+		List<AbstractWidget> actionButtons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, actionY, footer);
 		this.saveButton = actionButtons.get(2);
 		this.saveButton.active = canSave();
 		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.translatable("automodpack.selection.noChanges"));
