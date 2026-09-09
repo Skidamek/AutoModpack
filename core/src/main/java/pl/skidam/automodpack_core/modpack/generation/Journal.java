@@ -23,7 +23,7 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 
 /** The append-only history of one modpack lineage: one entry per content change. */
 public final class Journal {
-	private static final Gson COMPACT = new GsonBuilder().disableHtmlEscaping().registerTypeHierarchyAdapter(Enum.class, new ConfigTools.StrictEnumTypeAdapter()).create();
+	private static final Gson COMPACT = ConfigTools.strictEnums(new GsonBuilder().disableHtmlEscaping()).create();
 
 	private final Path file;
 	private List<JournalEntry> entries;
@@ -47,6 +47,7 @@ public final class Journal {
 		if (!Files.exists(file)) return List.of();
 		byte[] bytes = Files.readAllBytes(file);
 		List<JournalEntry> entries = new ArrayList<>();
+		int intactBytes = bytes.length;
 		int lineStart = 0;
 		while (lineStart < bytes.length) {
 			int lineEnd = lineStart;
@@ -64,8 +65,13 @@ public final class Journal {
 				LOGGER.warn("Journal {} ends in a torn line after {} intact entries; dropping the last {} bytes and keeping the intact prefix", file, entries.size(),
 						bytes.length - droppedFrom);
 				truncate(file, droppedFrom);
+				intactBytes = droppedFrom;
 				break;
 			}
+		}
+		if (tolerateTornTail && intactBytes > 0 && bytes[intactBytes - 1] != '\n') {
+			// A crash can land after the entry's bytes but before its newline; the entry parsed fine, so restore the newline before the next append fuses two entries into one line.
+			Files.writeString(file, "\n", StandardCharsets.UTF_8, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
 		}
 		return List.copyOf(entries);
 	}
