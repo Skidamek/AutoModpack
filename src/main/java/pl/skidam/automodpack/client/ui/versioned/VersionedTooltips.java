@@ -9,48 +9,40 @@ import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack.client.ui.TextColors;
 
 /**
- * The one tooltip implementation for every Minecraft version: wrapped lines, anchored below the pointer, clamped
- * into the window so it never flips off-screen, painted from plain fills and text. Vanilla anchors and paints its
- * tooltips differently on every version (legacy flips to the left of the pointer, 26.x defers to the next frame and
- * sprites the panel), so none of it can be shared - the panel look here is the classic vanilla tooltip colors that
- * every version still ships.
+ * The one tooltip implementation for every Minecraft version: the vanilla 26.1 tooltip - its exact panel sprites,
+ * padding and line metrics - wrapped to the window and anchored below the pointer so it never flips off-screen.
+ * Vanilla anchors and paints its tooltips differently on every version (legacy flips to the left of the pointer,
+ * 1.20 batches the panel under already-drawn text, 26.1 defers to a sprite panel in its own stratum), so none of
+ * it can be shared - the look here is the 26.1 look, and the draw runs inside {@link VersionedScreen#beginOverlay}
+ * which is the vanilla drawManaged recipe: flush, z-layer, draw, flush.
  */
 public final class VersionedTooltips {
 	private VersionedTooltips() {}
 
-	private static final int BACKGROUND = 0xF0100010;
-	private static final int BORDER = 0x505000FF;
-	private static final int BORDER_BOTTOM = 0x5028FFFF;
+	/** The sprite rect is the text rect plus this on every side: nine pixels of soft sprite edge plus three of padding. */
+	private static final int SPRITE_MARGIN = 12;
 	/** The pointer-to-box gap, vanilla's own mouse offset. */
 	private static final int MOUSE_OFFSET = 12;
 	private static final int SCREEN_MARGIN = 4;
-	private static final int TEXT_PAD_X = 5;
-	private static final int TEXT_PAD_Y = 4;
-	/** Vanilla advances tooltip lines by ten pixels: one font line plus one of leading. */
-	private static final int LINE_STEP = VersionedScreen.LINE_HEIGHT + 1;
-	/** The hard ceiling comes from the widest content we ship (a sha1 line is ~240px); narrow windows clamp further. */
-	private static final int MAX_WRAP_WIDTH = 300;
+	/** Vanilla 26.1 wraps hover text at half the gui width, never under 200. */
+	private static final int MIN_WRAP_WIDTH = 200;
 
 	public static void draw(Font font, VersionedMatrices matrices, Component tooltip, int anchorX, int anchorY, int screenWidth, int screenHeight) {
-		int windowWidth = Math.max(1, screenWidth - 2 * MOUSE_OFFSET - 2 * SCREEN_MARGIN);
-		List<MutableComponent> lines = VersionedScreen.wrapParagraph(font, tooltip.getString(), Math.max(1, Math.min(MAX_WRAP_WIDTH, windowWidth)));
+		List<MutableComponent> lines = VersionedScreen.wrapParagraph(font, tooltip.getString(), Math.max(MIN_WRAP_WIDTH, screenWidth / 2));
 		int textWidth = 0;
 		for (MutableComponent line : lines) textWidth = Math.max(textWidth, font.width(line));
-		int textHeight = (lines.size() - 1) * LINE_STEP + font.lineHeight;
-		int boxWidth = textWidth + TEXT_PAD_X * 2;
-		int boxHeight = textHeight + TEXT_PAD_Y * 2;
-		int x = clamp(anchorX + MOUSE_OFFSET, boxWidth, screenWidth);
-		int y = clamp(anchorY + MOUSE_OFFSET, boxHeight, screenHeight);
-		matrices.fill(x, y, x + boxWidth, y + 1, BORDER);
-		matrices.fill(x, y + boxHeight - 1, x + boxWidth, y + boxHeight, BORDER_BOTTOM);
-		matrices.fill(x, y + 1, x + 1, y + boxHeight - 1, BORDER);
-		matrices.fill(x + boxWidth - 1, y + 1, x + boxWidth, y + boxHeight - 1, BORDER);
-		matrices.fill(x + 1, y + 1, x + boxWidth - 1, y + boxHeight - 1, BACKGROUND);
-		int textY = y + TEXT_PAD_Y;
-		for (MutableComponent line : lines) {
-			VersionedScreen.drawTextWithShadow(matrices, font, line, x + TEXT_PAD_X, textY, TextColors.WHITE);
-			textY += LINE_STEP;
+		// Vanilla 26.1 metrics: single-line boxes lose two pixels, multi-line ones gain a two pixel gap after the first line.
+		int textHeight = 9 * lines.size() + (lines.size() > 1 ? 2 : -2);
+		int x = clamp(anchorX + MOUSE_OFFSET, textWidth, screenWidth);
+		int y = clamp(anchorY + MOUSE_OFFSET, textHeight, screenHeight);
+		VersionedScreen.beginOverlay(matrices);
+		VersionedScreen.drawTooltipPanel(matrices, x - SPRITE_MARGIN, y - SPRITE_MARGIN, textWidth + 2 * SPRITE_MARGIN, textHeight + 2 * SPRITE_MARGIN);
+		int textY = y;
+		for (int index = 0; index < lines.size(); index++) {
+			VersionedScreen.drawTextWithShadow(matrices, font, lines.get(index), x, textY, TextColors.WHITE);
+			textY += index == 0 ? VersionedScreen.LINE_HEIGHT + 2 : VersionedScreen.LINE_HEIGHT;
 		}
+		VersionedScreen.endOverlay(matrices);
 	}
 
 	/** Keeps the box inside the window: past the right or bottom edge it slides back, never past the opposite margin. */

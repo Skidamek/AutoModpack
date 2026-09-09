@@ -43,8 +43,8 @@ public final class DropdownWidget extends Button {
 	/** The menu opens this far below the button. */
 	private static final int MENU_GAP = 2;
 	private static final int CHEVRON_COLOR = 0xFFB0B0B0;
-	private static final int PANEL_BACKGROUND = 0xF0100010;
-	private static final int PANEL_BORDER = 0x505000FF;
+	/** The sprite rect is the row rect plus this on every side: nine pixels of soft sprite edge plus three of padding. */
+	private static final int SPRITE_MARGIN = 12;
 
 	private final VersionedScreen owner;
 	private final Font font;
@@ -167,13 +167,9 @@ public final class DropdownWidget extends Button {
 		*//*?}*/
 	}
 
-	/** The menu panel in the same visual language as the tooltips: dark fill, thin purple border. */
+	/** The same vanilla 26.1 tooltip panel the tooltips use, drawn around the menu rows. */
 	private void drawPanel(VersionedMatrices matrices) {
-		matrices.fill(left() - 1, panelTop - 1, left() + getWidth() + 1, panelTop, PANEL_BORDER);
-		matrices.fill(left() - 1, panelBottom, left() + getWidth() + 1, panelBottom + 1, PANEL_BORDER);
-		matrices.fill(left() - 1, panelTop, left(), panelBottom, PANEL_BORDER);
-		matrices.fill(left() + getWidth(), panelTop, left() + getWidth() + 1, panelBottom, PANEL_BORDER);
-		matrices.fill(left(), panelTop, left() + getWidth(), panelBottom, PANEL_BACKGROUND);
+		VersionedScreen.drawTooltipPanel(matrices, left() - SPRITE_MARGIN, panelTop - SPRITE_MARGIN, getWidth() + 2 * SPRITE_MARGIN, (panelBottom - panelTop) + 2 * SPRITE_MARGIN);
 	}
 
 	protected int left() {
