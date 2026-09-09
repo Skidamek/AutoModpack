@@ -1,6 +1,9 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +16,7 @@ import java.util.TreeMap;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
 
 import pl.skidam.automodpack_core.config.GenerationJsons;
 
@@ -28,15 +32,51 @@ public final class Journal {
 		this.entries = entries;
 	}
 
+	/** Opens the local durable journal, repairing away a torn final line left by a crash or power cut mid-append. */
 	public static Journal open(Path file) throws IOException {
+		return new Journal(file, parse(file, true));
+	}
+
+	/** Parses every line; verifying fetched journal artifacts, where a torn tail means a bad transfer instead of a crash. */
+	public static Journal openComplete(Path file) throws IOException {
+		return new Journal(file, parse(file, false));
+	}
+
+	private static List<JournalEntry> parse(Path file, boolean tolerateTornTail) throws IOException {
+		if (!Files.exists(file)) return List.of();
+		byte[] bytes = Files.readAllBytes(file);
 		List<JournalEntry> entries = new ArrayList<>();
-		if (Files.exists(file)) {
-			for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-				if (line.isBlank()) continue;
+		int lineStart = 0;
+		while (lineStart < bytes.length) {
+			int lineEnd = lineStart;
+			while (lineEnd < bytes.length && bytes[lineEnd] != '\n') lineEnd++;
+			boolean finalLine = lineEnd == bytes.length;
+			String line = new String(bytes, lineStart, lineEnd - lineStart, StandardCharsets.UTF_8);
+			int droppedFrom = lineStart;
+			lineStart = finalLine ? bytes.length : lineEnd + 1;
+			if (line.isBlank()) continue;
+			try {
 				entries.add(JournalEntry.fromFields(COMPACT.fromJson(line, GenerationJsons.JournalEntryFields.class)));
+			} catch (JsonParseException e) {
+				// A crash or power cut mid-append tears the last line; anything unparsable earlier is real corruption.
+				if (!finalLine || !tolerateTornTail) throw new IOException("Malformed journal line " + (entries.size() + 1) + " in " + file, e);
+				LOGGER.warn("Journal {} ends in a torn line after {} intact entries; dropping the last {} bytes and keeping the intact prefix", file, entries.size(),
+						bytes.length - droppedFrom);
+				truncate(file, droppedFrom);
+				break;
 			}
 		}
-		return new Journal(file, List.copyOf(entries));
+		for (int index = 1; index < entries.size(); index++)
+			if (entries.get(index).snapshot()) throw new IOException("Journal " + file + " carries a snapshot entry that is not its root");
+		return List.copyOf(entries);
+	}
+
+	/** Repairs the torn tail away, so later appends and the served file start from the intact prefix. */
+	private static void truncate(Path file, long intactBytes) throws IOException {
+		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
+			channel.truncate(intactBytes);
+			channel.force(true);
+		}
 	}
 
 	public List<JournalEntry> entries() {
