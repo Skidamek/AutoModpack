@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -207,6 +209,86 @@ class ModpackExecutorTest {
 			snapshot.restore();
 			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
 			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
+		}
+	}
+
+	@Test
+	void hostingSwapFailureAfterCommitIsReportedOnTheCommittedOutcome() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Path source = groups.resolve("main/config/example.txt");
+		Files.createDirectories(source.getParent());
+		Files.writeString(source, "content", StandardCharsets.UTF_8);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		Constants.serverConfig = config();
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
+		ModpackExecutor executor = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, tempDir.resolve("objects")),
+				new ModpackCandidateScanner()::scan, creation, hosting -> {
+					throw new IllegalStateException("swap boom");
+				});
+		try {
+			ModpackExecutor.Published published = assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+			assertEquals("swap boom", published.hostingFailure().orElseThrow().getMessage());
+			// The commit is durable even though the host was never rebinded.
+			assertEquals(published.current().contentToken(), executor.currentDocument().orElseThrow().contentToken());
+
+			Files.writeString(source, "changed", StandardCharsets.UTF_8);
+			ModpackExecutor.Published changed = assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
+			assertEquals("swap boom", changed.hostingFailure().orElseThrow().getMessage());
+			assertEquals("swap boom", assertInstanceOf(ModpackExecutor.NoChanges.class, executor.publish()).hostingFailure().orElseThrow().getMessage());
+
+			ModpackExecutor.Reverted reverted = assertInstanceOf(ModpackExecutor.Reverted.class, executor.revert(1, null));
+			assertEquals("swap boom", reverted.hostingFailure().orElseThrow().getMessage());
+		} finally {
+			executor.stop();
+			snapshot.restore();
+		}
+	}
+
+	@Test
+	void cleanHostingSwapAndGuardFailuresKeepTheirPlainShapes() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("host-modpack");
+		Path generationRoot = tempDir.resolve("host-generations");
+		Path source = groups.resolve("main/config/example.txt");
+		Files.createDirectories(source.getParent());
+		Files.writeString(source, "content", StandardCharsets.UTF_8);
+
+		ConstantsSnapshot snapshot = new ConstantsSnapshot();
+		Constants.serverConfig = config();
+		Constants.AM_VERSION = "test";
+		Constants.LOADER = "test";
+		Constants.LOADER_VERSION = "test";
+		Constants.MC_VERSION = "test";
+		ThreadPoolExecutor creation = (ThreadPoolExecutor) Executors.newFixedThreadPool(1);
+		List<GenerationHosting> bound = new ArrayList<>();
+		ModpackExecutor clean = new ModpackExecutor(server, groups, generationRoot, new GenerationStore(generationRoot, tempDir.resolve("objects-clean")),
+				new ModpackCandidateScanner()::scan, creation, bound::add);
+		ModpackExecutor guarded = new ModpackExecutor(tempDir.resolve("server-guarded"), tempDir.resolve("guarded-groups"), tempDir.resolve("guarded-generations"),
+				new GenerationStore(tempDir.resolve("guarded-generations"), tempDir.resolve("guarded-objects")),
+				request -> {
+					throw new CandidateBuildException("Candidate scan failed");
+				}, creation);
+		try {
+			ModpackExecutor.Published published = assertInstanceOf(ModpackExecutor.Published.class, clean.publish());
+			assertTrue(published.hostingFailure().isEmpty());
+			assertEquals(1, bound.size());
+
+			assertEquals("Guard token must be a canonical 40-character lowercase SHA-1",
+					assertInstanceOf(ModpackExecutor.PublishResult.Rejected.class, clean.publishIfContent("nope")).detail());
+
+			ModpackExecutor.PublishResult.Rejected scanFailure = assertInstanceOf(ModpackExecutor.PublishResult.Rejected.class, guarded.publish());
+			assertEquals("Candidate scan failed", scanFailure.detail());
+		} finally {
+			clean.stop();
+			guarded.stop();
+			snapshot.restore();
 		}
 	}
 

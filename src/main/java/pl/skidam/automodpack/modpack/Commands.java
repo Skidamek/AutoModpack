@@ -32,6 +32,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
@@ -458,15 +459,24 @@ public class Commands {
 				headline(context, "PUBLISHED", start, published.state().contentToken(), ChatFormatting.GREEN, true);
 				reportGenerationDetails(context, published.state(), false, true);
 				published.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
+				reportHostingFailure(context, published.hostingFailure());
 			} else if (result instanceof ModpackExecutor.NoChanges noChanges) {
 				headline(context, "NO_CHANGES", start, noChanges.state().contentToken(), ChatFormatting.YELLOW, true);
 				reportGenerationDetails(context, noChanges.state(), false, true);
 				noChanges.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
+				reportHostingFailure(context, noChanges.hostingFailure());
 			} else if (result instanceof ModpackExecutor.PublishResult.Rejected rejected) {
 				send(context, "FAILED: " + rejected.detail(), ChatFormatting.RED, true);
 			}
 		});
 		return Command.SINGLE_SUCCESS;
+	}
+
+	/** The generation is committed, but the live host may still serve the previous view; only an explicit restart rebinds it. */
+	private static void reportHostingFailure(CommandContext<CommandSourceStack> context, Optional<Throwable> failure) {
+		failure.ifPresent(cause -> send(context, "HOSTING SWAP FAILED: " + (cause.getMessage() == null || cause.getMessage().isBlank()
+				? cause.getClass().getSimpleName() : cause.getMessage()) + ". The generation is committed; run /automodpack host restart to rebind hosting.",
+				ChatFormatting.RED, true));
 	}
 
 	/** The one-line outcome of a generation: status, elapsed time and the short content token that click-copies the full one. */
@@ -497,6 +507,7 @@ public class Commands {
 						VersionedText.literal("content token ").append(copyable(shortToken(reverted.current().contentToken()), reverted.current().contentToken())),
 						ChatFormatting.WHITE, true);
 				reverted.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, true));
+				reportHostingFailure(context, reverted.hostingFailure());
 			} else if (result instanceof ModpackExecutor.RevertResult.Rejected rejected) {
 				send(context, "FAILED: " + rejected.detail(), ChatFormatting.RED, true);
 			}

@@ -15,4 +15,12 @@ public interface HostingOutcome {
 	default Optional<GenerationHosting> hosted() {
 		return Optional.empty();
 	}
+
+	/** The failed hosting swap of a committed generation: the commit is durable, only the live host view lags behind. */
+	default Optional<Throwable> hostingFailure() {
+		return Optional.empty();
+	}
+
+	/** The same outcome carrying a hosting swap failure; outcomes that commit nothing are returned unchanged. */
+	HostingOutcome withHostingFailure(Throwable failure);
 }
