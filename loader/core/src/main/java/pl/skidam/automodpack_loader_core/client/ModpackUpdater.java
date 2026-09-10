@@ -708,6 +708,8 @@ public class ModpackUpdater implements AutoCloseable {
 	private ReviewedClientPlan<ClientUpdatePlanBuilder.PreparedPlan> prepareReview(boolean playerFacing, boolean prepareObjects) throws Exception {
 		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			objectAcquisition.acquireTargetObjects(selectedTarget.flatTarget(), cache, playerFacing);
+			// A review presented to the player must not have its unverified verdict flipped by a late platform lookup; the preload path never waits on platform APIs.
+			if (playerFacing) sourceCatalogue.awaitSourceLookup();
 			planBuilder.reconcileEditableState(cache, selectedTarget.flatTarget());
 			ClientUpdatePlanBuilder.PreparedPlan prepared = planBuilder.buildPlan(updatePlanInput(true), cache, modCache);
 			if (prepareObjects) planBuilder.preparePlanObjects(prepared.plan(), selectedTarget.flatTarget());
