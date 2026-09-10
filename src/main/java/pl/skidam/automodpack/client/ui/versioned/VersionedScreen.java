@@ -123,6 +123,8 @@ public class VersionedScreen extends Screen {
 	 * The one frame order on every version: background, widgets, the screen's own content over them, then the
 	 * tooltip on top. Vanilla splits these phases differently per version (widgets over custom content on the
 	 * legacy render, custom content over widgets since 1.20.6), which made every overlay's stacking a gamble.
+	 * Since 1.21.8 vanilla draws the background itself before {@code render} (its blur budget allows exactly one
+	 * blur per frame), so there we must not touch the background again.
 	 */
 	/*? if <1.20 {*/
 	/*@Override
@@ -141,11 +143,16 @@ public class VersionedScreen extends Screen {
 		VersionedMatrices matrices = new VersionedMatrices(matrix);
 		super.renderBackground(matrices.getContext());
 		this.renderWidgets(matrices.getContext(), mouseX, mouseY, delta);
-	*//*?} else {*/
+	*//*?} elif <1.21.8 {*/
 	/*@Override
 	public void render(GuiGraphics matrix, int mouseX, int mouseY, float delta) {
 		VersionedMatrices matrices = new VersionedMatrices(matrix);
 		super.renderBackground(matrices.getContext(), mouseX, mouseY, delta);
+		this.renderWidgets(matrices.getContext(), mouseX, mouseY, delta);
+	*//*?} else {*/
+	/*@Override
+	public void render(GuiGraphics matrix, int mouseX, int mouseY, float delta) {
+		VersionedMatrices matrices = new VersionedMatrices(matrix);
 		this.renderWidgets(matrices.getContext(), mouseX, mouseY, delta);
 	*//*?}*/
 		versionedRender(matrices, mouseX, mouseY, delta);
