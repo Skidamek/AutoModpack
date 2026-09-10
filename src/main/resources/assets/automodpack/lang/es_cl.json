@@ -7,8 +7,6 @@
   "automodpack.restart.secDescription": "¿Quieres reiniciar ahora?",
   "automodpack.restart.confirm": "Sí, cerrar el juego",
   "automodpack.restart.cancel": "No, volver al juego",
-  "automodpack.restart.toast.title": "Modpack actualizado",
-  "automodpack.restart.toast.description": "Reinicia el juego para cargarlo",
   "automodpack.selection.title": "Ajustes del modpack",
   "automodpack.selection.description": "Elige qué partes opcionales del modpack quieres.",
   "automodpack.selection.saved": "Tu selección quedó guardada.",

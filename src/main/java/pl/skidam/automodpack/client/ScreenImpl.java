@@ -3,8 +3,6 @@ package pl.skidam.automodpack.client;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack.client.ui.screen.*;
-import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
@@ -12,7 +10,6 @@ import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_loader_core.client.SessionUpdateState;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
 import pl.skidam.automodpack_loader_core.screen.FailureDestination;
 import pl.skidam.automodpack_loader_core.screen.FailureRequest;
@@ -25,8 +22,6 @@ import java.util.Optional;
 import java.util.Locale;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.toasts.SystemToast;
-import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -36,16 +31,6 @@ public class ScreenImpl implements ScreenService {
 
 	private static void executeOnClient(Runnable task) {
 		Minecraft.getInstance().execute(task);
-	}
-
-	/** Quiet reminder that this session installed content the running game has not loaded; never replaces a screen. */
-	public static void updatePendingRestartToast() {
-		if (!SessionUpdateState.hasAppliedContentNotLoaded()) return;
-		executeOnClient(() -> {
-			Toast toast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE, VersionedText.translatable("automodpack.restart.toast.title"),
-					VersionedText.translatable("automodpack.restart.toast.description"));
-			VersionedToasts.add(toast);
-		});
 	}
 
 	@Override

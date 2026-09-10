@@ -7,8 +7,6 @@
   "automodpack.restart.secDescription": "지금 재시작할까요?",
   "automodpack.restart.confirm": "예, 게임 종료",
   "automodpack.restart.cancel": "아니요, 게임으로",
-  "automodpack.restart.toast.title": "모드팩 업데이트됨",
-  "automodpack.restart.toast.description": "불러오려면 게임을 다시 시작하세요",
   "automodpack.selection.title": "모드팩 설정",
   "automodpack.selection.description": "모드팩에서 쓸 선택 콘텐츠를 고르세요.",
   "automodpack.selection.saved": "선택이 저장되었습니다.",
