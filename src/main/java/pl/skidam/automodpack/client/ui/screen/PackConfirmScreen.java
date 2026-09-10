@@ -47,7 +47,6 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private boolean keepExistingMods;
 	private boolean acknowledged;
 	private boolean finished;
-	private String unverifiedKey = "";
 	private AbstractWidget cancelButton;
 	private AbstractWidget primaryButton;
 	private AbstractWidget ackCheckbox;
@@ -144,18 +143,14 @@ public final class PackConfirmScreen extends VersionedScreen {
 		layoutBody(bottomY);
 	}
 
-	/** Re-reads the unverified set from the updater; true when the set changed, which is what a resolving lookup does. */
-	private boolean refreshUnverifiedFiles() {
+	/** Snapshots the unverified set from the updater; the lookup settles before this screen opens, so the set never moves while it is open. */
+	private void refreshUnverifiedFiles() {
 		List<String> currentPaths = updater.unverifiedSelectedJarPaths();
-		String key = String.join("\n", currentPaths);
-		if (key.equals(unverifiedKey)) return false;
-		unverifiedKey = key;
 		unverifiedPaths.clear();
 		unverifiedPaths.addAll(currentPaths);
 		unverifiedFiles.clear();
 		var target = updater.getSelectedTarget();
 		for (String path : currentPaths) unverifiedFiles.add(new UnverifiedJarList.UnverifiedFile(path, PackConfirmCopy.selectedJarSize(target, path)));
-		return true;
 	}
 
 	/** The acknowledge checkbox is inactive until the read timer ran out, so a flip is always a real consent. */
@@ -215,14 +210,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 		this.addCenteredScrollBody(BODY, 42, bottomY, all);
 	}
 
-	/** While the platform lookup runs its status replaces the count; afterwards the count is final and red. */
+	/** The platform lookup has settled before this screen opens, so the unverified count is final and red. */
 	private void appendSourceLines(List<MutableComponent> lines, int wrapWidth) {
-		ModpackUpdater.SourceAvailability availability = updater.getSourceAvailability();
-		if (!availability.complete() && !availability.cancelled()) {
-			lines.addAll(
-					wrapParagraph(this.font, VersionedText.translatable("automodpack.selection.sourcesResolving", availability.resolvedFiles(), availability.totalFiles()).getString(), wrapWidth, ChatFormatting.GRAY));
-			return;
-		}
 		int jars = PackConfirmCopy.selectedJarCount(updater.getSelectedTarget());
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.unverifiedCount(unverifiedPaths.size(), jars), wrapWidth, ChatFormatting.RED));
 	}
@@ -337,9 +326,6 @@ public final class PackConfirmScreen extends VersionedScreen {
 	public void tick() {
 		super.tick();
 		countdown.tick();
-		// A running platform lookup keeps shrinking the unverified set; follow it until it settles.
-		ModpackUpdater.SourceAvailability availability = updater.getSourceAvailability();
-		if (!availability.complete() && !availability.cancelled() && refreshUnverifiedFiles()) rebuild();
 		if (!countdown.running() && ackCheckbox != null) ackCheckbox.active = true;
 		if (primaryButton != null) primaryButton.active = !unverified || (!countdown.running() && acknowledged);
 		if (firstInstall) {

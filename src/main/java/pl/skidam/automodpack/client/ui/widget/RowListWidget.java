@@ -31,8 +31,9 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> implements RowViewport {
 	public static final int LINE_STEP = 10;
 	private static final int TEXT_MARGIN = 6;
-	/** The hovered-row wash: soft enough to sit under text, strong enough to read as a control. */
+	/** The hovered-row wash reads as "you can click this"; the selected wash is the stronger one that stays. */
 	private static final int HOVER_COLOR = 0x40FFFFFF;
+	private static final int SELECTED_COLOR = 0x60FFFFFF;
 	private final IntConsumer rowPicked;
 
 	/** One row: pre-wrapped, pre-styled lines plus an optional hover tooltip. */
@@ -109,8 +110,9 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 			int lineWidth = Math.max(1, entryWidth - TEXT_MARGIN * 2);
 			int lines = row.lines().size();
 			int textY = y + Math.max(0, (rowHeight() - lines * LINE_STEP) / 2) + 1;
-			// A hovered row washes over, so rows read as clickable and not as static text.
-			if (hovered) matrices.fill(x, y, x + entryWidth, y + rowHeight(), HOVER_COLOR);
+			// Washes carry the row state: the selected row stays washed, a hovered row washes while the pointer is on it.
+			if (getSelected() == this) matrices.fill(x, y, x + entryWidth, y + rowHeight(), SELECTED_COLOR);
+			else if (hovered) matrices.fill(x, y, x + entryWidth, y + rowHeight(), HOVER_COLOR);
 			for (MutableComponent line : row.lines()) {
 				MutableComponent drawn = line;
 				if (minecraft.font.width(line) > lineWidth) drawn = VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, line.getString(), lineWidth)).withStyle(line.getStyle());

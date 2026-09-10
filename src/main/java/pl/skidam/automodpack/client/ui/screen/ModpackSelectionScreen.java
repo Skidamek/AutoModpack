@@ -236,7 +236,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (item.kind() == GroupSelectionList.Kind.GROUP) inspect(item.id());
 	}
 
-	/** The "?" on a group row opens the file browser pre-filtered to that group — the row tooltip already carries the group's metadata. */
+	/** The Files button on a group row opens the file browser pre-filtered to that group — the row tooltip already carries the group's metadata. */
 	private void inspect(String groupId) {
 		if (!groups.containsKey(groupId)) return;
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.literal(displayName(groupId)),
@@ -530,7 +530,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private int groupLabelWidth() {
-		return Math.max(1, listWidth() - CHECKBOX_LABEL_OFFSET - GroupSelectionList.INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM - 4);
+		return Math.max(1, listWidth() - CHECKBOX_LABEL_OFFSET - GroupSelectionList.filesButtonWidth(this.font) - ActionAreaLayout.SEAM - 4);
 	}
 
 	/** The group list spans the screen between two symmetric margins. */
