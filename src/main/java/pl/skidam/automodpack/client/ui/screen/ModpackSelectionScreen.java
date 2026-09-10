@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import static pl.skidam.automodpack_core.Constants.clientConfig;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -78,7 +76,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private ResolvedSelection resolution;
 	private String resolutionError = "";
 
-	private boolean saved = false;
 	private boolean closed;
 	private boolean switchInFlight;
 	private AbstractWidget saveButton;
@@ -154,15 +151,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-
-		// Once saved, the screen becomes a restart prompt: the new selection only takes effect after
-		// a relaunch, so there is nothing left to toggle here.
-		if (saved) {
-			this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, this.height / 2 + 20, actionRow(ActionAreaLayout.RowKind.FOOTER,
-					secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
-					primaryAction(VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop())));
-			return;
-		}
 
 		int actionY = this.height - 28;
 		String saveLabel = selectionAction != null ? "automodpack.selection.preview" : managerEntry && !activeModpack ? "automodpack.packManager.reviewSwitch" : "automodpack.selection.save";
@@ -389,8 +377,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 		try {
 			controller.saveSelection(modpackId, expectedSelection, target);
-			saved = true;
-			rebuild();
+			ScreenImpl.setScreen(new SelectionSavedScreen(this, modpackName));
 		} catch (IOException e) {
 			ScreenManager.failure(FailureRequest.of(e, "automodpack.error.storage", FailureCategory.STORAGE, FailureDestination.CURRENT_SCREEN, null));
 		}
@@ -624,20 +611,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				: VersionedText.literal(modpackName);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header.getString(), this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 11,
 				TextColors.WHITE);
-		if (saved) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.saved").withStyle(ChatFormatting.GREEN), this.width / 2, this.height / 2 - 30,
-					TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.restartRequired").withStyle(ChatFormatting.YELLOW), this.width / 2, this.height / 2 - 15,
-					TextColors.WHITE);
-			// updateSelectedModpackOnLaunch skips reconciliation entirely on the next launch, so a
-			// restart alone will not apply this selection change; say so instead of implying it will.
-			if (clientConfig != null && !clientConfig.updateSelectedModpackOnLaunch) {
-				drawCenteredTextWithShadow(matrices, this.font,
-						VersionedText.translatable("automodpack.selection.updateOnLaunchDisabled").withStyle(ChatFormatting.RED), this.width / 2,
-						this.height / 2 - 45, TextColors.WHITE);
-			}
-			return;
-		}
 		MutableComponent description = managerEntry && !isActiveModpack()
 				? VersionedText.translatable("automodpack.packManager.switchDescription")
 				: VersionedText.translatable("automodpack.selection.description");
