@@ -16,6 +16,7 @@
   ],
   "client": [
     "core.ClientConnectionAccessor",
+    "core.ClientConfigurationPacketListenerMixin",
     "core.ClientLoginNetworkHandlerAccessor",
     "core.ClientLoginNetworkHandlerMixin",
     "core.ConnectScreenMixin",

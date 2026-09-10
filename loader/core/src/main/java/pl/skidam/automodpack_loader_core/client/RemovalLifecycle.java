@@ -122,6 +122,7 @@ final class RemovalLifecycle {
 	void restartAfterApply(ApplyResult applyResult) {
 		// Only the launch-time apply hot-loads projection content; any mid-session apply with content changes
 		// leaves the running process without them until restart, whether or not the player accepts the restart.
+		if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) SessionUpdateState.markAppliedContentNotLoaded();
 		if (!applyResult.requiresRestart()) {
 			updateLoopDetector.clear();
 			// Ask the player to restart instead of silently returning to the game where the next join fails with a mod mismatch.
