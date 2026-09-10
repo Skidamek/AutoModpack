@@ -158,7 +158,7 @@ final class ModpackObjectAcquisition {
 		downloadManager.joinAll();
 		LOGGER.info("Finished downloading files in {}ms", System.currentTimeMillis() - startFetching);
 		if (downloadManager.isCancelled()) {
-			LOGGER.warn("Download canceled");
+			LOGGER.info("Download canceled");
 			return false;
 		}
 		downloadManager.finish();
