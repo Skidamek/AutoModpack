@@ -65,6 +65,17 @@ final class SourceCatalogue {
 		if (sourceFetchManager != null) sourceFetchManager.fetch();
 	}
 
+	/**
+	 * Joins an in-flight Modrinth/CurseForge lookup, so a review presented afterwards carries the final unverified
+	 * verdict instead of a late arrival flipping it. Bounded by the platform APIs' own HTTP timeouts; a cancelled
+	 * lookup just logs and returns.
+	 */
+	void awaitSourceLookup() {
+		FetchManager manager = sourceFetchManager;
+		if (manager == null || manager.isComplete()) return;
+		manager.fetch();
+	}
+
 	static boolean gatedJar(String path) {
 		return path != null && path.toLowerCase(Locale.ROOT).endsWith(".jar");
 	}
