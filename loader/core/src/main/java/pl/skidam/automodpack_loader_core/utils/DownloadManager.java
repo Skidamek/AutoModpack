@@ -267,6 +267,7 @@ public class DownloadManager {
 				}
 				return false;
 			} catch (IOException e) {
+				if (cancelled || Thread.currentThread().isInterrupted()) throw new InterruptedException("Download of CAS object " + hashPathPair.hash() + " was cancelled");
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				LOGGER.warn("Remote source failed for CAS object {}", hashPathPair.hash(), e);
 				return false;
