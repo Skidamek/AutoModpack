@@ -207,8 +207,9 @@ final class InstalledModpackController {
 					releaseOnClient(() -> completed.accept(true));
 					return;
 				}
-				updater.processModpackUpdate(false);
-				releaseOnClient(() -> completed.accept(false));
+				// The outcome is honest: APPLIED only when the update ran inline; a review owns the screen, a restart was deferred, or the flow failed otherwise.
+				ModpackUpdater.UpdateOutcome outcome = updater.processModpackUpdate(false);
+				releaseOnClient(() -> completed.accept(outcome == ModpackUpdater.UpdateOutcome.APPLIED));
 			} catch (Exception e) {
 				if (updater != null) updater.close();
 				releaseOnClient(() -> completed.accept(false));

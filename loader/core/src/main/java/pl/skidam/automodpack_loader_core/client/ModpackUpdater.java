@@ -315,11 +315,27 @@ public class ModpackUpdater implements AutoCloseable {
 		LOGGER.info("Modpack {} is attached again: syncing to the server's current generation", selectedTarget.manifest().modpackId());
 	}
 
-	/** When {@code showWaitingScreen} is false a player-facing screen already owns the wait and shows its own busy state. */
-	public void processModpackUpdate(boolean showWaitingScreen) {
+	/** How an update attempt ended: a player-facing review took over the screen, the update applied inline, or nothing was applied. */
+	public enum UpdateOutcome {
+		/** A first-install welcome or a review preview took the screen; completion belongs to that flow now. */
+		REVIEW_OPENED,
+		/** The update applied inline; nothing is pending and the pack is current. */
+		APPLIED,
+		/** Cancelled by the player, deferred to a restart, or failed; the caller still owns the screen. */
+		INCOMPLETE
+	}
+
+	/**
+	 * When {@code showWaitingScreen} is false a player-facing screen already owns the wait and shows its own busy state.
+	 * Returns {@link UpdateOutcome#APPLIED} exactly when the update ran inline to completion; {@link
+	 * UpdateOutcome#REVIEW_OPENED} when a player-facing flow took over (first-install welcome, or a review preview
+	 * accepted for display); {@link UpdateOutcome#INCOMPLETE} when the flow was cancelled, deferred to a restart, or
+	 * failed, so the caller still owns the screen either way.
+	 */
+	public UpdateOutcome processModpackUpdate(boolean showWaitingScreen) {
 		if (preload) {
 			applySelectedTargetWithoutReview(false);
-			return;
+			return UpdateOutcome.APPLIED;
 		}
 
 		try {
@@ -337,24 +353,27 @@ public class ModpackUpdater implements AutoCloseable {
 				firstInstallLocalModFiles = storedTarget() == null ? scanFirstInstallLocalMods() : Map.of();
 				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
 				ScreenManager.welcome(this);
+				return UpdateOutcome.REVIEW_OPENED;
 			} else if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) {
 				// Handle an installed modpack without an active projection: reactivate it through the reviewed switch plan
-				startInstalledSwitch(showWaitingScreen);
+				return startInstalledSwitch(showWaitingScreen);
 			} else {
 				// Handle existing modpack
 				ModpackUtils.reprotectActiveFiles(serverModpackContent, storage);
 
-				startUpdate(showWaitingScreen);
+				return startUpdate(showWaitingScreen);
 			}
 		} catch (UpdateDeferredException e) {
 			close();
-			if (isCancelledByPlayer()) return;
+			if (isCancelledByPlayer()) return UpdateOutcome.INCOMPLETE;
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
 			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
+			return UpdateOutcome.INCOMPLETE;
 		} catch (Exception e) {
 			close();
-			if (abortedByPlayer(e)) return;
+			if (abortedByPlayer(e)) return UpdateOutcome.INCOMPLETE;
 			showUpdateFailure(e);
+			return UpdateOutcome.INCOMPLETE;
 		}
 	}
 
@@ -509,57 +528,69 @@ public class ModpackUpdater implements AutoCloseable {
 		close();
 	}
 
-	private void startUpdate(boolean showWaitingScreen) {
+	/** Returns {@link UpdateOutcome#REVIEW_OPENED} only when the review preview was accepted for display; every other outcome still owns the screen. */
+	private UpdateOutcome startUpdate(boolean showWaitingScreen) {
 		try {
 			requireLiveConnection();
 			if (showWaitingScreen) ScreenManager.waiting(this::cancelFromPlayer);
-			switch (requestUpdatePreview()) {
-				case PREVIEW_SHOWN -> {
-					return;
+			UpdateOutcome outcome = switch (requestUpdatePreview()) {
+				case PREVIEW_SHOWN -> UpdateOutcome.REVIEW_OPENED;
+				case APPLIED -> {
+					LOGGER.info("Applied an already-authorized no-op update without opening a review screen");
+					yield UpdateOutcome.APPLIED;
 				}
-				case APPLIED -> LOGGER.info("Applied an already-authorized no-op update without opening a review screen");
-				case DEFERRED -> LOGGER.info("Already-authorized no-op update was deferred to the detached helper");
+				case DEFERRED -> {
+					LOGGER.info("Already-authorized no-op update was deferred to the detached helper");
+					yield UpdateOutcome.INCOMPLETE;
+				}
 				case FAILED -> {
 					if (isCancelledByPlayer()) {
 						confirmCancellationHandled();
-						return;
+						yield UpdateOutcome.INCOMPLETE;
 					}
 					LOGGER.error("Already-authorized no-op update failed; the installed generation was not advanced");
+					yield UpdateOutcome.INCOMPLETE;
 				}
 				case PREVIEW_NOT_SHOWN -> {
 					if (isCancelledByPlayer()) {
 						confirmCancellationHandled();
-						return;
+						yield UpdateOutcome.INCOMPLETE;
 					}
 					LOGGER.warn("Update preview could not be shown; leaving the installed generation unchanged");
+					yield UpdateOutcome.INCOMPLETE;
 				}
-			}
+			};
+			if (outcome == UpdateOutcome.REVIEW_OPENED) return outcome; // the updater stays open; the review flow owns it now
 			close();
+			return outcome;
 		} catch (Exception e) {
 			if (objectAcquisition.downloadCancelled()) {
 				close();
-				return;
+				return UpdateOutcome.INCOMPLETE;
 			}
 			if (abortedByPlayer(e) || confirmationState.get() == ConfirmationState.WAITING) {
 				if (abortedByPlayer(e)) LOGGER.warn("Modpack update preparation was aborted by the player", e);
 				confirmCancellationHandled();
-				return;
+				return UpdateOutcome.INCOMPLETE;
 			}
 			close();
 			showUpdateFailure(e);
-			return;
+			return UpdateOutcome.INCOMPLETE;
 		}
 	}
 
-	/** Presents the switch plan for an installed modpack that has no active projection, instead of replaying the first-install flow. */
-	private void startInstalledSwitch(boolean showWaitingScreen) {
+	/**
+	 * Presents the switch plan for an installed modpack that has no active projection, instead of replaying the
+	 * first-install flow. Returns true only when the preview was accepted for display.
+	 */
+	private UpdateOutcome startInstalledSwitch(boolean showWaitingScreen) {
 		try {
 			requireLiveConnection();
 			if (showWaitingScreen) ScreenManager.waiting(this::cancelFromPlayer);
 			UpdatePreview preview = previewInstalledSwitch();
 			if (isCancelledByPlayer()) {
 				close();
-				return;
+				return UpdateOutcome.INCOMPLETE;
 			}
 			Runnable continueAction = () -> {
 				try {
@@ -571,10 +602,13 @@ public class ModpackUpdater implements AutoCloseable {
 			if (!ScreenManager.preview(preview, getModpackName(), this, (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), this::close)) {
 				LOGGER.warn("Installed modpack switch preview could not be shown; leaving the client without an active modpack");
 				close();
+				return UpdateOutcome.INCOMPLETE;
 			}
+			return UpdateOutcome.REVIEW_OPENED;
 		} catch (Exception e) {
 			if (!abortedByPlayer(e)) showUpdateFailure(e);
 			close();
+			return UpdateOutcome.INCOMPLETE;
 		}
 	}
 
