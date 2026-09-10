@@ -60,23 +60,24 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private void initWidgets() {
-		cancelButton = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height / 2 + 56, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		cancelButton = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.cancel"), button -> {
 					cancelButton.active = false;
 					cancelDownload();
 					AudioManager.stopMusic();
 				}))).get(0);
 
-		int x = VersionedScreen.widgetX(cancelButton) + cancelButton.getWidth() + ActionAreaLayout.GAP;
-		int y = VersionedScreen.widgetY(cancelButton);
+		// The music toggle is one square icon button at the right end of the footer rail, the vanilla icon-button idiom.
+		int iconX = panelLeft(ActionAreaLayout.FOOTER_RAIL) + panelWidth(ActionAreaLayout.FOOTER_RAIL) - ActionAreaLayout.BUTTON_HEIGHT;
+		int iconY = VersionedScreen.widgetY(cancelButton);
 
-		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
+		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(iconX, iconY, ActionAreaLayout.BUTTON_HEIGHT, 16, button -> {
 			AudioManager.stopMusic();
 			ClientPreferences.setMusicEnabled(false);
 		}, "music-note", VersionedText.translatable("soundCategory.music")));
 		setTooltip(muteMusicButton, VersionedText.translatable("soundCategory.music"));
 
-		playMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
+		playMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(iconX, iconY, ActionAreaLayout.BUTTON_HEIGHT, 16, button -> {
 			AudioManager.playMusic();
 			ClientPreferences.setMusicEnabled(true);
 		}, "mute-music-note", VersionedText.translatable("soundCategory.music")));

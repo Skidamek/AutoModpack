@@ -31,7 +31,7 @@ public final class SelectionSavedScreen extends VersionedScreen {
 	@Override
 	protected void init() {
 		super.init();
-		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, this.height / 2 + 20, actionRow(ActionAreaLayout.RowKind.FOOTER,
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)),
 				primaryAction(VersionedText.translatable("automodpack.selection.restartNow").withStyle(ChatFormatting.BOLD), press -> this.minecraft.stop())));
 	}

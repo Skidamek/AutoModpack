@@ -57,7 +57,7 @@ public final class PinMismatchScreen extends VersionedScreen {
 		int headerLines = 2 + (copied ? 1 : 0);
 		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, copyRow, footerRow);
 		this.titleTop = layout.titleTop();
-		addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), copyRow, footerRow);
+		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, copyRow, footerRow);
 		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 

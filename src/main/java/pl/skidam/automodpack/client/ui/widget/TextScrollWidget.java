@@ -28,8 +28,6 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /** One ObjectSelectionList of already-wrapped text lines for a pinned-title / pinned-footer dialog body. */
 public final class TextScrollWidget extends ChromelessList<TextScrollWidget.Entry> implements RowViewport {
-	/** Vanilla adds this padding to every selection list's content height, so a window of exactly the rows' height reports a phantom 4px of scroll and clips the last row. */
-	public static final int CONTENT_PADDING = 4;
 	private final boolean center;
 
 	public TextScrollWidget(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<? extends Component> lines, boolean center) {

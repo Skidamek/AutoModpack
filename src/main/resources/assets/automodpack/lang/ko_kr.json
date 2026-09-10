@@ -34,6 +34,7 @@
   "automodpack.confirm.unverifiedCount": "모드 파일 %s개 중 %s개를 Modrinth 또는 CurseForge에서 찾지 못했습니다.",
   "automodpack.confirm.unverifiedExplain": "무해한 직접 만든 모드, 수정된 모드, 악성 모드일 수 있습니다. AutoModpack은 어느 쪽인지 알 수 없습니다.",
   "automodpack.confirm.ack": "위험을 이해했고 이 서버를 신뢰합니다.",
+  "automodpack.confirm.ackCountdown": "위험 확인란은 %s초 후에 열립니다.",
   "automodpack.confirm.ackUnlock": "위험 확인란을 체크하면 잠금이 풀립니다.",
   "automodpack.confirm.customize": "사용자 지정",
   "automodpack.confirm.groupCount.one": "그룹 %s개",

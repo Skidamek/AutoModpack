@@ -17,6 +17,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
+import pl.skidam.automodpack.client.ui.widget.Countdown;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -30,9 +31,9 @@ public class SkipVerificationScreen extends VersionedScreen {
 			VersionedText.translatable("automodpack.retry"));
 	private static final String REQUIRED_TEXT = "I accept the risk";
 	private static final int TIMER_SECONDS = 10;
+	private final Countdown countdown = new Countdown(TIMER_SECONDS);
 	private EditBox textField;
 	private AbstractWidget confirmButton;
-	private int ticksRemaining;
 	private int fieldY;
 	private List<MutableComponent> stackLines = List.of();
 	private int stackTop;
@@ -42,7 +43,6 @@ public class SkipVerificationScreen extends VersionedScreen {
 		super(VersionedText.translatable("automodpack.validation.skip.title"));
 		this.verificationScreen = verificationScreen;
 		this.validatedCallback = validatedCallback;
-		this.ticksRemaining = TIMER_SECONDS * 20;
 	}
 
 	@Override
@@ -74,7 +74,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 		int stackHeight = stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + LINE_HEIGHT;
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, prose.size() * LINE_HEIGHT, stackHeight, footer);
 		this.titleTop = layout.titleTop();
-		List<AbstractWidget> buttons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
+		List<AbstractWidget> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
 		this.confirmButton = buttons.get(1);
 		this.confirmButton.active = false;
 		DialogColumn column = layout.column();
@@ -102,24 +102,16 @@ public class SkipVerificationScreen extends VersionedScreen {
 	@Override
 	public void tick() {
 		super.tick();
-		if (ticksRemaining > 0) {
-			ticksRemaining--;
-			if (ticksRemaining == 0) confirmButton.active = true;
-		}
-	}
-
-	private int getRemainingSeconds() {
-		return (ticksRemaining + 19) / 20;
+		countdown.tick();
+		if (!countdown.running()) confirmButton.active = true;
 	}
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.skip.title").withStyle(ChatFormatting.BOLD), this.width / 2, titleTop, TextColors.LIGHT_RED);
 		drawCenteredLines(matrices, stackLines, stackTop);
-		if (ticksRemaining > 0)
-			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.translatable("automodpack.validation.skip.countdown", getRemainingSeconds()).withStyle(ChatFormatting.GRAY), this.width / 2,
-					fieldY + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM, TextColors.WHITE);
+		if (countdown.running())
+			drawCountdown(matrices, VersionedText.translatable("automodpack.validation.skip.countdown", countdown.secondsRemaining()), fieldY + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM);
 	}
 
 	@Override

@@ -48,7 +48,7 @@ public class RestartScreen extends VersionedScreen {
 		List<MutableComponent> lines = buildBodyLines();
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, rowArray);
 		this.titleTop = layout.titleTop();
-		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rowArray);
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		this.addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 

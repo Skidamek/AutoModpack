@@ -70,7 +70,7 @@ public class ErrorScreen extends VersionedScreen {
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.error.details").getString(), wrapWidth, ChatFormatting.GRAY));
 		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, rows.toArray(ActionRow[]::new));
 		this.titleTop = layout.titleTop();
-		this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rows.toArray(ActionRow[]::new));
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows.toArray(ActionRow[]::new));
 		this.addScrollBody(wrapWidth, layout.column().bodyTop(), layout.column().bodyBottom(), lines, true);
 	}
 

@@ -34,6 +34,7 @@
   "automodpack.confirm.unverifiedCount": "%s von %s Mod-Dateien wurden nicht auf Modrinth oder CurseForge gefunden.",
   "automodpack.confirm.unverifiedExplain": "Sie können harmlose eigene Mods, bearbeitete Mods oder bösartige Mods sein. AutoModpack kann das nicht unterscheiden.",
   "automodpack.confirm.ack": "Ich kenne das Risiko und vertraue diesem Server.",
+  "automodpack.confirm.ackCountdown": "Das Kontrollkästchen wird in %s Sekunden freigeschaltet.",
   "automodpack.confirm.ackUnlock": "Setze den Haken, um fortzufahren.",
   "automodpack.confirm.customize": "Anpassen",
   "automodpack.confirm.groupCount.one": "%s Gruppe",

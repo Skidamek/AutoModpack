@@ -48,7 +48,7 @@ public final class OriginChangeConfirmScreen extends VersionedScreen {
 				primaryAction(VersionedText.translatable("automodpack.originChange.allow"), button -> allowed.run()));
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, footer);
 		this.titleTop = layout.titleTop();
-		addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
+		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
 		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 

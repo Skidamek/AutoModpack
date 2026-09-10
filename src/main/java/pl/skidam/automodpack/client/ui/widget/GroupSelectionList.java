@@ -35,18 +35,24 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 public final class GroupSelectionList extends ContainerObjectSelectionList<GroupSelectionList.Entry> implements RowViewport {
 	private static final int ROW_HEIGHT = 24;
 	public static final int INFO_BUTTON_WIDTH = 20;
+	/** Vanilla renders the first row this far below the list's top edge; the window is shifted up so rows land where the caller asked. */
+	/*? if >=1.21.10 {*/
+	private static final int VANILLA_ROW_INSET = 2;
+	/*?} else {*/
+	/*private static final int VANILLA_ROW_INSET = 4;
+	*//*?}*/
 	private final int contentWidth;
 
 	public GroupSelectionList(Minecraft client, int width, int height, int contentWidth, int top, int bottom, List<Item> items, Consumer<Item> onToggle, Consumer<Item> onInspect) {
 		/*? if <1.20.3 {*/
-		/*super(client, width, height, top, bottom, ROW_HEIGHT);
+		/*super(client, width, height, top - VANILLA_ROW_INSET, bottom, ROW_HEIGHT);
 		*//*?} else {*/
-		super(client, width, Math.max(ROW_HEIGHT, bottom - top), top, ROW_HEIGHT);
+		super(client, width, Math.max(ROW_HEIGHT, bottom - top) + VANILLA_ROW_INSET, top - VANILLA_ROW_INSET, ROW_HEIGHT);
 		/*?}*/
 		this.contentWidth = Math.max(1, contentWidth);
 		this.centerListVertically = false;
-		// The only chrome handling this list carries itself: it is a ContainerObjectSelectionList, so it cannot
-		// sit on the shared ChromelessList base the other lists use. Keep it in sync with that base.
+		// The only chrome this list carries itself: it is a ContainerObjectSelectionList, so it cannot sit on the shared
+		// ChromelessList base the other lists use. Its row window and scroll contract stay in sync with that base.
 		/*? if <1.21.1 {*/
 		/*this.setRenderBackground(false);
 		this.setRenderTopAndBottom(false);
@@ -58,6 +64,15 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		Consumer<Item> inspect = Objects.requireNonNull(onInspect, "onInspect");
 		for (Item item : Objects.requireNonNull(items, "items")) this.addEntry(new Entry(item, toggle, inspect));
 	}
+
+	/*? if >=1.21.10 {*/
+	@Override
+	public int maxScrollAmount() {
+		// Vanilla pads contentHeight by 4 while its rows only start 2px down; with the window shifted onto the rows, the scroll range is exactly the overflow.
+		return Math.max(0, this.contentHeight() - this.height - (4 - VANILLA_ROW_INSET));
+	}
+
+	/*?}*/
 
 	@Override
 	public void revealRow(int index) {

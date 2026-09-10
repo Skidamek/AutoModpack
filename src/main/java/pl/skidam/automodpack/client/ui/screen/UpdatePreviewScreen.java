@@ -63,7 +63,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		List<MutableComponent> body = buildBodyLines();
 		DialogLayout layout = layoutDialogWithActions(28, 2 * LINE_HEIGHT, body.size() * LINE_HEIGHT, 0, rowArray);
 		this.titleTop = layout.titleTop();
-		List<AbstractWidget> buttons = this.addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), rowArray);
+		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		setTooltip(buttons.get(buttons.size() - 2), ChangeSummary.diffLegend());
 		this.addCenteredScrollBody(PANEL_WIDTH, layout.column().bodyTop(), layout.column().bodyBottom(), body);
 	}

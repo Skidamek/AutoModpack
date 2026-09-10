@@ -17,7 +17,7 @@ import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.client.ui.widget.TextScrollWidget;
+import pl.skidam.automodpack.client.ui.widget.Countdown;
 import pl.skidam.automodpack.client.ui.widget.UnverifiedJarList;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePreview;
@@ -33,7 +33,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 /** Confirm before an update starts; the unverified-jar list and typed-ack gate appear only when unverified jars were selected. */
 public final class PackConfirmScreen extends VersionedScreen {
 	private static final int BODY = 420;
-	private static final int TIMER_TICKS = 10 * 20;
+	private static final int TIMER_SECONDS = 10;
 	private final ModpackUpdater updater;
 	private final boolean firstInstall;
 	private final boolean unverified;
@@ -41,19 +41,18 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private final UpdatePreview laterPreview;
 	private final Runnable laterContinue;
 	private final Runnable laterCancel;
+	private final Countdown countdown = new Countdown(TIMER_SECONDS);
 	private final List<String> unverifiedPaths = new ArrayList<>();
 	private final List<UnverifiedJarList.UnverifiedFile> unverifiedFiles = new ArrayList<>();
 	private boolean keepExistingMods;
 	private boolean acknowledged;
 	private boolean finished;
-	// The countdown only exists to gate unverified risk; verified installs start unlocked.
-	private int ticksRemaining = 0;
+	private String unverifiedKey = "";
 	private AbstractWidget cancelButton;
 	private AbstractWidget primaryButton;
 	private AbstractWidget ackCheckbox;
 	private String originFull = "";
 	private String originDisplay = "";
-	private String previousUnverifiedKey = "";
 
 	/** First-install confirm; every selected jar matched Modrinth or CurseForge unless unverified jars were picked. */
 	public PackConfirmScreen(ModpackUpdater updater) {
@@ -65,10 +64,6 @@ public final class PackConfirmScreen extends VersionedScreen {
 		this.laterPreview = null;
 		this.laterContinue = null;
 		this.laterCancel = null;
-		this.unverifiedPaths.addAll(updater.unverifiedSelectedJarPaths());
-		this.previousUnverifiedKey = String.join("\n", unverifiedPaths);
-		// The read countdown only exists for unverified risk; verified installs start unlocked.
-		if (unverified) ticksRemaining = TIMER_TICKS;
 	}
 
 	/** Confirm before writing unverified jars on a later update. */
@@ -81,10 +76,6 @@ public final class PackConfirmScreen extends VersionedScreen {
 		this.laterPreview = Objects.requireNonNull(preview, "preview");
 		this.laterContinue = Objects.requireNonNull(continueAction, "continueAction");
 		this.laterCancel = Objects.requireNonNull(cancelAction, "cancelAction");
-		this.unverifiedPaths.addAll(updater.unverifiedSelectedJarPaths());
-		this.previousUnverifiedKey = String.join("\n", unverifiedPaths);
-		// The read countdown only exists for unverified risk; verified installs start unlocked.
-		if (unverified) ticksRemaining = TIMER_TICKS;
 	}
 
 	@Override
@@ -92,18 +83,15 @@ public final class PackConfirmScreen extends VersionedScreen {
 		super.init();
 		originFull = updater.joinOrigin();
 		originDisplay = truncateToWidth(this.font, PackConfirmCopy.displayOrigin(originFull), panelWidth(BODY) - 8);
-		List<String> currentPaths = updater.unverifiedSelectedJarPaths();
-		String currentKey = String.join("\n", currentPaths);
-		if (!currentKey.equals(previousUnverifiedKey)) {
-			previousUnverifiedKey = currentKey;
-			acknowledged = false;
-			ticksRemaining = currentPaths.isEmpty() ? 0 : TIMER_TICKS;
+		refreshUnverifiedFiles();
+		if (unverified) {
+			// The risk read rearms while the player has not consented yet, so returning from a sub-screen
+			// restarts the countdown; a given acknowledgement survives coming back from review or history.
+			if (unverifiedPaths.isEmpty() || acknowledged) countdown.finish();
+			else countdown.restart();
+		} else {
+			countdown.finish();
 		}
-		unverifiedPaths.clear();
-		unverifiedPaths.addAll(currentPaths);
-		unverifiedFiles.clear();
-		var target = updater.getSelectedTarget();
-		for (String path : currentPaths) unverifiedFiles.add(new UnverifiedJarList.UnverifiedFile(path, PackConfirmCopy.selectedJarSize(target, path)));
 
 		boolean leftover = firstInstall && updater.firstInstallLocalModCount() > 0;
 		boolean customize = PackConfirmCopy.canCustomize(updater.getSelectedTarget().manifest());
@@ -121,7 +109,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 				rebuild();
 			})));
 		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
-		if (unverified) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, checkboxAction(ackMessage(), acknowledged, value -> onAckToggled(value))));
+		if (unverified) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, checkboxAction(PackConfirmCopy.ackLabel(), acknowledged, value -> onAckToggled(value))));
 		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
 		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : "automodpack.update.apply");
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
@@ -141,12 +129,12 @@ public final class PackConfirmScreen extends VersionedScreen {
 		if (unverified) {
 			ackCheckbox = widgets.get(widgetIndex);
 			// The risk acknowledgement stays locked until the read countdown ran out.
-			ackCheckbox.active = ticksRemaining <= 0;
+			ackCheckbox.active = !countdown.running();
 		}
 		// The footer row is always last: cancel, review files, primary.
 		cancelButton = widgets.get(widgets.size() - 3);
 		primaryButton = widgets.get(widgets.size() - 1);
-		primaryButton.active = !unverified || (ticksRemaining <= 0 && acknowledged);
+		primaryButton.active = !unverified || (!countdown.running() && acknowledged);
 		if (unverified) {
 			// A real focus (not the deferred initial-focus request) keeps the highlighted state on every version.
 			this.setFocused(cancelButton);
@@ -156,17 +144,24 @@ public final class PackConfirmScreen extends VersionedScreen {
 		layoutBody(bottomY);
 	}
 
+	/** Re-reads the unverified set from the updater; true when the set changed, which is what a resolving lookup does. */
+	private boolean refreshUnverifiedFiles() {
+		List<String> currentPaths = updater.unverifiedSelectedJarPaths();
+		String key = String.join("\n", currentPaths);
+		if (key.equals(unverifiedKey)) return false;
+		unverifiedKey = key;
+		unverifiedPaths.clear();
+		unverifiedPaths.addAll(currentPaths);
+		unverifiedFiles.clear();
+		var target = updater.getSelectedTarget();
+		for (String path : currentPaths) unverifiedFiles.add(new UnverifiedJarList.UnverifiedFile(path, PackConfirmCopy.selectedJarSize(target, path)));
+		return true;
+	}
+
 	/** The acknowledge checkbox is inactive until the read timer ran out, so a flip is always a real consent. */
 	private void onAckToggled(boolean value) {
 		acknowledged = value;
 		if (primaryButton != null) primaryButton.active = acknowledged;
-	}
-
-	private MutableComponent ackMessage() {
-		MutableComponent label = PackConfirmCopy.ackLabel();
-		int seconds = (ticksRemaining + 19) / 20;
-		if (seconds > 0) label = label.append(" (" + seconds + "s)");
-		return label;
 	}
 
 	private void layoutBody(int footerTop) {
@@ -183,8 +178,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 		}
 		appendStatLines(topLines, wrapWidth);
 		topLines.add(blankLine());
-		int jars = PackConfirmCopy.selectedJarCount(updater.getSelectedTarget());
-		topLines.addAll(wrapParagraph(this.font, PackConfirmCopy.unverifiedCount(unverifiedPaths.size(), jars), wrapWidth, ChatFormatting.RED));
+		appendSourceLines(topLines, wrapWidth);
+		topLines.add(blankLine());
 		List<MutableComponent> bottomLines = new ArrayList<>();
 		bottomLines.addAll(wrapParagraph(this.font, PackConfirmCopy.unverifiedExplain(), wrapWidth, ChatFormatting.RED));
 		bottomLines.add(blankLine());
@@ -195,15 +190,14 @@ public final class PackConfirmScreen extends VersionedScreen {
 		int topHeight = topLines.size() * LINE_HEIGHT;
 		int bottomHeight = bottomLines.size() * LINE_HEIGHT;
 		int available = Math.max(LINE_HEIGHT, bottomY - 42);
-		int listRows = preferredListRows(available - topHeight - bottomHeight - 12);
-		// The window carries the list's content padding, or vanilla reports a phantom scroll and clips the last row.
-		int listHeight = listRows * UnverifiedJarList.ROW_HEIGHT + TextScrollWidget.CONTENT_PADDING;
-		int needed = topHeight + 4 + listHeight + 4 + bottomHeight;
+		int listRows = preferredListRows(available - topHeight - bottomHeight - 2 * ActionAreaLayout.SEAM);
+		int listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
+		int needed = topHeight + ActionAreaLayout.SEAM + listHeight + ActionAreaLayout.SEAM + bottomHeight;
 
 		if (needed > available) {
 			listRows = Math.max(3, listRows - 1);
-			listHeight = listRows * UnverifiedJarList.ROW_HEIGHT + TextScrollWidget.CONTENT_PADDING;
-			needed = topHeight + 4 + listHeight + 4 + bottomHeight;
+			listHeight = listRows * UnverifiedJarList.ROW_HEIGHT;
+			needed = topHeight + ActionAreaLayout.SEAM + listHeight + ActionAreaLayout.SEAM + bottomHeight;
 		}
 		if (needed <= available) {
 			// The whole assembly centers, so a short window never opens a hole between the blocks.
@@ -219,6 +213,18 @@ public final class PackConfirmScreen extends VersionedScreen {
 		all.add(blankLine());
 		all.addAll(bottomLines);
 		this.addCenteredScrollBody(BODY, 42, bottomY, all);
+	}
+
+	/** While the platform lookup runs its status replaces the count; afterwards the count is final and red. */
+	private void appendSourceLines(List<MutableComponent> lines, int wrapWidth) {
+		ModpackUpdater.SourceAvailability availability = updater.getSourceAvailability();
+		if (!availability.complete() && !availability.cancelled()) {
+			lines.addAll(
+					wrapParagraph(this.font, VersionedText.translatable("automodpack.selection.sourcesResolving", availability.resolvedFiles(), availability.totalFiles()).getString(), wrapWidth, ChatFormatting.GRAY));
+			return;
+		}
+		int jars = PackConfirmCopy.selectedJarCount(updater.getSelectedTarget());
+		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.unverifiedCount(unverifiedPaths.size(), jars), wrapWidth, ChatFormatting.RED));
 	}
 
 	/** The matched layout: one centered scroll body between the pinned title and the action area. */
@@ -254,10 +260,10 @@ public final class PackConfirmScreen extends VersionedScreen {
 	}
 
 	private void placeUnverifiedBody(int topY, int bottomY, List<MutableComponent> topLines, List<MutableComponent> bottomLines, int topHeight, int listHeight) {
-		this.addCenteredScrollBody(BODY, topY, topY + topHeight + 2, topLines);
-		int listTop = topY + topHeight + 4;
+		this.addCenteredScrollBody(BODY, topY, topY + topHeight, topLines);
+		int listTop = topY + topHeight + ActionAreaLayout.SEAM;
 		this.addRenderableWidget(new UnverifiedJarList(this.minecraft, this.width, this.height, panelWidth(BODY), listTop, listTop + listHeight, unverifiedFiles));
-		this.addCenteredScrollBody(BODY, listTop + listHeight + 4, bottomY, bottomLines);
+		this.addCenteredScrollBody(BODY, listTop + listHeight + ActionAreaLayout.SEAM, bottomY, bottomLines);
 	}
 
 	private int preferredListRows(int freeHeight) {
@@ -268,7 +274,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 	private void confirm() {
 		if (finished) return;
-		if (unverified && (!acknowledged || ticksRemaining > 0)) return;
+		if (unverified && (!acknowledged || countdown.running())) return;
 		if (firstInstall) {
 			if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) return;
 			finished = true;
@@ -330,16 +336,12 @@ public final class PackConfirmScreen extends VersionedScreen {
 	@Override
 	public void tick() {
 		super.tick();
-		if (ticksRemaining > 0) {
-			ticksRemaining--;
-			// Matched installs have no ack box; the countdown only gates unverified risk.
-			if (ticksRemaining == 0 && ackCheckbox != null) {
-				// The countdown just ended: this is the moment the risk box unlocks.
-				ackCheckbox.setMessage(ackMessage());
-				ackCheckbox.active = true;
-			}
-			if (primaryButton != null) primaryButton.active = !unverified || (ticksRemaining <= 0 && acknowledged);
-		}
+		countdown.tick();
+		// A running platform lookup keeps shrinking the unverified set; follow it until it settles.
+		ModpackUpdater.SourceAvailability availability = updater.getSourceAvailability();
+		if (!availability.complete() && !availability.cancelled() && refreshUnverifiedFiles()) rebuild();
+		if (!countdown.running() && ackCheckbox != null) ackCheckbox.active = true;
+		if (primaryButton != null) primaryButton.active = !unverified || (!countdown.running() && acknowledged);
 		if (firstInstall) {
 			if (updater.getConfirmationState() == ModpackUpdater.ConfirmationState.CANCELLED) {
 				finished = true;
@@ -356,9 +358,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = updater.getSelectedTarget().manifest().modpackName().isBlank() ? "AutoModpack" : updater.getSelectedTarget().manifest().modpackName();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
-		// The disabled primary needs its reason on screen: the gate is the risk checkbox (the label carries the countdown).
-		if (!finished && primaryButton != null && !primaryButton.active && !unverifiedPaths.isEmpty())
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.confirm.ackUnlock").withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 40, TextColors.WHITE);
+		// The disabled primary needs its reason on screen: the countdown while the risk read runs, the checkbox after it.
+		if (!finished && !unverifiedPaths.isEmpty() && !acknowledged) {
+			if (countdown.running()) drawCountdown(matrices, VersionedText.translatable("automodpack.confirm.ackCountdown", countdown.secondsRemaining()), this.height - 40);
+			else drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.confirm.ackUnlock").withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 40, TextColors.WHITE);
+		}
 	}
 
 	@Override

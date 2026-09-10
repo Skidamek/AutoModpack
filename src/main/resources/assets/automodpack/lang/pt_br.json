@@ -34,6 +34,7 @@
   "automodpack.confirm.unverifiedCount": "%s de %s arquivos de mods não foram achados no Modrinth ou no CurseForge.",
   "automodpack.confirm.unverifiedExplain": "Podem ser mods próprios inofensivos, mods editados ou mods maliciosos. O AutoModpack não sabe distinguir.",
   "automodpack.confirm.ack": "Eu entendo o risco e confio neste servidor.",
+  "automodpack.confirm.ackCountdown": "A caixa de risco destrava em %s segundos.",
   "automodpack.confirm.ackUnlock": "Marque a caixa de risco para continuar.",
   "automodpack.confirm.customize": "Personalizar",
   "automodpack.confirm.groupCount.one": "%s grupo",
