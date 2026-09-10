@@ -230,6 +230,7 @@
   "automodpack.selection.requires": "Requires: %s",
   "automodpack.selection.conflicts": "Conflicts: %s",
   "automodpack.selection.files": "Files: %s (%s)",
+  "automodpack.selection.groupFiles": "Files",
   "automodpack.selection.unavailableOn": "Not available on %s",
   "automodpack.selection.metrics.one": "(%s file, %s)",
   "automodpack.selection.metrics.other": "(%s files, %s)",

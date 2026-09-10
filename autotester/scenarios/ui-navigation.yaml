@@ -60,8 +60,8 @@ flow:
     name: capture explicit child selection
     file: ui-navigation-explicit-child
   - do: click
-    name: open the group file browser from the row help button
-    select: { text: "?" }
+    name: open the group file browser from the row Files button
+    select: { key: automodpack.selection.groupFiles }
   - do: wait_for
     name: wait for the group file browser
     until:

@@ -50,6 +50,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	private final Runnable closedCallback;
 	private final Set<Long> restorableSeqs;
 	private final Consumer<JournalEntry> restore;
+	private RowListWidget historyList;
 	private boolean closed;
 
 	public ContentHistoryScreen(Screen parent, HistoryViewRequest request) {
@@ -70,11 +71,20 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		super.init();
 		ActionRow[] rowArray = {actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), button -> back()))};
 		int width = panelWidth(PANEL_WIDTH);
+		int currentIndex = -1;
 		List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
-		for (int index = 0; index < entries.size(); index++) rows.add(row(entries.get(index), width - TEXT_MARGIN * 2));
+		for (int index = 0; index < entries.size(); index++) {
+			rows.add(row(entries.get(index), width - TEXT_MARGIN * 2));
+			if (isCurrent(entries.get(index))) currentIndex = index;
+		}
 		// The list fills the space between the header and the pinned actions; only a real overflow scrolls.
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray) - 6;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, width, 0, LIST_TOP, listBottom, ROW_HEIGHT, rows, this::openEntry));
+		this.historyList = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, width, 0, LIST_TOP, listBottom, ROW_HEIGHT, rows, this::openEntry));
+		// The installed generation is the entry the player came here for, so it starts selected and scrolled into view.
+		if (currentIndex >= 0) {
+			this.historyList.setSelected(this.historyList.children().get(currentIndex));
+			this.historyList.revealRow(currentIndex);
+		}
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 	}
 

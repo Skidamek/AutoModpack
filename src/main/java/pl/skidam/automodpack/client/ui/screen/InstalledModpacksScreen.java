@@ -30,6 +30,7 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 	private final Screen parent;
 	private final InstalledModpackController controller;
 	private List<InstalledModpackController.Pack> entries;
+	private RowListWidget packList;
 	private int preservedCount;
 	private boolean discoveryFailureShown;
 
@@ -67,18 +68,26 @@ public final class InstalledModpacksScreen extends VersionedScreen {
 		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.back"), press -> ScreenImpl.setScreen(parent)));
 		ActionRow[] actionRows = {management, footer};
 		int rowWidth = panelWidth(PANEL_WIDTH) - TEXT_MARGIN * 2;
+		int activeIndex = -1;
 		List<RowListWidget.Row> rows = new ArrayList<>(entries.size());
-		for (InstalledModpackController.Pack entry : entries) {
+		for (int index = 0; index < entries.size(); index++) {
+			InstalledModpackController.Pack entry = entries.get(index);
 			String source = VersionedText.translatable(entry.connectionAvailable() ? "automodpack.packManager.sourceServer" : "automodpack.packManager.sourceLocal").getString();
 			// State is carried by color, not bracket markers: green = active pack, white = installed pack.
 			rows.add(new RowListWidget.Row(List.of(
 					VersionedText.literal(truncateToWidth(this.font, entry.name(), rowWidth)).withStyle(entry.active() ? ChatFormatting.GREEN : ChatFormatting.WHITE),
 					VersionedText.literal(truncateToWidth(this.font, source, rowWidth)).withStyle(ChatFormatting.GRAY))));
+			if (entry.active()) activeIndex = index;
 		}
 		// The list fills the space between the header and the pinned actions; only a real overflow scrolls.
 		int listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows) - 8;
-		this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, LIST_TOP, listBottom, ROW_HEIGHT, rows,
+		this.packList = this.addRenderableWidget(new RowListWidget(this.minecraft, this.width, this.height, panelWidth(PANEL_WIDTH), 0, LIST_TOP, listBottom, ROW_HEIGHT, rows,
 				index -> open(entries.get(index))));
+		// The active pack is the row the player came here for, so it starts selected and scrolled into view.
+		if (activeIndex >= 0) {
+			this.packList.setSelected(this.packList.children().get(activeIndex));
+			this.packList.revealRow(activeIndex);
+		}
 		List<AbstractWidget> actionButtons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, actionRows);
 		if (preservedCount == 0) setTooltip(actionButtons.get(0), VersionedText.translatable("automodpack.vault.empty"));
 	}

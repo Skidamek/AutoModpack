@@ -46,12 +46,12 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 				: wrapParagraph(this.font, VersionedText.translatable("automodpack.detached.risk").getString(), wrapWidth, ChatFormatting.RED));
 		lines.add(blankLine());
 		lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.detached.syncAnytime").getString(), wrapWidth));
-		ActionRow auxiliary = actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.detached.syncNow"), button -> syncToServer()));
-		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.detached.continueJoin"), button -> continuePlaying()));
+		ActionRow footer = actionRow(ActionAreaLayout.RowKind.FOOTER, secondaryAction(VersionedText.translatable("automodpack.detached.continueJoin"), button -> continuePlaying()),
+				primaryAction(VersionedText.translatable("automodpack.detached.syncNow"), button -> syncToServer()));
 		int headerLines = modpackName.isBlank() ? 1 : 2;
-		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, auxiliary, footer);
+		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, footer);
 		this.titleTop = layout.titleTop();
-		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, auxiliary, footer);
+		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
 		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 
