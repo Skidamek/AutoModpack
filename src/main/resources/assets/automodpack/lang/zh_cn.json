@@ -34,6 +34,7 @@
   "automodpack.confirm.unverifiedCount": "%s 个模组文件（共 %s 个）没有在 Modrinth 或 CurseForge 上找到。",
   "automodpack.confirm.unverifiedExplain": "它们可能无害的自制模组、被修改过的模组，也可能是恶意模组。AutoModpack 无法分辨。",
   "automodpack.confirm.ack": "我了解风险并信任这个服务器。",
+  "automodpack.confirm.ackCountdown": "风险确认框将在 %s 秒后可用。",
   "automodpack.confirm.ackUnlock": "勾选风险确认框以继续。",
   "automodpack.confirm.customize": "自定义",
   "automodpack.confirm.groupCount.one": "%s 个分组",

@@ -34,6 +34,7 @@
   "automodpack.confirm.unverifiedCount": "%s modfájl %s közül nem található a Modrinthon vagy a CurseForge-on.",
   "automodpack.confirm.unverifiedExplain": "Lehetnek ártalmatlan saját modok, módosított modok vagy rosszindulatú modok. Az AutoModpack nem tudja megkülönböztetni őket.",
   "automodpack.confirm.ack": "Megértem a kockázatot, és bízom ebben a szerverben.",
+  "automodpack.confirm.ackCountdown": "A kockázati mező %s másodperc múlva oldódik.",
   "automodpack.confirm.ackUnlock": "Pipáld be a kockázati mezőt a folytatáshoz.",
   "automodpack.confirm.customize": "Testreszabás",
   "automodpack.confirm.groupCount.one": "%s csoport",

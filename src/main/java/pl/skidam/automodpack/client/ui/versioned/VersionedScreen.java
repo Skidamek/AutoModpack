@@ -312,52 +312,21 @@ public class VersionedScreen extends Screen {
 		return buildActionArea(footerWidth, bottomY, false, rows).layout().top();
 	}
 
-	/** The total height of the given rows: one button height each plus the row gap. */
-	protected final int actionAreaHeight(ActionRow... rows) {
-		int visible = 0;
-		for (ActionRow row : rows) if (!row.actions().isEmpty()) visible++;
-		return visible == 0 ? 0 : visible * ActionAreaLayout.BUTTON_HEIGHT + (visible - 1) * ActionAreaLayout.GAP;
-	}
-
-	/** Where a content block and its action rows land: the whole block floats centered when it fits, pins to the bottom edge otherwise. */
-	private record BlockLayout(int contentTop, int actionsTop, boolean scrolls) {}
-
-	/**
-	 * Lays content of the given height out with its action rows as one block between the top reserve and
-	 * the footer anchor. A fitting block centers in the space and the rows sit right under the content;
-	 * only a real overflow scrolls the content while the rows pin above the bottom edge.
-	 */
-	private BlockLayout layoutBlockWithActions(int topReserve, int contentHeight, int bottomMargin, ActionRow... rows) {
-		int bottomAnchor = this.height - 28;
-		int actionsTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, bottomAnchor, rows);
-		int blockHeight = contentHeight + ActionAreaLayout.GAP + actionAreaHeight(rows);
-		int available = actionsTop - bottomMargin - topReserve;
-		if (blockHeight <= available) {
-			int contentTop = topReserve + (available - blockHeight) / 2;
-			return new BlockLayout(contentTop, contentTop + contentHeight + ActionAreaLayout.GAP, false);
-		}
-		return new BlockLayout(topReserve, actionsTop, true);
-	}
-
 	/** One laid-out dialog: where the title line(s) sit, the body window, and where the action rows go. */
 	protected record DialogLayout(DialogColumn column, int actionsTop, int titleTop) {}
 
 	/**
-	 * The dialog version of {@link #layoutBlockWithActions}: title, body and optional pinned stack plus action rows as
-	 * one centered block, the way vanilla centers a confirm dialog around its message. The title travels with the
-	 * block; only a body that cannot fit scrolls, while the title pins above it.
+	 * The dialog layout rule of the mod: the action rows pin to the bottom rail and the dialog - title, body
+	 * and optional pinned stack - centers as one block between the top reserve and those rows, the way vanilla
+	 * centers a confirm dialog around its message. The title travels with the block; only a body that cannot
+	 * fit scrolls, while the title pins above it and the stack pins above the rows.
 	 */
 	protected final DialogLayout layoutDialogWithActions(int topReserve, int titleHeight, int bodyHeight, int stackHeight, ActionRow... rows) {
-		int header = titleHeight + (titleHeight > 0 ? LINE_HEIGHT : 0);
-		BlockLayout block = layoutBlockWithActions(topReserve, header + bodyHeight + (stackHeight > 0 ? ActionAreaLayout.SEAM + stackHeight : 0), 4, rows);
-		if (!block.scrolls()) {
-			int bodyTop = block.contentTop() + header;
-			// stackTop is where the stack starts, mirroring layoutDialogColumn: right under the body, with the rows after the budgeted stack.
-			DialogColumn column = new DialogColumn(bodyTop, bodyTop + bodyHeight + TextScrollWidget.CONTENT_PADDING, false, bodyTop + bodyHeight + ActionAreaLayout.SEAM);
-			return new DialogLayout(column, block.actionsTop(), block.contentTop());
-		}
 		int actionsTop = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rows);
-		return new DialogLayout(layoutDialogColumn(topReserve + header, actionsTop, bodyHeight, stackHeight), actionsTop, topReserve);
+		int header = titleHeight + (titleHeight > 0 ? LINE_HEIGHT : 0);
+		DialogColumn column = layoutDialogColumn(topReserve + header, actionsTop, bodyHeight, stackHeight);
+		int titleTop = column.scrolls() ? topReserve : column.bodyTop() - header;
+		return new DialogLayout(column, actionsTop, titleTop);
 	}
 
 	private List<AbstractWidget> addActionArea(int footerWidth, int anchorY, boolean fromTop, ActionRow... rows) {
@@ -420,15 +389,6 @@ public class VersionedScreen extends Screen {
 		Objects.requireNonNull(tooltip, "tooltip");
 		VersionedScreen versioned = currentScreen();
 		if (versioned != null) versioned.widgetTooltips.put(widget, tooltip);
-	}
-
-	/** The widget's left edge; the accessor is a field below 1.19.4 and a method since. */
-	public static int widgetX(AbstractWidget widget) {
-		/*? if >=1.19.4 {*/
-		return widget.getX();
-		/*?} else {*/
-		/*return widget.x;
-		*//*?}*/
 	}
 
 	public static int widgetY(AbstractWidget widget) {
@@ -541,14 +501,18 @@ public class VersionedScreen extends Screen {
 		return y;
 	}
 
+	/** The shared read-countdown line: centered gray, the same look on every gate. */
+	protected final void drawCountdown(VersionedMatrices matrices, MutableComponent countdown, int y) {
+		drawCenteredTextWithShadow(matrices, this.font, countdown.withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+	}
+
 	/** One dialog column: the scrollable body window and where the pinned stack under it starts. */
 	protected record DialogColumn(int bodyTop, int bodyBottom, boolean scrolls, int stackTop) {}
 
 	/**
 	 * Lays a dialog out as one column — body, then an optional pinned stack — above the footer. A column
 	 * that fits centers in the space between the top reserve and the footer; only a real overflow clips
-	 * the body into the remaining window while the stack pins above the footer. The fitting body window
-	 * includes the list's own content padding, or vanilla reports a phantom scroll and clips the last row.
+	 * the body into the remaining window while the stack pins above the footer.
 	 */
 	protected final DialogColumn layoutDialogColumn(int topReserve, int footerTop, int contentHeight, int stackHeight) {
 		int bottomLimit = footerTop - 4;
@@ -556,7 +520,7 @@ public class VersionedScreen extends Screen {
 		int blockHeight = stackHeight > 0 ? contentHeight + ActionAreaLayout.SEAM + stackHeight : contentHeight;
 		if (blockHeight <= available) {
 			int blockTop = topReserve + (available - blockHeight) / 2;
-			return new DialogColumn(blockTop, blockTop + contentHeight + TextScrollWidget.CONTENT_PADDING, false, blockTop + contentHeight + ActionAreaLayout.SEAM);
+			return new DialogColumn(blockTop, blockTop + contentHeight, false, blockTop + contentHeight + ActionAreaLayout.SEAM);
 		}
 		int stackTop = Math.max(topReserve, bottomLimit - stackHeight);
 		int bodyBottom = Math.max(topReserve + LINE_HEIGHT, stackTop - (stackHeight > 0 ? ActionAreaLayout.GAP : 0));

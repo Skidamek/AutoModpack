@@ -89,7 +89,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		int stackHeight = stackLines.size() * LINE_HEIGHT + ActionAreaLayout.SEAM + ActionAreaLayout.BUTTON_HEIGHT + ActionAreaLayout.SEAM + hintLines.size() * LINE_HEIGHT;
 		DialogLayout layout = layoutDialogWithActions(28, 2 * LINE_HEIGHT, prose.size() * LINE_HEIGHT, stackHeight, footer);
 		this.titleTop = layout.titleTop();
-		List<AbstractWidget> buttons = addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), footer);
+		List<AbstractWidget> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, footer);
 		this.verifyButton = buttons.get(2);
 		DialogColumn column = layout.column();
 		this.addCenteredScrollBody(BODY, column.bodyTop(), column.bodyBottom(), prose);

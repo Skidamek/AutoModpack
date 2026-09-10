@@ -34,6 +34,7 @@
   "automodpack.confirm.unverifiedCount": "%s из %s файлов модов не нашлись на Modrinth или CurseForge.",
   "automodpack.confirm.unverifiedExplain": "Это могут быть безобидные самописные моды, изменённые моды или вредоносные моды. AutoModpack не умеет их различать.",
   "automodpack.confirm.ack": "Я понимаю риск и доверяю этому серверу.",
+  "automodpack.confirm.ackCountdown": "Поле риска откроется через %s сек.",
   "automodpack.confirm.ackUnlock": "Отметьте поле риска, чтобы продолжить.",
   "automodpack.confirm.customize": "Настроить",
   "automodpack.confirm.groupCount.one": "%s группа",

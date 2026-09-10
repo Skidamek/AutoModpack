@@ -32,18 +32,16 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 *//*?}*/
 
 /**
- * The one dropdown on every Minecraft version: a vanilla button with a filled chevron after its label, and a menu
- * panel that opens under it. The menu list lives in the screen's children (so clicks, scrolling and the test bridge
- * reach it) but renders in the screen's overlay pass, above widgets and content on every version. The panel itself
- * is drawn here because vanilla draws list panels through different - version-specific - machinery. The chevron
- * travels with the button, so it cannot get lost to per-version render order like the hand-drawn one it replaces.
+ * The one dropdown on every Minecraft version: a plain vanilla button whose menu panel opens under it. The menu
+ * is not a screen child - the screen forwards clicks, scrolling and the test bridge to the open menus - but it
+ * renders in the screen's overlay pass, above widgets and content on every version. The panel itself is drawn
+ * here because vanilla draws list panels through different - version-specific - machinery.
  */
 public final class DropdownWidget extends Button {
 	/** Row height of the menu panel; the panel spans exactly the button's width, like a vanilla menu. */
 	public static final int MENU_ROW_HEIGHT = 14;
 	/** The menu opens this far below the button. */
 	private static final int MENU_GAP = 2;
-	private static final int CHEVRON_COLOR = 0xFFB0B0B0;
 	/** The sprite rect is the row rect plus this on every side: nine pixels of soft sprite edge plus three of padding. */
 	private static final int SPRITE_MARGIN = 12;
 
@@ -111,14 +109,13 @@ public final class DropdownWidget extends Button {
 					.withStyle(index == selected ? ChatFormatting.YELLOW : ChatFormatting.WHITE))));
 		int top = top() + getHeight() + MENU_GAP;
 		int visibleRows = Math.max(1, Math.min(options.size(), (bottomLimit - top) / MENU_ROW_HEIGHT));
-		// Four pixels of slack absorb vanilla's phantom-scroll constant, so a fitting menu never shows a scrollbar.
-		menu = new RowListWidget(minecraft, getWidth(), minecraft.getWindow().getGuiScaledHeight(), getWidth(), left(), top, top + visibleRows * MENU_ROW_HEIGHT + 4, MENU_ROW_HEIGHT, rows,
+		menu = new RowListWidget(minecraft, getWidth(), minecraft.getWindow().getGuiScaledHeight(), getWidth(), left(), top, top + visibleRows * MENU_ROW_HEIGHT, MENU_ROW_HEIGHT, rows,
 				index -> {
 					closeMenu();
 					onPick.accept(index);
 				});
 		panelTop = top;
-		panelBottom = top + visibleRows * MENU_ROW_HEIGHT + 4;
+		panelBottom = top + visibleRows * MENU_ROW_HEIGHT;
 	}
 
 	/**
@@ -216,7 +213,6 @@ public final class DropdownWidget extends Button {
 		// Button is abstract here and leaves its look to subclasses, so the vanilla sprite and label are extracted by hand.
 		extractDefaultSprite(graphics);
 		extractDefaultLabel(graphics.textRendererForWidget(this, GuiGraphicsExtractor.HoveredTextEffects.NONE));
-		drawChevron(new VersionedMatrices(graphics));
 	}
 	/*?} elif >=1.21.11 {*/
 	/*@Override
@@ -224,29 +220,6 @@ public final class DropdownWidget extends Button {
 		// Button is abstract here and leaves its look to subclasses, so the vanilla sprite and label are drawn by hand.
 		renderDefaultSprite(graphics);
 		renderDefaultLabel(graphics.textRendererForWidget(this, GuiGraphics.HoveredTextEffects.NONE));
-		drawChevron(new VersionedMatrices(graphics));
-	}
-	*//*?} elif >=1.20 {*/
-	/*@Override
-	protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		super.renderWidget(graphics, mouseX, mouseY, delta);
-		drawChevron(new VersionedMatrices(graphics));
-	}
-	*//*?} else {*/
-	/*@Override
-	public void renderButton(PoseStack matrices, int mouseX, int mouseY, float delta) {
-		super.renderButton(matrices, mouseX, mouseY, delta);
-		drawChevron(new VersionedMatrices());
 	}
 	*//*?}*/
-
-	/** A small filled chevron right after the centered label; the vanilla font carries no triangle glyph on every version. */
-	private void drawChevron(VersionedMatrices matrices) {
-		int labelWidth = font.width(getMessage());
-		int chevron = left() + Math.max(0, (getWidth() - labelWidth) / 2 + labelWidth + 3);
-		int first = top() + 7;
-		matrices.fill(chevron, first, chevron + 5, first + 1, CHEVRON_COLOR);
-		matrices.fill(chevron + 1, first + 1, chevron + 4, first + 2, CHEVRON_COLOR);
-		matrices.fill(chevron + 2, first + 2, chevron + 3, first + 3, CHEVRON_COLOR);
-	}
 }

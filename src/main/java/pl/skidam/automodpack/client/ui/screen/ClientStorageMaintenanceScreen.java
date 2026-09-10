@@ -77,7 +77,7 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		}
 		DialogLayout layout = layoutDialogWithActions(28, LINE_HEIGHT, lines.size() * LINE_HEIGHT, LINE_HEIGHT, maintenanceRow, footerRow);
 		this.titleTop = layout.titleTop();
-		List<AbstractWidget> buttons = addActionAreaAt(PANEL_WIDTH, layout.actionsTop(), maintenanceRow, footerRow);
+		List<AbstractWidget> buttons = addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, maintenanceRow, footerRow);
 		buttons.get(0).active = !busy && !closed;
 		buttons.get(1).active = !busy && !closed;
 		DialogColumn column = layout.column();

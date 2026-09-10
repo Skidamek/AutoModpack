@@ -32,6 +32,7 @@
   "automodpack.confirm.unverifiedCount": "%s of %s mod files were not found on Modrinth or CurseForge.",
   "automodpack.confirm.unverifiedExplain": "They can be harmless custom mods, edited mods, or malicious mods. AutoModpack cannot tell which.",
   "automodpack.confirm.ack": "I understand the risk and trust this server.",
+  "automodpack.confirm.ackCountdown": "The risk box unlocks in %s seconds.",
   "automodpack.confirm.ackUnlock": "Check the risk box to unlock.",
   "automodpack.confirm.customize": "Customize",
   "automodpack.confirm.keepExistingMods": "Keep %s existing mod files",

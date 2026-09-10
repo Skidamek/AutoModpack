@@ -45,7 +45,8 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
  */
 public class ModpackSelectionScreen extends VersionedScreen {
 
-	private static final int ROW_WIDTH = 500;
+	/** Symmetric margins on both sides of the group list; rows span the rest of the screen, like vanilla list screens. */
+	private static final int LIST_MARGIN = 12;
 	/** Vanilla checkbox geometry: the box plus the gap before its label. */
 	private static final int CHECKBOX_LABEL_OFFSET = 24;
 
@@ -171,10 +172,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (selectionAction == null && resolutionError.isEmpty() && !this.saveButton.active) setTooltip(this.saveButton, VersionedText.translatable("automodpack.selection.noChanges"));
 		int listTop = 80;
 		listBottom = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, actionY, footer) - 8;
-		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, panelWidth(ROW_WIDTH), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
+		this.addRenderableWidget(new GroupSelectionList(this.minecraft, this.width, this.height, listWidth(), listTop, listBottom, listItems(), this::onListToggle, this::onListInspect));
 		String platformLabel = platformLabel();
 		int platformButtonWidth = Math.max(90, Math.min(160, this.font.width(platformLabel) + 26));
-		this.platformDropdown = dropdownWidget(panelLeft(ROW_WIDTH) + panelWidth(ROW_WIDTH) - platformButtonWidth, 24, platformButtonWidth, 20, VersionedText.literal(platformLabel));
+		this.platformDropdown = dropdownWidget(listLeft() + listWidth() - platformButtonWidth, 24, platformButtonWidth, 20, VersionedText.literal(platformLabel));
 		setTooltip(this.platformDropdown, VersionedText.translatable("automodpack.selection.platformTooltip"));
 		this.platformDropdown.setOptions(platformOptions(), effectivePlatform().ordinal(), listBottom, index -> pickPlatform(ClientPlatform.values()[index]));
 	}
@@ -529,7 +530,16 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private int groupLabelWidth() {
-		return Math.max(1, panelWidth(ROW_WIDTH) - CHECKBOX_LABEL_OFFSET - GroupSelectionList.INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM - 4);
+		return Math.max(1, listWidth() - CHECKBOX_LABEL_OFFSET - GroupSelectionList.INFO_BUTTON_WIDTH - ActionAreaLayout.SEAM - 4);
+	}
+
+	/** The group list spans the screen between two symmetric margins. */
+	private int listWidth() {
+		return Math.max(1, this.width - LIST_MARGIN * 2);
+	}
+
+	private int listLeft() {
+		return (this.width - listWidth()) / 2;
 	}
 
 	private static long groupBytes(GroupManifest.Group group) {
@@ -616,8 +626,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				: VersionedText.translatable("automodpack.selection.description");
 		// The header stack shares the rail with the platform dropdown (y 24..44), so the description
 		// wraps inside the space left of it and the summary waits until that zone ends.
-		int railLeft = panelLeft(ROW_WIDTH);
-		int railWidth = panelWidth(ROW_WIDTH);
+		int railLeft = listLeft();
+		int railWidth = listWidth();
 		List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - platformDropdown.getWidth() - 8);
 		if (descriptionLines.size() > 2) descriptionLines = descriptionLines.subList(0, 2);
 		for (int index = 0; index < descriptionLines.size(); index++)
@@ -644,7 +654,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	/** Draws one status line centered below the header stack; two wrapped lines fit between it and the first row. */
 	private void drawWrappedStatus(VersionedMatrices matrices, MutableComponent text) {
 
-		List<String> lines = wrapToWidth(this.font, text.getString(), panelWidth(ROW_WIDTH), 2);
+		List<String> lines = wrapToWidth(this.font, text.getString(), listWidth(), 2);
 		int firstY = lines.size() > 1 ? 55 : 60;
 		for (String line : lines) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(text.getStyle()), this.width / 2, firstY, TextColors.WHITE);

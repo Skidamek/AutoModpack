@@ -51,7 +51,7 @@ public final class DetachedJoinPromptScreen extends VersionedScreen {
 		int headerLines = modpackName.isBlank() ? 1 : 2;
 		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, lines.size() * LINE_HEIGHT, 0, auxiliary, footer);
 		this.titleTop = layout.titleTop();
-		addActionAreaAt(ActionAreaLayout.FOOTER_RAIL, layout.actionsTop(), auxiliary, footer);
+		addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, auxiliary, footer);
 		addCenteredScrollBody(BODY, layout.column().bodyTop(), layout.column().bodyBottom(), lines);
 	}
 
