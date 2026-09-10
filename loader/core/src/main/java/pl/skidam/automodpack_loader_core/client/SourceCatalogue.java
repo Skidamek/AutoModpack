@@ -69,10 +69,13 @@ final class SourceCatalogue {
 		return path != null && path.toLowerCase(Locale.ROOT).endsWith(".jar");
 	}
 
+	/** A sha1 counts as first-party when the running lookup resolved it or a previous resolution is persisted in the platform cache. */
 	boolean firstPartyHit(String sha1) {
+		if (sha1 == null || sha1.isBlank()) return false;
 		FetchManager manager = sourceFetchManager;
-		if (manager == null || sha1 == null || sha1.isBlank()) return false;
-		return manager.hasSource(sha1);
+		if (manager != null && manager.hasSource(sha1)) return true;
+		PlatformCache.Record record = platformCache.getAll(List.of(sha1)).get(sha1);
+		return record != null && (record.modrinth() != null || record.curseforge() != null);
 	}
 
 	List<String> unverifiedSelectedJarPaths(SelectedModpackTarget target) {
