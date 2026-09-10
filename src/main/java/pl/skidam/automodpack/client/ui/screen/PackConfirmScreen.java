@@ -46,7 +46,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private boolean keepExistingMods;
 	private boolean acknowledged;
 	private boolean finished;
-	private int ticksRemaining = TIMER_TICKS;
+	// The countdown only exists to gate unverified risk; verified installs start unlocked.
+	private int ticksRemaining = 0;
 	private AbstractWidget cancelButton;
 	private AbstractWidget primaryButton;
 	private AbstractWidget ackCheckbox;
@@ -66,6 +67,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 		this.laterCancel = null;
 		this.unverifiedPaths.addAll(updater.unverifiedSelectedJarPaths());
 		this.previousUnverifiedKey = String.join("\n", unverifiedPaths);
+		// The read countdown only exists for unverified risk; verified installs start unlocked.
+		if (unverified) ticksRemaining = TIMER_TICKS;
 	}
 
 	/** Confirm before writing unverified jars on a later update. */
@@ -80,6 +83,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 		this.laterCancel = Objects.requireNonNull(cancelAction, "cancelAction");
 		this.unverifiedPaths.addAll(updater.unverifiedSelectedJarPaths());
 		this.previousUnverifiedKey = String.join("\n", unverifiedPaths);
+		// The read countdown only exists for unverified risk; verified installs start unlocked.
+		if (unverified) ticksRemaining = TIMER_TICKS;
 	}
 
 	@Override
@@ -141,8 +146,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 		// The footer row is always last: cancel, review files, primary.
 		cancelButton = widgets.get(widgets.size() - 3);
 		primaryButton = widgets.get(widgets.size() - 1);
-		primaryButton.active = ticksRemaining <= 0 && acknowledged;
-		if (unverified) this.setInitialFocus(cancelButton);
+		primaryButton.active = !unverified || (ticksRemaining <= 0 && acknowledged);
+		if (unverified) {
+			// A real focus (not the deferred initial-focus request) keeps the highlighted state on every version.
+			this.setFocused(cancelButton);
+		}
 
 		int bottomY = actionAreaTop(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		layoutBody(bottomY);
@@ -326,9 +334,11 @@ public final class PackConfirmScreen extends VersionedScreen {
 			ticksRemaining--;
 			// Matched installs have no ack box; the countdown only gates unverified risk.
 			if (ticksRemaining == 0 && ackCheckbox != null) {
+				// The countdown just ended: this is the moment the risk box unlocks.
 				ackCheckbox.setMessage(ackMessage());
+				ackCheckbox.active = true;
 			}
-			if (primaryButton != null) primaryButton.active = ticksRemaining <= 0 && acknowledged;
+			if (primaryButton != null) primaryButton.active = !unverified || (ticksRemaining <= 0 && acknowledged);
 		}
 		if (firstInstall) {
 			if (updater.getConfirmationState() == ModpackUpdater.ConfirmationState.CANCELLED) {
