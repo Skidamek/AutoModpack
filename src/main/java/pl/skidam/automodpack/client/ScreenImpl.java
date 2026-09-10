@@ -195,8 +195,13 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, updater, continueAction, cancelAction));
 		}
 
+		/** Parents whose screen died with the login: a detached-join sync disconnects the login, so the prompt and the connect screen behind it are dead returns. */
+		private static boolean isDeadReturn(Screen parent) {
+			return parent == null || parent instanceof ConnectScreen || parent instanceof TitleScreen || parent instanceof DetachedJoinPromptScreen;
+		}
+
 		private static Screen previewParent(Screen parent) {
-			if (parent == null || parent instanceof ConnectScreen || parent instanceof TitleScreen) return multiplayerScreen();
+			if (isDeadReturn(parent)) return multiplayerScreen();
 			return parent;
 		}
 
@@ -226,7 +231,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		private static Screen resumableFailureParent(Screen parent) {
-			if (parent == null || parent instanceof ConnectScreen || parent instanceof TitleScreen) return multiplayerScreen();
+			if (isDeadReturn(parent)) return multiplayerScreen();
 			return parent;
 		}
 
@@ -263,7 +268,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		private static Screen cancelDestination() {
-			if (interactiveParent != null && !(interactiveParent instanceof ConnectScreen) && !isTransient(interactiveParent)) return interactiveParent;
+			if (!isDeadReturn(interactiveParent) && !isTransient(interactiveParent)) return interactiveParent;
 			return multiplayerScreen();
 		}
 	}
