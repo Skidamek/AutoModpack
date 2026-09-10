@@ -50,6 +50,13 @@ public interface ScreenService {
 		waiting();
 	}
 
+	/**
+	 * The screens the player interacted with in this flow are gone, e.g. a login torn down before its modpack sync;
+	 * the remembered return target is dropped and later returns land on the neutral fallback until a new interactive
+	 * screen shows.
+	 */
+	default void discardReturnTarget() {}
+
 	Optional<String> getScreenString();
 
 	Optional<Object> getScreen();

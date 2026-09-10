@@ -115,6 +115,11 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
+	public void discardReturnTarget() {
+		executeOnClient(() -> Screens.interactiveParent = null);
+	}
+
+	@Override
 	public Optional<String> getScreenString() {
 		Screen screen = Screens.getScreen();
 		return Optional.ofNullable(screen).map(current -> current.getTitle().getString().toLowerCase(Locale.ROOT));
@@ -139,6 +144,8 @@ public class ScreenImpl implements ScreenService {
 
 	private static class Screens {
 		private static Screen interactiveParent;
+		// A Preparing/Download screen owns the player's attention from the moment one is asked for until a real screen shows again; the loading transition delays that swap, so this flag and not the live screen says when a flow is transient.
+		private static boolean transientAttention;
 		private static final LoadingTransition LOADING_TRANSITION = new LoadingTransition(ScreenImpl::executeOnClient);
 
 		private static Screen getScreen() {
@@ -150,6 +157,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void setScreen(Screen screen) {
+			// A live login screen must be replaced instantly, without the transition: the vanilla join proceeds under our screens.
 			if (getScreen() instanceof ConnectScreen) {
 				LOADING_TRANSITION.cancel();
 				setScreenNow(screen);
@@ -163,23 +171,38 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		private static void beginTransient(Screen screen) {
-			Screen current = Screens.getScreen();
-			if (!isTransient(current)) interactiveParent = current;
+			beginTransientAttention();
 			LOADING_TRANSITION.begin(() -> setScreenNow(screen));
 		}
 
 		private static void setScreenNow(Screen screen) {
-			Screen current = Screens.getScreen();
 			if (isTransient(screen)) {
-				if (!isTransient(current)) interactiveParent = current;
+				beginTransientAttention();
 			} else {
 				interactiveParent = null;
+				transientAttention = false;
 			}
 			/*? if >=26.2 {*/
 			Minecraft.getInstance().gui.setScreen(screen);
 			/*?} else {*/
 			/*Minecraft.getInstance().setScreen(screen);
 			*//*?}*/
+		}
+
+		/** Starts a transient episode: the busy screen owns the display and the screen under it is remembered as the place to return to. */
+		private static void beginTransientAttention() {
+			if (!transientAttention) interactiveParent = getScreen();
+			transientAttention = true;
+		}
+
+		/** Where a flow that borrowed the display returns to: the remembered screen during a transient episode, else the screen that is up. */
+		private static Screen flowParent() {
+			return transientAttention ? interactiveParent : getScreen();
+		}
+
+		/** Screens with nowhere honest to return to land on the multiplayer hub. */
+		private static Screen returnTarget(Screen parent) {
+			return parent == null ? multiplayerScreen() : parent;
 		}
 
 		public static void download(DownloadManager downloadManager, String modpackName) {
@@ -199,10 +222,7 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
-			Screen parent = Screens.getScreen();
-			if (isTransient(parent)) parent = interactiveParent;
-			parent = previewParent(parent);
-			interactiveParent = null;
+			Screen parent = returnTarget(flowParent());
 			if (updater != null && preview.mode() == UpdatePreview.Mode.UPDATE && updater.planWritesUnverifiedJar(preview.plan())) {
 				Screens.setScreen(new PackConfirmScreen(parent, updater, preview, continueAction, cancelAction));
 				return;
@@ -210,32 +230,18 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, updater, continueAction, cancelAction));
 		}
 
-		/** Parents whose screen died with the login: a detached-join sync disconnects the login, so the prompt and the connect screen behind it are dead returns. */
-		private static boolean isDeadReturn(Screen parent) {
-			return parent == null || parent instanceof ConnectScreen || parent instanceof TitleScreen || parent instanceof DetachedJoinPromptScreen;
-		}
-
-		private static Screen previewParent(Screen parent) {
-			if (isDeadReturn(parent)) return multiplayerScreen();
-			return parent;
-		}
-
 		private static boolean isTransient(Screen screen) {
 			return screen instanceof PreparingScreen || screen instanceof DownloadScreen;
 		}
 
 		public static void history(HistoryViewRequest request) {
-			Screen parent = Screens.getScreen();
-			Screens.setScreen(new ContentHistoryScreen(parent, request));
+			Screens.setScreen(new ContentHistoryScreen(flowParent(), request));
 		}
 
 		public static void failure(FailureRequest request) {
-			Screen parent = Screens.getScreen();
-			if (isTransient(parent)) parent = interactiveParent;
-			parent = switch (request.returnDestination()) {
-				case CURRENT_SCREEN -> resumableFailureParent(parent);
+			Screen parent = switch (request.returnDestination()) {
+				case CURRENT_SCREEN -> returnTarget(flowParent());
 				case MULTIPLAYER -> multiplayerScreen();
-				case TITLE -> new TitleScreen();
 			};
 			CertificatePinMismatchException mismatch = Throwables.findCause(request.cause(), CertificatePinMismatchException.class);
 			if (mismatch != null) {
@@ -243,11 +249,6 @@ public class ScreenImpl implements ScreenService {
 				return;
 			}
 			Screens.setScreen(new ErrorScreen(parent, request));
-		}
-
-		private static Screen resumableFailureParent(Screen parent) {
-			if (isDeadReturn(parent)) return multiplayerScreen();
-			return parent;
 		}
 
 		public static void multiplayer() {
@@ -278,13 +279,8 @@ public class ScreenImpl implements ScreenService {
 		public static void waiting(Runnable onCancel) {
 			Screens.setScreen(new PreparingScreen(() -> {
 				if (onCancel != null) onCancel.run();
-				Screens.setScreen(cancelDestination());
+				Screens.setScreen(returnTarget(interactiveParent));
 			}));
-		}
-
-		private static Screen cancelDestination() {
-			if (!isDeadReturn(interactiveParent) && !isTransient(interactiveParent)) return interactiveParent;
-			return multiplayerScreen();
 		}
 	}
 }
