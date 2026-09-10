@@ -157,11 +157,14 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		controller.stopSyncing(pack, this::reopenOrList);
 	}
 
-	/** Resume syncing is an explicit attach: the normal update flow runs and ends attached whatever it had to do. */
+	/** Resume syncing is an explicit attach: the normal update flow runs and ends attached; only an inline completion navigates, other outcomes release the buttons. */
 	private void resumeSyncing() {
 		if (busy) return;
 		markBusy();
-		controller.update(pack, completed -> reopenOrList());
+		controller.update(pack, completed -> {
+			released();
+			if (completed) reopenOrList();
+		});
 	}
 
 	private void returnToList() {
