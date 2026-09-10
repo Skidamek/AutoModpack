@@ -54,6 +54,9 @@ stonecutter.parameters {
 	properties.tags(version, loader)
 
 	replacements {
+		string(current.parsed < "1.20.2") {
+			replace(".SystemToastId.", ".SystemToastIds.")
+		}
 		string(current.parsed >= "1.20.2") {
 			replace("ServerboundCustomQueryPacket", "ServerboundCustomQueryAnswerPacket")
 			replace(".SystemToastIds.", ".SystemToastId.")
