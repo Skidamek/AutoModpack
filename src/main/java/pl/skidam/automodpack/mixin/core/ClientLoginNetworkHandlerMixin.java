@@ -22,10 +22,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 
-import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.networking.client.ClientLoginNetworkAddon;
 import pl.skidam.automodpack.networking.client.IntentionalDisconnectControl;
-import pl.skidam.automodpack_loader_core.client.SessionUpdateState;
 
 @Mixin(value = ClientHandshakePacketListenerImpl.class, priority = 300)
 public class ClientLoginNetworkHandlerMixin implements IntentionalDisconnectControl {
@@ -55,18 +53,12 @@ public class ClientLoginNetworkHandlerMixin implements IntentionalDisconnectCont
 	/*? if >=26.2 {*/
 	@WrapWithCondition(method = "onDisconnect", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;setScreen(Lnet/minecraft/client/gui/screens/Screen;)V"))
 	private boolean autoModpack$suppressIntentionalDisconnectScreen(Gui gui, Screen screen) {
-		boolean intentional = autoModpack$intentionalDisconnect.getAndSet(false);
-		// A real server rejection during login is the one kick worth answering with the pending-restart reminder.
-		if (!intentional && SessionUpdateState.hasAppliedContentNotLoaded()) ScreenImpl.updatePendingRestartToast();
-		return !intentional;
+		return !autoModpack$intentionalDisconnect.getAndSet(false);
 	}
 	/*?} else {*/
 	/*@WrapWithCondition(method = "onDisconnect", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;setScreen(Lnet/minecraft/client/gui/screens/Screen;)V"))
 	private boolean autoModpack$suppressIntentionalDisconnectScreen(Minecraft minecraft, Screen screen) {
-		boolean intentional = autoModpack$intentionalDisconnect.getAndSet(false);
-		// A real server rejection during login is the one kick worth answering with the pending-restart reminder.
-		if (!intentional && SessionUpdateState.hasAppliedContentNotLoaded()) ScreenImpl.updatePendingRestartToast();
-		return !intentional;
+		return !autoModpack$intentionalDisconnect.getAndSet(false);
 	}
 	*//*?}*/
 }
