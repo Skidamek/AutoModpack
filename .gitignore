@@ -48,3 +48,15 @@ __pycache__/
 *.egg-info/
 autotester/out/
 autotester/.hmc-cache/
+
+# agent scratch and internal notes, never commit these
+/AGENTS.md
+/CONTEXT.md
+/NEXT-*.md
+/ONE-JAR.md
+/security-audit.md
+/.commandcode/
+
+# local build artifacts and throwaway debug scenarios
+/autotester/merged-*.jar
+/autotester/scenarios/zz-*.yaml
