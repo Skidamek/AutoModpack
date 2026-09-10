@@ -4,6 +4,7 @@ import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public final class ClientLoginDisconnect {
 	private ClientLoginDisconnect() {}
@@ -12,5 +13,7 @@ public final class ClientLoginDisconnect {
 		((IntentionalDisconnectControl) handler).automodpack$markIntentionalDisconnect();
 		var connection = ((ClientLoginNetworkHandlerAccessor) handler).getConnection();
 		((ClientConnectionAccessor) connection).getChannel().disconnect();
+		// The connect screen and any login prompt above it died with the login; nothing may return to them.
+		ScreenManager.discardReturnTarget();
 	}
 }

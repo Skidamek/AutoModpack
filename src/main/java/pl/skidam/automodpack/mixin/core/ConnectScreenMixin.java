@@ -52,8 +52,9 @@ public abstract class ConnectScreenMixin {
 		ServerAddressPin.Parsed parsed = ServerAddressPin.parse(info.ip);
 		info.ip = parsed.address();
 		if (parsed.isMalformed()) {
+			// The connect screen belongs to the vanilla join flow; it cannot host a failure return.
 			ScreenManager.failure(FailureRequest.of(new IllegalArgumentException(parsed.error()), "automodpack.pin.invalid", FailureCategory.SECURITY,
-					FailureDestination.CURRENT_SCREEN, null));
+					FailureDestination.MULTIPLAYER, null));
 			return;
 		}
 

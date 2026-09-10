@@ -79,6 +79,10 @@ public final class ScreenManager {
 		instance.waiting(onCancel);
 	}
 
+	public static void discardReturnTarget() {
+		instance.discardReturnTarget();
+	}
+
 	public static Optional<String> getScreenString() {
 		return instance.getScreenString();
 	}
