@@ -317,33 +317,15 @@ public class DownloadClient implements AutoCloseable {
 		});
 	}
 
-	/**
-	 * Turns a validated candidate into a configured connection, releasing the socket when the negotiation fails. A relayed transport can die before any data flows, so one fresh connection settles it; a server rejection
-	 * is a verdict and is rethrown as-is.
-	 */
+	/** Turns a validated candidate into a configured connection, releasing the socket when the negotiation fails. */
 	private Connection configuredConnection(TlsCandidate candidate) throws IOException {
 		try {
-			return negotiate(candidate.socket());
-		} catch (ServerRejectedException e) {
+			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
+			return new Connection(candidate.socket(), secretBytes);
+		} catch (IOException e) {
 			closeQuietly(candidate.socket());
 			throw e;
-		} catch (IOException first) {
-			closeQuietly(candidate.socket());
-			LOGGER.info("Modpack connection closed while negotiating with the server; retrying once");
-			TlsCandidate retry = openTlsCandidate();
-			try {
-				return negotiate(retry.socket());
-			} catch (IOException second) {
-				closeQuietly(retry.socket());
-				second.addSuppressed(first);
-				throw second;
-			}
 		}
-	}
-
-	private Connection negotiate(SSLSocket socket) throws IOException {
-		socket.setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
-		return new Connection(socket, secretBytes);
 	}
 
 	private static <T> CompletableFuture<T> rejectCandidate(TlsCandidate candidate, Throwable error) {
@@ -464,9 +446,6 @@ public class DownloadClient implements AutoCloseable {
 }
 
 class Connection implements AutoCloseable {
-
-	/** The server's negotiation error frames carry short fixed strings; anything past this is a corrupt stream. */
-	private static final int MAX_ERROR_MESSAGE_LENGTH = 1024;
 
 	private byte protocolVersion = LATEST_SUPPORTED_PROTOCOL_VERSION;
 	private CompressionType compressionType = CompressionType.ZSTD;
@@ -611,18 +590,8 @@ class Connection implements AutoCloseable {
 		byte version = in.readByte();
 		if (version >= 1 && version < protocolVersion) protocolVersion = version;
 		byte type = in.readByte();
-		if (type == ERROR) throw new ServerRejectedException(readErrorMessage());
 		if (type != expectedType) throw new IOException("Unexpected response: " + type);
 		return version;
-	}
-
-	/** Reads the [length][utf-8 message] body of an error frame. */
-	private String readErrorMessage() throws IOException {
-		int length = in.readInt();
-		if (length < 0 || length > MAX_ERROR_MESSAGE_LENGTH) throw new IOException("Invalid error message length: " + length);
-		byte[] messageBytes = new byte[length];
-		in.readFully(messageBytes);
-		return new String(messageBytes, StandardCharsets.UTF_8);
 	}
 
 	@Override
