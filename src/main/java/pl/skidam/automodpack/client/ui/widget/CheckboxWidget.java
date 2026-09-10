@@ -45,6 +45,8 @@ public class CheckboxWidget extends AbstractButton {
 	private final Consumer<Boolean> onValueChange;
 	private final int rightReserve;
 	private State state;
+	// The plain label we were given; on 26.x getMessage() swaps in a gray-styled copy while the widget is disabled, which must not reach the rendered lines.
+	private Component label;
 	private List<MutableComponent> labelLines;
 
 	public CheckboxWidget(Font font, int x, int y, int maxWidth, Component message, boolean selected, Consumer<Boolean> onValueChange) {
@@ -62,6 +64,7 @@ public class CheckboxWidget extends AbstractButton {
 		this.onValueChange = onValueChange;
 		this.state = state;
 		this.rightReserve = rightReserve;
+		this.label = message;
 		relayout(maxWidth);
 	}
 
@@ -75,13 +78,14 @@ public class CheckboxWidget extends AbstractButton {
 
 	@Override
 	public void setMessage(Component message) {
+		this.label = message;
 		super.setMessage(message);
 		relayout(getWidth());
 	}
 
 	/** Wraps the label to the caller's width like vanilla does; the widget fills that width so whole rows stay one click target. */
 	private void relayout(int maxWidth) {
-		labelLines = wrapLabel(getMessage(), textWidth(maxWidth));
+		labelLines = wrapLabel(label, textWidth(maxWidth));
 		this.width = Math.max(1, maxWidth);
 		this.height = Math.max(BOX_SIZE, labelLines.size() * font.lineHeight);
 	}
