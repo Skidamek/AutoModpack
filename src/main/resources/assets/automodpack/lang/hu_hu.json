@@ -7,8 +7,6 @@
   "automodpack.restart.secDescription": "Újraindítod most?",
   "automodpack.restart.confirm": "Igen, zárd be a játékot",
   "automodpack.restart.cancel": "Nem, vissza a játékhoz",
-  "automodpack.restart.toast.title": "Modpack frissítve",
-  "automodpack.restart.toast.description": "Indítsd újra a játékot a betöltéséhez",
   "automodpack.selection.title": "Modpack beállítások",
   "automodpack.selection.description": "Válaszd ki a modpack opcionális részeit.",
   "automodpack.selection.saved": "A választásod elmentve.",

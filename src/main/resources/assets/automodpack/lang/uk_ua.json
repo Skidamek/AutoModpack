@@ -7,8 +7,6 @@
   "automodpack.restart.secDescription": "Перезапустити зараз?",
   "automodpack.restart.confirm": "Так, закрити гру",
   "automodpack.restart.cancel": "Ні, повернутися до гри",
-  "automodpack.restart.toast.title": "Модпак оновлено",
-  "automodpack.restart.toast.description": "Перезапустіть гру, щоб завантажити її",
   "automodpack.selection.title": "Налаштування модпака",
   "automodpack.selection.description": "Виберіть необов'язкові частини модпака.",
   "automodpack.selection.saved": "Вибір збережено.",
