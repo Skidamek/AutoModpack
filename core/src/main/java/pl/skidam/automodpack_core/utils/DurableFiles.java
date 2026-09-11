@@ -13,7 +13,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Filesystem publication primitives whose failure modes preserve the power-loss contract. */
+/** Filesystem publication primitives with defined power-loss contracts: durable writes force, volatile writes only promise atomic-while-running. */
 public final class DurableFiles {
 	private static final AtomicBoolean NON_ATOMIC_RENAME_WARNED = new AtomicBoolean();
 
@@ -65,6 +65,26 @@ public final class DurableFiles {
 			}
 			replace(temporary, target);
 			FileTrees.forceDirectory(parent);
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
+	}
+
+	/**
+	 * Writes bytes to a fresh same-filesystem temporary and publishes it with {@link #replace}, skipping every
+	 * force. The publication is atomic while the system runs, so a reader never sees torn content, but a power
+	 * cut may lose the newest file or keep the old one; for rebuildable data such as cache records that only
+	 * costs a recompute.
+	 */
+	public static void writeVolatile(Path target, byte[] bytes) throws IOException {
+		Path parent = target.toAbsolutePath().normalize().getParent();
+		if (parent == null) throw new IOException("Path has no parent: " + target);
+		Files.createDirectories(parent);
+
+		Path temporary = parent.resolve("." + target.getFileName() + "." + UUID.randomUUID() + ".tmp");
+		try {
+			Files.write(temporary, bytes);
+			replace(temporary, target);
 		} finally {
 			Files.deleteIfExists(temporary);
 		}

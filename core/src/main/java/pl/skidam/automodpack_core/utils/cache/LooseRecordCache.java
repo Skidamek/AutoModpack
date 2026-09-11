@@ -58,7 +58,10 @@ abstract class LooseRecordCache<T> implements AutoCloseable {
 	protected void writeRecord(String key, T record) {
 		hotRecords.put(key, record);
 		try {
-			ConfigTools.writeAtomic(recordPath(key), record);
+			// A cache record is rebuildable: a bulk hash run publishes thousands of records, so
+			// publication stays atomic-rename but skips the fsync pair, and a record lost to a power
+			// cut only costs one rehash.
+			ConfigTools.writeCached(recordPath(key), record);
 		} catch (IOException e) {
 			LOGGER.debug("Could not persist {} cache record: {}", description, key, e);
 		}
