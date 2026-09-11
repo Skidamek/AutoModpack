@@ -223,6 +223,7 @@
   "automodpack.selection.platformTooltip": "Wechselt die Plattform, mit der optionale Gruppen aufgelöst werden. Zurück zur erkannten Plattform bedeutet wieder automatische Erkennung.",
   "automodpack.selection.platformButton": "OS: %s",
   "automodpack.selection.platformDetected": "%s (erkannt)",
+  "automodpack.selection.platformUndetected": "Keine Plattform erkannt",
   "automodpack.selection.category": "Kategorie: %s",
   "automodpack.selection.requiredAlways": "Erforderlich: immer enthalten",
   "automodpack.selection.defaultSelected": "Standard: ausgewählt, bis du sie entfernst",

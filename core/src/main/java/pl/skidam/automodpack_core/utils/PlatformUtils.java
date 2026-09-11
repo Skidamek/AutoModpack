@@ -24,9 +24,10 @@ public final class PlatformUtils {
 
 	/**
 	 * Recognizes only the first-class desktop systems; every other kernel (the BSDs, Solaris, Android launchers
-	 * that do not announce themselves, anything new) lands in {@link OperatingSystem#OTHER}, which resolves modpack
-	 * content to platform-agnostic groups only. Mobile and other unusual systems are not probed for on purpose -
-	 * every launcher reports something different - the player overrides to OTHER manually when detection fails.
+	 * that do not announce themselves, anything new) lands in {@link OperatingSystem#OTHER}, which knows nothing
+	 * about the platform: modpack content resolves to platform-agnostic groups only, and the player can still
+	 * pick a concrete platform in the selection screen when they know better. Mobile and other unusual systems
+	 * are not probed for on purpose - every launcher reports something different.
 	 * Order matters: "darwin" contains "win", so macOS must be tested before Windows.
 	 */
 	static OperatingSystem classify(String osName) {

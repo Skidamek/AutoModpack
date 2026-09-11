@@ -16,7 +16,6 @@ public record SelectedModpackTarget(
 	public SelectedModpackTarget {
 		document = Objects.requireNonNull(document);
 		selection = Objects.requireNonNull(selection);
-		platform = Objects.requireNonNull(platform);
 		flatTarget = Objects.requireNonNull(flatTarget);
 		if (!PackTarget.from(document).equals(PackTarget.fromFlat(flatTarget)))
 			throw new IllegalArgumentException("Selected flat target identity does not match the pack document");

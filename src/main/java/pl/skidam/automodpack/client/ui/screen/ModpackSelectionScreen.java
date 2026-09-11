@@ -195,7 +195,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private List<Component> platformOptions(List<ClientPlatform> choices) {
 		List<Component> options = new ArrayList<>(choices.size());
 		for (ClientPlatform platform : choices)
-			options.add(detectedPlatform.equals(platform)
+			options.add(platform.equals(detectedPlatform)
 					? VersionedText.translatable("automodpack.selection.platformDetected", platformDisplay(platform))
 					: VersionedText.literal(platformDisplay(platform)));
 		return options;
@@ -582,7 +582,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private ClientPlatform override() {
-		return detectedPlatform.equals(platformOverride) ? null : platformOverride;
+		return Objects.equals(detectedPlatform, platformOverride) ? null : platformOverride;
 	}
 
 	private ClientPlatform effectivePlatform() {
@@ -593,16 +593,17 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return VersionedText.translatable("automodpack.selection.platformButton", platformDisplay(effectivePlatform())).getString();
 	}
 
-	private static String platformDisplay(ClientPlatform platform) {
+	/** The display name of a platform choice; nothing is known about the platform when none is detected or chosen. */
+	private String platformDisplay(ClientPlatform platform) {
+		if (platform == null) return VersionedText.translatable("automodpack.selection.platformUndetected").getString();
 		if (platform.equals(ClientPlatform.WINDOWS)) return "Windows";
 		if (platform.equals(ClientPlatform.LINUX)) return "Linux";
 		if (platform.equals(ClientPlatform.MACOS)) return "macOS";
-		if (platform.equals(ClientPlatform.OTHER)) return "Other";
 		return platform.id();
 	}
 
 	private void pickPlatform(ClientPlatform platform) {
-		platformOverride = detectedPlatform.equals(platform) ? null : platform;
+		platformOverride = platform.equals(detectedPlatform) ? null : platform;
 		applySelectionChange(currentIntent(), Set.of(), null);
 	}
 
@@ -641,7 +642,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (descriptionLines.size() > 2) descriptionLines = descriptionLines.subList(0, 2);
 		for (int index = 0; index < descriptionLines.size(); index++)
 			drawTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), railLeft, 22 + index * 11, TextColors.WHITE);
-		drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", effectivePlatform().id(), resolution.selectedGroups().size())
+		drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", platformDisplay(effectivePlatform()), resolution.selectedGroups().size())
 				.withStyle(platformOverride == null ? ChatFormatting.GRAY : ChatFormatting.YELLOW), railLeft, 44, TextColors.WHITE);
 		// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
 		if (!resolutionError.isEmpty()) {

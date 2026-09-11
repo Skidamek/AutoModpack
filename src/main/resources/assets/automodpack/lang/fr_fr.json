@@ -223,6 +223,7 @@
   "automodpack.selection.platformTooltip": "Fait défiler la plateforme utilisée pour résoudre les groupes optionnels. Revenir à la plateforme détectée réactive la détection.",
   "automodpack.selection.platformButton": "OS : %s",
   "automodpack.selection.platformDetected": "%s (détecté)",
+  "automodpack.selection.platformUndetected": "Aucune plateforme détectée",
   "automodpack.selection.category": "Catégorie : %s",
   "automodpack.selection.requiredAlways": "Obligatoire : toujours inclus",
   "automodpack.selection.defaultSelected": "Par défaut : sélectionné tant que vous ne le retirez pas",

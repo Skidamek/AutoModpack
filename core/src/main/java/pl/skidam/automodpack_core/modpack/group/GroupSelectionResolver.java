@@ -26,7 +26,6 @@ public final class GroupSelectionResolver {
 	private static ResolvedSelection resolveInternal(GroupManifest manifest, SelectionIntent intent, ClientPlatform platform, boolean defaultSelection) {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(intent);
-		Objects.requireNonNull(platform);
 		ResolutionState state = new ResolutionState(manifest, intent, platform);
 		state.initializeMandatoryGroups();
 		state.collectStaleChoices();
@@ -51,7 +50,6 @@ public final class GroupSelectionResolver {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(clicked);
-		Objects.requireNonNull(platform);
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
@@ -72,7 +70,6 @@ public final class GroupSelectionResolver {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(category);
-		Objects.requireNonNull(platform);
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
@@ -86,7 +83,6 @@ public final class GroupSelectionResolver {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(current);
 		Objects.requireNonNull(category);
-		Objects.requireNonNull(platform);
 		Set<String> requestedGroups = new TreeSet<>(current.requestedGroups());
 		Set<String> requestedCategories = new TreeSet<>(current.requestedCategories());
 		Set<String> excludedGroups = new TreeSet<>(current.excludedGroups());
@@ -123,7 +119,6 @@ public final class GroupSelectionResolver {
 		Objects.requireNonNull(manifest);
 		Objects.requireNonNull(candidate);
 		Objects.requireNonNull(preferredGroups);
-		Objects.requireNonNull(platform);
 		if (preferredGroups.isEmpty() || partial == null) return Optional.empty();
 		Set<String> conflicts = new TreeSet<>();
 		for (String preferred : preferredGroups) {
@@ -169,6 +164,11 @@ public final class GroupSelectionResolver {
 			intent = Objects.requireNonNull(intent);
 			conflictingGroups = Set.copyOf(new TreeSet<>(conflictingGroups));
 		}
+	}
+
+	/** Names the resolution context in messages: the platform id, or the plain fact that nothing is known about the platform. */
+	private static String platformName(ClientPlatform platform) {
+		return platform == null ? "no platform detected" : "platform " + platform.id();
 	}
 
 	private enum Source {
@@ -221,7 +221,7 @@ public final class GroupSelectionResolver {
 				if (unavailableGroups.stream().anyMatch(closure.groups()::contains)) {
 					requestedUnavailableGroups.add(groupId);
 					addReason(groupId, GroupResolution.Reason.EXPLICIT_REQUEST_UNAVAILABLE);
-					errors.add("Group '" + groupId + "' was explicitly requested but is unavailable on " + platform.id());
+					errors.add("Group '" + groupId + "' was explicitly requested but is unavailable on " + platformName(platform));
 				} else if (!closure.excluded()) {
 					errors.add("Group '" + groupId + "' was explicitly requested but could not be selected");
 				}
@@ -244,7 +244,7 @@ public final class GroupSelectionResolver {
 			if (!group.supports(platform)) {
 				unavailableGroups.add(groupId);
 				addReason(groupId, GroupResolution.Reason.PLATFORM_INCOMPATIBLE);
-				if (forced) errors.add("Group '" + groupId + "' is unavailable on " + platform.id());
+				if (forced) errors.add("Group '" + groupId + "' is unavailable on " + platformName(platform));
 				return Closure.failure(Set.of(groupId));
 			}
 			if (selected.contains(groupId)) return Closure.success(Set.of(groupId));

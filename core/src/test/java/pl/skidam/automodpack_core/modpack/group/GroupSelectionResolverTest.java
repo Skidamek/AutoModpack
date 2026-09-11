@@ -145,6 +145,18 @@ class GroupSelectionResolverTest {
 		assertTrue(GroupSelectionResolver.resolve(manifest, intent, android).selectedGroups().contains("mobile"));
 	}
 
+	@Test
+	void noPlatformKeepsOnlyThePlatformAgnosticGroups() {
+		GroupManifest.Group any = group(false, true, Set.of());
+		GroupManifest.Group windows = new GroupManifest.Group("Windows", "", "", false, true, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.WINDOWS), new TreeMap<>());
+		GroupManifest manifest = manifest(Map.of("any", any, "windows", windows));
+
+		// Without a detected or chosen platform nothing is known, so platform-specific groups fall away and agnostic ones stay.
+		ResolvedSelection defaults = GroupSelectionResolver.resolveDefault(manifest, null);
+		assertEquals(Set.of("any"), defaults.selectedGroups());
+		assertEquals(GroupResolution.Status.UNAVAILABLE, defaults.resolution("windows").status());
+	}
+
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
 		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups));
 	}
