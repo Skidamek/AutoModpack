@@ -361,6 +361,8 @@
   "automodpack.selection.noChanges": "Sin cambios",
   "automodpack.management.preservedFilesCount": "%s archivos conservados",
   "automodpack.restart.preservedFiles": "%s archivos están en Archivos conservados",
+  "automodpack.restart.removeStale.one": "Eliminar pack viejo: %s",
+  "automodpack.restart.removeStale.other": "Eliminar %s packs viejos",
   "automodpack.selection.categoryPart": "%s de %s seleccionados",
   "automodpack.selection.categoryTooltip": "Toca para incluir todos los grupos opcionales de esta categoría. Toca de nuevo para excluirlos todos.",
   "automodpack.vault.restorePickFirst": "Seleccioná primero un archivo conservado.",

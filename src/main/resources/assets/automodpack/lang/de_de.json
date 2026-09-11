@@ -361,6 +361,8 @@
   "automodpack.selection.noChanges": "Keine Änderungen",
   "automodpack.management.preservedFilesCount": "%s gesicherte Dateien",
   "automodpack.restart.preservedFiles": "%s Dateien sind in Gesicherte Dateien",
+  "automodpack.restart.removeStale.one": "Altes Modpack entfernen: %s",
+  "automodpack.restart.removeStale.other": "%s alte Modpacks entfernen",
   "automodpack.selection.categoryPart": "%s von %s ausgewählt",
   "automodpack.selection.categoryTooltip": "Klicke, um jede optionale Gruppe dieser Kategorie einzuschließen. Klicke erneut, um alle auszuschließen.",
   "automodpack.vault.restorePickFirst": "Wähle zuerst eine gesicherte Datei.",

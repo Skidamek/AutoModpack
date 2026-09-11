@@ -356,6 +356,8 @@
   "automodpack.selection.noChanges": "無變更",
   "automodpack.management.preservedFilesCount": "%s 個保留的檔案",
   "automodpack.restart.preservedFiles": "%s 個檔案在「保留的檔案」裡",
+  "automodpack.restart.removeStale.one": "移除舊整合包：%s",
+  "automodpack.restart.removeStale.other": "移除 %s 個舊整合包",
   "automodpack.selection.categoryPart": "已選取 %s / %s",
   "automodpack.selection.categoryTooltip": "點擊包含此類別中的所有可選分組。再次點擊全部排除。",
   "automodpack.vault.restorePickFirst": "請先選擇一個保留的檔案。",
