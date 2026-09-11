@@ -213,8 +213,8 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 		/*? if >= 26.1 {*/
 		@Override
 		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			layoutRow(this.getX(), this.getY(), this.getWidth());
-			versionedRender(new VersionedMatrices(guiGraphics), this.getContentX(), this.getContentY(), this.getContentWidth(), mouseX, mouseY, tickDelta);
+			layoutRow(this.getX(), this.getY(), GroupSelectionList.this.getRowWidth());
+			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), GroupSelectionList.this.getRowWidth(), mouseX, mouseY, tickDelta);
 		}
 		/*?} elif >= 1.21.9 {*/
 		/*@Override

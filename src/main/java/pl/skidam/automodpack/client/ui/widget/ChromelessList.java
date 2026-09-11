@@ -21,7 +21,10 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
  * vanilla relative position made every click inside a menu panel land on a phantom scrollbar. Contract: the rows
  * occupy exactly the [top, bottom] window the constructor is given, so a list whose content fits never scrolls
  * and never shows a scrollbar, whatever vanilla's internal first-row inset and content padding are. Lists
- * extending this only describe their rows.
+ * extending this only describe their rows. Rows are content-sized here (a 9px row is exactly one font line), so
+ * an entry renders from its raw row rectangle ({@code getX()}/{@code getY()}/{@code getRowWidth()}) on every
+ * version; vanilla 26.x's content accessors add a 2px padding that pushes an 8px glyph past the row bottom and
+ * the list scissor amputates the last row's descenders.
  */
 public abstract class ChromelessList<T extends ObjectSelectionList.Entry<T>> extends ObjectSelectionList<T> {
 	/** Vanilla renders the first row this far below the list's top edge; the window is shifted up so rows land where the caller asked. */

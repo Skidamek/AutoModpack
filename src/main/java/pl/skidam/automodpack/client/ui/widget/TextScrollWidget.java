@@ -67,7 +67,7 @@ public final class TextScrollWidget extends ChromelessList<TextScrollWidget.Entr
 		/*? if >= 26.1 {*/
 		@Override
 		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getContentX(), this.getContentY(), this.getContentWidth());
+			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), TextScrollWidget.this.getRowWidth());
 		}
 		/*?} elif >= 1.21.9 {*/
 		/*@Override
