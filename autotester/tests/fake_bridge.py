@@ -823,7 +823,7 @@ class FakeBridge:
             connection_path.write_text(json.dumps(connection), encoding="utf-8")
             server_secrets = self.ctx.server_dir / "automodpack" / "server" / "secrets.json"
             server_secrets.parent.mkdir(parents=True, exist_ok=True)
-            server_secrets.write_text(json.dumps({"secrets": {"fake-player": {"secret": secret, "timestamp": 1}}}), encoding="utf-8")
+            server_secrets.write_text(json.dumps({"secrets": {"fake-player": {"secret": secret, "timestamp": 1, "name": "fake-player"}}}), encoding="utf-8")
         self.synced = True
         if self.selected_pack == "A":
             self.pack_removed = False
