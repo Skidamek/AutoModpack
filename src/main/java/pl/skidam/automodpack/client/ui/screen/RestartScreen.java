@@ -43,6 +43,8 @@ public class RestartScreen extends VersionedScreen {
 		List<ActionRow> rows = new ArrayList<>();
 		if (hasChangelogs) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.changelog.view"), button -> ScreenManager.changelog(this, changelogs))));
 		if (preservedFiles > 0) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.preservedFilesCount", preservedFiles), button -> openVault())));
+		List<InstalledModpackController.StalePack> stalePacks = new InstalledModpackController().stalePacks();
+		if (!stalePacks.isEmpty()) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(stalePackLabel(stalePacks), button -> forgetStalePacks(stalePacks))));
 		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
 				secondaryAction(VersionedText.translatable("automodpack.restart.cancel"), button -> ScreenImpl.setScreen(null)),
 				primaryAction(VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> minecraft.stop())));
@@ -91,6 +93,19 @@ public class RestartScreen extends VersionedScreen {
 	/** The vault is one click away from the screen that just preserved the files. */
 	private void openVault() {
 		new InstalledModpackController().openPreservedFiles(this, this::rebuild);
+	}
+
+	/** One stale pack shows by name; several show as a count. */
+	private MutableComponent stalePackLabel(List<InstalledModpackController.StalePack> stalePacks) {
+		return stalePacks.size() == 1
+				? VersionedText.translatable("automodpack.restart.removeStale.one", stalePacks.get(0).name())
+				: VersionedText.translatable("automodpack.restart.removeStale.other", stalePacks.size());
+	}
+
+	/** The removal only touches retained state of packs the origin no longer serves, so it is safe while the game runs. */
+	private void forgetStalePacks(List<InstalledModpackController.StalePack> stalePacks) {
+		InstalledModpackController controller = new InstalledModpackController();
+		for (InstalledModpackController.StalePack pack : stalePacks) controller.forgetStalePack(pack.modpackId(), this::rebuild);
 	}
 
 	@Override
