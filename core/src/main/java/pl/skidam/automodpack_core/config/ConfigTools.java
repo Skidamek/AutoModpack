@@ -156,6 +156,12 @@ public final class ConfigTools {
 		DurableFiles.writeAtomic(path, GSON.toJson(value).getBytes(StandardCharsets.UTF_8));
 	}
 
+	/** Publishes rebuildable cache records: atomic replace without any fsync, because a lost or torn write only costs a recompute. */
+	public static void writeCached(Path path, Object value) throws IOException {
+		OsPaths.requirePublishableConfig(path);
+		DurableFiles.writeVolatile(path, GSON.toJson(value).getBytes(StandardCharsets.UTF_8));
+	}
+
 	private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress> {
 		@Override
 		public JsonElement serialize(InetSocketAddress source, Type type, JsonSerializationContext context) {
