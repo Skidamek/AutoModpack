@@ -13,7 +13,6 @@ import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
@@ -28,14 +27,6 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 /*? if >= 1.21.9 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 /*?}*/
-
-/*? if >=26.1 {*/
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-/*?} elif >=1.20 {*/
-/*import net.minecraft.client.gui.GuiGraphics;
-*//*?} else {*/
-/*import com.mojang.blaze3d.vertex.PoseStack;
-*//*?}*/
 
 /** A native selection list for the shared tree/list change projection. */
 public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidget.Entry> {
@@ -117,7 +108,7 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 		if (selectionChanged != null) selectionChanged.accept(entry.row instanceof ChangeBrowserProjection.FileRow file ? file : null);
 	}
 
-	public final class Entry extends ObjectSelectionList.Entry<Entry> {
+	public final class Entry extends Row<Entry> {
 		private final ChangeBrowserProjection.Row row;
 		private final boolean collapsed;
 		private final Map<String, String> groupNames;
@@ -136,34 +127,12 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 			return VersionedText.literal(row.path() + ", " + detail());
 		}
 
-		/*? if >= 26.1 {*/
 		@Override
-		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), ChangeBrowserWidget.this.getRowWidth(), mouseX, mouseY, hovered);
-		}
-		/*?} elif >= 1.21.9 {*/
-		/*@Override
-		public void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), ChangeBrowserWidget.this.getRowWidth(), mouseX, mouseY, hovered);
-		}
-		*//*?} else {*/
-		/*@Override
-		/^? if <1.20 {^/
-		/^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			VersionedMatrices versionedMatrices = new VersionedMatrices();
-		^//^?} else {^/
-		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
-		/^?}^/
-			versionedRender(versionedMatrices, x, y, entryWidth, mouseX, mouseY, hovered);
-		}
-		*//*?}*/
-
-		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth, int mouseX, int mouseY, boolean hovered) {
+		protected void versionedRender(VersionedMatrices matrices, int x, int y, int width, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			// The vanilla selection outline is chrome we strip, so the rows carry their own state washes.
 			boolean selected = getSelected() == this;
-			if (selected) matrices.fill(x, y, x + entryWidth, y + ROW_HEIGHT, SELECTED_COLOR);
-			else if (hovered) matrices.fill(x, y, x + entryWidth, y + ROW_HEIGHT, HOVER_COLOR);
+			if (selected) matrices.fill(x, y, x + width, y + ROW_HEIGHT, SELECTED_COLOR);
+			else if (hovered) matrices.fill(x, y, x + width, y + ROW_HEIGHT, HOVER_COLOR);
 			int indent = Math.min(72, row.depth() * 12);
 			int badgeWidth = 0;
 			for (Badge badge : badges) badgeWidth += minecraft.font.width(badge.text()) + BADGE_SPACING;
@@ -172,8 +141,8 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 			String label = row instanceof ChangeBrowserProjection.EffectRow effect ? effectName(effect.effect()) : row instanceof ChangeBrowserProjection.FolderRow || row.depth() > 0 ? leafName(row.path()) : row.path();
 			ChatFormatting color = row instanceof ChangeBrowserProjection.FileRow file ? kindColor(file.kind()) : row instanceof ChangeBrowserProjection.EffectRow effect ? kindColor(effectKind(effect.effect())) : ChatFormatting.WHITE;
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
-					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, marker + label, Math.max(1, entryWidth - indent - 12 - badgeWidth))).withStyle(color), x + indent + 6, y + 4, TextColors.WHITE);
-			int badgeRight = x + entryWidth - BADGE_MARGIN;
+					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, marker + label, Math.max(1, width - indent - 12 - badgeWidth))).withStyle(color), x + indent + 6, y + 4, TextColors.WHITE);
+			int badgeRight = x + width - BADGE_MARGIN;
 			for (int index = badges.size() - 1; index >= 0; index--) {
 				Badge badge = badges.get(index);
 				badgeRight -= minecraft.font.width(badge.text());
@@ -181,7 +150,7 @@ public final class ChangeBrowserWidget extends ChromelessList<ChangeBrowserWidge
 				badgeRight -= BADGE_SPACING;
 			}
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font,
-					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, detail(), Math.max(1, entryWidth - indent - 22))).withStyle(ChatFormatting.GRAY), x + indent + 16, y + 17, TextColors.WHITE);
+					VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, detail(), Math.max(1, width - indent - 22))).withStyle(ChatFormatting.GRAY), x + indent + 16, y + 17, TextColors.WHITE);
 			if (hovered) tooltip(matrices, mouseX, mouseY);
 		}
 

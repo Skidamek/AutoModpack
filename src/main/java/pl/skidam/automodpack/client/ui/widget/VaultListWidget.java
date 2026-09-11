@@ -9,7 +9,6 @@ import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
@@ -23,14 +22,6 @@ import pl.skidam.automodpack_core.update.PreservationVault;
 /*? if >= 1.21.9 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 /*?}*/
-
-/*? if >=26.1 {*/
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-/*?} elif >=1.20 {*/
-/*import net.minecraft.client.gui.GuiGraphics;
-*//*?} else {*/
-/*import com.mojang.blaze3d.vertex.PoseStack;
-*//*?}*/
 
 /** A native selection list of the files a modpack preserved, one claim per two-line row. */
 public final class VaultListWidget extends ChromelessList<VaultListWidget.Entry> implements RowViewport {
@@ -81,7 +72,7 @@ public final class VaultListWidget extends ChromelessList<VaultListWidget.Entry>
 		return new RowView(this.children().get(index).getNarration().getString(), true, null, false);
 	}
 
-	public final class Entry extends ObjectSelectionList.Entry<Entry> {
+	public final class Entry extends Row<Entry> {
 		private final PreservationVault.Claim claim;
 		private final Map<String, String> packNames;
 
@@ -125,36 +116,14 @@ public final class VaultListWidget extends ChromelessList<VaultListWidget.Entry>
 			return VersionedText.translatable("automodpack.vault.reason." + claim.reason().name().toLowerCase(Locale.ROOT)).getString();
 		}
 
-		/*? if >= 26.1 {*/
 		@Override
-		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), VaultListWidget.this.getRowWidth());
-		}
-		/*?} elif >= 1.21.9 {*/
-		/*@Override
-		public void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), VaultListWidget.this.getRowWidth());
-		}
-		*//*?} else {*/
-		/*@Override
-		/^? if <1.20 {^/
-		/^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			VersionedMatrices versionedMatrices = new VersionedMatrices();
-		^//^?} else {^/
-		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
-		/^?}^/
-			versionedRender(versionedMatrices, x, y, entryWidth);
-		}
-		*//*?}*/
-
-		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth) {
-			if (getSelected() == this) matrices.fill(x, y, x + entryWidth, y + ROW_HEIGHT, SELECTED_COLOR);
+		protected void versionedRender(VersionedMatrices matrices, int x, int y, int width, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+			if (getSelected() == this) matrices.fill(x, y, x + width, y + ROW_HEIGHT, SELECTED_COLOR);
 			String size = UiFormat.formatSize(claim.size());
-			int lineWidth = Math.max(1, entryWidth - TEXT_MARGIN * 2 - minecraft.font.width(size));
+			int lineWidth = Math.max(1, width - TEXT_MARGIN * 2 - minecraft.font.width(size));
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, fileName(), lineWidth)).withStyle(ChatFormatting.WHITE), x + TEXT_MARGIN, y + 4, TextColors.WHITE);
-			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(size), x + entryWidth - TEXT_MARGIN - minecraft.font.width(size), y + 4, TextColors.WHITE);
-			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, detail(), Math.max(1, entryWidth - TEXT_MARGIN * 2))).withStyle(ChatFormatting.GRAY), x + TEXT_MARGIN, y + 14, TextColors.WHITE);
+			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(size), x + width - TEXT_MARGIN - minecraft.font.width(size), y + 4, TextColors.WHITE);
+			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, detail(), Math.max(1, width - TEXT_MARGIN * 2))).withStyle(ChatFormatting.GRAY), x + TEXT_MARGIN, y + 14, TextColors.WHITE);
 		}
 
 		/*? if >= 1.21.9 {*/
