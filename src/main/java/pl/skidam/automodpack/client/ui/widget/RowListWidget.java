@@ -86,7 +86,7 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 		/*? if >= 26.1 {*/
 		@Override
 		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getContentX(), this.getContentY(), this.getContentWidth(), mouseX, mouseY, hovered);
+			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), RowListWidget.this.getRowWidth(), mouseX, mouseY, hovered);
 		}
 		/*?} elif >= 1.21.9 {*/
 		/*@Override
