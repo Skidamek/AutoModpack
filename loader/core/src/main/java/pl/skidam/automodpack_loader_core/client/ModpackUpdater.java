@@ -158,23 +158,25 @@ public class ModpackUpdater implements AutoCloseable {
 		applyInstalledSwitch();
 	}
 
-	/** Returns whether the selected installed target needs an authenticated object-transfer session. */
-	public boolean requiresSelectedTargetDownload() throws IOException {
-		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Installed modpack target is unavailable");
+	/** The selected target's objects the local store still misses, after counting the sources already available locally. */
+	private Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingSelectedTargetObjects() throws IOException {
+		if (selectedTarget == null || serverModpackContent == null) throw new IOException("Selected modpack target is unavailable");
 		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 			planBuilder.populateStoreFromCachedLocations(selectedTarget.flatTarget(), cache);
-			return !objectAcquisition.missingTargetObjects(selectedTarget.flatTarget(), cache).isEmpty();
+			return objectAcquisition.missingTargetObjects(selectedTarget.flatTarget(), cache);
 		}
+	}
+
+	/** Returns whether the selected installed target needs an authenticated object-transfer session. */
+	public boolean requiresSelectedTargetDownload() throws IOException {
+		return !missingSelectedTargetObjects().isEmpty();
 	}
 
 	/** The selected target's download cost with the local store: the bytes of its objects not already acquired. */
 	public long uncachedSelectedTargetBytes() throws IOException {
-		if (selectedTarget == null || serverModpackContent == null) throw new IOException("Selected modpack target is unavailable");
-		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			long bytes = 0;
-			for (var item : objectAcquisition.missingTargetObjects(selectedTarget.flatTarget(), cache)) bytes += item.size;
-			return bytes;
-		}
+		long bytes = 0;
+		for (var item : missingSelectedTargetObjects()) bytes += item.size;
+		return bytes;
 	}
 
 	private ModpackJsons.ModpackContentFields storedTarget() throws IOException {
