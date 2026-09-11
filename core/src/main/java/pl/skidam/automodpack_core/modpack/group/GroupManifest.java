@@ -98,8 +98,9 @@ public record GroupManifest(
 			files = immutableMap(files);
 		}
 
+		/** Platform-agnostic groups support everything; platform-specific ones need a matching detected or chosen platform. */
 		public boolean supports(ClientPlatform platform) {
-			return compatiblePlatforms.isEmpty() || compatiblePlatforms.contains(platform);
+			return compatiblePlatforms.isEmpty() || (platform != null && compatiblePlatforms.contains(platform));
 		}
 
 		public boolean hasSameMetadata(Group other) {

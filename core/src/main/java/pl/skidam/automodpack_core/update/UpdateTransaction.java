@@ -109,7 +109,7 @@ public final class UpdateTransaction {
 
 		UpdateTransaction transaction = base(Purpose.MODPACK_UPDATE);
 		fillGeneration(transaction, plan.packTarget(), target.document().ownershipLedger());
-		transaction.targetPlatform = target.platform().id();
+		transaction.targetPlatform = target.platform() == null ? null : target.platform().id();
 		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
 		transaction.expectedPriorRequestedGroups = intentValues(target.expectedPriorIntent(), IntentPart.GROUPS);
 		transaction.expectedPriorRequestedCategories = intentValues(target.expectedPriorIntent(), IntentPart.CATEGORIES);
@@ -138,10 +138,9 @@ public final class UpdateTransaction {
 	private static UpdateTransaction createRemovalLike(Purpose purpose, UpdatePlan plan, ClientPlatform platform, SelectionIntent expectedPriorIntent,
 			GenerationJsons.OwnershipLedgerFields ownershipLedger, String overlayDigest, ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) {
 		Objects.requireNonNull(plan, "plan");
-		Objects.requireNonNull(platform, "platform");
 		UpdateTransaction transaction = base(purpose);
 		fillGeneration(transaction, plan.packTarget(), OwnershipLedger.fromFields(ownershipLedger));
-		transaction.targetPlatform = platform.id();
+		transaction.targetPlatform = platform == null ? null : platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
 		transaction.expectedPriorRequestedGroups = intentValues(expectedPriorIntent, IntentPart.GROUPS);
 		transaction.expectedPriorRequestedCategories = intentValues(expectedPriorIntent, IntentPart.CATEGORIES);
@@ -209,7 +208,7 @@ public final class UpdateTransaction {
 	}
 
 	public ClientPlatform platform() {
-		return ClientPlatform.parse(targetPlatform);
+		return targetPlatform == null ? null : ClientPlatform.parse(targetPlatform);
 	}
 
 	public SelectionIntent expectedPriorIntent() {

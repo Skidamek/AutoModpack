@@ -223,6 +223,7 @@
   "automodpack.selection.platformTooltip": "Переключает платформу, используемую для подбора необязательных групп. Возврат к определённой платформе снова включает автоопределение.",
   "automodpack.selection.platformButton": "ОС: %s",
   "automodpack.selection.platformDetected": "%s (определено)",
+  "automodpack.selection.platformUndetected": "Платформа не определена",
   "automodpack.selection.category": "Категория: %s",
   "automodpack.selection.requiredAlways": "Обязательная: всегда включена",
   "automodpack.selection.defaultSelected": "По умолчанию: выбрана, пока вы её не уберёте",

@@ -180,7 +180,7 @@ public final class UpdateTransactionValidator {
 
 	private static void validateSelectedTargetMetadata(UpdateTransaction transaction, SelectedModpackTarget target) throws IOException {
 		if (!Objects.equals(transaction.expectedPriorIntent(), target.expectedPriorIntent()) || !transaction.targetIntent().equals(target.selection().intent())
-				|| !transaction.platform().equals(target.platform()))
+				|| !Objects.equals(transaction.platform(), target.platform()))
 			throw new IOException("Transaction selection metadata disagrees with the supplied target");
 	}
 
@@ -249,7 +249,7 @@ public final class UpdateTransactionValidator {
 	}
 
 	private void validateSelectionMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorRequestedCategories == null
+		if (transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorRequestedCategories == null
 				|| transaction.expectedPriorExcludedGroups == null || transaction.requestedGroups == null || transaction.requestedCategories == null || transaction.excludedGroups == null)
 			throw new IOException("Selection metadata is incomplete");
 		if (!isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
@@ -263,7 +263,8 @@ public final class UpdateTransactionValidator {
 					? transaction.targetIntent()
 					: transaction.expectedPriorIntent())))
 				throw new IOException("Selection digest does not match selection metadata");
-			if (!ClientPlatform.parse(transaction.targetPlatform).id().equals(transaction.targetPlatform)) throw new IOException("Selection platform is not canonical");
+			if (transaction.targetPlatform != null && !ClientPlatform.parse(transaction.targetPlatform).id().equals(transaction.targetPlatform))
+				throw new IOException("Selection platform is not canonical");
 		} catch (RuntimeException e) {
 			throw new IOException("Selection metadata is invalid", e);
 		}

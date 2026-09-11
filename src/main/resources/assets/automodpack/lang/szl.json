@@ -223,6 +223,7 @@
   "automodpack.selection.platformTooltip": "Przełōnczo platforma używanŏ do doboru grup ôpcjonalnych. Powrōt do wykryntyj platformy wrŏcŏ do autōmatycznego wykrywanio.",
   "automodpack.selection.platformButton": "Systym: %s",
   "automodpack.selection.platformDetected": "%s (wykryty)",
+  "automodpack.selection.platformUndetected": "Niy wykryto platformy",
   "automodpack.selection.category": "Kategoryjo: %s",
   "automodpack.selection.requiredAlways": "Wymŏgane: zawdy dołōne",
   "automodpack.selection.defaultSelected": "Dōmyślne: wybrane, dopōki ich niy wyciepiesz",

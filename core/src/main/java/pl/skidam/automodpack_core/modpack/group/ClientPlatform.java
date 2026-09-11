@@ -6,19 +6,17 @@ import java.util.Locale;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /**
- * A platform by its canonical lowercase id. The three desktop platforms are the only ones detection can ever
- * produce, but a server admin may declare any other name in a group's {@code compatiblePlatforms}, and a client
- * may then explicitly select that group. Instances are value-equal by id: built-in ids always yield the built-in
- * constant, while admin-declared names parse to fresh instances.
+ * A platform by its canonical lowercase id. Detection yields one of the three desktop platforms or nothing at all, and
+ * a server admin may declare any other name in a group's {@code compatiblePlatforms}, which a client can then select
+ * explicitly. Instances are value-equal by id: built-in ids always yield the built-in constant, while admin-declared
+ * names parse to fresh instances.
  */
 public final class ClientPlatform implements Comparable<ClientPlatform> {
 	public static final ClientPlatform WINDOWS = new ClientPlatform("windows");
 	public static final ClientPlatform LINUX = new ClientPlatform("linux");
 	public static final ClientPlatform MACOS = new ClientPlatform("macos");
-	/** Everything outside the first-class desktop trio - mobile launchers, the BSDs, anything new. */
-	public static final ClientPlatform OTHER = new ClientPlatform("other");
 
-	private static final List<ClientPlatform> BUILT_INS = List.of(WINDOWS, LINUX, MACOS, OTHER);
+	private static final List<ClientPlatform> BUILT_INS = List.of(WINDOWS, LINUX, MACOS);
 
 	private ClientPlatform(String id) {
 		this.id = id;
@@ -26,21 +24,22 @@ public final class ClientPlatform implements Comparable<ClientPlatform> {
 
 	private final String id;
 
+	/** The detected platform, or null when the running system is none of the desktop trio; nothing is then known about the platform. */
 	public static ClientPlatform current() {
 		return switch (PlatformUtils.operatingSystem()) {
 			case WINDOWS -> WINDOWS;
 			case MACOS -> MACOS;
 			case LINUX -> LINUX;
-			case OTHER -> OTHER;
+			case OTHER -> null;
 		};
 	}
 
-	/** The saved selection's platform override when present, otherwise the detected platform. */
+	/** The saved selection's platform override when present, otherwise the detected platform; null when neither exists. */
 	public static ClientPlatform effective(SelectionIntent savedSelection) {
 		return savedSelection != null && savedSelection.platform() != null ? savedSelection.platform() : current();
 	}
 
-	/** The platforms auto-detection can ever produce; admin-declared names outside this list are still legal. */
+	/** The desktop platforms detection can match; admin-declared names outside this list are still legal. */
 	public static List<ClientPlatform> builtIns() {
 		return BUILT_INS;
 	}

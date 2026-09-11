@@ -223,6 +223,7 @@
   "automodpack.selection.platformTooltip": "Przełącza platformę używaną do doboru grup opcjonalnych. Powrót do wykrytej platformy przywraca automatyczne wykrywanie.",
   "automodpack.selection.platformButton": "System: %s",
   "automodpack.selection.platformDetected": "%s (wykryty)",
+  "automodpack.selection.platformUndetected": "Nie wykryto platformy",
   "automodpack.selection.category": "Kategoria: %s",
   "automodpack.selection.requiredAlways": "Wymagane: zawsze uwzględnione",
   "automodpack.selection.defaultSelected": "Domyślne: wybrane, dopóki go nie usuniesz",

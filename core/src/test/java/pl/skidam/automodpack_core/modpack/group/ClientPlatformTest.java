@@ -18,7 +18,7 @@ class ClientPlatformTest {
 	void parseIsValueEqualById() {
 		assertEquals(ClientPlatform.parse("android"), ClientPlatform.parse("ANDROID"));
 		assertEquals(ClientPlatform.parse("android"), ClientPlatform.parse("android"));
-		assertNotEquals(ClientPlatform.parse("android"), ClientPlatform.OTHER);
+		assertNotEquals(ClientPlatform.parse("android"), ClientPlatform.LINUX);
 	}
 
 	@Test
@@ -30,7 +30,7 @@ class ClientPlatformTest {
 	@Test
 	void identityIsTheCanonicalId() {
 		assertEquals("windows", ClientPlatform.WINDOWS.id());
-		assertEquals("other", ClientPlatform.OTHER.toString());
+		assertEquals("windows", ClientPlatform.WINDOWS.toString());
 		assertEquals(ClientPlatform.parse("HarmonyOS").hashCode(), ClientPlatform.parse("harmonyos").hashCode());
 	}
 }
