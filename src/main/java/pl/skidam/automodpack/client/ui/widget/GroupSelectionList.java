@@ -5,7 +5,6 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
@@ -35,16 +34,28 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 /** Scrolling group rows: every togglable row is a vanilla checkbox, so the bridge and screen readers see the whole list. */
 public final class GroupSelectionList extends ContainerObjectSelectionList<GroupSelectionList.Entry> implements RowViewport {
 	private static final int ROW_HEIGHT = 24;
-	/** The Files button hugs its label: text width plus a symmetric margin, at the standard button height. */
-	private static final int FILES_BUTTON_LABEL_MARGIN = 8;
 
 	private static Component filesLabel() {
 		return VersionedText.translatable("automodpack.selection.groupFiles");
 	}
 
-	/** Width of a group row's Files button; the screen uses the same value so row labels stop short of the button. */
-	public static int filesButtonWidth(Font font) {
-		return font.width(filesLabel()) + FILES_BUTTON_LABEL_MARGIN;
+	/** Group rows span the whole list like the shared ChromelessList lists do; vanilla caps the row width, which squashed every row into the center. */
+	@Override
+	public int getRowWidth() {
+		return this.contentWidth;
+	}
+
+	/*? if <1.21.4 {*/
+	/*@Override
+	protected int getScrollbarPosition() {
+		// The hit test compares absolute screen coordinates, so the anchor has to be absolute too.
+		return this.getRowLeft() + this.getRowWidth() + 4;
+	}
+	*//*?}*/
+
+	/** Width of a group row's square Files icon button; the screen uses the same value so row labels stop short of the button. */
+	public static int filesButtonWidth() {
+		return ActionAreaLayout.BUTTON_HEIGHT;
 	}
 
 	/** Vanilla renders the first row this far below the list's top edge; the window is shifted up so rows land where the caller asked. */
@@ -162,7 +173,7 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 				this.filesButton = null;
 			} else {
 				int indent = item.kind() == Kind.GROUP ? CHILD_INDENT : 0;
-				int filesWidth = item.kind() == Kind.GROUP ? filesButtonWidth(minecraft.font) : 0;
+				int filesWidth = item.kind() == Kind.GROUP ? filesButtonWidth() : 0;
 				int mainWidth = item.kind() == Kind.GROUP ? Math.max(1, rowWidth - indent - filesWidth - ActionAreaLayout.SEAM) : rowWidth;
 				AbstractWidget checkbox = item.kind() == Kind.HEADER
 						? new CategoryHeaderRow(minecraft.font, 0, 0, mainWidth, item.label(), state(item), item.counter(), () -> onToggle.accept(item))
@@ -174,7 +185,8 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 				if (item.tooltip() != null) VersionedScreen.setTooltip(checkbox, item.tooltip());
 				this.row = checkbox;
 				if (item.kind() == Kind.GROUP) {
-					Button files = VersionedScreen.buttonWidget(0, 0, filesWidth, 20, filesLabel(), button -> onInspect.accept(item));
+					// The narration keeps the "Files" label so screen readers and the tooling bridge still name the action.
+					Button files = VersionedScreen.iconButtonWidget(0, 0, filesWidth, 16, button -> onInspect.accept(item), "folder", filesLabel());
 					if (item.tooltip() != null) VersionedScreen.setTooltip(files, item.tooltip());
 					this.filesButton = files;
 				} else {

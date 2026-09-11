@@ -540,7 +540,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private int groupLabelWidth() {
-		return Math.max(1, listWidth() - CHECKBOX_LABEL_OFFSET - GroupSelectionList.filesButtonWidth(this.font) - ActionAreaLayout.SEAM - 4);
+		return Math.max(1, listWidth() - CHECKBOX_LABEL_OFFSET - GroupSelectionList.filesButtonWidth() - ActionAreaLayout.SEAM - 4);
 	}
 
 	/** The group list spans the screen between two symmetric margins. */
