@@ -304,6 +304,49 @@ class ModpackCandidateScannerTest {
 		return group;
 	}
 
+	@Test
+	void excludedFilesLeaveGroupDirectoryContentOutOfThePack() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/kept.txt"), "kept", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/pakku-params.json"), "params", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/pakku-cache.json"), "cache", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.excludedFiles = new LinkedHashSet<>(List.of("pakku-*.json"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertTrue(files.containsKey("config/kept.txt"));
+		assertFalse(files.containsKey("pakku-params.json"));
+		assertFalse(files.containsKey("pakku-cache.json"));
+		assertEquals(2, candidate.exclusions().size());
+		for (ExcludedCandidate exclusion : candidate.exclusions()) {
+			assertEquals(ExcludedCandidate.Reason.EXCLUDED_BY_RULE, exclusion.reason());
+			assertEquals("excluded by pakku-*.json", exclusion.message());
+		}
+	}
+
+	@Test
+	void excludedFilesCarveExceptionsOutOfSyncedRules() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(server.resolve("kubejs/server_scripts"));
+		Files.writeString(server.resolve("kubejs/main.js"), "script", StandardCharsets.UTF_8);
+		Files.writeString(server.resolve("kubejs/server_scripts/secret.js"), "secret", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group("kubejs/**");
+		main.excludedFiles = new LinkedHashSet<>(List.of("kubejs/server_scripts/**"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertTrue(files.containsKey("kubejs/main.js"));
+		assertFalse(files.containsKey("kubejs/server_scripts/secret.js"));
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals(ExcludedCandidate.Reason.EXCLUDED_BY_RULE, candidate.exclusions().get(0).reason());
+	}
+
 	private static void writeModJar(Path path) throws IOException {
 		try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(path))) {
 			jar.putNextEntry(new JarEntry("fabric.mod.json"));

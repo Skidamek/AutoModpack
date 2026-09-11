@@ -61,65 +61,66 @@ public class ConfigUtils {
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
 
-		String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";
-		Pattern pattern = Pattern.compile(prefixPattern);
+		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<group>/' prefix.
+		Pattern hostModpackGroup = Pattern.compile("^/?automodpack/host-modpack/[^/]+/");
 
-		if (config.groups != null) {
-			for (var groupEntry : config.groups.entrySet()) {
-				var group = groupEntry.getValue();
-				if (group == null) {
-					LOGGER.warn("Ignored null group declaration '{}'.", groupEntry.getKey());
+		if (config.groups == null) return;
+		for (var groupEntry : config.groups.entrySet()) {
+			var group = groupEntry.getValue();
+			if (group == null) {
+				LOGGER.warn("Ignored null group declaration '{}'.", groupEntry.getKey());
+				continue;
+			}
+			Set<String> syncedFiles = new LinkedHashSet<>();
+			Set<String> movedExclusions = new LinkedHashSet<>();
+			for (String rule : rules(group.syncedFiles)) {
+				String path = clean(rule, "syncedFiles");
+				if (path == null) continue;
+				if (path.startsWith("!")) {
+					String exclusion = clean(path.substring(1), "syncedFiles");
+					if (exclusion == null) continue;
+					LOGGER.info("Moved the exclusion '{}' from syncedFiles to excludedFiles, where exclusions live now.", rule);
+					movedExclusions.add(hostModpackGroup.matcher(exclusion).replaceFirst(""));
 					continue;
 				}
-				group.syncedFiles = normalizePathSet(group.syncedFiles, "syncedFiles", pattern, true);
-				group.allowEditsInFiles = normalizePathSet(group.allowEditsInFiles, "allowEditsInFiles", pattern, false);
+				if (hostModpackGroup.matcher(path).find()) {
+					LOGGER.info("Removed redundant syncedFiles entry '{}': the group directory under '/automodpack/host-modpack/' is included in full.", rule);
+					continue;
+				}
+				syncedFiles.add(path);
 			}
+			group.syncedFiles = syncedFiles;
+			group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", hostModpackGroup, movedExclusions);
+			group.allowEditsInFiles = normalizeRuleSet(group.allowEditsInFiles, "allowEditsInFiles", hostModpackGroup, Set.of());
 		}
 	}
 
-	/**
-	 * Trims, prefix-normalizes and logs away broken entries of one path set. {@code dropHostModpackPaths} selects the
-	 * syncedFiles rule (paths under '/automodpack/host-modpack/' are implicitly synced, so entries there are removed)
-	 * over the path-rules rule (the prefix is stripped from the kept entry).
-	 */
-	private static Set<String> normalizePathSet(Set<String> files, String configKey, Pattern hostModpackPattern, boolean dropHostModpackPaths) {
-		if (files == null || files.isEmpty()) return new LinkedHashSet<>();
-
-		Set<String> normalizedFiles = new LinkedHashSet<>(files.size());
-		for (var file : files) {
-			if (file == null) {
-				LOGGER.warn("Ignored null entry in {}.", configKey);
-				continue;
-			}
-			var trimmed = file.trim();
-			if (trimmed.isEmpty()) {
-				LOGGER.warn("Ignored empty entry in {}.", configKey);
-				continue;
-			}
-			if (dropHostModpackPaths) {
-				if (hostModpackPattern.matcher(trimmed).find()) {
-					LOGGER.info("Removed redundant {} entry '{}': paths under '/automodpack/host-modpack/' are implicitly synced.", configKey, file);
-					continue;
-				}
-				normalizedFiles.add(prefixSlash(file));
-			} else {
-				var fixed = hostModpackPattern.matcher(trimmed).replaceFirst("");
-				if (!fixed.equals(trimmed)) {
-					LOGGER.info("Normalized {} entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", configKey, file, fixed);
-				}
-				normalizedFiles.add(prefixSlash(fixed));
-			}
+	/** Normalizes one rule set: logs away null and blank entries, strips leading slashes and the host-modpack group prefix, and seeds moved exclusions. */
+	private static Set<String> normalizeRuleSet(Set<String> ruleSet, String configKey, Pattern hostModpackGroup, Set<String> movedExclusions) {
+		Set<String> normalized = new LinkedHashSet<>(movedExclusions);
+		for (String rule : rules(ruleSet)) {
+			String path = clean(rule, configKey);
+			if (path != null) normalized.add(hostModpackGroup.matcher(path).replaceFirst(""));
 		}
-		return normalizedFiles;
+		return normalized;
 	}
 
-	private static String prefixSlash(String path) {
-		if (path == null) return null;
-		if (path.isEmpty()) return path;
-		if (path.startsWith("/!/")) return path.substring(1);
-		if (path.startsWith("/")) return path;
-		if (path.startsWith("!/")) return path;
-		if (path.charAt(0) == '!') return "!/" + path.substring(1);
-		return "/" + path;
+	/** Trims one rule and strips its leading slashes; null (logged) when the rule is null or blank. */
+	private static String clean(String rule, String configKey) {
+		if (rule == null) {
+			LOGGER.warn("Ignored null entry in {}.", configKey);
+			return null;
+		}
+		String trimmed = rule.trim();
+		if (trimmed.isEmpty()) {
+			LOGGER.warn("Ignored empty entry in {}.", configKey);
+			return null;
+		}
+		while (trimmed.startsWith("/")) trimmed = trimmed.substring(1);
+		return trimmed;
+	}
+
+	private static Set<String> rules(Set<String> ruleSet) {
+		return ruleSet == null ? Set.of() : ruleSet;
 	}
 }

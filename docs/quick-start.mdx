@@ -40,14 +40,16 @@ Restart your game. Your server's modpack should now be loaded, and you should be
   "modpackHost": true,
   "generateModpackOnStart": true,
   "syncedFiles": [
-    "/mods/*.jar",
-    "/resourcepacks/*",
-    "/config/**",
-    "/shaderpacks/*",
-    "!/config/fancymenu/user_variables.db"
+    "mods/*.jar",
+    "resourcepacks/*",
+    "config/**",
+    "shaderpacks/*"
+  ],
+  "excludedFiles": [
+    "config/fancymenu/user_variables.db"
   ],
   "allowEditsInFiles": [
-    "/options.txt"
+    "options.txt"
   ],
   "autoExcludeServerSideMods": true,
   "requireAutoModpackOnClient": true
@@ -56,19 +58,17 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 
 **Key Configuration Options:**
 
-- **`syncedFiles`**: List of files and folders to sync to clients. Use `*` for wildcards and `**` for recursive matching. Prefix with `!` to exclude
+- **`syncedFiles`**: Files and folders to sync to clients, relative to the server root. Nothing is synced from the server root unless a rule includes it. Use `*` for wildcards and `**` for recursive matching
+- **`excludedFiles`**: Files and folders to leave out of the modpack. The group directory under `host-modpack/` is included in full, so this is the way to keep a file there from reaching clients; it also carves exceptions out of `syncedFiles`
 - **`allowEditsInFiles`**: Files that clients can edit locally. Local edits are preserved until the server version of the file changes
-  - **Example:** To always update FancyMenu configs, remove `/config/**` from `allowEditsInFiles`
-  - **⚠️ Warning:** Removing `/config/**` will make ALL config files non-editable. If you only want specific config folders to be always updated, use exclusions instead:
+  - **Example:** To always update FancyMenu configs (the server's copy always wins), leave that folder out of `allowEditsInFiles` by scoping the editable rules around it - wildcards cannot express "everything except":
     ```json
-    "syncedFiles": [
-      "/config/**"
-    ],
     "allowEditsInFiles": [
-      "/config/**",
-      "!/config/fancymenu/**"
+      "config/*",
+      "config/*/**"
     ]
     ```
+    With `config/fancymenu/**` absent from the list, FancyMenu configs update whenever the server ships new ones. Keep such files in `syncedFiles` - `excludedFiles` would remove them from the modpack entirely
 - **Other options**: See the [full configuration page](configuration/server-config) for detailed explanations of all settings
 
 ### Splitting Mods for Server and Client
@@ -78,8 +78,10 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 - **Excluding server-only mods example**:
   ```json
   "syncedFiles": [
-    "/mods/*.jar",
-    "!/mods/lithostitched-fabric*.jar"
+    "mods/*.jar"
+  ],
+  "excludedFiles": [
+    "mods/lithostitched-fabric*.jar"
   ]
   ```
 

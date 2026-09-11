@@ -38,11 +38,18 @@ public final class ModpackCandidateScanner {
 		for (var entry : declarations.entrySet()) {
 			String groupId = entry.getKey();
 			ServerConfigJsons.GroupDeclaration declaration = entry.getValue();
-			PathRuleSet syncedRules = rulesByGroup.get(groupId).syncedFiles();
+			PathRuleSet excludedRules = rulesByGroup.get(groupId).excludedFiles();
 			Path groupDirectory = request.groupRoot().resolve(groupId).normalize();
 			if (!groupDirectory.startsWith(request.groupRoot().toAbsolutePath().normalize()))
 				throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
 			for (var file : walk(groupDirectory).entrySet()) {
+				// The group directory is included in full; excludedFiles is the only way to leave content out of it.
+				PathRuleSet.Decision excluded = excludedRules.evaluate(file.getKey());
+				if (excluded.matched()) {
+					ruleExclusions.add(new ExcludedCandidate(new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.GROUP_DIRECTORY, file.getValue(), null),
+							ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + excluded.decisiveRule()));
+					continue;
+				}
 				CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.GROUP_DIRECTORY, file.getValue(), null);
 				sources.computeIfAbsent(ModpackCandidate.provenanceKey(groupId, file.getKey()), ignored -> new SourcePair()).explicit = source;
 			}
@@ -59,14 +66,16 @@ public final class ModpackCandidateScanner {
 				if (!root.startsWith(request.serverRoot())) throw new CandidateBuildException("Synchronized scan root escapes server root: " + scanRoot);
 				for (var file : walk(root, request.serverRoot()).entrySet()) {
 					for (String groupId : groupsByScanRoot.get(scanRoot)) {
-						PathRuleSet syncedRules = rulesByGroup.get(groupId).syncedFiles();
-						PathRuleSet.Decision decision = syncedRules.evaluate(file.getKey());
-						if (!decision.matched()) continue;
-						CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), decision.decisiveRule());
-						if (!decision.included()) {
-							ruleExclusions.add(new ExcludedCandidate(source, ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + decision.decisiveRule()));
+						GroupRules groupRules = rulesByGroup.get(groupId);
+						PathRuleSet.Decision included = groupRules.syncedFiles().evaluate(file.getKey());
+						if (!included.matched()) continue;
+						PathRuleSet.Decision excluded = groupRules.excludedFiles().evaluate(file.getKey());
+						if (excluded.matched()) {
+							ruleExclusions.add(new ExcludedCandidate(new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), included.decisiveRule()),
+									ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + excluded.decisiveRule()));
 							continue;
 						}
+						CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), included.decisiveRule());
 						SourcePair pair = sources.computeIfAbsent(ModpackCandidate.provenanceKey(groupId, file.getKey()), ignored -> new SourcePair());
 						if (pair.synced != null && !pair.synced.sourcePath().equals(source.sourcePath()))
 							throw new CandidateBuildException("Multiple synchronized sources resolve to group '" + groupId + "' path '" + file.getKey() + "'");
@@ -175,14 +184,14 @@ public final class ModpackCandidateScanner {
 		CandidateProvenance provenance = null;
 		if (selected != null && file != null) {
 			PathRuleSet.Decision editable = rules.allowEditsInFiles().evaluate(selected.logicalPath());
-			file = new GroupManifest.GroupFile(file.size(), file.type(), editable.included(), file.sha1(), file.murmur());
+			file = new GroupManifest.GroupFile(file.size(), file.type(), editable.matched(), file.sha1(), file.murmur());
 			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
 		return new PathResult(selected, file, object, provenance, exclusions, pair.explicit != null ? pair.explicit : pair.synced);
 	}
 
 	private static GroupRules compileRules(String groupId, ServerConfigJsons.GroupDeclaration declaration) throws CandidateBuildException {
-		return new GroupRules(compileRuleSet(declaration.syncedFiles, groupId, "syncedFiles"),
+		return new GroupRules(compileRuleSet(declaration.syncedFiles, groupId, "syncedFiles"), compileRuleSet(declaration.excludedFiles, groupId, "excludedFiles"),
 				compileRuleSet(declaration.allowEditsInFiles, groupId, "allowEditsInFiles"));
 	}
 
@@ -290,6 +299,7 @@ public final class ModpackCandidateScanner {
 
 	private record GroupRules(
 			PathRuleSet syncedFiles,
+			PathRuleSet excludedFiles,
 			PathRuleSet allowEditsInFiles) {}
 
 	private static final class SourcePair {
