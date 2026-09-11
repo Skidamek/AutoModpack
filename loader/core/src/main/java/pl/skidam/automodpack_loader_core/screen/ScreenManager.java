@@ -59,8 +59,8 @@ public final class ScreenManager {
 		instance.failure(request);
 	}
 
-	public static void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled) {
-		instance.validation(parent, fingerprint, origin, validated, canceled);
+	public static void validation(String fingerprint, String origin, Runnable validated, Runnable canceled) {
+		instance.validation(fingerprint, origin, validated, canceled);
 	}
 
 	public static void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {

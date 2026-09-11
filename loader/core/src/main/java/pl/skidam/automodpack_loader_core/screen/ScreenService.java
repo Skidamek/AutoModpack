@@ -26,7 +26,12 @@ public interface ScreenService {
 
 	void failure(FailureRequest request);
 
-	void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled);
+	/**
+	 * Asks the player to verify a server certificate during a join. The join is already owned by this prompt, so
+	 * backing out of it always lands on the multiplayer hub — never on the vanilla connecting screen the prompt
+	 * interrupted, which has no live connection to return to.
+	 */
+	void validation(String fingerprint, String origin, Runnable validated, Runnable canceled);
 
 	/** Asks before an installed modpack starts being served from a different address; exactly one of the runnables runs. */
 	default void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
