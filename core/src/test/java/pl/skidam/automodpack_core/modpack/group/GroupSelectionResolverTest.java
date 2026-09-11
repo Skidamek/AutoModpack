@@ -135,7 +135,7 @@ class GroupSelectionResolverTest {
 		GroupManifest manifest = manifest(Map.of("mobile", mobile, "desktop", desktop));
 
 		// Auto-detection never yields android, so the group stays out of the default resolution...
-		ResolvedSelection defaults = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.current());
+		ResolvedSelection defaults = GroupSelectionResolver.resolveDefault(manifest, ClientPlatform.LINUX);
 		assertFalse(defaults.selectedGroups().contains("mobile"));
 		assertEquals(GroupResolution.Status.UNAVAILABLE, defaults.resolution("mobile").status());
 		assertEquals(Set.of("desktop"), defaults.selectedGroups());
