@@ -8,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
@@ -138,10 +139,11 @@ public class FetchManager {
 		List<ModrinthAPI> results = ModrinthAPI.getModsInfosFromListOfSHA1(missing);
 		if (results == null) return;
 
+		Map<String, String> slugs = ModrinthAPI.getProjectSlugs(results.stream().map(ModrinthAPI::modrinthID).collect(Collectors.toSet()));
 		for (ModrinthAPI info : results) {
 			Datas datas = fetchDatas.get(info.SHA1Hash());
 			if (datas != null) {
-				String mainPageUrl = ModrinthAPI.getMainPageUrl(info.modrinthID(), datas.fetchData.fileType);
+				String mainPageUrl = ModrinthAPI.getMainPageUrl(datas.fetchData.fileType, slugs.getOrDefault(info.modrinthID(), info.modrinthID()));
 				platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
 				applyModrinth(datas, info.downloadUrl(), mainPageUrl);
 			}
@@ -202,12 +204,15 @@ public class FetchManager {
 	private Map<String, List<DownloadSource>> refetchPlatformMetadata(Map<String, DeadLink> batch) {
 		Map<String, List<DownloadSource>> fresh = new HashMap<>();
 		List<ModrinthAPI> modrinthInfos = ModrinthAPI.getModsInfosFromListOfSHA1(new ArrayList<>(batch.keySet()));
-		if (modrinthInfos != null) for (ModrinthAPI info : modrinthInfos) {
-			String sha1 = info.SHA1Hash().toLowerCase(Locale.ROOT);
-			DeadLink deadLink = batch.get(sha1);
-			String mainPageUrl = deadLink == null ? null : ModrinthAPI.getMainPageUrl(info.modrinthID(), deadLink.fileType());
-			platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
-			fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
+		if (modrinthInfos != null) {
+			Map<String, String> slugs = ModrinthAPI.getProjectSlugs(modrinthInfos.stream().map(ModrinthAPI::modrinthID).collect(Collectors.toSet()));
+			for (ModrinthAPI info : modrinthInfos) {
+				String sha1 = info.SHA1Hash().toLowerCase(Locale.ROOT);
+				DeadLink deadLink = batch.get(sha1);
+				String mainPageUrl = deadLink == null ? null : ModrinthAPI.getMainPageUrl(deadLink.fileType(), slugs.getOrDefault(info.modrinthID(), info.modrinthID()));
+				platformCache.putModrinth(info.SHA1Hash(), info, mainPageUrl);
+				fresh.computeIfAbsent(sha1, key -> new ArrayList<>()).add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
+			}
 		}
 		Map<String, String> murmurs = new HashMap<>();
 		for (Map.Entry<String, DeadLink> entry : batch.entrySet()) if (entry.getValue().murmur() != null && !entry.getValue().murmur().isBlank()) murmurs.put(entry.getKey(), entry.getValue().murmur());
