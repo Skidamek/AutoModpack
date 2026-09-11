@@ -157,7 +157,7 @@
   "automodpack.storage.description": "Czyszczenie zagęszcza zapisaną historię twoich modpacków i zwalnia zajmowane przez nią miejsce.",
   "automodpack.storage.removes": "Usuwa: dane plików przechowywane tylko po to, by móc przywrócić starsze generacje modpacka, oraz dane, do których nic już się nie odwołuje.",
   "automodpack.storage.keeps": "Zachowuje: twoją aktywną i najnowszą generację ze wszystkimi ich danymi plików, historię i notatki każdej generacji, twoje edytowalne pliki oraz Zachowane pliki.",
-  "automodpack.storage.compacted": "Historia zagęszczona do generacji %s: starszych generacji nie da się już przywrócić na tym komputerze.",
+  "automodpack.storage.compacted": "Wyczyszczono %s: generacje starsze niż #%s nie da się już przywrócić na tym komputerze.",
   "automodpack.storage.preservedKept": "%s pliki w Zachowanych plikach zostają. Czyszczenie ich nie usuwa.",
   "automodpack.storage.confirm": "Wyczyść pamięć lokalną",
   "automodpack.storage.verify": "Sprawdź pamięć",
