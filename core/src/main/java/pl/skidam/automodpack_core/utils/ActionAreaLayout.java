@@ -51,9 +51,9 @@ public final class ActionAreaLayout {
 	}
 
 	/**
-	 * Lays rows out from top to bottom. Every visible row fills the rail with an even split through a
-	 * 4px seam; leftover pixels go to the last button so the row's right edge equals left + width.
-	 * A lone FOOTER row keeps the canonical lone-button width, centered in the rail, wherever it sits.
+	 * Lays rows out from top to bottom. A row with several buttons fills the rail with an even split through
+	 * a 4px seam; leftover pixels go to the last button so the row's right edge equals left + width. A lone
+	 * row - any kind - keeps the canonical lone-button width, centered in the rail, wherever it sits.
 	 */
 	public static Layout fromTop(int left, int top, int width, int rowGap, List<Row> rows) {
 		int safeWidth = Math.max(1, width);
@@ -63,7 +63,7 @@ public final class ActionAreaLayout {
 		for (Row row : rows) {
 			if (row.actions().isEmpty()) continue;
 			if (!placements.isEmpty()) cursor += safeGap;
-			placements.addAll(row.kind() == RowKind.FOOTER && row.actions().size() == 1 ? layoutLoneFooter(left, cursor, safeWidth, row) : layoutRow(left, cursor, safeWidth, row));
+			placements.addAll(row.actions().size() == 1 ? layoutLone(left, cursor, safeWidth, row) : layoutRow(left, cursor, safeWidth, row));
 			cursor += BUTTON_HEIGHT;
 		}
 		return new Layout(placements, top, cursor);
@@ -82,8 +82,7 @@ public final class ActionAreaLayout {
 
 	/**
 	 * Splits one rail among the row's buttons with a 4px seam between neighbors. Widths stay equal
-	 * except the last button absorbs the remainder so the right edge of the rail is exact. A lone
-	 * row fills the rail.
+	 * except the last button absorbs the remainder so the right edge of the rail is exact.
 	 */
 	private static List<Placement> layoutRow(int left, int top, int width, Row row) {
 		List<Action> actions = row.actions();
@@ -102,7 +101,7 @@ public final class ActionAreaLayout {
 		return placements;
 	}
 
-	private static List<Placement> layoutLoneFooter(int left, int top, int width, Row row) {
+	private static List<Placement> layoutLone(int left, int top, int width, Row row) {
 		Action action = row.actions().get(0);
 		int buttonWidth = Math.min(LONE_BUTTON, width);
 		return List.of(new Placement(action.id(), left + (width - buttonWidth) / 2, top, buttonWidth, BUTTON_HEIGHT, row.kind(), action.role()));
