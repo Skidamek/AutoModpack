@@ -19,6 +19,10 @@
     "name": "File Structure",
     "icon": null
   },
+  "client-storage.mdx": {
+    "name": "Client Local Storage",
+    "icon": null
+  },
   "modpack-hosting.mdx": {
     "name": "Modpack Hosting",
     "icon": null

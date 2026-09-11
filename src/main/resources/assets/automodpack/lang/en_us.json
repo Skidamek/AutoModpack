@@ -156,7 +156,7 @@
   "automodpack.storage.description": "Cleanup compacts the stored history of your modpacks and frees the space it used.",
   "automodpack.storage.removes": "Removes: file data kept only so older modpack generations can be restored, and data nothing refers to anymore.",
   "automodpack.storage.keeps": "Keeps: your active generation and the newest one with all their file data, every generation's history and notes, your editable files, and Preserved files.",
-  "automodpack.storage.compacted": "History compacted through generation %s: older generations can no longer be restored on this computer.",
+  "automodpack.storage.compacted": "Cleaned on %s: generations older than #%s can no longer be restored on this computer.",
   "automodpack.storage.preservedKept": "%s files in Preserved files stay. Cleanup does not remove them.",
   "automodpack.storage.confirm": "Clean local storage",
   "automodpack.storage.verify": "Verify storage",

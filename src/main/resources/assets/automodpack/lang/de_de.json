@@ -157,7 +157,7 @@
   "automodpack.storage.description": "Die Bereinigung verdichtet den gespeicherten Verlauf deiner Modpacks und gibt den belegten Speicher frei.",
   "automodpack.storage.removes": "Entfernt: Dateidaten, die nur aufgehoben wurden, um ältere Modpack-Generationen wiederherstellen zu können, und Daten, auf die nichts mehr verweist.",
   "automodpack.storage.keeps": "Behält: deine aktive Generation und die neueste mit allen ihren Dateidaten, den Verlauf und die Notizen jeder Generation, deine editierbaren Dateien und Gesicherte Dateien.",
-  "automodpack.storage.compacted": "Verlauf verdichtet bis Generation %s: ältere Generationen lassen sich auf diesem Computer nicht mehr wiederherstellen.",
+  "automodpack.storage.compacted": "Gesäubert am %s: Generationen älter als #%s lassen sich auf diesem Computer nicht mehr wiederherstellen.",
   "automodpack.storage.preservedKept": "%s Dateien in Gesicherte Dateien bleiben. Die Bereinigung entfernt sie nicht.",
   "automodpack.storage.confirm": "Lokalen Speicher bereinigen",
   "automodpack.storage.verify": "Speicher prüfen",

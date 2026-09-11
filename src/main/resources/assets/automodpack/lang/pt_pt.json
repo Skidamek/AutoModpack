@@ -157,7 +157,7 @@
   "automodpack.storage.description": "A limpeza compacta o histórico guardado dos seus modpacks e liberta o espaço que ele ocupava.",
   "automodpack.storage.removes": "Remove: dados de ficheiros guardados apenas para restaurar gerações mais antigas do modpack, e dados que nada mais referencia.",
   "automodpack.storage.keeps": "Mantém: a sua geração ativa e a mais recente com todos os seus dados de ficheiros, o histórico e as notas de cada geração, os seus ficheiros editáveis e os Ficheiros conservados.",
-  "automodpack.storage.compacted": "Histórico compactado até à geração %s: as gerações mais antigas já não podem ser restauradas neste computador.",
+  "automodpack.storage.compacted": "Limpo a %s: as gerações mais antigas do que a n.º%s já não podem ser restauradas neste computador.",
   "automodpack.storage.preservedKept": "%s ficheiros em Ficheiros conservados ficam. A limpeza não os apaga.",
   "automodpack.storage.confirm": "Limpar armazenamento local",
   "automodpack.storage.verify": "Verificar armazenamento",

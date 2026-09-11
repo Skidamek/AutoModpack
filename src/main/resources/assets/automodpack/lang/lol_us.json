@@ -157,7 +157,7 @@
   "automodpack.storage.description": "kleenup smushz da stashd history ov ur modpackz an freez da space. vacuum cat time.",
   "automodpack.storage.removes": "tosses: file data kepted onlee fur restorin oldr modpack genz, an data nuffin pointz at anymoar.",
   "automodpack.storage.keeps": "keepz: ur active gen an da nuwest wun wif all thur file data, evry gen history an notez, ur editable filez, an stashd filez.",
-  "automodpack.storage.compacted": "history smushed thru gen %s: oldr genz can not be un-smushed on dis puter.",
+  "automodpack.storage.compacted": "cleaned on %s: genz older dan #%s can not be un-smushed on dis puter.",
   "automodpack.storage.preservedKept": "%s stashd filez stay. kleenup doez not yeet dem.",
   "automodpack.storage.confirm": "kleen storaj",
   "automodpack.storage.verify": "check storaj",

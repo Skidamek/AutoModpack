@@ -65,7 +65,8 @@ public final class ClientStorageMaintenanceScreen extends VersionedScreen {
 		lines.addAll(
 				wrapParagraph(this.font, VersionedText.translatable(preservedCount > 0 ? "automodpack.storage.preservedKept" : "automodpack.vault.empty", preservedCount).getString(), wrapWidth, ChatFormatting.GREEN));
 		for (ClientGenerationStore.CompactionReceipt receipt : controller.compactionReceipts())
-			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.compacted", receipt.boundarySeq()).getString(), wrapWidth, ChatFormatting.GREEN));
+			lines.addAll(wrapParagraph(this.font, VersionedText.translatable("automodpack.storage.compacted", UiFormat.formatInstant(receipt.compactedAt()), receipt.boundarySeq()).getString(), wrapWidth,
+					ChatFormatting.GREEN));
 		if (collectionResult != null) {
 			lines.add(blankLine());
 			lines.addAll(wrapParagraph(this.font, statLine("automodpack.storage.objects", collectionResult.before().objectCount(), collectionResult.after().objectCount(),
