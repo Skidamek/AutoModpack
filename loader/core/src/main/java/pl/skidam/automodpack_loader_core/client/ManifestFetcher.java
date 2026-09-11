@@ -181,8 +181,7 @@ public final class ManifestFetcher {
 		LOGGER.info("Asking user to verify certificate for Minecraft server {} from AutoModpack endpoint {}:{}", originHost, connectionInfo.endpoint.getHostString(),
 				connectionInfo.endpoint.getPort());
 
-		var parent = ScreenManager.getScreen().orElse(null);
-		if (parent == null) {
+		if (ScreenManager.getScreen().isEmpty()) {
 			LOGGER.warn("No screen available, cannot ask user");
 			return CompletableFuture.completedFuture(false);
 		}
@@ -197,7 +196,7 @@ public final class ManifestFetcher {
 			LOGGER.info("Certificate trust cancelled by the player for {}", originHost);
 			result.completeExceptionally(new CertificateTrustCancelledException());
 		};
-		ScreenManager.validation(parent, fingerprint, AddressHelpers.formatAddress(connectionInfo.origin), trustAction, cancelAction);
+		ScreenManager.validation(fingerprint, AddressHelpers.formatAddress(connectionInfo.origin), trustAction, cancelAction);
 		return result;
 	}
 }

@@ -90,8 +90,8 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void validation(Object parent, String fingerprint, String origin, Runnable validated, Runnable canceled) {
-		executeOnClient(() -> Screens.validation((Screen) parent, fingerprint, origin, validated, canceled));
+	public void validation(String fingerprint, String origin, Runnable validated, Runnable canceled) {
+		executeOnClient(() -> Screens.validation(fingerprint, origin, validated, canceled));
 	}
 
 	@Override
@@ -264,8 +264,9 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(ModpackSelectionScreen.repair(multiplayerScreen(), manifest, savedSelection, selectionAction, cancelAction));
 		}
 
-		public static void validation(Screen parent, String fingerprint, String origin, Runnable validated, Runnable canceled) {
-			Screens.setScreen(new FingerprintVerificationScreen(parent, fingerprint, origin, validated, canceled));
+		/** The certificate prompt interrupts the vanilla connecting screen, which owns no connection of its own; backing out of the join lands on the multiplayer hub. */
+		public static void validation(String fingerprint, String origin, Runnable validated, Runnable canceled) {
+			Screens.setScreen(new FingerprintVerificationScreen(multiplayerScreen(), fingerprint, origin, validated, canceled));
 		}
 
 		public static void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
