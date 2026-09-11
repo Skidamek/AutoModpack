@@ -214,6 +214,7 @@
   "automodpack.files.title": "%s 中的檔案",
   "automodpack.files.description": "已安裝模組包的完整檔案清單。",
   "automodpack.firstConnect.selectedSummary": "已選群組：%s  檔案：%s  內容大小：%s",
+  "automodpack.firstConnect.downloadSummary": "需下載：%s  |  新內容：%s",
   "automodpack.firstConnect.includedGroups": "包含的群組：%s",
   "automodpack.firstConnect.unavailableOldChoices": "以前選過、現已無法使用的群組：%s",
   "automodpack.selection.platformSummary": "平台：%s  已選群組：%s",

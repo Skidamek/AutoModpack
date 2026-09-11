@@ -167,6 +167,16 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
+	/** The selected target's download cost with the local store: the bytes of its objects not already acquired. */
+	public long uncachedSelectedTargetBytes() throws IOException {
+		if (selectedTarget == null || serverModpackContent == null) throw new IOException("Selected modpack target is unavailable");
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
+			long bytes = 0;
+			for (var item : objectAcquisition.missingTargetObjects(selectedTarget.flatTarget(), cache)) bytes += item.size;
+			return bytes;
+		}
+	}
+
 	private ModpackJsons.ModpackContentFields storedTarget() throws IOException {
 		return ClientProjectionView.open(storage).target();
 	}

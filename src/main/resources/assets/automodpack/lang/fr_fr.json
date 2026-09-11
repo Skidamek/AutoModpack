@@ -217,6 +217,7 @@
   "automodpack.files.title": "Fichiers dans %s",
   "automodpack.files.description": "Catalogue complet des fichiers du modpack installé.",
   "automodpack.firstConnect.selectedSummary": "Groupes sélectionnés : %s  Fichiers : %s  Taille du contenu : %s",
+  "automodpack.firstConnect.downloadSummary": "%s à télécharger  |  %s de nouveau contenu",
   "automodpack.firstConnect.includedGroups": "Groupes inclus : %s",
   "automodpack.firstConnect.unavailableOldChoices": "Groupes précédemment sélectionnés qui ne sont plus disponibles : %s",
   "automodpack.selection.platformSummary": "Plateforme : %s  Groupes sélectionnés : %s",

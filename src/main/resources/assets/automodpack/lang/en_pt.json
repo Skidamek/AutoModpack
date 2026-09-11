@@ -217,6 +217,7 @@
   "automodpack.files.title": "Files in %s",
   "automodpack.files.description": "The whole installed modpack file list.",
   "automodpack.firstConnect.selectedSummary": "Selected groups: %s  Files: %s  Loot size: %s",
+  "automodpack.firstConnect.downloadSummary": "%s to download  |  %s fresh loot",
   "automodpack.firstConnect.includedGroups": "Included groups: %s",
   "automodpack.firstConnect.unavailableOldChoices": "Old group picks no longer around: %s",
   "automodpack.selection.platformSummary": "Platform: %s  Selected groups: %s",

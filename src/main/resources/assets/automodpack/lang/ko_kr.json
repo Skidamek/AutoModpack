@@ -214,6 +214,7 @@
   "automodpack.files.title": "%s의 파일",
   "automodpack.files.description": "설치된 모드팩의 전체 파일 목록입니다.",
   "automodpack.firstConnect.selectedSummary": "선택한 그룹: %s  파일: %s  콘텐츠 크기: %s",
+  "automodpack.firstConnect.downloadSummary": "다운로드 %s  |  새 콘텐츠 %s",
   "automodpack.firstConnect.includedGroups": "포함된 그룹: %s",
   "automodpack.firstConnect.unavailableOldChoices": "더 이상 없는 이전 선택 그룹: %s",
   "automodpack.selection.platformSummary": "플랫폼: %s  선택한 그룹: %s",

@@ -217,6 +217,7 @@
   "automodpack.files.title": "Fájlok itt: %s",
   "automodpack.files.description": "A telepített modpack teljes fájlkatalógusa.",
   "automodpack.firstConnect.selectedSummary": "Kiválasztott csoportok: %s  Fájlok: %s  Tartalom mérete: %s",
+  "automodpack.firstConnect.downloadSummary": "%s letöltendő  |  %s új tartalom",
   "automodpack.firstConnect.includedGroups": "Benne lévő csoportok: %s",
   "automodpack.firstConnect.unavailableOldChoices": "Korábban kiválasztott csoportok, amelyek már nincsenek: %s",
   "automodpack.selection.platformSummary": "Platform: %s  Kiválasztott csoportok: %s",

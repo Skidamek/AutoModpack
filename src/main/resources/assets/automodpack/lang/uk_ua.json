@@ -217,6 +217,7 @@
   "automodpack.files.title": "Файли в %s",
   "automodpack.files.description": "Повний список файлів встановленого модпака.",
   "automodpack.firstConnect.selectedSummary": "Вибрано груп: %s  Файлів: %s  Розмір: %s",
+  "automodpack.firstConnect.downloadSummary": "%s до завантаження  |  %s нового вмісту",
   "automodpack.firstConnect.includedGroups": "Увімкнені групи: %s",
   "automodpack.firstConnect.unavailableOldChoices": "Раніше вибрані групи, яких більше немає: %s",
   "automodpack.selection.platformSummary": "Платформа: %s  Вибрано груп: %s",
