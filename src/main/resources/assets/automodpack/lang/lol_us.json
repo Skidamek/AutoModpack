@@ -361,6 +361,8 @@
   "automodpack.selection.noChanges": "no changz",
   "automodpack.management.preservedFilesCount": "%s stashd filez",
   "automodpack.restart.preservedFiles": "%s filez r in stashd filez",
+  "automodpack.restart.removeStale.one": "Remov olde pack: %s",
+  "automodpack.restart.removeStale.other": "Remov %s olde packz",
   "automodpack.selection.categoryPart": "%s of %s pickd",
   "automodpack.selection.categoryTooltip": "clik 2 includ all da optional groupz in dis category. clik agen 2 dump em all.",
   "automodpack.vault.restorePickFirst": "pick a stashd file fus. any file. plz.",

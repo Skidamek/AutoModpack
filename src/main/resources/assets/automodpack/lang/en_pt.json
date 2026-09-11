@@ -361,6 +361,8 @@
   "automodpack.selection.noChanges": "No changes",
   "automodpack.management.preservedFilesCount": "%s stashed files",
   "automodpack.restart.preservedFiles": "%s files be in Stashed files",
+  "automodpack.restart.removeStale.one": "Remove olde pack: %s",
+  "automodpack.restart.removeStale.other": "Remove %s olde packs",
   "automodpack.selection.categoryPart": "%s of %s selected",
   "automodpack.selection.categoryTooltip": "Click to include every optional group in this category. Click again to cast them all off.",
   "automodpack.vault.restorePickFirst": "Pick a stashed file first.",
