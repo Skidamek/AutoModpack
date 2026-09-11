@@ -3,9 +3,13 @@ package pl.skidam.automodpack_core.platforms;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -166,7 +170,29 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 		return new ModrinthAPI(modrinthID, null, downloadUrl, fileVersion, fileName, fileSize, releaseType, sha1);
 	}
 
-	public static String getMainPageUrl(String modrinthID, String fileType) {
-		return "https://modrinth.com/" + fileType + "/" + modrinthID;
+	/** The human project slug of every given project id, from one batched lookup; ids without a slug are absent. */
+	public static Map<String, String> getProjectSlugs(Collection<String> projectIds) {
+		if (projectIds == null || projectIds.isEmpty()) return Map.of();
+		String requestUrl = BASE_URL + "/projects?ids=" + projectIds.stream().map(id -> "\"" + id + "\"").collect(Collectors.joining(",", "[", "]"));
+		requestUrl = requestUrl.replaceAll("\"", "%22"); // so important!
+
+		Map<String, String> slugs = new LinkedHashMap<>();
+		try {
+			JsonArray projects = Json.fromUrlAsArray(requestUrl);
+			if (projects == null) return Map.of();
+			for (JsonElement element : projects) {
+				JsonObject project = element.getAsJsonObject();
+				if (project.has("id") && project.has("slug") && !project.get("slug").isJsonNull())
+					slugs.put(project.get("id").getAsString(), project.get("slug").getAsString());
+			}
+		} catch (Exception e) {
+			LOGGER.error("Failed to fetch project slugs from Modrinth API", e);
+		}
+		return slugs;
+	}
+
+	/** The project page of one file type and project slug; the id works as a fallback slug, but only the slug reads as a name. */
+	public static String getMainPageUrl(String fileType, String projectSlug) {
+		return "https://modrinth.com/" + fileType + "/" + projectSlug;
 	}
 }
