@@ -167,7 +167,12 @@ public final class ClientObjectStore {
 		return measure(storage, collectReferences(storage));
 	}
 
-	/** Publishes a conservative durable receipt before or after client state changes. */
+	/**
+	 * Publishes a conservative durable receipt before or after client state changes. One call sweeps every
+	 * journal-mirror entry, overlay, baseline, generated copy, the pending transaction, and repair state — measured
+	 * at ~2ms warm for a 200-entry journal ({@code ClientObjectStoreTest.referenceSweepStaysCheapOnATwoHundredEntryJournal}),
+	 * so callers publish at phase transitions, not per file.
+	 */
 	public static void publishOwnership(ClientStorage storage) throws IOException {
 		publishOwnership(storage, Set.of());
 	}

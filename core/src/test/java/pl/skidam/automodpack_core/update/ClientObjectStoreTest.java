@@ -189,6 +189,30 @@ class ClientObjectStoreTest {
 		assertFalse(Files.exists(storage.objectFile(hash)));
 	}
 
+	/** The receipt behind publishOwnership's per-commit cost: measured ~2ms warm for 200 entries; the assert is a structural tripwire, not a speed test. */
+	@Test
+	void referenceSweepStaysCheapOnATwoHundredEntryJournal() throws Exception {
+		ClientStorage storage = storage();
+		for (int generation = 0; generation < 200; generation++) {
+			byte[] content = ("generation-" + generation).getBytes(StandardCharsets.UTF_8);
+			String hash = store(storage, content);
+			PackDocument record = TestPacks.document(TestPacks.manifest("generation " + generation, "config/gen-" + generation + ".txt", new String(content, StandardCharsets.UTF_8)));
+			TestPacks.stageGeneration(storage, record);
+			assertTrue(Files.exists(storage.objectFile(hash)));
+		}
+
+		long start = System.nanoTime();
+		Set<String> referenced = ClientObjectStore.referencedHashes(storage);
+		long sweepMillis = (System.nanoTime() - start) / 1_000_000;
+
+		// 200 policy documents plus their change targets: the mirror alone pins ~400 objects, and the sweep walks
+		// every mirror entry's JSON plus every overlay, baseline, and generated-copy file. Anything past the
+		// measured ~2ms by orders of magnitude means the sweep became structural, not incremental.
+		assertTrue(sweepMillis < 5_000, "The reference sweep took " + sweepMillis + "ms for a 200-entry journal");
+		assertTrue(referenced.size() >= 400);
+		System.out.println("Reference sweep over a 200-entry journal: " + sweepMillis + "ms, " + referenced.size() + " referenced hashes");
+	}
+
 	private ClientStorage storage() throws Exception {
 		return storage("game", temporaryDirectory.resolve("data"));
 	}
