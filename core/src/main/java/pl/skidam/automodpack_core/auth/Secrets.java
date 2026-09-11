@@ -97,21 +97,31 @@ public class Secrets {
 		}
 
 		var playerSecretPair = SecretsStore.getHostSecret(secretStr);
-		if (playerSecretPair == null) return false;
-
-		Secret secret = playerSecretPair.getValue();
-		if (secret == null) return false;
-
-		String playerUuid = playerSecretPair.getKey();
-		if (!GAME_CALL.isPlayerAuthorized(address, playerUuid)) // check if associated player is still whitelisted
+		if (playerSecretPair == null) {
+			LOGGER.warn("Rejecting an unknown secret from {}", address);
 			return false;
+		}
+
+		IssuedSecret issued = playerSecretPair.getValue();
+		if (issued == null || issued.name() == null || issued.name().isBlank()) {
+			LOGGER.warn("Rejecting a secret from {} that is not bound to a player identity (stale entry from an older AutoModpack version)", address);
+			return false;
+		}
+
+		if (!GAME_CALL.isPlayerAuthorized(address, playerSecretPair.getKey(), issued.name())) { // check if the player the secret was issued to is still authorized
+			LOGGER.warn("Rejecting a secret from {}: {} is no longer authorized - make sure they are whitelisted", address, issued.name());
+			return false;
+		}
 
 		long secretLifetime = serverConfig.secretLifetime * 3600; // in seconds
 		long currentTime = System.currentTimeMillis() / 1000;
 
-		boolean valid = secret.timestamp() + secretLifetime > currentTime;
+		boolean valid = issued.timestamp() + secretLifetime > currentTime;
 
-		if (!valid) return false;
+		if (!valid) {
+			LOGGER.warn("Rejecting an expired secret from {}", address);
+			return false;
+		}
 
 		cachedValidSecrets.add(secretStr);
 

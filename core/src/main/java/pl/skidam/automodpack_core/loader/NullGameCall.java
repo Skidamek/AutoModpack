@@ -4,7 +4,7 @@ import java.net.SocketAddress;
 
 public class NullGameCall implements GameCallService {
 	@Override
-	public boolean isPlayerAuthorized(SocketAddress address, String id) {
+	public boolean isPlayerAuthorized(SocketAddress address, String id, String playerName) {
 		return true;
 	}
 }

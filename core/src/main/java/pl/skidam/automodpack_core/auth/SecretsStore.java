@@ -13,7 +13,7 @@ import pl.skidam.automodpack_core.storage.StoragePaths;
 
 public class SecretsStore {
 	private static class SecretsCache {
-		private final ConcurrentMap<String, Secrets.Secret> cache;
+		private final ConcurrentMap<String, IssuedSecret> cache;
 		private AuthJsons.SecretsFields db;
 		private final Path configFile;
 
@@ -36,37 +36,33 @@ public class SecretsStore {
 			}
 		}
 
-		public Secrets.Secret get(String key) {
+		public synchronized void save(String key, Secrets.Secret secret, String playerName) throws IllegalArgumentException {
+			if (key == null || key.isBlank() || secret == null || secret.secret().isBlank() || playerName == null || playerName.isBlank())
+				throw new IllegalArgumentException("Key, secret and player name cannot be null or blank");
 			load();
-			return cache.get(key);
-		}
-
-		public synchronized void save(String key, Secrets.Secret secret) throws IllegalArgumentException {
-			if (key == null || key.isBlank() || secret == null || secret.secret().isBlank())
-				throw new IllegalArgumentException("Key or secret cannot be null or blank");
-			load();
-			cache.put(key, secret);
+			IssuedSecret issued = new IssuedSecret(secret, playerName);
+			cache.put(key, issued);
 			if (db == null) db = new AuthJsons.SecretsFields();
 			if (db.secrets == null) db.secrets = new ConcurrentHashMap<>();
-			db.secrets.put(key, secret);
+			db.secrets.put(key, issued);
 			save();
 		}
-
 	}
 
 	private static final SecretsCache hostSecrets = new SecretsCache(StoragePaths.SERVER_SECRETS_FILE);
 
-	public static Map.Entry<String, Secrets.Secret> getHostSecret(String secret) {
+	public static Map.Entry<String, IssuedSecret> getHostSecret(String secret) {
 		hostSecrets.load();
 		for (var entry : hostSecrets.cache.entrySet()) {
-			var thisSecret = entry.getValue().secret();
-			if (Objects.equals(thisSecret, secret)) return entry;
+			IssuedSecret issued = entry.getValue();
+			if (issued == null || issued.secret() == null) continue;
+			if (Objects.equals(issued.secret(), secret)) return entry;
 		}
 
 		return null;
 	}
 
-	public static void saveHostSecret(String uuid, Secrets.Secret secret) {
-		hostSecrets.save(uuid, secret);
+	public static void saveHostSecret(String uuid, Secrets.Secret secret, String playerName) {
+		hostSecrets.save(uuid, secret, playerName);
 	}
 }
