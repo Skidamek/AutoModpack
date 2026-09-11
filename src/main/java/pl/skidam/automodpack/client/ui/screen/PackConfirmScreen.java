@@ -1,5 +1,8 @@
 package pl.skidam.automodpack.client.ui.screen;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -240,6 +243,18 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private void appendStatLines(List<MutableComponent> lines, int wrapWidth) {
 		var target = updater.getSelectedTarget();
 		appendStat(lines, wrapWidth, PackConfirmCopy.selectedSummary(target), ChatFormatting.GREEN);
+		// Same stat the update preview shows: what the local store still misses of the announced content.
+		if (firstInstall) {
+			try {
+				appendStat(lines, wrapWidth,
+						VersionedText.translatable("automodpack.firstConnect.downloadSummary", UiFormat.formatSize(updater.uncachedSelectedTargetBytes()), UiFormat.formatSize(PackConfirmCopy.selectedBytes(target)))
+								.getString(),
+						ChatFormatting.GRAY);
+			} catch (IOException e) {
+				// The stat is informational; the acquisition after confirm reports a real failure if the store is unreadable.
+				LOGGER.warn("Cannot measure the first-install download cost", e);
+			}
+		}
 		appendStat(lines, wrapWidth, PackConfirmCopy.existingMods(keepExistingMods, updater.firstInstallLocalModCount()), keepExistingMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY);
 		appendStat(lines, wrapWidth, PackConfirmCopy.requestedGroups(target), ChatFormatting.WHITE);
 		appendStat(lines, wrapWidth, PackConfirmCopy.includedGroups(target), ChatFormatting.WHITE);

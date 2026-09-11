@@ -217,6 +217,7 @@
   "automodpack.files.title": "filez in %s",
   "automodpack.files.description": "all teh installed modpak filez. all of them. yes.",
   "automodpack.firstConnect.selectedSummary": "pickd groups: %s  filez: %s  size: %s",
+  "automodpack.firstConnect.downloadSummary": "%s to downloads  |  %s nu content",
   "automodpack.firstConnect.includedGroups": "includd groupz: %s",
   "automodpack.firstConnect.unavailableOldChoices": "old groupz u pickd r gone: %s",
   "automodpack.selection.platformSummary": "platform: %s  pickd groups: %s",

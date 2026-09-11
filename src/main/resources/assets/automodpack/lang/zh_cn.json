@@ -214,6 +214,7 @@
   "automodpack.files.title": "%s 中的文件",
   "automodpack.files.description": "已安装整合包的完整文件列表。",
   "automodpack.firstConnect.selectedSummary": "已选分组：%s  文件：%s  内容大小：%s",
+  "automodpack.firstConnect.downloadSummary": "需下载：%s  |  新内容：%s",
   "automodpack.firstConnect.includedGroups": "包含的分组：%s",
   "automodpack.firstConnect.unavailableOldChoices": "以前选过、现已不可用的分组：%s",
   "automodpack.selection.platformSummary": "平台：%s  已选分组：%s",
