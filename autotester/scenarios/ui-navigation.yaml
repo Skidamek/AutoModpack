@@ -37,7 +37,6 @@ flow:
         - element: { text: "Windows" }
         - element: { text: "Linux (" }
         - element: { text: "macOS" }
-        - element: { text: "Other" }
   - do: screenshot
     name: capture the OS dropdown
     file: ui-navigation-os-dropdown
