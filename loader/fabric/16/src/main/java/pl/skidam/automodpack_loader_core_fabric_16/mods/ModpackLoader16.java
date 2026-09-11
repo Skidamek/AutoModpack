@@ -21,6 +21,7 @@ import net.fabricmc.loader.impl.util.SystemProperties;
 
 import pl.skidam.automodpack_core.loader.ModpackLoadRequest;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.loader.RequestedCandidates;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
@@ -40,7 +41,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
 			List<ModCandidateImpl> candidates;
 			candidates = (List<ModCandidateImpl>) discoverMods(activeModsDirectory);
-			candidates = filterRequested(candidates, request);
+			candidates = RequestedCandidates.keep(candidates, ACCESSOR, request::allowsProjectionJar);
 			candidates = (List<ModCandidateImpl>) resolveMods(candidates);
 
 			METHOD_DUMP_MOD_LIST.invoke(FabricLoaderImpl.INSTANCE, candidates);
@@ -210,24 +211,22 @@ public class ModpackLoader16 implements ModpackLoaderService {
 		return latestMods;
 	}
 
-	private static List<ModCandidateImpl> filterRequested(List<ModCandidateImpl> candidates, ModpackLoadRequest request) {
-		Set<ModCandidateImpl> keptRoots = new HashSet<>();
-		for (ModCandidateImpl candidate : candidates) {
-			if (!candidate.isRoot()) continue;
-			List<Path> paths = candidate.getPaths();
-			if (paths == null || paths.isEmpty()) {
-				keptRoots.add(candidate);
-				continue;
-			}
-			if (request.allowsProjectionJar(paths.get(0))) keptRoots.add(candidate);
+	private static final RequestedCandidates.Accessor<ModCandidateImpl> ACCESSOR = new RequestedCandidates.Accessor<>() {
+		@Override
+		public boolean isRoot(ModCandidateImpl candidate) {
+			return candidate.isRoot();
 		}
-		List<ModCandidateImpl> kept = new ArrayList<>();
-		for (ModCandidateImpl candidate : candidates) {
-			if (keptRoots.contains(candidate)) kept.add(candidate);
-			else if (!candidate.isRoot() && candidate.getParentMods().stream().anyMatch(keptRoots::contains)) kept.add(candidate);
+
+		@Override
+		public List<Path> paths(ModCandidateImpl candidate) {
+			return candidate.getPaths();
 		}
-		return kept;
-	}
+
+		@Override
+		public Collection<ModCandidateImpl> nestedMods(ModCandidateImpl candidate) {
+			return candidate.getNestedMods();
+		}
+	};
 
 	private Collection<ModCandidateImpl> discoverMods(Path modsDirectory) throws ModResolutionException, IllegalAccessException {
 		ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));
