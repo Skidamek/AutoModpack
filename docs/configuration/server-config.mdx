@@ -13,9 +13,9 @@ This configuration file controls the behavior of the AutoModpack server-side com
 | `modpackHost`                 | `true`          | Enables AutoModpack's built-in connection handling. When false, connection information can still point clients to an externally handled endpoint. |
 | `generateModpackOnStart`      | `true`          | Automatically scans files and regenerates modpack metadata every time the server starts.                                                          |
 | `autoExcludeServerSideMods`   | `true`          | Automatically excludes mods marked as "Server Side Only" in their metadata.                                                                       |
-| `autoExcludeUnnecessaryFiles` | `true`          | Automatically skips syncing files that are empty, hidden, temporary, disabled, or backup files.                                                   |
+| `autoExcludeUnnecessaryFiles` | `true`          | Convenience tier of the built-in scan exclusions: skips files that are empty, hidden, `.tmp`, `.disabled`, or `.bak`. The correctness tier - the `automodpack/` namespace and Windows-reserved device names (`con`, `com1`, `lpt0`, ...) - is always enforced and cannot be turned off. |
 | `requireAutoModpackOnClient`  | `true`          | If true, players are kicked if they do not have AutoModpack installed.                                                                            |
-| `acceptedLoaders`             | `["<current>"]` | A list of modloaders allowed to connect (e.g., Fabric, Forge). Use with caution; most mods are loader-specific.                                   |
+| `acceptedLoaders`             | `["<current>"]` | A list of modloaders allowed to connect (e.g., Fabric, Forge). Seeded with this server's loader on first load only; after that the set is the admin's, so removing the current loader keeps it removed. Use with caution; most mods are loader-specific. |
 | `syncLoaderVersion`           | `true`          | When false, the server does not provide a loader version, so clients keep whatever loader version their launcher has installed. |
 | `selfUpdater`                 | `false`         | Enables AutoModpack to update its own jar file automatically when new version is published on modrinth.                                           |
 
@@ -35,8 +35,9 @@ For `syncedFiles`, `excludedFiles` and `allowEditsInFiles`, use the following pa
 
 - `*` : Matches files in a single directory (e.g., `mods/*.jar`).
 - `**` : Matches files recursively in all subdirectories (e.g., `kubejs/**`).
+- `!` : Negates a rule inside its own list - a path matches the list when a positive rule matches it and no `!` rule does (e.g., `allowEditsInFiles: ["config/**", "!config/fancymenu/**"]` makes everything in `config` editable except FancyMenu's files).
 
-Exclusions are a rule set of their own (`excludedFiles`); there is no `!` prefix. A stale `!`-prefixed entry in `syncedFiles` is moved to `excludedFiles` when the config loads.
+Every list speaks the same language: a path matches a list when a positive rule matches it and no `!` rule vetoes it. Where the negation applies is up to the list it sits in. Inside `syncedFiles` it excepts a path from the synced set only - useful when the group directory provides the same path with different content, since host-modpack wins anyway. `excludedFiles` keeps a path from reaching clients from anywhere, so prefer it for pack exclusions and use a `syncedFiles` negation only when the group-directory copy should still ship.
 
 Read more about globbing on the [Globbing Wikipedia article](https://wikipedia.org/wiki/Glob_(programming)#Syntax).
 
@@ -62,10 +63,10 @@ These settings control how the file server is exposed to the internet.
 | `bindPort`               | `-1`                                                       | Controls built-in TCP handling according to `connectionMode`; see the matrix below. Values unused by the selected mode are preserved.          |
 | `advertisedEndpointHost` | `""`                                                       | The public hostname/IP sent to clients as the download endpoint. Empty uses the connected hostname.                                            |
 | `advertisedEndpointPort` | `-1`                                                       | The public TCP port sent to clients as the download endpoint. -1 uses the connected port.                                                      |
-| `bandwidthLimit`         | `0`                                                        | Upload speed limit in Mbps (0 = unlimited).                                                                                                    |
+| `bandwidthLimit`         | `0`                                                        | Upload speed limit in MiB/s per client (0 = unlimited).                                                                                        |
 | `disableInternalTLS`     | `false`                                                    | Disables only AutoModpack's server-side TLS termination. Clients always use TLS; an expert-provided terminator must forward decrypted traffic. |
 | `connectionMode`         | `HOLEPUNCH`                                              | Selects the exact method advertised to clients and used by built-in handling. `HOLEPUNCH` is the default. The modes do not fall back to one another at connection time. |
-| `validateSecrets`        | `true`                                                     | Protects downloads using unique, temporary secrets per user. The bootstrap provisioning secret is a separate grant stored in `credentials/provisioning-secret`. |
+| `validateSecrets`        | `true`                                                     | Protects downloads using unique, temporary secrets per user. The bootstrap provisioning secret is a separate grant stored in `credentials/provisioning-secret`. A standalone host has no game handshake to provision secrets, so its fresh config defaults this to `false`; the value stays the admin's to change. |
 | `secretLifetime`         | `336`                                                      | How long (in hours) a download secret remains valid.                                                                                           |
 
 ### Connection modes and ports

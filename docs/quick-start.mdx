@@ -58,17 +58,17 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 
 **Key Configuration Options:**
 
-- **`syncedFiles`**: Files and folders to sync to clients, relative to the server root. Nothing is synced from the server root unless a rule includes it. Use `*` for wildcards and `**` for recursive matching
-- **`excludedFiles`**: Files and folders to leave out of the modpack. The group directory under `host-modpack/` is included in full, so this is the way to keep a file there from reaching clients; it also carves exceptions out of `syncedFiles`
+- **`syncedFiles`**: Files and folders to sync to clients, relative to the server root. Nothing is synced from the server root unless a rule includes it. Use `*` for wildcards and `**` for recursive matching; a `!` rule excepts a path from the synced set only
+- **`excludedFiles`**: Files and folders to leave out of the modpack from every source. The group directory under `host-modpack/` is included in full, so this is the way to keep a file there from reaching clients; it also carves exceptions out of what `syncedFiles` included
 - **`allowEditsInFiles`**: Files that clients can edit locally. Local edits are preserved until the server version of the file changes
-  - **Example:** To always update FancyMenu configs (the server's copy always wins), leave that folder out of `allowEditsInFiles` by scoping the editable rules around it - wildcards cannot express "everything except":
+  - **Example:** To always update FancyMenu configs (the server's copy always wins), negate them inside the list - a path matches the list when a positive rule matches it and no `!` rule does:
     ```json
     "allowEditsInFiles": [
-      "config/*",
-      "config/*/**"
+      "config/**",
+      "!config/fancymenu/**"
     ]
     ```
-    With `config/fancymenu/**` absent from the list, FancyMenu configs update whenever the server ships new ones. Keep such files in `syncedFiles` - `excludedFiles` would remove them from the modpack entirely
+    Keep such files in `syncedFiles` - `excludedFiles` would remove them from the modpack entirely
 - **Other options**: See the [full configuration page](configuration/server-config) for detailed explanations of all settings
 
 ### Splitting Mods for Server and Client

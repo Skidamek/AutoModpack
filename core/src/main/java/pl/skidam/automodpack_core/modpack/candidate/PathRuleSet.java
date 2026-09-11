@@ -8,10 +8,15 @@ import java.util.*;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 
-/** A set of glob path rules; every rule matches, exclusions are a separate rule set. */
+/**
+ * A set of glob path rules. A path is matched when a positive rule matches it and no '!'-negated rule does - one
+ * primitive each field points at its own posture: syncedFiles includes, excludedFiles excludes (where a '!' rule
+ * un-excludes), allowEditsInFiles marks editable.
+ */
 public final class PathRuleSet {
 	private final FileSystem fileSystem;
-	private final List<CompiledRule> rules;
+	private final List<CompiledRule> positive;
+	private final List<CompiledRule> negated;
 
 	public PathRuleSet(Collection<String> rules) {
 		this(rules, FileSystems.getDefault());
@@ -19,36 +24,41 @@ public final class PathRuleSet {
 
 	PathRuleSet(Collection<String> rules, FileSystem fileSystem) {
 		this.fileSystem = fileSystem;
-		List<CompiledRule> compiled = new ArrayList<>();
+		List<CompiledRule> positive = new ArrayList<>();
+		List<CompiledRule> negated = new ArrayList<>();
 		if (rules != null) for (String raw : new TreeSet<>(rules)) {
 			if (raw == null || raw.isBlank()) throw new IllegalArgumentException("Path rule is null or blank");
-			if (raw.startsWith("!")) throw new IllegalArgumentException("Path rules cannot start with '!': exclusions live in their own rule set");
-			String pattern = raw;
+			boolean negation = raw.startsWith("!");
+			String pattern = negation ? raw.substring(1) : raw;
 			while (pattern.startsWith("/")) pattern = pattern.substring(1);
 			while (pattern.contains("**/**")) pattern = pattern.replace("**/**", "**");
 			if (pattern.isBlank()) throw new IllegalArgumentException("Path rule is empty: " + raw);
-			compiled.add(new CompiledRule(raw, compile(pattern)));
+			(negation ? negated : positive).add(new CompiledRule(raw, compile(pattern)));
 		}
-		this.rules = List.copyOf(compiled);
+		this.positive = List.copyOf(positive);
+		this.negated = List.copyOf(negated);
 	}
 
 	public Decision evaluate(String path) {
 		String logicalPath = LogicalPath.normalize(path);
 		Path value = fileSystem.getPath(logicalPath);
-		CompiledRule match = firstMatch(rules, value);
-		return match == null ? Decision.UNMATCHED : new Decision(true, match.raw());
+		CompiledRule match = firstMatch(positive, value);
+		if (match == null) return Decision.UNMATCHED;
+		CompiledRule veto = firstMatch(negated, value);
+		return veto == null ? new Decision(true, match.raw()) : new Decision(false, veto.raw());
 	}
 
 	public boolean isEmpty() {
-		return rules.isEmpty();
+		return positive.isEmpty();
 	}
 
 	/** Returns the narrowest filesystem prefixes that can contain a matched path. */
 	public Set<String> safeScanRoots() {
-		if (rules.isEmpty()) return Set.of();
+		if (positive.isEmpty()) return Set.of();
 		Set<String> roots = new TreeSet<>();
-		for (CompiledRule rule : rules) {
+		for (CompiledRule rule : positive) {
 			String pattern = rule.raw();
+			while (pattern.startsWith("!")) pattern = pattern.substring(1);
 			while (pattern.startsWith("/")) pattern = pattern.substring(1);
 			StringBuilder literal = new StringBuilder();
 			for (String component : pattern.split("/")) {
