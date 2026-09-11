@@ -131,6 +131,8 @@ public final class UpdateTransactionExecutor {
 			validateSelectionBeforeMutation(transaction);
 			preparePendingReplacement();
 			ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
+			// Receipt before the first mutation: other processes sharing the store see this instance only through
+			// its ownership receipt, so the journaled plan's objects must be pinned by name before apply runs.
 			ClientObjectStore.publishOwnership(context.storage());
 			return executePersisted(transaction);
 		});
@@ -235,13 +237,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Execution executePersisted(UpdateTransaction transaction) throws IOException {
-		if (transaction.phase == UpdateTransaction.Phase.COMMITTED) {
-			ClientObjectStore.publishOwnership(context.storage());
-			cleanupTransactionDirectories(transaction);
-			Files.deleteIfExists(context.storage().transactionFile());
-			ClientObjectStore.publishOwnership(context.storage());
-			return new Execution(UpdateTransaction.Status.SUCCESS, transaction, null, null, null);
-		}
+		if (transaction.phase == UpdateTransaction.Phase.COMMITTED) return finalizeCommitted(transaction);
 		AtomicReference<Operation> current = new AtomicReference<>();
 		Path blockedPath = null;
 		boolean publicationStarted = projectionPublicationStarted(transaction);
@@ -254,12 +250,8 @@ public final class UpdateTransactionExecutor {
 			transaction.resultMessage = null;
 			setPhase(transaction, UpdateTransaction.Phase.PREPARING);
 			applyModpackTransaction(transaction, current, publicationStarted, liveAlreadyApplied, preserveNewerSelection);
-			ClientObjectStore.publishOwnership(context.storage());
 			setPhase(transaction, UpdateTransaction.Phase.COMMITTED);
-			cleanupTransactionDirectories(transaction);
-			Files.deleteIfExists(context.storage().transactionFile());
-			ClientObjectStore.publishOwnership(context.storage());
-			return new Execution(UpdateTransaction.Status.SUCCESS, transaction, null, null, null);
+			return finalizeCommitted(transaction);
 		} catch (IOException e) {
 			Operation currentOperation = current.get();
 			if (blockedPath == null && currentOperation != null) blockedPath = resolve(currentOperation, transaction);
@@ -276,6 +268,21 @@ public final class UpdateTransactionExecutor {
 			recordResult(transaction, UpdateTransaction.Status.FAILED, operationName, blockedPath, e.getMessage(), e);
 			throw new UpdateExecutionException(operationName, blockedPath, e);
 		}
+	}
+
+	/**
+	 * The one durable commit tail, shared by the live path and the recovery of a crash after the COMMITTED phase
+	 * persisted: drop the working directories, retire the journal, and refresh the ownership receipt. The receipt
+	 * published at commit start names every object the journal pinned, and retiring it is the only reference loss
+	 * since, so the stale on-disk receipt protected everything until this refresh replaces it with exactly the
+	 * durable set. A publish is a full-state sweep (~2ms over a 200-entry journal, pinned by
+	 * {@code ClientObjectStoreTest}), so a commit publishes at its start and here, and never per file.
+	 */
+	private Execution finalizeCommitted(UpdateTransaction transaction) throws IOException {
+		cleanupTransactionDirectories(transaction);
+		Files.deleteIfExists(context.storage().transactionFile());
+		ClientObjectStore.publishOwnership(context.storage());
+		return new Execution(UpdateTransaction.Status.SUCCESS, transaction, null, null, null);
 	}
 
 	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
