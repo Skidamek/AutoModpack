@@ -1,17 +1,22 @@
 package pl.skidam.automodpack_core.auth;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.FileLocks;
@@ -56,6 +61,28 @@ public final class ConnectionStore {
 	public static void saveClientSecret(ClientStorage storage, String modpackId, InetSocketAddress origin, Secrets.Secret secret) throws IOException {
 		if (origin == null || secret == null || secret.secret().isBlank()) throw new IllegalArgumentException("Origin and secret are required");
 		update(storage, modpackId, fields -> fields.secrets.put(AddressHelpers.formatAddress(origin), secret));
+	}
+
+	/**
+	 * Installed packs whose saved connection origin equals the active pack's, excluding the active pack itself: the
+	 * leftovers of an origin that lost its modpack identity and republished under a new id. The active pack's own
+	 * connection record names the origin; an unreadable or origin-less record only hides its pack from the offer.
+	 */
+	public static List<String> staleSameOriginPackIds(ClientStorage storage, String activeModpackId) throws IOException {
+		ConnectionJsons.ConnectionInfo active = getConnection(storage, activeModpackId);
+		if (active == null || active.origin == null) return List.of();
+		String origin = AddressHelpers.formatAddress(active.origin);
+		List<String> stale = new ArrayList<>();
+		for (String modpackId : new ClientGenerationStore(storage).installedPackIds()) {
+			if (modpackId.equals(ModpackId.requireValid(activeModpackId))) continue;
+			try {
+				ConnectionJsons.ConnectionInfo connection = getConnection(storage, modpackId);
+				if (connection != null && connection.origin != null && AddressHelpers.formatAddress(connection.origin).equals(origin)) stale.add(modpackId);
+			} catch (IOException | RuntimeException e) {
+				LOGGER.debug("Cannot read the connection record of modpack {}; it is not offered for cleanup", modpackId, e);
+			}
+		}
+		return List.copyOf(stale);
 	}
 
 	private static Path file(ClientStorage storage, String modpackId) {

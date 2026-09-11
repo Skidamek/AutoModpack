@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
+import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -38,6 +39,7 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
+import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -166,6 +168,49 @@ final class InstalledModpackController {
 
 	List<PreservationVault.Snapshot> preservedFiles() throws IOException {
 		return PreservationVault.snapshots(storage);
+	}
+
+	/** One installed pack this origin no longer serves, with its player-facing name or raw id. */
+	record StalePack(String modpackId, String name) {}
+
+	/** Installed packs whose saved origin now serves the active pack instead: the leftovers of a republished server. */
+	List<StalePack> stalePacks() {
+		String activeId = activeModpackId();
+		if (activeId.isBlank()) return List.of();
+		try {
+			List<StalePack> stale = new ArrayList<>();
+			for (String modpackId : ConnectionStore.staleSameOriginPackIds(storage, activeId)) stale.add(new StalePack(modpackId, stalePackName(modpackId)));
+			return List.copyOf(stale);
+		} catch (IOException | RuntimeException e) {
+			discoveryFailure = e;
+			return List.of();
+		}
+	}
+
+	private String stalePackName(String modpackId) {
+		try {
+			List<JournalEntry> entries = new JournalMirror(storage).entries(modpackId);
+			if (!entries.isEmpty()) {
+				String name = new ClientGenerationStore(storage).policyDocument(entries.get(entries.size() - 1).policySha1()).modpackName();
+				if (!name.isBlank()) return name;
+			}
+		} catch (IOException | RuntimeException ignored) {
+			// The name is cosmetic; the raw id is the honest fallback, not a discovery failure.
+		}
+		return modpackId;
+	}
+
+	/** Forgets one non-active installed pack's retained local state and its now-unreferenced objects; the restart prompt is the consent. */
+	void forgetStalePack(String modpackId, Runnable completed) {
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			try {
+				new ClientGenerationStore(storage).forgetModpack(modpackId);
+				releaseOnClient(completed);
+			} catch (Exception e) {
+				releaseOnClient(completed);
+				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+			}
+		});
 	}
 
 	Path restorePreservedFile(String modpackId, String claimId) throws IOException {
