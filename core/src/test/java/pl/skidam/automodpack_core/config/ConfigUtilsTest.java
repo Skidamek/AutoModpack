@@ -25,19 +25,18 @@ class ConfigUtilsTest {
 	}
 
 	@Test
-	void normalizesRulePathsAndMigratesOldExclusions() {
+	void normalizesRulePathsAndKeepsSetLocalNegations() {
 		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.syncedFiles = new LinkedHashSet<>(List.of("/mods/*.jar", "/automodpack/host-modpack/main/extra", "!kubejs/server_scripts/**", "!/kubejs/assets/**"));
-		group.excludedFiles = new LinkedHashSet<>(List.of("/automodpack/host-modpack/main/secret.bin"));
+		group.excludedFiles = new LinkedHashSet<>(List.of("/automodpack/host-modpack/main/secret.bin", "!/automodpack/host-modpack/main/keep.bin"));
 		group.allowEditsInFiles = new LinkedHashSet<>(List.of("//config/**"));
 		config.groups = new LinkedHashMap<>(Map.of("main", group));
 
 		ConfigUtils.normalizeServerConfig(config);
 
-		assertEquals(List.of("mods/*.jar"), List.copyOf(group.syncedFiles));
-		// The stale '!' exclusions land in excludedFiles ahead of the group's own entries.
-		assertEquals(List.of("kubejs/server_scripts/**", "kubejs/assets/**", "secret.bin"), List.copyOf(group.excludedFiles));
+		assertEquals(List.of("mods/*.jar", "!kubejs/server_scripts/**", "!kubejs/assets/**"), List.copyOf(group.syncedFiles));
+		assertEquals(List.of("secret.bin", "!keep.bin"), List.copyOf(group.excludedFiles));
 		assertEquals(List.of("config/**"), List.copyOf(group.allowEditsInFiles));
 	}
 }

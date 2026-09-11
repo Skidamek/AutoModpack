@@ -34,8 +34,8 @@ public class ConfigUtils {
 	public static ServerConfigJsons.ServerConfigFieldsV3 loadOrCreateServerConfig() {
 		ServerConfigJsons.ServerConfigFieldsV3 config = ConfigTools.readOrCreate(SERVER_CONFIG_FILE, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new);
 		String before = ConfigTools.GSON.toJson(config);
-		if (config.acceptedLoaders == null) config.acceptedLoaders = new HashSet<>(Set.of(LOADER));
-		else config.acceptedLoaders.add(LOADER);
+		// Seeded on first load only; an admin-edited set is honored as-is, including one that dropped this server's loader.
+		if (config.acceptedLoaders == null || config.acceptedLoaders.isEmpty()) config.acceptedLoaders = new HashSet<>(Set.of(LOADER));
 		normalizeServerConfig(config);
 		if (!before.equals(ConfigTools.GSON.toJson(config))) {
 			try {
@@ -71,36 +71,33 @@ public class ConfigUtils {
 				LOGGER.warn("Ignored null group declaration '{}'.", groupEntry.getKey());
 				continue;
 			}
-			Set<String> syncedFiles = new LinkedHashSet<>();
-			Set<String> movedExclusions = new LinkedHashSet<>();
-			for (String rule : rules(group.syncedFiles)) {
-				String path = clean(rule, "syncedFiles");
-				if (path == null) continue;
-				if (path.startsWith("!")) {
-					String exclusion = clean(path.substring(1), "syncedFiles");
-					if (exclusion == null) continue;
-					LOGGER.info("Moved the exclusion '{}' from syncedFiles to excludedFiles, where exclusions live now.", rule);
-					movedExclusions.add(hostModpackGroup.matcher(exclusion).replaceFirst(""));
-					continue;
-				}
-				if (hostModpackGroup.matcher(path).find()) {
-					LOGGER.info("Removed redundant syncedFiles entry '{}': the group directory under '/automodpack/host-modpack/' is included in full.", rule);
-					continue;
-				}
-				syncedFiles.add(path);
-			}
-			group.syncedFiles = syncedFiles;
-			group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", hostModpackGroup, movedExclusions);
-			group.allowEditsInFiles = normalizeRuleSet(group.allowEditsInFiles, "allowEditsInFiles", hostModpackGroup, Set.of());
+			group.syncedFiles = normalizeRuleSet(group.syncedFiles, "syncedFiles", hostModpackGroup, true);
+			group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", hostModpackGroup, false);
+			group.allowEditsInFiles = normalizeRuleSet(group.allowEditsInFiles, "allowEditsInFiles", hostModpackGroup, false);
 		}
 	}
 
-	/** Normalizes one rule set: logs away null and blank entries, strips leading slashes and the host-modpack group prefix, and seeds moved exclusions. */
-	private static Set<String> normalizeRuleSet(Set<String> ruleSet, String configKey, Pattern hostModpackGroup, Set<String> movedExclusions) {
-		Set<String> normalized = new LinkedHashSet<>(movedExclusions);
+	/**
+	 * Normalizes one rule set: logs away null and blank entries, strips leading slashes and the host-modpack group
+	 * prefix. A '!' rule stays put and keeps its set-local meaning: in syncedFiles it excepts the path from the synced
+	 * set only - the group directory may still provide it - while excludedFiles keeps it from clients entirely, so
+	 * moving one to the other would change what ships. syncedFiles entries under the group directory are dropped
+	 * instead of stripped: the directory is included in full, so a synced rule there can only be redundant.
+	 */
+	private static Set<String> normalizeRuleSet(Set<String> ruleSet, String configKey, Pattern hostModpackGroup, boolean dropHostModpackPaths) {
+		Set<String> normalized = new LinkedHashSet<>();
 		for (String rule : rules(ruleSet)) {
 			String path = clean(rule, configKey);
-			if (path != null) normalized.add(hostModpackGroup.matcher(path).replaceFirst(""));
+			if (path == null) continue;
+			boolean negated = path.startsWith("!");
+			String body = negated ? path.substring(1) : path;
+			while (body.startsWith("/")) body = body.substring(1);
+			if (hostModpackGroup.matcher(body).find()) {
+				if (dropHostModpackPaths) LOGGER.info("Removed redundant {} entry '{}': the group directory under '/automodpack/host-modpack/' is included in full.", configKey, rule);
+				else normalized.add((negated ? "!" : "") + hostModpackGroup.matcher(body).replaceFirst(""));
+				continue;
+			}
+			normalized.add((negated ? "!" : "") + body);
 		}
 		return normalized;
 	}

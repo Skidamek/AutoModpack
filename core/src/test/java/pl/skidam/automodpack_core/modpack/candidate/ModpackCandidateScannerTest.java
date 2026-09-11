@@ -347,6 +347,77 @@ class ModpackCandidateScannerTest {
 		assertEquals(ExcludedCandidate.Reason.EXCLUDED_BY_RULE, candidate.exclusions().get(0).reason());
 	}
 
+	@Test
+	void negatedSyncedRuleSparesOnlyTheSyncedCopy() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(server.resolve("config"));
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(server.resolve("config/dup.txt"), "server build", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/dup.txt"), "client build", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group("config/**", "!config/dup.txt");
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		// The synced copy is skipped, but the group directory still provides the path - only excludedFiles could remove it entirely.
+		assertTrue(files.containsKey("config/dup.txt"));
+		assertEquals(0, candidate.exclusions().size());
+	}
+
+	@Test
+	void negatedExclusionRulesSparePathsFromTheExclusionSet() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main"));
+		Files.writeString(groups.resolve("main/pakku-params.json"), "params", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/pakku-keep.json"), "keep", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.excludedFiles = new LinkedHashSet<>(List.of("pakku-*.json", "!pakku-keep.json"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertTrue(files.containsKey("pakku-keep.json"));
+		assertFalse(files.containsKey("pakku-params.json"));
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals("excluded by pakku-*.json", candidate.exclusions().get(0).message());
+	}
+
+	@Test
+	void negatedEditRulesKeepServerOwnedPaths() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config/fancymenu"));
+		Files.writeString(groups.resolve("main/config/options.txt"), "options", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/fancymenu/theme.txt"), "theme", StandardCharsets.UTF_8);
+		ServerConfigJsons.GroupDeclaration main = group();
+		main.allowEditsInFiles = new LinkedHashSet<>(List.of("config/**", "!config/fancymenu/**"));
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertTrue(files.get("config/options.txt").editable());
+		assertFalse(files.get("config/fancymenu/theme.txt").editable());
+	}
+
+	@Test
+	void reservedWindowsNamesStayExcludedWhenConvenienceExclusionsAreOff() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/aux.tar.gz"), "reserved", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/old.bak"), "backup", StandardCharsets.UTF_8);
+
+		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), false);
+		var files = candidate.manifest().groups().get("main").files();
+
+		assertFalse(files.containsKey("config/aux.tar.gz"));
+		assertTrue(files.containsKey("config/old.bak"));
+		assertEquals(1, candidate.exclusions().size());
+		assertEquals(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, candidate.exclusions().get(0).reason());
+	}
+
 	private static void writeModJar(Path path) throws IOException {
 		try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(path))) {
 			jar.putNextEntry(new JarEntry("fabric.mod.json"));

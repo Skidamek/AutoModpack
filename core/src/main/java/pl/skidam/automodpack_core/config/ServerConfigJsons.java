@@ -16,6 +16,7 @@ public class ServerConfigJsons {
 		// Key is the group id referenced by requires/breaksWith and by the client's saved selection.
 		public Map<String, GroupDeclaration> groups = Map.of("main", mainGroupDeclaration());
 		public boolean autoExcludeServerSideMods = true;
+		/** Convenience tier only: skips empty, hidden, .tmp, .disabled and .bak files at scan time. The correctness tier (the 'automodpack/' namespace and Windows-reserved device names) is always enforced. */
 		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireAutoModpackOnClient = true;
 		public boolean nagUnModdedClients = true;
@@ -28,12 +29,27 @@ public class ServerConfigJsons {
 		public int advertisedEndpointPort = -1;
 		public boolean disableInternalTLS = false;
 		public ModpackConnectionMode connectionMode = ModpackConnectionMode.HOLEPUNCH;
+		/** Cap on per-client transfer speed in MiB/s; 0 disables limiting. */
 		public int bandwidthLimit = 0;
 		public boolean validateSecrets = true;
 		public long secretLifetime = 336; // 336 hours = 14 days
 		public boolean selfUpdater = false;
+		/** Loaders a client may run the modpack with; seeded with this server's loader on first load only, never re-added after the admin edits the set. */
 		public Set<String> acceptedLoaders = new HashSet<>();
 		public boolean syncLoaderVersion = true;
+	}
+
+	/**
+	 * Defaults for a fresh standalone host config: no game handshake exists to provision secrets, and nothing is synced from the host directory unless the admin adds rules. Values land in the file once and are the
+	 * admin's to change.
+	 */
+	public static ServerConfigFieldsV3 standalone() {
+		ServerConfigFieldsV3 config = new ServerConfigFieldsV3();
+		config.validateSecrets = false;
+		GroupDeclaration main = mainGroupDeclaration();
+		main.syncedFiles = Set.of();
+		config.groups = Map.of("main", main);
+		return config;
 	}
 
 	// Default group for a fresh config.

@@ -104,14 +104,16 @@ public final class StableSourceSnapshotter {
 
 	private static Exclusion expectedPathExclusion(CandidateSource source, BasicFileAttributes attributes, boolean autoExcludeUnnecessary) {
 		String logicalPath = source.logicalPath();
+		// Correctness tier, always enforced: Windows clients cannot create these names, and the AutoModpack namespace belongs to the mod's own update flow.
 		if (logicalPath.equals("automodpack") || logicalPath.startsWith("automodpack/"))
 			return new Exclusion(ExcludedCandidate.Reason.INTERNAL_FILE, "AutoModpack internal content is never published");
+		for (Path component : Path.of(logicalPath))
+			if (OsPaths.isReservedWindowsDeviceName(component.toString())) return new Exclusion(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, "'" + component + "' cannot be created on Windows clients");
+		// Convenience tier, owned by the autoExcludeUnnecessaryFiles preference.
 		if (!autoExcludeUnnecessary) return null;
 		if (attributes.size() == 0) return new Exclusion(ExcludedCandidate.Reason.EMPTY_FILE, "empty file");
 		for (Path component : Path.of(logicalPath))
 			if (component.toString().startsWith(".")) return new Exclusion(ExcludedCandidate.Reason.HIDDEN_FILE, "hidden file or directory");
-		for (Path component : Path.of(logicalPath))
-			if (OsPaths.isReservedWindowsDeviceName(component.toString())) return new Exclusion(ExcludedCandidate.Reason.RESERVED_WINDOWS_NAME, "'" + component + "' cannot be created on Windows clients");
 		if (logicalPath.endsWith(".tmp")) return new Exclusion(ExcludedCandidate.Reason.TEMPORARY_FILE, "temporary file");
 		if (logicalPath.endsWith(".disabled")) return new Exclusion(ExcludedCandidate.Reason.DISABLED_FILE, "disabled file");
 		if (logicalPath.endsWith(".bak")) return new Exclusion(ExcludedCandidate.Reason.BACKUP_FILE, "backup file");
