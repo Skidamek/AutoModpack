@@ -43,8 +43,9 @@ public class ServerConfigJsons {
 		declaration.description = "Core modpack files";
 		declaration.required = true;
 		declaration.defaultSelected = true;
-		declaration.syncedFiles = Set.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
-		declaration.allowEditsInFiles = Set.of("/options.txt", "/config/**");
+		declaration.syncedFiles = Set.of("mods/*.jar", "kubejs/**", "emotes/*");
+		declaration.excludedFiles = Set.of("kubejs/server_scripts/**");
+		declaration.allowEditsInFiles = Set.of("options.txt", "config/**");
 		return declaration;
 	}
 
@@ -63,8 +64,13 @@ public class ServerConfigJsons {
 		public Set<String> requires = Set.of();
 		public Set<String> compatiblePlatforms = Set.of();
 
-		// File rules scoped to this group.
+		/**
+		 * File rules scoped to this group. Two postures: the group's directory under host-modpack is included in full
+		 * and {@code excludedFiles} is the only way to leave content out of it, while nothing is synced from the server
+		 * directory unless a {@code syncedFiles} rule includes it - excludedFiles carves exceptions out of either.
+		 */
 		public Set<String> syncedFiles = Set.of();
+		public Set<String> excludedFiles = Set.of();
 		public Set<String> allowEditsInFiles = Set.of();
 	}
 }

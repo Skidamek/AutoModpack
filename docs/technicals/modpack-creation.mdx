@@ -65,8 +65,9 @@ With a [server config](../configuration/server-config) of:
 
 | Setting                            | Values                                                                     |
 |------------------------------------|----------------------------------------------------------------------------|
-| `syncedFiles`                      | `["/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*"]` |
-| `allowEditsInFiles`                | `["/options.txt", "/config/**"]`                                           |
+| `syncedFiles`                      | `["mods/*.jar", "kubejs/**", "emotes/*"]`                                  |
+| `excludedFiles`                    | `["kubejs/server_scripts/**"]`                                             |
+| `allowEditsInFiles`                | `["options.txt", "config/**"]`                                             |
 
 
 The resulting modpack on client would contain:

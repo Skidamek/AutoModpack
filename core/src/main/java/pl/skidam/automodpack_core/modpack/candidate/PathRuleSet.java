@@ -8,10 +8,10 @@ import java.util.*;
 
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 
+/** A set of glob path rules; every rule matches, exclusions are a separate rule set. */
 public final class PathRuleSet {
 	private final FileSystem fileSystem;
-	private final List<CompiledRule> includes;
-	private final List<CompiledRule> excludes;
+	private final List<CompiledRule> rules;
 
 	public PathRuleSet(Collection<String> rules) {
 		this(rules, FileSystems.getDefault());
@@ -19,42 +19,36 @@ public final class PathRuleSet {
 
 	PathRuleSet(Collection<String> rules, FileSystem fileSystem) {
 		this.fileSystem = fileSystem;
-		List<CompiledRule> includes = new ArrayList<>();
-		List<CompiledRule> excludes = new ArrayList<>();
+		List<CompiledRule> compiled = new ArrayList<>();
 		if (rules != null) for (String raw : new TreeSet<>(rules)) {
 			if (raw == null || raw.isBlank()) throw new IllegalArgumentException("Path rule is null or blank");
-			boolean excluded = raw.startsWith("!");
-			String pattern = excluded ? raw.substring(1) : raw;
+			if (raw.startsWith("!")) throw new IllegalArgumentException("Path rules cannot start with '!': exclusions live in their own rule set");
+			String pattern = raw;
 			while (pattern.startsWith("/")) pattern = pattern.substring(1);
 			while (pattern.contains("**/**")) pattern = pattern.replace("**/**", "**");
 			if (pattern.isBlank()) throw new IllegalArgumentException("Path rule is empty: " + raw);
-			CompiledRule compiled = new CompiledRule(raw, compile(pattern));
-			(excluded ? excludes : includes).add(compiled);
+			compiled.add(new CompiledRule(raw, compile(pattern)));
 		}
-		this.includes = List.copyOf(includes);
-		this.excludes = List.copyOf(excludes);
+		this.rules = List.copyOf(compiled);
 	}
 
 	public Decision evaluate(String path) {
 		String logicalPath = LogicalPath.normalize(path);
 		Path value = fileSystem.getPath(logicalPath);
-		CompiledRule include = firstMatch(includes, value);
-		if (include == null) return Decision.unmatched();
-		CompiledRule exclude = firstMatch(excludes, value);
-		return exclude == null ? new Decision(true, true, include.raw()) : new Decision(true, false, exclude.raw());
+		CompiledRule match = firstMatch(rules, value);
+		return match == null ? Decision.UNMATCHED : new Decision(true, match.raw());
 	}
 
 	public boolean isEmpty() {
-		return includes.isEmpty();
+		return rules.isEmpty();
 	}
 
-	/** Returns the narrowest filesystem prefixes that can contain an included path. */
+	/** Returns the narrowest filesystem prefixes that can contain a matched path. */
 	public Set<String> safeScanRoots() {
-		if (includes.isEmpty()) return Set.of();
+		if (rules.isEmpty()) return Set.of();
 		Set<String> roots = new TreeSet<>();
-		for (CompiledRule rule : includes) {
+		for (CompiledRule rule : rules) {
 			String pattern = rule.raw();
-			while (pattern.startsWith("!")) pattern = pattern.substring(1);
 			while (pattern.startsWith("/")) pattern = pattern.substring(1);
 			StringBuilder literal = new StringBuilder();
 			for (String component : pattern.split("/")) {
@@ -93,9 +87,7 @@ public final class PathRuleSet {
 		}
 	}
 
-	public record Decision(boolean matched, boolean included, String decisiveRule) {
-		private static Decision unmatched() {
-			return new Decision(false, false, null);
-		}
+	public record Decision(boolean matched, String decisiveRule) {
+		private static final Decision UNMATCHED = new Decision(false, null);
 	}
 }
