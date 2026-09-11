@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Objects;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
@@ -17,14 +16,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 /*? if >= 1.21.9 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 /*?}*/
-
-/*? if >=26.1 {*/
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-/*?} elif >=1.20 {*/
-/*import net.minecraft.client.gui.GuiGraphics;
-*//*?} else {*/
-/*import com.mojang.blaze3d.vertex.PoseStack;
-*//*?}*/
 
 /** Nested list of unverified jar paths with their sizes for the unverified confirm screen. */
 public final class UnverifiedJarList extends ChromelessList<UnverifiedJarList.Entry> {
@@ -44,7 +35,7 @@ public final class UnverifiedJarList extends ChromelessList<UnverifiedJarList.En
 		if (!this.children().isEmpty()) this.setSelected(this.children().get(0));
 	}
 
-	public final class Entry extends ObjectSelectionList.Entry<Entry> {
+	public final class Entry extends Row<Entry> {
 		private final UnverifiedFile file;
 
 		private Entry(UnverifiedFile file) {
@@ -56,36 +47,14 @@ public final class UnverifiedJarList extends ChromelessList<UnverifiedJarList.En
 			return VersionedText.literal(file.path());
 		}
 
-		/*? if >= 26.1 {*/
 		@Override
-		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), UnverifiedJarList.this.getRowWidth());
-		}
-		/*?} elif >= 1.21.9 {*/
-		/*@Override
-		public void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), UnverifiedJarList.this.getRowWidth());
-		}
-		*//*?} else {*/
-		/*@Override
-		/^? if <1.20 {^/
-		/^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			VersionedMatrices versionedMatrices = new VersionedMatrices();
-		^//^?} else {^/
-		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
-		/^?}^/
-			versionedRender(versionedMatrices, x, y, entryWidth);
-		}
-		*//*?}*/
-
-		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth) {
+		protected void versionedRender(VersionedMatrices matrices, int x, int y, int width, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 			boolean selected = UnverifiedJarList.this.getSelected() == this;
 			String sizeText = file.size() > 0 ? UiFormat.formatSize(file.size()) : "";
 			int sizeWidth = sizeText.isEmpty() ? 0 : minecraft.font.width(sizeText);
-			String label = VersionedScreen.truncateToWidth(minecraft.font, file.path(), Math.max(1, entryWidth - sizeWidth - 6));
+			String label = VersionedScreen.truncateToWidth(minecraft.font, file.path(), Math.max(1, width - sizeWidth - 6));
 			VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(label), x + 2, y + 1, selected ? TextColors.LIGHT_YELLOW : TextColors.LIGHT_GRAY);
-			if (!sizeText.isEmpty()) VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(sizeText), x + entryWidth - sizeWidth, y + 1, TextColors.GRAY);
+			if (!sizeText.isEmpty()) VersionedScreen.drawTextWithShadow(matrices, minecraft.font, VersionedText.literal(sizeText), x + width - sizeWidth, y + 1, TextColors.GRAY);
 		}
 
 		/*? if >= 1.21.9 {*/

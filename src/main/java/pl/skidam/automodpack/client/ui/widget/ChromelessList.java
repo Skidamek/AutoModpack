@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 
+import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScissor;
 
 /*? if >=26.1 {*/
@@ -22,9 +23,9 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
  * occupy exactly the [top, bottom] window the constructor is given, so a list whose content fits never scrolls
  * and never shows a scrollbar, whatever vanilla's internal first-row inset and content padding are. Lists
  * extending this only describe their rows. Rows are content-sized here (a 9px row is exactly one font line), so
- * an entry renders from its raw row rectangle ({@code getX()}/{@code getY()}/{@code getRowWidth()}) on every
- * version; vanilla 26.x's content accessors add a 2px padding that pushes an 8px glyph past the row bottom and
- * the list scissor amputates the last row's descenders.
+ * a row draws from its raw row rectangle on every version - vanilla's content accessors carry a 2px padding that
+ * pushes an 8px glyph past the row bottom, where the list scissor amputates the last row's descenders. The one
+ * per-version entry fork lives in {@link Row}; list entries extend it and never fork rendering again.
  */
 public abstract class ChromelessList<T extends ObjectSelectionList.Entry<T>> extends ObjectSelectionList<T> {
 	/** Vanilla renders the first row this far below the list's top edge; the window is shifted up so rows land where the caller asked. */
@@ -161,4 +162,40 @@ public abstract class ChromelessList<T extends ObjectSelectionList.Entry<T>> ext
 	/*@Override
 	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
 	*//*?}*/
+
+	/**
+	 * One row of any ChromelessList, and the only version fork a list entry ever needs: vanilla's per-version
+	 * entry callbacks - the extract pipeline on 26.x, {@code renderContent} since 1.21.9, plain {@code render}
+	 * before - all funnel into {@link #versionedRender} with the row's raw rectangle. Nothing here may route
+	 * through vanilla's content accessors: their 2px padding assumes rows taller than their content, while
+	 * these rows are exactly their content, so the padding would draw every row 2px low and the list scissor
+	 * would cut the last row's descenders off.
+	 */
+	public abstract static class Row<T extends Row<T>> extends ObjectSelectionList.Entry<T> {
+		/*? if >=26.1 {*/
+		@Override
+		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+			this.versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), this.getWidth(), mouseX, mouseY, hovered, tickDelta);
+		}
+		/*?} elif >= 1.21.9 {*/
+		/*@Override
+		public void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+			this.versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), this.getWidth(), mouseX, mouseY, hovered, tickDelta);
+		}
+		*//*?} else {*/
+		/*@Override
+		/^? if <1.20 {^/
+		/^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+			this.versionedRender(new VersionedMatrices(), x, y, entryWidth, mouseX, mouseY, hovered, tickDelta);
+		}
+		^//^?} else {^/
+		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+			this.versionedRender(new VersionedMatrices(guiGraphics), x, y, entryWidth, mouseX, mouseY, hovered, tickDelta);
+		}
+		/^?}^/
+		*//*?}*/
+
+		/** Draws the row's content inside its raw rectangle [x, y, x + width, y + rowHeight]; absolute gui pixels. */
+		protected abstract void versionedRender(VersionedMatrices matrices, int x, int y, int width, int mouseX, int mouseY, boolean hovered, float tickDelta);
+	}
 }

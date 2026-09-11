@@ -5,7 +5,6 @@ import java.util.Objects;
 import java.util.function.IntConsumer;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import org.jetbrains.annotations.NotNull;
@@ -18,14 +17,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 /*? if >= 1.21.9 {*/
 import net.minecraft.client.input.MouseButtonEvent;
 /*?}*/
-
-/*? if >=26.1 {*/
-import net.minecraft.client.gui.GuiGraphicsExtractor;
-/*?} elif >=1.20 {*/
-/*import net.minecraft.client.gui.GuiGraphics;
-*//*?} else {*/
-/*import com.mojang.blaze3d.vertex.PoseStack;
-*//*?}*/
 
 /** One scrollable vanilla list of pre-styled text rows; screens own the content, this owns scrolling, hit-testing and row picks. */
 public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> implements RowViewport {
@@ -57,7 +48,7 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 		for (Row row : Objects.requireNonNull(rows, "rows")) this.addEntry(new RowEntry(row));
 	}
 
-	public final class RowEntry extends ObjectSelectionList.Entry<RowEntry> {
+	public final class RowEntry extends ChromelessList.Row<RowEntry> {
 		private final Row row;
 
 		private RowEntry(Row row) {
@@ -83,40 +74,18 @@ public final class RowListWidget extends ChromelessList<RowListWidget.RowEntry> 
 			return VersionedText.literal(row.text());
 		}
 
-		/*? if >= 26.1 {*/
 		@Override
-		public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), RowListWidget.this.getRowWidth(), mouseX, mouseY, hovered);
-		}
-		/*?} elif >= 1.21.9 {*/
-		/*@Override
-		public void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			versionedRender(new VersionedMatrices(guiGraphics), this.getX(), this.getY(), RowListWidget.this.getRowWidth(), mouseX, mouseY, hovered);
-		}
-		*//*?} else {*/
-		/*@Override
-		/^? if <1.20 {^/
-		/^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			VersionedMatrices versionedMatrices = new VersionedMatrices();
-		^//^?} else {^/
-		public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-			VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
-		/^?}^/
-			versionedRender(versionedMatrices, x, y, entryWidth, mouseX, mouseY, hovered);
-		}
-		*//*?}*/
-
-		private void versionedRender(VersionedMatrices matrices, int x, int y, int entryWidth, int mouseX, int mouseY, boolean hovered) {
-			int lineWidth = Math.max(1, entryWidth - TEXT_MARGIN * 2);
+		protected void versionedRender(VersionedMatrices matrices, int x, int y, int width, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+			int lineWidth = Math.max(1, width - TEXT_MARGIN * 2);
 			int lines = row.lines().size();
 			int textY = y + Math.max(0, (rowHeight() - lines * LINE_STEP) / 2) + 1;
 			// Washes carry the row state: the selected row stays washed, a hovered row washes while the pointer is on it.
-			if (getSelected() == this) matrices.fill(x, y, x + entryWidth, y + rowHeight(), SELECTED_COLOR);
-			else if (hovered) matrices.fill(x, y, x + entryWidth, y + rowHeight(), HOVER_COLOR);
+			if (getSelected() == this) matrices.fill(x, y, x + width, y + rowHeight(), SELECTED_COLOR);
+			else if (hovered) matrices.fill(x, y, x + width, y + rowHeight(), HOVER_COLOR);
 			for (MutableComponent line : row.lines()) {
 				MutableComponent drawn = line;
 				if (minecraft.font.width(line) > lineWidth) drawn = VersionedText.literal(VersionedScreen.truncateToWidth(minecraft.font, line.getString(), lineWidth)).withStyle(line.getStyle());
-				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + Math.max(0, (entryWidth - minecraft.font.width(drawn)) / 2), textY, TextColors.WHITE);
+				VersionedScreen.drawTextWithShadow(matrices, minecraft.font, drawn, x + Math.max(0, (width - minecraft.font.width(drawn)) / 2), textY, TextColors.WHITE);
 				textY += LINE_STEP;
 			}
 			if (hovered && row.tooltip() != null) VersionedScreen.showComponentTooltip(row.tooltip(), mouseX, mouseY);
