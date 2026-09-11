@@ -57,9 +57,8 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
 		SocketAddress address = ctx.channel().attr(NettyServer.REAL_REMOTE_ADDR).get();
 
-		// Validate the secret
+		// Validate the secret; rejection reasons are logged by the auth layer
 		if (!validateSecret(ctx, address, msg.getSecret())) {
-			LOGGER.warn("Player with address {} tried to connect but we've received an invalid secret - make sure they are whitelisted", address);
 			sendError(ctx, protocolVersion, "Authentication failed");
 			return;
 		}
@@ -90,7 +89,11 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 			authenticatedSecret = decodedSecret;
 			server.addConnection(ctx.channel(), decodedSecret);
 		}
-		return authenticatedSecret.equals(decodedSecret);
+		if (!authenticatedSecret.equals(decodedSecret)) {
+			LOGGER.warn("Connection from {} tried to switch to a different secret", address);
+			return false;
+		}
+		return true;
 	}
 
 	private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) throws IOException {

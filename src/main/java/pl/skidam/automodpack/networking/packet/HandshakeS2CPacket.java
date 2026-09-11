@@ -59,7 +59,7 @@ public class HandshakeS2CPacket {
 //            LOGGER.warn("Connection is not encrypted for player: {}", playerName);
 //        }
 
-		if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), profile)) return;
+		if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), GameHelpers.getPlayerUUID(profile), playerName)) return;
 
 		if (!understood) {
 			Common.players.put(playerName, false);
@@ -122,9 +122,9 @@ public class HandshakeS2CPacket {
 			}
 
 			// now we know player is authenticated, packets are encrypted and player is whitelisted
-			// regenerate unique secret
+			// regenerate unique secret, bound to the exact identity the login presented
 			Secrets.Secret secret = Secrets.generateSecret();
-			SecretsStore.saveHostSecret(GameHelpers.getPlayerUUID(profile).toString(), secret);
+			SecretsStore.saveHostSecret(GameHelpers.getPlayerUUID(profile).toString(), secret, GameHelpers.getPlayerName(profile));
 
 			String advertisedEndpointHost = serverConfig.advertisedEndpointHost;
 			int advertisedEndpointPort = serverConfig.advertisedEndpointPort;

@@ -12,6 +12,7 @@ import net.minecraft.server.permissions.PermissionLevel;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
+import pl.skidam.automodpack_core.auth.IssuedSecret;
 import pl.skidam.automodpack_core.auth.ProvisioningSecretStore;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.auth.ServerAddressPin;
@@ -320,12 +321,12 @@ public class Commands {
 				var playerSecretPair = SecretsStore.getHostSecret(secret);
 				if (playerSecretPair == null) continue;
 
-				String playerId = playerSecretPair.getKey();
-				var profile = GameHelpers.getPlayerProfile(playerId);
+				IssuedSecret issued = playerSecretPair.getValue();
+				if (issued == null || issued.name() == null) continue;
 
 				long connNum = connections.values().stream().filter(secret::equals).count();
 
-				send(context, String.format(Locale.ROOT, "Player: %s (%s) is downloading modpack using %d connections", GameHelpers.getPlayerName(profile), playerId, connNum), ChatFormatting.GREEN, false);
+				send(context, String.format(Locale.ROOT, "Player: %s (%s) is downloading modpack using %d connections", issued.name(), playerSecretPair.getKey(), connNum), ChatFormatting.GREEN, false);
 			}
 		});
 

@@ -387,6 +387,8 @@ def assert_authenticated_secret(ctx, _step):
     matching_server_secrets = [entry for entry in (server_secrets.get("secrets", {}) or {}).values() if isinstance(entry, dict) and entry.get("secret") == value]
     if not matching_server_secrets:
         raise AssertionError("server did not persist the secret issued during authenticated login")
+    if not any(isinstance(entry.get("name"), str) and entry.get("name") for entry in matching_server_secrets):
+        raise AssertionError("server persisted the secret without the player name it was issued to")
     ctx.vars["authenticated_secret_persisted"] = True
 
 
