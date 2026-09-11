@@ -286,14 +286,13 @@ public class ModpackExecutor {
 	 * as a rejection of a durable commit.
 	 */
 	private <R extends HostingOutcome> R bindHosting(R result) {
-		GenerationHosting hosting = result.hosted().orElse(null);
-		if (hosting == null) return result;
+		if (!(result instanceof CommittedOutcome committed)) return result;
 		try {
-			hostingBinder.bind(hosting);
+			hostingBinder.bind(committed.hosting());
 		} catch (Exception e) {
 			LOGGER.error("The generation committed, but the hosting swap failed", e);
 			@SuppressWarnings("unchecked")
-			R failed = (R) result.withHostingFailure(e);
+			R failed = (R) committed.withHostingFailure(e);
 			return failed;
 		}
 		return result;
@@ -410,11 +409,6 @@ public class ModpackExecutor {
 			public Rejected {
 				detail = Objects.requireNonNull(detail);
 			}
-
-			@Override
-			public RevertResult withHostingFailure(Throwable failure) {
-				return this;
-			}
 		}
 	}
 
@@ -442,11 +436,6 @@ public class ModpackExecutor {
 		record Rejected(String detail, Throwable cause) implements PublishResult {
 			public Rejected {
 				detail = Objects.requireNonNull(detail);
-			}
-
-			@Override
-			public PublishResult withHostingFailure(Throwable failure) {
-				return this;
 			}
 		}
 	}
@@ -499,11 +488,6 @@ public class ModpackExecutor {
 		record Rejected(String detail, Throwable cause) implements LoadResult {
 			public Rejected {
 				detail = Objects.requireNonNull(detail);
-			}
-
-			@Override
-			public LoadResult withHostingFailure(Throwable failure) {
-				return this;
 			}
 		}
 	}
