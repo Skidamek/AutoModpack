@@ -87,7 +87,7 @@ public class Secrets {
 	private static final TimedSet<String> cachedValidSecrets = new TimedSet<>(3500);
 
 	public static boolean isSecretValid(String secretStr, SocketAddress address) {
-		if (!serverConfig.validateSecrets || standaloneHost) return true;
+		if (!serverConfig.validateSecrets) return true;
 
 		if (cachedValidSecrets.contains(secretStr)) return true;
 

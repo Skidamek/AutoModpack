@@ -35,7 +35,5 @@ public final class Constants {
 	public static NettyServer hostServer;
 	public static ServerConfigJsons.ServerConfigFieldsV3 serverConfig;
 	public static ClientConfigJsons.ClientConfigFieldsV3 clientConfig;
-	/** Standalone host runtime mode: serve only what is inside host-modpack and skip secret validation, never persisted to the config file. */
-	public static boolean standaloneHost = false;
 	private Constants() {}
 }
