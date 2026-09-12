@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance;
 import pl.skidam.automodpack_core.storage.ObjectStoreMaintenance.ExpectedSizes;
 import pl.skidam.automodpack_core.storage.SharedObjectOwnership;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -99,7 +100,7 @@ public final class ClientObjectStore {
 		if (!HashUtils.sha1(bytes).equals(hash)) throw new IOException("Object bytes do not match their content hash: " + hash);
 		Path object = storage.objectFile(hash);
 		if (FileIntegrity.matches(object, bytes.length, hash)) return;
-		Path temporary = Files.createTempFile(storage.stagingDirectory(), ".object-", ".tmp");
+		Path temporary = Files.createTempFile(storage.stagingDirectory(), ".object-", DurableFiles.TEMPORARY_SUFFIX);
 		try {
 			Files.write(temporary, bytes);
 			Files.createDirectories(object.getParent());
@@ -468,7 +469,7 @@ public final class ClientObjectStore {
 							for (Path state : states.toList()) {
 								FileTrees.requireNoSymbolicLink(state, "client generated-copy state");
 								String name = state.getFileName().toString();
-								if (name.endsWith(".tmp") || name.contains(".corrupt-")) {
+								if (name.endsWith(DurableFiles.TEMPORARY_SUFFIX) || name.contains(DurableFiles.CORRUPT_ASIDE_MARKER)) {
 									// A crash leftover or set-aside evidence never pins objects; loud, but never worth a boot.
 									LOGGER.warn("Skipping {} in the client generated-copy state", name);
 									continue;

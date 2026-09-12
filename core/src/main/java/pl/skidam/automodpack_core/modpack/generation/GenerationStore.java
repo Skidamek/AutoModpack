@@ -282,7 +282,7 @@ public final class GenerationStore {
 		Path object = DataRootResolver.objectFile(objectsDirectory, policySha1);
 		if (Files.exists(object)) return;
 		Files.createDirectories(object.getParent());
-		Path temporary = object.resolveSibling(object.getFileName() + ".tmp");
+		Path temporary = object.resolveSibling(object.getFileName() + DurableFiles.TEMPORARY_SUFFIX);
 		Files.write(temporary, bytes);
 		Files.move(temporary, object, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
 	}

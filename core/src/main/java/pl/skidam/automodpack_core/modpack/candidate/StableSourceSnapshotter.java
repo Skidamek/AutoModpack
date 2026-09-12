@@ -13,6 +13,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
@@ -114,7 +115,7 @@ public final class StableSourceSnapshotter {
 		if (attributes.size() == 0) return new Exclusion(ExcludedCandidate.Reason.EMPTY_FILE, "empty file");
 		for (Path component : Path.of(logicalPath))
 			if (component.toString().startsWith(".")) return new Exclusion(ExcludedCandidate.Reason.HIDDEN_FILE, "hidden file or directory");
-		if (logicalPath.endsWith(".tmp")) return new Exclusion(ExcludedCandidate.Reason.TEMPORARY_FILE, "temporary file");
+		if (logicalPath.endsWith(DurableFiles.TEMPORARY_SUFFIX)) return new Exclusion(ExcludedCandidate.Reason.TEMPORARY_FILE, "temporary file");
 		if (logicalPath.endsWith(".disabled")) return new Exclusion(ExcludedCandidate.Reason.DISABLED_FILE, "disabled file");
 		if (logicalPath.endsWith(".bak")) return new Exclusion(ExcludedCandidate.Reason.BACKUP_FILE, "backup file");
 		return null;

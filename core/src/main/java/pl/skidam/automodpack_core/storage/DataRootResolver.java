@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Objects;
 
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
@@ -178,7 +179,7 @@ public final class DataRootResolver {
 		try {
 			Files.createDirectories(normalized);
 			if (!Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS)) return "not a directory";
-			Path probe = Files.createTempFile(normalized, ".write-probe-", ".tmp");
+			Path probe = Files.createTempFile(normalized, ".write-probe-", DurableFiles.TEMPORARY_SUFFIX);
 			Files.writeString(probe, "AutoModpack\n", StandardCharsets.UTF_8);
 			Files.deleteIfExists(probe);
 			return null;
