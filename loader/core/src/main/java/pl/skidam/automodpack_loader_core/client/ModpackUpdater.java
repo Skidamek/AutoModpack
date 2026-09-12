@@ -894,6 +894,7 @@ public class ModpackUpdater implements AutoCloseable {
 			try {
 				reviewed.review().requireCompatible(replanned.plan());
 			} catch (IllegalStateException e) {
+				LOGGER.error("The rebuilt update plan no longer matches the reviewed outcome; the first apply failed with: {}", failedExecution.message(), e);
 				throw new UpdateReplanRequiredException(failedExecution.blockedPath(), "Mutable input changed the reviewed update consequences", e);
 			}
 			recordChangelogs(replanned, target);

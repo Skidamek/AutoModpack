@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.FileSystemException;
@@ -116,6 +118,8 @@ public final class UpdateTransactionExecutor {
 	public Execution commitWithReplan(CommitCall apply, ReplanCall replan) throws IOException {
 		Execution execution = apply.run();
 		if (!execution.replanRequired()) return execution;
+		// The first attempt's reason is the receipt for why a replan is happening at all; never let the retry swallow it.
+		LOGGER.warn("The update apply needs a replan: {}; rebuilding the plan from mutable inputs", execution.message());
 		execution = replan.run(execution);
 		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
 		return execution;
