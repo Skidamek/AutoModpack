@@ -50,8 +50,8 @@ public record GeneratedCopyState(String modpackId, String contentToken, String s
 
 	private static GeneratedCopyState answeringTo(String modpackId, String contentToken, String selectionDigest, Path path, ClientStorageJsons.ClientGeneratedCopiesFields fields) {
 		GeneratedCopyState state = fromFields(fields);
-		if (!state.modpackId().equals(ModpackId.requireValid(modpackId)) || !state.contentToken().equals(HashUtils.normalizeSha1(contentToken))
-				|| !state.selectionDigest().equals(HashUtils.normalizeSha1(selectionDigest)))
+		if (!state.modpackId().equals(ModpackId.requireValid(modpackId)) || !state.contentToken().equals(requireDigest(contentToken, "generation ID"))
+				|| !state.selectionDigest().equals(requireDigest(selectionDigest, "generated-copy selection digest")))
 			throw new IllegalArgumentException("Generated-copy state does not answer to its path: " + path);
 		return state;
 	}
