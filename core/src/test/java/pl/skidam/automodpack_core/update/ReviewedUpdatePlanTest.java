@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
+import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 
 class ReviewedUpdatePlanTest {
@@ -57,24 +58,45 @@ class ReviewedUpdatePlanTest {
 	}
 
 	@Test
-	void changedConsequencesCannotBypassReview() {
-		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of(operation("mods/a.jar", OBJECT_HASH))));
-		UpdatePlan changed = plan(List.of(operation("mods/a.jar", OTHER_HASH)));
+	void anAppliedPrefixOfTheSameOutcomeStaysCompatible() {
+		ChangeSet reviewedConsequences = ChangeSet.of(new ChangeSet.Change("mods/a.jar", ChangeSet.Kind.ADDED,
+				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, null, null, OBJECT_HASH, "mod", List.of(), List.of()))));
+		UpdatePlan reviewed = plan(
+				List.of(operation("mods/a.jar", OBJECT_HASH), operation("config/a.json", OTHER_HASH)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/a.jar", true, OBJECT_HASH, 1)),
+				reviewedConsequences);
+		// The first apply already ran the config operation, so the rebuilt plan carries less work for the same outcome.
+		UpdatePlan replanned = plan(
+				List.of(operation("mods/a.jar", OBJECT_HASH)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/a.jar", true, OBJECT_HASH, 1)),
+				ChangeSet.empty());
 
-		assertThrows(IllegalStateException.class, () -> reviewed.requireCompatible(changed));
+		ReviewedUpdatePlan.pending(reviewed).requireCompatible(replanned);
 	}
 
 	@Test
-	void changedVisibleConsequencesCannotBypassReview() {
-		ChangeSet firstConsequences = ChangeSet.of(new ChangeSet.Change("mods/a.jar", ChangeSet.Kind.ADDED,
-				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, null, null, OBJECT_HASH, "mod", List.of(), List.of()))));
-		ChangeSet changedConsequences = ChangeSet.of(new ChangeSet.Change("mods/a.jar", ChangeSet.Kind.MODIFIED,
-				List.of(new ChangeSet.Occurrence("PROJECTION", "mods/a.jar", 1, null, OTHER_HASH, OBJECT_HASH, "mod", List.of(), List.of()))));
+	void aDriftedProjectedFinalStateCannotBypassReview() {
+		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(
+				List.of(operation("mods/a.jar", OBJECT_HASH)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/a.jar", true, OBJECT_HASH, 1))));
+		UpdatePlan drifted = plan(
+				List.of(operation("mods/a.jar", OBJECT_HASH)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/a.jar", true, OTHER_HASH, 1)));
 
-		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of(operation("mods/a.jar", OBJECT_HASH)), firstConsequences));
-		UpdatePlan changed = plan(List.of(operation("mods/a.jar", OBJECT_HASH)), changedConsequences);
+		IllegalStateException failure = assertThrows(IllegalStateException.class, () -> reviewed.requireCompatible(drifted));
+		assertTrue(failure.getMessage().contains("projected final state"));
+	}
 
-		assertThrows(IllegalStateException.class, () -> reviewed.requireCompatible(changed));
+	@Test
+	void aDriftedPlannedClientConfigCannotBypassReview() {
+		ClientConfigJsons.ClientConfigFieldsV3 config = new ClientConfigJsons.ClientConfigFieldsV3();
+		config.playMusic = false;
+
+		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of(operation("mods/a.jar", OBJECT_HASH)), List.of(), new ClientConfigJsons.ClientConfigFieldsV3()));
+		UpdatePlan drifted = plan(List.of(operation("mods/a.jar", OBJECT_HASH)), List.of(), config);
+
+		IllegalStateException failure = assertThrows(IllegalStateException.class, () -> reviewed.requireCompatible(drifted));
+		assertTrue(failure.getMessage().contains("planned client configuration"));
 	}
 
 	@Test
@@ -100,12 +122,24 @@ class ReviewedUpdatePlanTest {
 	}
 
 	private static UpdatePlan plan(List<Operation> operations) {
-		return plan(operations, ChangeSet.empty());
+		return plan(operations, List.of(), new ClientConfigJsons.ClientConfigFieldsV3());
 	}
 
-	private static UpdatePlan plan(List<Operation> operations, ChangeSet consequences) {
-		return new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), "c".repeat(40)), operations, List.of(),
-				new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), consequences);
+	private static UpdatePlan plan(List<Operation> operations, List<ProjectedFile> projected) {
+		return plan(operations, projected, new ClientConfigJsons.ClientConfigFieldsV3());
+	}
+
+	private static UpdatePlan plan(List<Operation> operations, List<ProjectedFile> projected, ChangeSet consequences) {
+		return plan(operations, projected, new ClientConfigJsons.ClientConfigFieldsV3(), consequences);
+	}
+
+	private static UpdatePlan plan(List<Operation> operations, List<ProjectedFile> projected, ClientConfigJsons.ClientConfigFieldsV3 config) {
+		return plan(operations, projected, config, ChangeSet.empty());
+	}
+
+	private static UpdatePlan plan(List<Operation> operations, List<ProjectedFile> projected, ClientConfigJsons.ClientConfigFieldsV3 config, ChangeSet consequences) {
+		return new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), "c".repeat(40)), operations, projected,
+				config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), consequences);
 	}
 
 	private static Operation operation(String path, String objectHash) {
