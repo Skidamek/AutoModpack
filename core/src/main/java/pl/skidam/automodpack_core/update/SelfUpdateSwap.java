@@ -38,18 +38,18 @@ public final class SelfUpdateSwap {
 			throws IOException {
 		StorageJsons.SelfUpdateFields swap = validated(currentPath, targetPath, targetSha1, targetSize, currentSha1);
 		ConfigTools.writeAtomic(gameDirectory.resolve(SELF_UPDATE_FILE).normalize(), swap);
-		// Strict on purpose: a swap planned against bytes that changed since staging fails this update loudly here,
-		// instead of surfacing as a skipped boot recovery later.
+		// Strict on purpose, and deliberately not recover's aside-and-continue: a swap failing moments after it was
+		// planned means the plan is wrong now, so this update must fail loudly instead of quietly staying on the old jar.
 		installTarget(gameDirectory, dataLocation, swap);
 		retireSupersededJar(gameDirectory, swap);
 		Files.deleteIfExists(gameDirectory.resolve(SELF_UPDATE_FILE).normalize());
 	}
 
 	/**
-	 * Applies and clears a pending swap; a no-op when none is pending. A swap that cannot be understood or whose
-	 * target bytes are gone is set aside as evidence and skipped, so the instance keeps running its current jar and
-	 * re-running the update is the whole recovery - a stale record must never loop the boot. A failure after the
-	 * target jar is already installed still propagates: the next boot's retry is what completes the swap.
+	 * Applies and clears a pending swap; a no-op when none is pending. A swap that cannot be understood, cannot even
+	 * be read, or whose target bytes are gone is set aside as evidence and skipped, so the instance keeps running its
+	 * current jar and re-running the update is the whole recovery - a stale record must never loop the boot. A
+	 * failure after the target jar is already installed still propagates: the next boot's retry is what completes the swap.
 	 */
 	public static void recover(Path gameDirectory, DataRootResolver.Location dataLocation) throws IOException {
 		Path recordFile = gameDirectory.resolve(SELF_UPDATE_FILE).normalize();
@@ -63,7 +63,9 @@ public final class SelfUpdateSwap {
 				}
 			}).orElse(null);
 		} catch (IOException | RuntimeException e) {
-			LOGGER.error("The pending self-update record {} could not be read, so the swap was skipped and AutoModpack stays on its current jar", recordFile, e);
+			// Only physically unreadable or not-a-file records land here; everything else readState already set aside.
+			DurableFiles.setAside(recordFile, "Pending self-update record", e);
+			LOGGER.error("The unreadable pending self-update record was set aside, so the swap was skipped and AutoModpack stays on its current jar");
 			return;
 		}
 		if (swap == null) return;

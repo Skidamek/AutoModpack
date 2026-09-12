@@ -94,6 +94,22 @@ class SelfUpdateSwapTest {
 		}
 	}
 
+	@Test
+	void anUnreadableRecordIsSetAsideInsteadOfLoopingTheBoot() throws Exception {
+		ClientStorage storage = storage();
+		Path record = recordFile(storage);
+		Files.createDirectories(record.getParent());
+		Files.createSymbolicLink(record, record.getParent().resolve("elsewhere"));
+
+		// A record that cannot even be read must not re-log and re-skip every boot either; it joins the evidence.
+		assertDoesNotThrow(() -> SelfUpdateSwap.recover(storage.gameDirectory(), storage.dataLocation()));
+
+		assertTrue(Files.notExists(record));
+		try (var leftovers = Files.list(record.getParent())) {
+			assertTrue(leftovers.anyMatch(path -> path.getFileName().toString().startsWith(record.getFileName() + ".corrupt-")));
+		}
+	}
+
 	private ClientStorage storage() throws Exception {
 		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
