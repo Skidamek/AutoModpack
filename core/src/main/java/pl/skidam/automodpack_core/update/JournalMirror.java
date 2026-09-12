@@ -27,8 +27,9 @@ public final class JournalMirror {
 
 	/**
 	 * Every journal entry of the pack's mirror, or an empty list when no mirror exists yet. A mirror that cannot be
-	 * parsed is set aside as evidence and reads as empty: the mirror is a pure replica, so the next head fetch simply
-	 * replaces it, and no corrupt copy may block the client.
+	 * read is set aside as evidence and reads as empty - ambiguous IO trouble included, since Journal's line-level
+	 * failures cannot be told apart from a torn read: the mirror is a pure replica, so the next head fetch simply
+	 * replaces it, and no unreadable copy may block the client.
 	 */
 	public List<JournalEntry> entries(String modpackId) throws IOException {
 		Path file = storage.historyJournalFile(modpackId);
