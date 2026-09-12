@@ -15,6 +15,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Filesystem publication primitives with defined power-loss contracts: durable writes force, volatile writes only promise atomic-while-running. */
 public final class DurableFiles {
+	/** Suffix of every not-yet-published temporary this codebase writes; leftover sweepers match it instead of a crash ever failing on one. */
+	public static final String TEMPORARY_SUFFIX = ".tmp";
+	/** Infix of {@link #setAside} evidence names; the sweepers that must recognize set-aside state match this spelling. */
+	public static final String CORRUPT_ASIDE_MARKER = ".corrupt-";
+
 	private static final AtomicBoolean NON_ATOMIC_RENAME_WARNED = new AtomicBoolean();
 
 	private DurableFiles() {}
@@ -53,7 +58,7 @@ public final class DurableFiles {
 	 * carries. The evidence stays until a human removes it.
 	 */
 	public static boolean setAside(Path file, String description, Exception cause) {
-		Path aside = file.resolveSibling(file.getFileName() + ".corrupt-" + System.currentTimeMillis());
+		Path aside = file.resolveSibling(file.getFileName() + CORRUPT_ASIDE_MARKER + System.currentTimeMillis());
 		try {
 			Files.move(file, aside);
 			LOGGER.error("{} is unusable and was set aside as {}: {}", description, aside.getFileName(), cause, cause);
@@ -74,7 +79,7 @@ public final class DurableFiles {
 		if (parent == null) throw new IOException("Path has no parent: " + target);
 		Files.createDirectories(parent);
 
-		Path temporary = parent.resolve("." + target.getFileName() + "." + UUID.randomUUID() + ".tmp");
+		Path temporary = parent.resolve("." + target.getFileName() + "." + UUID.randomUUID() + TEMPORARY_SUFFIX);
 		try {
 			try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)) {
 				ByteBuffer buffer = ByteBuffer.wrap(bytes);
@@ -99,7 +104,7 @@ public final class DurableFiles {
 		if (parent == null) throw new IOException("Path has no parent: " + target);
 		Files.createDirectories(parent);
 
-		Path temporary = parent.resolve("." + target.getFileName() + "." + UUID.randomUUID() + ".tmp");
+		Path temporary = parent.resolve("." + target.getFileName() + "." + UUID.randomUUID() + TEMPORARY_SUFFIX);
 		try {
 			Files.write(temporary, bytes);
 			replace(temporary, target);

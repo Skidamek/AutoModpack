@@ -83,7 +83,7 @@ public final class VerifiedFileTransfer {
 		requireValidSource(sourceFile, expectedSize, expectedSha1, cache);
 		ImmutableFiles.protect(sourceFile);
 		Path parent = OsPaths.requirePublishableParent(targetFile, "Target path");
-		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
+		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", DurableFiles.TEMPORARY_SUFFIX);
 		Files.deleteIfExists(temporary);
 		try {
 			try {
@@ -129,7 +129,7 @@ public final class VerifiedFileTransfer {
 
 	private static void promoteAcrossFileSystems(Path temporary, Path targetFile, Path targetParent, long expectedSize, String expectedSha1,
 			AtomicMoveNotSupportedException crossFileSystem) throws IOException {
-		Path targetTemporary = Files.createTempFile(targetParent, "." + targetFile.getFileName() + ".", ".tmp");
+		Path targetTemporary = Files.createTempFile(targetParent, "." + targetFile.getFileName() + ".", DurableFiles.TEMPORARY_SUFFIX);
 		try {
 			Files.copy(temporary, targetTemporary, StandardCopyOption.REPLACE_EXISTING);
 			ImmutableFiles.allowOwnerWrite(targetTemporary);
@@ -165,7 +165,7 @@ public final class VerifiedFileTransfer {
 
 	private static Path copyToTemporary(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		Path parent = OsPaths.requirePublishableParent(targetFile, "Target path");
-		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
+		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", DurableFiles.TEMPORARY_SUFFIX);
 		boolean valid = false;
 		try {
 			copyNamedOrHashed(sourceFile, temporary, expectedSize, expectedSha1, cache);

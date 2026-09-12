@@ -49,7 +49,7 @@ public final class ImmutableFilePublisher {
 	}
 
 	private static boolean publishCopy(Path source, Path target, Path parent, ExistingFileValidator existingFileValidator, Exception linkFailure, boolean protect) throws IOException {
-		Path temporary = Files.createTempFile(parent, ".immutable-", ".tmp");
+		Path temporary = Files.createTempFile(parent, ".immutable-", DurableFiles.TEMPORARY_SUFFIX);
 		try {
 			Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
 			ImmutableFiles.allowOwnerWrite(temporary);

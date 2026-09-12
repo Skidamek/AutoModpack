@@ -14,6 +14,7 @@ import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.StorageJsons;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileLocks;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -65,7 +66,7 @@ public final class SharedObjectOwnership {
 		TreeSet<String> result = new TreeSet<>();
 		try (Stream<Path> paths = Files.list(owners)) {
 			for (Path path : paths.toList()) {
-				if (path.getFileName().toString().endsWith(".tmp")) {
+				if (path.getFileName().toString().endsWith(DurableFiles.TEMPORARY_SUFFIX)) {
 					// A crash during a receipt write leaves a transient ConfigTools temporary; it is never a receipt.
 					Files.deleteIfExists(path);
 					continue;
