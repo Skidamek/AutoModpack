@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.storage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -14,6 +15,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.update.ClientStorage;
 
 class DataRootResolverTest {
@@ -78,5 +80,45 @@ class DataRootResolverTest {
 		assertEquals("0123456789abcdef0123456789abcdef01234567", DataRootResolver.objectHash(objects, file));
 		assertTrue(DataRootResolver.isObjectFile(objects, file));
 		assertTrue(!DataRootResolver.isObjectFile(objects, objects.resolve("0123456789abcdef0123456789abcdef01234567")));
+	}
+
+	@Test
+	void dedicatedServersOwnTheirCacheInsideTheServerScope() throws Exception {
+		Path game = Files.createDirectory(temporaryDirectory.resolve("server-game"));
+		DataRootResolver.Location location = DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.SERVER);
+		assertEquals(game.resolve("automodpack").resolve("server").resolve("data").toAbsolutePath().normalize(), location.root());
+		assertTrue(location.root().startsWith(game));
+	}
+
+	@Test
+	void configuredRootWinsForDedicatedServersToo() throws Exception {
+		Path game = Files.createDirectory(temporaryDirectory.resolve("server-configured-game"));
+		Path data = Files.createDirectory(temporaryDirectory.resolve("server-configured-data"));
+		String previous = System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, data.toAbsolutePath().normalize().toString());
+		try {
+			assertEquals(data.toAbsolutePath().normalize(), DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.SERVER).root());
+		} finally {
+			if (previous == null) System.clearProperty(StoragePaths.DATA_ROOT_PROPERTY);
+			else System.setProperty(StoragePaths.DATA_ROOT_PROPERTY, previous);
+		}
+	}
+
+	@Test
+	void clientUnknownAndUniversalProcessesShareThePlatformRoot() throws Exception {
+		// The platform root is only predictable when neither environment variable pins it; otherwise the test would
+		// reach into a real user directory.
+		assumeTrue(System.getenv("XDG_DATA_HOME") == null && System.getenv("LOCALAPPDATA") == null, "The platform data root is pinned by the environment");
+		String previousHome = System.setProperty("user.home", temporaryDirectory.resolve("home").toString());
+		try {
+			Path game = Files.createDirectory(temporaryDirectory.resolve("client-game"));
+			DataRootResolver.Location client = DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.CLIENT);
+			assertEquals(DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.UNIVERSAL).root(), client.root());
+			assertEquals(DataRootResolver.resolve(game, null).root(), client.root());
+			assertFalse(client.root().startsWith(game));
+			assertNotEquals(game.resolve("automodpack").resolve("server").resolve("data").toAbsolutePath().normalize(), client.root());
+		} finally {
+			if (previousHome == null) System.clearProperty("user.home");
+			else System.setProperty("user.home", previousHome);
+		}
 	}
 }

@@ -6,8 +6,9 @@ import java.nio.file.Path;
  * Canonical relative layout of AutoModpack's game-local files.
  *
  * <p>
- * These paths describe layout only. Runtime services and process state do not belong here.
- * Shared content-addressed bytes live outside this tree, in the resolved data root.
+ * These paths describe layout only. Runtime services and process state do not belong here. Content shared across
+ * instances lives outside this tree, in the resolved data root; a dedicated server's own cache is the exception
+ * and lives at {@code server/data}, inside the server scope it belongs to.
  * </p>
  */
 public final class StoragePaths {
@@ -31,7 +32,9 @@ public final class StoragePaths {
 	public static final Path CLIENT_MUTATION_LOCK_FILE = CLIENT_DIR.resolve("mutation.lock");
 	public static final Path CLIENT_CONTENT_TEMP_FILE = CLIENT_DIR.resolve("incoming-manifest.json.temp");
 	public static final Path CLIENT_JOURNAL_TEMP_FILE = CLIENT_DIR.resolve("incoming-journal.jsonl.temp");
-	public static final Path LOCAL_DATA_DIR = AUTOMODPACK_DIR.resolve("data");
+
+	/** The client's instance-local cache, used only when the shared platform root is unusable. */
+	public static final Path CLIENT_DATA_DIR = CLIENT_DIR.resolve("data");
 
 	/** The instance-level pending self-update swap; consumed at boot before any role machinery wakes up. */
 	public static final Path SELF_UPDATE_FILE = AUTOMODPACK_DIR.resolve("self-update.json");
@@ -43,6 +46,9 @@ public final class StoragePaths {
 	public static final Path SERVER_PROJECTION_FILE = SERVER_DIR.resolve("current-projection.json");
 	public static final Path SERVER_JOURNAL_FILE = SERVER_DIR.resolve("journal.jsonl");
 	public static final Path SERVER_STAGING_DIR = SERVER_DIR.resolve("staging");
+
+	/** The dedicated server's own cache: visible, deletable with the folder, never derived from HOME. */
+	public static final Path SERVER_DATA_DIR = SERVER_DIR.resolve("data");
 	public static final Path PATCH_NOTES_FILE = AUTOMODPACK_DIR.resolve("patch-notes.md");
 
 	public static final Path CREDENTIALS_DIR = AUTOMODPACK_DIR.resolve("credentials");
