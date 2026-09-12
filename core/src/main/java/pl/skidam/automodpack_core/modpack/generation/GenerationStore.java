@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_JOURNAL_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.SERVER_PROJECTION_FILE;
 
@@ -24,6 +25,7 @@ import pl.skidam.automodpack_core.modpack.candidate.ServerObjectStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -61,15 +63,50 @@ public final class GenerationStore {
 	/** The current generation: the journal head's content with its policy document and ledger. */
 	public Optional<Current> loadCurrent() throws IOException {
 		if (current != null) return Optional.of(current);
-		journal = Journal.open(journalFile);
+		journal = openJournal();
 		if (journal.isEmpty()) return Optional.empty();
-		current = loadFromProjection();
-		if (current == null) {
-			JournalEntry head = journal.head();
-			current = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), replayLedger(head.seq()), journal.treeAt(head.seq()));
-			writeProjection(current);
+		current = loadCurrentSetAsideOnFailure();
+		return current == null ? Optional.empty() : Optional.of(current);
+	}
+
+	/** Journal.open with the store-level heal: a journal that cannot even be read is archived aside and reopened empty. */
+	private Journal openJournal() throws IOException {
+		try {
+			return Journal.open(journalFile);
+		} catch (IOException | RuntimeException e) {
+			archiveUnusableState(e);
+			return Journal.open(journalFile);
 		}
-		return Optional.of(current);
+	}
+
+	/**
+	 * The current generation from the projection view, or rebuilt from the journal; null once an unusable store was
+	 * archived aside. Any materialization failure counts, ambiguous IO trouble included: the journal is derived state,
+	 * the modpack files on disk are the truth, and the next publish recreates the store from them as a fresh
+	 * generation. Unchanged content keeps its content token, so clients never re-download for that heal.
+	 */
+	private Current loadCurrentSetAsideOnFailure() throws IOException {
+		try {
+			Current projected = loadFromProjection();
+			if (projected != null) return projected;
+			JournalEntry head = journal.head();
+			Current rebuilt = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), replayLedger(head.seq()),
+					journal.treeAt(head.seq()));
+			writeProjection(rebuilt);
+			return rebuilt;
+		} catch (IOException | RuntimeException e) {
+			archiveUnusableState(e);
+			return null;
+		}
+	}
+
+	/** Archives generation state that cannot be loaded, preserving the evidence next to where it lived. */
+	private void archiveUnusableState(Exception cause) throws IOException {
+		LOGGER.error("The modpack generation state in {} is unusable ({}); it was archived aside and the next publish recreates it from the server files as a fresh generation."
+				+ " Clients keep their content, only the generation history restarts.", root, cause, cause);
+		DurableFiles.setAside(journalFile, "Server generation journal", cause);
+		DurableFiles.setAside(projectionFile, "Server generation projection", cause);
+		journal = Journal.open(journalFile);
 	}
 
 	/**

@@ -120,7 +120,7 @@ class GenerationStoreTest {
 	}
 
 	@Test
-	void journalReplayDetectsCorruption() throws Exception {
+	void journalReplayCorruptionIsArchivedAsideAndTheNextPublishStartsFresh() throws Exception {
 		Path state = tempDir.resolve("state");
 		Path objects = tempDir.resolve("objects");
 		String first = sha1("content-one");
@@ -139,8 +139,35 @@ class GenerationStoreTest {
 		Path journal = state.resolve("journal.jsonl");
 		Files.writeString(journal, Files.readString(journal, StandardCharsets.UTF_8).replace(second, sha1("tampered")), StandardCharsets.UTF_8);
 
+		// The replay no longer matches the recorded token: the store is archived aside and restarts empty instead of failing forever.
 		GenerationStore reopened = new GenerationStore(state, objects);
-		assertThrows(IllegalStateException.class, reopened::loadCurrent);
+		assertTrue(reopened.loadCurrent().isEmpty());
+		assertFalse(Files.exists(journal));
+		try (var leftovers = Files.list(state)) {
+			assertTrue(leftovers.anyMatch(path -> path.getFileName().toString().startsWith("journal.jsonl.corrupt-")));
+		}
+
+		GenerationStore.Publication fresh = reopened.publish(candidate("two", "content-two"), "After heal");
+		assertEquals(1, fresh.entry().seq());
+	}
+
+	@Test
+	void aStoreMissingItsPolicyDocumentsRestartsEmptyInsteadOfFailingForever() throws Exception {
+		Path state = tempDir.resolve("state");
+		Path objects = tempDir.resolve("objects");
+		GenerationStore store = new GenerationStore(state, objects);
+		GenerationStore.Publication root = store.publish(candidate("one", "content-one"), "First");
+
+		// No projection view and no policy object to rebuild it from: the state an interrupted publish can leave behind.
+		Files.delete(state.resolve("current-projection.json"));
+		Files.delete(DataRootResolver.objectFile(objects, root.entry().policySha1()));
+
+		GenerationStore reopened = new GenerationStore(state, objects);
+		assertTrue(reopened.loadCurrent().isEmpty());
+
+		GenerationStore.Publication fresh = reopened.publish(candidate("one", "content-one"), "After heal");
+		assertEquals(1, fresh.entry().seq());
+		assertEquals(root.entry().contentToken(), fresh.entry().contentToken());
 	}
 
 	@Test
