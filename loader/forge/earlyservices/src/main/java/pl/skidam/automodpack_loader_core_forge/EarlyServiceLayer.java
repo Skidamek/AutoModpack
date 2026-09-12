@@ -36,12 +36,8 @@ import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.LoaderServiceFiles;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
-import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
-import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.EarlyServiceScan;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.cache.FileCache;
+import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 import pl.skidam.automodpack_loader_core_modlauncher.ModLauncherEarlyServiceBridge;
 
@@ -149,15 +145,10 @@ public final class EarlyServiceLayer {
 		if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) return;
 
 		try {
-			ClientStorage storage = ClientStorage.open(GameDirectory.current());
-			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
-			if (!Files.isDirectory(activeModsDirectory)) return;
-
-			List<Path> earlyServiceJars;
-			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-				earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace, cache);
-			}
-
+			// Preload owns what this launch loads; host early services only for jars on that list, so a
+			// projection that was skipped (no active state, pinned conflicts, standard-mods duplicates)
+			// is never half-bootstrapped.
+			List<Path> earlyServiceJars = ModpackLoader.modsToLoad.stream().filter(EarlyServiceLayer::eligibleForInPlace).toList();
 			if (earlyServiceJars.isEmpty()) return;
 
 			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());

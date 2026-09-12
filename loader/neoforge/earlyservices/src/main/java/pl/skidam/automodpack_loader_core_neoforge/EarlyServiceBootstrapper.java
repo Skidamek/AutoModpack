@@ -2,7 +2,6 @@ package pl.skidam.automodpack_loader_core_neoforge;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,12 +13,8 @@ import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
-import pl.skidam.automodpack_core.storage.GameDirectory;
-import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.utils.EarlyServiceScan;
-import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_loader_core.Preload;
+import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
@@ -48,8 +43,8 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			String launchTarget = argValue(arguments, "--launchTarget");
 			if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
 
-			// Run the update/reconcile step before anything below reads the active projection, so an
-			// update that changes which mods are early-service mods is reflected in the same boot.
+			// Run the update/reconcile step first: it decides what this launch loads, and the
+			// early-service hosting below hosts only jars from that decision.
 			ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
 			new Preload();
 			progress.complete();
@@ -57,15 +52,10 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			// Early-service hosting serves the client's active projection; a dedicated server has none.
 			if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) return;
 
-			ClientStorage storage = ClientStorage.open(GameDirectory.current());
-			Path activeModsDirectory = storage.activePath(ModpackPathPolicy.MODS_ROOT);
-			if (!Files.isDirectory(activeModsDirectory)) return;
-
-			List<Path> earlyServiceJars;
-			try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-				earlyServiceJars = EarlyServiceScan.eligibleJars(activeModsDirectory, storage.modsDirectory(), EarlyServiceLayer::eligibleForInPlace, cache);
-			}
-
+			// Preload owns what this launch loads; host early services only for jars on that list, so a
+			// projection that was skipped (no active state, pinned conflicts, standard-mods duplicates)
+			// is never half-bootstrapped.
+			List<Path> earlyServiceJars = ModpackLoader.modsToLoad.stream().filter(EarlyServiceLayer::eligibleForInPlace).toList();
 			if (earlyServiceJars.isEmpty()) return;
 
 			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the active projection in place", earlyServiceJars.size());
