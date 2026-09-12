@@ -72,6 +72,28 @@ class SelfUpdateSwapTest {
 		assertFalse(Files.exists(recordFile(storage)));
 	}
 
+	@Test
+	void aSwapWhoseTargetBytesAreGoneIsSetAsideInsteadOfLoopingTheBoot() throws Exception {
+		ClientStorage storage = storage();
+		Path current = Files.writeString(storage.modsDirectory().resolve("automodpack-old.jar"), "old", StandardCharsets.UTF_8);
+		Path target = storage.modsDirectory().resolve("automodpack-new.jar");
+		byte[] replacement = "replacement".getBytes(StandardCharsets.UTF_8);
+		String replacementHash = store(storage, replacement);
+		String currentHash = HashUtils.getHash(current);
+		writeRecord(storage, relative(storage, current), relative(storage, target), replacementHash, replacement.length, currentHash);
+		Files.delete(storage.objectFile(replacementHash));
+
+		// The record survives a crash-loop scenario in the wild; recovery must skip it, not kill every boot.
+		assertDoesNotThrow(() -> SelfUpdateSwap.recover(storage.gameDirectory(), storage.dataLocation()));
+
+		assertEquals("old", Files.readString(current));
+		assertFalse(Files.exists(target));
+		assertTrue(Files.notExists(recordFile(storage)));
+		try (var leftovers = Files.list(recordFile(storage).getParent())) {
+			assertTrue(leftovers.anyMatch(path -> path.getFileName().toString().startsWith(recordFile(storage).getFileName() + ".corrupt-")));
+		}
+	}
+
 	private ClientStorage storage() throws Exception {
 		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
