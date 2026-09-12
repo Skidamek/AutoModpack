@@ -227,10 +227,6 @@ public final class UpdateTransactionExecutor {
 		});
 	}
 
-	public UpdateTransaction readPersisted() {
-		return ConfigTools.read(context.storage().transactionFile(), UpdateTransaction.class).orElse(null);
-	}
-
 	private ClientConfigJsons.ClientConfigFieldsV3 readClientConfig() {
 		return ConfigTools.read(context.storage().clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);

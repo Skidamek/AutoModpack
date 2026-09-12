@@ -276,8 +276,8 @@ class UpdateTransactionExecutorTest {
 		assertTrue(execution.replanRequired());
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, execution.status());
 		assertArrayEquals(newerBytes, Files.readAllBytes(live));
-		assertEquals(UpdateTransaction.Phase.DEFERRED, executor(storage).readPersisted().phase);
-		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, executor(storage).readPersisted().resultStatus);
+		assertEquals(UpdateTransaction.Phase.DEFERRED, persistedTransaction(storage).phase);
+		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
 	}
 
 	@Test
@@ -300,7 +300,7 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(execution.replanRequired());
 		assertFalse(ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class).orElseThrow().playMusic);
-		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, executor(storage).readPersisted().resultStatus);
+		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
 	}
 
 	@Test
@@ -397,7 +397,7 @@ class UpdateTransactionExecutorTest {
 		ConfigTools.writeAtomic(storage.transactionFile(), latest);
 
 		assertThrows(IOException.class, () -> executor(storage).recover(stale));
-		assertEquals(latest.transactionId, executor(storage).readPersisted().transactionId);
+		assertEquals(latest.transactionId, persistedTransaction(storage).transactionId);
 	}
 
 	@Test
@@ -672,6 +672,10 @@ class UpdateTransactionExecutorTest {
 
 	private static UpdateTransactionExecutor executor(ClientStorage storage) {
 		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(storage, null));
+	}
+
+	private static UpdateTransaction persistedTransaction(ClientStorage storage) {
+		return ConfigTools.read(storage.transactionFile(), UpdateTransaction.class).orElseThrow();
 	}
 
 	private static String store(ClientStorage storage, byte[] bytes) throws Exception {
