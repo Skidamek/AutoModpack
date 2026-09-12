@@ -161,7 +161,7 @@ public final class ClientObjectStore {
 		}
 	}
 
-	/** Measures all client state without deleting or writing anything. */
+	/** Measures all client state, touching no valid state; only unusable durable state is set aside by the read policy. */
 	public static StorageReport measure(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
 		return measure(storage, collectReferences(storage));
@@ -208,7 +208,7 @@ public final class ClientObjectStore {
 		return Set.copyOf(existing);
 	}
 
-	/** Validates all durable client state and all required CAS references without mutating storage. */
+	/** Validates all durable client state and all required CAS references, leaving valid state untouched. */
 	public static StorageReport validate(ClientStorage storage) throws IOException {
 		Objects.requireNonNull(storage, "storage");
 		return measure(storage, collectReferences(storage), true);
@@ -354,20 +354,25 @@ public final class ClientObjectStore {
 	}
 
 	private static void collectRepair(ClientStorage storage, ExpectedSizes retained) throws IOException {
-		Path path = storage.repairJournalFile();
-		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return;
-		FileTrees.requireRegularFile(path, "offline repair journal");
-		ClientStorageJsons.OfflineRepairJournalFields fields = readJson(path, ClientStorageJsons.OfflineRepairJournalFields.class, "offline repair journal");
-		if (fields.schemaVersion != 1 || fields.editableResets == null || fields.unownedMods == null) throw new IOException("Offline repair journal fields are incomplete: " + path);
-		for (var reset : fields.editableResets) {
-			if (reset == null) throw new IOException("Offline repair journal contains an incomplete editable reset");
+		ClientStorageJsons.OfflineRepairJournalFields journal = ConfigTools
+				.readState(storage.repairJournalFile(), ClientStorageJsons.OfflineRepairJournalFields.class, "Offline repair journal", ClientObjectStore::validatedRepairJournal)
+				.orElse(null);
+		if (journal == null) return;
+		for (var reset : journal.editableResets) {
 			retained.require(reset.defaultHash, reset.defaultSize, "offline repair editable default");
 			retained.ifPresent(reset.currentHash, reset.currentSize, "offline repair editable source");
 		}
-		for (var mod : fields.unownedMods) {
-			if (mod == null) throw new IOException("Offline repair journal contains an incomplete unowned mod");
+		for (var mod : journal.unownedMods) {
 			retained.ifPresent(mod.objectHash, mod.size, "offline repair unowned mod");
 		}
+	}
+
+	/** The repair journal's completeness contract; an unusable one is set aside as evidence and reads as no repair state. */
+	private static ClientStorageJsons.OfflineRepairJournalFields validatedRepairJournal(ClientStorageJsons.OfflineRepairJournalFields fields) {
+		if (fields.schemaVersion != 1 || fields.editableResets == null || fields.unownedMods == null) throw new IllegalArgumentException("Offline repair journal fields are incomplete");
+		if (fields.editableResets.stream().anyMatch(Objects::isNull) || fields.unownedMods.stream().anyMatch(Objects::isNull))
+			throw new IllegalArgumentException("Offline repair journal contains incomplete rows");
+		return fields;
 	}
 
 	private static void validateActiveProjection(ClientStorage storage) throws IOException {
@@ -463,6 +468,11 @@ public final class ClientObjectStore {
 							for (Path state : states.toList()) {
 								FileTrees.requireNoSymbolicLink(state, "client generated-copy state");
 								String name = state.getFileName().toString();
+								if (name.endsWith(".tmp") || name.contains(".corrupt-")) {
+									// A crash leftover or set-aside evidence never pins objects; loud, but never worth a boot.
+									LOGGER.warn("Skipping {} in the client generated-copy state", name);
+									continue;
+								}
 								if (!Files.isRegularFile(state, LinkOption.NOFOLLOW_LINKS) || name.length() != HashUtils.SHA1_HEX_LENGTH + ".json".length() || !name.endsWith(".json")
 										|| !HashUtils.isCanonicalSha1(name.substring(0, HashUtils.SHA1_HEX_LENGTH)))
 									throw new IOException("Client generated-copy state contains an unsupported entry: " + state);
@@ -478,14 +488,6 @@ public final class ClientObjectStore {
 
 	private static ObjectStoreMaintenance.FileTotals fileTotals(List<Path> paths) throws IOException {
 		return ObjectStoreMaintenance.fileTotals(paths);
-	}
-
-	private static <T> T readJson(Path path, Class<T> type, String description) throws IOException {
-		try {
-			return ConfigTools.read(path, type).orElseThrow(() -> new IOException(description + " is empty: " + path));
-		} catch (RuntimeException e) {
-			throw new IOException(description + " is invalid: " + path, e);
-		}
 	}
 
 	private static String requireModpackId(String value, String description) throws IOException {

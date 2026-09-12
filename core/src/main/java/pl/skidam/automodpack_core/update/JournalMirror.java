@@ -12,6 +12,7 @@ import java.util.Optional;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.Journal;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 
 /**
  * The client's per-pack replica of the server journal file. The mirror is only ever replaced whole
@@ -24,15 +25,20 @@ public final class JournalMirror {
 		this.storage = Objects.requireNonNull(storage, "storage");
 	}
 
-	/** Every journal entry of the pack's mirror, or an empty list when no mirror exists yet. */
+	/**
+	 * Every journal entry of the pack's mirror, or an empty list when no mirror exists yet. A mirror that cannot be
+	 * parsed is set aside as evidence and reads as empty: the mirror is a pure replica, so the next head fetch simply
+	 * replaces it, and no corrupt copy may block the client.
+	 */
 	public List<JournalEntry> entries(String modpackId) throws IOException {
 		Path file = storage.historyJournalFile(modpackId);
 		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return List.of();
 		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client journal mirror is not a regular file: " + file);
 		try {
 			return Journal.openComplete(file).entries();
-		} catch (RuntimeException e) {
-			throw new IOException("Client journal mirror is invalid: " + file, e);
+		} catch (IOException | RuntimeException e) {
+			DurableFiles.setAside(file, "Client journal mirror", e);
+			return List.of();
 		}
 	}
 
