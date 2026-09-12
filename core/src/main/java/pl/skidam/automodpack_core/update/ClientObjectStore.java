@@ -356,7 +356,7 @@ public final class ClientObjectStore {
 
 	private static void collectRepair(ClientStorage storage, ExpectedSizes retained) throws IOException {
 		ClientStorageJsons.OfflineRepairJournalFields journal = ConfigTools
-				.readState(storage.repairJournalFile(), ClientStorageJsons.OfflineRepairJournalFields.class, "Offline repair journal", ClientObjectStore::validatedRepairJournal)
+				.readState(storage.repairJournalFile(), ClientStorageJsons.OfflineRepairJournalFields.class, "Offline repair journal", OfflineRepair::validatedJournal)
 				.orElse(null);
 		if (journal == null) return;
 		for (var reset : journal.editableResets) {
@@ -366,14 +366,6 @@ public final class ClientObjectStore {
 		for (var mod : journal.unownedMods) {
 			retained.ifPresent(mod.objectHash, mod.size, "offline repair unowned mod");
 		}
-	}
-
-	/** The repair journal's completeness contract; an unusable one is set aside as evidence and reads as no repair state. */
-	private static ClientStorageJsons.OfflineRepairJournalFields validatedRepairJournal(ClientStorageJsons.OfflineRepairJournalFields fields) {
-		if (fields.schemaVersion != 1 || fields.editableResets == null || fields.unownedMods == null) throw new IllegalArgumentException("Offline repair journal fields are incomplete");
-		if (fields.editableResets.stream().anyMatch(Objects::isNull) || fields.unownedMods.stream().anyMatch(Objects::isNull))
-			throw new IllegalArgumentException("Offline repair journal contains incomplete rows");
-		return fields;
 	}
 
 	private static void validateActiveProjection(ClientStorage storage) throws IOException {
