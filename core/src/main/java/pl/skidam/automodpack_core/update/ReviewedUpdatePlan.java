@@ -20,15 +20,13 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-/** Owns the finite lifecycle and execution fingerprint of one player-reviewed update plan. */
+/** Owns the finite lifecycle, execution fingerprint, and outcome contract of one player-reviewed update plan. */
 public final class ReviewedUpdatePlan {
 	private final UpdatePlan plan;
-	private final String executionDigest;
 	private State state;
 
 	private ReviewedUpdatePlan(UpdatePlan plan, State state) {
 		this.plan = Objects.requireNonNull(plan, "update plan");
-		this.executionDigest = executionDigest(plan);
 		this.state = Objects.requireNonNull(state, "review state");
 	}
 
@@ -71,12 +69,30 @@ public final class ReviewedUpdatePlan {
 	}
 
 	/**
-	 * Verifies that a plan rebuilt after mutable-input validation still means exactly the same update.
-	 * A changed fingerprint must return to the review seam instead of being applied implicitly.
+	 * Verifies that a plan rebuilt after a partial apply still means exactly the update the player approved. The
+	 * contract is the outcome - the target generation, the projected final state, and the planned client
+	 * configuration - never the work description: an earlier attempt of this same approved plan may have already
+	 * applied a prefix of its operations, which legitimately shrinks the rebuilt plan's operations, consequences,
+	 * and captures, and must not read as a changed review. A drifted outcome returns to the review seam instead of
+	 * being applied implicitly, and the failure names exactly what drifted.
 	 */
 	public void requireCompatible(UpdatePlan candidate) {
 		Objects.requireNonNull(candidate, "candidate plan");
-		if (!executionDigest.equals(executionDigest(candidate))) throw new IllegalStateException("The reviewed update plan changed before it could be applied");
+		OutcomeTuple approved = outcomeTuple(plan);
+		OutcomeTuple rebuilt = outcomeTuple(candidate);
+		List<String> drifted = new ArrayList<>();
+		if (!approved.modpackId().equals(rebuilt.modpackId())) drifted.add("modpack");
+		if (!approved.generation().equals(rebuilt.generation())) drifted.add("target generation");
+		if (!approved.projected().equals(rebuilt.projected())) drifted.add("projected final state");
+		if (!Objects.equals(approved.config(), rebuilt.config())) drifted.add("planned client configuration");
+		if (!drifted.isEmpty()) throw new IllegalStateException("The reviewed update outcome changed before it could be applied: " + String.join(", ", drifted));
+	}
+
+	/** The approved outcome of one update: everything the player's review decided, independent of how much work is still ahead. */
+	private record OutcomeTuple(String modpackId, PackTarget generation, List<ProjectedFile> projected, ClientConfigJsons.ClientConfigFieldsV3 config) {}
+
+	private static OutcomeTuple outcomeTuple(UpdatePlan plan) {
+		return new OutcomeTuple(plan.modpackId(), plan.packTarget(), safe(plan.projectedFinalState()), plan.plannedClientConfig());
 	}
 
 	/** Compares a rebuilt plan with the plan captured in a durable transaction. */

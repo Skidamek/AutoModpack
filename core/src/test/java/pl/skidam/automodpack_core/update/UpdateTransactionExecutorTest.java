@@ -281,6 +281,56 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void aRebuiltTransactionRetiresAnInterruptedApply() throws Exception {
+		ClientStorage storage = storage();
+		byte[] earlyBytes = "early-game-file".getBytes(StandardCharsets.UTF_8);
+		String earlyHash = store(storage, earlyBytes);
+		byte[] expectedBytes = "expected-game-file".getBytes(StandardCharsets.UTF_8);
+		String expectedHash = store(storage, expectedBytes);
+		SelectedModpackTarget target = twoFileTarget(storage, "config/early.txt", "config/replanned.json", earlyHash, earlyBytes.length, expectedHash, expectedBytes.length);
+		Path drifted = storage.gameDirectory().resolve("config/replanned.json");
+		Files.createDirectories(drifted.getParent());
+		byte[] playerBytes = "newer-player-file".getBytes(StandardCharsets.UTF_8);
+		Files.write(drifted, playerBytes);
+		String playerHash = HashUtils.sha1(playerBytes);
+
+		// Attempt one plans against a world without the player's file and dies on it, after the early file is already materialized.
+		UpdatePlan interruptedPlan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, null),
+				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null),
+				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
+				.stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
+		UpdateTransactionExecutor.Execution first = executor(storage).commit(createTransaction(storage, interruptedPlan, target));
+
+		assertTrue(first.replanRequired());
+		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, persistedTransaction(storage).resultStatus);
+		assertArrayEquals(earlyBytes, Files.readAllBytes(storage.gameDirectory().resolve("config/early.txt")));
+		assertArrayEquals(playerBytes, Files.readAllBytes(drifted));
+
+		// The rebuild observes the same world attempt one left behind: both game ops now name the bytes they expect to find.
+		UpdatePlan rebuiltPlan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
+				new Operation(Root.GAME_DIR, "config/early.txt", OperationType.INSTALL_OBJECT, earlyHash, earlyBytes.length, earlyHash),
+				new Operation(Root.GAME_DIR, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, playerHash),
+				new Operation(Root.PROJECTION, "config/replanned.json", OperationType.INSTALL_OBJECT, expectedHash, expectedBytes.length, null))
+				.stream().sorted(Operation.ORDER).toList(),
+				List.of(new ProjectedFile(Root.PROJECTION, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.PROJECTION, "config/replanned.json", true, expectedHash, expectedBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/early.txt", true, earlyHash, earlyBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/replanned.json", true, expectedHash, expectedBytes.length)));
+		UpdateTransactionExecutor.Execution second = executor(storage).commit(createTransaction(storage, rebuiltPlan, target));
+
+		assertTrue(second.success());
+		assertArrayEquals(earlyBytes, Files.readAllBytes(storage.gameDirectory().resolve("config/early.txt")));
+		assertArrayEquals(expectedBytes, Files.readAllBytes(drifted));
+		assertFalse(Files.exists(storage.transactionFile()));
+		assertEquals(target.packTarget().contentToken(), storage.readActiveState().contentToken);
+	}
+
+	@Test
 	void clientConfigurationDriftRequestsAReplanWithoutOverwritingTheNewSettings() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "config-drift".getBytes(StandardCharsets.UTF_8);
@@ -709,6 +759,29 @@ class UpdateTransactionExecutorTest {
 		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields(path, type, editable, hash, size)));
 		TestPacks.stageGeneration(storage, document);
 		return SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+	}
+
+	private static SelectedModpackTarget twoFileTarget(ClientStorage storage, String pathA, String pathB, String hashA, long sizeA, String hashB, long sizeB) throws IOException {
+		ModpackJsons.CompleteModpackContentFields fields = new ModpackJsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		fields.modpackName = "Test";
+		ModpackJsons.CompleteModpackContentFields.ModpackGroupFields group = new ModpackJsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.required = true;
+		group.files = Map.of(pathA, file(pathA, hashA, sizeA), pathB, file(pathB, hashB, sizeB));
+		fields.groups = Map.of("main", group);
+		PackDocument document = TestPacks.document(GroupManifestValidator.validate(fields));
+		TestPacks.stageGeneration(storage, document);
+		return SelectedModpackTarget.prepare(document, null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+	}
+
+	private static ModpackJsons.CompleteModpackContentFields.GroupFileFields file(String path, String hash, long size) {
+		ModpackJsons.CompleteModpackContentFields.GroupFileFields file = new ModpackJsons.CompleteModpackContentFields.GroupFileFields();
+		file.size = String.valueOf(size);
+		file.type = path.endsWith(".jar") ? "mod" : "config";
+		file.editable = false;
+		file.sha1 = hash;
+		file.murmur = "0";
+		return file;
 	}
 
 	private static SelectedModpackTarget nextTarget(ClientStorage storage, SelectedModpackTarget parent, String path, String hash, long size, Instant createdAt) throws IOException {
