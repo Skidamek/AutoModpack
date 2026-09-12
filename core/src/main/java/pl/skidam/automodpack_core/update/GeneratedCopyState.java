@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -38,21 +37,23 @@ public record GeneratedCopyState(String modpackId, String contentToken, String s
 				copies.stream().map(copy -> new Entry(copy.relativePath(), copy.sha1(), copy.size())).toList());
 	}
 
+	/**
+	 * The state at the given identity, or an empty state when none was persisted yet; a persisted file that fails to
+	 * parse or does not answer to its own path is set aside as evidence and reads as empty, so a state written by a
+	 * build with another format can never block the client again.
+	 */
 	public static GeneratedCopyState read(ClientStorage storage, String modpackId, String contentToken, String selectionDigest) throws IOException {
 		Path path = storage.generatedCopiesFile(modpackId, contentToken, selectionDigest);
-		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return new GeneratedCopyState(modpackId, contentToken, selectionDigest, List.of());
-		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Generated-copy state is not a regular file: " + path);
-		try {
-			ClientStorageJsons.ClientGeneratedCopiesFields fields = ConfigTools.read(path, ClientStorageJsons.ClientGeneratedCopiesFields.class)
-					.orElseThrow(() -> new IOException("Generated-copy state is empty: " + path));
-			GeneratedCopyState state = fromFields(fields);
-			if (!state.modpackId().equals(ModpackId.requireValid(modpackId)) || !state.contentToken().equals(requireDigest(contentToken, "generation ID"))
-					|| !state.selectionDigest().equals(requireDigest(selectionDigest, "generated-copy selection digest")))
-				throw new IOException("Generated-copy state identity is invalid: " + path);
-			return state;
-		} catch (RuntimeException e) {
-			throw new IOException("Generated-copy state is invalid: " + path, e);
-		}
+		return ConfigTools.readState(path, ClientStorageJsons.ClientGeneratedCopiesFields.class, "Generated-copy state",
+				fields -> answeringTo(modpackId, contentToken, selectionDigest, path, fields)).orElse(new GeneratedCopyState(modpackId, contentToken, selectionDigest, List.of()));
+	}
+
+	private static GeneratedCopyState answeringTo(String modpackId, String contentToken, String selectionDigest, Path path, ClientStorageJsons.ClientGeneratedCopiesFields fields) {
+		GeneratedCopyState state = fromFields(fields);
+		if (!state.modpackId().equals(ModpackId.requireValid(modpackId)) || !state.contentToken().equals(HashUtils.normalizeSha1(contentToken))
+				|| !state.selectionDigest().equals(HashUtils.normalizeSha1(selectionDigest)))
+			throw new IllegalArgumentException("Generated-copy state does not answer to its path: " + path);
+		return state;
 	}
 
 	public void write(ClientStorage storage) throws IOException {

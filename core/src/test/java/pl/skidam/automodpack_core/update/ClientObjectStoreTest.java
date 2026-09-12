@@ -141,14 +141,20 @@ class ClientObjectStoreTest {
 	}
 
 	@Test
-	void refusesCollectionWhenTheMirrorIsMalformed() throws Exception {
+	void collectionSetsAMalformedMirrorAsideAndRuns() throws Exception {
 		ClientStorage storage = storage();
 		String orphan = store(storage, "orphan");
 		Files.createDirectories(storage.historyJournalFile(MODPACK_ID).getParent());
 		Files.writeString(storage.historyJournalFile(MODPACK_ID), "{not a journal", StandardCharsets.UTF_8);
 
-		assertThrows(IOException.class, () -> ClientObjectStore.collectUnreachableObjects(storage, Set.of()));
-		assertTrue(Files.exists(storage.objectFile(orphan)));
+		// The malformed mirror is set aside as evidence, so it pins nothing and the collection runs over the rest.
+		ClientObjectStore.CollectionResult result = ClientObjectStore.collectUnreachableObjects(storage, Set.of());
+		assertEquals(1, result.deletedObjectCount());
+		assertFalse(Files.exists(storage.objectFile(orphan)));
+		assertTrue(Files.notExists(storage.historyJournalFile(MODPACK_ID)));
+		try (var leftovers = Files.list(storage.historyJournalFile(MODPACK_ID).getParent())) {
+			assertTrue(leftovers.anyMatch(path -> path.getFileName().toString().startsWith(storage.historyJournalFile(MODPACK_ID).getFileName() + ".corrupt-")));
+		}
 	}
 
 	@Test

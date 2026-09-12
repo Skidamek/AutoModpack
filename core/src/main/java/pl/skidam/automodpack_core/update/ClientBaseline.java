@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.update;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,20 +30,21 @@ public record ClientBaseline(String modpackId, List<Entry> entries) {
 		entries = List.copyOf(sorted);
 	}
 
-	/** Reads the modpack's persisted baseline, returning an empty baseline when none was persisted yet. */
+	/**
+	 * Reads the modpack's persisted baseline, returning an empty baseline when none was persisted yet; a file that
+	 * fails to parse or answers to another pack is set aside as evidence and reads as empty, and the next update
+	 * rebuilds the baseline.
+	 */
 	public static ClientBaseline read(ClientStorage storage, String modpackId) throws IOException {
 		Path path = storage.baselineFile(modpackId);
-		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return new ClientBaseline(modpackId, List.of());
-		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client baseline is not a regular file: " + path);
-		try {
-			ClientStorageJsons.ClientBaselineFields fields = ConfigTools.read(path, ClientStorageJsons.ClientBaselineFields.class)
-					.orElseThrow(() -> new IOException("Client baseline is empty: " + path));
-			ClientBaseline baseline = fromFields(fields);
-			if (!baseline.modpackId().equals(ModpackId.requireValid(modpackId))) throw new IOException("Client baseline identity is invalid: " + path);
-			return baseline;
-		} catch (RuntimeException e) {
-			throw new IOException("Client baseline is invalid: " + path, e);
-		}
+		return ConfigTools.readState(path, ClientStorageJsons.ClientBaselineFields.class, "Client baseline", fields -> answeringTo(modpackId, path, fields))
+				.orElse(new ClientBaseline(modpackId, List.of()));
+	}
+
+	private static ClientBaseline answeringTo(String modpackId, Path path, ClientStorageJsons.ClientBaselineFields fields) {
+		ClientBaseline baseline = fromFields(fields);
+		if (!baseline.modpackId().equals(ModpackId.requireValid(modpackId))) throw new IllegalArgumentException("Client baseline does not answer to its path: " + path);
+		return baseline;
 	}
 
 	public void write(ClientStorage storage) throws IOException {

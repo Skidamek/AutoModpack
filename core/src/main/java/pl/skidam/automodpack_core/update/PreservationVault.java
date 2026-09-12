@@ -328,35 +328,40 @@ public final class PreservationVault {
 		return fields.claims.stream().filter(claim -> claimId.equals(claim.claimId)).findFirst().orElseThrow(() -> new IOException("Preservation claim is no longer available: " + claimId));
 	}
 
+	/** The modpack's current manifest, or an empty vault when none was persisted yet; an unusable manifest is set aside as evidence and also reads as an empty vault. */
 	private static ClientStorageJsons.ClientPreservationVaultFields readFields(ClientStorage storage, String modpackId) throws IOException {
 		Path root = storage.preservationPackDirectory(modpackId);
 		FileTrees.requireNoSymbolicLinkDescendants(storage.preservationDirectory(), root, "preservation vault");
 		Path manifest = storage.preservationManifest(modpackId);
-		if (Files.notExists(manifest, LinkOption.NOFOLLOW_LINKS)) {
-			ClientStorageJsons.ClientPreservationVaultFields empty = new ClientStorageJsons.ClientPreservationVaultFields();
-			empty.modpackId = modpackId;
-			empty.claims = new ArrayList<>();
-			return empty;
-		}
-		FileTrees.requireNoSymbolicLinkDescendants(root, manifest, "preservation manifest");
-		if (!Files.isRegularFile(manifest, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Preservation manifest is not a regular file: " + manifest);
-		ClientStorageJsons.ClientPreservationVaultFields fields;
-		try {
-			fields = ConfigTools.read(manifest, ClientStorageJsons.ClientPreservationVaultFields.class).orElseThrow(() -> new IOException("Preservation manifest is empty"));
-		} catch (RuntimeException e) {
-			throw new IOException("Preservation manifest is invalid", e);
-		}
-		if (fields.schemaVersion != 1 || !modpackId.equals(fields.modpackId) || fields.claims == null) throw new IOException("Preservation manifest identity is invalid");
+		return ConfigTools.readState(manifest, ClientStorageJsons.ClientPreservationVaultFields.class, "Preservation manifest", fields -> validated(modpackId, fields))
+				.orElseGet(() -> emptyFields(modpackId));
+	}
+
+	private static ClientStorageJsons.ClientPreservationVaultFields emptyFields(String modpackId) {
+		ClientStorageJsons.ClientPreservationVaultFields empty = new ClientStorageJsons.ClientPreservationVaultFields();
+		empty.modpackId = modpackId;
+		empty.claims = new ArrayList<>();
+		return empty;
+	}
+
+	/** The manifest's content contract; every rejection here is unusable content, so the corrupt-file-aside policy applies to it. */
+	private static ClientStorageJsons.ClientPreservationVaultFields validated(String modpackId, ClientStorageJsons.ClientPreservationVaultFields fields) {
+		if (fields.schemaVersion != 1 || !modpackId.equals(fields.modpackId) || fields.claims == null) throw new IllegalArgumentException("Preservation manifest identity is invalid");
 		Set<String> ids = new HashSet<>();
 		for (ClientStorageJsons.ClientPreservationVaultFields.ClaimFields claim : fields.claims) {
-			ClaimIdentity parsed = toIdentity(claim);
-			if (!modpackId.equals(parsed.modpackId()) || !ids.add(parsed.claimId())) throw new IOException("Preservation manifest contains duplicate or foreign claims");
+			ClaimIdentity parsed;
+			try {
+				parsed = toIdentity(claim);
+			} catch (IOException e) {
+				throw new IllegalArgumentException("Preservation claim is invalid", e);
+			}
+			if (!modpackId.equals(parsed.modpackId()) || !ids.add(parsed.claimId())) throw new IllegalArgumentException("Preservation manifest contains duplicate or foreign claims");
 			String expectedId = claimId(parsed.modpackId(), parsed.contentToken(), parsed.reason(), parsed.sourceRoot(), parsed.originalPath(), parsed.objectHash(), parsed.size());
-			if (!expectedId.equals(parsed.claimId())) throw new IOException("Preservation claim identity is invalid");
+			if (!expectedId.equals(parsed.claimId())) throw new IllegalArgumentException("Preservation claim identity is invalid");
 		}
 		List<ClientStorageJsons.ClientPreservationVaultFields.ClaimFields> sorted = new ArrayList<>(fields.claims);
 		sorted.sort(CLAIM_ORDER);
-		if (!sorted.equals(fields.claims)) throw new IOException("Preservation claims are not deterministically ordered");
+		if (!sorted.equals(fields.claims)) throw new IllegalArgumentException("Preservation claims are not deterministically ordered");
 		return fields;
 	}
 

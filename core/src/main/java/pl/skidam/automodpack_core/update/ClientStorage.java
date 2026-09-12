@@ -1,12 +1,12 @@
 package pl.skidam.automodpack_core.update;
 
 import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.storage.StoragePaths.*;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -123,12 +123,18 @@ public final class ClientStorage {
 		ClientStorage storage = new ClientStorage(dataLocation);
 		try {
 			storage.initialize();
-			ClientObjectStore.publishOwnership(storage);
-			OPEN_STORAGE.put(canonicalGameDirectory, new WeakReference<>(storage));
-			return storage;
 		} catch (IOException e) {
 			throw new IllegalStateException("Cannot initialize client storage for " + storage.gameDirectory, e);
 		}
+		try {
+			ClientObjectStore.publishOwnership(storage);
+		} catch (IOException e) {
+			// The receipt is collection bookkeeping: every collection republishes it under the lock first, so a failed
+			// publish only makes the next collection refuse to run - it must never cost the game its boot.
+			LOGGER.error("Could not publish the client object ownership receipt for {}; content collection stays refused until one publishes: {}", storage.gameDirectory, e.getMessage(), e);
+		}
+		OPEN_STORAGE.put(canonicalGameDirectory, new WeakReference<>(storage));
+		return storage;
 	}
 
 	public Path gameDirectory() {
@@ -364,21 +370,22 @@ public final class ClientStorage {
 		return overlaysDirectory.resolve(ModpackId.requireValid(modpackId) + ".json").normalize();
 	}
 
+	/** The pack's overlay tombstones, or an empty overlay state when none was persisted; an unusable state is set aside as evidence and reads as empty. */
 	public ClientStorageJsons.ClientOverlayFields readOverlayState(String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
-		Path stateFile = overlayStateFile(normalizedModpackId);
-		if (!Files.exists(stateFile, LinkOption.NOFOLLOW_LINKS)) {
-			ClientStorageJsons.ClientOverlayFields empty = new ClientStorageJsons.ClientOverlayFields();
-			empty.modpackId = normalizedModpackId;
-			empty.deletedPaths = List.of();
-			return empty;
-		}
-		if (Files.isSymbolicLink(stateFile) || !Files.isRegularFile(stateFile, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client overlay state is not a regular file: " + stateFile);
-		ClientStorageJsons.ClientOverlayFields state = ConfigTools.read(stateFile, ClientStorageJsons.ClientOverlayFields.class)
-				.orElseThrow(() -> new IOException("Client overlay state is empty: " + stateFile));
-		if (!normalizedModpackId.equals(state.modpackId) || state.deletedPaths == null) throw new IOException("Client overlay state identity is invalid: " + stateFile);
+		return ConfigTools.readState(overlayStateFile(normalizedModpackId), ClientStorageJsons.ClientOverlayFields.class, "Client overlay state",
+				fields -> canonicalTombstones(normalizedModpackId, fields)).orElseGet(() -> {
+					ClientStorageJsons.ClientOverlayFields empty = new ClientStorageJsons.ClientOverlayFields();
+					empty.modpackId = normalizedModpackId;
+					empty.deletedPaths = List.of();
+					return empty;
+				});
+	}
+
+	private static ClientStorageJsons.ClientOverlayFields canonicalTombstones(String modpackId, ClientStorageJsons.ClientOverlayFields state) {
+		if (!modpackId.equals(state.modpackId) || state.deletedPaths == null) throw new IllegalArgumentException("Client overlay state identity is invalid");
 		List<String> canonical = state.deletedPaths.stream().map(ClientStorage::requireLogicalPath).distinct().sorted().toList();
-		if (!canonical.equals(state.deletedPaths)) throw new IOException("Client overlay tombstones are not canonical: " + stateFile);
+		if (!canonical.equals(state.deletedPaths)) throw new IllegalArgumentException("Client overlay tombstones are not canonical");
 		return state;
 	}
 
@@ -432,20 +439,19 @@ public final class ClientStorage {
 		FileTrees.createManagedDirectory(historyDirectory, "client journal mirrors");
 	}
 
+	/**
+	 * The active pack pointer, or null when none was persisted yet. An unusable state is set aside as evidence and
+	 * reads as no active pack; the next committed update writes it fresh.
+	 */
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
-		if (!Files.exists(stateFile, LinkOption.NOFOLLOW_LINKS)) return null;
-		if (Files.isSymbolicLink(stateFile) || !Files.isRegularFile(stateFile, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Client active state is not a regular file");
-		ClientStorageJsons.ClientGenerationStateFields state = ConfigTools.read(stateFile, ClientStorageJsons.ClientGenerationStateFields.class)
-				.orElseThrow(() -> new IOException("Client active state is empty"));
+		return ConfigTools.readState(stateFile, ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ClientStorage::validatedActiveState).orElse(null);
+	}
+
+	private static ClientStorageJsons.ClientGenerationStateFields validatedActiveState(ClientStorageJsons.ClientGenerationStateFields state) {
 		if (!ModpackId.isValid(state.modpackId) || !HashUtils.isSha1(state.contentToken) || !"ACTIVE".equals(state.status))
-			throw new IOException("Client active state identity is invalid");
-		try {
-			OwnershipLedger.fromFields(state.ownershipLedger);
-		} catch (RuntimeException e) {
-			throw new IOException("Client active state ownership ledger is invalid", e);
-		}
-		if (!state.modpackId.equals(state.ownershipLedger.modpackId)) throw new IOException("Client active state and its ledger belong to different modpacks");
+			throw new IllegalArgumentException("Client active state identity is invalid");
+		OwnershipLedger.fromFields(state.ownershipLedger);
+		if (!state.modpackId.equals(state.ownershipLedger.modpackId)) throw new IllegalArgumentException("Client active state and its ledger belong to different modpacks");
 		return state;
 	}
 
