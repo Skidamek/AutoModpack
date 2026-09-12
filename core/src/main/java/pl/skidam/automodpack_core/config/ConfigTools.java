@@ -10,6 +10,7 @@ import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import com.google.gson.Gson;
@@ -82,6 +84,29 @@ public final class ConfigTools {
 			return value;
 		} catch (IOException e) {
 			throw new ConfigException("Failed to create configuration " + path.toAbsolutePath().normalize(), e);
+		}
+	}
+
+	/**
+	 * Reads one persisted-but-rebuildable state document under the corrupt-file-aside policy: a missing file reads as
+	 * empty, an unusable one is set aside as evidence with a loud log and also reads as empty, and only real IO trouble
+	 * propagates. The mapper folds every content validation in, so anything it rejects counts as unusable content; the
+	 * state's owner stays the sole authority on what its document must look like.
+	 */
+	public static <F, S> Optional<S> readState(Path path, Class<F> type, String description, Function<F, S> fromFields) throws IOException {
+		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " is not a regular file: " + path);
+		try {
+			F fields = read(path, type).orElseThrow(() -> new ConfigParseException(description + " is empty: " + path));
+			return Optional.of(fromFields.apply(fields));
+		} catch (ConfigParseException e) {
+			DurableFiles.setAside(path, description, e);
+			return Optional.empty();
+		} catch (ConfigException e) {
+			throw e; // a file that cannot be physically read is IO trouble, never unusable content
+		} catch (RuntimeException e) {
+			DurableFiles.setAside(path, description, e);
+			return Optional.empty();
 		}
 	}
 

@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -162,6 +163,43 @@ class ConfigToolsTest {
 
 		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.readOrCreate(config, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new));
 		assertEquals(json, Files.readString(config, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void readStateTreatsUnusableContentAsAbsentAndSetsItAside() throws Exception {
+		Path missing = temporaryDirectory.resolve("missing.json");
+		assertTrue(ConfigTools.readState(missing, StateDocument.class, "Test state", StateDocument::validated).isEmpty());
+		assertFalse(Files.exists(missing));
+
+		Path unusable = temporaryDirectory.resolve("state.json");
+		Files.writeString(unusable, "{\"value\": -1}", StandardCharsets.UTF_8);
+		assertTrue(ConfigTools.readState(unusable, StateDocument.class, "Test state", StateDocument::validated).isEmpty());
+		assertFalse(Files.exists(unusable));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			List<Path> aside = leftovers.filter(path -> path.getFileName().toString().startsWith("state.json.corrupt-")).toList();
+			assertEquals(1, aside.size());
+			assertEquals("{\"value\": -1}", Files.readString(aside.get(0)));
+		}
+
+		Files.writeString(unusable, "{\"value\": 3}", StandardCharsets.UTF_8);
+		assertEquals(3, ConfigTools.readState(unusable, StateDocument.class, "Test state", StateDocument::validated).orElseThrow().value);
+	}
+
+	@Test
+	void readStateStillFailsOnAFileThatIsNotARegularFile() throws Exception {
+		Path directory = temporaryDirectory.resolve("state.json");
+		Files.createDirectory(directory);
+
+		assertThrows(IOException.class, () -> ConfigTools.readState(directory, StateDocument.class, "Test state", StateDocument::validated));
+	}
+
+	public static class StateDocument {
+		public int value;
+
+		public static StateDocument validated(StateDocument document) {
+			if (document.value < 0) throw new IllegalArgumentException("Test state value is invalid");
+			return document;
+		}
 	}
 
 	public static class EnumHolder {

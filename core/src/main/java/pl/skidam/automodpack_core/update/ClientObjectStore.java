@@ -334,28 +334,20 @@ public final class ClientObjectStore {
 	private static void collectTransaction(ClientStorage storage, ExpectedSizes retained) throws IOException {
 		UpdateTransaction transaction = UpdateTransaction.read(storage.transactionFile());
 		if (transaction == null) return;
-		if (transaction.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION || transaction.operations == null || transaction.projectedFinalState == null
-				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null || transaction.plannedConflicts == null)
-			throw new IOException("Client transaction fields are incomplete: " + storage.transactionFile());
 		for (UpdatePlan.Operation operation : transaction.operations) {
-			if (operation == null) throw new IOException("Client transaction contains an incomplete operation");
 			retained.ifPresent(operation.expectedObjectHash(), operation.expectedSize(), "in-flight transaction operation");
 			retained.ifPresent(operation.expectedExistingHash(), -1, "in-flight transaction source");
 		}
 		for (UpdatePlan.ProjectedFile projected : transaction.projectedFinalState) {
-			if (projected == null) throw new IOException("Client transaction contains an incomplete projection");
 			if (projected.present()) retained.require(projected.expectedHash(), projected.expectedSize(), "in-flight transaction projection");
 		}
 		for (UpdatePlan.BaselineCapture capture : transaction.plannedBaselineCaptures) {
-			if (capture == null) throw new IOException("Client transaction contains an incomplete baseline capture");
 			if (!capture.absent()) retained.require(capture.expectedHash(), capture.expectedSize(), "in-flight transaction baseline");
 		}
 		for (UpdatePlan.Preservation preservation : transaction.plannedPreservations) {
-			if (preservation == null) throw new IOException("Client transaction contains an incomplete preservation");
 			retained.require(preservation.expectedHash(), preservation.expectedSize(), "in-flight transaction preservation");
 		}
 		for (UpdatePlan.Conflict conflict : transaction.plannedConflicts) {
-			if (conflict == null) throw new IOException("Client transaction contains an incomplete conflict");
 			retained.optional(conflict.sourceHash(), conflict.sourceSize(), "in-flight transaction conflict source");
 			retained.require(conflict.targetHash(), conflict.targetSize(), "in-flight transaction conflict target");
 		}

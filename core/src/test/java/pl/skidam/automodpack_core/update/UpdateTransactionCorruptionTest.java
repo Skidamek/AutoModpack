@@ -31,10 +31,24 @@ class UpdateTransactionCorruptionTest {
 	}
 
 	@Test
+	void incompleteTransactionIsSetAsideAndStartupSeesNoTransaction() throws Exception {
+		Path file = tempDir.resolve("update-transaction.json");
+		// A transaction whose planned sections never reached the disk cannot drive any recovery; only a whole one loads.
+		Files.writeString(file, "{\"schemaVersion\":1,\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"restartReasons\":[\"SELECTED_MODPACK\"]}");
+
+		assertNull(UpdateTransaction.read(file));
+		assertTrue(Files.notExists(file));
+		try (var leftovers = Files.list(tempDir)) {
+			List<Path> aside = leftovers.filter(path -> path.getFileName().toString().startsWith("update-transaction.json.corrupt-")).toList();
+			assertEquals(1, aside.size());
+		}
+	}
+
+	@Test
 	void validTransactionStillLoads() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
 		Files.writeString(file, "{\"schemaVersion\":1,\"transactionId\":\"t1\",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"targetPlatform\":\"linux\","
-				+ "\"restartReasons\":[\"SELECTED_MODPACK\"]}");
+				+ "\"restartReasons\":[\"SELECTED_MODPACK\"],\"operations\":[],\"projectedFinalState\":[],\"plannedPreservations\":[],\"plannedBaselineCaptures\":[],\"plannedConflicts\":[]}");
 
 		UpdateTransaction transaction = UpdateTransaction.read(file);
 
