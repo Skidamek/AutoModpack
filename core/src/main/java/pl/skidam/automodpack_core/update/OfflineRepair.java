@@ -145,6 +145,7 @@ public final class OfflineRepair {
 		try (FileCache fileCache = FileCache.open(storage.fileCacheDirectory())) {
 			Analysis current = analyze(request, fileCache);
 			ClientStorageJsons.OfflineRepairJournalFields journal = readJournal(current.prepared());
+			if (journal == null) return Optional.empty();
 			return Optional.of(executeJournal(current.prepared(), current, journal, fileCache));
 		}
 	}
@@ -254,25 +255,39 @@ public final class OfflineRepair {
 		return journal;
 	}
 
+	/**
+	 * The durable resume intent, or null when none survives: a journal that cannot be understood is set aside as
+	 * evidence and reads as none, so a torn repair journal can never block the boot. One that answers to another
+	 * repair is stale state and still fails loudly.
+	 */
 	private ClientStorageJsons.OfflineRepairJournalFields readJournal(Prepared prepared) throws IOException {
 		Path path = storage.repairJournalFile();
-		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Offline repair journal is not a regular file: " + path);
-		ClientStorageJsons.OfflineRepairJournalFields journal = ConfigTools.read(path, ClientStorageJsons.OfflineRepairJournalFields.class)
-				.orElseThrow(() -> new IOException("Offline repair journal is empty: " + path));
-		if (journal.schemaVersion != 1 || !prepared.modpackId().equals(journal.modpackId) || !prepared.contentToken().equals(journal.contentToken)
-				|| !prepared.selectionDigest().equals(journal.selectionDigest) || journal.editableResets == null || journal.unownedMods == null)
+		ClientStorageJsons.OfflineRepairJournalFields journal = ConfigTools
+				.readState(path, ClientStorageJsons.OfflineRepairJournalFields.class, "Offline repair journal", OfflineRepair::validatedJournal)
+				.orElse(null);
+		if (journal == null) return null;
+		if (!prepared.modpackId().equals(journal.modpackId) || !prepared.contentToken().equals(journal.contentToken)
+				|| !prepared.selectionDigest().equals(journal.selectionDigest))
 			throw new IOException("Offline repair journal identity is invalid: " + path);
-		List<String> editablePaths = journal.editableResets.stream().map(fields -> LogicalPath.normalize(fields.logicalPath)).toList();
-		List<String> unownedPaths = journal.unownedMods.stream().map(fields -> LogicalPath.normalize(fields.logicalPath)).toList();
-		if (!editablePaths.equals(editablePaths.stream().distinct().sorted().toList()) || !unownedPaths.equals(unownedPaths.stream().distinct().sorted().toList()))
-			throw new IOException("Offline repair journal paths are not canonical: " + path);
-		for (var fields : journal.editableResets)
-			new EditableResetCandidate(fields.logicalPath, fields.defaultHash, fields.defaultSize, fields.currentHash, fields.currentSize, fields.absent);
-		for (var fields : journal.unownedMods) {
-			HashUtils.normalizeSha1(fields.objectHash);
-			if (fields.size < 0) throw new IOException("Offline repair journal contains an invalid unowned mod size");
-		}
 		return journal;
+	}
+
+	/** The repair journal's content contract; an unusable one is set aside as evidence by every reader. */
+	static ClientStorageJsons.OfflineRepairJournalFields validatedJournal(ClientStorageJsons.OfflineRepairJournalFields fields) {
+		if (fields.schemaVersion != 1 || fields.editableResets == null || fields.unownedMods == null) throw new IllegalArgumentException("Offline repair journal is incomplete");
+		if (fields.editableResets.stream().anyMatch(Objects::isNull) || fields.unownedMods.stream().anyMatch(Objects::isNull))
+			throw new IllegalArgumentException("Offline repair journal contains incomplete rows");
+		List<String> editablePaths = fields.editableResets.stream().map(reset -> LogicalPath.normalize(reset.logicalPath)).toList();
+		List<String> unownedPaths = fields.unownedMods.stream().map(mod -> LogicalPath.normalize(mod.logicalPath)).toList();
+		if (!editablePaths.equals(editablePaths.stream().distinct().sorted().toList()) || !unownedPaths.equals(unownedPaths.stream().distinct().sorted().toList()))
+			throw new IllegalArgumentException("Offline repair journal paths are not canonical");
+		for (var reset : fields.editableResets)
+			new EditableResetCandidate(reset.logicalPath, reset.defaultHash, reset.defaultSize, reset.currentHash, reset.currentSize, reset.absent);
+		for (var mod : fields.unownedMods) {
+			HashUtils.normalizeSha1(mod.objectHash);
+			if (mod.size < 0) throw new IllegalArgumentException("Offline repair journal contains an invalid unowned mod size");
+		}
+		return fields;
 	}
 
 	private long resetJournalEditable(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, FileCache fileCache) throws IOException {
