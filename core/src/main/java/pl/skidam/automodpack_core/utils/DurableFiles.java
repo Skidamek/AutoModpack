@@ -48,6 +48,24 @@ public final class DurableFiles {
 	}
 
 	/**
+	 * Moves a persisted state file that cannot be understood aside as evidence, renamed in place next to where it
+	 * lived, so callers can treat it as absent instead of crashing; false when even the move failed, which the log
+	 * carries. The evidence stays until a human removes it.
+	 */
+	public static boolean setAside(Path file, String description, Exception cause) {
+		Path aside = file.resolveSibling(file.getFileName() + ".corrupt-" + System.currentTimeMillis());
+		try {
+			Files.move(file, aside);
+			LOGGER.error("{} is unusable and was set aside as {}: {}", description, aside.getFileName(), cause, cause);
+			return true;
+		} catch (IOException moveFailure) {
+			moveFailure.addSuppressed(cause);
+			LOGGER.error("{} is unusable and could not be set aside: {}", description, file, moveFailure);
+			return false;
+		}
+	}
+
+	/**
 	 * Writes bytes to a fresh same-filesystem temporary, forces it to stable storage, then publishes it with {@link #replace}
 	 * and forces the parent directory entry. The temporary is always removed, even on failure.
 	 */

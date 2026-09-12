@@ -1,11 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -18,7 +14,6 @@ import java.util.UUID;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.ConfigTools.ConfigParseException;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
@@ -74,28 +69,23 @@ public final class UpdateTransaction {
 	public UpdateTransaction() {}
 
 	/**
-	 * Reads the persisted transaction file, returning null when none exists; unparseable content is set aside as evidence and treated as absent, since the replan recovery rebuilds from the leftover directories, while
-	 * read failures propagate.
+	 * Reads the persisted transaction file, returning null when none exists; unusable content is set aside as evidence
+	 * and treated as absent, since the replan recovery rebuilds from the leftover directories, while read failures propagate.
 	 */
 	public static UpdateTransaction read(Path path) throws IOException {
-		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return null;
-		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Persisted update transaction is not a regular file: " + path);
-		try {
-			return ConfigTools.read(path, UpdateTransaction.class).orElseThrow(() -> new IOException("Persisted update transaction is empty: " + path));
-		} catch (ConfigParseException e) {
-			setAsideCorrupt(path, e);
-			return null;
-		}
+		return ConfigTools.readState(path, UpdateTransaction.class, "Persisted update transaction", UpdateTransaction::validated).orElse(null);
 	}
 
-	private static void setAsideCorrupt(Path path, RuntimeException cause) {
-		Path aside = path.resolveSibling(path.getFileName() + ".corrupt-" + System.currentTimeMillis());
-		try {
-			Files.move(path, aside);
-			LOGGER.error("Persisted update transaction is unreadable and was set aside as {}: {}", aside, cause.getMessage());
-		} catch (IOException moveFailure) {
-			LOGGER.error("Persisted update transaction is unreadable and could not be set aside: {}", path, cause);
-		}
+	/** The document's completeness contract: a transaction missing any planned section, or carrying null rows, was never fully written and is unusable content. */
+	private static UpdateTransaction validated(UpdateTransaction transaction) {
+		if (transaction.schemaVersion != CURRENT_SCHEMA_VERSION || transaction.operations == null || transaction.projectedFinalState == null
+				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null || transaction.plannedConflicts == null)
+			throw new IllegalArgumentException("Persisted update transaction fields are incomplete");
+		if (transaction.operations.stream().anyMatch(Objects::isNull) || transaction.projectedFinalState.stream().anyMatch(Objects::isNull)
+				|| transaction.plannedPreservations.stream().anyMatch(Objects::isNull) || transaction.plannedBaselineCaptures.stream().anyMatch(Objects::isNull)
+				|| transaction.plannedConflicts.stream().anyMatch(Objects::isNull))
+			throw new IllegalArgumentException("Persisted update transaction contains incomplete rows");
+		return transaction;
 	}
 
 	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
