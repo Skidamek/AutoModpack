@@ -12,6 +12,7 @@ class PathRuleSetTest {
 	void aPathMatchesWhenAPositiveRuleMatchesAndNoNegatedRuleVetoesIt() {
 		PathRuleSet rules = new PathRuleSet(List.of("config/**", "!config/fancymenu/**"));
 
+		assertTrue(rules.matches("config/emoji.json"));
 		assertTrue(rules.evaluate("config/emoji.json").matched());
 		assertEquals("config/**", rules.evaluate("config/emoji.json").decisiveRule());
 		assertFalse(rules.evaluate("config/fancymenu/theme.txt").matched());
