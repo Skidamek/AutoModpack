@@ -28,7 +28,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
  * not lose roots, group provenance, or source references.
  * </p>
  */
-public final class ChangeSet {
+public record ChangeSet(List<Change> changes, List<Effect> effects) {
 	private static final Comparator<Change> CHANGE_ORDER = Comparator.comparingInt((Change change) -> change.kind().sortOrder())
 			.thenComparing(Change::logicalPath);
 	private static final Comparator<Occurrence> OCCURRENCE_ORDER = Comparator.comparing(Occurrence::location)
@@ -38,12 +38,9 @@ public final class ChangeSet {
 			.thenComparing(Occurrence::contentKind)
 			.thenComparing(occurrence -> String.join("\u0000", occurrence.featureIds()));
 
-	private final List<Change> changes;
-	private final List<Effect> effects;
-
-	private ChangeSet(List<Change> changes, List<Effect> effects) {
-		this.changes = List.copyOf(changes);
-		this.effects = List.copyOf(effects);
+	public ChangeSet {
+		changes = List.copyOf(changes);
+		effects = List.copyOf(effects);
 	}
 
 	public static ChangeSet empty() {
@@ -97,14 +94,6 @@ public final class ChangeSet {
 			}
 		}
 		return of(changes);
-	}
-
-	public List<Change> changes() {
-		return changes;
-	}
-
-	public List<Effect> effects() {
-		return effects;
 	}
 
 	/** Returns a copy with references supplied for each physical occurrence. */

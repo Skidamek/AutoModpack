@@ -64,10 +64,10 @@ public final class UpdateTransactionValidator {
 		try {
 			if (pending.schemaVersion != UpdateTransaction.CURRENT_SCHEMA_VERSION) throw new IOException("Unsupported deferred transaction schema");
 			UUID.fromString(pending.transactionId);
-			if (pending.purpose == null || pending.projectedFinalState == null)
+			if (pending.purpose == null || pending.plan().projectedFinalState() == null)
 				throw new IOException("Deferred transaction envelope is incomplete");
-			ModpackId.requireValid(pending.modpackId);
-			validateFinalState(pending.projectedFinalState, pending.modpackId, pending.purpose);
+			ModpackId.requireValid(pending.plan().modpackId());
+			validateFinalState(pending.plan().projectedFinalState(), pending.plan().modpackId(), pending.purpose);
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
@@ -84,50 +84,45 @@ public final class UpdateTransactionValidator {
 			throw new IOException("Invalid transaction UUID", e);
 		}
 		if (transaction.purpose == null || transaction.phase == null) throw new IOException("Transaction purpose or phase is missing");
-		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.restartReasons == null
-				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null || transaction.plannedConflicts == null)
-			throw new IOException("Transaction fields are incomplete");
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE && transaction.plannedGeneratedCopies == null)
-			throw new IOException("Generated-copy state is missing from modpack update transaction");
-		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && transaction.plannedGeneratedCopies != null)
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !transaction.plan().generatedCopies().isEmpty())
 			throw new IOException("Generated-copy state is only valid for modpack update transactions");
 
 		ModpackJsons.ModpackContentFields target = null;
 		if (transaction.purpose != null) {
 			if (transaction.expectedClientConfig == null) throw new IOException("Expected client configuration is missing");
-			ModpackId.requireValid(transaction.modpackId);
+			ModpackId.requireValid(transaction.plan().modpackId());
 			if (selectedTarget != null && transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE)
 				throw new IOException("A supplied update target is only valid for a modpack update transaction");
 			PackDocument record = selectedTarget == null ? targetDocument(transaction) : selectedTarget.document();
 			target = selectedTarget == null ? resolvedTarget(transaction, record).flatTarget() : selectedTarget.flatTarget();
 			if (selectedTarget != null) validateSelectedTargetMetadata(transaction, selectedTarget);
 			validateGenerationIdentity(transaction, record, target);
-			validateManifest(target, transaction.modpackId);
+			validateManifest(target, transaction.plan().modpackId());
 			validateSelectionMetadata(transaction);
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateGeneratedCopies(transaction);
 			validateStoredClientState(transaction, record);
-			if (transaction.plannedClientConfig == null) throw new IOException("Planned client config is missing");
+			if (transaction.plan().plannedClientConfig() == null) throw new IOException("Planned client config is missing");
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
 			else validateRemovalClientConfig(transaction);
 			if (verifyMutableInputs && mutableInputDrift(transaction).overlay())
 				throw new IOException("Client editable overlay changed after planning");
 		} else throw new IOException("Unsupported transaction purpose");
 
-		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.projectedFinalState, transaction.modpackId, transaction.purpose);
-		for (Operation operation : transaction.operations)
+		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.plan().projectedFinalState(), transaction.plan().modpackId(), transaction.purpose);
+		for (Operation operation : transaction.plan().operations())
 			if (operation == null || operation.root() == null || operation.operation() == null || operation.relativePath() == null)
 				throw new IOException("Incomplete transaction operation");
-		List<Operation> sortedOperations = transaction.operations.stream().sorted(Operation.ORDER).toList();
-		if (!transaction.operations.equals(sortedOperations)) throw new IOException("Transaction operations are not deterministically ordered");
+		List<Operation> sortedOperations = transaction.plan().operations().stream().sorted(Operation.ORDER).toList();
+		if (!transaction.plan().operations().equals(sortedOperations)) throw new IOException("Transaction operations are not deterministically ordered");
 		Set<FileKey> operationKeys = new HashSet<>();
 		Set<Path> operationTargets = new HashSet<>();
-		for (Operation operation : transaction.operations) {
+		for (Operation operation : transaction.plan().operations()) {
 			if (operation == null || operation.root() == null || operation.operation() == null) throw new IOException("Incomplete transaction operation");
 			validatePurposeOperation(transaction.purpose, operation);
 			String relative = normalizeOperationPath(operation.relativePath());
 			FileKey key = new FileKey(operation.root(), relative);
 			if (!operationKeys.add(key)) throw new IOException("Duplicate transaction operation target");
-			Path physicalTarget = validateRootAndPath(operation.root(), relative, transaction.modpackId, transaction.purpose);
+			Path physicalTarget = validateRootAndPath(operation.root(), relative, transaction.plan().modpackId(), transaction.purpose);
 			if (!operationTargets.add(physicalTarget)) throw new IOException("Transaction operations alias the same physical target");
 			ProjectedFile projected = finalState.get(key);
 			if (projected == null && operation.root() != Root.PROJECTION) throw new IOException("Operation target is missing from projected final state");
@@ -155,14 +150,14 @@ public final class UpdateTransactionValidator {
 	 */
 	MutableInputDrift mutableInputDrift(UpdateTransaction transaction) throws IOException {
 		return new MutableInputDrift(configurationChanged(transaction), selectionChanged(transaction),
-				!Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.modpackId)));
+				!Objects.equals(transaction.overlayDigest, storage.overlayDigest(transaction.plan().modpackId())));
 	}
 
 	private boolean configurationChanged(UpdateTransaction transaction) throws IOException {
 		if (transaction.expectedClientConfig == null) return true;
 		ClientConfigJsons.ClientConfigFieldsV3 current = currentClientConfig();
 		if (current.equals(transaction.expectedClientConfig)) return false;
-		return transaction.plannedClientConfig == null || !current.equals(transaction.plannedClientConfig);
+		return transaction.plan().plannedClientConfig() == null || !current.equals(transaction.plan().plannedClientConfig());
 	}
 
 	private ClientConfigJsons.ClientConfigFieldsV3 currentClientConfig() {
@@ -170,7 +165,7 @@ public final class UpdateTransactionValidator {
 	}
 
 	private boolean selectionChanged(UpdateTransaction transaction) throws IOException {
-		SelectionIntent current = new ClientSelectionStore(storage.selectionFile()).get(transaction.modpackId).orElse(null);
+		SelectionIntent current = new ClientSelectionStore(storage.selectionFile()).get(transaction.plan().modpackId()).orElse(null);
 		SelectionIntent expected = transaction.expectedPriorIntent();
 		boolean alreadyCommitted = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
 				? Objects.equals(current, transaction.targetIntent())
@@ -184,12 +179,10 @@ public final class UpdateTransactionValidator {
 			throw new IOException("Transaction selection metadata disagrees with the supplied target");
 	}
 
+	/** Validates the carried plan's generated copies: the identity is the plan's own, so only the entries' contract can be wrong. */
 	private void validateGeneratedCopies(UpdateTransaction transaction) throws IOException {
 		try {
-			GeneratedCopyState state = GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies);
-			if (!transaction.modpackId.equals(state.modpackId()) || !transaction.contentToken.equals(state.contentToken())
-					|| !transaction.selectionDigest.equals(state.selectionDigest()))
-				throw new IOException("Generated-copy state identity does not match transaction");
+			GeneratedCopyState.fromCopies(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken(), transaction.selectionDigest(), transaction.plan().generatedCopies());
 		} catch (RuntimeException e) {
 			throw new IOException("Generated-copy state is invalid", e);
 		}
@@ -226,7 +219,7 @@ public final class UpdateTransactionValidator {
 		PackTarget flatTarget = PackTarget.fromFlat(target);
 		if (!transactionTarget.equals(recordTarget) || !transactionTarget.equals(flatTarget))
 			throw new IOException("Transaction, target generation, and selected target identities disagree");
-		if (!transaction.modpackId.equals(record.manifest().modpackId())) throw new IOException("Target generation belongs to another modpack lineage");
+		if (!transaction.plan().modpackId().equals(record.manifest().modpackId())) throw new IOException("Target generation belongs to another modpack lineage");
 		try {
 			if (!OwnershipLedger.fromFields(target.ownershipLedger).equals(record.ownershipLedger())) throw new IOException("Selected target ledger disagrees with generation record");
 		} catch (RuntimeException e) {
@@ -243,7 +236,7 @@ public final class UpdateTransactionValidator {
 		PackDocument stateRecord = new ClientGenerationStore(storage).activeDocument()
 				.orElseThrow(() -> new IOException("Active client generation is missing: " + state.contentToken));
 		if (!state.modpackId.equals(stateRecord.manifest().modpackId())) throw new IOException("Active client state and generation belong to different modpacks");
-		if (state.modpackId.equals(transaction.modpackId) && state.contentToken.equals(targetRecord.contentToken())) {
+		if (state.modpackId.equals(transaction.plan().modpackId()) && state.contentToken.equals(targetRecord.contentToken())) {
 			if (!stateRecord.equals(targetRecord)) throw new IOException("Active client state disagrees with its generation record");
 		}
 	}
@@ -259,7 +252,7 @@ public final class UpdateTransactionValidator {
 				|| !isCanonicalIntentList(transaction.excludedGroups))
 			throw new IOException("Selection metadata is not canonical");
 		try {
-			if (!transaction.selectionDigest.equals(UpdateTransaction.digest(transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+			if (!transaction.selectionDigest().equals(UpdateTransaction.digest(transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
 					? transaction.targetIntent()
 					: transaction.expectedPriorIntent())))
 				throw new IOException("Selection digest does not match selection metadata");
@@ -271,14 +264,14 @@ public final class UpdateTransactionValidator {
 	}
 
 	private void validatePlannedClientConfig(UpdateTransaction transaction) throws IOException {
-		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plannedClientConfig;
-		if (config == null || !transaction.modpackId.equals(config.selectedModpackId))
+		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plan().plannedClientConfig();
+		if (config == null || !transaction.plan().modpackId().equals(config.selectedModpackId))
 			throw new IOException("Planned client config does not select the transaction modpack");
 	}
 
 	private void validateRemovalClientConfig(UpdateTransaction transaction) throws IOException {
-		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plannedClientConfig;
-		if (config == null || transaction.modpackId.equals(config.selectedModpackId))
+		ClientConfigJsons.ClientConfigFieldsV3 config = transaction.plan().plannedClientConfig();
+		if (config == null || transaction.plan().modpackId().equals(config.selectedModpackId))
 			throw new IOException("Removal client config still selects the removed modpack");
 	}
 
@@ -335,19 +328,19 @@ public final class UpdateTransactionValidator {
 
 	private void validateBaselineCaptures(UpdateTransaction transaction) throws IOException {
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			if (!transaction.plannedBaselineCaptures.isEmpty()) throw new IOException("Only modpack updates can capture baselines");
+			if (!transaction.plan().baselineCaptures().isEmpty()) throw new IOException("Only modpack updates can capture baselines");
 			return;
 		}
-		for (BaselineCapture capture : transaction.plannedBaselineCaptures)
+		for (BaselineCapture capture : transaction.plan().baselineCaptures())
 			if (capture == null || capture.root() == null || capture.relativePath() == null || capture.expectedHash() == null)
 				throw new IOException("Invalid baseline capture");
-		List<BaselineCapture> sorted = transaction.plannedBaselineCaptures.stream().sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal())
+		List<BaselineCapture> sorted = transaction.plan().baselineCaptures().stream().sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal())
 				.thenComparing(BaselineCapture::relativePath)).toList();
-		if (!transaction.plannedBaselineCaptures.equals(sorted)) throw new IOException("Baseline captures are not deterministically ordered");
-		for (BaselineCapture capture : transaction.plannedBaselineCaptures) {
+		if (!transaction.plan().baselineCaptures().equals(sorted)) throw new IOException("Baseline captures are not deterministically ordered");
+		for (BaselineCapture capture : transaction.plan().baselineCaptures()) {
 			if (capture == null || capture.root() != Root.GAME_DIR) throw new IOException("Invalid baseline capture");
 			String relative = normalizeOperationPath(capture.relativePath());
-			validateRootAndPath(capture.root(), relative, transaction.modpackId, transaction.purpose);
+			validateRootAndPath(capture.root(), relative, transaction.plan().modpackId(), transaction.purpose);
 			if (capture.absent()) {
 				if (!capture.expectedHash().isEmpty() || capture.expectedSize() != -1) throw new IOException("Absent baseline contains file metadata");
 			} else {
@@ -360,12 +353,12 @@ public final class UpdateTransactionValidator {
 	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
 		boolean removal = transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL || transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION;
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !removal) {
-			if (!transaction.plannedPreservations.isEmpty()) throw new IOException("Only modpack transactions can preserve deleted files");
+			if (!transaction.plan().preservations().isEmpty()) throw new IOException("Only modpack transactions can preserve deleted files");
 			return;
 		}
 		if (target == null) throw new IOException("Preservation validation has no target");
-		if (transaction.plannedPreservations.isEmpty()) return;
-		for (Preservation preservation : transaction.plannedPreservations)
+		if (transaction.plan().preservations().isEmpty()) return;
+		for (Preservation preservation : transaction.plan().preservations())
 			if (preservation == null || preservation.root() == null || preservation.relativePath() == null || preservation.expectedHash() == null || preservation.proof() == null)
 				throw new IOException("Invalid preservation");
 		OwnershipLedger activeLedger = cleanupLedger();
@@ -373,16 +366,16 @@ public final class UpdateTransactionValidator {
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
-		List<Preservation> sorted = transaction.plannedPreservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal())
+		List<Preservation> sorted = transaction.plan().preservations().stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal())
 				.thenComparing(Preservation::relativePath).thenComparing(Preservation::expectedHash).thenComparingLong(Preservation::expectedSize)).toList();
-		if (!transaction.plannedPreservations.equals(sorted)) throw new IOException("Preservations are not deterministically ordered");
+		if (!transaction.plan().preservations().equals(sorted)) throw new IOException("Preservations are not deterministically ordered");
 		Set<FileKey> preservationKeys = new HashSet<>();
 		for (Preservation preservation : sorted) {
 			if (preservation == null || preservation.root() != Root.GAME_DIR)
 				throw new IOException("Invalid preservation root");
 			if (preservation.proof() == null) throw new IOException("Preservation proof is missing");
 			String relative = normalizeOperationPath(preservation.relativePath());
-			validateRootAndPath(preservation.root(), relative, transaction.modpackId, transaction.purpose);
+			validateRootAndPath(preservation.root(), relative, transaction.plan().modpackId(), transaction.purpose);
 			if (!preservationKeys.add(new FileKey(preservation.root(), relative))) throw new IOException("Duplicate preservation target");
 			validateHash(preservation.expectedHash(), "preservation SHA-1");
 			String logicalPath = relative;
@@ -390,15 +383,15 @@ public final class UpdateTransactionValidator {
 				if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE
 						|| Path.of(relative).getNameCount() != 2 || !Path.of(relative).getName(0).toString().equals(ModpackPathPolicy.MODS_ROOT))
 					throw new IOException("Player-consent preservation is restricted to direct mods files on first install");
-				Operation deletion = transaction.operations.stream().filter(operation -> operation.root() == Root.GAME_DIR
+				Operation deletion = transaction.plan().operations().stream().filter(operation -> operation.root() == Root.GAME_DIR
 						&& operation.operation() == OperationType.DELETE && relative.equals(operation.relativePath())).findFirst().orElse(null);
-				Operation installation = transaction.operations.stream().filter(operation -> operation.root() == Root.GAME_DIR
+				Operation installation = transaction.plan().operations().stream().filter(operation -> operation.root() == Root.GAME_DIR
 						&& operation.operation() == OperationType.INSTALL_OBJECT && relative.equals(operation.relativePath())).findFirst().orElse(null);
 				boolean deleteProof = deletion != null && deletion.expectedExistingHash() != null && preservation.expectedHash().equalsIgnoreCase(deletion.expectedExistingHash());
 				boolean replaceProof = installation != null && installation.expectedExistingHash() != null
 						&& preservation.expectedHash().equalsIgnoreCase(installation.expectedExistingHash());
 				if (!deleteProof && !replaceProof) throw new IOException("Player-consent preservation has no matching hash-pinned operation");
-				if (activeState != null && !(activeState.modpackId.equals(transaction.modpackId) && activeState.contentToken.equals(transaction.contentToken)
+				if (activeState != null && !(activeState.modpackId.equals(transaction.plan().modpackId()) && activeState.contentToken.equals(transaction.plan().packTarget().contentToken())
 						&& hasPlayerConsentClaim(transaction, preservation, relative)))
 					throw new IOException("Player-consent preservation is only valid on a first install");
 				ProjectedFile projected = finalState.get(new FileKey(preservation.root(), relative));
@@ -423,18 +416,18 @@ public final class UpdateTransactionValidator {
 	}
 
 	private boolean hasPlayerConsentClaim(UpdateTransaction transaction, Preservation preservation, String relative) throws IOException {
-		return PreservationVault.read(storage, transaction.modpackId).claims().stream().anyMatch(claim -> claim.sourceRoot() == Root.GAME_DIR
+		return PreservationVault.read(storage, transaction.plan().modpackId()).claims().stream().anyMatch(claim -> claim.sourceRoot() == Root.GAME_DIR
 				&& claim.originalPath().equals(relative) && claim.objectHash().equalsIgnoreCase(preservation.expectedHash()) && claim.size() == preservation.expectedSize()
-				&& claim.reason() == PreservationVault.Reason.PLAYER_CONSENT && claim.contentToken().equals(transaction.contentToken));
+				&& claim.reason() == PreservationVault.Reason.PLAYER_CONSENT && claim.contentToken().equals(transaction.plan().packTarget().contentToken()));
 	}
 
 	private void validateConflicts(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState, ModpackJsons.ModpackContentFields target) throws IOException {
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			if (!transaction.plannedConflicts.isEmpty()) throw new IOException("Only modpack updates may contain conflicts");
+			if (!transaction.plan().conflicts().isEmpty()) throw new IOException("Only modpack updates may contain conflicts");
 			return;
 		}
 		if (target == null) throw new IOException("Conflict validation has no target");
-		for (Conflict conflict : transaction.plannedConflicts) {
+		for (Conflict conflict : transaction.plan().conflicts()) {
 			if (conflict == null) throw new IOException("Conflict identity is invalid");
 			try {
 				conflict.validate();
@@ -442,15 +435,15 @@ public final class UpdateTransactionValidator {
 				throw new IOException("Conflict metadata is invalid", e);
 			}
 		}
-		List<Conflict> sorted = transaction.plannedConflicts.stream().sorted(Comparator.comparing(Conflict::conflictId)).toList();
-		if (!transaction.plannedConflicts.equals(sorted)) throw new IOException("Conflicts are not deterministically ordered");
+		List<Conflict> sorted = transaction.plan().conflicts().stream().sorted(Comparator.comparing(Conflict::conflictId)).toList();
+		if (!transaction.plan().conflicts().equals(sorted)) throw new IOException("Conflicts are not deterministically ordered");
 		OwnershipLedger activeLedger = cleanupLedger();
-		PreservationVault.read(storage, transaction.modpackId);
+		PreservationVault.read(storage, transaction.plan().modpackId());
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
 		Set<String> conflictIds = new HashSet<>();
 		for (Conflict conflict : sorted) {
-			if (conflict == null || conflict.action() == null || !transaction.modpackId.equals(conflict.modpackId()) || !conflictIds.add(conflict.conflictId()))
+			if (conflict == null || conflict.action() == null || !transaction.plan().modpackId().equals(conflict.modpackId()) || !conflictIds.add(conflict.conflictId()))
 				throw new IOException("Conflict identity is invalid");
 			if (!ModpackPathPolicy.isModPath(conflict.sourcePath()) || !ModpackPathPolicy.isModPath(conflict.targetPath()) || !targetPaths.contains(conflict.targetPath()))
 				throw new IOException("Conflict path is outside the selected target mods");
@@ -459,7 +452,7 @@ public final class UpdateTransactionValidator {
 			if (conflict.sourceSize() < 0 || conflict.targetSize() < 0 || conflict.modIds().isEmpty()) throw new IOException("Conflict content metadata is invalid");
 			FileKey sourceKey = new FileKey(Root.GAME_DIR, conflict.sourcePath());
 			Operation sourceOperation = null;
-			for (Operation operation : transaction.operations)
+			for (Operation operation : transaction.plan().operations())
 				if (operation.root() == Root.GAME_DIR && conflict.sourcePath().equals(normalizeOperationPath(operation.relativePath()))) {
 					sourceOperation = operation;
 					break;

@@ -95,11 +95,11 @@ public final class ReviewedUpdatePlan {
 		return new OutcomeTuple(plan.modpackId(), plan.packTarget(), safe(plan.projectedFinalState()), plan.plannedClientConfig());
 	}
 
-	/** Compares a rebuilt plan with the plan captured in a durable transaction. */
+	/** Compares a rebuilt plan with the plan carried by a durable transaction. */
 	public static boolean isCompatible(UpdateTransaction transaction, UpdatePlan candidate) {
 		Objects.requireNonNull(transaction, "transaction");
 		Objects.requireNonNull(candidate, "candidate plan");
-		return executionDigest(transaction).equals(executionDigest(candidate));
+		return executionDigest(transaction.plan()).equals(executionDigest(candidate));
 	}
 
 	/** The complete execution meaning of one update, normalized so plans and durable transactions digest identically. */
@@ -110,16 +110,7 @@ public final class ReviewedUpdatePlan {
 	private static ExecutionTuple tuple(UpdatePlan plan) {
 		return new ExecutionTuple(plan.modpackId(), plan.packTarget(), safe(plan.operations()), safe(plan.projectedFinalState()), plan.plannedClientConfig(),
 				plan.restartReasons().stream().map(Enum::name).sorted().toList(), safe(plan.preservations()), safe(plan.baselineCaptures()), safe(plan.conflicts()),
-				loaderCopies(plan.generatedCopies()), consequencesDigest(plan.consequences()));
-	}
-
-	private static ExecutionTuple tuple(UpdateTransaction transaction) {
-		List<NestedCopy> nestedCopies = transaction.plannedGeneratedCopies == null
-				? List.of()
-				: safe(transaction.plannedGeneratedCopies.entries).stream().map(entry -> new NestedCopy(entry.logicalPath, entry.sha1, entry.size, Set.of())).toList();
-		return new ExecutionTuple(transaction.modpackId, transaction.packTarget(), safe(transaction.operations), safe(transaction.projectedFinalState),
-				transaction.plannedClientConfig, safe(transaction.restartReasons).stream().map(Enum::name).sorted().toList(), safe(transaction.plannedPreservations),
-				safe(transaction.plannedBaselineCaptures), safe(transaction.plannedConflicts), nestedCopies, transaction.plannedConsequencesDigest);
+				safe(plan.generatedCopies()), consequencesDigest(plan.consequences()));
 	}
 
 	/**
@@ -133,10 +124,6 @@ public final class ReviewedUpdatePlan {
 	static String executionDigest(UpdatePlan plan) {
 		Objects.requireNonNull(plan, "update plan");
 		return executionDigest(tuple(plan));
-	}
-
-	private static String executionDigest(UpdateTransaction transaction) {
-		return executionDigest(tuple(transaction));
 	}
 
 	/** Every tuple field is encoded as one length-prefixed unit: the records' canonical toStrings. */

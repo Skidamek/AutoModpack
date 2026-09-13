@@ -105,7 +105,7 @@ public final class ClientGenerationStore {
 	public PackDocument document(UpdateTransaction transaction) throws IOException {
 		Objects.requireNonNull(transaction, "transaction");
 		if (transaction.ownershipLedger == null) throw new IOException("Pending modpack transaction carries no ownership ledger: " + transaction.transactionId);
-		return document(mirrorEntry(transaction.modpackId, transaction.contentToken), OwnershipLedger.fromFields(transaction.ownershipLedger));
+		return document(mirrorEntry(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()), OwnershipLedger.fromFields(transaction.ownershipLedger));
 	}
 
 	/** The newest mirror generation of one pack; its ledger comes from the active pointer when that is the newest generation. */

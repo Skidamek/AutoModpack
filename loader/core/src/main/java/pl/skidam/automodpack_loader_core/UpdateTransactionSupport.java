@@ -26,7 +26,7 @@ public final class UpdateTransactionSupport {
 	}
 
 	private static void applyLauncherMetadata(UpdateTransaction transaction, ModpackJsons.ModpackContentFields manifest) throws IOException {
-		if (!transaction.restartReasons.contains(RestartReason.CHANGED_LOADER_VERSION)) return;
+		if (!transaction.plan().restartReasons().contains(RestartReason.CHANGED_LOADER_VERSION)) return;
 		if (Constants.clientConfig == null) {
 			Constants.clientConfig = ConfigTools.read(storage().clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
 					.orElseThrow(() -> new IOException("Client config is missing while applying launcher metadata"));
