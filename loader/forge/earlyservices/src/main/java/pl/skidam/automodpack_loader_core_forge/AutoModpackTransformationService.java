@@ -9,7 +9,9 @@ import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 
-import pl.skidam.automodpack_loader_core.Preload;
+import pl.skidam.automodpack_core.Preload;
+import pl.skidam.automodpack_loader_core_forge.loader.LoaderManager;
+import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
 /**
@@ -55,7 +57,7 @@ public class AutoModpackTransformationService implements ITransformationService 
 		String launchTarget = firstNonNull(argValue(launchArgs, "--launchTarget"), argValue(processArgs, "--launchTarget"));
 		if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
 
-		new Preload();
+		new Preload(new LoaderManager(), ModpackLoader::new);
 		EarlyServiceLayer.bootstrap();
 		EarlyServiceLayer.forwardOnLoad(env, otherServices);
 	}

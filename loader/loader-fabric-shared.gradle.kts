@@ -11,26 +11,20 @@ base {
 repositories {
 	mavenCentral()
 	maven { url = uri("https://maven.fabricmc.net/") }
-	maven { url = uri("https://libraries.minecraft.net/") }
 }
 
-val gsonVersion = versionProperty("versionLoaderGson")
-val log4jVersion = versionProperty("versionLoaderFabricLog4j")
-val tomljVersion = versionProperty("versionTomlj")
+// Loader internals access shared by every fabric generation: the language adapter that preloads
+// the mod and the FabricLoaderImpl accessors the versioned mod loaders compile against.
 val fabricLoaderVersion = loaderVersion()
+val log4jVersion = versionProperty("versionLoaderPlatformLog4j")
 
 dependencies {
-	compileOnly(project(":core"))
-	compileOnly(project(":loader-fabric-shared"))
-
-	compileOnly("com.google.code.gson:gson:$gsonVersion")
+	compileOnly("net.fabricmc:fabric-loader:$fabricLoaderVersion")
 	compileOnly("org.apache.logging.log4j:log4j-core:$log4jVersion")
-	implementation("org.tomlj:tomlj:$tomljVersion")
-
-	implementation("net.fabricmc:fabric-loader:$fabricLoaderVersion")
 }
 
 java {
+	// Floor of every fabric target's loader generation.
 	sourceCompatibility = JavaVersion.VERSION_17
 	targetCompatibility = JavaVersion.VERSION_17
 	toolchain.languageVersion.set(JavaLanguageVersion.of(17))

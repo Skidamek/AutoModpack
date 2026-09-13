@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_master_core_fabric;
+package pl.skidam.automodpack_loader_fabric_shared;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -8,16 +8,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.ModContainerImpl;
 
-import pl.skidam.automodpack_loader_core.Preload;
-
 // Inspired by preloading tricks by settingdust
 @SuppressWarnings("unchecked unused")
-public class FabricLanguageAdapter implements LanguageAdapter {
+public class FabricLoaderMods {
 
 	private static final List<ModContainerImpl> mods;
 
@@ -27,6 +24,12 @@ public class FabricLanguageAdapter implements LanguageAdapter {
 		} catch (IllegalAccessException e) {
 			throw new RuntimeException(e);
 		}
+	}
+
+	/** Swaps FabricLoaderImpl's mod list for a proxy over ours, so mods added before loader discovery stick. Must run before Preload adds the modpack. */
+	public static void install() throws IllegalAccessException {
+		FabricLoaderImplAccessor.FIELD_MODS.set(FabricLoaderImpl.INSTANCE,
+				Proxy.newProxyInstance(mods.getClass().getClassLoader(), mods.getClass().getInterfaces(), new ListProxy()));
 	}
 
 	public static Collection<ModContainer> getAllMods() {
@@ -40,17 +43,6 @@ public class FabricLanguageAdapter implements LanguageAdapter {
 		}
 
 		throw new IllegalArgumentException("Mod must be an instance of ModContainerImpl");
-	}
-
-	public FabricLanguageAdapter() throws IllegalAccessException {
-		FabricLoaderImplAccessor.FIELD_MODS.set(FabricLoaderImpl.INSTANCE,
-				Proxy.newProxyInstance(mods.getClass().getClassLoader(), mods.getClass().getInterfaces(), new ListProxy()));
-		new Preload();
-	}
-
-	@Override
-	public <T> T create(ModContainer mod, String value, Class<T> type) {
-		throw new UnsupportedOperationException("AutoModpack");
 	}
 
 	// Proxy is necessary to be able to add/remove mods there

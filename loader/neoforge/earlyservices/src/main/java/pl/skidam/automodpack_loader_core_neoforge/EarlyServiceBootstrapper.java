@@ -12,8 +12,9 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.Preload;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core.Preload;
+import pl.skidam.automodpack_loader_core_neoforge.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
@@ -46,7 +47,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 		// early-service hosting below hosts only jars from that decision. Preload failures must crash
 		// the launch; swallowing them would boot without the pack.
 		ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
-		new Preload();
+		new Preload(new LoaderManager(), ModpackLoader::new);
 		progress.complete();
 
 		try {

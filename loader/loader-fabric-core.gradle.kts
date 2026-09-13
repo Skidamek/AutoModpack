@@ -33,7 +33,7 @@ val aircompressorVersion = versionProperty("versionAircompressor")
 
 dependencies {
 	compileOnly(project(":core"))
-	compileOnly(project(":loader-core"))
+	compileOnly(project(":loader-fabric-shared"))
 	compileOnly(project(":loader-fabric-15"))
 	compileOnly(project(":loader-fabric-16"))
 
@@ -73,7 +73,7 @@ tasks.named<ShadowJar>("shadowJar") {
 	}
 
 	// Combine all subproject outputs efficiently
-	val subprojects = listOf(":core", ":loader-core", ":loader-fabric-core", ":loader-fabric-15", ":loader-fabric-16")
+	val subprojects = listOf(":core", ":loader-fabric-shared", ":loader-fabric-core", ":loader-fabric-15", ":loader-fabric-16")
 	subprojects.forEach {
 		from(
 			project(it)
@@ -94,15 +94,7 @@ tasks.named<ShadowJar>("shadowJar") {
 	relocate("org.bouncycastle", "$reloc.org.bouncycastle")
 	relocate("io.netty.handler.codec.haproxy", "$reloc.io.netty.handler.codec.haproxy")
 
-	// Project internal relocations
-	relocate("pl.skidam.automodpack_loader_core_fabric", "pl.skidam.automodpack_loader_core")
-	relocate("pl.skidam.automodpack_loader_master_core_fabric", "pl.skidam.automodpack_loader_core")
-
 	// Cleanup
-	exclude("pl/skidam/automodpack_loader_core/loader/LoaderManager.class")
-	exclude("pl/skidam/automodpack_loader_core/mods/ModpackLoader.class")
-	exclude("pl/skidam/automodpack_loader_core_fabric/FabricLanguageAdapter.class")
-	exclude("pl/skidam/automodpack_loader_core_fabric/FabricLoaderImplAccessor.class")
 
 	exclude("kotlin/**", "log4j2.xml")
 	exclude("META-INF/maven/**", "META-INF/native-image/**", "META-INF/io.netty.versions.properties")
