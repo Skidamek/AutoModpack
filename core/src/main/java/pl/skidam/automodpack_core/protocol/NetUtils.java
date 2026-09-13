@@ -37,6 +37,17 @@ public class NetUtils {
 	// flow-control pauses outlast a connect-grade deadline. It only has to catch a dead peer, not
 	// a slow pipe, so it sits far past any healthy inter-frame gap.
 	public static final Duration TRANSFER_IDLE_TIMEOUT = Duration.ofSeconds(60);
+	// The transfer write-stall tripwire: how long a frame may sit on the socket with zero drain
+	// progress before the peer is declared gone. Only a peer that stopped reading entirely can trip
+	// it - a live link resets the window with every drained byte - and a genuinely dead peer
+	// surfaces faster through its own 60 s read deadline closing the socket. 90 s is 1.5x that
+	// window, so the stall fuse is never the first thing to fire on a healthy connection.
+	public static final Duration TRANSFER_WRITE_STALL_TIMEOUT = Duration.ofSeconds(90);
+	// Per-connection concurrent file transfer tripwire: an honest client pipelines exactly one
+	// request per connection, so this sits 4x past any good component and only a broken or hostile
+	// one touches it. It bounds the sender workers (one thread plus ~16 MiB of buffers each) a
+	// single authenticated connection can pin with pipelined file requests.
+	public static final int MAX_CONCURRENT_TRANSFERS_PER_CONNECTION = 4;
 	// The pre-configuration lifetime tripwire: while the human decides on certificate trust the server must never reap
 	// the socket for idleness, so pre-configuration sockets are bounded only by this one window. It sits an order of
 	// magnitude past the transfer idle deadline (60 s) and far past the connect-grade network timeout (15 s) - generous
@@ -77,6 +88,9 @@ public class NetUtils {
 	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
 	public static final int MIN_CHUNK_SIZE = 1024 * 1024; // 1 MiB
 	public static final int MAX_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB
+
+	public static final int MAX_ECHO_PAYLOAD_BYTES = 1024;
+	public static final int MAX_FILE_HASH_BYTES = 128;
 
 	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
 	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);

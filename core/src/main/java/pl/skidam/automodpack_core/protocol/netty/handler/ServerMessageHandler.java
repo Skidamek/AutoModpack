@@ -14,6 +14,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
@@ -38,11 +40,13 @@ import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMess
  * one reusable chunk buffer, frames and compresses every chunk with its own grow-only {@link ProtocolFrameCodec.FrameScratch}, and writes the finished frame at the compression
  * encoder's own pipeline context so the pre-encoded frame bypasses the encoder but still flows through everything head-ward (TLS, shaping). Per channel, ordering is by submission:
  * the worker awaits the response header write before its first frame and blocks on every frame write, so at most one frame is in flight per transfer and the socket drain rate is the
- * backpressure.
+ * backpressure. Two tripwires bound the damage a broken peer can do: concurrent transfers per connection are capped, and every awaited write fails once the socket stops draining
+ * for the {@code TRANSFER_WRITE_STALL_TIMEOUT} window, so a stalled client can neither pin the worker nor its buffers forever.
  */
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
 	private final NettyServer server;
+	private final AtomicInteger inFlightTransfers = new AtomicInteger();
 	private String authenticatedSecret;
 	private byte protocolVersion;
 	private int chunkSize;
@@ -110,6 +114,11 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 	}
 
 	private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) throws IOException {
+		if (inFlightTransfers.get() >= MAX_CONCURRENT_TRANSFERS_PER_CONNECTION) {
+			sendError(ctx, this.protocolVersion, "Too many concurrent transfers");
+			return;
+		}
+
 		final String sha1 = new String(bsha1, StandardCharsets.UTF_8);
 		final Optional<Path> optionalPath = resolvePath(sha1);
 
@@ -142,8 +151,10 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 			final ChannelHandlerContext encoderContext = encoderContext(ctx);
 			final FileChannel opened = FileChannel.open(path, StandardOpenOption.READ);
 			file = opened;
+			inFlightTransfers.incrementAndGet();
 			server.senderExecutor().execute(() -> streamFile(ctx, opened, fileSize, chunkSize, protocolVersion, headerFuture, codec, encoderContext));
 		} catch (Exception e) {
+			inFlightTransfers.decrementAndGet();
 			closeQuietly(file);
 			sendError(ctx, this.protocolVersion, "File transfer error: " + e.getMessage());
 		}
@@ -156,9 +167,10 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		ByteBuffer chunkBuffer = chunk.nioBuffer(0, chunkSize);
 		Throwable failure = null;
 		try {
-			headerFuture.await();
-			if (!headerFuture.isSuccess()) {
-				failure = causeOf(headerFuture);
+			Throwable headerFailure = awaitFrameFlush(ctx.channel(), headerFuture);
+			if (headerFailure == null && !headerFuture.isSuccess()) headerFailure = causeOf(headerFuture);
+			if (headerFailure != null) {
+				failure = headerFailure;
 			} else {
 				long sent = 0;
 				while (failure == null && sent < fileSize) {
@@ -173,6 +185,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		} catch (Exception e) {
 			failure = e;
 		} finally {
+			inFlightTransfers.decrementAndGet();
 			chunk.release();
 			closeQuietly(file);
 		}
@@ -189,19 +202,48 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		ByteBuf frame = ctx.alloc().buffer(ProtocolFrameCodec.HEADER_BYTES + codec.maxCompressedLength(length));
 		try {
 			ProtocolFrameCodec.write(frame, codec, chunk, chunkSize, scratch);
-			ChannelFuture written;
-			try {
-				// Netty owns the frame once writeAndFlush accepted it, even when the await below is interrupted or fails.
-				written = encoderContext.writeAndFlush(frame).await();
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return e;
-			}
+			// Netty owns the frame once writeAndFlush accepted it, even when the await below is interrupted or fails.
+			ChannelFuture written = encoderContext.writeAndFlush(frame);
+			Throwable stall = awaitFrameFlush(ctx.channel(), written);
+			if (stall != null) return stall;
 			return written.isSuccess() ? null : causeOf(written);
 		} catch (Exception e) {
 			frame.release();
 			return e;
 		}
+	}
+
+	/**
+	 * Awaits one flush reaching the socket, failing the transfer once the peer stops draining entirely for
+	 * {@link NetUtils#TRANSFER_WRITE_STALL_TIMEOUT}. Only zero progress trips it: the window resets whenever
+	 * the pending byte count moves, so a slow but flowing link never times out, and the write is bounded so
+	 * the worker, its chunk buffer and its scratch can never be pinned by a silent peer.
+	 */
+	private static Throwable awaitFrameFlush(Channel channel, ChannelFuture written) {
+		long stallWindowNanos = TRANSFER_WRITE_STALL_TIMEOUT.toNanos();
+		long progressDeadline = System.nanoTime() + stallWindowNanos;
+		long lastPending = -1;
+		try {
+			while (!written.await(1, TimeUnit.SECONDS)) {
+				long pending = pendingOutboundBytes(channel);
+				if (pending != lastPending) {
+					lastPending = pending;
+					progressDeadline = System.nanoTime() + stallWindowNanos;
+				} else if (System.nanoTime() - progressDeadline >= 0) {
+					channel.close();
+					return new IOException("Write stalled: the peer stopped draining the connection");
+				}
+			}
+			return null;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return e;
+		}
+	}
+
+	/** The drain gauge for the stall window: pending bytes above the writability floor, zero while the outbound buffer sits under it. */
+	private static long pendingOutboundBytes(Channel channel) {
+		return channel.isWritable() ? 0 : channel.bytesBeforeWritable();
 	}
 
 	private static Throwable causeOf(ChannelFuture future) {
