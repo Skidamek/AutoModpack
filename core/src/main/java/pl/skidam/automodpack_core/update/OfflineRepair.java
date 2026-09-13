@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -21,6 +22,7 @@ import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
@@ -64,6 +66,13 @@ public final class OfflineRepair {
 			for (String path : Objects.requireNonNull(forceCopyPaths, "force-copy paths")) normalizedForceCopyPaths.add(LogicalPath.normalize(path));
 			forceCopyPaths = Set.copyOf(normalizedForceCopyPaths);
 			protectedModPath = protectedModPath == null ? null : protectedModPath.toAbsolutePath().normalize();
+		}
+	}
+
+	/** One read of the pinned generation identity; the per-row guards evaluate it instead of re-parsing the durable documents per repaired row. */
+	private record PinnedGeneration(ClientStorageJsons.ClientGenerationStateFields state, SelectedModpackTarget activeTarget) {
+		static PinnedGeneration read(ClientStorage storage, ClientPlatform platform) throws IOException {
+			return new PinnedGeneration(storage.readActiveState(), new ClientGenerationStore(storage).readActiveTarget(platform).orElse(null));
 		}
 	}
 
@@ -178,9 +187,10 @@ public final class OfflineRepair {
 
 	private Receipt executeJournal(Prepared prepared, Analysis current, ClientStorageJsons.OfflineRepairJournalFields journal, FileCache fileCache)
 			throws IOException {
-		RepairCounts repaired = repairLocally(current, fileCache);
-		long resetEditable = resetJournalEditable(current.prepared().request(), journal, fileCache);
-		long archivedUnowned = archiveJournalUnowned(current.prepared().request(), journal, fileCache);
+		PinnedGeneration pinned = PinnedGeneration.read(storage, current.prepared().request().activeTarget().platform());
+		RepairCounts repaired = repairLocally(current, pinned, fileCache);
+		long resetEditable = resetJournalEditable(current.prepared().request(), journal, pinned, fileCache);
+		long archivedUnowned = archiveJournalUnowned(current.prepared().request(), journal, pinned, fileCache);
 		Prepared after = analyze(current.prepared().request(), fileCache).prepared();
 		requireSamePinnedIdentity(prepared, after);
 		Files.deleteIfExists(storage.repairJournalFile());
@@ -189,7 +199,7 @@ public final class OfflineRepair {
 		return new Receipt(current.prepared(), after, repaired.casObjects(), repaired.materializedFiles(), resetEditable, archivedUnowned);
 	}
 
-	private RepairCounts repairLocally(Analysis current, FileCache fileCache) throws IOException {
+	private RepairCounts repairLocally(Analysis current, PinnedGeneration pinned, FileCache fileCache) throws IOException {
 		Request request = current.prepared().request();
 		long repairedCas = 0;
 		for (Expected expected : current.expected().values().stream().filter(value -> value.place() == Place.CAS).sorted(Expected.ORDER).toList()) {
@@ -197,7 +207,7 @@ public final class OfflineRepair {
 			if (matches(observation, expected.content()) || observation != null && observation.unsupported()) continue;
 			Path source = verifiedSource(current.sources().getOrDefault(expected.content(), List.of()), expected.path(), expected.content(), fileCache);
 			if (source == null) continue;
-			assertPinned(request);
+			assertPinned(request, pinned);
 			FileTrees.requireNoSymbolicLinkDescendants(storage.objectsDirectory(), expected.path(), "Repair object path");
 			if (VerifiedFileTransfer.copyAtomicImmutable(source, expected.path(), expected.content().size(), expected.content().hash(), fileCache)) repairedCas++;
 		}
@@ -210,7 +220,7 @@ public final class OfflineRepair {
 			Path object = storage.objectFile(expected.content().hash()).normalize();
 			Observation objectObservation = withRepairedCas.observations().get(object);
 			if (!matches(objectObservation, expected.content())) continue;
-			assertPinned(request);
+			assertPinned(request, pinned);
 			FileTrees.requireNoSymbolicLinkDescendants(expected.root(), expected.path(), "Repair path");
 			boolean repaired = expected.place() == Place.PROJECTION
 					? VerifiedFileTransfer.linkAtomic(object, expected.path(), expected.content().size(), expected.content().hash(), fileCache)
@@ -290,8 +300,9 @@ public final class OfflineRepair {
 		return fields;
 	}
 
-	private long resetJournalEditable(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, FileCache fileCache) throws IOException {
+	private long resetJournalEditable(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, PinnedGeneration pinned, FileCache fileCache) throws IOException {
 		if (journal.editableResets.isEmpty()) return 0;
+		PreservationVault.LiveOwnership ownership = PreservationVault.LiveOwnership.read(storage);
 		TreeSet<String> tombstones = new TreeSet<>(storage.readOverlayState(journal.modpackId).deletedPaths);
 		long reset = 0;
 		for (var fields : journal.editableResets) {
@@ -305,10 +316,10 @@ public final class OfflineRepair {
 				} else if (!FileIntegrity.matches(live, fields.currentSize, fields.currentHash, fileCache)) {
 					throw new IOException("Editable file changed after repair was journaled: " + fields.logicalPath);
 				}
-				assertPinned(request);
+				assertPinned(request, pinned);
 				if (!fields.absent)
-					PreservationVault.preserve(storage, journal.modpackId, journal.contentToken, PreservationVault.Reason.EDITABLE_RESET, Root.GAME_DIR, fields.logicalPath,
-							fields.currentHash, fields.currentSize);
+					PreservationVault.preserve(storage, ownership, journal.modpackId, journal.contentToken, PreservationVault.Reason.EDITABLE_RESET, Root.GAME_DIR,
+							fields.logicalPath, fields.currentHash, fields.currentSize, Instant.now());
 				FileTrees.requireNoSymbolicLinkDescendants(storage.gameDirectory(), live, "Repair path");
 				VerifiedFileTransfer.copyAtomic(object, live, fields.defaultSize, fields.defaultHash, fileCache);
 				reset++;
@@ -320,22 +331,25 @@ public final class OfflineRepair {
 		return reset;
 	}
 
-	private long archiveJournalUnowned(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, FileCache fileCache) throws IOException {
+	private long archiveJournalUnowned(Request request, ClientStorageJsons.OfflineRepairJournalFields journal, PinnedGeneration pinned, FileCache fileCache) throws IOException {
+		if (journal.unownedMods.isEmpty()) return 0;
+		PreservationVault.LiveOwnership ownership = PreservationVault.LiveOwnership.read(storage);
+		PreservationVault.Snapshot vault = PreservationVault.read(storage, ownership, journal.modpackId);
 		long archived = 0;
 		for (var fields : journal.unownedMods) {
 			Path source = storage.gamePath(fields.logicalPath);
 			if (source.toAbsolutePath().normalize().equals(request.protectedModPath())) throw new IOException("The running AutoModpack JAR cannot be archived");
 			if (!Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
-				boolean preserved = PreservationVault.read(storage, journal.modpackId).claims().stream().anyMatch(claim -> claim.reason() == PreservationVault.Reason.STRICT_REPAIR
+				boolean preserved = vault.claims().stream().anyMatch(claim -> claim.reason() == PreservationVault.Reason.STRICT_REPAIR
 						&& claim.sourceRoot() == Root.GAME_DIR && claim.originalPath().equals(fields.logicalPath) && claim.objectHash().equals(fields.objectHash) && claim.size() == fields.size);
 				if (!preserved) throw new IOException("Journaled unowned mod disappeared before it was preserved: " + fields.logicalPath);
 				continue;
 			}
 			FileTrees.requireNoSymbolicLinkDescendants(storage.modsDirectory(), source, "Repair path");
 			if (!FileIntegrity.matches(source, fields.size, fields.objectHash, fileCache)) throw new IOException("Unowned mod changed after repair was journaled: " + fields.logicalPath);
-			assertPinned(request);
-			PreservationVault.preserveAndRemove(storage, journal.modpackId, journal.contentToken, PreservationVault.Reason.STRICT_REPAIR, Root.GAME_DIR, fields.logicalPath,
-					fields.objectHash, fields.size);
+			assertPinned(request, pinned);
+			PreservationVault.preserveAndRemove(storage, ownership, journal.modpackId, journal.contentToken, PreservationVault.Reason.STRICT_REPAIR, Root.GAME_DIR,
+					fields.logicalPath, fields.objectHash, fields.size);
 			archived++;
 		}
 		return archived;
@@ -355,7 +369,7 @@ public final class OfflineRepair {
 
 	private Analysis analyze(Request request, FileCache fileCache) throws IOException {
 		Objects.requireNonNull(request, "repair request");
-		assertPinned(request);
+		assertPinned(request, PinnedGeneration.read(storage, request.activeTarget().platform()));
 		Map<Path, Expected> expected = new LinkedHashMap<>();
 		Map<Path, Observation> observations = new HashMap<>();
 		Map<String, EditableResetCandidate> editable = new TreeMap<>();
@@ -491,14 +505,13 @@ public final class OfflineRepair {
 		return observation;
 	}
 
-	private void assertPinned(Request request) throws IOException {
+	private void assertPinned(Request request, PinnedGeneration pinned) throws IOException {
 		if (Files.exists(storage.transactionFile(), LinkOption.NOFOLLOW_LINKS)) throw new IOException("Cannot repair while an update transaction is active");
-		var state = storage.readActiveState();
 		String modpackId = request.activeTarget().manifest().modpackId();
 		String contentToken = request.activeTarget().packTarget().contentToken();
-		if (state == null || !modpackId.equals(state.modpackId) || !contentToken.equals(state.contentToken)) throw new IOException("Repair target is no longer the active installed generation");
-		var active = new ClientGenerationStore(storage).readActiveTarget(request.activeTarget().platform()).orElseThrow(() -> new IOException("Active client target is unavailable"));
-		if (!active.document().equals(request.activeTarget().document()) || !active.selection().intent().equals(request.activeTarget().selection().intent()))
+		if (pinned.state() == null || !modpackId.equals(pinned.state().modpackId) || !contentToken.equals(pinned.state().contentToken)) throw new IOException("Repair target is no longer the active installed generation");
+		if (pinned.activeTarget() == null) throw new IOException("Active client target is unavailable");
+		if (!pinned.activeTarget().document().equals(request.activeTarget().document()) || !pinned.activeTarget().selection().intent().equals(request.activeTarget().selection().intent()))
 			throw new IOException("Repair selection changed after preparation");
 	}
 

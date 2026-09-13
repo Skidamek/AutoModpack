@@ -203,6 +203,33 @@ class PreservationVaultTest {
 		assertEquals(claim.claimId(), PreservationVault.read(storage, MODPACK_ID).claims().get(0).claimId());
 	}
 
+	@Test
+	void batchPreserveOverOneOwnershipSnapshotWritesTheSameManifestAsRowByRowPreserve() throws Exception {
+		ClientStorage rowByRow = storage();
+		ClientStorage batch = TestDataRoot.open(temporaryDirectory.resolve("batch-game"), temporaryDirectory.resolve("batch-data"));
+		Files.createDirectories(batch.modsDirectory());
+		Files.createDirectories(batch.gamePath("config"));
+		Path rowOne = Files.writeString(rowByRow.gamePath("config/one.txt"), "one", StandardCharsets.UTF_8);
+		Path rowTwo = Files.writeString(rowByRow.gamePath("config/two.txt"), "two", StandardCharsets.UTF_8);
+		Files.writeString(batch.gamePath("config/one.txt"), "one", StandardCharsets.UTF_8);
+		Files.writeString(batch.gamePath("config/two.txt"), "two", StandardCharsets.UTF_8);
+		Instant time = Instant.parse("2026-09-12T10:00:00Z");
+
+		PreservationVault.preserve(rowByRow, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/one.txt", HashUtils.getHash(rowOne), Files.size(rowOne),
+				time);
+		PreservationVault.preserve(rowByRow, MODPACK_ID, GENERATION_ID, Reason.MODPACK_DEACTIVATION, Root.GAME_DIR, "config/two.txt", HashUtils.getHash(rowTwo), Files.size(rowTwo),
+				time);
+		PreservationVault.LiveOwnership ownership = PreservationVault.LiveOwnership.read(batch);
+		PreservationVault.preserve(batch, ownership, MODPACK_ID, GENERATION_ID, Reason.SERVER_REMOVAL, Root.GAME_DIR, "config/one.txt",
+				HashUtils.getHash(batch.gamePath("config/one.txt")), Files.size(batch.gamePath("config/one.txt")), time);
+		PreservationVault.preserve(batch, ownership, MODPACK_ID, GENERATION_ID, Reason.MODPACK_DEACTIVATION, Root.GAME_DIR, "config/two.txt",
+				HashUtils.getHash(batch.gamePath("config/two.txt")), Files.size(batch.gamePath("config/two.txt")), time);
+
+		assertEquals(Files.readString(rowByRow.preservationManifest(MODPACK_ID), StandardCharsets.UTF_8),
+				Files.readString(batch.preservationManifest(MODPACK_ID), StandardCharsets.UTF_8));
+		assertEquals(2, PreservationVault.read(batch, MODPACK_ID).claims().size());
+	}
+
 	private ClientStorage storage() throws Exception {
 		ClientStorage storage = TestDataRoot.open(temporaryDirectory.resolve("game"), temporaryDirectory.resolve("data"));
 		Files.createDirectories(storage.modsDirectory());
