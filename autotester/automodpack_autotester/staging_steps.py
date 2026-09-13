@@ -23,7 +23,7 @@ def _sha1(path: Path) -> str:
         return hashlib.file_digest(f, "sha1").hexdigest()
 
 
-def _canonical_timestamp(moment: datetime) -> str:
+def canonical_timestamp(moment: datetime) -> str:
     """Format a timestamp the way java.time.Instant.toString does: no fraction, or 3/6/9 digits, never trailing zeros.
 
     The client rejects any other shape as a non-canonical generation timestamp, so a staged generation stamped with a
@@ -49,11 +49,11 @@ def _check_canonical_timestamp(created_at: str) -> None:
         parsed = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
     except ValueError as error:
         raise ValueError(f"staged generation timestamp is not parseable: {created_at!r}") from error
-    if _canonical_timestamp(parsed) != created_at:
+    if canonical_timestamp(parsed) != created_at:
         raise ValueError(f"staged generation timestamp is not canonical: {created_at!r}")
 
 
-def _policy_bytes(policy: dict) -> bytes:
+def policy_bytes(policy: dict) -> bytes:
     """The exact policy document bytes the client stores in its CAS: deterministic key-sorted JSON."""
     return json.dumps(policy, sort_keys=True).encode("utf-8")
 
@@ -70,7 +70,7 @@ def _policy_tree(policy: dict) -> dict[str, tuple[str, int]]:
     return tree
 
 
-def _staged_ledger(modpack_id: str, file_map: dict[str, tuple[str, int]]) -> dict:
+def staged_ledger(modpack_id: str, file_map: dict[str, tuple[str, int]]) -> dict:
     """The ownership ledger of a staged pack: one PRESENT entry per served path, as a first publish materializes it."""
     ledger_entries = [
         {"logicalPath": path, "historicalHashes": [{"sha1": file_map[path][0], "size": file_map[path][1]}], "historicalGroupIds": ["main"], "currentStatus": "PRESENT"}
@@ -105,7 +105,7 @@ def _mirror_tree(entries: list[dict]) -> dict[str, tuple[str, int]]:
     return tree
 
 
-def _append_staged_mirror(client_root: Path, modpack_id: str, token: str, policy_sha1: str, file_map: dict[str, tuple[str, int]], notes: str, created_at: str) -> list[dict]:
+def append_staged_mirror(client_root: Path, modpack_id: str, token: str, policy_sha1: str, file_map: dict[str, tuple[str, int]], notes: str, created_at: str) -> list[dict]:
     """Append the generation's journal entry to the pack's mirror, the client's replica of the server journal."""
     mirror_path = client_root / "history" / modpack_id / "journal.jsonl"
     entries = _mirror_entries(mirror_path)
@@ -196,23 +196,23 @@ def _write_staged_generation(
         },
     }
     file_map = {entry["logicalPath"]: (entry["sha1"], int(entry["size"])) for entry in files}
-    created_at = _canonical_timestamp(datetime.now(timezone.utc))
+    created_at = canonical_timestamp(datetime.now(timezone.utc))
     client_root = client_root or root.parent
-    policy_sha1 = hashlib.sha1(_policy_bytes(policy)).hexdigest()
+    policy_sha1 = hashlib.sha1(policy_bytes(policy)).hexdigest()
     token = content_token(file_map)
-    ledger = _staged_ledger(modpack_id, file_map)
+    ledger = staged_ledger(modpack_id, file_map)
     objects = data_root / "objects"
     objects.mkdir(parents=True, exist_ok=True)
     policy_object = cas_object(objects, policy_sha1)
     if not policy_object.is_file():
         policy_object.parent.mkdir(parents=True, exist_ok=True)
-        policy_object.write_bytes(_policy_bytes(policy))
+        policy_object.write_bytes(policy_bytes(policy))
     for entry in files:
         object_path = cas_object(objects, entry["sha1"])
         if not object_path.is_file():
             object_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / entry["logicalPath"], object_path)
-    mirror_entries = _append_staged_mirror(client_root, modpack_id, token, policy_sha1, file_map, patch_notes, created_at)
+    mirror_entries = append_staged_mirror(client_root, modpack_id, token, policy_sha1, file_map, patch_notes, created_at)
     _verify_staged_generation(policy_object, token, policy_sha1, created_at, ledger, client_root / "history" / modpack_id / "journal.jsonl", patch_notes)
     return {"contentToken": token, "policySha1": policy_sha1, "ledger": ledger, "mirrorEntries": len(mirror_entries)}
 
