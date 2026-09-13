@@ -52,10 +52,9 @@ public final class ReviewedUpdatePlan {
 		state = State.EXECUTING;
 	}
 
+	/** Abandons an open review. An executing commit runs to completion, and a finished plan has nothing to abandon. */
 	public void cancel() {
-		if (state == State.EXECUTING) return;
-		if (state != State.PENDING_REVIEW && state != State.APPROVED) throw new IllegalStateException("Update plan cannot be cancelled: " + state);
-		state = State.CANCELLED;
+		if (state == State.PENDING_REVIEW || state == State.APPROVED) state = State.CANCELLED;
 	}
 
 	public void complete() {

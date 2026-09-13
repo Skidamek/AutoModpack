@@ -36,14 +36,17 @@ class ReviewedUpdatePlanTest {
 		reviewed.complete();
 
 		assertEquals(ReviewedUpdatePlan.State.APPLIED, reviewed.state());
-		assertThrows(IllegalStateException.class, reviewed::cancel);
 		assertThrows(IllegalStateException.class, reviewed::approve);
+		// Cancelling a finished plan is shutdown noise, not a bug: close() runs after every apply.
+		reviewed.cancel();
+		assertEquals(ReviewedUpdatePlan.State.APPLIED, reviewed.state());
 	}
 
 	@Test
 	void cancellationCannotBeReapprovedOrCompleted() {
 		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(List.of()));
 
+		reviewed.cancel();
 		reviewed.cancel();
 
 		assertEquals(ReviewedUpdatePlan.State.CANCELLED, reviewed.state());
