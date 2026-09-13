@@ -39,34 +39,44 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 {
   "modpackHost": true,
   "generateModpackOnStart": true,
-  "syncedFiles": [
-    "mods/*.jar",
-    "resourcepacks/*",
-    "config/**",
-    "shaderpacks/*"
-  ],
-  "excludedFiles": [
-    "config/fancymenu/user_variables.db"
-  ],
-  "allowEditsInFiles": [
-    "options.txt"
-  ],
+  "groups": {
+    "main": {
+      "syncedFiles": [
+        "mods/*.jar",
+        "resourcepacks/*",
+        "config/**",
+        "shaderpacks/*"
+      ],
+      "excludedFiles": [
+        "config/fancymenu/user_variables.db"
+      ],
+      "allowEditsInFiles": [
+        "options.txt"
+      ]
+    }
+  },
   "autoExcludeServerSideMods": true,
   "requireAutoModpackOnClient": true
 }
 ```
 
+File rules live on each group. Unknown top-level keys are ignored, so `syncedFiles`, `excludedFiles`, and `allowEditsInFiles` at the root of `server-config.json` have no effect.
+
 **Key Configuration Options:**
 
-- **`syncedFiles`**: Files and folders to sync to clients, relative to the server root. Nothing is synced from the server root unless a rule includes it. Use `*` for wildcards and `**` for recursive matching; a `!` rule excepts a path from the synced set only
-- **`excludedFiles`**: Files and folders to leave out of the modpack from every source. The group directory under `host-modpack/` is included in full, so this is the way to keep a file there from reaching clients; it also carves exceptions out of what `syncedFiles` included
-- **`allowEditsInFiles`**: Files that clients can edit locally. Local edits are preserved until the server version of the file changes
+- **`groups.main.syncedFiles`**: Files and folders to sync to clients, relative to the server root. Nothing is synced from the server root unless a rule includes it. Use `*` for wildcards and `**` for recursive matching; a `!` rule excepts a path from the synced set only
+- **`groups.main.excludedFiles`**: Files and folders to leave out of the modpack from every source. The group directory under `host-modpack/` is included in full, so this is the way to keep a file there from reaching clients; it also carves exceptions out of what `syncedFiles` included
+- **`groups.main.allowEditsInFiles`**: Files that clients can edit locally. Local edits are preserved until the server version of the file changes
   - **Example:** To always update FancyMenu configs (the server's copy always wins), negate them inside the list - a path matches the list when a positive rule matches it and no `!` rule does:
     ```json
-    "allowEditsInFiles": [
-      "config/**",
-      "!config/fancymenu/**"
-    ]
+    "groups": {
+      "main": {
+        "allowEditsInFiles": [
+          "config/**",
+          "!config/fancymenu/**"
+        ]
+      }
+    }
     ```
     Keep such files in `syncedFiles` - `excludedFiles` would remove them from the modpack entirely
 - **Other options**: See the [full configuration page](configuration/server-config) for detailed explanations of all settings
@@ -77,12 +87,16 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 - **Server-side mods (synced)**: Place in the standard `mods` folder; they will be synced to clients
 - **Excluding server-only mods example**:
   ```json
-  "syncedFiles": [
-    "mods/*.jar"
-  ],
-  "excludedFiles": [
-    "mods/lithostitched-fabric*.jar"
-  ]
+  "groups": {
+    "main": {
+      "syncedFiles": [
+        "mods/*.jar"
+      ],
+      "excludedFiles": [
+        "mods/lithostitched-fabric*.jar"
+      ]
+    }
+  }
   ```
 
 ---
@@ -103,17 +117,21 @@ After installation, restart Minecraft to load the modpack.
 
 ## Maintaining Updates
 
-- Files listed in `allowEditsInFiles` keep player edits until the server version of the file changes; then the edited copy is saved to the player's "Preserved files" and the new server version is applied once. Use this for files that players should be able to customize, and never change them server-side if the edits must never be replaced
-- For files that must always be in sync (e.g., specific configs), ensure they are in `syncedFiles` and not in `allowEditsInFiles`
+- Files listed in `groups.main.allowEditsInFiles` keep player edits until the server version of the file changes; then the edited copy is saved to the player's "Preserved files" and the new server version is applied once. Use this for files that players should be able to customize, and never change them server-side if the edits must never be replaced
+- For files that must always be in sync (e.g., specific configs), ensure they are in `groups.main.syncedFiles` and not in `groups.main.allowEditsInFiles`
 
 **Example for FancyMenu configs:**
 ```json
-"syncedFiles": [
-  "/config/fancymenu/**"
-],
-"allowEditsInFiles": [
-  "/options.txt"
-]
+"groups": {
+  "main": {
+    "syncedFiles": [
+      "/config/fancymenu/**"
+    ],
+    "allowEditsInFiles": [
+      "/options.txt"
+    ]
+  }
+}
 ```
 
 This ensures FancyMenu configs are always updated, while players can still edit their options.
@@ -121,9 +139,13 @@ This ensures FancyMenu configs are always updated, while players can still edit 
 **Example for editable configs with server-controlled changes:**
 
 ```json
-"allowEditsInFiles": [
-  "/config/**"
-]
+"groups": {
+  "main": {
+    "allowEditsInFiles": [
+      "/config/**"
+    ]
+  }
+}
 ```
 
 Players can edit these config files normally. When you change one of them on the server, the player's edited copy is saved to their "Preserved files" and the new server version is applied once; local changes alone never trigger an update.

@@ -209,7 +209,8 @@ final class InstalledModpackController {
 		try {
 			PackDocument record = new ClientGenerationStore(storage).newestDocument(pack.modpackId());
 			if (record == null) throw new IOException("Stale pack has no installed generation: " + pack.modpackId());
-			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(record), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(record), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(),
+					ChangeSet.catalogue(record.manifest(), ChangeSet.Kind.REMOVED));
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(record.manifest());
 			boolean shown = ScreenManager.preview(preview, pack.name(), null,
 					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> {

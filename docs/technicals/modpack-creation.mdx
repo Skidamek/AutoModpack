@@ -2,7 +2,7 @@
 
 ## There are two complementing each other ways of adding content to the modpack.
 
-- To re-use already existing files on server use `syncedFiles` read more in [config](../configuration/server-config). As an example with default config it creates modpack containing *every* mod (file ending with .jar) from server `~/mods/` folder.
+- To re-use already existing files on server use `groups.main.syncedFiles` read more in [config](../configuration/server-config). As an example with default config it creates modpack containing *every* mod (file ending with .jar) from server `~/mods/` folder.
 
 - To add more files to modpack without affecting server use separate directory `~/automodpack/host-modpack/main/`.
 For example to add more mods place mods in the `~/automodpack/host-modpack/main/mods/` folder.
@@ -18,8 +18,7 @@ Both of these methods translate to the `~/.minecraft/` on client side (root dire
 Remember to regenerate the modpack using `/automodpack generate` (see [commands](../commands/commands))
 
 Syncing everything from default server mods is just default, you can disable it completely (see [config](../configuration/server-config)).
-The `host-modpack` folder is synced implicitly, it doesn't require config, automodpack assumes that if there are files in that directory, you want to send them to clients.
-`syncedFiles` is used only for files outside the `host-modpack` folder.
+The group directory under `host-modpack` is included in full; it doesn't require config. `groups.main.syncedFiles` is used only for files outside the `host-modpack` folder. `groups.main.excludedFiles` is the way to keep a file out of either source.
 
 ## Example
 
@@ -63,12 +62,15 @@ Assuming you have the following server file structure:
 
 With a [server config](../configuration/server-config) of:
 
-| Setting                            | Values                                                                     |
-|------------------------------------|----------------------------------------------------------------------------|
-| `syncedFiles`                      | `["mods/*.jar", "kubejs/**", "emotes/*"]`                                  |
-| `excludedFiles`                    | `["kubejs/server_scripts/**"]`                                             |
-| `allowEditsInFiles`                | `["options.txt", "config/**"]`                                             |
-
+```json
+"groups": {
+  "main": {
+    "syncedFiles": ["mods/*.jar", "kubejs/**", "emotes/*"],
+    "excludedFiles": ["kubejs/server_scripts/**"],
+    "allowEditsInFiles": ["options.txt", "config/**"]
+  }
+}
+```
 
 The resulting modpack on client would contain:
 ```
@@ -92,10 +94,10 @@ The resulting modpack on client would contain:
     └── the-ultimate-shader.zip
 ```
 
-As you can see there are files included using both methods, they complement each other these two make up our single modpack bucket/group (currently named `main` - in the future there will be custom grouping available).
+As you can see there are files included using both methods; they complement each other and make up the `main` group. Extra groups use the same pair of sources under `~/automodpack/host-modpack/<group>/` and matching entries in `groups` in server config.
 
 AutoModpack is obviously excluded since you need it to download the modpack in the first place, AutoModpack has its own update mechanism. By default, it syncs the version from server independently of your modpack.
 
 In case when two files share the same relative path, files from `host-modpack` are prioritized.
 
-The `allowEditsInFiles` is evaluated last, on top of the modpack so in order for it to work, the files need to exist in the first place. So as you can see even though `config/ferritecore.mixin.properties` and `config/invisible-radio.json` match the wildcard of `"/config/**"` in the `allowEditsInFiles`, they don't exist in the modpack at all since they weren't included by any of the methods.
+The group's `allowEditsInFiles` is evaluated last, on top of the modpack so in order for it to work, the files need to exist in the first place. So as you can see even though `config/ferritecore.mixin.properties` and `config/invisible-radio.json` match the wildcard of `"/config/**"` in `groups.main.allowEditsInFiles`, they don't exist in the modpack at all since they weren't included by any of the methods.

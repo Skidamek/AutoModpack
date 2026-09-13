@@ -514,7 +514,39 @@ class UpdateTransactionExecutorTest {
 
 		assertTrue(ReviewedUpdatePlan.outcomeCompatible(first, rebuilt), "An applied delete prefix must not read as a changed review");
 		ReviewedUpdatePlan.pending(first).requireCompatible(rebuilt);
-		assertEquals(first.projectedFinalState(), rebuilt.projectedFinalState());
+	}
+
+	@Test
+	void aPlannerRebuiltPlanAfterDeletingAnUnlistedProjectionStaysOutcomeCompatible() throws Exception {
+		ClientStorage storage = storage();
+		byte[] keepBytes = "kept-pack-file".getBytes(StandardCharsets.UTF_8);
+		String keepHash = store(storage, keepBytes);
+		byte[] goneBytes = "unlisted-projection".getBytes(StandardCharsets.UTF_8);
+		String goneHash = store(storage, goneBytes);
+		SelectedModpackTarget installed = target(storage, "mods/keep.jar", "mod", false, keepHash, keepBytes.length);
+		UpdatePlan installedPlan = plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/keep.jar", OperationType.INSTALL_OBJECT, keepHash, keepBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/keep.jar", true, keepHash, keepBytes.length)));
+		assertTrue(commit(storage, installedPlan, installed).success());
+
+		// gone.jar is extra projection: not on the installed or next manifest, so only the first plan carries its absent row.
+		Files.write(storage.activePath("mods/gone.jar"), goneBytes);
+		UpdatePlan.FileState keepState = new UpdatePlan.FileState(keepHash, keepBytes.length, true);
+		UpdatePlan.FileState goneState = new UpdatePlan.FileState(goneHash, goneBytes.length, true);
+		UpdatePlan first = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), installed.flatTarget(),
+				Map.of(new UpdatePlan.FileKey(Root.PROJECTION, "mods/keep.jar"), keepState, new UpdatePlan.FileKey(Root.PROJECTION, "mods/gone.jar"), goneState),
+				Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(installed.manifest().modpackId()), null));
+		assertTrue(first.operations().stream().anyMatch(operation -> operation.operation() == OperationType.DELETE && operation.relativePath().equals("mods/gone.jar")),
+				"The plan must remove the extra projection the target never listed");
+
+		Files.delete(storage.activePath("mods/gone.jar"));
+		UpdatePlan rebuilt = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), installed.flatTarget(),
+				Map.of(new UpdatePlan.FileKey(Root.PROJECTION, "mods/keep.jar"), keepState),
+				Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(installed.manifest().modpackId()), null));
+
+		assertNotEquals(first.projectedFinalState(), rebuilt.projectedFinalState(), "The extra delete leaves an absent row only on the first plan");
+		assertTrue(ReviewedUpdatePlan.outcomeCompatible(first, rebuilt), "destination() must ignore the already-applied extra delete");
+		ReviewedUpdatePlan.pending(first).requireCompatible(rebuilt);
 	}
 
 	@Test

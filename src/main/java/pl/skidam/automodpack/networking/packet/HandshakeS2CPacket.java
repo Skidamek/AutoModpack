@@ -59,8 +59,6 @@ public class HandshakeS2CPacket {
 //            LOGGER.warn("Connection is not encrypted for player: {}", playerName);
 //        }
 
-		if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), GameHelpers.getPlayerUUID(profile), playerName)) return;
-
 		if (!understood) {
 			Common.players.put(playerName, false);
 			LOGGER.warn("{} has not installed AutoModpack.", playerName);
@@ -69,11 +67,21 @@ public class HandshakeS2CPacket {
 						"AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT) + " modloader is required to play on this server!");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
+				return;
 			}
-		} else {
-			Common.players.put(playerName, true);
-			handleHandshake(connection, profile, buf, sender);
 		}
+
+		if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), GameHelpers.getPlayerUUID(profile), playerName)) {
+			Component reason = VersionedText.literal("You are not authorized to join this server!");
+			connection.send(new ClientboundLoginDisconnectPacket(reason));
+			connection.disconnect(reason);
+			return;
+		}
+
+		if (!understood) return;
+
+		Common.players.put(playerName, true);
+		handleHandshake(connection, profile, buf, sender);
 	}
 
 	private static void handleHandshake(Connection connection, GameProfile profile, FriendlyByteBuf buf, PacketSender sender) {

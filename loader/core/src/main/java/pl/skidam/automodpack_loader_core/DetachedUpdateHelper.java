@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_loader_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.storage.StoragePaths.DATA_ROOT_PROPERTY;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_DIR;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LEASE_FILE;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
@@ -22,6 +23,7 @@ import org.apache.logging.log4j.core.LoggerContext;
 
 import com.google.gson.Gson;
 
+import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.JarUtils;
@@ -57,10 +59,11 @@ public final class DetachedUpdateHelper {
 		// The game process exits right after this launch, so inherited streams would die with it; the helper's story must outlive the game in a file.
 		// Append: a second helper that loses the lease still starts with this redirect already open, and must not truncate the running helper's log.
 		Path helperLog = GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize();
-		// The helper JVM has no loader service, so it cannot know this process's role; the data root it must recover
-		// through is the one this process resolved, and on dedicated servers that is the role-scoped server root.
+		// The helper has no loader service. Pin this process's already-resolved root as a JVM property before the main class; configuredRoot prefers it over env and role defaults.
 		String environment = LOADER_MANAGER == null || LOADER_MANAGER.getEnvironmentType() == null ? "" : LOADER_MANAGER.getEnvironmentType().name();
-		new ProcessBuilder(javaExecutable.toString(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid()), environment).directory(GameDirectory.current().toFile())
+		DataRootResolver.Location dataLocation = DataRootResolver.resolve(GameDirectory.current(), LOADER_MANAGER == null ? null : LOADER_MANAGER.getEnvironmentType());
+		new ProcessBuilder(javaExecutable.toString(), "-D" + DATA_ROOT_PROPERTY + "=" + dataLocation.root(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid()), environment)
+				.directory(GameDirectory.current().toFile())
 				.redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(helperLog.toFile())).start();
 		LOGGER.info("Launched detached update helper for the latest pending transaction from {} (environment {}); its output goes to {}", helperJar, environment.isBlank() ? "unknown" : environment, helperLog);
 	}

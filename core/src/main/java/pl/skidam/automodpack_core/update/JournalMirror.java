@@ -25,10 +25,9 @@ public final class JournalMirror {
 	}
 
 	/**
-	 * Every journal entry of the pack's mirror, or an empty list when no mirror exists yet. A mirror that cannot be
-	 * read is set aside as evidence and reads as empty - ambiguous IO trouble included, since Journal's line-level
-	 * failures cannot be told apart from a torn read: the mirror is a pure replica, so the next head fetch simply
-	 * replaces it, and no unreadable copy may block the client.
+	 * Every journal entry of the pack's mirror, or an empty list when no mirror exists yet. Unusable journal content
+	 * is set aside as evidence and reads as empty; physical IO of a regular file propagates. The mirror is a pure
+	 * replica, so the next head fetch replaces an asided copy.
 	 */
 	public List<JournalEntry> entries(String modpackId) throws IOException {
 		Path file = storage.historyJournalFile(modpackId);
@@ -36,7 +35,7 @@ public final class JournalMirror {
 		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Client journal mirror is not a regular file: " + file);
 		try {
 			return Journal.openComplete(file).entries();
-		} catch (IOException | RuntimeException e) {
+		} catch (Journal.UnusableContentException e) {
 			DurableFiles.setAside(file, "Client journal mirror", e);
 			return List.of();
 		}

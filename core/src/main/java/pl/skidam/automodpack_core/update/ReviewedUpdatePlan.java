@@ -1,11 +1,13 @@
 package pl.skidam.automodpack_core.update;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
+import pl.skidam.automodpack_core.update.UpdatePlan.NestedCopy;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 
 /**
@@ -90,21 +92,39 @@ public final class ReviewedUpdatePlan {
 		if (!left.modpackId().equals(right.modpackId())) drifted.add("modpack");
 		if (!left.generation().equals(right.generation())) drifted.add("target generation");
 		if (!left.projected().equals(right.projected())) drifted.add("projected final state");
+		if (!left.generatedCopies().equals(right.generatedCopies())) drifted.add("generated copies");
 		if (!Objects.equals(left.config(), right.config())) drifted.add("planned client configuration");
 		return drifted;
 	}
 
-	/** The approved outcome: destination files that remain, never leftover absent rows from already-applied deletes. */
-	private record OutcomeTuple(String modpackId, PackTarget generation, List<ProjectedFile> projected, ClientConfigJsons.ClientConfigFieldsV3 config) {}
+	/**
+	 * The approved outcome: destination files that remain, never leftover absent rows from already-applied deletes, and
+	 * the generated-copy index finalize will write (path/sha1/size, never NestedCopy.ids).
+	 */
+	private record OutcomeTuple(String modpackId, PackTarget generation, List<ProjectedFile> projected, List<GeneratedCopyIdentity> generatedCopies,
+			ClientConfigJsons.ClientConfigFieldsV3 config) {}
+
+	/** Path, hash, and size of one generated copy. NestedCopy.ids are transient and empty after persist. */
+	private record GeneratedCopyIdentity(String relativePath, String sha1, long size) {}
 
 	private static OutcomeTuple outcomeTuple(UpdatePlan plan) {
-		return new OutcomeTuple(plan.modpackId(), plan.packTarget(), destination(plan), plan.plannedClientConfig());
+		return new OutcomeTuple(plan.modpackId(), plan.packTarget(), destination(plan), generatedCopies(plan), plan.plannedClientConfig());
 	}
 
 	private static List<ProjectedFile> destination(UpdatePlan plan) {
 		List<ProjectedFile> present = new ArrayList<>();
 		if (plan.projectedFinalState() != null) for (ProjectedFile file : plan.projectedFinalState()) if (file != null && file.present()) present.add(file);
+		present.sort(Comparator.comparingInt((ProjectedFile file) -> file.root().ordinal()).thenComparing(ProjectedFile::relativePath));
 		return present;
+	}
+
+	private static List<GeneratedCopyIdentity> generatedCopies(UpdatePlan plan) {
+		List<GeneratedCopyIdentity> copies = new ArrayList<>();
+		if (plan.generatedCopies() != null)
+			for (NestedCopy copy : plan.generatedCopies())
+				if (copy != null) copies.add(new GeneratedCopyIdentity(copy.relativePath(), copy.sha1(), copy.size()));
+		copies.sort(Comparator.comparing(GeneratedCopyIdentity::relativePath));
+		return copies;
 	}
 
 	public enum State {

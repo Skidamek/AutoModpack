@@ -21,21 +21,23 @@ This configuration file controls the behavior of the AutoModpack server-side com
 
 ## File Synchronization
 
-These settings control which files are sent to the client and which files the client is allowed to customize.
+These settings live on each entry in `groups` (default group id `main`). They are not top-level keys; unknown top-level keys are ignored, so pasting `syncedFiles`, `excludedFiles`, or `allowEditsInFiles` at the root of `server-config.json` leaves the factory group rules in place.
+
+They control which files are sent to the client and which files the client is allowed to customize.
 
 | Setting                            | Default                                     | Description                                                                                                                                                                                       |
 |------------------------------------|---------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `syncedFiles`                      | `["mods/*.jar", "kubejs/**", "emotes/*"]`   | Paths, relative to the server root, to sync to the client. Nothing is synced from the server root unless a rule includes it. Supports wildcards.                                                  |
-| `excludedFiles`                    | `["kubejs/server_scripts/**"]`              | Paths to leave out of the modpack. The group directory under `host-modpack/` is included in full, so this is the only way to keep a file there from reaching clients; it also carves exceptions out of `syncedFiles`. Supports wildcards. |
-| `allowEditsInFiles`                | `["options.txt", "config/**"]`              | Files clients download but can edit locally. Local edits are preserved until the server version of the file changes; then the edited copy is saved to the client's "Preserved files" and the new server version is applied once. Supports wildcards. |
+| `groups.<id>.syncedFiles`          | `["mods/*.jar", "kubejs/**", "emotes/*"]`   | Paths, relative to the server root, to sync to the client. Nothing is synced from the server root unless a rule includes it. Supports wildcards.                                                  |
+| `groups.<id>.excludedFiles`        | `["kubejs/server_scripts/**"]`              | Paths to leave out of the modpack. The group directory under `host-modpack/` is included in full, so this is the only way to keep a file there from reaching clients; it also carves exceptions out of `syncedFiles`. Supports wildcards. |
+| `groups.<id>.allowEditsInFiles`    | `["options.txt", "config/**"]`              | Files clients download but can edit locally. Local edits are preserved until the server version of the file changes; then the edited copy is saved to the client's "Preserved files" and the new server version is applied once. Supports wildcards. |
 
 ## Globbing wildcards
 
-For `syncedFiles`, `excludedFiles` and `allowEditsInFiles`, use the following patterns relative to the server root (a leading `/` is allowed and ignored):
+For each group's `syncedFiles`, `excludedFiles` and `allowEditsInFiles`, use the following patterns relative to the server root (a leading `/` is allowed and ignored):
 
 - `*` : Matches files in a single directory (e.g., `mods/*.jar`).
 - `**` : Matches files recursively in all subdirectories (e.g., `kubejs/**`).
-- `!` : Negates a rule inside its own list - a path matches the list when a positive rule matches it and no `!` rule does (e.g., `allowEditsInFiles: ["config/**", "!config/fancymenu/**"]` makes everything in `config` editable except FancyMenu's files).
+- `!` : Negates a rule inside its own list - a path matches the list when a positive rule matches it and no `!` rule does (e.g., `groups.main.allowEditsInFiles: ["config/**", "!config/fancymenu/**"]` makes everything in `config` editable except FancyMenu's files).
 
 Every list speaks the same language: a path matches a list when a positive rule matches it and no `!` rule vetoes it. Where the negation applies is up to the list it sits in. Inside `syncedFiles` it excepts a path from the synced set only - useful when the group directory provides the same path with different content, since host-modpack wins anyway. `excludedFiles` keeps a path from reaching clients from anywhere, so prefer it for pack exclusions and use a `syncedFiles` negation only when the group-directory copy should still ship.
 
