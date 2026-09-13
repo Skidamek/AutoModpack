@@ -51,7 +51,7 @@ class UpdateTransactionCorruptionTest {
 	void validTransactionStillLoads() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
 		Files.writeString(file, "{\"schemaVersion\":1,\"transactionId\":\"t1\",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"targetPlatform\":\"linux\","
-				+ "\"plan\":{\"modpackId\":\"packaa1\",\"packTarget\":{\"modpackId\":\"packaa1\",\"contentToken\":\"" + TOKEN + "\",\"policySha1\":\"" + TOKEN + "\",\"ledgerDigest\":\"" + TOKEN + "\"},"
+				+ "\"plan\":{\"modpackId\":\"packaa1\",\"contentToken\":\"" + TOKEN + "\",\"policySha1\":\"" + TOKEN + "\",\"ledgerDigest\":\"" + TOKEN + "\","
 				+ "\"operations\":[],\"projectedFinalState\":[],\"restartReasons\":[\"SELECTED_MODPACK\"],\"preservations\":[],\"baselineCaptures\":[],\"conflicts\":[],\"generatedCopies\":[],"
 				+ "\"plannedClientConfig\":null,\"consequences\":{\"changes\":[],\"effects\":[]}}}");
 
