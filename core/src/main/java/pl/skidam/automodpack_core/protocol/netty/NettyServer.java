@@ -12,6 +12,8 @@ import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -44,6 +46,7 @@ public class NettyServer {
 	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
 	private volatile Map<String, Path> paths = Map.of();
 	private MultithreadEventLoopGroup eventLoopGroup;
+	private ExecutorService senderExecutor;
 	private ChannelFuture serverChannel;
 	private volatile boolean sharedMagicEnabled;
 	private volatile boolean holepunchActive;
@@ -113,6 +116,12 @@ public class NettyServer {
 		}
 
 		try {
+			senderExecutor = Executors.newCachedThreadPool(r -> {
+				Thread t = new Thread(r, "automodpack-sender");
+				t.setDaemon(true);
+				return t;
+			});
+
 			prepareTls();
 
 			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
@@ -227,6 +236,9 @@ public class NettyServer {
 			eventLoopGroup = null;
 		}
 
+		if (senderExecutor != null) senderExecutor.shutdownNow();
+		senderExecutor = null;
+
 		sslCtx = null;
 		certificateFingerprint = null;
 		return stopped;
@@ -238,5 +250,10 @@ public class NettyServer {
 
 	public SslContext getSslCtx() {
 		return sslCtx;
+	}
+
+	/** The pool file-send workers run on: one worker per in-flight transfer, each holding one FileChannel and one reusable chunk buffer off the event loop. */
+	public ExecutorService senderExecutor() {
+		return senderExecutor;
 	}
 }
