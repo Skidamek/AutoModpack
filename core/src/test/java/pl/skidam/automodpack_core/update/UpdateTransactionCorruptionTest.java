@@ -34,6 +34,18 @@ class UpdateTransactionCorruptionTest {
 	}
 
 	@Test
+	void emptyPlanObjectIsSetAsideAndStartupSeesNoTransaction() throws Exception {
+		Path file = tempDir.resolve("update-transaction.json");
+		Files.writeString(file, "{\"schemaVersion\":1,\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"plan\":{}}");
+
+		assertNull(UpdateTransaction.read(file));
+		assertTrue(Files.notExists(file));
+		try (var leftovers = Files.list(tempDir)) {
+			assertEquals(1, leftovers.filter(path -> path.getFileName().toString().startsWith("update-transaction.json.corrupt-")).toList().size());
+		}
+	}
+
+	@Test
 	void incompleteTransactionIsSetAsideAndStartupSeesNoTransaction() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
 		// A transaction whose planned sections never reached the disk cannot drive any recovery; only a whole one loads.

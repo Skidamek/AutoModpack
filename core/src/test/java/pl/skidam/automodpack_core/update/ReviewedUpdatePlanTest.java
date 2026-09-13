@@ -76,6 +76,16 @@ class ReviewedUpdatePlanTest {
 	}
 
 	@Test
+	void alreadyAppliedDeletesAreNotAChangedOutcome() {
+		UpdatePlan reviewed = plan(List.of(operation("mods/keep.jar", OBJECT_HASH)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/keep.jar", true, OBJECT_HASH, 1), new ProjectedFile(Root.PROJECTION, "mods/gone.jar", false, null, -1)));
+		UpdatePlan rebuilt = plan(List.of(), List.of(new ProjectedFile(Root.PROJECTION, "mods/keep.jar", true, OBJECT_HASH, 1)));
+
+		assertTrue(ReviewedUpdatePlan.outcomeCompatible(reviewed, rebuilt));
+		ReviewedUpdatePlan.pending(reviewed).requireCompatible(rebuilt);
+	}
+
+	@Test
 	void aDriftedProjectedFinalStateCannotBypassReview() {
 		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(
 				List.of(operation("mods/a.jar", OBJECT_HASH)),

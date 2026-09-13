@@ -94,7 +94,13 @@ public class ConfigUtils {
 			if (body.startsWith("automodpack/host-modpack/")) {
 				if (ownGroupPrefix.matcher(body).find()) {
 					if (dropOwnGroupPaths) LOGGER.info("Removed redundant {} entry '{}': the group directory under '/automodpack/host-modpack/' is included in full.", configKey, rule);
-					else normalized.add((negated ? "!" : "") + ownGroupPrefix.matcher(body).replaceFirst(""));
+					else {
+						String remainder = ownGroupPrefix.matcher(body).replaceFirst("");
+						if (remainder.isBlank() || remainder.equals("**"))
+							LOGGER.warn("Ignored {} entry '{}': a whole-directory host-modpack rule would also match every synced path.", configKey, rule);
+						else
+							normalized.add((negated ? "!" : "") + remainder);
+					}
 				} else {
 					// Another group's directory cannot be spelled in this group's relative space; stripping it would
 					// silently rebind the rule to this group's files. Keep it verbatim and tell the server owner.

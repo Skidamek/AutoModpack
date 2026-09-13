@@ -32,9 +32,8 @@ public final class UpdateTransaction {
 	public String transactionId;
 	public Purpose purpose;
 	public Phase phase;
-	/** The durable plan; kept as fields because old Minecraft Gson cannot deserialize records. */
-	public UpdatePlanFields plan;
-	private transient UpdatePlan resolvedPlan;
+	/** The durable plan. A class tree, not records: the Gson shipped in Minecraft 1.18 cannot deserialize records. */
+	public UpdatePlan plan;
 	public String targetPlatform;
 	public boolean expectedPriorSelectionPresent;
 	public List<String> expectedPriorRequestedGroups;
@@ -62,12 +61,13 @@ public final class UpdateTransaction {
 	}
 
 	/**
-	 * The document's completeness contract: a transaction without its whole plan was never fully written and is unusable
-	 * content. The plan is a record, so a present one already guarantees its lists and rows are whole.
+	 * The document's completeness contract: a transaction without a whole, constructor-validated plan is unusable
+	 * content and is set aside. Gson fills the class tree without running constructors, so validation lives here.
 	 */
 	private static UpdateTransaction validated(UpdateTransaction transaction) {
 		if (transaction.schemaVersion != CURRENT_SCHEMA_VERSION || transaction.plan == null)
 			throw new IllegalArgumentException("Persisted update transaction fields are incomplete");
+		transaction.plan = transaction.plan.validated();
 		return transaction;
 	}
 
@@ -92,7 +92,7 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
-		transaction.plan = plan.toFields();
+		transaction.plan = plan;
 		return transaction;
 	}
 
@@ -121,7 +121,7 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = List.of();
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
-		transaction.plan = plan.toFields();
+		transaction.plan = plan;
 		return transaction;
 	}
 
@@ -155,8 +155,7 @@ public final class UpdateTransaction {
 	}
 
 	public UpdatePlan plan() {
-		if (resolvedPlan == null) resolvedPlan = UpdatePlan.fromFields(plan);
-		return resolvedPlan;
+		return plan;
 	}
 
 	public String modpackId() {
