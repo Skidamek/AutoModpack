@@ -89,6 +89,10 @@ public class NetUtils {
 	public static final int MIN_CHUNK_SIZE = 1024 * 1024; // 1 MiB
 	public static final int MAX_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB
 
+	// Protocol message field tripwires. The decoder reads these lengths pre-authentication, so they must
+	// never trust a client length near the buffer sizes: an honest echo carries a small nonce and an
+	// honest file request carries one hex SHA-1, so both caps sit an order of magnitude past any good
+	// client while staying thousands of bytes below one frame.
 	public static final int MAX_ECHO_PAYLOAD_BYTES = 1024;
 	public static final int MAX_FILE_HASH_BYTES = 128;
 

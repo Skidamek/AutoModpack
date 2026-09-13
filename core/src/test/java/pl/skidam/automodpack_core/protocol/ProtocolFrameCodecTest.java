@@ -45,13 +45,14 @@ class ProtocolFrameCodecTest {
 		byte[] payload = "partial frames must be accumulated before decompression".getBytes(StandardCharsets.UTF_8);
 		ByteBuf encoded = Unpooled.buffer();
 		ByteBuf inbound = Unpooled.buffer();
+		ProtocolFrameCodec.FrameScratch readScratch = new ProtocolFrameCodec.FrameScratch();
 		try {
 			ProtocolFrameCodec.write(encoded, codec, payload, DEFAULT_CHUNK_SIZE);
 			int split = ProtocolFrameCodec.HEADER_BYTES + 1;
 			inbound.writeBytes(encoded, 0, split);
-			assertNull(ProtocolFrameCodec.read(inbound, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE));
+			assertNull(ProtocolFrameCodec.read(inbound, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE, readScratch));
 			inbound.writeBytes(encoded, split, encoded.readableBytes() - split);
-			ByteBuf decoded = ProtocolFrameCodec.read(inbound, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE);
+			ByteBuf decoded = ProtocolFrameCodec.read(inbound, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE, readScratch);
 			try {
 				byte[] actual = new byte[decoded.readableBytes()];
 				decoded.readBytes(actual);
@@ -75,8 +76,9 @@ class ProtocolFrameCodecTest {
 		try {
 			ProtocolFrameCodec.write(encoded, codec, payload, DEFAULT_CHUNK_SIZE);
 			ByteArrayOutputStream decoded = new ByteArrayOutputStream();
+			ProtocolFrameCodec.FrameScratch readScratch = new ProtocolFrameCodec.FrameScratch();
 			while (encoded.isReadable()) {
-				ByteBuf frame = ProtocolFrameCodec.read(encoded, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE);
+				ByteBuf frame = ProtocolFrameCodec.read(encoded, UnpooledByteBufAllocator.DEFAULT, codec, DEFAULT_CHUNK_SIZE, readScratch);
 				try {
 					byte[] bytes = new byte[frame.readableBytes()];
 					frame.readBytes(bytes);
