@@ -128,7 +128,8 @@ public class ModpackUpdater implements AutoCloseable {
 	public void applyInstalledSwitch() throws Exception {
 		UpdateAttempt current = attempt.get();
 		if (!(current instanceof UpdateSession switchPlan) || selectedTarget == null) throw new IllegalStateException("Installed modpack switch was not prepared");
-		if (!switchPlan.isApproved()) switchPlan.approve();
+		// The confirm click that reached this action is the review's consent; commit itself refuses an unapproved plan.
+		switchPlan.approve();
 		// The switch flow reports its failure through its own caller, so its failure handling carries the failure out of the harness.
 		AtomicReference<Exception> propagated = new AtomicReference<>();
 		runReviewedFlow(new ApplyFlow("Installed modpack switch", () -> new ReLauncher(UpdateType.SELECT, changelogs).restart(false), propagated::set, this::close),
@@ -529,7 +530,10 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	private LifecycleApply commitRemoval(RemovalAttempt.Kind kind) throws Exception {
-		ApplyResult result = requireRemoval(kind).commit();
+		RemovalAttempt removal = requireRemoval(kind);
+		// The confirm click is the review's consent; commit itself refuses an unapproved plan.
+		removal.approve();
+		ApplyResult result = removal.commit();
 		afterRemovalApply(result);
 		return new LifecycleApply(true, result.requiresRestart());
 	}
@@ -738,12 +742,10 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 		Runnable continueAction = () -> {
 			if (attempt.get() != session) return;
-			if (!session.isApproved()) {
-				try {
-					session.approve();
-				} catch (IllegalStateException e) {
-					return;
-				}
+			try {
+				session.approve(); // The confirm click is the review's consent; a second click dies here.
+			} catch (IllegalStateException e) {
+				return;
 			}
 			if (!confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED) && firstConnection) return;
 			startUpdateAfterPreview(session);

@@ -11,8 +11,9 @@ import pl.skidam.automodpack_loader_core.client.RestartDecision.ApplyResult;
 
 /**
  * One player-reviewed mutation of client pack state. Prepare and preview live on the adapter that knows the inputs;
- * this seam is the review and the one commit. Boot recovery of a pending transaction is {@link #resume}, not a third
- * owner.
+ * this seam is the review and the one commit. Consent is captured exactly once, by the adapter action that carries the
+ * player's decision: it calls {@link #approve}, and {@link #commit} refuses an unapproved plan. Boot recovery of a
+ * pending transaction is {@link #resume}, not a third owner.
  */
 public interface UpdateAttempt {
 	void approve();
