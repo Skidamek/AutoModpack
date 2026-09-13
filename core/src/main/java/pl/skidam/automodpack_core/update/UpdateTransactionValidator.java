@@ -67,7 +67,7 @@ public final class UpdateTransactionValidator {
 			if (pending.purpose == null || pending.plan().projectedFinalState() == null)
 				throw new IOException("Deferred transaction envelope is incomplete");
 			ModpackId.requireValid(pending.plan().modpackId());
-			validateFinalState(pending.plan().projectedFinalState(), pending.plan().modpackId(), pending.purpose);
+			validateFinalState(pending.plan().projectedFinalState(), pending.plan().modpackId());
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
@@ -88,27 +88,25 @@ public final class UpdateTransactionValidator {
 			throw new IOException("Generated-copy state is only valid for modpack update transactions");
 
 		ModpackJsons.ModpackContentFields target = null;
-		if (transaction.purpose != null) {
-			if (transaction.expectedClientConfig == null) throw new IOException("Expected client configuration is missing");
-			ModpackId.requireValid(transaction.plan().modpackId());
-			if (selectedTarget != null && transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE)
-				throw new IOException("A supplied update target is only valid for a modpack update transaction");
-			PackDocument record = selectedTarget == null ? targetDocument(transaction) : selectedTarget.document();
-			target = selectedTarget == null ? resolvedTarget(transaction, record).flatTarget() : selectedTarget.flatTarget();
-			if (selectedTarget != null) validateSelectedTargetMetadata(transaction, selectedTarget);
-			validateGenerationIdentity(transaction, record, target);
-			validateManifest(target, transaction.plan().modpackId());
-			validateSelectionMetadata(transaction);
-			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateGeneratedCopies(transaction);
-			validateStoredClientState(transaction, record);
-			if (transaction.plan().plannedClientConfig() == null) throw new IOException("Planned client config is missing");
-			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
-			else validateRemovalClientConfig(transaction);
-			if (verifyMutableInputs && mutableInputDrift(transaction).overlay())
-				throw new IOException("Client editable overlay changed after planning");
-		} else throw new IOException("Unsupported transaction purpose");
+		if (transaction.expectedClientConfig == null) throw new IOException("Expected client configuration is missing");
+		ModpackId.requireValid(transaction.plan().modpackId());
+		if (selectedTarget != null && transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE)
+			throw new IOException("A supplied update target is only valid for a modpack update transaction");
+		PackDocument record = selectedTarget == null ? targetDocument(transaction) : selectedTarget.document();
+		target = selectedTarget == null ? resolvedTarget(transaction, record).flatTarget() : selectedTarget.flatTarget();
+		if (selectedTarget != null) validateSelectedTargetMetadata(transaction, selectedTarget);
+		validateGenerationIdentity(transaction, record, target);
+		validateManifest(target, transaction.plan().modpackId());
+		validateSelectionMetadata(transaction);
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateGeneratedCopies(transaction);
+		validateStoredClientState(transaction, record);
+		if (transaction.plan().plannedClientConfig() == null) throw new IOException("Planned client config is missing");
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validatePlannedClientConfig(transaction);
+		else validateRemovalClientConfig(transaction);
+		if (verifyMutableInputs && mutableInputDrift(transaction).overlay())
+			throw new IOException("Client editable overlay changed after planning");
 
-		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.plan().projectedFinalState(), transaction.plan().modpackId(), transaction.purpose);
+		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.plan().projectedFinalState(), transaction.plan().modpackId());
 		for (Operation operation : transaction.plan().operations())
 			if (operation == null || operation.root() == null || operation.operation() == null || operation.relativePath() == null)
 				throw new IOException("Incomplete transaction operation");
@@ -117,12 +115,11 @@ public final class UpdateTransactionValidator {
 		Set<FileKey> operationKeys = new HashSet<>();
 		Set<Path> operationTargets = new HashSet<>();
 		for (Operation operation : transaction.plan().operations()) {
-			if (operation == null || operation.root() == null || operation.operation() == null) throw new IOException("Incomplete transaction operation");
-			validatePurposeOperation(transaction.purpose, operation);
+			validatePurposeOperation(operation);
 			String relative = normalizeOperationPath(operation.relativePath());
 			FileKey key = new FileKey(operation.root(), relative);
 			if (!operationKeys.add(key)) throw new IOException("Duplicate transaction operation target");
-			Path physicalTarget = validateRootAndPath(operation.root(), relative, transaction.plan().modpackId(), transaction.purpose);
+			Path physicalTarget = validateRootAndPath(operation.root(), relative, transaction.plan().modpackId());
 			if (!operationTargets.add(physicalTarget)) throw new IOException("Transaction operations alias the same physical target");
 			ProjectedFile projected = finalState.get(key);
 			if (projected == null && operation.root() != Root.PROJECTION) throw new IOException("Operation target is missing from projected final state");
@@ -275,11 +272,9 @@ public final class UpdateTransactionValidator {
 			throw new IOException("Removal client config still selects the removed modpack");
 	}
 
-	private static void validatePurposeOperation(UpdateTransaction.Purpose purpose, Operation operation) throws IOException {
-		if (purpose != null) {
-			if (operation.root() != Root.PROJECTION && operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR)
-				throw new IOException("Modpack operations are restricted to projection, overlays, and managed live files");
-		} else throw new IOException("Unsupported transaction purpose");
+	private static void validatePurposeOperation(Operation operation) throws IOException {
+		if (operation.root() != Root.PROJECTION && operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR)
+			throw new IOException("Modpack operations are restricted to projection, overlays, and managed live files");
 	}
 
 	private void validateManifest(ModpackJsons.ModpackContentFields manifest, String modpackId) throws IOException {
@@ -305,14 +300,14 @@ public final class UpdateTransactionValidator {
 		return values != null && values.equals(values.stream().distinct().sorted().toList());
 	}
 
-	Map<FileKey, ProjectedFile> validateFinalState(List<ProjectedFile> entries, String modpackId, UpdateTransaction.Purpose purpose) throws IOException {
+	Map<FileKey, ProjectedFile> validateFinalState(List<ProjectedFile> entries, String modpackId) throws IOException {
 		Map<FileKey, ProjectedFile> finalState = new LinkedHashMap<>();
 		Set<Path> physicalTargets = new HashSet<>();
 		FileKey previous = null;
 		for (ProjectedFile entry : entries) {
 			if (entry == null || entry.root() == null) throw new IOException("Incomplete projected final-state entry");
 			String relative = normalizeOperationPath(entry.relativePath());
-			Path physicalTarget = validateRootAndPath(entry.root(), relative, modpackId, purpose);
+			Path physicalTarget = validateRootAndPath(entry.root(), relative, modpackId);
 			if (!physicalTargets.add(physicalTarget)) throw new IOException("Projected entries alias the same physical target");
 			FileKey key = new FileKey(entry.root(), relative);
 			if (previous != null && FileKey.ORDER.compare(previous, key) >= 0) throw new IOException("Projected final state is not uniquely ordered");
@@ -340,7 +335,7 @@ public final class UpdateTransactionValidator {
 		for (BaselineCapture capture : transaction.plan().baselineCaptures()) {
 			if (capture == null || capture.root() != Root.GAME_DIR) throw new IOException("Invalid baseline capture");
 			String relative = normalizeOperationPath(capture.relativePath());
-			validateRootAndPath(capture.root(), relative, transaction.plan().modpackId(), transaction.purpose);
+			validateRootAndPath(capture.root(), relative, transaction.plan().modpackId());
 			if (capture.absent()) {
 				if (!capture.expectedHash().isEmpty() || capture.expectedSize() != -1) throw new IOException("Absent baseline contains file metadata");
 			} else {
@@ -361,9 +356,9 @@ public final class UpdateTransactionValidator {
 		for (Preservation preservation : transaction.plan().preservations())
 			if (preservation == null || preservation.root() == null || preservation.relativePath() == null || preservation.expectedHash() == null || preservation.proof() == null)
 				throw new IOException("Invalid preservation");
-		OwnershipLedger activeLedger = cleanupLedger();
-		OwnershipLedger targetLedger = OwnershipLedger.fromFields(target.ownershipLedger);
 		ClientStorageJsons.ClientGenerationStateFields activeState = storage.readActiveState();
+		OwnershipLedger activeLedger = activeLedger(activeState);
+		OwnershipLedger targetLedger = OwnershipLedger.fromFields(target.ownershipLedger);
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
 		List<Preservation> sorted = transaction.plan().preservations().stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal())
@@ -375,7 +370,7 @@ public final class UpdateTransactionValidator {
 				throw new IOException("Invalid preservation root");
 			if (preservation.proof() == null) throw new IOException("Preservation proof is missing");
 			String relative = normalizeOperationPath(preservation.relativePath());
-			validateRootAndPath(preservation.root(), relative, transaction.plan().modpackId(), transaction.purpose);
+			validateRootAndPath(preservation.root(), relative, transaction.plan().modpackId());
 			if (!preservationKeys.add(new FileKey(preservation.root(), relative))) throw new IOException("Duplicate preservation target");
 			validateHash(preservation.expectedHash(), "preservation SHA-1");
 			String logicalPath = relative;
@@ -437,7 +432,7 @@ public final class UpdateTransactionValidator {
 		}
 		List<Conflict> sorted = transaction.plan().conflicts().stream().sorted(Comparator.comparing(Conflict::conflictId)).toList();
 		if (!transaction.plan().conflicts().equals(sorted)) throw new IOException("Conflicts are not deterministically ordered");
-		OwnershipLedger activeLedger = cleanupLedger();
+		OwnershipLedger activeLedger = activeLedger(storage.readActiveState());
 		PreservationVault.read(storage, transaction.plan().modpackId());
 		Set<String> targetPaths = new HashSet<>();
 		for (var item : target.list) targetPaths.add(normalizeManifestPath(item.file));
@@ -478,8 +473,8 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	private OwnershipLedger cleanupLedger() throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields state = storage.readActiveState();
+	/** The active client state's ownership ledger, or null when no pack is active. */
+	private static OwnershipLedger activeLedger(ClientStorageJsons.ClientGenerationStateFields state) {
 		if (state == null) return null;
 		return OwnershipLedger.fromFields(state.ownershipLedger);
 	}
@@ -511,14 +506,12 @@ public final class UpdateTransactionValidator {
 		}
 	}
 
-	Path validateRootAndPath(Root root, String relativePath, String currentModpackId, UpdateTransaction.Purpose purpose) throws IOException {
+	Path validateRootAndPath(Root root, String relativePath, String currentModpackId) throws IOException {
 		Path constrainedRoot = storage.root(root, currentModpackId);
 		Path resolved = FileTrees.resolveConfined(constrainedRoot, relativePath, "Transaction target");
 		Path game = storage.gameDirectory();
 		Path automodpack = storage.automodpackDirectory();
 		if (root == Root.GAME_DIR && resolved.startsWith(automodpack)) throw new IOException("GAME_DIR operation uses a narrower root");
-		if (root == Root.OVERLAY && purpose == null) throw new IOException("OVERLAY is restricted to modpack transactions");
-		if (root == Root.PROJECTION && purpose == null) throw new IOException("PROJECTION is restricted to modpack transactions");
 		if (!resolved.startsWith(game)) throw new IOException("Transaction target escaped the game directory");
 		return resolved;
 	}
