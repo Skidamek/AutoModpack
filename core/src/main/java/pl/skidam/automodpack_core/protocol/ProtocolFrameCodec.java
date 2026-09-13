@@ -83,10 +83,6 @@ public final class ProtocolFrameCodec {
 	}
 
 	/** Returns null when the input does not contain one complete frame yet. */
-	public static ByteBuf read(ByteBuf input, ByteBufAllocator allocator, CompressionCodec codec, int chunkSize) throws IOException {
-		return read(input, allocator, codec, chunkSize, new FrameScratch());
-	}
-
 	public static ByteBuf read(ByteBuf input, ByteBufAllocator allocator, CompressionCodec codec, int chunkSize, FrameScratch scratch) throws IOException {
 		if (input.readableBytes() < HEADER_BYTES) return null;
 
