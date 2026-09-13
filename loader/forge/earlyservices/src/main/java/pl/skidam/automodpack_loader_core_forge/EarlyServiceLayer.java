@@ -178,6 +178,8 @@ public final class EarlyServiceLayer {
 			EarlyServiceBridgePlugin.registerFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
 		} catch (Throwable t) {
 			LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
+			// Bootstrap failures must crash the launch; swallowing them would boot without the pack (see the NeoForge twins).
+			throw new RuntimeException("AutoModpack early-service bootstrap failed", t);
 		}
 	}
 
