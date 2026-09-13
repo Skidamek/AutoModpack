@@ -119,15 +119,8 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private Component getAcquisitionSummary() {
-		int acquired = 0;
-		int failed = 0;
-		if (downloadManager != null) {
-			for (DownloadManager.AcquisitionResult result : downloadManager.getAcquisitionResults().values()) {
-				if (result.success()) acquired++;
-				else failed++;
-			}
-		}
-		return VersionedText.translatable("automodpack.download.acquired", acquired, failed);
+		DownloadManager.AcquisitionProgress progress = downloadManager.acquisitionProgress();
+		return VersionedText.translatable("automodpack.download.acquired", progress.acquired(), progress.failed());
 	}
 
 	private float getDownloadScale() {
