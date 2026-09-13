@@ -191,16 +191,21 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		actionButtons.get(0).setMessage(VersionedText.translatable(upToDate ? "automodpack.management.upToDate" : "automodpack.management.update"));
 	}
 
+	// The header stack: description, state, identity, id, contents, optional connection line, generation.
+	private static final int HEADER_TOP = 28;
+	private static final int STATE_LINE_GAP = 16;
+	private static final int IDENTITY_LINE_GAP = 14;
+	private static final int LINE_GAP = 12;
+
+	/** The generation line's y - the end of the header stack the render walks - so the action grid derives from one layout. */
+	private int generationY() {
+		int y = HEADER_TOP + STATE_LINE_GAP + IDENTITY_LINE_GAP + LINE_GAP + LINE_GAP;
+		if (pack.connectionDetail() != null) y += LINE_GAP;
+		return y;
+	}
+
 	private int actionGridTop() {
-		int y = 28;
-		y += 16;
-		y += 14;
-		y += 12;
-		y += 12;
-		y += 12;
-		if (pack.connectionAvailable()) y += 12;
-		y += 12;
-		return y + ActionAreaLayout.GAP;
+		return generationY() + LINE_GAP + ActionAreaLayout.GAP;
 	}
 
 	/** Picks the widest column count whose grid stays clear of the bottom rail; 3 columns still keeps every button at or above the 88px minimum width. */
@@ -222,28 +227,28 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, name, this.width / 2, 12, TextColors.WHITE);
 		if (pack.connectionAvailable())
 			showHoverTooltip(VersionedText.translatable("automodpack.packDetails.server", pack.connectionOrigin()), this.width / 2 - this.font.width(name) / 2, 12, this.font.width(name), mouseX, mouseY);
-		int y = 28;
+		int y = HEADER_TOP;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.description").withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-		y += 16;
+		y += STATE_LINE_GAP;
 		String state = pack.active() ? VersionedText.translatable("automodpack.packManager.active", pack.name()).getString() : VersionedText.translatable("automodpack.packManager.noActive").getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, state, width)).withStyle(pack.active() ? ChatFormatting.GREEN : ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
-		y += 14;
+		y += IDENTITY_LINE_GAP;
 		String version = VersionedText.translatable("automodpack.packDetails.identity", pack.record().manifest().loader(), pack.record().manifest().loaderVersion(), pack.record().manifest().mcVersion()).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, version, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-		y += 12;
+		y += LINE_GAP;
 		String modpackId = VersionedText.translatable("automodpack.packDetails.id", pack.modpackId()).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, modpackId, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
 		showHoverTooltip(VersionedText.literal(pack.modpackId()), this.width / 2 - this.font.width(modpackId) / 2, y, this.font.width(modpackId), mouseX, mouseY);
-		y += 12;
+		y += LINE_GAP;
 		String contents = VersionedText.translatable("automodpack.packDetails.contents", UiFormat.plural(pack.groupCount(), "automodpack.confirm.groupCount").getString(),
 				UiFormat.plural(pack.fileCount(), "automodpack.confirm.fileCount").getString(), UiFormat.formatSize(pack.fileBytes())).getString();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, contents, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-		y += 12;
+		y += LINE_GAP;
 		if (pack.connectionDetail() != null) {
 			String connection = VersionedText.translatable("automodpack.packDetails.connection", pack.connectionOrigin(), pack.connectionDetail()).getString();
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, connection, width)).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
-			y += 12;
+			y += LINE_GAP;
 		}
 		String contentToken = pack.record().contentToken();
 		String generation = VersionedText.translatable("automodpack.packDetails.generation", contentToken.substring(0, Math.min(contentToken.length(), 7)), UiFormat.formatInstant(pack.record().createdAt())).getString();
