@@ -11,6 +11,7 @@ import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
@@ -462,5 +463,41 @@ public record UpdatePlan(
 		LinkedHashSet<String> normalized = new LinkedHashSet<>();
 		if (values != null) for (String value : values) if (value != null && !value.isBlank()) normalized.add(value.toLowerCase(Locale.ROOT));
 		return Collections.unmodifiableSet(normalized);
+	}
+
+	public UpdatePlanFields toFields() {
+		UpdatePlanFields fields = new UpdatePlanFields();
+		fields.modpackId = modpackId;
+		fields.contentToken = packTarget.contentToken();
+		fields.policySha1 = packTarget.policySha1();
+		fields.ledgerDigest = packTarget.ledgerDigest();
+		fields.operations = operations;
+		fields.projectedFinalState = projectedFinalState;
+		fields.plannedClientConfig = plannedClientConfig;
+		fields.restartReasons = List.copyOf(restartReasons);
+		fields.preservations = preservations;
+		fields.baselineCaptures = baselineCaptures;
+		fields.conflicts = conflicts;
+		fields.generatedCopies = generatedCopies.stream().map(copy -> {
+			ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields row = new ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields();
+			row.logicalPath = copy.relativePath();
+			row.sha1 = copy.sha1();
+			row.size = copy.size();
+			return row;
+		}).toList();
+		fields.consequences = consequences.toFields();
+		return fields;
+	}
+
+	public static UpdatePlan fromFields(UpdatePlanFields fields) {
+		if (fields == null || fields.modpackId == null || fields.operations == null || fields.projectedFinalState == null
+				|| fields.preservations == null || fields.baselineCaptures == null || fields.conflicts == null || fields.generatedCopies == null
+				|| fields.consequences == null)
+			throw new IllegalArgumentException("Update plan fields are incomplete");
+		PackTarget packTarget = new PackTarget(fields.modpackId, fields.contentToken, fields.policySha1, fields.ledgerDigest);
+		List<NestedCopy> generatedCopies = fields.generatedCopies.stream().map(row -> new NestedCopy(row.logicalPath, row.sha1, row.size, Set.<String>of())).toList();
+		return new UpdatePlan(fields.modpackId, packTarget, fields.operations, fields.projectedFinalState, fields.plannedClientConfig,
+				fields.restartReasons == null ? Set.of() : Set.copyOf(fields.restartReasons), fields.preservations, fields.baselineCaptures, fields.conflicts,
+				generatedCopies, ChangeSet.fromFields(fields.consequences));
 	}
 }

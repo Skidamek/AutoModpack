@@ -290,4 +290,89 @@ public record ChangeSet(List<Change> changes, List<Effect> effects) {
 		normalized.sort(String::compareTo);
 		return List.copyOf(normalized);
 	}
+
+	/**
+	 * The durable spelling of a change set. Gson versions shipped in older Minecraft releases cannot deserialize
+	 * records, so the persisted document is this class tree and the in-memory record is built back from it.
+	 */
+	public static class Fields {
+		public List<ChangeFields> changes;
+		public List<EffectFields> effects;
+
+		public static class ChangeFields {
+			public String logicalPath;
+			public String kind;
+			public List<OccurrenceFields> occurrences;
+		}
+
+		public static class OccurrenceFields {
+			public String location;
+			public String logicalPath;
+			public long size;
+			public Long beforeSize;
+			public String beforeHash;
+			public String afterHash;
+			public String contentKind;
+			public List<String> featureIds;
+			public List<String> references;
+		}
+
+		public static class EffectFields {
+			public String category;
+			public String value;
+		}
+	}
+
+	public Fields toFields() {
+		Fields fields = new Fields();
+		fields.changes = changes.stream().map(change -> {
+			Fields.ChangeFields row = new Fields.ChangeFields();
+			row.logicalPath = change.logicalPath();
+			row.kind = change.kind().name();
+			row.occurrences = change.occurrences().stream().map(occurrence -> {
+				Fields.OccurrenceFields occurrenceRow = new Fields.OccurrenceFields();
+				occurrenceRow.location = occurrence.location();
+				occurrenceRow.logicalPath = occurrence.logicalPath();
+				occurrenceRow.size = occurrence.size();
+				occurrenceRow.beforeSize = occurrence.beforeSize();
+				occurrenceRow.beforeHash = occurrence.beforeHash();
+				occurrenceRow.afterHash = occurrence.afterHash();
+				occurrenceRow.contentKind = occurrence.contentKind();
+				occurrenceRow.featureIds = occurrence.featureIds();
+				occurrenceRow.references = occurrence.references();
+				return occurrenceRow;
+			}).toList();
+			return row;
+		}).toList();
+		fields.effects = effects.stream().map(effect -> {
+			Fields.EffectFields row = new Fields.EffectFields();
+			row.category = effect.category();
+			row.value = effect.value();
+			return row;
+		}).toList();
+		return fields;
+	}
+
+	public static ChangeSet fromFields(Fields fields) {
+		if (fields == null || fields.changes == null || fields.effects == null) throw new IllegalArgumentException("Change set fields are incomplete");
+		List<Change> changes = new ArrayList<>();
+		for (Fields.ChangeFields row : fields.changes) {
+			if (row == null) throw new IllegalArgumentException("Change set contains an incomplete change");
+			List<Occurrence> occurrences = new ArrayList<>();
+			for (Fields.OccurrenceFields occurrenceRow : row.occurrences == null ? List.<Fields.OccurrenceFields>of() : row.occurrences) {
+				if (occurrenceRow == null) throw new IllegalArgumentException("Change set contains an incomplete occurrence");
+				occurrences.add(new Occurrence(occurrenceRow.location, occurrenceRow.logicalPath, occurrenceRow.size, occurrenceRow.beforeSize, occurrenceRow.beforeHash,
+						occurrenceRow.afterHash, occurrenceRow.contentKind,
+						occurrenceRow.featureIds == null ? List.of() : List.copyOf(occurrenceRow.featureIds),
+						occurrenceRow.references == null ? List.of() : List.copyOf(occurrenceRow.references)));
+			}
+			changes.add(new Change(row.logicalPath, Kind.valueOf(row.kind), occurrences));
+		}
+		List<Effect> effects = new ArrayList<>();
+		for (Fields.EffectFields row : fields.effects) {
+			if (row == null) throw new IllegalArgumentException("Change set contains an incomplete effect");
+			effects.add(new Effect(row.category, row.value));
+		}
+		return new ChangeSet(changes, effects);
+	}
 }

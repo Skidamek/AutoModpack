@@ -32,7 +32,9 @@ public final class UpdateTransaction {
 	public String transactionId;
 	public Purpose purpose;
 	public Phase phase;
-	private UpdatePlan plan;
+	/** The durable plan; kept as fields because old Minecraft Gson cannot deserialize records. */
+	public UpdatePlanFields plan;
+	private transient UpdatePlan resolvedPlan;
 	public String targetPlatform;
 	public boolean expectedPriorSelectionPresent;
 	public List<String> expectedPriorRequestedGroups;
@@ -90,7 +92,7 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
-		transaction.plan = plan;
+		transaction.plan = plan.toFields();
 		return transaction;
 	}
 
@@ -119,7 +121,7 @@ public final class UpdateTransaction {
 		transaction.excludedGroups = List.of();
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
-		transaction.plan = plan;
+		transaction.plan = plan.toFields();
 		return transaction;
 	}
 
@@ -153,15 +155,16 @@ public final class UpdateTransaction {
 	}
 
 	public UpdatePlan plan() {
-		return plan;
+		if (resolvedPlan == null) resolvedPlan = UpdatePlan.fromFields(plan);
+		return resolvedPlan;
 	}
 
 	public String modpackId() {
-		return plan.modpackId();
+		return plan().modpackId();
 	}
 
 	public PackTarget packTarget() {
-		return plan.packTarget();
+		return plan().packTarget();
 	}
 
 	public ClientPlatform platform() {
