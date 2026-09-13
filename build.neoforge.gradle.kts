@@ -33,7 +33,6 @@ neoForge {
 
 dependencies {
 	implementation(project(":core")) { isTransitive = false }
-	implementation(project(":loader-core")) { isTransitive = false }
 
 	compileOnly(":mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
 	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }

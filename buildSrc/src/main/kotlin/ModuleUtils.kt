@@ -28,8 +28,9 @@ fun getLoaderModuleName(projectName: String): String {
 
 fun getAllDependentLoaderModules(name: String): List<String> {
     val loaderModule = getLoaderModuleName(name)
-    val list = mutableListOf("core", "loader-core", "loader-$loaderModule")
+    val list = mutableListOf("core", "loader-$loaderModule")
     if (loaderModule == "fabric-core") { // Special case for fabric.
+        list.add("loader-fabric-shared")
         list.add("loader-fabric-15")
         list.add("loader-fabric-16")
     }

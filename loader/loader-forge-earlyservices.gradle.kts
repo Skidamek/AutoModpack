@@ -27,7 +27,6 @@ legacyForge {
 
 dependencies {
 	compileOnly(project(":core"))
-	compileOnly(project(":loader-core"))
 	compileOnly(project(":loader-modlauncher-earlyservices"))
 }
 

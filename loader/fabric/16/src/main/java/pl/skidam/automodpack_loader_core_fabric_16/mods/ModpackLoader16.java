@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_loader_core_fabric_16.mods;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_loader_core_fabric.FabricLoaderImplAccessor.*;
+import static pl.skidam.automodpack_loader_fabric_shared.FabricLoaderImplAccessor.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,7 +25,7 @@ import pl.skidam.automodpack_core.loader.RequestedCandidates;
 import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
-import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
+import pl.skidam.automodpack_loader_fabric_shared.FabricLoaderMods;
 
 @SuppressWarnings({"unchecked", "unused"})
 public class ModpackLoader16 implements ModpackLoaderService {
@@ -231,7 +231,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
 	private Collection<ModCandidateImpl> discoverMods(Path modsDirectory) throws ModResolutionException, IllegalAccessException {
 		ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));
 
-		List<?> candidateFinders = List.of(new ModContainerModCandidateFinder((List<ModContainer>) FabricLanguageAdapter.getAllMods().stream().toList()),
+		List<?> candidateFinders = List.of(new ModContainerModCandidateFinder((List<ModContainer>) FabricLoaderMods.getAllMods().stream().toList()),
 				new DirectoryModCandidateFinder(modsDirectory, FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()));
 
 		FIELD_CANDIDATE_FINDERS.set(discoverer, candidateFinders);
@@ -241,7 +241,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
 	private Collection<ModCandidateImpl> resolveMods(Collection<ModCandidateImpl> modCandidates) throws ModResolutionException {
 		Set<String> modIds = new HashSet<>();
-		for (var mod : FabricLanguageAdapter.getAllMods().stream().toList()) {
+		for (var mod : FabricLoaderMods.getAllMods().stream().toList()) {
 			ModContainerImpl container = (ModContainerImpl) mod;
 			modIds.add(container.getMetadata().getId());
 		}
@@ -265,7 +265,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
 	public void addMod(ModCandidateImpl candidate) throws IllegalAccessException {
 		ModContainerImpl container = new ModContainerImpl(candidate);
-		FabricLanguageAdapter.addMod(container);
+		FabricLoaderMods.addMod(container);
 
 		var modMap = (Map<String, ModContainerImpl>) FIELD_MOD_MAP.get(FabricLoaderImpl.INSTANCE);
 

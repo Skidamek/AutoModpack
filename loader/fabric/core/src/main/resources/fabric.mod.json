@@ -20,7 +20,7 @@
     "automodpack_mod": "*"
   },
   "languageAdapters": {
-    "automodpack_preload": "pl.skidam.automodpack_loader_core.FabricLanguageAdapter"
+    "automodpack_preload": "pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter"
   },
   "jars": [
     {

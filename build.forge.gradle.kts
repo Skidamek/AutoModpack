@@ -41,7 +41,6 @@ dependencies {
 	// gives legacy Forge one classloader owner for the loader package; its SERVICE module otherwise
 	// loads ModpackUtils while the duplicate nested package can hide ManifestFetchState.
 	compileOnly(project(":core")) { isTransitive = false }
-	compileOnly(project(":loader-core")) { isTransitive = false }
 	compileOnly(":mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
 	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion") { isTransitive = false }
 

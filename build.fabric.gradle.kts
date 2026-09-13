@@ -36,7 +36,6 @@ repositories {
 
 dependencies {
 	implementation(project(":core")) { isTransitive = false }
-	implementation(project(":loader-core")) { isTransitive = false }
 
 	compileOnly(":mcholepunch-core:$mcholepunchVersion")
 	compileOnly(":mcholepunch-server-netty:$mcholepunchVersion")

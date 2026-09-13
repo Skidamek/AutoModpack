@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_master_core_fabric;
+package pl.skidam.automodpack_loader_fabric_shared;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;

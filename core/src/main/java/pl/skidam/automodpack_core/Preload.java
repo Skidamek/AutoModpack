@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core;
+package pl.skidam.automodpack_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
@@ -6,6 +6,7 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
+import java.util.function.Supplier;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.client.ClientOfflineRepair;
@@ -26,6 +27,7 @@ import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -43,8 +45,6 @@ import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_core.utils.DurableFiles;
-import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 
 public class Preload {
 	// Three deferred restarts for the same transaction id, then the next failed recover rolls back. The id is the episode; the count does not expire.
@@ -56,11 +56,12 @@ public class Preload {
 	private boolean trustedBootstrapApply;
 	private boolean rolledBackStuckUpdate;
 
-	public Preload() {
+	/** The modpack loader is supplied, not handed over: its class initialization reads {@link Constants#LOADER_MANAGER}, so it must be constructed only after that is installed. */
+	public Preload(LoaderManagerService loaderManager, Supplier<ModpackLoaderService> modpackLoader) {
 		try {
 			long start = System.currentTimeMillis();
 			LOGGER.info("Prelaunching AutoModpack...");
-			initializeConstants();
+			initializeConstants(loaderManager, modpackLoader);
 			recoverPendingSelfUpdate();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
 				storage = ClientStorage.open(GameDirectory.current());
@@ -366,12 +367,12 @@ public class Preload {
 		}
 	}
 
-	private void initializeConstants() {
+	private void initializeConstants(LoaderManagerService loaderManager, Supplier<ModpackLoaderService> modpackLoader) {
 		// Initialize global variables
 		preload = true;
 		PRELOAD_TIME = System.currentTimeMillis();
-		LOADER_MANAGER = new LoaderManager();
-		MODPACK_LOADER = new ModpackLoader();
+		LOADER_MANAGER = loaderManager;
+		MODPACK_LOADER = modpackLoader.get();
 		MC_VERSION = LOADER_MANAGER.getModVersion("minecraft");
 		LOADER_VERSION = LOADER_MANAGER.getLoaderVersion();
 		LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);

@@ -130,7 +130,7 @@ val mergeJarTask =
 		)
 
 		// Hash the shadow jars where they exist: they're what this task actually merges and
-		// the only outputs that change when a shared subproject (core, loader-core, an
+		// the only outputs that change when a shared subproject (core, an
 		// earlyservices module) changes. The plain `jar` outputs don't contain those classes.
 		val filesToHash = mutableListOf<Any>()
 		(tasks.findByName("shadowJar") ?: tasks.findByName("jar"))?.let { projectJar ->
