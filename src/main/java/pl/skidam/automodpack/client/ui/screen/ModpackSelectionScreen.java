@@ -62,8 +62,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final Runnable cancelAction;
 	private final ModpackUpdater pendingUpdater;
 	private final boolean managerEntry;
-	private final boolean openedFromManager;
-	private final boolean showManagement;
 	private final boolean activeModpack;
 	private final PackDocument localRecord;
 	private final ClientPlatform detectedPlatform;
@@ -83,35 +81,24 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private DropdownWidget platformDropdown;
 	private int listBottom;
 
-	public ModpackSelectionScreen(Screen parent, GroupManifest manifest) {
-		this(parent, manifest, null, null, null, () -> {}, null, false, false, null);
-	}
-
 	public ModpackSelectionScreen(Screen parent, ModpackUpdater updater, Consumer<SelectionIntent> selectionAction) {
-		this(parent, updater.getSelectedTarget().manifest(), updater.getSelectedTarget().expectedPriorIntent(), updater.getSelectedTarget().selection().intent(), selectionAction, () -> {}, updater, false, false, null);
+		this(parent, updater.getSelectedTarget().manifest(),
+				new Entry(updater.getSelectedTarget().expectedPriorIntent(), updater.getSelectedTarget().selection().intent(), selectionAction, () -> {}, updater, false, null));
 	}
 
 	public static ModpackSelectionScreen repair(Screen parent, GroupManifest manifest, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
-		return new ModpackSelectionScreen(parent, manifest, savedSelection, savedSelection, selectionAction, cancelAction, null, false, false, null);
+		return new ModpackSelectionScreen(parent, manifest, new Entry(savedSelection, savedSelection, selectionAction, cancelAction, null, false, null));
 	}
 
-	public static ModpackSelectionScreen forInstalledRecord(Screen parent, PackDocument record, boolean managerEntry) {
-		return forInstalledRecord(parent, record, managerEntry, true);
+	static ModpackSelectionScreen forInstalledRecord(Screen parent, PackDocument record, boolean managerEntry) {
+		return new ModpackSelectionScreen(parent, record.manifest(), new Entry(null, null, null, () -> {}, null, managerEntry, record));
 	}
 
-	static ModpackSelectionScreen forInstalledRecord(Screen parent, PackDocument record, boolean managerEntry, boolean showManagement) {
-		return new ModpackSelectionScreen(parent, record.manifest(), null, null, null, () -> {}, null, managerEntry, true, showManagement, record);
-	}
+	/** What an entry point varies; the screen settles everything else itself. */
+	private record Entry(SelectionIntent expectedSelection, SelectionIntent initialSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction,
+			ModpackUpdater pendingUpdater, boolean managerEntry, PackDocument localRecord) {}
 
-	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, SelectionIntent expectedSelection, SelectionIntent initialSelection,
-			Consumer<SelectionIntent> selectionAction, Runnable cancelAction, ModpackUpdater pendingUpdater, boolean managerEntry, boolean openedFromManager,
-			PackDocument localRecord) {
-		this(parent, manifest, expectedSelection, initialSelection, selectionAction, cancelAction, pendingUpdater, managerEntry, openedFromManager, true, localRecord);
-	}
-
-	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, SelectionIntent expectedSelection, SelectionIntent initialSelection,
-			Consumer<SelectionIntent> selectionAction, Runnable cancelAction, ModpackUpdater pendingUpdater, boolean managerEntry, boolean openedFromManager,
-			boolean showManagement, PackDocument localRecord) {
+	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, Entry entry) {
 		super(VersionedText.translatable("automodpack.selection.title"));
 		this.parent = parent;
 		this.manifest = Objects.requireNonNull(manifest);
@@ -119,19 +106,17 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.modpackName = manifest.modpackName();
 		this.groups = manifest.groups();
 		this.controller = new InstalledModpackController();
-		this.expectedSelection = expectedSelection == null && initialSelection == null
+		this.expectedSelection = entry.expectedSelection() == null && entry.initialSelection() == null
 				? controller.savedSelection(modpackId)
-				: expectedSelection;
-		this.selectionAction = selectionAction;
-		this.cancelAction = cancelAction;
-		this.pendingUpdater = pendingUpdater;
-		this.managerEntry = managerEntry;
-		this.openedFromManager = openedFromManager;
-		this.showManagement = showManagement;
+				: entry.expectedSelection();
+		this.selectionAction = entry.selectionAction();
+		this.cancelAction = entry.cancelAction();
+		this.pendingUpdater = entry.pendingUpdater();
+		this.managerEntry = entry.managerEntry();
 		this.activeModpack = controller.activeRecord(modpackId) != null;
-		this.localRecord = localRecord;
-		SelectionIntent initial = initialSelection != null
-				? initialSelection
+		this.localRecord = entry.localRecord();
+		SelectionIntent initial = entry.initialSelection() != null
+				? entry.initialSelection()
 				: this.expectedSelection == null ? GroupSelectionResolver.defaultIntent(manifest) : this.expectedSelection;
 		this.initialSelection = initial;
 		this.detectedPlatform = ClientPlatform.current();
@@ -264,14 +249,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return ChangeSet.of(changes);
 	}
 
-	public boolean isUpdateFlow() {
-		return selectionAction != null;
-	}
-
-	public boolean isConfirmationFlow() {
-		return pendingUpdater != null;
-	}
-
 	@Override
 	public void tick() {
 		super.tick();
@@ -322,21 +299,19 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void applySelectionChange(SelectionIntent next, Set<String> preferredGroups, String preferredName) {
-		try {
-			ResolvedSelection nextResolution = GroupSelectionResolver.resolve(manifest, next, effectivePlatform());
-			applyResolved(next, nextResolution);
-		} catch (SelectionResolutionException exception) {
-			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, effectivePlatform(), exception.resolution()).orElse(null);
-			if (replacement != null) {
-				ScreenImpl.setScreen(
-						new GroupConflictScreen(this, preferredName, names(replacement.conflictingGroups()), () -> applySelectionChange(replacement.intent().withPlatform(override()), Set.of(), preferredName)));
-				return;
-			}
-			resolutionError = preferredGroups.isEmpty()
-					? VersionedText.translatable("automodpack.selection.changeInvalid").getString()
-					: VersionedText.translatable("automodpack.selection.cannotSelect", preferredName).getString();
-			rebuild();
+		InstalledModpackController.SelectionChange change = controller.planSelectionChange(manifest, next, preferredGroups, preferredName, effectivePlatform());
+		if (change.resolution() != null) {
+			applyResolved(change.intent(), change.resolution());
+			return;
 		}
+		if (change.conflict() != null) {
+			GroupSelectionResolver.ConflictReplacement replacement = change.conflict();
+			ScreenImpl.setScreen(
+					new GroupConflictScreen(this, preferredName, names(replacement.conflictingGroups()), () -> applySelectionChange(replacement.intent().withPlatform(override()), Set.of(), preferredName)));
+			return;
+		}
+		resolutionError = change.failure();
+		rebuild();
 	}
 
 	private Set<String> categoryGroups(String category) {

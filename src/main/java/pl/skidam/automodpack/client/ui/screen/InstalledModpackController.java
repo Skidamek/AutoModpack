@@ -31,8 +31,10 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
+import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -79,6 +81,25 @@ final class InstalledModpackController {
 
 	void saveSelection(String modpackId, SelectionIntent expected, SelectionIntent target) throws IOException {
 		new ClientSelectionStore(storage.selectionFile()).compareAndSet(modpackId, expected, target);
+	}
+
+	/** One applied selection change, the conflict the player must settle first, or the player-facing reason the change cannot apply. */
+	record SelectionChange(SelectionIntent intent, ResolvedSelection resolution, GroupSelectionResolver.ConflictReplacement conflict, String failure) {}
+
+	/**
+	 * The outcome of applying one selection change: the resolver's answer when it holds, otherwise the conflict offer that
+	 * can settle it, otherwise the reason it cannot. Screens route between the outcomes; the resolver policy stays here.
+	 */
+	SelectionChange planSelectionChange(GroupManifest manifest, SelectionIntent next, Set<String> preferredGroups, String preferredName, ClientPlatform platform) {
+		try {
+			return new SelectionChange(next, GroupSelectionResolver.resolve(manifest, next, platform), null, null);
+		} catch (SelectionResolutionException exception) {
+			GroupSelectionResolver.ConflictReplacement replacement = GroupSelectionResolver.replaceConflicts(manifest, next, preferredGroups, platform, exception.resolution()).orElse(null);
+			if (replacement != null) return new SelectionChange(next, null, replacement, null);
+			return new SelectionChange(next, null, null, preferredGroups.isEmpty()
+					? VersionedText.translatable("automodpack.selection.changeInvalid").getString()
+					: VersionedText.translatable("automodpack.selection.cannotSelect", preferredName).getString());
+		}
 	}
 
 	PackDocument activeRecord(String modpackId) {
