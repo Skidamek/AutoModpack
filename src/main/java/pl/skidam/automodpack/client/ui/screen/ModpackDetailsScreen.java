@@ -124,7 +124,7 @@ public final class ModpackDetailsScreen extends VersionedScreen {
 
 	private void openGroups() {
 		if (busy) return;
-		ScreenImpl.setScreen(ModpackSelectionScreen.forInstalledRecord(this, pack.record(), false, false));
+		ScreenImpl.setScreen(ModpackSelectionScreen.forInstalledRecord(this, pack.record(), false));
 	}
 
 	private void openHistory() {
