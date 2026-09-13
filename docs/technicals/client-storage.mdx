@@ -17,3 +17,9 @@ Clean local storage is the one explicit cleanup pass. Per pack it keeps the acti
 The History screen judges restorability by live checks against the object store, so a generation whose file data was cleaned shows as no longer restorable instead of failing halfway through a restore.
 
 A clean refuses to run while an update transaction is active. After it finishes, the storage screen shows one receipt per pack: the date of the clean, the generation it cleaned through, and how much was reclaimed. Generations older than that boundary can no longer be restored on this computer. The receipt only appears after a clean ran on this installation.
+
+## Restoring a generation, and stop syncing
+
+The History screen lists the synced generations from the journal mirror. Opening an entry shows its patch notes and file changes, and Restore puts that generation's files back when their data is still in the store. A generation whose data was cleaned shows as no longer restorable before you try it.
+
+"Stop syncing" detaches the pack: your current files stay exactly as they are and the server can no longer change them. While detached, joining a server warns you that it may expect different files. "Sync now" reattaches and applies the server's current generation.

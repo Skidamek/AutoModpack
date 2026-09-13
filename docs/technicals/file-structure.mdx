@@ -1,4 +1,4 @@
-All AutoModpack files live under `~/automodpack/`.
+AutoModpack keeps its files in an `automodpack/` folder inside the game directory: the server root for a server, the instance folder for a client. This page writes that folder as `~/automodpack/`.
 
 The one-shot client drop-in is `~/automodpack/automodpack-bootstrap.json`. It lives inside `automodpack/` so a pack cannot ship or overwrite it. Put a copy there, launch, and AutoModpack imports then deletes it. AutoModpack must already be installed. If the file includes `serverName`, import writes that entry into vanilla `servers.dat`. An `automodpack-bootstrap.json` in the instance root is ignored.
 
@@ -30,17 +30,19 @@ Do not edit these by hand.
 
 ### Server runtime — `~/automodpack/server/`
 
-Published generation history: `current.json`, `current-projection.json`, `checkpoint.json`, `catalogues/`, `commits/`, `deltas/`, `staging/`, and `secrets.json`.
+The published history is one append-only journal: `journal.jsonl` lists every published generation with its patch notes, `current-projection.json` is the materialized view of the current one, `staging/` holds in-flight publishes, and `secrets.json` holds the per-player download secrets. Dedicated servers also keep their own content store under `data/`.
 
 ### Client runtime — `~/automodpack/client/`
 
 | Path | Role |
 |---|---|
 | `active/` | The one live projection the loader reads |
-| `records/<generationId>/` | Immutable downloaded generation records |
+| `history/<modpack-id>/` | The journal mirror for this pack: the server's generation timeline, so the History screen works offline |
 | `overlays/<modpackId>/` | Player edits that survive generation switches |
-| `baselines/`, `generated-copies/`, `incoming/`, `backup/`, `preservation/`, `helper/` | Update, repair, and loader-copy working state |
-| `active-state.json`, `selections.json`, `restart-state.json`, `update-transaction.json` | Pointers and in-flight work |
+| `baselines/`, `generated-copies/`, `incoming/`, `backup/`, `preservation/` | Update, repair, and loader-copy working state |
+| `active-state.json`, `selections.json`, `restart-state.json`, `update-transaction.json`, `repair.json` | Pointers and in-flight work |
+
+`automodpack/helper/` (outside `client/`) is where detached update and repair helpers log their runs.
 
 ### Content store
 
@@ -50,7 +52,7 @@ Downloaded and hosted bytes live in a content-addressed store, shared across Min
 - macOS: `~/Library/Application Support/automodpack/data`
 - Windows: `%LOCALAPPDATA%\automodpack\data`
 
-If that directory is not writable, AutoModpack falls back to `~/automodpack/data/`. Tests and isolated runs can set `AUTOMODPACK_DATA_ROOT`.
+A dedicated server always keeps its store inside the instance at `~/automodpack/server/data/`. A client shares the platform store with every other instance of the same user; when that root is not writable, the client falls back to its own instance-local `~/automodpack/client/data/`. Tests and isolated runs can set `AUTOMODPACK_DATA_ROOT` (or the `automodpack.data.root` system property); a configured root that cannot be used is an error, not a fallback.
 
 The store contains Git-style objects (`objects/<aa>/<rest-of-sha1>`), file and mod metadata caches, per-pack `packs/<modpack-id>/connection.json`, and `known-hosts.json`.
 
