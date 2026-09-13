@@ -183,14 +183,14 @@ public final class ClientStorage {
 
 	public Path generatedCopiesFile(String modpackId, String contentToken, String selectionDigest) {
 		Path packRoot = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).normalize();
-		Path generationRoot = packRoot.resolve(requireDigest(contentToken, "generation ID")).normalize();
-		Path file = generationRoot.resolve(requireDigest(selectionDigest, "generated-copy selection digest") + ".json").normalize();
+		Path generationRoot = packRoot.resolve(HashUtils.requireDigest(contentToken, "generation ID")).normalize();
+		Path file = generationRoot.resolve(HashUtils.requireDigest(selectionDigest, "generated-copy selection digest") + ".json").normalize();
 		if (!file.startsWith(generationRoot)) throw new IllegalArgumentException("Generated-copy state escaped its generation root");
 		return file;
 	}
 
 	public Path generatedCopiesGenerationDirectory(String modpackId, String contentToken) {
-		Path root = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve(requireDigest(contentToken, "generation ID")).normalize();
+		Path root = generatedCopiesDirectory.resolve(ModpackId.requireValid(modpackId)).resolve(HashUtils.requireDigest(contentToken, "generation ID")).normalize();
 		if (!root.startsWith(generatedCopiesDirectory)) throw new IllegalArgumentException("Generated-copy state escaped its root");
 		return root;
 	}
@@ -458,7 +458,7 @@ public final class ClientStorage {
 	public void writeActiveState(String modpackId, String contentToken, GenerationJsons.OwnershipLedgerFields ownershipLedger) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = new ClientStorageJsons.ClientGenerationStateFields();
 		state.modpackId = ModpackId.requireValid(modpackId);
-		state.contentToken = requireDigest(contentToken, "generation ID");
+		state.contentToken = HashUtils.requireDigest(contentToken, "generation ID");
 		state.ownershipLedger = Objects.requireNonNull(ownershipLedger, "ownership ledger");
 		state.detached = currentDetachmentFor(state.modpackId);
 		Files.createDirectories(stateFile.getParent());
@@ -510,11 +510,6 @@ public final class ClientStorage {
 
 	private static Path requireDirectoryPath(Path path, String description) {
 		return Objects.requireNonNull(path, description).toAbsolutePath().normalize();
-	}
-
-	private static String requireDigest(String value, String description) {
-		if (!HashUtils.isSha1(value)) throw new IllegalArgumentException("Invalid " + description);
-		return HashUtils.normalizeSha1(value);
 	}
 
 	private static String requireLogicalPath(String value) {

@@ -22,8 +22,8 @@ public record GeneratedCopyState(String modpackId, String contentToken, String s
 
 	public GeneratedCopyState {
 		modpackId = ModpackId.requireValid(modpackId);
-		contentToken = requireDigest(contentToken, "generation ID");
-		selectionDigest = requireDigest(selectionDigest, "generated-copy selection digest");
+		contentToken = HashUtils.requireDigest(contentToken, "generation ID");
+		selectionDigest = HashUtils.requireDigest(selectionDigest, "generated-copy selection digest");
 		List<Entry> sorted = new ArrayList<>(Objects.requireNonNull(entries, "generated-copy entries"));
 		sorted.sort(ENTRY_ORDER);
 		for (int i = 1; i < sorted.size(); i++)
@@ -50,8 +50,8 @@ public record GeneratedCopyState(String modpackId, String contentToken, String s
 
 	private static GeneratedCopyState answeringTo(String modpackId, String contentToken, String selectionDigest, Path path, ClientStorageJsons.ClientGeneratedCopiesFields fields) {
 		GeneratedCopyState state = fromFields(fields);
-		if (!state.modpackId().equals(ModpackId.requireValid(modpackId)) || !state.contentToken().equals(requireDigest(contentToken, "generation ID"))
-				|| !state.selectionDigest().equals(requireDigest(selectionDigest, "generated-copy selection digest")))
+		if (!state.modpackId().equals(ModpackId.requireValid(modpackId)) || !state.contentToken().equals(HashUtils.requireDigest(contentToken, "generation ID"))
+				|| !state.selectionDigest().equals(HashUtils.requireDigest(selectionDigest, "generated-copy selection digest")))
 			throw new IllegalArgumentException("Generated-copy state does not answer to its path: " + path);
 		return state;
 	}
@@ -100,10 +100,5 @@ public record GeneratedCopyState(String modpackId, String contentToken, String s
 			sha1 = HashUtils.normalizeSha1(sha1);
 			if (size < 0) throw new IllegalArgumentException("Generated-copy size is invalid");
 		}
-	}
-
-	private static String requireDigest(String value, String description) {
-		if (!HashUtils.isSha1(value)) throw new IllegalArgumentException("Invalid " + description);
-		return HashUtils.normalizeSha1(value);
 	}
 }

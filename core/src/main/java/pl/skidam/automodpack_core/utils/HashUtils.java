@@ -77,6 +77,12 @@ public final class HashUtils {
 		return value.toLowerCase(Locale.ROOT);
 	}
 
+	/** Validates and returns the lowercase canonical representation of a required SHA-1 digest, described by {@code description} in the failure message. */
+	public static String requireDigest(String value, String description) {
+		if (!isSha1(value)) throw new IllegalArgumentException("Invalid " + description);
+		return normalizeSha1(value);
+	}
+
 	/** Full SHA-1 of current bytes. Path-keyed identity goes through {@code FileIntegrity} / {@code FileCache}. */
 	public static String getHash(Path path) {
 		try {
