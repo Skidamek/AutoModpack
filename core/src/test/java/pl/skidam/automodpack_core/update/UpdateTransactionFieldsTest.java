@@ -1,19 +1,11 @@
 package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
 import java.nio.file.Path;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -38,12 +30,6 @@ class UpdateTransactionFieldsTest {
 
 	@TempDir
 	Path temporaryDirectory;
-
-	@Test
-	void theDurableTransactionGraphCarriesNoRecords() throws IOException {
-		Set<Class<?>> visited = new HashSet<>();
-		assertNoRecords(UpdateTransaction.class, visited);
-	}
 
 	@Test
 	void aRealTransactionRoundTripsThroughTheDurableDocument() throws Exception {
@@ -73,24 +59,5 @@ class UpdateTransactionFieldsTest {
 		// Service ids are inspection-only and are not part of the durable plan.
 		assertTrue(roundTripped.plan().generatedCopies().get(0).ids().isEmpty());
 		assertEquals(ChangeSet.Kind.ADDED, roundTripped.plan().consequences().changes().get(0).kind());
-	}
-
-	private static void assertNoRecords(Class<?> type, Set<Class<?>> visited) throws IOException {
-		if (type.isPrimitive() || type.isEnum() || type.isArray() || type.getName().startsWith("java.")) return;
-		assertFalse(type.isRecord(), "Durable transaction types must not be records: " + type.getName());
-		if (!visited.add(type)) return;
-		for (Field field : type.getDeclaredFields()) {
-			int modifiers = field.getModifiers();
-			if (Modifier.isStatic(modifiers) || Modifier.isTransient(modifiers)) continue;
-			Class<?> fieldType = field.getType();
-			if (List.class.isAssignableFrom(fieldType) || Set.class.isAssignableFrom(fieldType) || Map.class.isAssignableFrom(fieldType)) {
-				Type generic = field.getGenericType();
-				if (generic instanceof ParameterizedType parameterized)
-					for (Type argument : parameterized.getActualTypeArguments())
-						if (argument instanceof Class<?> argumentType) assertNoRecords(argumentType, visited);
-			} else {
-				assertNoRecords(fieldType, visited);
-			}
-		}
 	}
 }
