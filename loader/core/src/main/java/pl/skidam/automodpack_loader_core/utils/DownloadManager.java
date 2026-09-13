@@ -22,7 +22,6 @@ import pl.skidam.automodpack_core.utils.DownloadScheduler;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
@@ -276,13 +275,12 @@ public class DownloadManager {
 				if (attemptBytes.get() > 0) scheduler.report(platformTransfer ? data.activeDomain : INTERNAL_CLIENT_SOURCE, attemptBytes.get(), System.nanoTime() - attemptStart);
 			}
 
-			if (!FileIntegrity.matches(tempStoreFile, task.fileSize, hashPathPair.hash())) {
+			try {
+				VerifiedFileTransfer.promoteAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash(), cache);
+			} catch (VerifiedFileTransfer.VerificationMismatchException e) {
 				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
 				return false;
-			}
-			try {
-				VerifiedFileTransfer.promoteAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash(), cache);
 			} catch (IOException e) {
 				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
 				LOGGER.warn("Failed to persist verified CAS object {}", hashPathPair.hash(), e);

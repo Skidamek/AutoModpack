@@ -137,6 +137,22 @@ class VerifiedFileTransferTest {
 		ImmutableFiles.deleteIfExists(source);
 	}
 
+	@Test
+	void promotionThrowsItsTypedMismatchAndPublishesOnlyMatchingBytes() throws IOException {
+		Path source = Files.writeString(tempDir.resolve("promotion-source"), "verified content", StandardCharsets.UTF_8);
+		Path target = tempDir.resolve("objects/promotion-target");
+		String hash = HashUtils.getHash(source);
+		long size = Files.size(source);
+
+		assertThrows(VerifiedFileTransfer.VerificationMismatchException.class,
+				() -> VerifiedFileTransfer.promoteAtomic(source, target, size, "0000000000000000000000000000000000000000"));
+		assertFalse(Files.exists(target));
+		assertTrue(Files.exists(source));
+
+		VerifiedFileTransfer.promoteAtomic(source, target, size, hash);
+		assertTrue(FileIntegrity.matches(target, size, hash));
+	}
+
 	private static Path differentFileStoreDirectory(Path targetRoot) throws IOException {
 		FileStore targetStore = Files.getFileStore(targetRoot);
 		for (Path candidate : List.of(Path.of(System.getProperty("user.home")), Path.of("/dev/shm"), Path.of("/tmp"))) {

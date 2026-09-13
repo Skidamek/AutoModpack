@@ -12,10 +12,27 @@ import pl.skidam.automodpack_core.utils.cache.FileCache;
 /**
  * Durable file installation. Ingress (untrusted bytes) hashes while copying. A source that already
  * passes {@link FileIntegrity#matchesNamed} is copied or linked without a second SHA-1; the destination
- * cache record is seeded from the advertised hash.
+ * cache record is seeded from the advertised hash. Promotion is the single-flight verification point for
+ * downloaded bytes: the temporary is read and hashed exactly once, published on match, and the resulting
+ * hash is recorded.
  */
 public final class VerifiedFileTransfer {
 	private VerifiedFileTransfer() {}
+
+	/**
+	 * The bytes did not match the expected size or SHA-1. Promotion throws this instead of a generic
+	 * {@link IOException} so callers can tell a bad source from a broken destination; the target is left
+	 * untouched.
+	 */
+	public static final class VerificationMismatchException extends IOException {
+		public VerificationMismatchException(String message) {
+			super(message);
+		}
+
+		public VerificationMismatchException(String message, Throwable cause) {
+			super(message, cause);
+		}
+	}
 
 	public static boolean copyAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
 		return copyAtomic(sourceFile, targetFile, expectedSize, expectedSha1, false, null);
@@ -104,14 +121,14 @@ public final class VerifiedFileTransfer {
 		}
 	}
 
+	/** Verifies the temporary once, publishes it as the target, and seeds the cache with the advertised hash. */
 	public static void promoteAtomic(Path temporary, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
 		promoteAtomic(temporary, targetFile, expectedSize, expectedSha1, null);
 	}
 
 	public static void promoteAtomic(Path temporary, Path targetFile, long expectedSize, String expectedSha1, FileCache cache) throws IOException {
 		FileTrees.forceFile(temporary);
-		if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1))
-			throw new IOException("Downloaded file failed size/SHA-1 verification: " + temporary);
+		if (!FileIntegrity.matches(temporary, expectedSize, expectedSha1)) throw new VerificationMismatchException("Downloaded file failed size/SHA-1 verification: " + temporary);
 		ImmutableFiles.protect(temporary);
 		Path targetParent = OsPaths.requirePublishableParent(targetFile, "Target path");
 		boolean crossFileSystem = false;
@@ -135,7 +152,7 @@ public final class VerifiedFileTransfer {
 			ImmutableFiles.allowOwnerWrite(targetTemporary);
 			FileTrees.forceFile(targetTemporary);
 			if (!FileIntegrity.matches(targetTemporary, expectedSize, expectedSha1))
-				throw new IOException("Cross-filesystem promotion failed size/SHA-1 verification: " + targetTemporary, crossFileSystem);
+				throw new VerificationMismatchException("Cross-filesystem promotion failed size/SHA-1 verification: " + targetTemporary, crossFileSystem);
 			ImmutableFiles.protect(targetTemporary);
 			DurableFiles.replace(targetTemporary, targetFile);
 		} finally {
