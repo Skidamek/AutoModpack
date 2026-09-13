@@ -22,6 +22,10 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.client.ClientOfflineRepair;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.ModpackUtils;
+import pl.skidam.automodpack_core.client.StoredModpackConnection;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
@@ -36,6 +40,10 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.screen.FailureCategory;
+import pl.skidam.automodpack_core.screen.FailureDestination;
+import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
@@ -45,14 +53,6 @@ import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
-import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_loader_core.client.ModpackUtils;
-import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
-import pl.skidam.automodpack_loader_core.screen.FailureCategory;
-import pl.skidam.automodpack_loader_core.screen.FailureDestination;
-import pl.skidam.automodpack_loader_core.screen.FailureRequest;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /**
  * Owns local installed-pack discovery and lifecycle operations used by the pack manager screens.

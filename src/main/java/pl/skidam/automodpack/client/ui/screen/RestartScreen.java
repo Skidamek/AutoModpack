@@ -14,10 +14,10 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.client.Changelogs;
+import pl.skidam.automodpack_core.client.UpdateType;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
-import pl.skidam.automodpack_loader_core.client.Changelogs;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
-import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class RestartScreen extends VersionedScreen {
 	private static final int BODY = 420;

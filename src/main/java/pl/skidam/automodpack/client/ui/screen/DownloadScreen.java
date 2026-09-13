@@ -18,9 +18,9 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack_core.client.DownloadManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.ByteFormat;
-import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 
 public class DownloadScreen extends VersionedScreen {
 	private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/green_background.png");

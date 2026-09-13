@@ -17,16 +17,16 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.client.Changelogs;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.screen.FailureCategory;
+import pl.skidam.automodpack_core.screen.FailureDestination;
+import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.HistoryViewRequest;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
-import pl.skidam.automodpack_loader_core.client.Changelogs;
-import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_loader_core.screen.FailureCategory;
-import pl.skidam.automodpack_loader_core.screen.FailureDestination;
-import pl.skidam.automodpack_loader_core.screen.FailureRequest;
-import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** A concise confirmation screen. Detailed file changes open in the shared browser. */
 public final class UpdatePreviewScreen extends VersionedScreen {

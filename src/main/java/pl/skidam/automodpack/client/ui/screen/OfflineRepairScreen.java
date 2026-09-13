@@ -20,14 +20,14 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
+import pl.skidam.automodpack_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.screen.FailureCategory;
+import pl.skidam.automodpack_core.screen.FailureDestination;
+import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
-import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
-import pl.skidam.automodpack_loader_core.screen.FailureCategory;
-import pl.skidam.automodpack_loader_core.screen.FailureDestination;
-import pl.skidam.automodpack_loader_core.screen.FailureRequest;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Reviews one cache-bypassing offline integrity inspection before any files are changed. */
 public final class OfflineRepairScreen extends VersionedScreen {

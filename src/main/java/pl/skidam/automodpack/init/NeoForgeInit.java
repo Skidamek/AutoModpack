@@ -9,7 +9,7 @@ import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;

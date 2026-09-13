@@ -15,6 +15,9 @@ import pl.skidam.automodpack.networking.client.ClientLoginDisconnect;
 import pl.skidam.automodpack.networking.content.LoginUpdateResponse;
 import pl.skidam.automodpack_core.auth.ConnectionStore;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.client.ManifestFetcher;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.ModpackUtils;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
@@ -27,17 +30,14 @@ import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.screen.FailureCategory;
+import pl.skidam.automodpack_core.screen.FailureDestination;
+import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.Throwables;
-import pl.skidam.automodpack_loader_core.client.ManifestFetcher;
-import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_loader_core.client.ModpackUtils;
-import pl.skidam.automodpack_loader_core.screen.FailureCategory;
-import pl.skidam.automodpack_loader_core.screen.FailureDestination;
-import pl.skidam.automodpack_loader_core.screen.FailureRequest;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Coordinates the client-side work that follows the login data query. */
 final class ClientLoginUpdateFlow {

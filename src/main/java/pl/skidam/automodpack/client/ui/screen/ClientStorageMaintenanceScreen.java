@@ -16,13 +16,13 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.screen.FailureCategory;
+import pl.skidam.automodpack_core.screen.FailureDestination;
+import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
-import pl.skidam.automodpack_loader_core.screen.FailureCategory;
-import pl.skidam.automodpack_loader_core.screen.FailureDestination;
-import pl.skidam.automodpack_loader_core.screen.FailureRequest;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** Provides an explicit, user-confirmed cleanup pass for client local storage. */
 public final class ClientStorageMaintenanceScreen extends VersionedScreen {

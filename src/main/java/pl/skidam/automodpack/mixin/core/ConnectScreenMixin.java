@@ -17,11 +17,11 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
-import pl.skidam.automodpack_loader_core.screen.FailureCategory;
-import pl.skidam.automodpack_loader_core.screen.FailureDestination;
-import pl.skidam.automodpack_loader_core.screen.FailureRequest;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.client.CertificateTrustStore;
+import pl.skidam.automodpack_core.screen.FailureCategory;
+import pl.skidam.automodpack_core.screen.FailureDestination;
+import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 
 /*? if >= 1.20.5 {*/
 import net.minecraft.client.multiplayer.TransferState;

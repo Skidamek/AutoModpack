@@ -19,8 +19,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.versioned.VersionedToasts;
 import pl.skidam.automodpack.client.ui.widget.Countdown;
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class SkipVerificationScreen extends VersionedScreen {
 	private static final int BODY = 420;

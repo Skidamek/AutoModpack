@@ -23,15 +23,15 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.VaultListWidget;
 import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.screen.FailureCategory;
+import pl.skidam.automodpack_core.screen.FailureDestination;
+import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
-import pl.skidam.automodpack_loader_core.screen.FailureCategory;
-import pl.skidam.automodpack_loader_core.screen.FailureDestination;
-import pl.skidam.automodpack_loader_core.screen.FailureRequest;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 /** One browser for every file AutoModpack preserved before a destructive change. */
 public final class PreservationVaultScreen extends VersionedScreen {

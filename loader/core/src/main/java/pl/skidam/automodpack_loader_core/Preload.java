@@ -8,6 +8,16 @@ import java.nio.file.*;
 import java.util.*;
 
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.client.ClientOfflineRepair;
+import pl.skidam.automodpack_core.client.DetachedUpdateHelper;
+import pl.skidam.automodpack_core.client.ManifestFetcher;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.ReLauncher;
+import pl.skidam.automodpack_core.client.SelfUpdater;
+import pl.skidam.automodpack_core.client.StoredModpackConnection;
+import pl.skidam.automodpack_core.client.UpdateAttempt;
+import pl.skidam.automodpack_core.client.UpdateTransactionSupport;
+import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.config.BootstrapInstaller;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
@@ -33,14 +43,8 @@ import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_core.utils.DurableFiles;
-import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
-import pl.skidam.automodpack_loader_core.client.ManifestFetcher;
-import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
-import pl.skidam.automodpack_loader_core.client.UpdateAttempt;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
-import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class Preload {
 	// Three deferred restarts for the same transaction id, then the next failed recover rolls back. The id is the episode; the count does not expire.
