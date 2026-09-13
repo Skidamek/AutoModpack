@@ -330,7 +330,7 @@ public final class UpdatePlanner {
 					null, beforeHash, null, null, List.copyOf(ledgerEntry.historicalGroupIds()), List.of()))));
 		}
 
-		List<ChangeSet.Effect> effects = restartReasons.stream().map(reason -> new ChangeSet.Effect("restart", reason.name())).toList();
+		List<ChangeSet.Effect> effects = restartReasons.stream().map(reason -> ChangeSet.Effect.restart(reason.name())).toList();
 		return ChangeSet.of(changes, effects);
 	}
 

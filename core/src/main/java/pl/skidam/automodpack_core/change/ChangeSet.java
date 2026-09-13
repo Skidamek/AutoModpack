@@ -405,6 +405,11 @@ public final class ChangeSet {
 			this.value = value.trim();
 		}
 
+		/** The effect marking that applying the change requires a launch restart, reasoned by the named restart reason. */
+		public static Effect restart(String reason) {
+			return new Effect("restart", reason);
+		}
+
 		public Effect validated() {
 			return new Effect(category, value);
 		}
