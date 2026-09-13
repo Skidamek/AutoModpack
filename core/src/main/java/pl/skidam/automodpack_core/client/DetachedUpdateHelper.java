@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -32,6 +33,13 @@ import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 
 public final class DetachedUpdateHelper {
 	private static final String HELPER_MAIN = UpdateHelperMain.class.getName();
+	// Receipt: the helper holds the lease for its parent-exit wait plus a retry budget of ~82.5s of sleeps
+	// (UpdateHelperMain) and per-attempt IO, so a helper that is converging frees the lease well inside it.
+	// Past this wait the helper is stuck on a game process that will not exit, and hanging this boot behind
+	// it serves nobody - the deferred recovery path proceeds without it and the helper keeps working alone.
+	private static final Duration HELPER_LEASE_WAIT = Duration.ofMinutes(3);
+	// A released lease is noticed within half a second, the helper's own initial backoff step.
+	private static final long LEASE_POLL_MILLIS = 500;
 
 	private DetachedUpdateHelper() {}
 
@@ -69,7 +77,9 @@ public final class DetachedUpdateHelper {
 	}
 
 	/**
-	 * True after waiting out a helper that already held the lease. False when none was running, so this boot can count a deferred restart.
+	 * True after waiting out a helper that already held the lease, so the caller should retry recovery once.
+	 * False when none was running, or when it still held the lease after {@link #HELPER_LEASE_WAIT} and this
+	 * boot proceeds without it - the running helper keeps its lease and finishes, or gives up, on its own.
 	 */
 	public static boolean awaitRunningHelper() throws IOException {
 		Path leaseFile = GameDirectory.current().resolve(HELPER_LEASE_FILE).toAbsolutePath().normalize();
@@ -86,9 +96,21 @@ public final class DetachedUpdateHelper {
 				return false;
 			}
 			LOGGER.info("Waiting for the detached update helper to finish");
-			try (FileLock ignored = channel.lock()) {
-				return true;
+			long deadline = System.nanoTime() + HELPER_LEASE_WAIT.toNanos();
+			while (System.nanoTime() < deadline) {
+				try (FileLock acquired = channel.tryLock()) {
+					if (acquired != null) return true;
+				}
+				try {
+					Thread.sleep(LEASE_POLL_MILLIS);
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					throw new IOException("Interrupted while waiting for the detached update helper lease", e);
+				}
 			}
+			LOGGER.error("The detached update helper still holds the lease after {} minutes; continuing without it, its own log is at {}", HELPER_LEASE_WAIT.toMinutes(),
+					GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
+			return false;
 		}
 	}
 
