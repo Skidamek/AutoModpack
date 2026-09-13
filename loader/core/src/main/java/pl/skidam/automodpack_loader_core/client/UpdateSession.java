@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -19,10 +20,16 @@ import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
+import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.JournalMirror;
@@ -32,6 +39,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateReviewPolicy;
+import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
@@ -43,7 +51,7 @@ import pl.skidam.automodpack_loader_core.UpdateTransactionSupport;
  * it exactly once. The session is created after the target is resolved and owns the plan from then on, so the prepared
  * side effects, the review state, and the replan can never drift apart the way separate fields could.
  */
-final class UpdateSession {
+final class UpdateSession implements UpdateAttempt {
 	private final ClientStorage storage;
 	private final ClientUpdatePlanBuilder planBuilder;
 	private final ModpackObjectAcquisition objectAcquisition;
@@ -97,16 +105,19 @@ final class UpdateSession {
 		return Objects.requireNonNull(review, "The session's plan has not been prepared");
 	}
 
-	boolean isApproved() {
+	@Override
+	public boolean isApproved() {
 		return review != null && review.isApproved();
 	}
 
-	void approve() {
+	@Override
+	public void approve() {
 		review().approve();
 	}
 
 	/** Cancels a not-yet-executing review; an executing plan is a durable fact and stays that way. */
-	void cancel() {
+	@Override
+	public void cancel() {
 		if (review != null) review.cancel();
 	}
 
@@ -183,7 +194,8 @@ final class UpdateSession {
 	 * executing plan is a durable fact, so the commit begins by sealing the review; the executor's own validation and
 	 * the outcome-checked replan carry every drift decision from here.
 	 */
-	RestartDecision.ApplyResult commit() throws Exception {
+	@Override
+	public RestartDecision.ApplyResult commit() throws Exception {
 		recordChangelogs(prepared());
 		review().beginExecution();
 		AtomicReference<ClientUpdatePlanBuilder.PreparedPlan> applied = new AtomicReference<>(prepared());
@@ -277,5 +289,56 @@ final class UpdateSession {
 
 	private ModpackJsons.ModpackContentFields storedTarget() throws IOException {
 		return ClientProjectionView.open(storage).target();
+	}
+
+	/** Rebuilds a pending update from current mutable inputs and commits it when the approved outcome still holds. */
+	static UpdateTransactionExecutor.Execution resume(ClientStorage storage, UpdateTransaction pending, ModpackLoaderService modpackLoader, String loaderType) throws Exception {
+		ClientUpdatePlanBuilder builder = new ClientUpdatePlanBuilder(storage, modpackLoader, loaderType);
+		ClientConfigJsons.ClientConfigFieldsV3 currentConfig = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		SelectedModpackTarget target = targetFor(storage, pending, currentConfig);
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
+			builder.reconcileEditableState(cache, target.flatTarget());
+			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, currentConfig, true), cache, modCache);
+			if (!ReviewedUpdatePlan.outcomeCompatible(pending.plan(), prepared.plan()))
+				throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending update outcome; a new review is required");
+			builder.preparePlanObjects(prepared.plan(), target.flatTarget());
+			return UpdateTransactionSupport.executor().commit(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
+		}
+	}
+
+	private static SelectedModpackTarget targetFor(ClientStorage storage, UpdateTransaction pending, ClientConfigJsons.ClientConfigFieldsV3 currentConfig) throws IOException {
+		ClientGenerationStore generations = new ClientGenerationStore(storage);
+		PackDocument pendingDocument = generations.document(pending);
+		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
+		boolean configStillDescribesThePendingInput = active == null
+				? !currentConfig.hasSelectedModpack()
+				: Objects.equals(currentConfig.selectedModpackId, active.modpackId);
+		PackDocument record;
+		if (configStillDescribesThePendingInput || pending.plan().modpackId().equals(currentConfig.selectedModpackId))
+			record = newer(pendingDocument, newest(generations, pending.plan().modpackId()));
+		else {
+			if (!ModpackId.isValid(currentConfig.selectedModpackId))
+				throw new IOException("Selected modpack changed to an invalid or empty ID while replanning the pending update");
+			record = newest(generations, currentConfig.selectedModpackId);
+			if (record == null) throw new IOException("Selected modpack generation is not installed: " + currentConfig.selectedModpackId);
+		}
+		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
+		SelectionIntent storedIntent = selections.get(record.manifest().modpackId()).orElse(null);
+		if (record.manifest().modpackId().equals(pending.plan().modpackId()) && Objects.equals(storedIntent, pending.expectedPriorIntent()))
+			return SelectedModpackTarget.prepare(record, storedIntent, pending.targetIntent(), pending.platform());
+		if (storedIntent == null) return SelectedModpackTarget.prepareDefault(record, pending.platform());
+		return SelectedModpackTarget.prepare(record, storedIntent, storedIntent, pending.platform());
+	}
+
+	private static PackDocument newest(ClientGenerationStore generations, String modpackId) throws IOException {
+		if (!ModpackId.isValid(modpackId)) return null;
+		return generations.newestDocument(modpackId);
+	}
+
+	private static PackDocument newer(PackDocument first, PackDocument second) {
+		if (second == null) return first;
+		if (first == null) return second;
+		return Comparator.comparing(PackDocument::createdAt).thenComparing(PackDocument::contentToken).compare(first, second) >= 0 ? first : second;
 	}
 }

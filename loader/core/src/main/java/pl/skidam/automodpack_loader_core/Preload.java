@@ -33,10 +33,10 @@ import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
-import pl.skidam.automodpack_loader_core.client.ClientPendingUpdateRecovery;
 import pl.skidam.automodpack_loader_core.client.ManifestFetcher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.StoredModpackConnection;
+import pl.skidam.automodpack_loader_core.client.UpdateAttempt;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -151,7 +151,7 @@ public class Preload {
 
 	private UpdateTransactionExecutor.Execution replanPendingTransaction(UpdateTransaction transaction) throws IOException {
 		try {
-			return ClientPendingUpdateRecovery.replan(storage, transaction, MODPACK_LOADER, LOADER);
+			return UpdateAttempt.resume(storage, transaction, MODPACK_LOADER, LOADER);
 		} catch (IOException e) {
 			throw new UpdateReplanRequiredException(null, "Pending update could not be replanned; its durable mailbox was retained", e);
 		}

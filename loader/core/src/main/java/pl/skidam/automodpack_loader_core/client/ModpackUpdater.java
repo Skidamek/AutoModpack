@@ -60,10 +60,9 @@ public class ModpackUpdater implements AutoCloseable {
 	private final PlatformCache platformCache;
 	private final ClientUpdatePlanBuilder planBuilder;
 	private final SourceCatalogue sourceCatalogue;
-	private final RemovalLifecycle removalLifecycle;
 	private final ProjectionLoader projectionLoader;
 	private final ModpackObjectAcquisition objectAcquisition;
-	private final AtomicReference<UpdateSession> attempt = new AtomicReference<>();
+	private final AtomicReference<UpdateAttempt> attempt = new AtomicReference<>();
 	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
 	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
 	/**
@@ -120,15 +119,15 @@ public class ModpackUpdater implements AutoCloseable {
 				&& selectedTarget.document().contentToken().equals(active.contentToken)
 				&& Objects.equals(selectedTarget.expectedPriorIntent(), selectedTarget.selection().intent()))
 			throw new IllegalArgumentException("Installed modpack target generation and group selection are already active");
-		UpdateSession switchAttempt = beginAttempt();
+		UpdateSession switchAttempt = beginUpdateAttempt();
 		switchAttempt.prepare(true, true);
 		return switchAttempt.preview(UpdateSession.InstalledTokenRule.ACTIVE_OR_MIRROR_HEAD);
 	}
 
 	/** Applies the last installed-generation switch plan through the normal atomic transaction executor. */
 	public void applyInstalledSwitch() throws Exception {
-		UpdateSession switchPlan = attempt.get();
-		if (switchPlan == null || selectedTarget == null) throw new IllegalStateException("Installed modpack switch was not prepared");
+		UpdateAttempt current = attempt.get();
+		if (!(current instanceof UpdateSession switchPlan) || selectedTarget == null) throw new IllegalStateException("Installed modpack switch was not prepared");
 		if (!switchPlan.isApproved()) switchPlan.approve();
 		// The switch flow reports its failure through its own caller, so its failure handling carries the failure out of the harness.
 		AtomicReference<Exception> propagated = new AtomicReference<>();
@@ -225,7 +224,7 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Applies a new group selection and re-enters the preview path from confirm or preview customize. */
 	public void reselectAndPreview(SelectionIntent intent) {
 		selectTarget(intent);
-		UpdateSession previous = attempt.getAndSet(null);
+		UpdateAttempt previous = attempt.getAndSet(null);
 		if (previous != null) previous.cancel();
 		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
 		if (firstConnection && confirmationState.get() == ConfirmationState.WAITING) {
@@ -270,7 +269,6 @@ public class ModpackUpdater implements AutoCloseable {
 		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, MODPACK_LOADER, LOADER);
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
 		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformCache);
-		this.removalLifecycle = new RemovalLifecycle(this.storage, this.planBuilder, changelogs, this::afterRemovalApply);
 		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);
 		this.downloadClient = downloadClient;
 		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.downloadClient,
@@ -284,11 +282,20 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** Replaces any in-flight attempt so prepare, review, and commit cannot drift across two sessions. */
-	private UpdateSession beginAttempt() {
-		UpdateSession next = newSession();
-		UpdateSession previous = attempt.getAndSet(next);
+	private <T extends UpdateAttempt> T beginAttempt(T next) {
+		UpdateAttempt previous = attempt.getAndSet(next);
 		if (previous != null) previous.cancel();
 		return next;
+	}
+
+	private UpdateSession beginUpdateAttempt() {
+		return beginAttempt(newSession());
+	}
+
+	private RemovalAttempt requireRemoval(RemovalAttempt.Kind kind) {
+		UpdateAttempt current = attempt.get();
+		if (!(current instanceof RemovalAttempt removal) || removal.kind() != kind) throw new IllegalStateException("Modpack lifecycle action was not prepared");
+		return removal;
 	}
 
 	private static PlatformCache openPlatformCache(ClientStorage storage) {
@@ -503,22 +510,28 @@ public class ModpackUpdater implements AutoCloseable {
 
 	// Build the removal plan without changing the installed files.
 	public UpdatePreview previewRemoval() throws Exception {
-		return removalLifecycle.previewRemoval();
+		return beginAttempt(new RemovalAttempt(storage, planBuilder, changelogs, RemovalAttempt.Kind.REMOVAL)).preview();
 	}
 
 	public UpdatePreview previewDeactivation() throws Exception {
-		return removalLifecycle.previewDeactivation();
+		return beginAttempt(new RemovalAttempt(storage, planBuilder, changelogs, RemovalAttempt.Kind.DEACTIVATION)).preview();
 	}
 
 	public record LifecycleApply(boolean success, boolean restartRequired) {}
 
 	public LifecycleApply deactivateModpack() throws Exception {
-		return removalLifecycle.deactivateModpack();
+		return commitRemoval(RemovalAttempt.Kind.DEACTIVATION);
 	}
 
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
 	public LifecycleApply removeModpack() throws Exception {
-		return removalLifecycle.removeModpack();
+		return commitRemoval(RemovalAttempt.Kind.REMOVAL);
+	}
+
+	private LifecycleApply commitRemoval(RemovalAttempt.Kind kind) throws Exception {
+		ApplyResult result = requireRemoval(kind).commit();
+		afterRemovalApply(result);
+		return new LifecycleApply(true, result.requiresRestart());
 	}
 
 	/** Removal has no in-game content load: only a plan that names a restart reason asks the player to restart. */
@@ -624,7 +637,7 @@ public class ModpackUpdater implements AutoCloseable {
 				close();
 				return UpdateOutcome.INCOMPLETE;
 			}
-			UpdateSession switchAttempt = attempt.get();
+			UpdateAttempt switchAttempt = attempt.get();
 			Runnable continueAction = () -> {
 				try {
 					if (attempt.get() != switchAttempt) return;
@@ -710,7 +723,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		sourceCatalogue.startSourceFetch();
 		requireLiveConnection();
-		UpdateSession session = beginAttempt();
+		UpdateSession session = beginUpdateAttempt();
 		session.prepare(true, false);
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		ClientUpdatePlanBuilder.PreparedPlan prepared = session.prepared();
@@ -795,9 +808,8 @@ public class ModpackUpdater implements AutoCloseable {
 		confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED);
 		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.CANCELLED);
 		interruptInFlight();
-		UpdateSession current = attempt.getAndSet(null);
+		UpdateAttempt current = attempt.getAndSet(null);
 		if (current != null) current.cancel();
-		removalLifecycle.cancelPendingReview();
 		objectAcquisition.release();
 		if (closed.compareAndSet(false, true)) {
 			if (downloadClient != null) downloadClient.close();
