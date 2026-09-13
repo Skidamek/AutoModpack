@@ -31,8 +31,6 @@ val junitVersion = versionProperty("versionJunit")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
 val aircompressorVersion = versionProperty("versionAircompressor")
 
-val gson18 = configurations.create("gson18")
-
 val deps =
 	listOf(
 		"io.netty:netty-all:$nettyVersion",
@@ -55,7 +53,6 @@ dependencies {
 
 	testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitVersion")
-	gson18("com.google.code.gson:gson:2.8.9")
 }
 
 java {
@@ -83,9 +80,6 @@ tasks.named<Test>("test") {
 			.filter { rootProject.file("versions/${it.name}").isDirectory }
 			.map { it.tasks.named("compileJava") },
 	)
-	doFirst {
-		systemProperty("gson18.jar", gson18.singleFile.absolutePath)
-	}
 }
 
 // Configure the ShadowJar task
