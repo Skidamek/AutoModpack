@@ -2,9 +2,7 @@ package pl.skidam.automodpack_core.utils;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
 
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
@@ -34,14 +32,17 @@ public final class FileIntegrity {
 	}
 
 	public static boolean matches(Path file, long expectedSize, String expectedSha1, FileCache cache) {
-		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
 		try {
-			if (Files.size(file) != expectedSize) return false;
-			String hash = identityHash(file, cache);
-			return hash != null && expectedSha1.equalsIgnoreCase(hash);
+			return matches(file, expectedSize, expectedSha1, cache, FileCache.statSnapshot(file));
 		} catch (IOException e) {
 			return false;
 		}
+	}
+
+	private static boolean matches(Path file, long expectedSize, String expectedSha1, FileCache cache, FileCache.StatSnapshot snapshot) {
+		if (!snapshot.isTrackedRegularFile() || snapshot.size() != expectedSize) return false;
+		String hash = identityHash(file, cache, snapshot);
+		return hash != null && expectedSha1.equalsIgnoreCase(hash);
 	}
 
 	/**
@@ -50,6 +51,11 @@ public final class FileIntegrity {
 	 */
 	public static String identityHash(Path file, FileCache cache) {
 		if (cache != null) return cache.getHashOrNull(file);
+		return HashUtils.getHash(file);
+	}
+
+	private static String identityHash(Path file, FileCache cache, FileCache.StatSnapshot snapshot) {
+		if (cache != null) return cache.getHashOrNull(file, snapshot);
 		return HashUtils.getHash(file);
 	}
 
@@ -68,14 +74,19 @@ public final class FileIntegrity {
 	 * regular file of the advertised size.
 	 */
 	public static boolean matchesNamed(Path file, long expectedSize, String expectedSha1, FileCache cache) {
-		if (!HashUtils.isSha1(expectedSha1) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
+		if (!HashUtils.isSha1(expectedSha1)) return false;
 		try {
-			if (Files.size(file) != expectedSize) return false;
-			if (cache != null) return cache.matchesImmutable(file, expectedSize, expectedSha1);
-			return true;
+			return matchesNamed(file, expectedSize, expectedSha1, cache, FileCache.statSnapshot(file));
 		} catch (IOException e) {
 			return false;
 		}
+	}
+
+	private static boolean matchesNamed(Path file, long expectedSize, String expectedSha1, FileCache cache, FileCache.StatSnapshot snapshot) {
+		if (!HashUtils.isSha1(expectedSha1)) return false;
+		if (!snapshot.isTrackedRegularFile() || snapshot.size() != expectedSize) return false;
+		if (cache == null) return true;
+		return cache.matchesImmutable(file, expectedSize, expectedSha1, snapshot);
 	}
 
 	/**
@@ -85,23 +96,28 @@ public final class FileIntegrity {
 	 * on the ctime our own {@code link()} and {@code chmod()} bump at every publication.
 	 */
 	public static boolean matchesObject(Path file, Path canonicalObject, long expectedSize, String expectedSha1, FileCache cache) {
-		if (matchesNamed(canonicalObject, expectedSize, expectedSha1, cache) && sameInode(file, canonicalObject)) return true;
+		if (!HashUtils.isSha1(expectedSha1)) return false;
+		try {
+			FileCache.StatSnapshot canonical = FileCache.statSnapshot(canonicalObject);
+			if (matchesNamed(canonicalObject, expectedSize, expectedSha1, cache, canonical) && sameInode(file, canonicalObject, canonical, FileCache.statSnapshot(file))) return true;
+		} catch (IOException e) {
+			// A stat failure answers false on the disturbed side, like every other read here; the file side decides below.
+		}
 		return matchesNamed(file, expectedSize, expectedSha1, cache);
 	}
 
 	/** Whether two regular non-symlink paths share an inode (Unix file key / NTFS file index). */
 	public static boolean sameInode(Path left, Path right) {
 		try {
-			if (!Files.isRegularFile(left, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(right, LinkOption.NOFOLLOW_LINKS)) return false;
-			BasicFileAttributes leftAttributes = Files.readAttributes(left, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-			BasicFileAttributes rightAttributes = Files.readAttributes(right, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-			if (leftAttributes.isSymbolicLink() || rightAttributes.isSymbolicLink()) return false;
-			String leftKey = FileCache.fingerprint(left, leftAttributes).fileKey();
-			String rightKey = FileCache.fingerprint(right, rightAttributes).fileKey();
-			if (leftKey != null && rightKey != null) return leftKey.equals(rightKey);
-			return Files.isSameFile(left, right);
+			return sameInode(left, right, FileCache.statSnapshot(left), FileCache.statSnapshot(right));
 		} catch (IOException e) {
 			return false;
 		}
+	}
+
+	private static boolean sameInode(Path left, Path right, FileCache.StatSnapshot leftSnapshot, FileCache.StatSnapshot rightSnapshot) throws IOException {
+		if (!leftSnapshot.isTrackedRegularFile() || !rightSnapshot.isTrackedRegularFile()) return false;
+		if (leftSnapshot.fileKey() != null && rightSnapshot.fileKey() != null) return leftSnapshot.fileKey().equals(rightSnapshot.fileKey());
+		return Files.isSameFile(left, right);
 	}
 }

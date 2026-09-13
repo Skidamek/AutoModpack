@@ -9,10 +9,12 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /**
  * A shared, path-keyed file hash cache backed by immutable loose records.
@@ -100,6 +102,23 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	public record FileFingerprint(long lastModifiedNanos, long creationTimeNanos, long changeTimeNanos, long size, String fileKey) {}
 
+	/**
+	 * One stat for an identity question: every field {@link FileFingerprint} needs plus the regular-file and
+	 * symlink flags the callers reject on. OpenJDK Unix filesystems (macOS included) answer it from a single
+	 * fused {@code "unix:*"} read; filesystems without that view fall back to the split reads, producing
+	 * identical values for an unchanged file.
+	 */
+	public record StatSnapshot(FileTime lastModifiedTime, FileTime creationTime, long changeTimeNanos, long size, String fileKey, boolean regularFile, boolean symbolicLink) {
+		/** Whether this is the only kind the cache tracks: a regular file that is not a symbolic link. */
+		public boolean isTrackedRegularFile() {
+			return regularFile && !symbolicLink;
+		}
+
+		public FileFingerprint fingerprint() {
+			return new FileFingerprint(toNanos(lastModifiedTime), toNanos(creationTime), changeTimeNanos, size, fileKey);
+		}
+	}
+
 	private record ComputedHash(String hash, BasicFileAttributes attributes, FileFingerprint fingerprint) {}
 
 	public static FileCache open(Path path) throws IOException {
@@ -123,7 +142,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
 		String pathKey = absPath.toString();
 		synchronized (lock(pathKey)) {
-			ComputedHash computed = computeStableHash(absPath, attrs, LinkOption.NOFOLLOW_LINKS);
+			ComputedHash computed = computeStableHash(absPath, fingerprint(absPath, attrs), LinkOption.NOFOLLOW_LINKS);
 			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
 			return computed.hash();
 		}
@@ -131,13 +150,17 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	public String getOrComputeHashWithAttributes(Path file, BasicFileAttributes attrs) {
 		Path absPath = file.toAbsolutePath().normalize();
+		return getOrComputeHashWithFingerprint(absPath, fingerprint(absPath, attrs));
+	}
+
+	private String getOrComputeHashWithFingerprint(Path file, FileFingerprint fingerprint) {
+		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
-		FileFingerprint fingerprint = fingerprint(absPath, attrs);
 		synchronized (lock(pathKey)) {
 			CachedFile cached = readRecord(pathKey, CachedFile.class);
 			if (isCacheValid(cached, fingerprint)) return cached.contentHash();
 
-			ComputedHash computed = computeStableHash(absPath, attrs);
+			ComputedHash computed = computeStableHash(absPath, fingerprint);
 			if (computed == null) return null;
 
 			return publishComputed(pathKey, computed);
@@ -172,7 +195,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 			FileFingerprint fingerprint = fingerprint(absPath, attrs);
 			CachedFile cached = readRecord(pathKey, CachedFile.class);
 			if (!statsMatch(cached, fingerprint)) {
-				getOrComputeHashWithAttributes(absPath, attrs);
+				getOrComputeHashWithFingerprint(absPath, fingerprint);
 				cached = readRecord(pathKey, CachedFile.class);
 				if (!statsMatch(cached, fingerprint(absPath, Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS))))
 					throw new IOException("Cannot obtain a stable hash record for murmur: " + absPath);
@@ -198,16 +221,21 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	 */
 	public boolean matchesImmutable(Path file, long expectedSize, String expectedSha1) throws IOException {
 		if (!HashUtils.isSha1(expectedSha1)) return false;
-		Path absPath = file.toAbsolutePath().normalize();
-		if (!Files.isRegularFile(absPath, LinkOption.NOFOLLOW_LINKS)) return false;
-		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-		if (attrs.isSymbolicLink() || attrs.size() != expectedSize) return false;
+		return matchesImmutable(file, expectedSize, expectedSha1, statSnapshot(file));
+	}
+
+	/** Snapshot-carrying variant so a caller holding one fused stat answers the whole question from it. */
+	public boolean matchesImmutable(Path file, long expectedSize, String expectedSha1, StatSnapshot snapshot) {
+		if (!HashUtils.isSha1(expectedSha1)) return false;
+		if (!snapshot.isTrackedRegularFile() || snapshot.size() != expectedSize) return false;
 		String sha1 = HashUtils.normalizeSha1(expectedSha1);
+		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
 		synchronized (lock(pathKey)) {
 			CachedFile cached = readRecord(pathKey, CachedFile.class);
-			if (immutableStatsMatch(cached, fingerprint(absPath, attrs))) return sha1.equalsIgnoreCase(cached.contentHash());
-			String observed = getOrComputeHashWithAttributes(absPath, attrs);
+			FileFingerprint fingerprint = snapshot.fingerprint();
+			if (immutableStatsMatch(cached, fingerprint)) return sha1.equalsIgnoreCase(cached.contentHash());
+			String observed = getOrComputeHashWithFingerprint(absPath, fingerprint);
 			return observed != null && sha1.equalsIgnoreCase(observed);
 		}
 	}
@@ -223,10 +251,53 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	}
 
 	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
-		WindowsFileStat.Snapshot nativeStat = WindowsFileStat.read(path);
-		long changeTimeNanos = nativeStat != null ? nativeStat.changeTimeNanos() : unixChangeTimeNanos(path);
-		String fileKey = nativeStat != null ? nativeStat.fileKey() : attrs.fileKey() == null ? null : attrs.fileKey().toString();
-		return new FileFingerprint(toNanos(attrs.lastModifiedTime()), toNanos(attrs.creationTime()), changeTimeNanos, attrs.size(), fileKey);
+		return snapshot(path, attrs, WindowsFileStat.read(path)).fingerprint();
+	}
+
+	private static StatSnapshot snapshot(Path path, BasicFileAttributes attributes, WindowsFileStat.Snapshot nativeStat) {
+		return new StatSnapshot(attributes.lastModifiedTime(), attributes.creationTime(), nativeStat != null ? nativeStat.changeTimeNanos() : unixChangeTimeNanos(path), attributes.size(),
+				nativeStat != null ? nativeStat.fileKey() : keyString(attributes), attributes.isRegularFile(), attributes.isSymbolicLink());
+	}
+
+	/**
+	 * A single-stat {@link StatSnapshot} of {@code path}, never following symbolic links. OpenJDK Unix
+	 * filesystems answer it in one fused read; if any needed field comes back missing or mistyped the split
+	 * reads below produce exactly the values {@link #fingerprint(Path, BasicFileAttributes)} would.
+	 */
+	public static StatSnapshot statSnapshot(Path path) throws IOException {
+		if (PlatformUtils.operatingSystem() != PlatformUtils.OperatingSystem.WINDOWS) {
+			try {
+				StatSnapshot fused = fusedSnapshot(Files.readAttributes(path, "unix:*", LinkOption.NOFOLLOW_LINKS));
+				if (fused != null) return fused;
+			} catch (UnsupportedOperationException | IllegalArgumentException e) {
+				// No fused unix view on this filesystem (foreign providers, odd mounts): the split reads answer identically.
+			}
+		}
+		return splitSnapshot(path);
+	}
+
+	private static StatSnapshot splitSnapshot(Path path) throws IOException {
+		return snapshot(path, Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS), WindowsFileStat.read(path));
+	}
+
+	/** Parses the fused read; null whenever a field is missing or mistyped, so the caller falls back to the split reads. */
+	private static StatSnapshot fusedSnapshot(Map<String, Object> attributes) {
+		FileTime lastModifiedTime = fileTime(attributes, "lastModifiedTime");
+		FileTime creationTime = fileTime(attributes, "creationTime");
+		FileTime changeTime = fileTime(attributes, "ctime");
+		if (lastModifiedTime == null || creationTime == null || changeTime == null || !(attributes.get("size") instanceof Long size) || !(attributes.get("isRegularFile") instanceof Boolean regularFile)
+				|| !(attributes.get("isSymbolicLink") instanceof Boolean symbolicLink))
+			return null;
+		Object key = attributes.get("fileKey");
+		return new StatSnapshot(lastModifiedTime, creationTime, toNanos(changeTime), size, key == null ? null : key.toString(), regularFile, symbolicLink);
+	}
+
+	private static FileTime fileTime(Map<String, Object> attributes, String name) {
+		return attributes.get(name) instanceof FileTime time ? time : null;
+	}
+
+	private static String keyString(BasicFileAttributes attrs) {
+		return attrs.fileKey() == null ? null : attrs.fileKey().toString();
 	}
 
 	private static long unixChangeTimeNanos(Path path) {
@@ -247,10 +318,9 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		return now.getEpochSecond() * 1_000_000_000L + now.getNano();
 	}
 
-	private ComputedHash computeStableHash(Path file, BasicFileAttributes initialAttributes, LinkOption... options) {
-		BasicFileAttributes before = initialAttributes;
+	private ComputedHash computeStableHash(Path file, FileFingerprint initialFingerprint, LinkOption... options) {
+		FileFingerprint beforeFingerprint = initialFingerprint;
 		for (int attempt = 0; attempt < 3; attempt++) {
-			FileFingerprint beforeFingerprint = fingerprint(file, before);
 			String hash = HashUtils.getHash(file);
 			if (hash == null) return null;
 			try {
@@ -258,7 +328,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 				if (!after.isRegularFile() || after.isSymbolicLink()) return null;
 				FileFingerprint afterFingerprint = fingerprint(file, after);
 				if (beforeFingerprint.equals(afterFingerprint)) return new ComputedHash(hash, after, afterFingerprint);
-				before = after;
+				beforeFingerprint = afterFingerprint;
 			} catch (IOException e) {
 				return null;
 			}
@@ -303,6 +373,11 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 			LOGGER.error("Failed to compute hash for path: {}", path, e);
 			return null;
 		}
+	}
+
+	/** Snapshot-carrying twin of {@link #getHashOrNull(Path)}: the identity question is answered from the snapshot's single stat. */
+	public String getHashOrNull(Path path, StatSnapshot snapshot) {
+		return getOrComputeHashWithFingerprint(path.toAbsolutePath().normalize(), snapshot.fingerprint());
 	}
 
 	// Use only if you are SURE of the file state!
