@@ -25,7 +25,6 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
-import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
@@ -39,7 +38,6 @@ import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.OfflineRepair;
 import pl.skidam.automodpack_core.update.PreservationVault;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -189,28 +187,45 @@ final class InstalledModpackController {
 
 	private String stalePackName(String modpackId) {
 		try {
-			List<JournalEntry> entries = new JournalMirror(storage).entries(modpackId);
-			if (!entries.isEmpty()) {
-				String name = new ClientGenerationStore(storage).policyDocument(entries.get(entries.size() - 1).policySha1()).modpackName();
-				if (!name.isBlank()) return name;
-			}
+			PackDocument record = new ClientGenerationStore(storage).newestDocument(modpackId);
+			if (record != null) return displayName(record, connectionOrigin(connection(modpackId)));
 		} catch (IOException | RuntimeException ignored) {
 			// The name is cosmetic; the raw id is the honest fallback, not a discovery failure.
 		}
 		return modpackId;
 	}
 
-	/** Forgets one non-active installed pack's retained local state and its now-unreferenced objects; the restart prompt is the consent. */
-	void forgetStalePack(String modpackId, Runnable completed) {
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			try {
-				new ClientGenerationStore(storage).forgetModpack(modpackId);
-				releaseOnClient(completed);
-			} catch (Exception e) {
-				releaseOnClient(completed);
-				failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
-			}
-		});
+	/** The restart footer only offers the action; consent is the same removal preview the pack manager uses, one pack at a time. */
+	void offerStalePackRemoval(Runnable completed) {
+		previewStaleRemoval(stalePacks(), 0, completed);
+	}
+
+	private void previewStaleRemoval(List<StalePack> stale, int index, Runnable completed) {
+		if (index >= stale.size()) {
+			completed.run();
+			return;
+		}
+		StalePack pack = stale.get(index);
+		try {
+			PackDocument record = new ClientGenerationStore(storage).newestDocument(pack.modpackId());
+			if (record == null) throw new IOException("Stale pack has no installed generation: " + pack.modpackId());
+			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(record), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(record.manifest());
+			boolean shown = ScreenManager.preview(preview, pack.name(), null,
+					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> {
+						try {
+							new ClientGenerationStore(storage).forgetModpack(pack.modpackId());
+							releaseOnClient(() -> previewStaleRemoval(stale, index + 1, completed));
+						} catch (Exception e) {
+							releaseOnClient(completed);
+							failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+						}
+					}), completed);
+			if (!shown) completed.run();
+		} catch (Exception e) {
+			completed.run();
+			failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
+		}
 	}
 
 	Path restorePreservedFile(String modpackId, String claimId) throws IOException {
