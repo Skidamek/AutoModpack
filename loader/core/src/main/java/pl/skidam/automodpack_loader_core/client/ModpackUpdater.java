@@ -455,7 +455,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 		long start = System.currentTimeMillis();
 		sourceCatalogue.startSourceFetch();
-		UpdateSession launch = newSession();
+		UpdateSession launch = beginUpdateAttempt();
 		launch.prepare(false, false);
 		if (planWritesUnverifiedJar(launch.prepared().plan())) {
 			LOGGER.warn("Launch apply aborted: unverified jars will not be written during preload; leaving the live pack unchanged");

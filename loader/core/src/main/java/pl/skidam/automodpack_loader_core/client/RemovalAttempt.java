@@ -48,7 +48,6 @@ final class RemovalAttempt implements UpdateAttempt {
 
 	UpdatePreview preview() throws Exception {
 		prepared = planBuilder.prepareRemoval();
-		clientConfig = prepared.currentConfig();
 		review = ReviewedUpdatePlan.pending(prepared.plan());
 		return removalPreview(prepared, kind == Kind.REMOVAL ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION);
 	}
@@ -73,7 +72,7 @@ final class RemovalAttempt implements UpdateAttempt {
 	public ApplyResult commit() throws Exception {
 		if (prepared == null || review == null) throw new IllegalStateException("Modpack lifecycle action was not prepared");
 		if (!review.isApproved()) review.approve();
-		clientConfig = prepared.currentConfig();
+		review.beginExecution();
 		boolean remove = kind == Kind.REMOVAL;
 		UpdatePreview applied = removalPreview(prepared, remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION);
 		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor().commit(transactionOf(prepared, kind, storage.overlayDigest(prepared.installed().modpackId)));

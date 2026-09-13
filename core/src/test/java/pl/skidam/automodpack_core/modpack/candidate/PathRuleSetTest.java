@@ -37,4 +37,23 @@ class PathRuleSetTest {
 		assertFalse(rules.evaluate("mods/client/iris.jar").matched());
 		assertEquals(Set.of("mods"), rules.safeScanRoots());
 	}
+
+	@Test
+	void globMatchingIsCaseSensitive() {
+		PathRuleSet rules = new PathRuleSet(List.of("Mods/*.jar"));
+
+		assertTrue(rules.matches("Mods/foo.jar"));
+		assertFalse(rules.matches("mods/foo.jar"));
+	}
+
+	@Test
+	void braceAndCharacterClassGlobsStayGlobs() {
+		PathRuleSet rules = new PathRuleSet(List.of("{mods,config}/*.jar", "kubejs/[ab].js"));
+
+		assertTrue(rules.matches("mods/sodium.jar"));
+		assertTrue(rules.matches("config/foo.jar"));
+		assertFalse(rules.matches("resourcepacks/pack.jar"));
+		assertTrue(rules.matches("kubejs/a.js"));
+		assertFalse(rules.matches("kubejs/c.js"));
+	}
 }

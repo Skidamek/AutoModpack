@@ -45,15 +45,16 @@ class ConfigUtilsTest {
 		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
 		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
 		group.syncedFiles = new LinkedHashSet<>(List.of("automodpack/host-modpack/main/extra", "!automodpack/host-modpack/main/skip/**"));
-		group.excludedFiles = new LinkedHashSet<>(List.of("automodpack/host-modpack/main/**", "automodpack/host-modpack/other/**", "/automodpack/host-modpack/main"));
+		group.excludedFiles = new LinkedHashSet<>(
+				List.of("automodpack/host-modpack/main/**", "automodpack/host-modpack/other/**", "/automodpack/host-modpack/main", "automodpack/host-modpack/main/**/**", "automodpack/host-modpack/main/**/*"));
 		config.groups = new LinkedHashMap<>(Map.of("main", group));
 
 		ConfigUtils.normalizeServerConfig(config);
 
 		// Own-group synced rules are dropped entirely: the group directory is included in full, so they are redundant.
 		assertEquals(List.of(), List.copyOf(group.syncedFiles));
-		// Whole-directory remainders (`**`, empty) are dropped: excludedFiles also matches synced paths.
+		// Whole-directory remainders (empty, `**`, `**/*`, collapsed `**/**`) are dropped: excludedFiles also matches synced paths.
 		// A foreign group's rule is kept verbatim instead of being rewritten into this group's space.
-		assertEquals(List.of("automodpack/host-modpack/other/**", "automodpack/host-modpack/main"), List.copyOf(group.excludedFiles));
+		assertEquals(List.of("automodpack/host-modpack/other/**"), List.copyOf(group.excludedFiles));
 	}
 }

@@ -61,7 +61,7 @@ public class ConfigUtils {
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
 
-		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<this group>/' prefix.
+		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<this group>' prefix (slash optional).
 		if (config.groups == null) return;
 		for (var groupEntry : config.groups.entrySet()) {
 			var group = groupEntry.getValue();
@@ -69,7 +69,7 @@ public class ConfigUtils {
 				LOGGER.warn("Ignored null group declaration '{}'.", groupEntry.getKey());
 				continue;
 			}
-			Pattern ownGroupPrefix = Pattern.compile("^/?automodpack/host-modpack/" + Pattern.quote(groupEntry.getKey()) + "/");
+			Pattern ownGroupPrefix = Pattern.compile("^/?automodpack/host-modpack/" + Pattern.quote(groupEntry.getKey()) + "(?:/|$)");
 			group.syncedFiles = normalizeRuleSet(group.syncedFiles, "syncedFiles", groupEntry.getKey(), ownGroupPrefix, true);
 			group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", groupEntry.getKey(), ownGroupPrefix, false);
 			group.allowEditsInFiles = normalizeRuleSet(group.allowEditsInFiles, "allowEditsInFiles", groupEntry.getKey(), ownGroupPrefix, false);
@@ -96,7 +96,9 @@ public class ConfigUtils {
 					if (dropOwnGroupPaths) LOGGER.info("Removed redundant {} entry '{}': the group directory under '/automodpack/host-modpack/' is included in full.", configKey, rule);
 					else {
 						String remainder = ownGroupPrefix.matcher(body).replaceFirst("");
-						if (remainder.isBlank() || remainder.equals("**"))
+						while (remainder.startsWith("/")) remainder = remainder.substring(1);
+						while (remainder.contains("**/**")) remainder = remainder.replace("**/**", "**");
+						if (remainder.isBlank() || remainder.equals("**") || remainder.equals("**/*"))
 							LOGGER.warn("Ignored {} entry '{}': a whole-directory host-modpack rule would also match every synced path.", configKey, rule);
 						else
 							normalized.add((negated ? "!" : "") + remainder);

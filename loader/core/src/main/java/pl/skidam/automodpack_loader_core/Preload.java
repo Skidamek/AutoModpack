@@ -32,6 +32,7 @@ import pl.skidam.automodpack_core.update.UpdateReplanRequiredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
+import pl.skidam.automodpack_core.utils.DurableFiles;
 import pl.skidam.automodpack_loader_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_loader_core.client.ManifestFetcher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -152,6 +153,8 @@ public class Preload {
 	private UpdateTransactionExecutor.Execution replanPendingTransaction(UpdateTransaction transaction) throws IOException {
 		try {
 			return UpdateAttempt.resume(storage, transaction, MODPACK_LOADER, LOADER);
+		} catch (UpdateReplanRequiredException e) {
+			throw e;
 		} catch (IOException e) {
 			throw new UpdateReplanRequiredException(null, "Pending update could not be replanned; its durable mailbox was retained", e);
 		}
@@ -201,10 +204,7 @@ public class Preload {
 	}
 
 	private void quarantineTransaction(Exception reason) throws IOException {
-		Files.createDirectories(storage.clientDirectory());
-		Path quarantine = storage.clientDirectory().resolve("update-transaction.invalid-" + UUID.randomUUID() + ".json");
-		Files.move(storage.transactionFile(), quarantine, StandardCopyOption.REPLACE_EXISTING);
-		LOGGER.error("Quarantined invalid update transaction at {}", quarantine.toAbsolutePath().normalize(), reason);
+		DurableFiles.setAside(storage.transactionFile(), "Persisted update transaction", reason);
 	}
 
 	private void updateAll() {

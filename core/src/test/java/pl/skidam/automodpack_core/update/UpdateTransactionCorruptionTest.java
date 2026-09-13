@@ -60,9 +60,24 @@ class UpdateTransactionCorruptionTest {
 	}
 
 	@Test
-	void validTransactionStillLoads() throws Exception {
+	void priorSchemaTransactionIsSetAsideAndStartupSeesNoTransaction() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
 		Files.writeString(file, "{\"schemaVersion\":1,\"transactionId\":\"t1\",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"targetPlatform\":\"linux\","
+				+ "\"plan\":{\"modpackId\":\"packaa1\",\"contentToken\":\"" + TOKEN + "\",\"policySha1\":\"" + TOKEN + "\",\"ledgerDigest\":\"" + TOKEN + "\","
+				+ "\"operations\":[],\"projectedFinalState\":[],\"restartReasons\":[\"SELECTED_MODPACK\"],\"preservations\":[],\"baselineCaptures\":[],\"conflicts\":[],\"generatedCopies\":[],"
+				+ "\"plannedClientConfig\":null,\"consequences\":{\"changes\":[],\"effects\":[]}}}");
+
+		assertNull(UpdateTransaction.read(file));
+		assertTrue(Files.notExists(file));
+		try (var leftovers = Files.list(tempDir)) {
+			assertEquals(1, leftovers.filter(path -> path.getFileName().toString().startsWith("update-transaction.json.corrupt-")).toList().size());
+		}
+	}
+
+	@Test
+	void validTransactionStillLoads() throws Exception {
+		Path file = tempDir.resolve("update-transaction.json");
+		Files.writeString(file, "{\"schemaVersion\":2,\"transactionId\":\"t1\",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"targetPlatform\":\"linux\","
 				+ "\"plan\":{\"modpackId\":\"packaa1\",\"contentToken\":\"" + TOKEN + "\",\"policySha1\":\"" + TOKEN + "\",\"ledgerDigest\":\"" + TOKEN + "\","
 				+ "\"operations\":[],\"projectedFinalState\":[],\"restartReasons\":[\"SELECTED_MODPACK\"],\"preservations\":[],\"baselineCaptures\":[],\"conflicts\":[],\"generatedCopies\":[],"
 				+ "\"plannedClientConfig\":null,\"consequences\":{\"changes\":[],\"effects\":[]}}}");

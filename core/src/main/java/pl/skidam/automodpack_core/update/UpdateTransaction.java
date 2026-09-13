@@ -26,7 +26,8 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * client state it was planned against, the selection intents, the target's ledger) and the execution lifecycle.
  */
 public final class UpdateTransaction {
-	public static final int CURRENT_SCHEMA_VERSION = 1;
+	/** Pre-production: schema 1 write-ahead logs are unusable content; there is no migration. */
+	public static final int CURRENT_SCHEMA_VERSION = 2;
 
 	public int schemaVersion;
 	public String transactionId;
@@ -64,7 +65,7 @@ public final class UpdateTransaction {
 	 * The document's completeness contract: a transaction without a whole, constructor-validated plan is unusable
 	 * content and is set aside. Gson fills the class tree without running constructors, so validation lives here.
 	 */
-	private static UpdateTransaction validated(UpdateTransaction transaction) {
+	static UpdateTransaction validated(UpdateTransaction transaction) {
 		if (transaction.schemaVersion != CURRENT_SCHEMA_VERSION || transaction.plan == null)
 			throw new IllegalArgumentException("Persisted update transaction fields are incomplete");
 		transaction.plan = transaction.plan.validated();

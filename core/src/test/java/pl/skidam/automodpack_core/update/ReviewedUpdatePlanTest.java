@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.update.UpdatePlan.NestedCopy;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
@@ -86,6 +87,24 @@ class ReviewedUpdatePlanTest {
 	}
 
 	@Test
+	void generatedCopiesArePartOfTheApprovedOutcome() {
+		NestedCopy first = new NestedCopy("mods/b.jar", OTHER_HASH, 2, Set.of("b"));
+		NestedCopy second = new NestedCopy("mods/a.jar", OBJECT_HASH, 1, Set.of("a"));
+		// Same path/sha1/size in a different order, with different transient ids, is still the same index.
+		UpdatePlan approved = plan(List.of(), List.of(), new ClientConfigJsons.ClientConfigFieldsV3(), ChangeSet.empty(), List.of(first, second));
+		UpdatePlan reordered = plan(List.of(), List.of(), new ClientConfigJsons.ClientConfigFieldsV3(), ChangeSet.empty(),
+				List.of(new NestedCopy("mods/a.jar", OBJECT_HASH, 1, Set.of("ignored")), first));
+		assertTrue(ReviewedUpdatePlan.outcomeCompatible(approved, reordered));
+		ReviewedUpdatePlan.pending(approved).requireCompatible(reordered);
+
+		UpdatePlan drifted = plan(List.of(), List.of(), new ClientConfigJsons.ClientConfigFieldsV3(), ChangeSet.empty(),
+				List.of(new NestedCopy("mods/c.jar", OBJECT_HASH, 1, Set.of())));
+		IllegalStateException failure = assertThrows(IllegalStateException.class, () -> ReviewedUpdatePlan.pending(approved).requireCompatible(drifted));
+		assertTrue(failure.getMessage().contains("generated copies"));
+		assertFalse(ReviewedUpdatePlan.outcomeCompatible(approved, drifted));
+	}
+
+	@Test
 	void aDriftedProjectedFinalStateCannotBypassReview() {
 		ReviewedUpdatePlan reviewed = ReviewedUpdatePlan.pending(plan(
 				List.of(operation("mods/a.jar", OBJECT_HASH)),
@@ -147,8 +166,13 @@ class ReviewedUpdatePlanTest {
 	}
 
 	private static UpdatePlan plan(List<Operation> operations, List<ProjectedFile> projected, ClientConfigJsons.ClientConfigFieldsV3 config, ChangeSet consequences) {
+		return plan(operations, projected, config, consequences, List.of());
+	}
+
+	private static UpdatePlan plan(List<Operation> operations, List<ProjectedFile> projected, ClientConfigJsons.ClientConfigFieldsV3 config, ChangeSet consequences,
+			List<NestedCopy> generatedCopies) {
 		return new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), "c".repeat(40)), operations, projected,
-				config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), consequences);
+				config, Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), generatedCopies, consequences);
 	}
 
 	private static Operation operation(String path, String objectHash) {
