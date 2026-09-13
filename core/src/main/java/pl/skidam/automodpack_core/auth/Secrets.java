@@ -35,7 +35,8 @@ public class Secrets {
 
 		@Override
 		public String toString() {
-			return "Secret{secret='" + secret + '\'' + ", timestamp=" + timestamp + '}';
+			// The raw secret is a bearer credential; logging a Secret object must never print it.
+			return "Secret{secret=<redacted>, timestamp=" + timestamp + '}';
 		}
 	}
 
