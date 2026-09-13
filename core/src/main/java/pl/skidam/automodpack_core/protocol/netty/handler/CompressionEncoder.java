@@ -15,6 +15,16 @@ public class CompressionEncoder extends MessageToByteEncoder<ByteBuf> {
 	private CompressionType compressionType;
 	private final ProtocolFrameCodec.FrameScratch scratch = new ProtocolFrameCodec.FrameScratch();
 
+	/**
+	 * Pre-sizes the frame the same way the worker does in {@code ServerMessageHandler.writeFrame}, so a large
+	 * payload never grows the buffer by doubling. Exact for single-frame payloads; a multi-chunk message only
+	 * grows once past it, and {@code codec(ctx)} here is the same lazy init {@link #encode} already does on the loop.
+	 */
+	@Override
+	protected ByteBuf allocateBuffer(ChannelHandlerContext ctx, ByteBuf msg, boolean preferDirect) {
+		return ctx.alloc().ioBuffer(ProtocolFrameCodec.HEADER_BYTES + codec(ctx).maxCompressedLength(msg.readableBytes()));
+	}
+
 	@Override
 	protected void encode(ChannelHandlerContext ctx, ByteBuf msg, ByteBuf out) throws Exception {
 		Integer chunkSize = ctx.channel().attr(NettyServer.CHUNK_SIZE).get();
