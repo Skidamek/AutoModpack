@@ -54,16 +54,15 @@ public class NettyServer {
 	private String certificateFingerprint;
 	private SslContext sslCtx;
 
+	// The map is already a concurrent one and every access is a single atomic operation, so no external
+	// lock adds anything - readers get the live map and see per-entry updates immediately.
+
 	public void addConnection(Channel channel, String secret) {
-		synchronized (connections) {
-			connections.put(channel, secret);
-		}
+		connections.put(channel, secret);
 	}
 
 	public void removeConnection(Channel channel) {
-		synchronized (connections) {
-			connections.remove(channel);
-		}
+		connections.remove(channel);
 	}
 
 	public Map<Channel, String> getConnections() {
