@@ -7,6 +7,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -54,19 +55,19 @@ public final class DurableFiles {
 
 	/**
 	 * Moves a persisted state file that cannot be understood aside as evidence, renamed in place next to where it
-	 * lived, so callers can treat it as absent instead of crashing; false when even the move failed, which the log
-	 * carries. The evidence stays until a human removes it.
+	 * lived, so callers can treat it as absent instead of crashing. A failed move is IO trouble and propagates: the
+	 * poison is still at the live path, so continuing as empty would re-log every boot. The evidence stays until a
+	 * human removes it.
 	 */
-	public static boolean setAside(Path file, String description, Exception cause) {
-		Path aside = file.resolveSibling(file.getFileName() + CORRUPT_ASIDE_MARKER + System.currentTimeMillis());
+	public static void setAside(Path file, String description, Exception cause) throws IOException {
+		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return;
+		Path aside = file.resolveSibling(file.getFileName() + CORRUPT_ASIDE_MARKER + UUID.randomUUID());
 		try {
 			Files.move(file, aside);
 			LOGGER.error("{} is unusable and was set aside as {}: {}", description, aside.getFileName(), cause, cause);
-			return true;
 		} catch (IOException moveFailure) {
 			moveFailure.addSuppressed(cause);
-			LOGGER.error("{} is unusable and could not be set aside: {}", description, file, moveFailure);
-			return false;
+			throw new IOException(description + " is unusable and could not be set aside: " + file, moveFailure);
 		}
 	}
 
