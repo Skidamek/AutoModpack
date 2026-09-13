@@ -328,7 +328,7 @@ public final class PreservationVault {
 		return fields.claims.stream().filter(claim -> claimId.equals(claim.claimId)).findFirst().orElseThrow(() -> new IOException("Preservation claim is no longer available: " + claimId));
 	}
 
-	/** The modpack's current manifest, or an empty vault when none was persisted yet. Unusable content is set aside as evidence and fails this boot: the manifest is the only map of preserved originals. */
+	/** The modpack's current manifest, or an empty vault when none was persisted yet. Unusable content fails this boot in place: the manifest is the only map of preserved originals. */
 	private static ClientStorageJsons.ClientPreservationVaultFields readFields(ClientStorage storage, String modpackId) throws IOException {
 		Path root = storage.preservationPackDirectory(modpackId);
 		FileTrees.requireNoSymbolicLinkDescendants(storage.preservationDirectory(), root, "preservation vault");

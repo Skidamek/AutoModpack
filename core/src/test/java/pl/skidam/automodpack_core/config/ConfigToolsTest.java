@@ -198,16 +198,33 @@ class ConfigToolsTest {
 	}
 
 	@Test
-	void readUniqueFailsThisBootAfterSettingUnusableHistoryAside() throws Exception {
+	void readUniqueFailsEveryBootInPlaceUntilAHumanMovesTheHistory() throws Exception {
 		Path unusable = temporaryDirectory.resolve("history.json");
 		Files.writeString(unusable, "{\"value\": -1}", StandardCharsets.UTF_8);
 
 		assertThrows(IOException.class, () -> ConfigTools.readUnique(unusable, StateDocument.class, "Test history", StateDocument::validated));
-		assertFalse(Files.exists(unusable));
+		// The evidence stays where the owner wrote it, so the next boot fails with the same cause instead of reading empty history.
+		assertEquals("{\"value\": -1}", Files.readString(unusable, StandardCharsets.UTF_8));
 		try (var leftovers = Files.list(temporaryDirectory)) {
-			assertEquals(1, leftovers.filter(path -> path.getFileName().toString().startsWith("history.json.corrupt-")).count());
+			assertEquals(0, leftovers.filter(path -> path.getFileName().toString().startsWith("history.json.corrupt-")).count());
 		}
+		assertThrows(IOException.class, () -> ConfigTools.readUnique(unusable, StateDocument.class, "Test history", StateDocument::validated));
+
+		// Deleting the file is the explicit human decision; only then does the path read as never written.
+		Files.delete(unusable);
 		assertTrue(ConfigTools.readUnique(unusable, StateDocument.class, "Test history", StateDocument::validated).isEmpty());
+	}
+
+	@Test
+	void readUniqueFailsInPlaceOnANonRegularPathWithoutTouchingIt() throws Exception {
+		Path directory = temporaryDirectory.resolve("history.json");
+		Files.createDirectory(directory);
+
+		assertThrows(IOException.class, () -> ConfigTools.readUnique(directory, StateDocument.class, "Test history", StateDocument::validated));
+		assertTrue(Files.isDirectory(directory));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			assertEquals(0, leftovers.filter(path -> path.getFileName().toString().startsWith("history.json.corrupt-")).count());
+		}
 	}
 
 	public static class StateDocument {

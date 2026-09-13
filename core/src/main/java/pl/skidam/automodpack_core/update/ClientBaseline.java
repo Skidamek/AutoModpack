@@ -32,7 +32,7 @@ public record ClientBaseline(String modpackId, List<Entry> entries) {
 
 	/**
 	 * Reads the modpack's persisted baseline, returning an empty baseline when none was persisted yet. Unusable
-	 * content is set aside as evidence and fails this boot: the baseline is the only map of what was here before the
+	 * content fails this boot in place: the baseline is the only map of what was here before the
 	 * pack, so continuing as empty would drop user files on the next removal.
 	 */
 	public static ClientBaseline read(ClientStorage storage, String modpackId) throws IOException {
