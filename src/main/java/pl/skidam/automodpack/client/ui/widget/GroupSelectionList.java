@@ -96,6 +96,41 @@ public final class GroupSelectionList extends ContainerObjectSelectionList<Group
 	}
 
 	/*?}*/
+	/*? if >=26.1 {*/
+	@Override
+	protected void extractListBackground(GuiGraphicsExtractor guiGraphics) {}
+
+	@Override
+	protected void extractListSeparators(GuiGraphicsExtractor guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	/*?} elif >=1.21.10 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected boolean entriesCanBeSelected() {
+		return false;
+	}
+	*//*?} elif >=1.21.1 {*/
+	/*@Override
+	protected void renderListBackground(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderListSeparators(GuiGraphics guiGraphics) {}
+
+	@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
+	*//*?} elif >=1.20.4 {*/
+	/*@Override
+	protected void renderSelection(GuiGraphics guiGraphics, int y, int entryWidth, int entryHeight, int outlineColor, int innerColor) {}
+	*//*?}*/
 
 	@Override
 	public void revealRow(int index) {
