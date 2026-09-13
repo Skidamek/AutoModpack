@@ -370,7 +370,7 @@ public final class ClientStorage {
 		return overlaysDirectory.resolve(ModpackId.requireValid(modpackId) + ".json").normalize();
 	}
 
-	/** The pack's overlay tombstones, or an empty overlay state when none was persisted. Unusable content is set aside as evidence and fails this boot so deleted overlay files cannot silently return. */
+	/** The pack's overlay tombstones, or an empty overlay state when none was persisted. Unusable content fails this boot in place so deleted overlay files cannot silently return. */
 	public ClientStorageJsons.ClientOverlayFields readOverlayState(String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
 		return ConfigTools.readUnique(overlayStateFile(normalizedModpackId), ClientStorageJsons.ClientOverlayFields.class, "Client overlay state",
@@ -440,7 +440,7 @@ public final class ClientStorage {
 	}
 
 	/**
-	 * The active pack pointer, or null when none was persisted yet. Unusable content is set aside as evidence and
+	 * The active pack pointer, or null when none was persisted yet. Unusable content fails this boot in place and
 	 * fails this boot: the pointer carries the detach flag, so continuing as empty would silently rejoin enforcement.
 	 */
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {

@@ -99,8 +99,10 @@ public final class ConfigTools {
 
 	/**
 	 * Reads unique client history (baseline, vault, overlay tombstones, the active pointer): missing still means
-	 * never written, but unusable content is set aside as evidence and then fails this boot instead of continuing as
-	 * empty. Real IO trouble of a regular file propagates the same way. The next boot treats the path as missing.
+	 * never written, and unusable content fails this boot in place. No aside happens, so the evidence stays where
+	 * the owner wrote it and every later boot keeps failing with the same cause instead of reading the history as
+	 * empty; moving, fixing, or deleting the file is the explicit human decision that unblocks the next boot. Real
+	 * IO trouble of a regular file propagates the same way.
 	 */
 	public static <F, S> Optional<S> readUnique(Path path, Class<F> type, String description, Function<F, S> fromFields) throws IOException {
 		return readPersisted(path, type, description, fromFields, PersistFate.UNIQUE);
@@ -112,26 +114,20 @@ public final class ConfigTools {
 
 	private static <F, S> Optional<S> readPersisted(Path path, Class<F> type, String description, Function<F, S> fromFields, PersistFate fate) throws IOException {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
+		boolean rebuildable = fate == PersistFate.REBUILDABLE;
 		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-			DurableFiles.setAside(path, description, new IOException(description + " is not a regular file: " + path));
-			if (fate == PersistFate.UNIQUE) throw new IOException(description + " is unusable and was set aside as evidence: " + path);
+			IOException unusable = new IOException(description + " is not a regular file: " + path);
+			if (!rebuildable) throw unusable;
+			DurableFiles.setAside(path, description, unusable);
 			return Optional.empty();
 		}
-		F fields;
 		try {
-			fields = readDocument(path, type, description);
+			return Optional.of(fromFields.apply(readDocument(path, type, description)));
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
+			if (!rebuildable) throw new IOException(description + " is unusable; it fails every boot until a human moves, fixes, or deletes it: " + path, e);
 			DurableFiles.setAside(path, description, e);
-			if (fate == PersistFate.UNIQUE) throw new IOException(description + " is unusable and was set aside as evidence: " + path, e);
-			return Optional.empty();
-		}
-		try {
-			return Optional.of(fromFields.apply(fields));
-		} catch (RuntimeException e) {
-			DurableFiles.setAside(path, description, e);
-			if (fate == PersistFate.UNIQUE) throw new IOException(description + " is unusable and was set aside as evidence: " + path, e);
 			return Optional.empty();
 		}
 	}
