@@ -186,11 +186,28 @@ class ConfigToolsTest {
 	}
 
 	@Test
-	void readStateStillFailsOnAFileThatIsNotARegularFile() throws Exception {
+	void readStateSetsANonRegularPathAsideAsUnusableContent() throws Exception {
 		Path directory = temporaryDirectory.resolve("state.json");
 		Files.createDirectory(directory);
 
-		assertThrows(IOException.class, () -> ConfigTools.readState(directory, StateDocument.class, "Test state", StateDocument::validated));
+		assertTrue(ConfigTools.readState(directory, StateDocument.class, "Test state", StateDocument::validated).isEmpty());
+		assertFalse(Files.exists(directory));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			assertEquals(1, leftovers.filter(path -> path.getFileName().toString().startsWith("state.json.corrupt-")).count());
+		}
+	}
+
+	@Test
+	void readUniqueFailsThisBootAfterSettingUnusableHistoryAside() throws Exception {
+		Path unusable = temporaryDirectory.resolve("history.json");
+		Files.writeString(unusable, "{\"value\": -1}", StandardCharsets.UTF_8);
+
+		assertThrows(IOException.class, () -> ConfigTools.readUnique(unusable, StateDocument.class, "Test history", StateDocument::validated));
+		assertFalse(Files.exists(unusable));
+		try (var leftovers = Files.list(temporaryDirectory)) {
+			assertEquals(1, leftovers.filter(path -> path.getFileName().toString().startsWith("history.json.corrupt-")).count());
+		}
+		assertTrue(ConfigTools.readUnique(unusable, StateDocument.class, "Test history", StateDocument::validated).isEmpty());
 	}
 
 	public static class StateDocument {

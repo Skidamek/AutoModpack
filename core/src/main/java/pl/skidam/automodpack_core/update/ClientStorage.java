@@ -370,10 +370,10 @@ public final class ClientStorage {
 		return overlaysDirectory.resolve(ModpackId.requireValid(modpackId) + ".json").normalize();
 	}
 
-	/** The pack's overlay tombstones, or an empty overlay state when none was persisted; an unusable state is set aside as evidence and reads as empty. */
+	/** The pack's overlay tombstones, or an empty overlay state when none was persisted. Unusable content is set aside as evidence and fails this boot so deleted overlay files cannot silently return. */
 	public ClientStorageJsons.ClientOverlayFields readOverlayState(String modpackId) throws IOException {
 		String normalizedModpackId = ModpackId.requireValid(modpackId);
-		return ConfigTools.readState(overlayStateFile(normalizedModpackId), ClientStorageJsons.ClientOverlayFields.class, "Client overlay state",
+		return ConfigTools.readUnique(overlayStateFile(normalizedModpackId), ClientStorageJsons.ClientOverlayFields.class, "Client overlay state",
 				fields -> canonicalTombstones(normalizedModpackId, fields)).orElseGet(() -> {
 					ClientStorageJsons.ClientOverlayFields empty = new ClientStorageJsons.ClientOverlayFields();
 					empty.modpackId = normalizedModpackId;
@@ -440,11 +440,11 @@ public final class ClientStorage {
 	}
 
 	/**
-	 * The active pack pointer, or null when none was persisted yet. An unusable state is set aside as evidence and
-	 * reads as no active pack; the next committed update writes it fresh.
+	 * The active pack pointer, or null when none was persisted yet. Unusable content is set aside as evidence and
+	 * fails this boot: the pointer carries the detach flag, so continuing as empty would silently rejoin enforcement.
 	 */
 	public ClientStorageJsons.ClientGenerationStateFields readActiveState() throws IOException {
-		return ConfigTools.readState(stateFile, ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ClientStorage::validatedActiveState).orElse(null);
+		return ConfigTools.readUnique(stateFile, ClientStorageJsons.ClientGenerationStateFields.class, "Client active state", ClientStorage::validatedActiveState).orElse(null);
 	}
 
 	private static ClientStorageJsons.ClientGenerationStateFields validatedActiveState(ClientStorageJsons.ClientGenerationStateFields state) {
@@ -467,15 +467,11 @@ public final class ClientStorage {
 
 	/**
 	 * The persistent detachment flag of the active pack: commits republish the same pack's sovereignty, so only an
-	 * explicit attach or a cleared state may end it. An unreadable state carries no live flag; the fresh write repairs it.
+	 * explicit attach or a cleared state may end it. An unreadable pointer fails the write instead of clearing the flag.
 	 */
-	private boolean currentDetachmentFor(String modpackId) {
-		try {
-			ClientStorageJsons.ClientGenerationStateFields current = readActiveState();
-			return current != null && current.modpackId.equals(modpackId) && current.detached;
-		} catch (IOException e) {
-			return false;
-		}
+	private boolean currentDetachmentFor(String modpackId) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields current = readActiveState();
+		return current != null && current.modpackId.equals(modpackId) && current.detached;
 	}
 
 	public void clearActiveState() throws IOException {

@@ -88,26 +88,62 @@ public final class ConfigTools {
 	}
 
 	/**
-	 * Reads one persisted-but-rebuildable state document under the corrupt-file-aside policy: a missing file reads as
-	 * empty, an unusable one is set aside as evidence with a loud log and also reads as empty, and only real IO trouble
-	 * propagates. The mapper folds every content validation in, so anything it rejects counts as unusable content; the
-	 * state's owner stays the sole authority on what its document must look like.
+	 * Reads one persisted-but-rebuildable state document: a missing file reads as empty, unusable content (including a
+	 * non-regular path occupying the name) is set aside as evidence and also reads as empty, and only real IO trouble
+	 * of a regular file propagates. The mapper folds every content validation in; the state's owner stays the sole
+	 * authority on what its document must look like. A failed aside is IO trouble, never empty.
 	 */
 	public static <F, S> Optional<S> readState(Path path, Class<F> type, String description, Function<F, S> fromFields) throws IOException {
+		return readPersisted(path, type, description, fromFields, PersistFate.REBUILDABLE);
+	}
+
+	/**
+	 * Reads unique client history (baseline, vault, overlay tombstones, the active pointer): missing still means
+	 * never written, but unusable content is set aside as evidence and then fails this boot instead of continuing as
+	 * empty. Real IO trouble of a regular file propagates the same way. The next boot treats the path as missing.
+	 */
+	public static <F, S> Optional<S> readUnique(Path path, Class<F> type, String description, Function<F, S> fromFields) throws IOException {
+		return readPersisted(path, type, description, fromFields, PersistFate.UNIQUE);
+	}
+
+	private enum PersistFate {
+		REBUILDABLE, UNIQUE
+	}
+
+	private static <F, S> Optional<S> readPersisted(Path path, Class<F> type, String description, Function<F, S> fromFields, PersistFate fate) throws IOException {
 		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
-		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " is not a regular file: " + path);
-		try {
-			F fields = read(path, type).orElseThrow(() -> new ConfigParseException(description + " is empty: " + path));
-			return Optional.of(fromFields.apply(fields));
-		} catch (ConfigParseException e) {
-			DurableFiles.setAside(path, description, e);
-			return Optional.empty();
-		} catch (ConfigException e) {
-			throw e; // a file that cannot be physically read is IO trouble, never unusable content
-		} catch (RuntimeException e) {
-			DurableFiles.setAside(path, description, e);
+		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+			DurableFiles.setAside(path, description, new IOException(description + " is not a regular file: " + path));
+			if (fate == PersistFate.UNIQUE) throw new IOException(description + " is unusable and was set aside as evidence: " + path);
 			return Optional.empty();
 		}
+		F fields;
+		try {
+			fields = readDocument(path, type, description);
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			DurableFiles.setAside(path, description, e);
+			if (fate == PersistFate.UNIQUE) throw new IOException(description + " is unusable and was set aside as evidence: " + path, e);
+			return Optional.empty();
+		}
+		try {
+			return Optional.of(fromFields.apply(fields));
+		} catch (RuntimeException e) {
+			DurableFiles.setAside(path, description, e);
+			if (fate == PersistFate.UNIQUE) throw new IOException(description + " is unusable and was set aside as evidence: " + path, e);
+			return Optional.empty();
+		}
+	}
+
+	/** Reads one regular file as JSON without wrapping physical IO in {@link ConfigException}. */
+	private static <T> T readDocument(Path path, Class<T> type, String description) throws IOException {
+		String json = Files.readString(path, StandardCharsets.UTF_8);
+		if (json.isBlank()) throw new ConfigParseException(description + " is empty: " + path);
+		T value = parse(json, type);
+		List<String> unknown = unknownKeys(json, type);
+		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
+		return value;
 	}
 
 	public static <T> T parse(String json, Class<T> type) {

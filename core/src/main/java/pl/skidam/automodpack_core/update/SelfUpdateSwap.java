@@ -53,21 +53,13 @@ public final class SelfUpdateSwap {
 	 */
 	public static void recover(Path gameDirectory, DataRootResolver.Location dataLocation) throws IOException {
 		Path recordFile = gameDirectory.resolve(SELF_UPDATE_FILE).normalize();
-		StorageJsons.SelfUpdateFields swap;
-		try {
-			swap = ConfigTools.readState(recordFile, StorageJsons.SelfUpdateFields.class, "Pending self-update record", fields -> {
-				try {
-					return validated(fields.currentPath, fields.targetPath, fields.targetSha1, fields.targetSize, fields.currentSha1);
-				} catch (IOException e) {
-					throw new IllegalArgumentException("Pending self-update record is invalid", e);
-				}
-			}).orElse(null);
-		} catch (IOException | RuntimeException e) {
-			// Only physically unreadable or not-a-file records land here; everything else readState already set aside.
-			DurableFiles.setAside(recordFile, "Pending self-update record", e);
-			LOGGER.error("The unreadable pending self-update record was set aside, so the swap was skipped and AutoModpack stays on its current jar");
-			return;
-		}
+		StorageJsons.SelfUpdateFields swap = ConfigTools.readState(recordFile, StorageJsons.SelfUpdateFields.class, "Pending self-update record", fields -> {
+			try {
+				return validated(fields.currentPath, fields.targetPath, fields.targetSha1, fields.targetSize, fields.currentSha1);
+			} catch (IOException e) {
+				throw new IllegalArgumentException("Pending self-update record is invalid", e);
+			}
+		}).orElse(null);
 		if (swap == null) return;
 		try {
 			installTarget(gameDirectory, dataLocation, swap);
