@@ -11,6 +11,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.SelfUpdateSwap;
@@ -33,12 +34,13 @@ public final class UpdateHelperMain {
 
 	static int run(String[] arguments) {
 		try {
-			if (arguments.length != 1) throw new IOException("Expected parent PID");
+			if (arguments.length < 1 || arguments.length > 2) throw new IOException("Expected parent PID and optional environment");
 			long parentPid = Long.parseLong(arguments[0]);
 			if (parentPid <= 0 || parentPid == ProcessHandle.current().pid()) throw new IOException("Invalid parent PID");
+			LoaderManagerService.EnvironmentType environment = environment(arguments);
 
 			Path gameDirectory = GameDirectory.current();
-			DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory);
+			DataRootResolver.Location dataLocation = DataRootResolver.resolve(gameDirectory, environment);
 			Path leaseFile = gameDirectory.resolve(HELPER_LEASE_FILE).toAbsolutePath().normalize();
 			Files.createDirectories(leaseFile.getParent());
 			try (FileChannel leaseChannel = FileChannel.open(leaseFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
@@ -86,6 +88,20 @@ public final class UpdateHelperMain {
 		} catch (Exception failure) {
 			failure.printStackTrace();
 			return 1;
+		}
+	}
+
+	/**
+	 * The environment role the launching game process resolved its data root with, so the helper recovers through the
+	 * same root the planner planned into. Blank when the launcher did not know its role either; those processes share
+	 * the roleless client selection anyway.
+	 */
+	private static LoaderManagerService.EnvironmentType environment(String[] arguments) throws IOException {
+		if (arguments.length < 2 || arguments[1].isBlank()) return null;
+		try {
+			return LoaderManagerService.EnvironmentType.valueOf(arguments[1]);
+		} catch (IllegalArgumentException e) {
+			throw new IOException("Unknown launcher environment: " + arguments[1]);
 		}
 	}
 

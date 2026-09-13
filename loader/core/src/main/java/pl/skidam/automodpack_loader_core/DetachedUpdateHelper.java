@@ -57,9 +57,12 @@ public final class DetachedUpdateHelper {
 		// The game process exits right after this launch, so inherited streams would die with it; the helper's story must outlive the game in a file.
 		// Append: a second helper that loses the lease still starts with this redirect already open, and must not truncate the running helper's log.
 		Path helperLog = GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize();
-		new ProcessBuilder(javaExecutable.toString(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid())).directory(GameDirectory.current().toFile())
+		// The helper JVM has no loader service, so it cannot know this process's role; the data root it must recover
+		// through is the one this process resolved, and on dedicated servers that is the role-scoped server root.
+		String environment = LOADER_MANAGER == null || LOADER_MANAGER.getEnvironmentType() == null ? "" : LOADER_MANAGER.getEnvironmentType().name();
+		new ProcessBuilder(javaExecutable.toString(), "-cp", classpath, HELPER_MAIN, Long.toString(ProcessHandle.current().pid()), environment).directory(GameDirectory.current().toFile())
 				.redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(helperLog.toFile())).start();
-		LOGGER.info("Launched detached update helper for the latest pending transaction from {}; its output goes to {}", helperJar, helperLog);
+		LOGGER.info("Launched detached update helper for the latest pending transaction from {} (environment {}); its output goes to {}", helperJar, environment.isBlank() ? "unknown" : environment, helperLog);
 	}
 
 	/**
