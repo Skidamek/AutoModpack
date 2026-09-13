@@ -31,6 +31,38 @@ They control which files are sent to the client and which files the client is al
 | `groups.<id>.excludedFiles`        | `["kubejs/server_scripts/**"]`              | Paths to leave out of the modpack. The group directory under `host-modpack/` is included in full, so this is the only way to keep a file there from reaching clients; it also carves exceptions out of `syncedFiles`. Supports wildcards. |
 | `groups.<id>.allowEditsInFiles`    | `["options.txt", "config/**"]`              | Files clients download but can edit locally. Local edits are preserved until the server version of the file changes; then the edited copy is saved to the client's "Preserved files" and the new server version is applied once. Supports wildcards. |
 
+## Groups
+
+`groups` maps a group id to one part of your modpack. The default id `main` exists in every config; extra entries in `groups` become optional parts that players can turn on or off. Each group has two content sources, exactly like `main`: its directory under `host-modpack/<id>/` is included in full, and its `syncedFiles` rules pull in files from the server root.
+
+The fields below shape what players see and can choose. Players pick optional groups in the in-game "Modpack settings" screen (clients can hide that button with `showModpackSettingsButton` in the [client config](client-config)); the choice is saved on the client and honored at every sync.
+
+| Setting                  | Default | Description                                                                                                                    |
+|--------------------------|---------|--------------------------------------------------------------------------------------------------------------------------------|
+| `groups.<id>.displayName`| `""`    | Name shown to players in the Modpack settings screen. The map key is the id used by rules and other groups.                    |
+| `groups.<id>.description`| `""`    | Short player-facing description of the group.                                                                                  |
+| `groups.<id>.category`   | `""`    | Optional label that groups related entries together in the client UI.                                                          |
+| `groups.<id>.required`   | `false` | When true, players cannot deselect the group; it is always part of the pack.                                                   |
+| `groups.<id>.defaultSelected` | `false` | Preselected for players who have not chosen yet; ignored when `required` is true.                                         |
+| `groups.<id>.requires`   | `[]`    | Group ids that must also be selected for this group to make sense (a shader config pack that needs its shader pack).           |
+| `groups.<id>.breaksWith` | `[]`    | Group ids that cannot be selected alongside this one (two mods that replace the same files).                                   |
+| `groups.<id>.compatiblePlatforms` | `[]` | Restricts the group to matching platforms: `windows`, `linux`, or `macos`. Empty means every platform. A group with client-only mods stays out of a server's own pack this way. |
+
+A typical optional group looks like:
+
+```json
+"groups": {
+  "main": { "...": "as above" },
+  "shaders": {
+    "displayName": "Shader bundle",
+    "description": "Performance-friendly shader pack",
+    "defaultSelected": false
+  }
+}
+```
+
+Its files go into `host-modpack/shaders/` following the same layout as `~/.minecraft/`.
+
 ## Globbing wildcards
 
 For each group's `syncedFiles`, `excludedFiles` and `allowEditsInFiles`, use the following patterns relative to the server root (a leading `/` is allowed and ignored):

@@ -101,15 +101,7 @@ Check with:
 uv --project autotester run pytest autotester/tests/test_locale.py
 ```
 
-### 5. Documentation
-If you have a knack for writing, you can help improve the project's documentation. Clear and comprehensive documentation is crucial for users to understand how to use AutoModpack effectively.
-
-1. Fork the repository and create a new branch for your documentation changes.
-2. Edit existing documentation in the `/docs` directory or create new guides as needed.
-3. Ensure your changes are clear, concise, and well-structured.
-4. Submit a pull request with a description of your changes.
-
-### 6. Spread the Word
+### 5. Spread the Word
 Even if you're not a developer, you can still contribute by spreading the word about AutoModpack :)
 
 ## Code of Conduct

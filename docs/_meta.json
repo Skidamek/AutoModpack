@@ -1,34 +1,26 @@
 {
   "quick-start.mdx": {
-    "name": "🚀 Quick Start",
-    "icon": null
-  },
-  "usage": {
-    "name": "Usage",
+    "name": "Quick start",
     "icon": null
   },
   "configuration": {
-    "name": "\uD83D\uDEE0\uFE0F Configuration",
+    "name": "Configuration",
     "icon": null
   },
   "commands": {
-    "name": "⌨\uFE0F Commands",
-    "icon": null
-  },
-  "examples": {
-    "name": "\uD83D\uDCF7 Examples",
+    "name": "Commands",
     "icon": null
   },
   "technicals": {
-    "name": "\uD83D\uDC68\u200D\uD83D\uDCBB Technical Details",
+    "name": "Technical details",
     "icon": null
   },
   "compatibility": {
-    "name": "\uD83D\uDCDA Compatibility",
+    "name": "Compatibility",
     "icon": null
   },
   "faq.mdx": {
-    "name": "❔ FAQ",
+    "name": "FAQ",
     "icon": null
   }
 }
