@@ -13,6 +13,7 @@ import pl.skidam.automodpack_core.utils.OsPaths;
 
 public final class GroupManifestValidator {
 	private static final Pattern ID = Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
+	private static final Pattern ILLEGAL_WINDOWS_COMPONENT = Pattern.compile(".*[<>:\"|?*\\\\\\p{Cntrl}].*");
 
 	private GroupManifestValidator() {}
 
@@ -125,27 +126,32 @@ public final class GroupManifestValidator {
 		}
 	}
 
+	/**
+	 * Ancestor-of is exactly prefix-of: every owner's platform key is normalized once while building the alias
+	 * map, so the conflicts come out of strict '/'-boundary prefix lookups instead of a pairwise scan over every
+	 * file owner. Equal keys are aliases, never ancestor pairs.
+	 */
 	private static void validateAncestorOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, List<String> errors) {
-		List<PathOwner> owners = aliases.values().stream().flatMap(Collection::stream).toList();
-		for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
-			PathPair pair = ancestorPair(owners.get(i), owners.get(j), platform);
-			if (pair == null) continue;
-			if (pair.ancestor().groupId().equals(pair.descendant().groupId()) || coSelectable(manifest, pair.ancestor().groupId(), pair.descendant().groupId())) {
-				String ownerDescription = pair.ancestor().groupId().equals(pair.descendant().groupId())
-						? "group '" + pair.ancestor().groupId() + "'"
-						: "co-selectable groups '" + pair.ancestor().groupId() + "' and '" + pair.descendant().groupId() + "'";
-				errors.add(platform.id() + ": file path '" + pair.ancestor().path() + "' cannot be an ancestor of '" + pair.descendant().path() + "' in "
-						+ ownerDescription);
-			}
+		for (var entry : aliases.entrySet()) for (PathOwner descendant : entry.getValue()) for (String ancestorKey : ancestorKeys(entry.getKey())) {
+			List<PathOwner> ancestors = aliases.get(ancestorKey);
+			if (ancestors == null) continue;
+			for (PathOwner ancestor : ancestors) reportAncestor(platform, manifest, ancestor, descendant, errors);
 		}
 	}
 
-	private static PathPair ancestorPair(PathOwner first, PathOwner second, ClientPlatform platform) {
-		String firstKey = platformPathKey(first.path(), platform);
-		String secondKey = platformPathKey(second.path(), platform);
-		if (secondKey.startsWith(firstKey + "/")) return new PathPair(first, second);
-		if (firstKey.startsWith(secondKey + "/")) return new PathPair(second, first);
-		return null;
+	/** The strict prefixes of {@code key} that end at a '/' boundary, shortest first: exactly the keys an ancestor-of relation can name. */
+	private static List<String> ancestorKeys(String key) {
+		List<String> ancestors = new ArrayList<>();
+		for (int cut = key.indexOf('/'); cut >= 0; cut = key.indexOf('/', cut + 1)) ancestors.add(key.substring(0, cut));
+		return ancestors;
+	}
+
+	private static void reportAncestor(ClientPlatform platform, GroupManifest manifest, PathOwner ancestor, PathOwner descendant, List<String> errors) {
+		if (!ancestor.groupId().equals(descendant.groupId()) && !coSelectable(manifest, ancestor.groupId(), descendant.groupId())) return;
+		String ownerDescription = ancestor.groupId().equals(descendant.groupId())
+				? "group '" + ancestor.groupId() + "'"
+				: "co-selectable groups '" + ancestor.groupId() + "' and '" + descendant.groupId() + "'";
+		errors.add(platform.id() + ": file path '" + ancestor.path() + "' cannot be an ancestor of '" + descendant.path() + "' in " + ownerDescription);
 	}
 
 	private static void validateAliasOwners(ClientPlatform platform, GroupManifest manifest, Map<String, List<PathOwner>> aliases, boolean modBasenames,
@@ -173,15 +179,13 @@ public final class GroupManifestValidator {
 	private static void validateWindowsPath(String groupId, String path, List<String> errors) {
 		for (String component : path.split("/")) {
 			String trimmed = component.stripTrailing();
-			if (trimmed.isEmpty() || !trimmed.equals(component) || component.endsWith(".") || component.matches(".*[<>:\"|?*\\\\\\p{Cntrl}].*"))
+			if (trimmed.isEmpty() || !trimmed.equals(component) || component.endsWith(".") || ILLEGAL_WINDOWS_COMPONENT.matcher(component).matches())
 				errors.add("windows: group '" + groupId + "' has illegal path component in '" + path + "'");
 			if (OsPaths.isReservedWindowsDeviceName(trimmed)) errors.add("windows: group '" + groupId + "' uses reserved device name in '" + path + "'");
 		}
 	}
 
 	private record PathOwner(String groupId, String path) {}
-
-	private record PathPair(PathOwner ancestor, PathOwner descendant) {}
 
 	private static void validateReferences(Map<String, GroupManifest.Group> groups, List<String> errors) {
 		for (var entry : groups.entrySet()) {

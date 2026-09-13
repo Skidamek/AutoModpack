@@ -241,6 +241,35 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
+	void prefixWalkReportsEveryAncestorConflictOfANestedAndAliasedCatalogue() {
+		var fields = catalogue();
+		var trunk = group(fileOfType("mod"));
+		trunk.compatiblePlatforms = Set.of("linux");
+		trunk.files = Map.of("outside/t", fileOfType("mod"), "outside/t/u", fileOfType("mod"), "outside/t/u/v.jar", fileOfType("mod"));
+		var fork1 = groupAt("outside/k", fileOfType("mod"));
+		fork1.compatiblePlatforms = Set.of("linux");
+		var fork2 = groupAt("outside/k", fileOfType("mod"));
+		fork2.compatiblePlatforms = Set.of("linux");
+		var fork3 = groupAt("outside/k/z.jar", fileOfType("mod"));
+		fork3.compatiblePlatforms = Set.of("linux");
+		var exclusive = groupAt("outside/e", fileOfType("mod"));
+		exclusive.compatiblePlatforms = Set.of("linux");
+		exclusive.breaksWith = Set.of("leaf");
+		var leaf = groupAt("outside/e/f.jar", fileOfType("mod"));
+		leaf.compatiblePlatforms = Set.of("linux");
+		fields.groups = linkedGroups("trunk", trunk, "fork1", fork1, "fork2", fork2, "fork3", fork3, "exclusive", exclusive, "leaf", leaf);
+
+		// The aliased key 'outside/k' (two owners) pairs with the descendant once per owner, the chain pairs every
+		// ancestor depth once, and the mutually exclusive pair is silent: exactly the pairwise scan's conflict set.
+		GroupValidationException failure = assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+		assertEquals(List.of("linux: file path 'outside/k' cannot be an ancestor of 'outside/k/z.jar' in co-selectable groups 'fork1' and 'fork3'",
+				"linux: file path 'outside/k' cannot be an ancestor of 'outside/k/z.jar' in co-selectable groups 'fork2' and 'fork3'",
+				"linux: file path 'outside/t' cannot be an ancestor of 'outside/t/u' in group 'trunk'",
+				"linux: file path 'outside/t' cannot be an ancestor of 'outside/t/u/v.jar' in group 'trunk'",
+				"linux: file path 'outside/t/u' cannot be an ancestor of 'outside/t/u/v.jar' in group 'trunk'"), failure.errors());
+	}
+
+	@Test
 	void acceptsFileDirectoryPathsForMutuallyExclusiveGroups() {
 		var fields = catalogue();
 		var first = groupAt("outside", fileOfType("mod"));
