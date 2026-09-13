@@ -171,7 +171,9 @@ public final class UpdatePlanner {
 				|| input.installedManifest().list == null ? Map.of() : sortedItems(input.installedManifest().list);
 		OwnershipLedger installedLedger = input.installedManifest() == null ? null : OwnershipLedger.fromFields(input.installedManifest().ownershipLedger);
 		PlanningSession session = new PlanningSession(input.files());
-		planConsentedLocalMods(input, session);
+		Map<String, ModInfo> targetModsByPath = modsByPath(input.targetMods());
+		Map<String, ModInfo> standardModsByPath = modsByPath(input.standardMods());
+		planConsentedLocalMods(input, standardModsByPath, session);
 		planInstalledRemovals(input, target.modpackId, targetItems, installedItems, session);
 		if (installedLedger != null)
 			planLedgerCleanup(installedLedger, installedItems.keySet(), targetItems.keySet(), input.selection(), !input.installedManifest().modpackId.equals(target.modpackId), session);
@@ -181,7 +183,7 @@ public final class UpdatePlanner {
 		Set<String> forceCopyPaths = new HashSet<>(input.forceCopyServicePaths());
 		Set<String> listedPins = listedPins(input);
 		Set<String> protectedIds = PinnedMods.protectedIds(listedPins, input.standardMods().stream().map(ModInfo::ids).toList());
-		planTargetInstalls(input, targetItems, forceCopyPaths, protectedIds, session);
+		planTargetInstalls(input, targetItems, forceCopyPaths, protectedIds, targetModsByPath, session);
 		List<NestedCopy> generatedCopies = ownedNestedCopies(input.nestedCopies());
 		planNestedCopies(input.previousNestedCopies(), generatedCopies, session);
 		planDuplicates(target.modpackId, input.targetMods(), input.standardMods(), forceCopyPaths, installedLedger, session, listedPins);
@@ -224,7 +226,7 @@ public final class UpdatePlanner {
 
 	/** Installs every target manifest item into the projection, its overlay, and — when not protected from the player's mods directory — the live copy. */
 	private static void planTargetInstalls(Input input, Map<String, ModpackJsons.ModpackContentFields.ModpackContentItem> targetItems, Set<String> forceCopyPaths,
-			Set<String> protectedIds, PlanningSession session) {
+			Set<String> protectedIds, Map<String, ModInfo> targetModsByPath, PlanningSession session) {
 		for (var item : targetItems.values()) {
 			String relative = LogicalPath.normalize(item.file);
 			boolean activeMod = ModpackPathPolicy.isActiveMod(relative, item.type);
@@ -237,7 +239,7 @@ public final class UpdatePlanner {
 				session.delete(new FileKey(Root.OVERLAY, relative), session.projected(new FileKey(Root.OVERLAY, relative)).sha1());
 			if (!matches(existing, item.sha1, item.size)) session.install(modpackKey, item.sha1, item.size);
 
-			boolean copyToLive = !PinnedMods.protects(protectedIds, idsForPath(input.targetMods(), relative)) && (!activeMod || forceCopyPaths.contains(relative) || overlay != null);
+			boolean copyToLive = !PinnedMods.protects(protectedIds, idsForPath(targetModsByPath, relative)) && (!activeMod || forceCopyPaths.contains(relative) || overlay != null);
 			FileKey liveKey = liveKey(item);
 			if (copyToLive) {
 				FileState live = session.projected(liveKey);
@@ -256,7 +258,7 @@ public final class UpdatePlanner {
 		}
 	}
 
-	private static void planConsentedLocalMods(Input input, PlanningSession session) {
+	private static void planConsentedLocalMods(Input input, Map<String, ModInfo> standardModsByPath, PlanningSession session) {
 		if (input.installedManifest() != null) {
 			if (!input.consentedLocalModFiles().isEmpty()) throw new IllegalArgumentException("First-install consent cannot be used after a modpack is installed");
 			return;
@@ -271,7 +273,7 @@ public final class UpdatePlanner {
 			FileState observed = entry.getValue();
 			if (observed == null || !observed.regularFile() || !HashUtils.isSha1(observed.sha1()) || observed.size() < 0)
 				throw new IllegalArgumentException("First-install consent file metadata is invalid: " + relative);
-			if (PinnedMods.matches(listedPins, idsForPath(input.standardMods(), relative))) continue;
+			if (PinnedMods.matches(listedPins, idsForPath(standardModsByPath, relative))) continue;
 			FileKey key = new FileKey(Root.GAME_DIR, relative);
 			FileState current = session.projected(key);
 			if (!matches(current, observed.sha1(), observed.size())) throw new IllegalArgumentException("First-install consent file changed after scanning: " + relative);
@@ -498,14 +500,16 @@ public final class UpdatePlanner {
 		for (var duplicate : duplicates.entrySet()) {
 			ModInfo target = duplicate.getKey();
 			ModInfo standard = duplicate.getValue();
+			String targetPath = LogicalPath.normalize(target.relativePath());
+			String standardPath = LogicalPath.normalize(standard.relativePath());
 			if (PinnedMods.matches(listedPins, standard.ids())) continue;
-			FileKey oldKey = new FileKey(Root.GAME_DIR, LogicalPath.normalize(standard.relativePath()));
-			boolean owned = isOwned(standard, installedLedger);
+			FileKey oldKey = new FileKey(Root.GAME_DIR, standardPath);
+			boolean owned = isOwned(standard, standardPath, installedLedger);
 			boolean keepStandard = target.ids().stream().anyMatch(idsToKeep::contains);
-			FileKey targetKey = new FileKey(Root.GAME_DIR, LogicalPath.normalize(target.relativePath()));
+			FileKey targetKey = new FileKey(Root.GAME_DIR, targetPath);
 			boolean targetAlreadyMatches = matches(session.projected(targetKey), target.sha1(), target.size());
 			boolean sourceNeedsDisposition = !oldKey.equals(targetKey) || !keepStandard || !targetAlreadyMatches;
-			if (sourceNeedsDisposition) session.conflicts().add(conflict(modpackId, target, standard, owned ? ConflictAction.REMOVE_OWNED : ConflictAction.PRESERVE_LOCAL));
+			if (sourceNeedsDisposition) session.conflicts().add(conflict(modpackId, targetPath, target, standardPath, standard, owned ? ConflictAction.REMOVE_OWNED : ConflictAction.PRESERVE_LOCAL));
 			if (keepStandard) {
 				if (!targetAlreadyMatches) {
 					session.install(targetKey, target.sha1(), target.size(),
@@ -520,23 +524,21 @@ public final class UpdatePlanner {
 		}
 	}
 
-	private static boolean isOwned(ModInfo standard, OwnershipLedger ledger) {
+	private static boolean isOwned(ModInfo standard, String standardPath, OwnershipLedger ledger) {
 		if (ledger == null) return false;
-		OwnershipLedger.Entry entry = ledger.entries().get(LogicalPath.normalize(standard.relativePath()));
+		OwnershipLedger.Entry entry = ledger.entries().get(standardPath);
 		return entry != null && entry.historicalHashes().contains(new OwnershipLedger.Content(standard.sha1().toLowerCase(Locale.ROOT), standard.size()));
 	}
 
-	private static Conflict conflict(String modpackId, ModInfo target, ModInfo standard, ConflictAction action) {
-		String sourcePath = LogicalPath.normalize(standard.relativePath());
-		String targetPath = LogicalPath.normalize(target.relativePath());
-		String identity = conflictId(target, standard);
+	private static Conflict conflict(String modpackId, String targetPath, ModInfo target, String standardPath, ModInfo standard, ConflictAction action) {
+		String identity = conflictId(target, targetPath, standard, standardPath);
 		Set<String> ids = new TreeSet<>(target.ids());
 		ids.addAll(standard.ids());
-		return new Conflict(modpackId, identity, ids, sourcePath, standard.sha1(), standard.size(), targetPath, target.sha1(), target.size(), action);
+		return new Conflict(modpackId, identity, ids, standardPath, standard.sha1(), standard.size(), targetPath, target.sha1(), target.size(), action);
 	}
 
-	private static String conflictId(ModInfo target, ModInfo standard) {
-		String value = String.join("\n", LogicalPath.normalize(target.relativePath()), target.sha1().toLowerCase(Locale.ROOT), LogicalPath.normalize(standard.relativePath()),
+	private static String conflictId(ModInfo target, String targetPath, ModInfo standard, String standardPath) {
+		String value = String.join("\n", targetPath, target.sha1().toLowerCase(Locale.ROOT), standardPath,
 				standard.sha1().toLowerCase(Locale.ROOT), String.join(",", new TreeSet<>(target.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()),
 				String.join(",", new TreeSet<>(standard.ids()).stream().map(id -> id.toLowerCase(Locale.ROOT)).toList()));
 		return HashUtils.sha1(value);
@@ -686,9 +688,16 @@ public final class UpdatePlanner {
 		return input.plannedClientConfig() == null ? Set.of() : PinnedMods.index(input.plannedClientConfig().pinnedModIds);
 	}
 
-	private static Set<String> idsForPath(List<ModInfo> mods, String relative) {
-		for (ModInfo mod : mods) if (LogicalPath.normalize(mod.relativePath()).equals(relative)) return mod.ids();
-		return Set.of();
+	/** Indexes scanned mods by normalized logical path once per plan; the first mod on a path wins, matching the linear-scan lookups this replaces. */
+	private static Map<String, ModInfo> modsByPath(List<ModInfo> mods) {
+		Map<String, ModInfo> byPath = new HashMap<>();
+		for (ModInfo mod : mods) byPath.putIfAbsent(LogicalPath.normalize(mod.relativePath()), mod);
+		return byPath;
+	}
+
+	private static Set<String> idsForPath(Map<String, ModInfo> modsByPath, String relative) {
+		ModInfo mod = modsByPath.get(relative);
+		return mod == null ? Set.of() : mod.ids();
 	}
 
 }
