@@ -63,8 +63,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private final RemovalLifecycle removalLifecycle;
 	private final ProjectionLoader projectionLoader;
 	private final ModpackObjectAcquisition objectAcquisition;
-	private UpdateSession switchSession;
-	private UpdateSession session;
+	private final AtomicReference<UpdateSession> attempt = new AtomicReference<>();
 	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
 	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
 	/**
@@ -121,20 +120,20 @@ public class ModpackUpdater implements AutoCloseable {
 				&& selectedTarget.document().contentToken().equals(active.contentToken)
 				&& Objects.equals(selectedTarget.expectedPriorIntent(), selectedTarget.selection().intent()))
 			throw new IllegalArgumentException("Installed modpack target generation and group selection are already active");
-		switchSession = newSession();
-		switchSession.prepare(true, true);
-		return switchSession.preview(UpdateSession.InstalledTokenRule.ACTIVE_OR_MIRROR_HEAD);
+		UpdateSession switchAttempt = beginAttempt();
+		switchAttempt.prepare(true, true);
+		return switchAttempt.preview(UpdateSession.InstalledTokenRule.ACTIVE_OR_MIRROR_HEAD);
 	}
 
 	/** Applies the last installed-generation switch plan through the normal atomic transaction executor. */
 	public void applyInstalledSwitch() throws Exception {
-		UpdateSession switchPlan = switchSession;
+		UpdateSession switchPlan = attempt.get();
 		if (switchPlan == null || selectedTarget == null) throw new IllegalStateException("Installed modpack switch was not prepared");
 		if (!switchPlan.isApproved()) switchPlan.approve();
 		// The switch flow reports its failure through its own caller, so its failure handling carries the failure out of the harness.
 		AtomicReference<Exception> propagated = new AtomicReference<>();
 		runReviewedFlow(new ApplyFlow("Installed modpack switch", () -> new ReLauncher(UpdateType.SELECT, changelogs).restart(false), propagated::set, this::close),
-				() -> removalLifecycle.restartAfterApply(switchPlan.commit()));
+				() -> restartAfterApply(switchPlan.commit()));
 		if (propagated.get() != null) throw propagated.get();
 	}
 
@@ -226,10 +225,8 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Applies a new group selection and re-enters the preview path from confirm or preview customize. */
 	public void reselectAndPreview(SelectionIntent intent) {
 		selectTarget(intent);
-		if (session != null) {
-			session.cancel();
-			session = null;
-		}
+		UpdateSession previous = attempt.getAndSet(null);
+		if (previous != null) previous.cancel();
 		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
 		if (firstConnection && confirmationState.get() == ConfirmationState.WAITING) {
 			ScreenManager.welcome(this);
@@ -273,7 +270,7 @@ public class ModpackUpdater implements AutoCloseable {
 		this.planBuilder = new ClientUpdatePlanBuilder(this.storage, MODPACK_LOADER, LOADER);
 		this.updateLoopDetector = new UpdateLoopDetector(storage.restartLoopStateFile());
 		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformCache);
-		this.removalLifecycle = new RemovalLifecycle(this.storage, this.planBuilder, changelogs, this.updateLoopDetector, () -> fullDownload);
+		this.removalLifecycle = new RemovalLifecycle(this.storage, this.planBuilder, changelogs, this::afterRemovalApply);
 		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);
 		this.downloadClient = downloadClient;
 		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.downloadClient,
@@ -284,6 +281,14 @@ public class ModpackUpdater implements AutoCloseable {
 	private UpdateSession newSession() {
 		return new UpdateSession(storage, planBuilder, objectAcquisition, sourceCatalogue, changelogs, connectionInfo, getSelectedTarget(), firstConnection,
 				consentedLocalModFiles, attaching);
+	}
+
+	/** Replaces any in-flight attempt so prepare, review, and commit cannot drift across two sessions. */
+	private UpdateSession beginAttempt() {
+		UpdateSession next = newSession();
+		UpdateSession previous = attempt.getAndSet(next);
+		if (previous != null) previous.cancel();
+		return next;
 	}
 
 	private static PlatformCache openPlatformCache(ClientStorage storage) {
@@ -471,7 +476,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private void finishLaunchApply(ApplyResult applyResult) {
 		if (!preload) {
-			removalLifecycle.restartAfterApply(applyResult);
+			restartAfterApply(applyResult);
 			return;
 		}
 		if (!RestartDecision.requiresRestartAtPreload(applyResult.restartReasons())) {
@@ -514,6 +519,36 @@ public class ModpackUpdater implements AutoCloseable {
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
 	public LifecycleApply removeModpack() throws Exception {
 		return removalLifecycle.removeModpack();
+	}
+
+	/** Removal has no in-game content load: only a plan that names a restart reason asks the player to restart. */
+	private void afterRemovalApply(ApplyResult applyResult) {
+		if (applyResult.requiresRestart()) restartAfterApply(applyResult);
+		else updateLoopDetector.clear();
+	}
+
+	/** Post-apply restart for a running game: the updater is the screen adapter, so this decision stays here. */
+	private void restartAfterApply(ApplyResult applyResult) {
+		if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) SessionUpdateState.markAppliedContentNotLoaded();
+		if (!applyResult.requiresRestart()) {
+			updateLoopDetector.clear();
+			if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) {
+				LOGGER.info("Update applied with {} changed and {} removed files, but they cannot load into the running game; asking the player to restart", changelogs.changedFiles().size(),
+						changelogs.removedFiles().size());
+				ScreenManager.restart(fullDownload ? UpdateType.FULL : UpdateType.UPDATE, changelogs);
+				return;
+			}
+			ScreenManager.completeWithoutRestart();
+			return;
+		}
+		String fingerprint = RestartDecision.stateFingerprint(storage, applyResult);
+		if (updateLoopDetector.evaluateAndRecord(fingerprint) == UpdateLoopDetector.Decision.SUPPRESS) {
+			LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
+			LOGGER.error("Corrections were applied but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
+			LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
+			return;
+		}
+		new ReLauncher(RestartDecision.applyRestartType(fullDownload, applyResult.restartReasons()), changelogs).restart(false);
 	}
 
 	/** Returns the updater to the confirmation seam once drained work observes the player's cancellation. */
@@ -589,8 +624,10 @@ public class ModpackUpdater implements AutoCloseable {
 				close();
 				return UpdateOutcome.INCOMPLETE;
 			}
+			UpdateSession switchAttempt = attempt.get();
 			Runnable continueAction = () -> {
 				try {
+					if (attempt.get() != switchAttempt) return;
 					applyInstalledSwitch();
 				} catch (Exception e) {
 					if (!abortedByPlayer(e)) showUpdateFailure(e);
@@ -609,15 +646,14 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	private void startUpdateAfterPreview() {
+	private void startUpdateAfterPreview(UpdateSession reviewed) {
 		long start = System.currentTimeMillis();
-		UpdateSession session = this.session;
-		if (session == null || !session.isApproved()) {
+		if (reviewed == null || attempt.get() != reviewed || !reviewed.isApproved()) {
 			LOGGER.warn("Update approval callback arrived without an approved prepared plan");
 			close();
 			return;
 		}
-		applyApprovedPlan(session, start);
+		applyApprovedPlan(reviewed, start);
 	}
 
 	private ApplyStatus applyApprovedPlan(UpdateSession reviewed, long start) {
@@ -633,7 +669,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}, this::close), () -> {
 			ApplyResult applyResult = reviewed.commit();
 			LOGGER.info("Update completed! Required restart: {} Took: {}ms", applyResult.requiresRestart(), System.currentTimeMillis() - start);
-			removalLifecycle.restartAfterApply(applyResult);
+			restartAfterApply(applyResult);
 		});
 	}
 
@@ -674,7 +710,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		sourceCatalogue.startSourceFetch();
 		requireLiveConnection();
-		session = newSession();
+		UpdateSession session = beginAttempt();
 		session.prepare(true, false);
 		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
 		ClientUpdatePlanBuilder.PreparedPlan prepared = session.prepared();
@@ -688,26 +724,33 @@ public class ModpackUpdater implements AutoCloseable {
 			return previewResult(applyApprovedPlan(session, System.currentTimeMillis()));
 		}
 		Runnable continueAction = () -> {
-			if (!session.isApproved()) session.approve();
-			if (firstConnection && !confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return;
-			startUpdateAfterPreview();
+			if (attempt.get() != session) return;
+			if (!session.isApproved()) {
+				try {
+					session.approve();
+				} catch (IllegalStateException e) {
+					return;
+				}
+			}
+			if (!confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED) && firstConnection) return;
+			startUpdateAfterPreview(session);
 		};
 		Runnable cancelAction = firstConnection
 				? () -> {
-					session.cancel();
+					if (attempt.get() == session) session.cancel();
 					confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
 				}
 				: () -> {
-					session.cancel();
+					if (attempt.get() == session) session.cancel();
 					detachOnDeclinedUpdate();
 					close();
 				};
-		return requestPreparedPlanPreview(prepared, continueAction, cancelAction)
+		return requestPreparedPlanPreview(session, prepared, continueAction, cancelAction)
 				? PreviewRequestResult.PREVIEW_SHOWN
 				: PreviewRequestResult.PREVIEW_NOT_SHOWN;
 	}
 
-	private boolean requestPreparedPlanPreview(ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
+	private boolean requestPreparedPlanPreview(UpdateSession session, ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
 		UpdatePreview preview = session.preview(UpdateSession.InstalledTokenRule.ACTIVE_BOOKMARK)
 				.withReferences(sourceCatalogue.resolveMainPageReferences(prepared));
 		return ScreenManager.preview(preview, getModpackName(), this,
@@ -752,9 +795,9 @@ public class ModpackUpdater implements AutoCloseable {
 		confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED);
 		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.CANCELLED);
 		interruptInFlight();
-		if (session != null && session.isApproved()) session.cancel();
+		UpdateSession current = attempt.getAndSet(null);
+		if (current != null) current.cancel();
 		removalLifecycle.cancelPendingReview();
-		if (switchSession != null && switchSession.isApproved()) switchSession.cancel();
 		objectAcquisition.release();
 		if (closed.compareAndSet(false, true)) {
 			if (downloadClient != null) downloadClient.close();
