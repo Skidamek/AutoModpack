@@ -118,7 +118,7 @@ public final class UpdatePlan {
 		LinkedHashSet<RestartReason> reasons = new LinkedHashSet<>(restartReasons);
 		if (!reasons.add(Objects.requireNonNull(reason, "restart reason"))) return this;
 		return new UpdatePlan(modpackId, packTarget(), operations, projectedFinalState, plannedClientConfig, reasons, preservations, baselineCaptures, conflicts, generatedCopies,
-				consequences.withEffects(List.of(new ChangeSet.Effect("restart", reason.name()))));
+				consequences.withEffects(List.of(ChangeSet.Effect.restart(reason.name()))));
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
