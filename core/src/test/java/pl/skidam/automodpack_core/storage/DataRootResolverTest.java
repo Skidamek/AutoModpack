@@ -85,7 +85,7 @@ class DataRootResolverTest {
 	@Test
 	void dedicatedServersOwnTheirCacheInsideTheServerScope() throws Exception {
 		Path game = Files.createDirectory(temporaryDirectory.resolve("server-game"));
-		DataRootResolver.Location location = DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.SERVER);
+		DataRootResolver.Location location = DataRootResolver.resolve(game, LoaderManagerService.EnvironmentType.valueOf("SERVER"));
 		// The resolver canonicalizes the game root; on Windows the injected temp path may spell it as an 8.3 alias, so compare real paths.
 		assertEquals(game.resolve("automodpack").resolve("server").resolve("data").toRealPath(), location.root().toRealPath());
 		assertTrue(location.root().toRealPath().startsWith(game.toRealPath()));

@@ -28,7 +28,7 @@ import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
  * not lose roots, group provenance, or source references.
  * </p>
  */
-public record ChangeSet(List<Change> changes, List<Effect> effects) {
+public final class ChangeSet {
 	private static final Comparator<Change> CHANGE_ORDER = Comparator.comparingInt((Change change) -> change.kind().sortOrder())
 			.thenComparing(Change::logicalPath);
 	private static final Comparator<Occurrence> OCCURRENCE_ORDER = Comparator.comparing(Occurrence::location)
@@ -38,9 +38,37 @@ public record ChangeSet(List<Change> changes, List<Effect> effects) {
 			.thenComparing(Occurrence::contentKind)
 			.thenComparing(occurrence -> String.join("\u0000", occurrence.featureIds()));
 
-	public ChangeSet {
-		changes = List.copyOf(changes);
-		effects = List.copyOf(effects);
+	private List<Change> changes;
+	private List<Effect> effects;
+
+	public ChangeSet() {}
+
+	public ChangeSet(List<Change> changes, List<Effect> effects) {
+		this.changes = List.copyOf(changes);
+		this.effects = List.copyOf(effects);
+	}
+
+	public List<Change> changes() {
+		return changes;
+	}
+
+	public List<Effect> effects() {
+		return effects;
+	}
+
+	public ChangeSet validated() {
+		if (changes == null || effects == null) throw new IllegalArgumentException("Change set fields are incomplete");
+		List<Change> validatedChanges = new ArrayList<>();
+		for (Change change : changes) {
+			if (change == null) throw new IllegalArgumentException("Change set contains an incomplete change");
+			validatedChanges.add(change.validated());
+		}
+		List<Effect> validatedEffects = new ArrayList<>();
+		for (Effect effect : effects) {
+			if (effect == null) throw new IllegalArgumentException("Change set contains an incomplete effect");
+			validatedEffects.add(effect.validated());
+		}
+		return of(validatedChanges, validatedEffects);
 	}
 
 	public static ChangeSet empty() {
@@ -205,26 +233,72 @@ public record ChangeSet(List<Change> changes, List<Effect> effects) {
 		}
 	}
 
-	public record Change(String logicalPath, Kind kind, List<Occurrence> occurrences) {
-		public Change {
-			logicalPath = LogicalPath.requireCanonical(logicalPath);
-			kind = Objects.requireNonNull(kind, "change kind");
+	public static final class Change {
+		private String logicalPath;
+		private Kind kind;
+		private List<Occurrence> occurrences;
+
+		public Change() {}
+
+		public Change(String logicalPath, Kind kind, List<Occurrence> occurrences) {
+			this.logicalPath = LogicalPath.requireCanonical(logicalPath);
+			this.kind = Objects.requireNonNull(kind, "change kind");
 			if (occurrences == null || occurrences.isEmpty()) throw new IllegalArgumentException("Change has no physical occurrences");
 			List<Occurrence> normalized = new ArrayList<>(occurrences.size());
 			for (Occurrence occurrence : occurrences) {
 				Objects.requireNonNull(occurrence, "change occurrence");
-				if (!logicalPath.equals(occurrence.logicalPath())) throw new IllegalArgumentException("Change occurrence path does not match logical path");
-				normalized.add(occurrence);
+				if (!this.logicalPath.equals(occurrence.logicalPath())) throw new IllegalArgumentException("Change occurrence path does not match logical path");
+				normalized.add(occurrence.validated());
 			}
-			occurrences = List.copyOf(normalized);
+			this.occurrences = List.copyOf(normalized);
+		}
+
+		public Change validated() {
+			return new Change(logicalPath, kind, occurrences);
+		}
+
+		public String logicalPath() {
+			return logicalPath;
+		}
+
+		public Kind kind() {
+			return kind;
+		}
+
+		public List<Occurrence> occurrences() {
+			return occurrences;
 		}
 
 		public Occurrence primaryOccurrence() {
 			return occurrences.get(0);
 		}
+
+		@Override
+		public boolean equals(Object object) {
+			if (this == object) return true;
+			if (!(object instanceof Change other)) return false;
+			return kind == other.kind && Objects.equals(logicalPath, other.logicalPath) && Objects.equals(occurrences, other.occurrences);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(logicalPath, kind, occurrences);
+		}
 	}
 
-	public record Occurrence(String location, String logicalPath, long size, Long beforeSize, String beforeHash, String afterHash, String contentKind, List<String> featureIds, List<String> references) {
+	public static final class Occurrence {
+		private String location;
+		private String logicalPath;
+		private long size;
+		private Long beforeSize;
+		private String beforeHash;
+		private String afterHash;
+		private String contentKind;
+		private List<String> featureIds;
+		private List<String> references;
+
+		public Occurrence() {}
+
 		public Occurrence(String location, String logicalPath, long size) {
 			this(location, logicalPath, size, null, null, null, null, List.of(), List.of());
 		}
@@ -241,32 +315,118 @@ public record ChangeSet(List<Change> changes, List<Effect> effects) {
 			this(location, logicalPath, size, null, beforeHash, afterHash, contentKind, List.of(), references);
 		}
 
-		public Occurrence {
+		public Occurrence(String location, String logicalPath, long size, Long beforeSize, String beforeHash, String afterHash, String contentKind, List<String> featureIds,
+				List<String> references) {
 			if (location == null || location.isBlank()) throw new IllegalArgumentException("Change occurrence location is missing");
-			location = location.trim();
-			logicalPath = LogicalPath.requireCanonical(logicalPath);
+			this.location = location.trim();
+			this.logicalPath = LogicalPath.requireCanonical(logicalPath);
 			if (size < 0) throw new IllegalArgumentException("Change occurrence size is negative");
+			this.size = size;
 			if (beforeSize != null && beforeSize < 0) throw new IllegalArgumentException("Change occurrence before size is negative");
-			beforeHash = normalizeHash(beforeHash, "before hash");
-			afterHash = normalizeHash(afterHash, "after hash");
-			contentKind = normalizeContentKind(contentKind, logicalPath);
-			featureIds = normalizedValues(featureIds);
+			this.beforeSize = beforeSize;
+			this.beforeHash = normalizeHash(beforeHash, "before hash");
+			this.afterHash = normalizeHash(afterHash, "after hash");
+			this.contentKind = normalizeContentKind(contentKind, this.logicalPath);
+			this.featureIds = normalizedValues(featureIds);
 			List<String> normalizedReferences = new ArrayList<>();
 			if (references != null) for (String reference : references) if (reference != null && !reference.isBlank() && !normalizedReferences.contains(reference)) normalizedReferences.add(reference);
-			references = List.copyOf(normalizedReferences);
+			this.references = List.copyOf(normalizedReferences);
+		}
+
+		public Occurrence validated() {
+			return new Occurrence(location, logicalPath, size, beforeSize, beforeHash, afterHash, contentKind, featureIds, references);
+		}
+
+		public String location() {
+			return location;
+		}
+
+		public String logicalPath() {
+			return logicalPath;
+		}
+
+		public long size() {
+			return size;
+		}
+
+		public Long beforeSize() {
+			return beforeSize;
+		}
+
+		public String beforeHash() {
+			return beforeHash;
+		}
+
+		public String afterHash() {
+			return afterHash;
+		}
+
+		public String contentKind() {
+			return contentKind;
+		}
+
+		public List<String> featureIds() {
+			return featureIds;
+		}
+
+		public List<String> references() {
+			return references;
 		}
 
 		public Occurrence withReferences(List<String> newReferences) {
 			return new Occurrence(location, logicalPath, size, beforeSize, beforeHash, afterHash, contentKind, featureIds, newReferences);
 		}
+
+		@Override
+		public boolean equals(Object object) {
+			if (this == object) return true;
+			if (!(object instanceof Occurrence other)) return false;
+			return size == other.size && Objects.equals(location, other.location) && Objects.equals(logicalPath, other.logicalPath) && Objects.equals(beforeSize, other.beforeSize)
+					&& Objects.equals(beforeHash, other.beforeHash) && Objects.equals(afterHash, other.afterHash) && Objects.equals(contentKind, other.contentKind)
+					&& Objects.equals(featureIds, other.featureIds) && Objects.equals(references, other.references);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(location, logicalPath, size, beforeSize, beforeHash, afterHash, contentKind, featureIds, references);
+		}
 	}
 
-	public record Effect(String category, String value) {
-		public Effect {
+	public static final class Effect {
+		private String category;
+		private String value;
+
+		public Effect() {}
+
+		public Effect(String category, String value) {
 			if (category == null || category.isBlank()) throw new IllegalArgumentException("Change effect category is missing");
 			if (value == null || value.isBlank()) throw new IllegalArgumentException("Change effect value is missing");
-			category = category.trim();
-			value = value.trim();
+			this.category = category.trim();
+			this.value = value.trim();
+		}
+
+		public Effect validated() {
+			return new Effect(category, value);
+		}
+
+		public String category() {
+			return category;
+		}
+
+		public String value() {
+			return value;
+		}
+
+		@Override
+		public boolean equals(Object object) {
+			if (this == object) return true;
+			if (!(object instanceof Effect other)) return false;
+			return Objects.equals(category, other.category) && Objects.equals(value, other.value);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(category, value);
 		}
 	}
 
@@ -291,88 +451,4 @@ public record ChangeSet(List<Change> changes, List<Effect> effects) {
 		return List.copyOf(normalized);
 	}
 
-	/**
-	 * The durable spelling of a change set. Gson versions shipped in older Minecraft releases cannot deserialize
-	 * records, so the persisted document is this class tree and the in-memory record is built back from it.
-	 */
-	public static class Fields {
-		public List<ChangeFields> changes;
-		public List<EffectFields> effects;
-
-		public static class ChangeFields {
-			public String logicalPath;
-			public String kind;
-			public List<OccurrenceFields> occurrences;
-		}
-
-		public static class OccurrenceFields {
-			public String location;
-			public String logicalPath;
-			public long size;
-			public Long beforeSize;
-			public String beforeHash;
-			public String afterHash;
-			public String contentKind;
-			public List<String> featureIds;
-			public List<String> references;
-		}
-
-		public static class EffectFields {
-			public String category;
-			public String value;
-		}
-	}
-
-	public Fields toFields() {
-		Fields fields = new Fields();
-		fields.changes = changes.stream().map(change -> {
-			Fields.ChangeFields row = new Fields.ChangeFields();
-			row.logicalPath = change.logicalPath();
-			row.kind = change.kind().name();
-			row.occurrences = change.occurrences().stream().map(occurrence -> {
-				Fields.OccurrenceFields occurrenceRow = new Fields.OccurrenceFields();
-				occurrenceRow.location = occurrence.location();
-				occurrenceRow.logicalPath = occurrence.logicalPath();
-				occurrenceRow.size = occurrence.size();
-				occurrenceRow.beforeSize = occurrence.beforeSize();
-				occurrenceRow.beforeHash = occurrence.beforeHash();
-				occurrenceRow.afterHash = occurrence.afterHash();
-				occurrenceRow.contentKind = occurrence.contentKind();
-				occurrenceRow.featureIds = occurrence.featureIds();
-				occurrenceRow.references = occurrence.references();
-				return occurrenceRow;
-			}).toList();
-			return row;
-		}).toList();
-		fields.effects = effects.stream().map(effect -> {
-			Fields.EffectFields row = new Fields.EffectFields();
-			row.category = effect.category();
-			row.value = effect.value();
-			return row;
-		}).toList();
-		return fields;
-	}
-
-	public static ChangeSet fromFields(Fields fields) {
-		if (fields == null || fields.changes == null || fields.effects == null) throw new IllegalArgumentException("Change set fields are incomplete");
-		List<Change> changes = new ArrayList<>();
-		for (Fields.ChangeFields row : fields.changes) {
-			if (row == null) throw new IllegalArgumentException("Change set contains an incomplete change");
-			List<Occurrence> occurrences = new ArrayList<>();
-			for (Fields.OccurrenceFields occurrenceRow : row.occurrences == null ? List.<Fields.OccurrenceFields>of() : row.occurrences) {
-				if (occurrenceRow == null) throw new IllegalArgumentException("Change set contains an incomplete occurrence");
-				occurrences.add(new Occurrence(occurrenceRow.location, occurrenceRow.logicalPath, occurrenceRow.size, occurrenceRow.beforeSize, occurrenceRow.beforeHash,
-						occurrenceRow.afterHash, occurrenceRow.contentKind,
-						occurrenceRow.featureIds == null ? List.of() : List.copyOf(occurrenceRow.featureIds),
-						occurrenceRow.references == null ? List.of() : List.copyOf(occurrenceRow.references)));
-			}
-			changes.add(new Change(row.logicalPath, Kind.valueOf(row.kind), occurrences));
-		}
-		List<Effect> effects = new ArrayList<>();
-		for (Fields.EffectFields row : fields.effects) {
-			if (row == null) throw new IllegalArgumentException("Change set contains an incomplete effect");
-			effects.add(new Effect(row.category, row.value));
-		}
-		return new ChangeSet(changes, effects);
-	}
 }

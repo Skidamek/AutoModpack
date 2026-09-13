@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.update;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -11,46 +12,117 @@ import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-/** Immutable prepared reconciliation decision: executable intent and its canonical user-visible consequences. */
-public record UpdatePlan(
-		String modpackId,
-		PackTarget packTarget,
-		List<Operation> operations,
-		List<ProjectedFile> projectedFinalState,
-		ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig,
-		Set<RestartReason> restartReasons,
-		List<Preservation> preservations,
-		List<BaselineCapture> baselineCaptures,
-		List<Conflict> conflicts,
-		List<NestedCopy> generatedCopies,
-		ChangeSet consequences) {
+/**
+ * Immutable prepared reconciliation decision. A class, not a record: the Gson shipped in Minecraft 1.18 cannot
+ * deserialize records, and this object is the durable plan on {@link UpdateTransaction}.
+ */
+public final class UpdatePlan {
+	private String modpackId;
+	private String contentToken;
+	private String policySha1;
+	private String ledgerDigest;
+	private List<Operation> operations;
+	private List<ProjectedFile> projectedFinalState;
+	private ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig;
+	private Set<RestartReason> restartReasons;
+	private List<Preservation> preservations;
+	private List<BaselineCapture> baselineCaptures;
+	private List<Conflict> conflicts;
+	private List<NestedCopy> generatedCopies;
+	private ChangeSet consequences;
+	private transient PackTarget packTarget;
 
-	public UpdatePlan {
-		packTarget = Objects.requireNonNull(packTarget, "packTarget");
-		operations = List.copyOf(operations);
-		projectedFinalState = List.copyOf(projectedFinalState);
-		restartReasons = stableSet(restartReasons);
-		preservations = List.copyOf(preservations);
-		baselineCaptures = List.copyOf(baselineCaptures);
-		conflicts = List.copyOf(conflicts);
-		generatedCopies = List.copyOf(generatedCopies);
-		consequences = Objects.requireNonNull(consequences, "reconciliation consequences");
+	public UpdatePlan() {}
+
+	public UpdatePlan(String modpackId, PackTarget packTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
+			ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations,
+			List<BaselineCapture> baselineCaptures, List<Conflict> conflicts, List<NestedCopy> generatedCopies, ChangeSet consequences) {
+		this.packTarget = Objects.requireNonNull(packTarget, "packTarget");
+		if (modpackId != null && !modpackId.equals(packTarget.modpackId())) throw new IllegalArgumentException("Plan and pack target modpack IDs disagree");
+		this.modpackId = packTarget.modpackId();
+		this.contentToken = packTarget.contentToken();
+		this.policySha1 = packTarget.policySha1();
+		this.ledgerDigest = packTarget.ledgerDigest();
+		if (operations == null || projectedFinalState == null || preservations == null || baselineCaptures == null || conflicts == null || generatedCopies == null)
+			throw new IllegalArgumentException("Update plan fields are incomplete");
+		this.operations = List.copyOf(operations);
+		this.projectedFinalState = List.copyOf(projectedFinalState);
+		this.plannedClientConfig = plannedClientConfig;
+		this.restartReasons = stableSet(restartReasons);
+		this.preservations = List.copyOf(preservations);
+		this.baselineCaptures = List.copyOf(baselineCaptures);
+		this.conflicts = List.copyOf(conflicts);
+		List<NestedCopy> copies = new ArrayList<>();
+		for (NestedCopy copy : generatedCopies) copies.add(Objects.requireNonNull(copy, "generated copy").validated());
+		this.generatedCopies = List.copyOf(copies);
+		this.consequences = Objects.requireNonNull(consequences, "reconciliation consequences").validated();
+	}
+
+	/** Re-runs constructor validation so a Gson-built plan is either whole or rejected as unusable content. */
+	public UpdatePlan validated() {
+		return new UpdatePlan(modpackId, new PackTarget(modpackId, contentToken, policySha1, ledgerDigest), operations, projectedFinalState, plannedClientConfig, restartReasons,
+				preservations, baselineCaptures, conflicts, generatedCopies, consequences);
+	}
+
+	public String modpackId() {
+		return modpackId;
+	}
+
+	public PackTarget packTarget() {
+		if (packTarget == null) packTarget = new PackTarget(modpackId, contentToken, policySha1, ledgerDigest);
+		return packTarget;
+	}
+
+	public List<Operation> operations() {
+		return operations;
+	}
+
+	public List<ProjectedFile> projectedFinalState() {
+		return projectedFinalState;
+	}
+
+	public ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig() {
+		return plannedClientConfig;
+	}
+
+	public Set<RestartReason> restartReasons() {
+		return restartReasons;
+	}
+
+	public List<Preservation> preservations() {
+		return preservations;
+	}
+
+	public List<BaselineCapture> baselineCaptures() {
+		return baselineCaptures;
+	}
+
+	public List<Conflict> conflicts() {
+		return conflicts;
+	}
+
+	public List<NestedCopy> generatedCopies() {
+		return generatedCopies;
+	}
+
+	public ChangeSet consequences() {
+		return consequences;
 	}
 
 	public UpdatePlan withRestartReason(RestartReason reason) {
 		LinkedHashSet<RestartReason> reasons = new LinkedHashSet<>(restartReasons);
 		if (!reasons.add(Objects.requireNonNull(reason, "restart reason"))) return this;
-		return new UpdatePlan(modpackId, packTarget, operations, projectedFinalState, plannedClientConfig, reasons, preservations, baselineCaptures, conflicts,
-				generatedCopies, consequences.withEffects(List.of(new ChangeSet.Effect("restart", reason.name()))));
+		return new UpdatePlan(modpackId, packTarget(), operations, projectedFinalState, plannedClientConfig, reasons, preservations, baselineCaptures, conflicts, generatedCopies,
+				consequences.withEffects(List.of(new ChangeSet.Effect("restart", reason.name()))));
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
+		if (values == null || values.isEmpty()) return Set.of();
 		return Collections.unmodifiableSet(new LinkedHashSet<>(values));
 	}
 
@@ -449,13 +521,41 @@ public record UpdatePlan(
 		}
 	}
 
-	public record NestedCopy(String relativePath, String sha1, long size, Set<String> ids) {
-		public NestedCopy {
-			relativePath = LogicalPath.requireCanonical(relativePath);
+	public static final class NestedCopy {
+		private String relativePath;
+		private String sha1;
+		private long size;
+		private transient Set<String> ids;
+
+		public NestedCopy() {}
+
+		public NestedCopy(String relativePath, String sha1, long size, Set<String> ids) {
+			this.relativePath = LogicalPath.requireCanonical(relativePath);
 			if (!HashUtils.isSha1(sha1)) throw new IllegalArgumentException("Nested-copy SHA-1 is invalid");
-			sha1 = HashUtils.normalizeSha1(sha1);
+			this.sha1 = HashUtils.normalizeSha1(sha1);
 			if (size < 0) throw new IllegalArgumentException("Nested-copy size is invalid");
-			ids = stableSet(ids);
+			this.size = size;
+			this.ids = stableSet(ids);
+		}
+
+		public NestedCopy validated() {
+			return new NestedCopy(relativePath, sha1, size, ids);
+		}
+
+		public String relativePath() {
+			return relativePath;
+		}
+
+		public String sha1() {
+			return sha1;
+		}
+
+		public long size() {
+			return size;
+		}
+
+		public Set<String> ids() {
+			return ids == null ? Set.of() : ids;
 		}
 	}
 
@@ -463,41 +563,5 @@ public record UpdatePlan(
 		LinkedHashSet<String> normalized = new LinkedHashSet<>();
 		if (values != null) for (String value : values) if (value != null && !value.isBlank()) normalized.add(value.toLowerCase(Locale.ROOT));
 		return Collections.unmodifiableSet(normalized);
-	}
-
-	public UpdatePlanFields toFields() {
-		UpdatePlanFields fields = new UpdatePlanFields();
-		fields.modpackId = modpackId;
-		fields.contentToken = packTarget.contentToken();
-		fields.policySha1 = packTarget.policySha1();
-		fields.ledgerDigest = packTarget.ledgerDigest();
-		fields.operations = operations;
-		fields.projectedFinalState = projectedFinalState;
-		fields.plannedClientConfig = plannedClientConfig;
-		fields.restartReasons = List.copyOf(restartReasons);
-		fields.preservations = preservations;
-		fields.baselineCaptures = baselineCaptures;
-		fields.conflicts = conflicts;
-		fields.generatedCopies = generatedCopies.stream().map(copy -> {
-			ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields row = new ClientStorageJsons.ClientGeneratedCopiesFields.EntryFields();
-			row.logicalPath = copy.relativePath();
-			row.sha1 = copy.sha1();
-			row.size = copy.size();
-			return row;
-		}).toList();
-		fields.consequences = consequences.toFields();
-		return fields;
-	}
-
-	public static UpdatePlan fromFields(UpdatePlanFields fields) {
-		if (fields == null || fields.modpackId == null || fields.operations == null || fields.projectedFinalState == null
-				|| fields.preservations == null || fields.baselineCaptures == null || fields.conflicts == null || fields.generatedCopies == null
-				|| fields.consequences == null)
-			throw new IllegalArgumentException("Update plan fields are incomplete");
-		PackTarget packTarget = new PackTarget(fields.modpackId, fields.contentToken, fields.policySha1, fields.ledgerDigest);
-		List<NestedCopy> generatedCopies = fields.generatedCopies.stream().map(row -> new NestedCopy(row.logicalPath, row.sha1, row.size, Set.<String>of())).toList();
-		return new UpdatePlan(fields.modpackId, packTarget, fields.operations, fields.projectedFinalState, fields.plannedClientConfig,
-				fields.restartReasons == null ? Set.of() : Set.copyOf(fields.restartReasons), fields.preservations, fields.baselineCaptures, fields.conflicts,
-				generatedCopies, ChangeSet.fromFields(fields.consequences));
 	}
 }

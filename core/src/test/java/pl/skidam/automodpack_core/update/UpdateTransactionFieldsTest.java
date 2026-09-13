@@ -30,9 +30,8 @@ import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 
 /**
- * The transaction is the write-ahead journal, and its durable document is parsed by the Gson version the running
- * Minecraft ships — 2.8.9 on 1.18/1.19, which cannot deserialize records. These tests keep the persisted graph free
- * of records and prove a real transaction survives a write-read round trip.
+ * The transaction is the write-ahead journal. Minecraft 1.18 ships Gson 2.8.9, which cannot deserialize records, so
+ * every durable type on this graph is a class. These tests keep it that way and prove a real transaction round-trips.
  */
 class UpdateTransactionFieldsTest {
 	private static final String OBJECT_HASH = "1111111111111111111111111111111111111111";

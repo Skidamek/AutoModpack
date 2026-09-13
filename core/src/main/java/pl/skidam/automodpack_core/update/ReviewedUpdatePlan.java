@@ -69,35 +69,42 @@ public final class ReviewedUpdatePlan {
 	 * exactly what drifted.
 	 */
 	public void requireCompatible(UpdatePlan candidate) {
-		Objects.requireNonNull(candidate, "candidate plan");
-		OutcomeTuple approved = outcomeTuple(plan);
-		OutcomeTuple rebuilt = outcomeTuple(candidate);
-		List<String> drifted = new ArrayList<>();
-		if (!approved.modpackId().equals(rebuilt.modpackId())) drifted.add("modpack");
-		if (!approved.generation().equals(rebuilt.generation())) drifted.add("target generation");
-		if (!approved.projected().equals(rebuilt.projected())) drifted.add("projected final state");
-		if (!Objects.equals(approved.config(), rebuilt.config())) drifted.add("planned client configuration");
+		List<String> drifted = outcomeDrift(plan, candidate);
 		if (!drifted.isEmpty()) throw new IllegalStateException("The reviewed update outcome changed before it could be applied: " + String.join(", ", drifted));
 	}
 
 	/**
-	 * Whether a rebuilt plan still means the same approved update. Used by the live replan seam through
-	 * {@link #requireCompatible(UpdatePlan)} and by boot recovery directly, so an interrupted apply can never pass on
-	 * one path and loop the boot on the other.
+	 * Whether a rebuilt plan still means the same approved update. Live replan and boot recovery both call this, so an
+	 * interrupted apply can never pass on one path and loop the boot on the other.
 	 */
 	public static boolean outcomeCompatible(UpdatePlan approved, UpdatePlan rebuilt) {
-		return outcomeTuple(approved).equals(outcomeTuple(rebuilt));
+		return outcomeDrift(approved, rebuilt).isEmpty();
 	}
 
-	/** The approved outcome of one update: everything the player's review decided, independent of how much work is still ahead. */
+	private static List<String> outcomeDrift(UpdatePlan approved, UpdatePlan rebuilt) {
+		Objects.requireNonNull(approved, "approved plan");
+		Objects.requireNonNull(rebuilt, "candidate plan");
+		OutcomeTuple left = outcomeTuple(approved);
+		OutcomeTuple right = outcomeTuple(rebuilt);
+		List<String> drifted = new ArrayList<>();
+		if (!left.modpackId().equals(right.modpackId())) drifted.add("modpack");
+		if (!left.generation().equals(right.generation())) drifted.add("target generation");
+		if (!left.projected().equals(right.projected())) drifted.add("projected final state");
+		if (!Objects.equals(left.config(), right.config())) drifted.add("planned client configuration");
+		return drifted;
+	}
+
+	/** The approved outcome: destination files that remain, never leftover absent rows from already-applied deletes. */
 	private record OutcomeTuple(String modpackId, PackTarget generation, List<ProjectedFile> projected, ClientConfigJsons.ClientConfigFieldsV3 config) {}
 
 	private static OutcomeTuple outcomeTuple(UpdatePlan plan) {
-		return new OutcomeTuple(plan.modpackId(), plan.packTarget(), safe(plan.projectedFinalState()), plan.plannedClientConfig());
+		return new OutcomeTuple(plan.modpackId(), plan.packTarget(), destination(plan), plan.plannedClientConfig());
 	}
 
-	private static <T> List<T> safe(List<T> values) {
-		return values == null ? List.of() : values;
+	private static List<ProjectedFile> destination(UpdatePlan plan) {
+		List<ProjectedFile> present = new ArrayList<>();
+		if (plan.projectedFinalState() != null) for (ProjectedFile file : plan.projectedFinalState()) if (file != null && file.present()) present.add(file);
+		return present;
 	}
 
 	public enum State {

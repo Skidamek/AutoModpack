@@ -52,8 +52,8 @@ class ConfigUtilsTest {
 
 		// Own-group synced rules are dropped entirely: the group directory is included in full, so they are redundant.
 		assertEquals(List.of(), List.copyOf(group.syncedFiles));
-		// The own-group prefix strips; a whole-directory rule stays meaningful in the group's own space, and a
-		// foreign group's rule is kept verbatim instead of being rewritten into a whole-pack statement.
-		assertEquals(List.of("**", "automodpack/host-modpack/other/**", "automodpack/host-modpack/main"), List.copyOf(group.excludedFiles));
+		// Whole-directory remainders (`**`, empty) are dropped: excludedFiles also matches synced paths.
+		// A foreign group's rule is kept verbatim instead of being rewritten into this group's space.
+		assertEquals(List.of("automodpack/host-modpack/other/**", "automodpack/host-modpack/main"), List.copyOf(group.excludedFiles));
 	}
 }
