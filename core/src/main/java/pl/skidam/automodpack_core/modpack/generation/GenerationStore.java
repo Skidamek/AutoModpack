@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +25,6 @@ import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.utils.DurableFiles;
-import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
 /**
@@ -69,32 +67,32 @@ public final class GenerationStore {
 		return current == null ? Optional.empty() : Optional.of(current);
 	}
 
-	/** Journal.open with the store-level heal: a journal that cannot even be read is archived aside and reopened empty. */
+	/** Journal.open with the store-level heal: unusable *content* is archived aside and reopened empty. Physical IO of a readable journal propagates. */
 	private Journal openJournal() throws IOException {
 		try {
 			return Journal.open(journalFile);
-		} catch (IOException | RuntimeException e) {
+		} catch (Journal.UnusableContentException e) {
 			archiveUnusableState(e);
 			return Journal.open(journalFile);
 		}
 	}
 
 	/**
-	 * The current generation from the projection view, or rebuilt from the journal; null once an unusable store was
-	 * archived aside. Any materialization failure counts, ambiguous IO trouble included: the journal is derived state,
-	 * the modpack files on disk are the truth, and the next publish recreates the store from them as a fresh
-	 * generation. Unchanged content keeps its content token, so clients never re-download for that heal.
+	 * The current generation from the projection view, or rebuilt from the journal. Projection write trouble
+	 * propagates: the journal stays the truth. Unusable journal content (replay that cannot be folded, a missing
+	 * policy object after a torn publish) is archived aside so the next publish recreates the store from the server
+	 * files. Unchanged content keeps its content token, so clients never re-download for that heal.
 	 */
 	private Current loadCurrentSetAsideOnFailure() throws IOException {
+		Current projected = loadFromProjection();
+		if (projected != null) return projected;
 		try {
-			Current projected = loadFromProjection();
-			if (projected != null) return projected;
 			JournalEntry head = journal.head();
 			Current rebuilt = new Current(head.seq(), head.contentToken(), head.policySha1(), head.createdAt(), loadPolicy(head.policySha1()), replayLedger(head.seq()),
 					journal.treeAt(head.seq()));
 			writeProjection(rebuilt);
 			return rebuilt;
-		} catch (IOException | RuntimeException e) {
+		} catch (Journal.UnusableContentException e) {
 			archiveUnusableState(e);
 			return null;
 		}
@@ -273,18 +271,19 @@ public final class GenerationStore {
 
 	private GroupManifest loadPolicy(String policySha1) throws IOException {
 		Path object = DataRootResolver.objectFile(objectsDirectory, policySha1);
-		FileTrees.requireRegularFile(object, "policy document");
-		ModpackJsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(object, StandardCharsets.UTF_8), ModpackJsons.CompleteModpackContentFields.class);
-		return GroupManifestValidator.validate(fields);
+		if (!Files.isRegularFile(object)) throw new Journal.UnusableContentException("Policy document is missing from the object store: " + policySha1);
+		try {
+			ModpackJsons.CompleteModpackContentFields fields = ConfigTools.parse(Files.readString(object, StandardCharsets.UTF_8), ModpackJsons.CompleteModpackContentFields.class);
+			return GroupManifestValidator.validate(fields);
+		} catch (RuntimeException e) {
+			throw new Journal.UnusableContentException("Policy document is unusable: " + policySha1, e);
+		}
 	}
 
 	private void writePolicyObject(String policySha1, byte[] bytes) throws IOException {
 		Path object = DataRootResolver.objectFile(objectsDirectory, policySha1);
 		if (Files.exists(object)) return;
-		Files.createDirectories(object.getParent());
-		Path temporary = object.resolveSibling(object.getFileName() + DurableFiles.TEMPORARY_SUFFIX);
-		Files.write(temporary, bytes);
-		Files.move(temporary, object, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		DurableFiles.writeAtomic(object, bytes);
 	}
 
 	/** Replays the journal from its root: every entry's policy document folds into the cumulative ownership ledger. */

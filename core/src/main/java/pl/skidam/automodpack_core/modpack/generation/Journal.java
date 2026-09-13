@@ -23,6 +23,17 @@ import pl.skidam.automodpack_core.config.GenerationJsons;
 
 /** The append-only history of one modpack lineage: one entry per content change. */
 public final class Journal {
+	/** Unusable journal *content*, not a locked or missing file: callers may aside the evidence. Physical IO stays a plain {@link IOException}. */
+	public static final class UnusableContentException extends IOException {
+		public UnusableContentException(String message, Throwable cause) {
+			super(message, cause);
+		}
+
+		public UnusableContentException(String message) {
+			super(message);
+		}
+	}
+
 	private static final Gson COMPACT = ConfigTools.strictEnums(new GsonBuilder().disableHtmlEscaping()).create();
 
 	private final Path file;
@@ -61,7 +72,7 @@ public final class Journal {
 				entries.add(JournalEntry.fromFields(COMPACT.fromJson(line, GenerationJsons.JournalEntryFields.class)));
 			} catch (JsonParseException e) {
 				// A crash or power cut mid-append tears the last line; anything unparsable earlier is real corruption.
-				if (!finalLine || !tolerateTornTail) throw new IOException("Malformed journal line " + (entries.size() + 1) + " in " + file, e);
+				if (!finalLine || !tolerateTornTail) throw new UnusableContentException("Malformed journal line " + (entries.size() + 1) + " in " + file, e);
 				LOGGER.warn("Journal {} ends in a torn line after {} intact entries; dropping the last {} bytes and keeping the intact prefix", file, entries.size(),
 						bytes.length - droppedFrom);
 				truncate(file, droppedFrom);
@@ -120,7 +131,7 @@ public final class Journal {
 	}
 
 	/** Rebuilds the served file set as of the given entry by folding the changes of every entry up to it. */
-	public ContentTree treeAt(long seq) {
+	public ContentTree treeAt(long seq) throws IOException {
 		JournalEntry target = entryAt(seq);
 		ContentTree tree = ContentTree.empty();
 		for (JournalEntry entry : entries) {
@@ -129,7 +140,7 @@ public final class Journal {
 		}
 		String token = tree.token();
 		if (!token.equals(target.contentToken()))
-			throw new IllegalStateException("Journal replay at " + seq + " produced token " + token + " but the entry recorded " + target.contentToken());
+			throw new UnusableContentException("Journal replay at " + seq + " produced token " + token + " but the entry recorded " + target.contentToken());
 		return tree;
 	}
 

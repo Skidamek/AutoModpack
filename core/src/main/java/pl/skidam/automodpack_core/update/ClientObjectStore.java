@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -100,14 +99,7 @@ public final class ClientObjectStore {
 		if (!HashUtils.sha1(bytes).equals(hash)) throw new IOException("Object bytes do not match their content hash: " + hash);
 		Path object = storage.objectFile(hash);
 		if (FileIntegrity.matches(object, bytes.length, hash)) return;
-		Path temporary = Files.createTempFile(storage.stagingDirectory(), ".object-", DurableFiles.TEMPORARY_SUFFIX);
-		try {
-			Files.write(temporary, bytes);
-			Files.createDirectories(object.getParent());
-			Files.move(temporary, object, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-		} finally {
-			Files.deleteIfExists(temporary);
-		}
+		DurableFiles.writeAtomic(object, bytes);
 		if (!FileIntegrity.matches(object, bytes.length, hash)) throw new IOException("Stored client object failed verification: " + hash);
 	}
 
