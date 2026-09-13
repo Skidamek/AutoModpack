@@ -193,7 +193,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	/** Reports whether the live state has already reached the point where only projection publication remains. */
-	public boolean projectionPublicationStarted(UpdateTransaction transaction) {
+	private boolean projectionPublicationStarted(UpdateTransaction transaction) {
 		return ClientProjectionView.publicationStarted(context.storage(), transaction);
 	}
 

@@ -111,7 +111,7 @@ public final class ClientProjectionView {
 		return readLiveFiles(cache);
 	}
 
-	static boolean publicationStarted(ClientStorage storage, UpdateTransaction transaction) {
+	public static boolean publicationStarted(ClientStorage storage, UpdateTransaction transaction) {
 		if (!isProjectionTransaction(transaction)) return false;
 		if (transaction.phase == UpdateTransaction.Phase.PROJECTED || transaction.phase == UpdateTransaction.Phase.SWAPPING
 				|| transaction.phase == UpdateTransaction.Phase.COMMITTED)

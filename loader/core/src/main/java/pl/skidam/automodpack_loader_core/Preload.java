@@ -24,6 +24,7 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
+import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.SelfUpdateSwap;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -130,7 +131,7 @@ public class Preload {
 
 	/** The preload recovery policy: a pending update replans proactively on pre-commit drift, and drift found after a successful recovery forces one replan whose replan-required result is terminal. */
 	private UpdateTransactionExecutor.Execution recoverPendingExecution(UpdateTransactionExecutor executor, UpdateTransaction transaction) throws IOException {
-		if (executor.hasMutableInputDrift(transaction) && !executor.projectionPublicationStarted(transaction)) return replanPendingTransaction(transaction);
+		if (executor.hasMutableInputDrift(transaction) && !ClientProjectionView.publicationStarted(storage, transaction)) return replanPendingTransaction(transaction);
 		UpdateTransactionExecutor.Execution execution;
 		try {
 			execution = executor.recoverLatest();
