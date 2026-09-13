@@ -20,7 +20,7 @@ class UpdateTransactionCorruptionTest {
 	void corruptTransactionIsSetAsideAndStartupSeesNoTransaction() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
 		// A transaction written by an older build whose RestartReason constants no longer exist.
-		Files.writeString(file, "{\"schemaVersion\":1,\"plan\":{\"restartReasons\":[\"GONE_REASON\"]}}");
+		Files.writeString(file, "{\"schemaVersion\":" + UpdateTransaction.CURRENT_SCHEMA_VERSION + ",\"plan\":{\"restartReasons\":[\"GONE_REASON\"]}}");
 
 		assertNull(UpdateTransaction.read(file));
 		assertTrue(Files.notExists(file));
@@ -36,7 +36,7 @@ class UpdateTransactionCorruptionTest {
 	@Test
 	void emptyPlanObjectIsSetAsideAndStartupSeesNoTransaction() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
-		Files.writeString(file, "{\"schemaVersion\":1,\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"plan\":{}}");
+		Files.writeString(file, "{\"schemaVersion\":" + UpdateTransaction.CURRENT_SCHEMA_VERSION + ",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"plan\":{}}");
 
 		assertNull(UpdateTransaction.read(file));
 		assertTrue(Files.notExists(file));
@@ -49,7 +49,7 @@ class UpdateTransactionCorruptionTest {
 	void incompleteTransactionIsSetAsideAndStartupSeesNoTransaction() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
 		// A transaction whose planned sections never reached the disk cannot drive any recovery; only a whole one loads.
-		Files.writeString(file, "{\"schemaVersion\":1,\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\"}");
+		Files.writeString(file, "{\"schemaVersion\":" + UpdateTransaction.CURRENT_SCHEMA_VERSION + ",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\"}");
 
 		assertNull(UpdateTransaction.read(file));
 		assertTrue(Files.notExists(file));
@@ -60,9 +60,10 @@ class UpdateTransactionCorruptionTest {
 	}
 
 	@Test
-	void priorSchemaTransactionIsSetAsideAndStartupSeesNoTransaction() throws Exception {
+	void aTransactionFromAnotherSchemaGenerationIsSetAsideAndStartupSeesNoTransaction() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
-		Files.writeString(file, "{\"schemaVersion\":1,\"transactionId\":\"t1\",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"targetPlatform\":\"linux\","
+		// A transaction a newer build wrote: this build must not drive its recovery, in either schema direction.
+		Files.writeString(file, "{\"schemaVersion\":" + (UpdateTransaction.CURRENT_SCHEMA_VERSION + 1) + ",\"transactionId\":\"t1\",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"targetPlatform\":\"linux\","
 				+ "\"plan\":{\"modpackId\":\"packaa1\",\"contentToken\":\"" + TOKEN + "\",\"policySha1\":\"" + TOKEN + "\",\"ledgerDigest\":\"" + TOKEN + "\","
 				+ "\"operations\":[],\"projectedFinalState\":[],\"restartReasons\":[\"SELECTED_MODPACK\"],\"preservations\":[],\"baselineCaptures\":[],\"conflicts\":[],\"generatedCopies\":[],"
 				+ "\"plannedClientConfig\":null,\"consequences\":{\"changes\":[],\"effects\":[]}}}");
@@ -77,7 +78,7 @@ class UpdateTransactionCorruptionTest {
 	@Test
 	void validTransactionStillLoads() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
-		Files.writeString(file, "{\"schemaVersion\":2,\"transactionId\":\"t1\",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"targetPlatform\":\"linux\","
+		Files.writeString(file, "{\"schemaVersion\":" + UpdateTransaction.CURRENT_SCHEMA_VERSION + ",\"transactionId\":\"t1\",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"targetPlatform\":\"linux\","
 				+ "\"plan\":{\"modpackId\":\"packaa1\",\"contentToken\":\"" + TOKEN + "\",\"policySha1\":\"" + TOKEN + "\",\"ledgerDigest\":\"" + TOKEN + "\","
 				+ "\"operations\":[],\"projectedFinalState\":[],\"restartReasons\":[\"SELECTED_MODPACK\"],\"preservations\":[],\"baselineCaptures\":[],\"conflicts\":[],\"generatedCopies\":[],"
 				+ "\"plannedClientConfig\":null,\"consequences\":{\"changes\":[],\"effects\":[]}}}");
