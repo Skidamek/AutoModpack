@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.utils;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Function;
@@ -202,7 +203,7 @@ public class FileInspection {
 					BufferedReader reader = new BufferedReader(new InputStreamReader(new FilterInputStream(zis) {
 						@Override
 						public void close() {}
-					}));
+					}, StandardCharsets.UTF_8));
 
 					if (name.endsWith(".toml")) metadata = parseTomlMetadata(reader);
 					else metadata = parseJsonMetadata(reader);
