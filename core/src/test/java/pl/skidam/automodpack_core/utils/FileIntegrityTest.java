@@ -88,4 +88,40 @@ class FileIntegrityTest {
 			assertTrue(FileIntegrity.matchesObject(copy, object, size, hash, cache));
 		}
 	}
+
+	@Test
+	void identityAnswersHoldAcrossTheFixtureMatrix() throws Exception {
+		Path object = Files.writeString(temporaryDirectory.resolve("object.bin"), "named-bytes", StandardCharsets.UTF_8);
+		long size = Files.size(object);
+		String hash = HashUtils.getHash(object);
+		Path copied = Files.writeString(temporaryDirectory.resolve("copied.bin"), "named-bytes", StandardCharsets.UTF_8);
+		Path edited = Files.writeString(temporaryDirectory.resolve("edited.bin"), "tampered-x!", StandardCharsets.UTF_8);
+		try (FileCache cache = FileCache.open(temporaryDirectory.resolve("file-cache"))) {
+			assertTrue(FileIntegrity.matchesNamed(object, size, hash, cache));
+			assertTrue(FileIntegrity.matches(object, size, hash, cache));
+			assertTrue(FileIntegrity.matchesObject(object, object, size, hash, cache));
+
+			assertFalse(FileIntegrity.sameInode(copied, object));
+			assertTrue(FileIntegrity.matchesNamed(copied, size, hash, cache));
+			assertTrue(FileIntegrity.matchesObject(copied, object, size, hash, cache));
+
+			// Same size, different bytes: the disturbed tripwire rehashes and the answer is false either way.
+			assertFalse(FileIntegrity.sameInode(edited, object));
+			assertFalse(FileIntegrity.matchesNamed(edited, size, hash, cache));
+			assertFalse(FileIntegrity.matchesObject(edited, object, size, hash, cache));
+			assertFalse(FileIntegrity.matches(edited, size, hash, cache));
+			assertTrue(FileIntegrity.matches(edited, Files.size(edited), HashUtils.getHash(edited), cache));
+
+			Path alias = temporaryDirectory.resolve("alias.bin");
+			try {
+				Files.createLink(alias, object);
+			} catch (UnsupportedOperationException | FileSystemException e) {
+				Assumptions.assumeTrue(false, "hardlinks unavailable");
+				return;
+			}
+			assertTrue(FileIntegrity.sameInode(alias, object));
+			assertTrue(FileIntegrity.matchesNamed(alias, size, hash, cache));
+			assertTrue(FileIntegrity.matchesObject(alias, object, size, hash, cache));
+		}
+	}
 }
