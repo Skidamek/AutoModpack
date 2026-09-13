@@ -103,7 +103,7 @@ public class Secrets {
 		}
 
 		IssuedSecret issued = playerSecretPair.getValue();
-		if (issued == null || issued.name() == null || issued.name().isBlank()) {
+		if (issued == null || issued.name() == null || issued.name().isBlank() || issued.timestamp() == null) {
 			LOGGER.warn("Rejecting a secret from {} that is not bound to a player identity (stale entry from an older AutoModpack version)", address);
 			return false;
 		}
