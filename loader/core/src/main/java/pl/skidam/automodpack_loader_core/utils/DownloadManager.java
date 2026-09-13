@@ -34,7 +34,8 @@ public class DownloadManager {
 		CANCELLED
 	}
 
-	public record AcquisitionResult(boolean success, FailureCategory failureCategory) {}
+	/** Finished acquisitions so far: files acquired successfully, then files failed for good. Survives {@link #cancelAllAndShutdown()}. */
+	public record AcquisitionProgress(long acquired, long failed) {}
 
 	private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
@@ -54,7 +55,11 @@ public class DownloadManager {
 	private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
 	public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
 	private final Map<FileInspection.HashPathPair, Path> activeTemporaryFiles = new ConcurrentHashMap<>();
-	private final Map<FileInspection.HashPathPair, AcquisitionResult> acquisitionResults = new ConcurrentHashMap<>();
+
+	// The acquisition summary outlives cancelAllAndShutdown, unlike downloadedCount which resets for the stage line;
+	// each task records at most once per run, so plain counters mirror what the recorded results map produced.
+	private final AtomicLong acquiredFiles = new AtomicLong(0);
+	private final AtomicLong failedFiles = new AtomicLong(0);
 
 	private final DownloadScheduler scheduler = new DownloadScheduler();
 
@@ -126,7 +131,7 @@ public class DownloadManager {
 		downloadsInProgress.put(key, data);
 		if (cancelled || downloadExecutor.isShutdown()) {
 			downloadsInProgress.remove(key);
-			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
+			failedFiles.incrementAndGet();
 			semaphore.release();
 			return;
 		}
@@ -142,7 +147,7 @@ public class DownloadManager {
 			});
 		} catch (RejectedExecutionException error) {
 			downloadsInProgress.remove(key);
-			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
+			failedFiles.incrementAndGet();
 			semaphore.release();
 			future.completeExceptionally(error);
 		} catch (RuntimeException error) {
@@ -330,7 +335,7 @@ public class DownloadManager {
 		try {
 			if (success) {
 				downloadedCount++;
-				acquisitionResults.put(key, new AcquisitionResult(true, null));
+				acquiredFiles.incrementAndGet();
 				LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
 				try {
 					task.successCallback.run();
@@ -347,7 +352,7 @@ public class DownloadManager {
 
 	private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {
 		if (interrupted || cancelled) {
-			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
+			failedFiles.incrementAndGet();
 			semaphore.release();
 			return;
 		}
@@ -357,7 +362,7 @@ public class DownloadManager {
 			queuedDownloads.put(key, task);
 		} else {
 			FailureCategory category = task.lastFailureCategory == null ? FailureCategory.REMOTE_SOURCE : task.lastFailureCategory;
-			acquisitionResults.put(key, new AcquisitionResult(false, category));
+			failedFiles.incrementAndGet();
 			LOGGER.error("Permanently failed to download {} ({})", task.file.getFileName(), category);
 			try {
 				task.failureCallback.accept(category);
@@ -441,8 +446,9 @@ public class DownloadManager {
 		downloadExecutor.shutdown();
 	}
 
-	public Map<FileInspection.HashPathPair, AcquisitionResult> getAcquisitionResults() {
-		return Map.copyOf(acquisitionResults);
+	/** Snapshot of finished acquisitions, what the acquisition summary line renders. */
+	public AcquisitionProgress acquisitionProgress() {
+		return new AcquisitionProgress(acquiredFiles.get(), failedFiles.get());
 	}
 
 	public boolean isCancelled() {
