@@ -1,26 +1,19 @@
 package pl.skidam.automodpack_core.update;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
-import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
-import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
-import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
-import pl.skidam.automodpack_core.update.UpdatePlan.NestedCopy;
-import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
-import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
-import pl.skidam.automodpack_core.utils.HashUtils;
 
-/** Owns the finite lifecycle, execution fingerprint, and outcome contract of one player-reviewed update plan. */
+/**
+ * Owns the finite lifecycle and the outcome contract of one player-reviewed update plan. The review approves the
+ * outcome - the target generation, the projected final state, and the planned client configuration - never the work
+ * description, so a plan rebuilt after a partial apply is judged by the one predicate both the live replan seam and
+ * boot recovery share: {@link #outcomeCompatible(UpdatePlan, UpdatePlan)}.
+ */
 public final class ReviewedUpdatePlan {
 	private final UpdatePlan plan;
 	private State state;
@@ -69,12 +62,11 @@ public final class ReviewedUpdatePlan {
 	}
 
 	/**
-	 * Verifies that a plan rebuilt after a partial apply still means exactly the update the player approved. The
-	 * contract is the outcome - the target generation, the projected final state, and the planned client
-	 * configuration - never the work description: an earlier attempt of this same approved plan may have already
-	 * applied a prefix of its operations, which legitimately shrinks the rebuilt plan's operations, consequences,
-	 * and captures, and must not read as a changed review. A drifted outcome returns to the review seam instead of
-	 * being applied implicitly, and the failure names exactly what drifted.
+	 * Verifies that a plan rebuilt after a partial apply still means exactly the update the player approved. An
+	 * earlier attempt of this same approved plan may have already applied a prefix of its operations, which
+	 * legitimately shrinks the rebuilt plan's operations, consequences, and captures, and must not read as a changed
+	 * review. A drifted outcome returns to the review seam instead of being applied implicitly, and the failure names
+	 * exactly what drifted.
 	 */
 	public void requireCompatible(UpdatePlan candidate) {
 		Objects.requireNonNull(candidate, "candidate plan");
@@ -88,6 +80,15 @@ public final class ReviewedUpdatePlan {
 		if (!drifted.isEmpty()) throw new IllegalStateException("The reviewed update outcome changed before it could be applied: " + String.join(", ", drifted));
 	}
 
+	/**
+	 * Whether a rebuilt plan still means the same approved update. Used by the live replan seam through
+	 * {@link #requireCompatible(UpdatePlan)} and by boot recovery directly, so an interrupted apply can never pass on
+	 * one path and loop the boot on the other.
+	 */
+	public static boolean outcomeCompatible(UpdatePlan approved, UpdatePlan rebuilt) {
+		return outcomeTuple(approved).equals(outcomeTuple(rebuilt));
+	}
+
 	/** The approved outcome of one update: everything the player's review decided, independent of how much work is still ahead. */
 	private record OutcomeTuple(String modpackId, PackTarget generation, List<ProjectedFile> projected, ClientConfigJsons.ClientConfigFieldsV3 config) {}
 
@@ -95,90 +96,8 @@ public final class ReviewedUpdatePlan {
 		return new OutcomeTuple(plan.modpackId(), plan.packTarget(), safe(plan.projectedFinalState()), plan.plannedClientConfig());
 	}
 
-	/** Compares a rebuilt plan with the plan carried by a durable transaction. */
-	public static boolean isCompatible(UpdateTransaction transaction, UpdatePlan candidate) {
-		Objects.requireNonNull(transaction, "transaction");
-		Objects.requireNonNull(candidate, "candidate plan");
-		return executionDigest(transaction.plan()).equals(executionDigest(candidate));
-	}
-
-	/** The complete execution meaning of one update, normalized so plans and durable transactions digest identically. */
-	private record ExecutionTuple(String modpackId, PackTarget generation, List<Operation> operations, List<ProjectedFile> projected,
-			ClientConfigJsons.ClientConfigFieldsV3 config, List<String> restartReasons, List<Preservation> preservations, List<BaselineCapture> baselines,
-			List<Conflict> conflicts, List<NestedCopy> nestedCopies, String consequencesDigest) {}
-
-	private static ExecutionTuple tuple(UpdatePlan plan) {
-		return new ExecutionTuple(plan.modpackId(), plan.packTarget(), safe(plan.operations()), safe(plan.projectedFinalState()), plan.plannedClientConfig(),
-				plan.restartReasons().stream().map(Enum::name).sorted().toList(), safe(plan.preservations()), safe(plan.baselineCaptures()), safe(plan.conflicts()),
-				safe(plan.generatedCopies()), consequencesDigest(plan.consequences()));
-	}
-
-	/**
-	 * Durable generated-copy state persists the loader-facing execution tuple, not inspection-only IDs,
-	 * so both plan- and transaction-side copies are stripped to their identical loader-facing fields.
-	 */
-	private static List<NestedCopy> loaderCopies(List<NestedCopy> copies) {
-		return safe(copies).stream().map(copy -> new NestedCopy(copy.relativePath(), copy.sha1(), copy.size(), Set.of())).toList();
-	}
-
-	static String executionDigest(UpdatePlan plan) {
-		Objects.requireNonNull(plan, "update plan");
-		return executionDigest(tuple(plan));
-	}
-
-	/** Every tuple field is encoded as one length-prefixed unit: the records' canonical toStrings. */
-	private static String executionDigest(ExecutionTuple tuple) {
-		MessageDigest digest = newDigest();
-		value(digest, "modpackId", tuple.modpackId());
-		value(digest, "generation", tuple.generation());
-		values(digest, "operation", tuple.operations());
-		values(digest, "projected", tuple.projected());
-		value(digest, "config", tuple.config());
-		values(digest, "restart", tuple.restartReasons());
-		values(digest, "preservation", tuple.preservations());
-		values(digest, "baseline", tuple.baselines());
-		values(digest, "conflict", tuple.conflicts());
-		values(digest, "nestedCopy", tuple.nestedCopies());
-		value(digest, "consequences", tuple.consequencesDigest());
-		return digest(digest);
-	}
-
-	public static String consequencesDigest(ChangeSet consequences) {
-		Objects.requireNonNull(consequences, "reconciliation consequences");
-		MessageDigest digest = newDigest();
-		values(digest, "change", consequences.changes());
-		values(digest, "effect", consequences.effects());
-		return digest(digest);
-	}
-
-	private static <T> void values(MessageDigest digest, String label, List<T> values) {
-		List<String> encoded = new ArrayList<>();
-		for (T item : safe(values)) encoded.add(String.valueOf(item));
-		encoded.sort(Comparator.naturalOrder());
-		value(digest, label + "Count", encoded.size());
-		for (String item : encoded) value(digest, label + "Value", item);
-	}
-
 	private static <T> List<T> safe(List<T> values) {
 		return values == null ? List.of() : values;
-	}
-
-	private static void value(MessageDigest digest, String label, Object value) {
-		String encoded = String.valueOf(value);
-		byte[] bytes = (label + "\u0000" + encoded).getBytes(StandardCharsets.UTF_8);
-		digest.update((byte) (bytes.length >>> 24));
-		digest.update((byte) (bytes.length >>> 16));
-		digest.update((byte) (bytes.length >>> 8));
-		digest.update((byte) bytes.length);
-		digest.update(bytes);
-	}
-
-	private static String digest(MessageDigest digest) {
-		return HexFormat.of().formatHex(digest.digest());
-	}
-
-	private static MessageDigest newDigest() {
-		return HashUtils.newSha1Digest();
 	}
 
 	public enum State {
