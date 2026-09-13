@@ -105,7 +105,14 @@ public final class ServerHolepunchBridge {
 			}
 			ByteBuf decoded = context.alloc().ioBuffer(input.readableBytes() + camouflage.inbound().pendingRecordLength());
 			ByteBuffer view = decoded.nioBuffer(0, decoded.capacity());
-			camouflage.inbound().decode(readableView(input), view);
+			try {
+				camouflage.inbound().decode(readableView(input), view);
+			} catch (IOException exception) {
+				// Malformed input kills the connection, but the pipeline's error path cannot release this
+				// method's local, so the buffer goes back first or every hostile frame leaks one.
+				decoded.release();
+				throw exception;
+			}
 			if (view.position() == 0) {
 				decoded.release();
 				return;
@@ -135,7 +142,12 @@ public final class ServerHolepunchBridge {
 			// plus whatever partial record the encoder still holds is the whole bound.
 			ByteBuf encoded = context.alloc().ioBuffer(message.readableBytes() + camouflage.outbound().pendingRecordLength() + TlsRecordCamouflage.FRAME_HEADER_LENGTH);
 			ByteBuffer view = encoded.nioBuffer(0, encoded.capacity());
-			camouflage.outbound().encode(readableView(message), view);
+			try {
+				camouflage.outbound().encode(readableView(message), view);
+			} catch (IOException exception) {
+				encoded.release();
+				throw exception;
+			}
 			if (view.position() == 0) {
 				encoded.release();
 				return;
