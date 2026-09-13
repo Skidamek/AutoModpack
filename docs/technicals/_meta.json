@@ -4,27 +4,31 @@
     "icon": null
   },
   "certificate.mdx": {
-    "name": "Certificate Handling",
+    "name": "Certificate handling",
     "icon": null
   },
   "modpack-creation.mdx": {
-    "name": "Modpack Creation",
+    "name": "Modpack creation",
     "icon": null
   },
   "editable-file-update-policy.mdx": {
-    "name": "Editable File Update Policy",
+    "name": "Editable file update policy",
     "icon": null
   },
   "file-structure.mdx": {
-    "name": "File Structure",
+    "name": "File structure",
     "icon": null
   },
   "client-storage.mdx": {
-    "name": "Client Local Storage",
+    "name": "Client local storage",
+    "icon": null
+  },
+  "client-update-review.mdx": {
+    "name": "Update review",
     "icon": null
   },
   "modpack-hosting.mdx": {
-    "name": "Modpack Hosting",
+    "name": "Modpack hosting",
     "icon": null
   }
 }

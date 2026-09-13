@@ -35,6 +35,9 @@ Client always try to sync to the server's version of AutoModpack. It updates or 
 ### Why is the host modpack path so long?
 Each group has its own directory under `~/automodpack/host-modpack/<group>/`. `main` is the default group; extra groups are declared in `groups` in [server config](configuration/server-config). File rules (`syncedFiles`, `excludedFiles`, `allowEditsInFiles`) live on each group, not at the top level of the config.
 
+### What are groups?
+Optional parts of a modpack, like a shader bundle or client-side mods. The server admin declares them in `groups` in the [server config](configuration/server-config); players pick the ones they want in the in-game Modpack settings screen, and the choice sticks across updates.
+
 ### Which minecraft versions are supported?
 All the versions you see in the [latest release](https://github.com/Skidamek/AutoModpack/releases/latest).
 
