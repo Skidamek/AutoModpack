@@ -56,4 +56,12 @@ class PathRuleSetTest {
 		assertTrue(rules.matches("kubejs/a.js"));
 		assertFalse(rules.matches("kubejs/c.js"));
 	}
+
+	@Test
+	void aNegatedCharacterClassStaysNegated() {
+		PathRuleSet rules = new PathRuleSet(List.of("mods/[!x]*.jar"));
+
+		assertTrue(rules.matches("mods/sodium.jar"));
+		assertFalse(rules.matches("mods/x.jasper"));
+	}
 }

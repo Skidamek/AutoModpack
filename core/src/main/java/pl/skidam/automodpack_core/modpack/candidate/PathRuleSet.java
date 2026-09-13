@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.modpack.candidate;
 
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -16,13 +14,8 @@ public final class PathRuleSet {
 	private final List<CompiledRule> positive;
 	private final List<CompiledRule> negated;
 
+	/** Matching is a case-sensitive {@code /}-only glob so the default filesystem cannot fold it. */
 	public PathRuleSet(Collection<String> rules) {
-		this(rules, FileSystems.getDefault());
-	}
-
-	/** {@code fileSystem} is kept for tests; matching is a case-sensitive {@code /}-only glob so NTFS cannot fold it. */
-	PathRuleSet(Collection<String> rules, FileSystem fileSystem) {
-		Objects.requireNonNull(fileSystem, "fileSystem");
 		List<CompiledRule> positive = new ArrayList<>();
 		List<CompiledRule> negated = new ArrayList<>();
 		if (rules != null) for (String raw : new TreeSet<>(rules)) {
@@ -90,7 +83,7 @@ public final class PathRuleSet {
 		}
 	}
 
-	/** Unix glob, case-sensitive, {@code /} is the only separator. {@code *} stays in one segment; {@code **} may cross. */
+	/** Unix glob, case-sensitive, {@code /} is the only separator. {@code *} stays in one segment; {@code **} may cross; {@code [!...]} negates the class. */
 	private static Pattern globToRegex(String glob) {
 		return Pattern.compile('^' + globToRegexBody(glob) + '$');
 	}
@@ -109,7 +102,13 @@ public final class PathRuleSet {
 				int close = glob.indexOf(']', i + 1);
 				if (close < 0) regex.append("\\[");
 				else {
-					regex.append(glob, i, close + 1);
+					regex.append('[');
+					int body = i + 1;
+					if (body < close && glob.charAt(body) == '!') {
+						regex.append('^');
+						body++;
+					}
+					regex.append(glob, body, close).append(']');
 					i = close;
 				}
 			} else if (c == '{') {
