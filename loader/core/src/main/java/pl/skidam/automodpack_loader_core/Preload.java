@@ -104,12 +104,10 @@ public class Preload {
 			return;
 		}
 
-		UpdateTransaction transaction;
-		try {
-			transaction = ConfigTools.read(storage.transactionFile(), UpdateTransaction.class)
-					.orElseThrow(() -> new ConfigTools.ConfigException("Transaction file is missing"));
-		} catch (RuntimeException e) {
-			quarantineTransaction(e);
+		// The canonical reader asides unusable content as *.corrupt- evidence and returns null; physical read trouble propagates and crashes loudly.
+		UpdateTransaction transaction = UpdateTransaction.read(storage.transactionFile());
+		if (transaction == null) {
+			deferredRecoveryGuard().clear();
 			return;
 		}
 

@@ -482,6 +482,42 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void aPlannerRebuiltPlanAfterADeletePrefixStaysOutcomeCompatible() throws Exception {
+		ClientStorage storage = storage();
+		byte[] keepBytes = "kept-pack-file".getBytes(StandardCharsets.UTF_8);
+		String keepHash = store(storage, keepBytes);
+		byte[] goneBytes = "removed-pack-file".getBytes(StandardCharsets.UTF_8);
+		String goneHash = store(storage, goneBytes);
+		SelectedModpackTarget installed = twoFileTarget(storage, "mods/keep.jar", "mods/gone.jar", keepHash, keepBytes.length, goneHash, goneBytes.length);
+		UpdatePlan installedPlan = plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
+				new Operation(Root.PROJECTION, "mods/gone.jar", OperationType.INSTALL_OBJECT, goneHash, goneBytes.length, null),
+				new Operation(Root.PROJECTION, "mods/keep.jar", OperationType.INSTALL_OBJECT, keepHash, keepBytes.length, null)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/gone.jar", true, goneHash, goneBytes.length),
+						new ProjectedFile(Root.PROJECTION, "mods/keep.jar", true, keepHash, keepBytes.length)));
+		assertTrue(commit(storage, installedPlan, installed).success());
+
+		// The next generation no longer ships gone.jar; the planner plans its removal from the projection.
+		SelectedModpackTarget next = nextTarget(storage, installed, "mods/keep.jar", keepHash, keepBytes.length, Instant.now());
+		UpdatePlan.FileState keepState = new UpdatePlan.FileState(keepHash, keepBytes.length, true);
+		UpdatePlan.FileState goneState = new UpdatePlan.FileState(goneHash, goneBytes.length, true);
+		UpdatePlan first = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), next.flatTarget(),
+				Map.of(new UpdatePlan.FileKey(Root.PROJECTION, "mods/keep.jar"), keepState, new UpdatePlan.FileKey(Root.PROJECTION, "mods/gone.jar"), goneState),
+				Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(next.manifest().modpackId()), null));
+		assertTrue(first.operations().stream().anyMatch(operation -> operation.operation() == OperationType.DELETE && operation.relativePath().equals("mods/gone.jar")),
+				"The plan must remove the file the next generation dropped");
+
+		// The delete prefix applies for real; the rebuilt plan then observes a world where it is already done.
+		Files.delete(storage.activePath("mods/gone.jar"));
+		UpdatePlan rebuilt = UpdatePlanner.plan(new UpdatePlanner.Input(installed.flatTarget(), next.flatTarget(),
+				Map.of(new UpdatePlan.FileKey(Root.PROJECTION, "mods/keep.jar"), keepState),
+				Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null, clientConfig(next.manifest().modpackId()), null));
+
+		assertTrue(ReviewedUpdatePlan.outcomeCompatible(first, rebuilt), "An applied delete prefix must not read as a changed review");
+		ReviewedUpdatePlan.pending(first).requireCompatible(rebuilt);
+		assertEquals(first.projectedFinalState(), rebuilt.projectedFinalState());
+	}
+
+	@Test
 	void corruptPendingTransactionIsSetAsideAndDoesNotBlockANewPlan() throws Exception {
 		ClientStorage storage = storage();
 		byte[] bytes = "blocked-object".getBytes(StandardCharsets.UTF_8);

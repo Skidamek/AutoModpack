@@ -54,8 +54,8 @@ public final class ClientPendingUpdateRecovery {
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			builder.reconcileEditableState(cache, target.flatTarget());
 			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, currentConfig, true), cache, modCache);
-			if (!ReviewedUpdatePlan.isCompatible(pending, prepared.plan()))
-				throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending update consequences; a new review is required");
+			if (!ReviewedUpdatePlan.outcomeCompatible(pending.plan(), prepared.plan()))
+				throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending update outcome; a new review is required");
 			builder.preparePlanObjects(prepared.plan(), target.flatTarget());
 			return UpdateTransactionSupport.executor().commit(prepared.plan(), target, prepared.overlayDigest(), prepared.expectedClientConfig());
 		}
@@ -71,8 +71,8 @@ public final class ClientPendingUpdateRecovery {
 		else
 			transaction = UpdateTransaction.createDeactivation(preparation.plan(), ClientPlatform.current(), preparation.expectedPriorIntent(), preparation.installed().ownershipLedger,
 					overlayDigest, preparation.expectedClientConfig());
-		if (!ReviewedUpdatePlan.isCompatible(pending, preparation.plan()))
-			throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending removal consequences; a new review is required");
+		if (!ReviewedUpdatePlan.outcomeCompatible(pending.plan(), preparation.plan()))
+			throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending removal outcome; a new review is required");
 		return UpdateTransactionSupport.executor().commit(transaction);
 	}
 

@@ -55,7 +55,6 @@ class ReviewedUpdatePlanTest {
 		UpdatePlan first = plan(List.of(operation("mods/a.jar", OBJECT_HASH), operation("config/a.json", OTHER_HASH)));
 		UpdatePlan reordered = plan(List.of(operation("config/a.json", OTHER_HASH), operation("mods/a.jar", OBJECT_HASH)));
 
-		assertEquals(ReviewedUpdatePlan.executionDigest(first), ReviewedUpdatePlan.executionDigest(reordered));
 		ReviewedUpdatePlan.pending(first).requireCompatible(reordered);
 	}
 
@@ -102,14 +101,23 @@ class ReviewedUpdatePlanTest {
 	}
 
 	@Test
-	void durableTransactionUsesTheSameExecutionFingerprint() {
+	void theTransactionJudgesRecoveryByItsCarriedOutcome() {
 		OwnershipLedger ledger = OwnershipLedger.empty("packaa1");
 		UpdatePlan plan = new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), ledger.digest()), List.of(operation("mods/a.jar", OBJECT_HASH)),
-				List.of(), new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/a.jar", true, OBJECT_HASH, 1)), new ClientConfigJsons.ClientConfigFieldsV3(),
+				Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, ClientPlatform.LINUX, null, ledger.toFields(), "", new ClientConfigJsons.ClientConfigFieldsV3());
 
-		assertTrue(ReviewedUpdatePlan.isCompatible(transaction, plan));
-		assertFalse(ReviewedUpdatePlan.isCompatible(transaction, plan(List.of(operation("mods/a.jar", OTHER_HASH)))));
+		// Recovery replans after a partial apply, so shrunk work for the same outcome stays compatible...
+		UpdatePlan shrunk = new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), ledger.digest()), List.of(operation("mods/a.jar", OTHER_HASH)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/a.jar", true, OBJECT_HASH, 1)), new ClientConfigJsons.ClientConfigFieldsV3(),
+				Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+		assertTrue(ReviewedUpdatePlan.outcomeCompatible(transaction.plan(), shrunk));
+		// ...while a drifted outcome cannot slip through.
+		UpdatePlan drifted = new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), ledger.digest()), List.of(operation("mods/a.jar", OBJECT_HASH)),
+				List.of(new ProjectedFile(Root.PROJECTION, "mods/a.jar", true, OTHER_HASH, 1)), new ClientConfigJsons.ClientConfigFieldsV3(),
+				Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+		assertFalse(ReviewedUpdatePlan.outcomeCompatible(transaction.plan(), drifted));
 	}
 
 	private static UpdatePlan plan(List<Operation> operations) {
