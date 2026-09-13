@@ -4,10 +4,10 @@
 - `/automodpack generate` - Publish a generation when the content changed.
 - `/automodpack generate notes <text...>` - Publish a generation with patch notes.
 - `/automodpack generate preview [notes <text...>]` - Preview the next generation without publishing it.
-- `/automodpack generate if-state <digest> [notes <text...>]` - Publish only when the current state matches the digest.
-- `/automodpack generate history` - List the complete generation timeline and copyable generation IDs.
-- `/automodpack generate revert <generation-id>` - Preview a server rollback.
-- `/automodpack generate revert <generation-id> confirm [notes <text...>]` - Publish the selected old state as a new generation.
+- `/automodpack generate if-content <content-token> [notes <text...>]` - Publish only when the pack content still matches the given content token, so a scripted publish cannot race a manual change.
+- `/automodpack generate history` - List the journal: every published generation with its sequence number, date, and patch notes.
+- `/automodpack generate revert <seq>` - Preview a server rollback to journal sequence `<seq>`.
+- `/automodpack generate revert <seq> confirm [notes <text...>]` - Publish the selected old state as a new generation.
 - `/automodpack generate storage` - Show a storage receipt for the journal and objects.
 - `/automodpack generate storage collect confirm` - Delete every object the current generation does not serve. Older generations stay listed in the journal but their bytes die, so they can no longer be restored.
 - `/automodpack host` - Status of modpack hosting.
