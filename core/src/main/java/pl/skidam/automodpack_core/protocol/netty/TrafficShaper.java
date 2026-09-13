@@ -42,7 +42,11 @@ public final class TrafficShaper {
 	}
 
 	public static GlobalTrafficShapingHandler handler() {
-		return instance.handler;
+		TrafficShaper shaper = instance;
+		// Crash with the cause instead of an NPE from a dereference: a pipeline install racing stop()
+		// must read as "the shaper is not running", not as a null the reader has to chase.
+		if (shaper == null) throw new IllegalStateException("Traffic shaper is not running");
+		return shaper.handler;
 	}
 
 	public static void close() {
