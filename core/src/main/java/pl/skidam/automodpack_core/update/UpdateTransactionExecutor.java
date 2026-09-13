@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -268,8 +269,9 @@ public final class UpdateTransactionExecutor {
 		captureBaselines(transaction);
 		// The ledger-driven batch is bookkeeping; the conflict resolutions are the player's last review
 		// decisions and must become the newest vault claims, which the vault surfaces first.
-		preserveBeforeMutation(transaction);
-		preserveConflicts(transaction);
+		PreservationVault.LiveOwnership ownership = PreservationVault.LiveOwnership.read(context.storage());
+		preserveBeforeMutation(transaction, ownership);
+		preserveConflicts(transaction, ownership);
 		if (!liveAlreadyApplied) applyOperations(transaction, current);
 		current.set(null);
 		if (!publicationStarted) {
@@ -376,21 +378,22 @@ public final class UpdateTransactionExecutor {
 			throw new UpdateReplanRequiredException(target, described + " target changed after planning: " + target);
 	}
 
-	private void preserveBeforeMutation(UpdateTransaction transaction) throws IOException {
+	private void preserveBeforeMutation(UpdateTransaction transaction, PreservationVault.LiveOwnership ownership) throws IOException {
 		for (Preservation preservation : transaction.plan().preservations()) {
-			PreservationOrigin origin = preservationOrigin(transaction, preservation);
-			PreservationVault.preserve(context.storage(), origin.modpackId(), origin.contentToken(), origin.reason(), preservation.root(),
-					preservation.relativePath(), preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize());
+			PreservationOrigin origin = preservationOrigin(transaction, preservation, ownership);
+			PreservationVault.preserve(context.storage(), ownership, origin.modpackId(), origin.contentToken(), origin.reason(), preservation.root(),
+					preservation.relativePath(), preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize(), Instant.now());
 		}
 	}
 
-	private void preserveConflicts(UpdateTransaction transaction) throws IOException {
+	private void preserveConflicts(UpdateTransaction transaction, PreservationVault.LiveOwnership ownership) throws IOException {
 		for (Conflict conflict : transaction.plan().conflicts())
-			if (conflict.action() == ConflictAction.PRESERVE_LOCAL) PreservationVault.preserveConflict(context.storage(), transaction.plan().packTarget().contentToken(), conflict);
+			if (conflict.action() == ConflictAction.PRESERVE_LOCAL)
+				PreservationVault.preserveConflict(context.storage(), ownership, transaction.plan().packTarget().contentToken(), conflict);
 	}
 
-	private PreservationOrigin preservationOrigin(UpdateTransaction transaction, Preservation preservation) throws IOException {
-		ClientStorageJsons.ClientGenerationStateFields active = context.storage().readActiveState();
+	private PreservationOrigin preservationOrigin(UpdateTransaction transaction, Preservation preservation, PreservationVault.LiveOwnership ownership) throws IOException {
+		ClientStorageJsons.ClientGenerationStateFields active = ownership.activeState();
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL)
 			return new PreservationOrigin(transaction.plan().modpackId(), active == null ? transaction.plan().packTarget().contentToken() : HashUtils.normalizeSha1(active.contentToken),
 					PreservationVault.Reason.MODPACK_REMOVAL);
