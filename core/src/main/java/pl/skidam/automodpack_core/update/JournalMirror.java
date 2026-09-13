@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -77,6 +76,6 @@ public final class JournalMirror {
 		if (Journal.openComplete(fetchedFile).length() != verifiedEntries) throw new IOException("Fetched journal changed while it was swapped into the mirror");
 		Path mirror = storage.historyJournalFile(modpackId);
 		Files.createDirectories(mirror.getParent());
-		Files.move(fetchedFile, mirror, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		DurableFiles.replace(fetchedFile, mirror);
 	}
 }
