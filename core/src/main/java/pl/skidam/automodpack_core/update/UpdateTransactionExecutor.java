@@ -360,23 +360,15 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void verifyExpectedExisting(Operation operation, Path target) throws IOException {
-		if (operation.root() == Root.OVERLAY) {
-			if (operation.expectedExistingHash() == null) {
-				if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new UpdateReplanRequiredException(target, "Client overlay target appeared after planning: " + target);
-			} else
-				if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
-						|| !FileIntegrity.matches(target, Files.size(target), operation.expectedExistingHash(), fileCache))
-					throw new UpdateReplanRequiredException(target, "Client overlay target changed after planning: " + target);
-			return;
-		}
-		if (operation.root() != Root.GAME_DIR) return;
+		if (operation.root() != Root.OVERLAY && operation.root() != Root.GAME_DIR) return;
+		String described = operation.root() == Root.OVERLAY ? "Client overlay" : "Game-directory";
 		if (operation.expectedExistingHash() == null) {
-			if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new UpdateReplanRequiredException(target, "Game-directory target appeared after planning: " + target);
+			if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) throw new UpdateReplanRequiredException(target, described + " target appeared after planning: " + target);
 			return;
 		}
 		if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS) || !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)
 				|| !FileIntegrity.matches(target, Files.size(target), operation.expectedExistingHash(), fileCache))
-			throw new UpdateReplanRequiredException(target, "Game-directory target changed after planning: " + target);
+			throw new UpdateReplanRequiredException(target, described + " target changed after planning: " + target);
 	}
 
 	private void preserveBeforeMutation(UpdateTransaction transaction) throws IOException {
