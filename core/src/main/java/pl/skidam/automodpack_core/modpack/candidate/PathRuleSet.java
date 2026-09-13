@@ -30,6 +30,7 @@ public final class PathRuleSet {
 			if (raw == null || raw.isBlank()) throw new IllegalArgumentException("Path rule is null or blank");
 			boolean negation = raw.startsWith("!");
 			String pattern = negation ? raw.substring(1) : raw;
+			pattern = pattern.replace('\\', '/');
 			while (pattern.startsWith("/")) pattern = pattern.substring(1);
 			while (pattern.contains("**/**")) pattern = pattern.replace("**/**", "**");
 			if (pattern.isBlank()) throw new IllegalArgumentException("Path rule is empty: " + raw);
@@ -57,7 +58,7 @@ public final class PathRuleSet {
 		if (positive.isEmpty()) return Set.of();
 		Set<String> roots = new TreeSet<>();
 		for (CompiledRule rule : positive) {
-			String pattern = rule.raw();
+			String pattern = rule.raw().replace('\\', '/');
 			while (pattern.startsWith("!")) pattern = pattern.substring(1);
 			while (pattern.startsWith("/")) pattern = pattern.substring(1);
 			StringBuilder literal = new StringBuilder();
