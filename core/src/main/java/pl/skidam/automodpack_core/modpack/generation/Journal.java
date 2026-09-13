@@ -136,21 +136,18 @@ public final class Journal {
 	/** Rebuilds the served file set as of the given entry by folding the changes of every entry up to it. */
 	public ContentTree treeAt(long seq) throws IOException {
 		JournalEntry target = entryAt(seq);
-		ContentTree tree = ContentTree.empty();
+		NavigableMap<String, ContentTree.ContentFile> files = new TreeMap<>();
 		for (JournalEntry entry : entries) {
-			for (JournalEntry.Change change : entry.changes()) tree = apply(tree, change);
+			for (JournalEntry.Change change : entry.changes()) {
+				if (change.toSha1() == null) files.remove(change.path());
+				else files.put(change.path(), new ContentTree.ContentFile(change.toSha1(), change.toSize()));
+			}
 			if (entry.seq() == seq) break;
 		}
+		ContentTree tree = new ContentTree(files);
 		String token = tree.token();
 		if (!token.equals(target.contentToken()))
 			throw new UnusableContentException("Journal replay at " + seq + " produced token " + token + " but the entry recorded " + target.contentToken());
 		return tree;
-	}
-
-	private static ContentTree apply(ContentTree tree, JournalEntry.Change change) {
-		NavigableMap<String, ContentTree.ContentFile> files = new TreeMap<>(tree.files());
-		if (change.toSha1() == null) files.remove(change.path());
-		else files.put(change.path(), new ContentTree.ContentFile(change.toSha1(), change.toSize()));
-		return new ContentTree(files);
 	}
 }
