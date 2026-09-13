@@ -49,6 +49,7 @@ public final class ProtocolPipeline {
 	public static void install(Channel channel, NettyServer server, SocketAddress remoteAddress) {
 		channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
 		channel.attr(NettyServer.PROTOCOL_VERSION).set(NetUtils.LATEST_SUPPORTED_PROTOCOL_VERSION);
+		// ZSTD stays the default on purpose: packs carry plenty of non-jar content (configs, scripts) that compresses well, and zstd costs a fraction of the transfer it saves.
 		CompressionType defaultCompression = CompressionFactory.isAvailable(CompressionType.ZSTD) ? CompressionType.ZSTD : CompressionType.GZIP;
 		channel.attr(NettyServer.COMPRESSION_TYPE).set(defaultCompression);
 		channel.attr(NettyServer.CHUNK_SIZE).set(NetUtils.DEFAULT_CHUNK_SIZE);

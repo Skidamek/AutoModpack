@@ -530,6 +530,7 @@ public class DownloadClient implements AutoCloseable {
 class Connection implements AutoCloseable {
 
 	private byte protocolVersion = LATEST_SUPPORTED_PROTOCOL_VERSION;
+	// ZSTD stays the default on purpose: packs carry plenty of non-jar content (configs, scripts) that compresses well, and zstd costs a fraction of the transfer it saves.
 	private CompressionType compressionType = CompressionType.ZSTD;
 	private int chunkSize = DEFAULT_CHUNK_SIZE;
 	private final byte[] secretBytes;
