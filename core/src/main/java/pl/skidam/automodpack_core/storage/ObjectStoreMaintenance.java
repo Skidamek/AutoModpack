@@ -14,7 +14,6 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
-import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ImmutableFiles;
@@ -148,9 +147,10 @@ public final class ObjectStoreMaintenance {
 	}
 
 	/**
-	 * Deletes every canonical, full-read-verified object outside the reachable set. A concurrent
-	 * collector removing an object between listing and stat is benign and skipped. The store
-	 * directory is fsynced when anything was deleted.
+	 * Deletes every object outside the reachable set, deciding by reachability alone: the store is closed under
+	 * verified promotion, and content verification of existing reachable objects is the explicit fsck/integrity
+	 * pass, so GC never re-reads bytes it is about to unlink. A concurrent collector removing an object between
+	 * listing and stat is benign and skipped. The store directory is fsynced when anything was deleted.
 	 */
 	public static DeletionReceipt deleteUnreachable(Path objectsDirectory, Set<String> reachableHashes) throws IOException {
 		List<Path> objects = objectFiles(objectsDirectory);
@@ -159,7 +159,6 @@ public final class ObjectStoreMaintenance {
 		for (Path object : objects) {
 			String hash = DataRootResolver.objectHash(objectsDirectory, object);
 			if (hash == null || reachableHashes.contains(hash)) continue;
-			if (!FileIntegrity.matchesCanonicalSha1(object, hash)) continue;
 			long size;
 			try {
 				size = Files.size(object);

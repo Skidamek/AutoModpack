@@ -44,11 +44,6 @@ public final class FileIntegrity {
 		}
 	}
 
-	/** Returns whether a regular non-symlink file has the exact canonical SHA-1. */
-	public static boolean matchesCanonicalSha1(Path file, String expectedSha1) {
-		return HashUtils.isCanonicalSha1(expectedSha1) && Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && expectedSha1.equals(identityHash(file, null));
-	}
-
 	/**
 	 * Path-keyed identity hash of an existing file. When {@code cache} is present this is a Git-stat
 	 * lookup; when it is {@code null} the current bytes are hashed.
