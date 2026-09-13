@@ -59,16 +59,12 @@ public class HolepunchSocket extends Socket {
 		return new HolepunchHandler() {
 			@Override
 			public void onRead(ByteBuffer data) {
-				byte[] bytes = new byte[data.remaining()];
-				data.get(bytes);
-				in.feed(bytes);
+				in.feed(data);
 			}
 
 			@Override
 			public void onRawRead(ByteBuffer data) {
-				byte[] bytes = new byte[data.remaining()];
-				data.get(bytes);
-				feedCamouflagedReadData(bytes);
+				feedCamouflagedReadData(data);
 			}
 
 			@Override
@@ -167,19 +163,18 @@ public class HolepunchSocket extends Socket {
 		}
 	}
 
-	void feedCamouflagedReadData(byte[] data) {
+	void feedCamouflagedReadData(ByteBuffer data) {
 		TlsRecordCamouflage.Pair camouflage = trafficCamouflage;
-		if (camouflage != null && data.length != 0) {
+		if (camouflage != null && data.hasRemaining()) {
 			try {
-				ByteBuffer input = ByteBuffer.wrap(data);
 				// The decoder keeps state across dispatches: this dispatch can complete a record
 				// started by an earlier one and decode up to one full pending record more than
 				// its own wire bytes, so the pending record sizes the output buffer.
-				ByteBuffer decoded = ByteBuffer.allocate(data.length + camouflage.inbound().pendingRecordLength());
-				camouflage.inbound().decode(input, decoded);
+				ByteBuffer decoded = ByteBuffer.allocate(data.remaining() + camouflage.inbound().pendingRecordLength());
+				camouflage.inbound().decode(data, decoded);
 				decoded.flip();
-				data = new byte[decoded.remaining()];
-				decoded.get(data);
+				in.feed(decoded);
+				return;
 			} catch (IOException exception) {
 				close();
 				throw new IllegalStateException("Invalid camouflaged TLS record stream", exception);
@@ -189,11 +184,12 @@ public class HolepunchSocket extends Socket {
 	}
 
 	private class HolepunchInputStream extends InputStream {
-		private final BlockingQueue<byte[]> queue = new LinkedBlockingQueue<>();
+		// The dispatched buffers are already private copies made by the connection, so the queue holds
+		// them directly: one less copy and one less allocation per byte on the read path.
+		private final BlockingQueue<ByteBuffer> queue = new LinkedBlockingQueue<>();
 		private final AtomicInteger queuedBytes = new AtomicInteger();
 		private volatile boolean readsPaused;
-		private byte[] current;
-		private int offset;
+		private ByteBuffer current;
 		private volatile boolean end;
 		private volatile int readTimeoutMillis;
 
@@ -201,9 +197,9 @@ public class HolepunchSocket extends Socket {
 			readTimeoutMillis = timeout;
 		}
 
-		void feed(byte[] data) {
-			if (data.length == 0 || end) return;
-			queuedBytes.addAndGet(data.length);
+		void feed(ByteBuffer data) {
+			if (!data.hasRemaining() || end) return;
+			queuedBytes.addAndGet(data.remaining());
 			queue.offer(data);
 			updateReadPause();
 		}
@@ -237,7 +233,7 @@ public class HolepunchSocket extends Socket {
 			Objects.checkFromIndexSize(off, len, b.length);
 			if (len == 0) return 0;
 
-			while (current == null || offset >= current.length) {
+			while (current == null || !current.hasRemaining()) {
 				current = null;
 				if (end && queue.isEmpty()) return -1;
 
@@ -261,12 +257,10 @@ public class HolepunchSocket extends Socket {
 					Thread.currentThread().interrupt();
 					throw new IOException("read interrupted", e);
 				}
-				offset = 0;
 			}
 
-			int n = Math.min(len, current.length - offset);
-			System.arraycopy(current, offset, b, off, n);
-			offset += n;
+			int n = Math.min(len, current.remaining());
+			current.get(b, off, n);
 			queuedBytes.addAndGet(-n);
 			updateReadPause();
 			return n;
@@ -274,8 +268,8 @@ public class HolepunchSocket extends Socket {
 
 		@Override
 		public int available() {
-			int available = current == null ? 0 : current.length - offset;
-			for (byte[] queued : queue) available += queued.length;
+			int available = current == null ? 0 : current.remaining();
+			for (ByteBuffer queued : queue) available += queued.remaining();
 			return available;
 		}
 
