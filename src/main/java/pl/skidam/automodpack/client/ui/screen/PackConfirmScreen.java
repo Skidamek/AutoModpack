@@ -101,41 +101,37 @@ public final class PackConfirmScreen extends VersionedScreen {
 				? Changelogs.hasNotes(updater.getFirstInstallPatchNotes())
 				: laterPreview != null && Changelogs.hasNotes(laterPreview.journal());
 
-		List<ActionRow> rows = new ArrayList<>();
-		if (notes) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(VersionedText.translatable("automodpack.management.history"), button -> openHistory())));
-		if (leftover)
-			rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, checkboxAction(PackConfirmCopy.leftoverLabel(updater.firstInstallLocalModCount()), keepExistingMods, value -> {
-				keepExistingMods = value;
-				updater.setFirstInstallLocalModCleanup(!keepExistingMods);
-				// The checkbox label is constant now; the rebuild only refreshes the existing-mods summary line.
-				rebuild();
-			})));
-		if (customize) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, optionalAction(PackConfirmCopy.customizeLabel(), button -> customize())));
-		if (unverified) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, checkboxAction(PackConfirmCopy.ackLabel(), acknowledged, value -> onAckToggled(value))));
+		ActionDefinition historyAction = notes ? optionalAction(VersionedText.translatable("automodpack.management.history"), button -> openHistory()) : null;
+		ActionDefinition leftoverAction = leftover ? checkboxAction(PackConfirmCopy.leftoverLabel(updater.firstInstallLocalModCount()), keepExistingMods, value -> {
+			keepExistingMods = value;
+			updater.setFirstInstallLocalModCleanup(!keepExistingMods);
+			// The checkbox label is constant now; the rebuild only refreshes the existing-mods summary line.
+			rebuild();
+		}) : null;
+		ActionDefinition customizeAction = customize ? optionalAction(PackConfirmCopy.customizeLabel(), button -> customize()) : null;
+		ActionDefinition ackAction = unverified ? checkboxAction(PackConfirmCopy.ackLabel(), acknowledged, value -> onAckToggled(value)) : null;
 		Component cancelLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.cancel" : "automodpack.back");
 		Component primaryLabel = VersionedText.translatable(firstInstall ? "automodpack.firstConnect.download" : UpdatePreviewScreen.actionKey(laterPreview.mode()));
-		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER,
-				secondaryAction(cancelLabel, button -> cancel()),
-				optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles()),
-				primaryAction(primaryLabel, button -> confirm())));
+		ActionDefinition cancelAction = secondaryAction(cancelLabel, button -> cancel());
+		ActionDefinition reviewAction = optionalAction(VersionedText.translatable("automodpack.browser.reviewFiles"), button -> openFiles());
+		ActionDefinition primaryDef = primaryAction(primaryLabel, button -> confirm());
+		List<ActionRow> rows = new ArrayList<>();
+		if (historyAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, historyAction));
+		if (leftoverAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, leftoverAction));
+		if (customizeAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, customizeAction));
+		if (ackAction != null) rows.add(actionRow(ActionAreaLayout.RowKind.AUXILIARY, ackAction));
+		rows.add(actionRow(ActionAreaLayout.RowKind.FOOTER, cancelAction, reviewAction, primaryDef));
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
-		List<AbstractWidget> widgets = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
-		int widgetIndex = 0;
-		if (notes) widgetIndex++;
-		if (leftover) {
+		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
+		if (leftoverAction != null) {
 			String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", updater.firstInstallLocalModPaths()), 240, 8));
-			VersionedScreen.setTooltip(widgets.get(widgetIndex), VersionedText.translatable("automodpack.confirm.leftoverTooltip", joined));
-			widgetIndex++;
+			VersionedScreen.setTooltip(leftoverAction.widget(), VersionedText.translatable("automodpack.confirm.leftoverTooltip", joined));
 		}
-		if (customize) widgetIndex++;
-		if (unverified) {
-			ackCheckbox = widgets.get(widgetIndex);
-			// The risk acknowledgement stays locked until the read countdown ran out.
-			ackCheckbox.active = !countdown.running();
-		}
-		// The footer row is always last: cancel, review files, primary.
-		cancelButton = widgets.get(widgets.size() - 3);
-		primaryButton = widgets.get(widgets.size() - 1);
+		ackCheckbox = ackAction == null ? null : ackAction.widget();
+		// The risk acknowledgement stays locked until the read countdown ran out.
+		if (ackCheckbox != null) ackCheckbox.active = !countdown.running();
+		cancelButton = cancelAction.widget();
+		primaryButton = primaryDef.widget();
 		primaryButton.active = !unverified || (!countdown.running() && acknowledged);
 		if (unverified) {
 			// A real focus (not the deferred initial-focus request) keeps the highlighted state on every version.

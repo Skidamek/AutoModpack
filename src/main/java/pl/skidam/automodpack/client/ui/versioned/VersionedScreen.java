@@ -345,6 +345,7 @@ public class VersionedScreen extends Screen {
 					? new CheckboxWidget(this.font, placement.x(), placement.y(), placement.width(), definition.message(), definition.selected(), value -> definition.onCheck().accept(value))
 					: buttonWidget(placement.x(), placement.y(), placement.width(), placement.height(), definition.message(), definition.onPress());
 			widget.active = definition.enabled();
+			definition.widget = widget;
 			this.addRenderableWidget(widget);
 			widgets.add(widget);
 		}
@@ -646,6 +647,7 @@ public class VersionedScreen extends Screen {
 		private final boolean checkbox;
 		private final boolean selected;
 		private final Consumer<Boolean> onCheck;
+		private AbstractWidget widget;
 
 		private ActionDefinition(Component message, Button.OnPress onPress, ActionAreaLayout.Role role, boolean enabled) {
 			this(message, onPress, role, enabled, false, null);
@@ -679,6 +681,11 @@ public class VersionedScreen extends Screen {
 
 		private boolean checkbox() {
 			return checkbox;
+		}
+
+		/** The widget this action was built into by the last {@code addActionArea} call, so screens never replay row conditionals as indices. */
+		public AbstractWidget widget() {
+			return widget;
 		}
 
 		private boolean selected() {
