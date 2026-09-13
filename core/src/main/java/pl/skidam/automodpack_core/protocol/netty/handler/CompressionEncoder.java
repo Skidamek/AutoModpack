@@ -11,14 +11,12 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 public class CompressionEncoder extends MessageToByteEncoder<ByteBuf> {
-	private CompressionCodec codec;
-	private CompressionType compressionType;
 	private final ProtocolFrameCodec.FrameScratch scratch = new ProtocolFrameCodec.FrameScratch();
 
 	/**
 	 * Pre-sizes the frame the same way the worker does in {@code ServerMessageHandler.writeFrame}, so a large
 	 * payload never grows the buffer by doubling. Exact for single-frame payloads; a multi-chunk message only
-	 * grows once past it, and {@code codec(ctx)} here is the same lazy init {@link #encode} already does on the loop.
+	 * grows once past it.
 	 */
 	@Override
 	protected ByteBuf allocateBuffer(ChannelHandlerContext ctx, ByteBuf msg, boolean preferDirect) {
@@ -32,13 +30,10 @@ public class CompressionEncoder extends MessageToByteEncoder<ByteBuf> {
 		ProtocolFrameCodec.write(out, codec(ctx), msg, chunkSize, scratch);
 	}
 
-	private CompressionCodec codec(ChannelHandlerContext ctx) {
+	/** The negotiated codec is a cheap wrapper, so it is simply created per message instead of memoized per handler. */
+	private static CompressionCodec codec(ChannelHandlerContext ctx) {
 		CompressionType selected = ctx.channel().attr(NettyServer.COMPRESSION_TYPE).get();
 		if (selected == null) throw new IllegalStateException("Compression type has not been configured");
-		if (codec == null || compressionType != selected) {
-			codec = CompressionFactory.createCodec(selected);
-			compressionType = selected;
-		}
-		return codec;
+		return CompressionFactory.createCodec(selected);
 	}
 }

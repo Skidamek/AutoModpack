@@ -13,8 +13,6 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 public class CompressionDecoder extends ByteToMessageDecoder {
-	private CompressionCodec codec;
-	private CompressionType compressionType;
 	private final ProtocolFrameCodec.FrameScratch scratch = new ProtocolFrameCodec.FrameScratch();
 
 	@Override
@@ -25,13 +23,10 @@ public class CompressionDecoder extends ByteToMessageDecoder {
 		if (frame != null) out.add(frame);
 	}
 
-	private CompressionCodec codec(ChannelHandlerContext ctx) {
+	/** The negotiated codec is a cheap wrapper, so it is simply created per message instead of memoized per handler. */
+	private static CompressionCodec codec(ChannelHandlerContext ctx) {
 		CompressionType selected = ctx.channel().attr(NettyServer.COMPRESSION_TYPE).get();
 		if (selected == null) throw new IllegalStateException("Compression type has not been configured");
-		if (codec == null || compressionType != selected) {
-			codec = CompressionFactory.createCodec(selected);
-			compressionType = selected;
-		}
-		return codec;
+		return CompressionFactory.createCodec(selected);
 	}
 }
