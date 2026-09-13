@@ -387,7 +387,7 @@ def test_wait_generation_requires_committed_state_and_matching_generation(make_c
                 "modpackId": "packaaa",
                 "contentToken": content_token,
                 "status": "ACTIVE",
-                "ownershipLedger": staging_steps._staged_ledger("packaaa", {}),
+                "ownershipLedger": staging_steps.staged_ledger("packaaa", {}),
             }
         ),
         encoding="utf-8",
@@ -429,7 +429,7 @@ def test_wait_generation_requires_expected_patch_notes(make_ctx):
                     "modpackId": "packaaa",
                     "contentToken": content_token,
                     "status": "ACTIVE",
-                    "ownershipLedger": staging_steps._staged_ledger("packaaa", {}),
+                    "ownershipLedger": staging_steps.staged_ledger("packaaa", {}),
                 }
             ),
             encoding="utf-8",
@@ -691,11 +691,11 @@ def test_canonical_timestamp_uses_java_fraction_groups():
     from datetime import datetime, timezone
 
     noon = datetime(2026, 9, 2, 23, 45, 32, tzinfo=timezone.utc)
-    assert staging_steps._canonical_timestamp(noon) == "2026-09-02T23:45:32Z"
-    assert staging_steps._canonical_timestamp(noon.replace(microsecond=800000)) == "2026-09-02T23:45:32.800Z"
-    assert staging_steps._canonical_timestamp(noon.replace(microsecond=123000)) == "2026-09-02T23:45:32.123Z"
-    assert staging_steps._canonical_timestamp(noon.replace(microsecond=123456)) == "2026-09-02T23:45:32.123456Z"
-    assert staging_steps._canonical_timestamp(noon.replace(microsecond=477370)) == "2026-09-02T23:45:32.477370Z"
+    assert staging_steps.canonical_timestamp(noon) == "2026-09-02T23:45:32Z"
+    assert staging_steps.canonical_timestamp(noon.replace(microsecond=800000)) == "2026-09-02T23:45:32.800Z"
+    assert staging_steps.canonical_timestamp(noon.replace(microsecond=123000)) == "2026-09-02T23:45:32.123Z"
+    assert staging_steps.canonical_timestamp(noon.replace(microsecond=123456)) == "2026-09-02T23:45:32.123456Z"
+    assert staging_steps.canonical_timestamp(noon.replace(microsecond=477370)) == "2026-09-02T23:45:32.477370Z"
 
 
 def test_non_canonical_staged_timestamp_is_rejected():
@@ -712,10 +712,10 @@ def test_non_canonical_staged_timestamp_is_rejected():
 def test_staged_generation_receipt_rejects_a_non_canonical_timestamp(tmp_path):
     policy = {"modpackId": "packbbb"}
     policy_object = tmp_path / "policy-object"
-    policy_object.write_bytes(staging_steps._policy_bytes(policy))
+    policy_object.write_bytes(staging_steps.policy_bytes(policy))
     with pytest.raises(ValueError, match="not canonical"):
         staging_steps._verify_staged_generation(policy_object, "0" * 40, "1" * 40, "2026-09-02T23:45:32.800000Z",
-                                                staging_steps._staged_ledger("packbbb", {}), tmp_path / "journal.jsonl", "")
+                                                staging_steps.staged_ledger("packbbb", {}), tmp_path / "journal.jsonl", "")
 
 
 # ── poisoned HMC cache recovery ─────────────────────────────────────────────

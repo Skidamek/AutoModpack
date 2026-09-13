@@ -504,7 +504,7 @@ def test_record_only_content_token_matches_its_policy_files(make_ctx):
             file_map[logical_path] = (file["sha1"], int(file["size"]))
 
     assert mirror[0]["contentToken"] == content_token(file_map)
-    assert hashlib.sha1(staging_steps._policy_bytes(policy)).hexdigest() == mirror[0]["policySha1"]
+    assert hashlib.sha1(staging_steps.policy_bytes(policy)).hexdigest() == mirror[0]["policySha1"]
 
 
 # ── bootstrap fixture ───────────────────────────────────────────────────────

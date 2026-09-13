@@ -17,7 +17,7 @@ from automodpack_autotester.engine import Context
 from automodpack_autotester.generation_identity import content_token
 from automodpack_autotester.mod_fixtures import valid_mod_jar_bytes
 from automodpack_autotester.client_steps import cas_object
-from automodpack_autotester.staging_steps import _append_staged_mirror, _canonical_timestamp, _policy_bytes, _staged_ledger
+from automodpack_autotester.staging_steps import append_staged_mirror, canonical_timestamp, policy_bytes, staged_ledger
 
 
 class FakeBridge:
@@ -1012,14 +1012,14 @@ class FakeBridge:
             "groups": manifest_groups,
         }
         file_map = {path: (file["sha1"], int(file["size"])) for path, file in active_files.items()}
-        created_at = _canonical_timestamp(datetime.now(timezone.utc))
+        created_at = canonical_timestamp(datetime.now(timezone.utc))
         token = content_token(file_map)
-        policy_sha1 = hashlib.sha1(_policy_bytes(policy)).hexdigest()
-        ledger = _staged_ledger("packaaa", file_map)
+        policy_sha1 = hashlib.sha1(policy_bytes(policy)).hexdigest()
+        ledger = staged_ledger("packaaa", file_map)
         client = self.ctx.game_dir / "automodpack" / "client"
         objects = client / "data" / "objects"
         policy_object = cas_object(objects, policy_sha1)
         policy_object.parent.mkdir(parents=True, exist_ok=True)
-        policy_object.write_bytes(_policy_bytes(policy))
-        _append_staged_mirror(client, "packaaa", token, policy_sha1, file_map, notes, created_at)
+        policy_object.write_bytes(policy_bytes(policy))
+        append_staged_mirror(client, "packaaa", token, policy_sha1, file_map, notes, created_at)
         (client / "active-state.json").write_text(json.dumps({"modpackId": "packaaa", "contentToken": token, "status": "ACTIVE", "ownershipLedger": ledger}), encoding="utf-8")
