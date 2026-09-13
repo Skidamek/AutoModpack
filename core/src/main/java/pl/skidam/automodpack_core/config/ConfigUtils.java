@@ -125,6 +125,7 @@ public class ConfigUtils {
 			LOGGER.warn("Ignored empty entry in {}.", configKey);
 			return null;
 		}
+		trimmed = trimmed.replace('\\', '/');
 		while (trimmed.startsWith("/")) trimmed = trimmed.substring(1);
 		return trimmed;
 	}

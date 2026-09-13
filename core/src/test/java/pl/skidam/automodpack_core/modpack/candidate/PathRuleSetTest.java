@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.modpack.candidate;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -25,5 +26,14 @@ class PathRuleSetTest {
 		assertTrue(rules.evaluate("assets/pack.zip").matched());
 		assertFalse(rules.evaluate("config/secret.txt").matched());
 		assertFalse(rules.evaluate("mods/test.jar").matched());
+	}
+
+	@Test
+	void windowsSeparatorsAreTheSameRuleAsForwardSlashes() {
+		PathRuleSet rules = new PathRuleSet(List.of("mods\\*.jar", "!mods\\client\\**"));
+
+		assertTrue(rules.evaluate("mods/sodium.jar").matched());
+		assertFalse(rules.evaluate("mods/client/iris.jar").matched());
+		assertEquals(Set.of("mods"), rules.safeScanRoots());
 	}
 }
