@@ -83,18 +83,22 @@ final class ClientUpdatePlanBuilder {
 		this.loaderType = Objects.requireNonNull(loaderType, "loaderType");
 	}
 
-	record Input(SelectedModpackTarget selectedTarget, ModpackJsons.ModpackContentFields target, ConnectionJsons.ConnectionInfo connectionInfo,
+	record Input(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo,
 			ClientConfigJsons.ClientConfigFieldsV3 currentConfig, boolean prepareObjects, Map<String, UpdatePlan.FileState> consentedLocalModFiles) {
 		Input {
 			Objects.requireNonNull(selectedTarget, "selectedTarget");
-			Objects.requireNonNull(target, "target");
 			Objects.requireNonNull(currentConfig, "currentConfig");
 			consentedLocalModFiles = Map.copyOf(consentedLocalModFiles == null ? Map.of() : consentedLocalModFiles);
 		}
 
-		Input(SelectedModpackTarget selectedTarget, ModpackJsons.ModpackContentFields target, ConnectionJsons.ConnectionInfo connectionInfo,
+		Input(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo,
 				ClientConfigJsons.ClientConfigFieldsV3 currentConfig, boolean prepareObjects) {
-			this(selectedTarget, target, connectionInfo, currentConfig, prepareObjects, Map.of());
+			this(selectedTarget, connectionInfo, currentConfig, prepareObjects, Map.of());
+		}
+
+		/** The target's flat manifest, a validated component of the selected target rather than a separately carried copy. */
+		ModpackJsons.ModpackContentFields target() {
+			return selectedTarget.flatTarget();
 		}
 	}
 

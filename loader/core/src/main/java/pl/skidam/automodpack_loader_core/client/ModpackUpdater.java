@@ -417,7 +417,7 @@ public class ModpackUpdater implements AutoCloseable {
 
 	private ClientUpdatePlanBuilder.Input updatePlanInput(boolean prepareObjects) {
 		Map<String, UpdatePlan.FileState> consent = firstConnection ? consentedLocalModFiles : Map.of();
-		return new ClientUpdatePlanBuilder.Input(selectedTarget, selectedTarget.flatTarget(), connectionInfo, clientConfig, prepareObjects, consent);
+		return new ClientUpdatePlanBuilder.Input(selectedTarget, connectionInfo, clientConfig, prepareObjects, consent);
 	}
 
 	/**
