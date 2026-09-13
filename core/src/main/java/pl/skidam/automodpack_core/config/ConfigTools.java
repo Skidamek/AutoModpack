@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -34,6 +35,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.annotations.SerializedName;
 
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
@@ -46,6 +48,15 @@ public final class ConfigTools {
 	private static final Map<Class<?>, Object> CUSTOM_JSON_ADAPTERS = Map.of(InetSocketAddress.class, new InetSocketAddressTypeAdapter(), ConnectionJsons.ConnectionInfo.class,
 			new ConnectionInfoTypeAdapter(), ConnectionJsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter());
 
+	/**
+	 * Stream-reader strictness for the integral types, registered because Gson 2.8.9 deserializing from a parsed tree
+	 * instead of a string narrows every number through a double and silently truncates out-of-range or fractional
+	 * literals — a hand-edited or corrupt config must fail loudly at parse, never take a truncated port or size.
+	 */
+	private static final Map<Class<?>, Object> STRICT_INTEGRAL_DESERIALIZERS = Map.of(byte.class, StrictIntegralDeserializer.BYTE, Byte.class, StrictIntegralDeserializer.BYTE,
+			short.class, StrictIntegralDeserializer.SHORT, Short.class, StrictIntegralDeserializer.SHORT, int.class, StrictIntegralDeserializer.INT, Integer.class,
+			StrictIntegralDeserializer.INT, long.class, StrictIntegralDeserializer.LONG, Long.class, StrictIntegralDeserializer.LONG);
+
 	public static final Gson GSON = buildGson();
 
 	private ConfigTools() {}
@@ -53,6 +64,7 @@ public final class ConfigTools {
 	private static Gson buildGson() {
 		GsonBuilder builder = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting();
 		CUSTOM_JSON_ADAPTERS.forEach(builder::registerTypeAdapter);
+		STRICT_INTEGRAL_DESERIALIZERS.forEach(builder::registerTypeAdapter);
 		return strictEnums(builder).create();
 	}
 
@@ -69,8 +81,9 @@ public final class ConfigTools {
 		} catch (IOException e) {
 			throw new ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
 		}
-		T value = parse(json, type);
-		List<String> unknown = unknownKeys(json, type);
+		JsonElement tree = parseTree(json, type);
+		T value = deserialize(tree, type);
+		List<String> unknown = unknownKeys(tree, type);
 		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
 		return Optional.of(value);
 	}
@@ -136,16 +149,29 @@ public final class ConfigTools {
 	private static <T> T readDocument(Path path, Class<T> type, String description) throws IOException {
 		String json = Files.readString(path, StandardCharsets.UTF_8);
 		if (json.isBlank()) throw new ConfigParseException(description + " is empty: " + path);
-		T value = parse(json, type);
-		List<String> unknown = unknownKeys(json, type);
+		JsonElement tree = parseTree(json, type);
+		T value = deserialize(tree, type);
+		List<String> unknown = unknownKeys(tree, type);
 		if (!unknown.isEmpty()) LOGGER.warn("{}: unknown keys ignored: {}", path.getFileName(), String.join(", ", unknown));
 		return value;
 	}
 
 	public static <T> T parse(String json, Class<T> type) {
+		return deserialize(parseTree(json, type), type);
+	}
+
+	private static JsonElement parseTree(String json, Class<?> type) {
 		if (json == null) throw new ConfigParseException("Configuration JSON is null");
 		try {
-			T value = GSON.fromJson(json, type);
+			return JsonParser.parseString(json);
+		} catch (JsonParseException e) {
+			throw new ConfigParseException("Invalid JSON for " + type.getSimpleName(), e);
+		}
+	}
+
+	private static <T> T deserialize(JsonElement tree, Class<T> type) {
+		try {
+			T value = GSON.fromJson(tree, type);
 			if (value == null) throw new ConfigParseException("Configuration JSON produced null for " + type.getSimpleName());
 			return value;
 		} catch (JsonParseException e) {
@@ -155,12 +181,16 @@ public final class ConfigTools {
 
 	/** JSON paths present in the document that match no field of the target class, so Gson silently drops them; empty for invalid JSON, which {@link #parse} reports instead. */
 	public static List<String> unknownKeys(String json, Class<?> type) {
-		List<String> unknown = new ArrayList<>();
 		try {
-			collectUnknownKeys(JsonParser.parseString(json), type, "", unknown);
+			return unknownKeys(JsonParser.parseString(json), type);
 		} catch (JsonParseException e) {
 			return List.of();
 		}
+	}
+
+	private static List<String> unknownKeys(JsonElement tree, Class<?> type) {
+		List<String> unknown = new ArrayList<>();
+		collectUnknownKeys(tree, type, "", unknown);
 		return unknown;
 	}
 
@@ -194,18 +224,23 @@ public final class ConfigTools {
 				&& raw != Character.class && !Number.class.isAssignableFrom(raw);
 	}
 
+	/** Per-class JSON name to field maps, cached because a single document scan revisits the same class at every nested JSON object. */
+	private static final ConcurrentHashMap<Class<?>, Map<String, Field>> JSON_FIELDS = new ConcurrentHashMap<>();
+
 	private static Map<String, Field> jsonFieldNames(Class<?> raw) {
-		Map<String, Field> names = new HashMap<>();
-		for (Field field : raw.getDeclaredFields()) {
-			if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers()) || field.isSynthetic()) continue;
-			SerializedName serializedName = field.getAnnotation(SerializedName.class);
-			if (serializedName == null) names.put(field.getName(), field);
-			else {
-				names.put(serializedName.value(), field);
-				for (String alternate : serializedName.alternate()) names.put(alternate, field);
+		return JSON_FIELDS.computeIfAbsent(raw, type -> {
+			Map<String, Field> names = new HashMap<>();
+			for (Field field : type.getDeclaredFields()) {
+				if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers()) || field.isSynthetic()) continue;
+				SerializedName serializedName = field.getAnnotation(SerializedName.class);
+				if (serializedName == null) names.put(field.getName(), field);
+				else {
+					names.put(serializedName.value(), field);
+					for (String alternate : serializedName.alternate()) names.put(alternate, field);
+				}
 			}
-		}
-		return names;
+			return names;
+		});
 	}
 
 	public static void writeAtomic(Path path, Object value) throws IOException {
@@ -275,6 +310,62 @@ public final class ConfigTools {
 			var object = json.getAsJsonObject();
 			String reason = object.has("reason") ? object.get("reason").getAsString() : "TOFU";
 			return new ConnectionJsons.CertificateTrustEntry(object.get("fingerprint").getAsString(), reason);
+		}
+	}
+
+	/** What the stream reader ({@code JsonReader#nextInt}) yields for a literal read as an {@code int}: narrowing to int must lose nothing, or the read fails. */
+	private static int streamInt(String literal) {
+		double value = Double.parseDouble(literal);
+		int narrowed = (int) value;
+		if (narrowed != value) throw new NumberFormatException("Expected an int but was " + literal);
+		return narrowed;
+	}
+
+	/** What the stream reader ({@code JsonReader#nextLong}) yields for a literal read as a {@code long}: whole literals keep full precision, anything else must narrow to long without loss. */
+	private static long streamLong(String literal) {
+		try {
+			return Long.parseLong(literal);
+		} catch (NumberFormatException notAWholeLiteral) {
+			double value = Double.parseDouble(literal);
+			long narrowed = (long) value;
+			if (narrowed != value) throw new NumberFormatException("Expected a long but was " + literal);
+			return narrowed;
+		}
+	}
+
+	/**
+	 * Enforces the stream reader's number grammar on integral fields deserialized from a parsed tree, where Gson 2.8.9's
+	 * own adapters would otherwise read the tree's numbers leniently and accept what the string path has always refused.
+	 */
+	private static final class StrictIntegralDeserializer implements JsonDeserializer<Number> {
+		static final StrictIntegralDeserializer BYTE = new StrictIntegralDeserializer("an int", literal -> (byte) streamInt(literal));
+		static final StrictIntegralDeserializer SHORT = new StrictIntegralDeserializer("an int", literal -> (short) streamInt(literal));
+		static final StrictIntegralDeserializer INT = new StrictIntegralDeserializer("an int", ConfigTools::streamInt);
+		static final StrictIntegralDeserializer LONG = new StrictIntegralDeserializer("a long", ConfigTools::streamLong);
+
+		private final String expected;
+		private final Function<String, Number> reader;
+
+		private StrictIntegralDeserializer(String expected, Function<String, Number> reader) {
+			this.expected = expected;
+			this.reader = reader;
+		}
+
+		@Override
+		public Number deserialize(JsonElement json, Type type, JsonDeserializationContext context) {
+			if (json.isJsonNull()) return null;
+			if (!json.isJsonPrimitive() || json.getAsJsonPrimitive().isBoolean()) throw new IllegalStateException("Expected " + expected + " but was " + token(json));
+			try {
+				return reader.apply(json.getAsString());
+			} catch (NumberFormatException e) {
+				throw new JsonSyntaxException(e);
+			}
+		}
+
+		private static String token(JsonElement json) {
+			if (json.isJsonObject()) return "BEGIN_OBJECT";
+			if (json.isJsonArray()) return "BEGIN_ARRAY";
+			return "BOOLEAN";
 		}
 	}
 
