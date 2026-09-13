@@ -38,13 +38,13 @@ public final class ModpackCandidateScanner {
 		for (var entry : declarations.entrySet()) {
 			String groupId = entry.getKey();
 			ServerConfigJsons.GroupDeclaration declaration = entry.getValue();
-			PathRuleSet excludedRules = rulesByGroup.get(groupId).excludedFiles();
+			GroupRules groupRules = rulesByGroup.get(groupId);
 			Path groupDirectory = request.groupRoot().resolve(groupId).normalize();
 			if (!groupDirectory.startsWith(request.groupRoot().toAbsolutePath().normalize()))
 				throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
 			for (var file : walk(groupDirectory).entrySet()) {
 				// The group directory is included in full; excludedFiles is the only way to leave content out of it.
-				PathRuleSet.Decision excluded = excludedRules.evaluate(file.getKey());
+				PathRuleSet.Decision excluded = groupRules.excluded(file.getKey());
 				if (excluded.matched()) {
 					ruleExclusions.add(new ExcludedCandidate(new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.GROUP_DIRECTORY, file.getValue(), null),
 							ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + excluded.decisiveRule()));
@@ -67,9 +67,9 @@ public final class ModpackCandidateScanner {
 				for (var file : walk(root, request.serverRoot()).entrySet()) {
 					for (String groupId : groupsByScanRoot.get(scanRoot)) {
 						GroupRules groupRules = rulesByGroup.get(groupId);
-						PathRuleSet.Decision included = groupRules.syncedFiles().evaluate(file.getKey());
+						PathRuleSet.Decision included = groupRules.synced(file.getKey());
 						if (!included.matched()) continue;
-						PathRuleSet.Decision excluded = groupRules.excludedFiles().evaluate(file.getKey());
+						PathRuleSet.Decision excluded = groupRules.excluded(file.getKey());
 						if (excluded.matched()) {
 							ruleExclusions.add(new ExcludedCandidate(new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), included.decisiveRule()),
 									ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + excluded.decisiveRule()));
@@ -183,7 +183,7 @@ public final class ModpackCandidateScanner {
 		}
 		CandidateProvenance provenance = null;
 		if (selected != null && file != null) {
-			PathRuleSet.Decision editable = rules.allowEditsInFiles().evaluate(selected.logicalPath());
+			PathRuleSet.Decision editable = rules.editable(selected.logicalPath());
 			file = new GroupManifest.GroupFile(file.size(), file.type(), editable.matched(), file.sha1(), file.murmur());
 			provenance = new CandidateProvenance(selected, editable.decisiveRule());
 		}
@@ -297,10 +297,19 @@ public final class ModpackCandidateScanner {
 		return values == null ? Set.of() : new LinkedHashSet<>(new TreeSet<>(values));
 	}
 
-	private record GroupRules(
-			PathRuleSet syncedFiles,
-			PathRuleSet excludedFiles,
-			PathRuleSet allowEditsInFiles) {}
+	private record GroupRules(PathRuleSet syncedFiles, PathRuleSet excludedFiles, PathRuleSet allowEditsInFiles) {
+		private PathRuleSet.Decision synced(String path) {
+			return syncedFiles.evaluate(path);
+		}
+
+		private PathRuleSet.Decision excluded(String path) {
+			return excludedFiles.evaluate(path);
+		}
+
+		private PathRuleSet.Decision editable(String path) {
+			return allowEditsInFiles.evaluate(path);
+		}
+	}
 
 	private static final class SourcePair {
 		private CandidateSource explicit;

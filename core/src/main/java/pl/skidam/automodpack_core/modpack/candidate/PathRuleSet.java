@@ -49,6 +49,11 @@ public final class PathRuleSet {
 		return veto == null ? new Decision(true, match.raw()) : new Decision(false, veto.raw());
 	}
 
+	/** Whether a positive rule matches and no {@code !} rule vetoes it. Posture (include / exclude / editable) belongs to the caller. */
+	public boolean matches(String path) {
+		return evaluate(path).matched();
+	}
+
 	public boolean isEmpty() {
 		return positive.isEmpty();
 	}
