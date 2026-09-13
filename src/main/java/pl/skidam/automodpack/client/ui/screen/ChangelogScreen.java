@@ -8,9 +8,9 @@ import net.minecraft.client.gui.screens.Screen;
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
-import pl.skidam.automodpack_loader_core.client.Changelogs;
-import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
+import pl.skidam.automodpack_core.screen.HistoryViewRequest;
 
 /** Shows the applied file changes through the same browser as previews and installed catalogues. */
 public final class ChangelogScreen extends ChangeBrowserScreen {

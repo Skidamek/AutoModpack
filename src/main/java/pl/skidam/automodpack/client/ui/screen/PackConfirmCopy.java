@@ -11,9 +11,9 @@ import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
-import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 
 /** Shared copy and catalogue helpers for the pack confirm screen. */
 final class PackConfirmCopy {

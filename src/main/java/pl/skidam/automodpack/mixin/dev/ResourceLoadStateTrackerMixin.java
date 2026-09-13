@@ -9,7 +9,7 @@ import net.minecraft.client.ResourceLoadStateTracker;
 import net.minecraft.client.gui.screens.TitleScreen;
 
 import pl.skidam.automodpack.client.autotest.AutoTestBridge;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 
 @Mixin(ResourceLoadStateTracker.class)
 public class ResourceLoadStateTrackerMixin {

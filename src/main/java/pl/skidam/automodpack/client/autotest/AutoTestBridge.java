@@ -7,7 +7,7 @@ import com.google.gson.JsonParser;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 /*? if >=1.20.4 {*/

@@ -25,10 +25,10 @@ import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.screen.HistoryViewRequest;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
-import pl.skidam.automodpack_loader_core.screen.HistoryViewRequest;
 
 /**
  * The one journal timeline of one installed pack. Every entry shows its own patch notes inline, so

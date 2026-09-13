@@ -4,7 +4,7 @@ import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 
 public final class ClientLoginDisconnect {
 	private ClientLoginDisconnect() {}
