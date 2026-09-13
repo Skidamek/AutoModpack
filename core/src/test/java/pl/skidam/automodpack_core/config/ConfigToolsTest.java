@@ -150,6 +150,24 @@ class ConfigToolsTest {
 	}
 
 	@Test
+	void repeatedUnknownKeyScansAgreeDespiteTheCachedFieldMaps() {
+		String json = """
+				{
+				  "syncedfile": "typo",
+				  "groups": {
+				    "main": {"syncedfile": "typo"},
+				    "extra": {"displayName": "Extra", "bogus": true}
+				  }
+				}
+				""";
+
+		List<String> first = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
+		List<String> second = ConfigTools.unknownKeys(json, ServerConfigJsons.ServerConfigFieldsV3.class);
+		assertEquals(List.of("syncedfile", "groups.main.syncedfile", "groups.extra.bogus"), first);
+		assertEquals(first, second);
+	}
+
+	@Test
 	void validSerializedConfigurationsHaveNoUnknownKeys() {
 		assertTrue(ConfigTools.unknownKeys(ConfigTools.GSON.toJson(new ServerConfigJsons.ServerConfigFieldsV3()), ServerConfigJsons.ServerConfigFieldsV3.class).isEmpty());
 		assertTrue(ConfigTools.unknownKeys(ConfigTools.GSON.toJson(new ClientConfigJsons.ClientConfigFieldsV3()), ClientConfigJsons.ClientConfigFieldsV3.class).isEmpty());
@@ -163,6 +181,23 @@ class ConfigToolsTest {
 
 		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.readOrCreate(config, ServerConfigJsons.ServerConfigFieldsV3.class, ServerConfigJsons.ServerConfigFieldsV3::new));
 		assertEquals(json, Files.readString(config, StandardCharsets.UTF_8));
+	}
+
+	@Test
+	void integralFieldsRejectLiteralsTheStreamReaderRejects() {
+		// The tree reader Gson 2.8.9 ships would silently narrow these through a double; a corrupt config must fail loudly instead.
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": 1.5}", IntHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": 2147483648}", IntHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": 99999999999}", IntHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": NaN}", IntHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": 1.5}", LongHolder.class));
+		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse("{\"value\": true}", IntHolder.class));
+
+		assertEquals(3, ConfigTools.parse("{\"value\": 3}", IntHolder.class).value);
+		assertEquals(1, ConfigTools.parse("{\"value\": 1.0}", IntHolder.class).value);
+		assertEquals(100, ConfigTools.parse("{\"value\": 1e2}", IntHolder.class).value);
+		assertEquals(5, ConfigTools.parse("{\"value\": \"5\"}", IntHolder.class).value);
+		assertEquals(9007199254740993L, ConfigTools.parse("{\"value\": 9007199254740993}", LongHolder.class).value);
 	}
 
 	@Test
@@ -238,5 +273,13 @@ class ConfigToolsTest {
 
 	public static class EnumHolder {
 		public List<UpdatePlan.RestartReason> reasons;
+	}
+
+	public static class IntHolder {
+		public int value;
+	}
+
+	public static class LongHolder {
+		public long value;
 	}
 }
