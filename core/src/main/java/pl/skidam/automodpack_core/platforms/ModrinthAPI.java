@@ -9,6 +9,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.google.gson.JsonArray;
@@ -118,9 +119,10 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 
 		try {
 			JsonObject JSONObjects = Json.fromModrinthUrl(requestUrl, listOfSha1);
+			Set<String> wantedSha1s = Set.copyOf(listOfSha1);
 			for (String key : JSONObjects.keySet()) {
 				JsonObject JSONObject = JSONObjects.getAsJsonObject(key);
-				ModrinthAPI modrinthAPI = parseJsonObject(JSONObject, listOfSha1);
+				ModrinthAPI modrinthAPI = parseJsonObject(JSONObject, wantedSha1s);
 				if (modrinthAPI != null) modrinthAPIList.add(modrinthAPI);
 			}
 		} catch (Exception e) {
@@ -130,7 +132,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 		return modrinthAPIList;
 	}
 
-	private static ModrinthAPI parseJsonObject(JsonObject JSONObject, List<String> listOfSha1) {
+	private static ModrinthAPI parseJsonObject(JsonObject JSONObject, Set<String> wantedSha1s) {
 		if (JSONObject == null) return null;
 
 		String modrinthID = JSONObject.get("project_id").getAsString();
@@ -140,7 +142,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 		JsonArray filesArray = JSONObject.getAsJsonArray("files");
 		JsonObject JSONObjectFile = null;
 
-		String sha1 = listOfSha1.size() == 1 ? listOfSha1.get(0) : null;
+		String sha1 = wantedSha1s.size() == 1 ? wantedSha1s.iterator().next() : null;
 
 		// some projects can have more than one file under the same version
 		for (JsonElement fileElement : filesArray) {
@@ -151,7 +153,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 			if (sha1 != null && sha1.equals(sha1Hash)) {
 				JSONObjectFile = fileObject;
 				break;
-			} else if (listOfSha1.contains(sha1Hash)) {
+			} else if (wantedSha1s.contains(sha1Hash)) {
 				JSONObjectFile = fileObject;
 				break;
 			}
