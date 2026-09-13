@@ -33,6 +33,7 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
+import pl.skidam.automodpack_core.protocol.netty.handler.PreConfigurationLifetimeHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.HashUtils;
@@ -173,6 +174,9 @@ public class NettyServer {
 				.childHandler(new ChannelInitializer<SocketChannel>() {
 					@Override
 					protected void initChannel(SocketChannel ch) {
+						// Nothing vanilla owns this socket, so the pre-configuration lifetime timer must exist from
+						// the first accepted byte: a connection that never sends its magic cannot pin the listener.
+						ch.pipeline().addLast(MOD_ID + "-pre-configuration-lifetime", new PreConfigurationLifetimeHandler());
 						ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(NettyServer.this, connectionMode, false));
 					}
 				}).group(eventLoopGroup).localAddress(bindAddress).bind().syncUninterruptibly();
