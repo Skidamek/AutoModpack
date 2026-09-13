@@ -70,6 +70,17 @@ class JournalTest {
 	}
 
 	@Test
+	void corruptEntrySemanticsAreUnusableContentEvenAtTheTail() throws Exception {
+		Path file = tempDir.resolve("journal.jsonl");
+		Journal journal = Journal.open(file);
+		journal.append(entry(1, "one"));
+		String corrupt = Files.readString(file, StandardCharsets.UTF_8).stripTrailing().replace("\"seq\":1", "\"seq\":0");
+		Files.writeString(file, corrupt, StandardCharsets.UTF_8);
+
+		assertThrows(Journal.UnusableContentException.class, () -> Journal.open(file));
+	}
+
+	@Test
 	void completeOpenRefusesATornTail() throws Exception {
 		Path file = tempDir.resolve("journal.jsonl");
 		Journal journal = Journal.open(file);

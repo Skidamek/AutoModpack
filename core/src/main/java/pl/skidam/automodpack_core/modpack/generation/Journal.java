@@ -70,6 +70,9 @@ public final class Journal {
 			if (line.isBlank()) continue;
 			try {
 				entries.add(JournalEntry.fromFields(COMPACT.fromJson(line, GenerationJsons.JournalEntryFields.class)));
+			} catch (IllegalArgumentException e) {
+				// A line that parses as JSON but breaks the entry contract is real corruption, never a torn write - even at the tail.
+				throw new UnusableContentException("Corrupt journal line " + (entries.size() + 1) + " in " + file, e);
 			} catch (JsonParseException e) {
 				// A crash or power cut mid-append tears the last line; anything unparsable earlier is real corruption.
 				if (!finalLine || !tolerateTornTail) throw new UnusableContentException("Malformed journal line " + (entries.size() + 1) + " in " + file, e);
