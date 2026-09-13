@@ -130,7 +130,7 @@ public final class ReviewedUpdatePlan {
 		return safe(copies).stream().map(copy -> new NestedCopy(copy.relativePath(), copy.sha1(), copy.size(), Set.of())).toList();
 	}
 
-	public static String executionDigest(UpdatePlan plan) {
+	static String executionDigest(UpdatePlan plan) {
 		Objects.requireNonNull(plan, "update plan");
 		return executionDigest(tuple(plan));
 	}

@@ -55,7 +55,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new Operation(Root.PROJECTION, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/new.jar", true, hash, bytes.length)));
 
-		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
+		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 
 		assertTrue(execution.success());
 		assertTrue(FileIntegrity.matches(projectionFile, bytes.length, hash));
@@ -85,7 +85,7 @@ class UpdateTransactionExecutorTest {
 						new ProjectedFile(Root.GAME_DIR, "mods/nested.jar", true, nestedHash, nestedBytes.length)),
 				clientConfig(target.manifest().modpackId()), Set.of(UpdatePlan.RestartReason.FIXED_NESTED_MODS), List.of(), List.of(), List.of(), List.of(generated), ChangeSet.empty());
 
-		assertTrue(executor(storage).commit(plan, target).success());
+		assertTrue(commit(storage, plan, target).success());
 
 		GeneratedCopyState state = GeneratedCopyState.read(storage, target.manifest().modpackId(), target.packTarget().contentToken(),
 				UpdateTransaction.digest(target.selection().intent()));
@@ -119,7 +119,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
 				ChangeSet.empty());
 
-		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
+		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 
 		assertTrue(execution.success());
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
@@ -142,7 +142,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/existing.jar", true, hash, bytes.length)), clientConfig(target.manifest().modpackId()), Set.of(), List.of(), List.of(), List.of(), List.of(),
 				ChangeSet.empty());
 
-		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
+		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 
 		assertTrue(execution.success());
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/existing.jar"), bytes.length, hash));
@@ -157,7 +157,7 @@ class UpdateTransactionExecutorTest {
 		String oldHash = store(storage, oldBytes);
 		SelectedModpackTarget oldTarget = target(storage, "mods/old.jar", "mod", false, oldHash, oldBytes.length);
 		UpdateTransactionExecutor executor = executor(storage);
-		assertTrue(executor.commit(plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
+		assertTrue(commit(storage, plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget).success());
 
@@ -177,7 +177,7 @@ class UpdateTransactionExecutorTest {
 		Files.createDirectories(storage.activeDirectory().resolve("mods"));
 		Files.writeString(storage.activePath("mods/partial.jar"), "partial", StandardCharsets.UTF_8);
 
-		assertTrue(executor.recover(transaction).success());
+		assertTrue(executor.recoverLatest().success());
 
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/new.jar"), newBytes.length, newHash));
 		assertFalse(Files.exists(storage.activePath("mods/partial.jar")));
@@ -192,7 +192,7 @@ class UpdateTransactionExecutorTest {
 		String oldHash = store(storage, oldBytes);
 		SelectedModpackTarget oldTarget = target(storage, "mods/old.jar", "mod", false, oldHash, oldBytes.length);
 		UpdateTransactionExecutor executor = executor(storage);
-		assertTrue(executor.commit(plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
+		assertTrue(commit(storage, plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget).success());
 
@@ -228,7 +228,7 @@ class UpdateTransactionExecutorTest {
 		String oldHash = store(storage, oldBytes);
 		SelectedModpackTarget oldTarget = target(storage, "mods/old.jar", "mod", false, oldHash, oldBytes.length);
 		UpdateTransactionExecutor executor = executor(storage);
-		assertTrue(executor.commit(plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
+		assertTrue(commit(storage, plan(oldTarget, clientConfig(oldTarget.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/old.jar", true, oldHash, oldBytes.length))), oldTarget).success());
 
@@ -271,7 +271,7 @@ class UpdateTransactionExecutorTest {
 		Files.write(live, newerBytes);
 		ConfigTools.writeAtomic(storage.transactionFile(), transaction);
 
-		UpdateTransactionExecutor.Execution execution = executor(storage).recover(transaction);
+		UpdateTransactionExecutor.Execution execution = executor(storage).recoverLatest();
 
 		assertTrue(execution.replanRequired());
 		assertEquals(UpdateTransaction.Status.REPLAN_REQUIRED, execution.status());
@@ -359,8 +359,7 @@ class UpdateTransactionExecutorTest {
 		byte[] oldBytes = "mailbox-old".getBytes(StandardCharsets.UTF_8);
 		String oldHash = store(storage, oldBytes);
 		SelectedModpackTarget installed = target(storage, "mods/mailbox-old.jar", "mod", false, oldHash, oldBytes.length);
-		UpdateTransactionExecutor executor = executor(storage);
-		assertTrue(executor.commit(plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
+		assertTrue(commit(storage, plan(installed, clientConfig(installed.manifest().modpackId()), List.of(
 				new Operation(Root.PROJECTION, "mods/mailbox-old.jar", OperationType.INSTALL_OBJECT, oldHash, oldBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-old.jar", true, oldHash, oldBytes.length))), installed).success());
 
@@ -397,7 +396,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/mailbox-latest.jar", OperationType.INSTALL_OBJECT, latestHash, latestBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/mailbox-latest.jar", true, latestHash, latestBytes.length)));
 
-		assertTrue(executor.commit(latestPlan, latestTarget).success());
+		assertTrue(commit(storage, latestPlan, latestTarget).success());
 		assertTrue(FileIntegrity.matches(storage.activePath("mods/mailbox-latest.jar"), latestBytes.length, latestHash));
 		assertFalse(Files.exists(storage.activePath("mods/mailbox-deferred.jar")));
 		assertFalse(Files.exists(storage.incomingDirectory().resolve("stale.txt")));
@@ -433,24 +432,6 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
-	void refusesToRecoverAStaleTransactionObjectAfterMailboxReplacement() throws Exception {
-		ClientStorage storage = storage();
-		byte[] bytes = "stale-mailbox".getBytes(StandardCharsets.UTF_8);
-		String hash = store(storage, bytes);
-		SelectedModpackTarget target = target(storage, "mods/stale.jar", "mod", false, hash, bytes.length);
-		UpdatePlan plan = plan(target, clientConfig(target.manifest().modpackId()), List.of(
-				new Operation(Root.PROJECTION, "mods/stale.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.PROJECTION, "mods/stale.jar", true, hash, bytes.length)));
-		UpdateTransaction stale = createTransaction(storage, plan, target);
-		UpdateTransaction latest = createTransaction(storage, plan, target);
-		latest.phase = UpdateTransaction.Phase.DEFERRED;
-		ConfigTools.writeAtomic(storage.transactionFile(), latest);
-
-		assertThrows(IOException.class, () -> executor(storage).recover(stale));
-		assertEquals(latest.transactionId, persistedTransaction(storage).transactionId);
-	}
-
-	@Test
 	void firstInstallPreservesLocalSameIdModBeforeProjectionApply() throws Exception {
 		ClientStorage storage = storage();
 		byte[] serverBytes = "server-sodium".getBytes(StandardCharsets.UTF_8);
@@ -470,9 +451,11 @@ class UpdateTransactionExecutorTest {
 		malformed.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3();
 		malformed.plannedConflicts = new ArrayList<>(List.of(plan.conflicts().get(0)));
 		malformed.plannedConflicts.set(0, null);
-		assertThrows(IOException.class, () -> executor(storage).validate(malformed));
+		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
+			assertThrows(IOException.class, () -> new UpdateTransactionValidator(storage).validate(malformed, null, true, cache));
+		}
 
-		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan, target);
+		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 
 		assertTrue(execution.success());
 		assertFalse(Files.exists(local));
@@ -498,7 +481,7 @@ class UpdateTransactionExecutorTest {
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target.flatTarget(), files, Map.of(), Set.of(), List.of(), List.of(), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId()), Map.of("mods/shared.jar", localState)));
 
-		assertTrue(executor(storage).commit(plan, target).success());
+		assertTrue(commit(storage, plan, target).success());
 
 		assertTrue(FileIntegrity.matches(local, serverBytes.length, serverHash));
 		PreservationVault.Claim claim = PreservationVault.read(storage, target.manifest().modpackId()).claims().get(0);
@@ -519,7 +502,7 @@ class UpdateTransactionExecutorTest {
 		Files.writeString(storage.transactionFile(), "active", StandardCharsets.UTF_8);
 
 		// An unparseable pending transaction is evidence, not a blocker: it is set aside and the fresh plan proceeds.
-		assertTrue(executor(storage).commit(plan, target).success());
+		assertTrue(commit(storage, plan, target).success());
 		try (var leftovers = Files.list(storage.transactionFile().getParent())) {
 			assertTrue(leftovers.anyMatch(path -> path.getFileName().toString().startsWith("update-transaction.json.corrupt-")));
 		}
@@ -535,7 +518,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/missing.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/missing.jar", true, hash, bytes.length)));
 
-		assertThrows(IOException.class, () -> executor(storage).commit(plan, target));
+		assertThrows(IOException.class, () -> commit(storage, plan, target));
 
 		assertFalse(Files.exists(storage.transactionFile()));
 	}
@@ -557,7 +540,7 @@ class UpdateTransactionExecutorTest {
 				new ProjectedFile(Root.OVERLAY, "config/settings.json", true, editedHash, editedBytes.length),
 				new ProjectedFile(Root.GAME_DIR, "config/settings.json", true, editedHash, editedBytes.length));
 
-		UpdateTransactionExecutor.Execution execution = executor(storage).commit(plan(target, clientConfig(target.manifest().modpackId()), operations, finalState), target);
+		UpdateTransactionExecutor.Execution execution = commit(storage, plan(target, clientConfig(target.manifest().modpackId()), operations, finalState), target);
 
 		Path overlay = storage.overlayFile(target.manifest().modpackId(), "config/settings.json");
 		Path live = storage.gameDirectory().resolve("config/settings.json");
@@ -584,8 +567,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.GAME_DIR, restoredPath, OperationType.INSTALL_OBJECT, serverHash, serverBytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, restoredPath, true, serverHash, serverBytes.length),
 						new ProjectedFile(Root.GAME_DIR, restoredPath, true, serverHash, serverBytes.length)));
-		UpdateTransactionExecutor executor = executor(storage);
-		assertTrue(executor.commit(installedPlan, installed).success());
+		assertTrue(commit(storage, installedPlan, installed).success());
 		Files.delete(storage.objectFile(serverHash));
 
 		ClientBaseline baseline = new ClientBaseline(installed.manifest().modpackId(), List.of(new ClientBaseline.Entry(restoredPath, baselineHash, baselineBytes.length, false, "")));
@@ -605,7 +587,7 @@ class UpdateTransactionExecutorTest {
 		assertEquals(List.of(new UpdatePlan.Preservation(Root.GAME_DIR, restoredPath, serverHash, serverBytes.length)), switchPlan.preservations());
 		assertTrue(switchPlan.projectedFinalState().stream().anyMatch(file -> file.root() == Root.GAME_DIR && file.relativePath().equals(restoredPath)
 				&& file.present() && baselineHash.equals(file.expectedHash())));
-		assertTrue(executor.commit(switchPlan, target).success());
+		assertTrue(commit(storage, switchPlan, target).success());
 		assertArrayEquals(baselineBytes, Files.readAllBytes(storage.gameDirectory().resolve(restoredPath)));
 		assertTrue(FileIntegrity.matches(storage.objectFile(serverHash), serverBytes.length, serverHash));
 		PreservationVault.Claim preserved = PreservationVault.read(storage, installed.manifest().modpackId()).claims().get(0);
@@ -623,7 +605,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new Operation(Root.PROJECTION, "mods/remove.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/remove.jar", true, hash, bytes.length)));
 		UpdateTransactionExecutor executor = executor(storage);
-		executor.commit(install, target);
+		commit(storage, install, target);
 		Path live = storage.gameDirectory().resolve("mods/remove.jar");
 		Files.write(live, bytes);
 		Path generatedLive = storage.gameDirectory().resolve("mods/generated-remove.jar");
@@ -672,7 +654,7 @@ class UpdateTransactionExecutorTest {
 		String managedPath = "config/empty/deactivate.txt";
 		SelectedModpackTarget target = target(storage, managedPath, "config", false, hash, bytes.length);
 		UpdateTransactionExecutor executor = executor(storage);
-		executor.commit(plan(target, clientConfig(target.manifest().modpackId()),
+		commit(storage, plan(target, clientConfig(target.manifest().modpackId()),
 				List.of(new Operation(Root.PROJECTION, managedPath, OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, managedPath, true, hash, bytes.length))), target);
 		Path live = storage.gameDirectory().resolve(managedPath);
@@ -722,6 +704,12 @@ class UpdateTransactionExecutorTest {
 
 	private static UpdateTransactionExecutor executor(ClientStorage storage) {
 		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(storage, null));
+	}
+
+	private static UpdateTransactionExecutor.Execution commit(ClientStorage storage, UpdatePlan plan, SelectedModpackTarget target) throws IOException {
+		ClientConfigJsons.ClientConfigFieldsV3 expected = ConfigTools.read(storage.clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
+				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
+		return executor(storage).commit(plan, target, storage.overlayDigest(target.manifest().modpackId()), expected);
 	}
 
 	private static UpdateTransaction persistedTransaction(ClientStorage storage) {

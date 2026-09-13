@@ -63,10 +63,6 @@ public record GeneratedCopyState(String modpackId, String contentToken, String s
 		ConfigTools.writeAtomic(path, fields);
 	}
 
-	public void delete(ClientStorage storage) throws IOException {
-		Files.deleteIfExists(storage.generatedCopiesFile(modpackId, contentToken, selectionDigest));
-	}
-
 	public ClientStorageJsons.ClientGeneratedCopiesFields toFields() {
 		ClientStorageJsons.ClientGeneratedCopiesFields fields = new ClientStorageJsons.ClientGeneratedCopiesFields();
 		fields.modpackId = modpackId;

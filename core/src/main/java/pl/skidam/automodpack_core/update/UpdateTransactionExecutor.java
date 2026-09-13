@@ -85,21 +85,6 @@ public final class UpdateTransactionExecutor {
 		validator = new UpdateTransactionValidator(context.storage());
 	}
 
-	public void validate(UpdateTransaction transaction) throws IOException {
-		withFileCache(cache -> {
-			validator.validate(transaction, null, true, cache);
-			return null;
-		});
-	}
-
-	public Execution commit(UpdatePlan plan, SelectedModpackTarget target) throws IOException {
-		return commit(plan, target, context.storage().overlayDigest(plan.modpackId()));
-	}
-
-	public Execution commit(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest) throws IOException {
-		return commit(plan, target, overlayDigest, readClientConfig());
-	}
-
 	public Execution commit(UpdatePlan plan, SelectedModpackTarget target, String overlayDigest,
 			ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig) throws IOException {
 		UpdateTransaction transaction = UpdateTransaction.create(plan, target, overlayDigest, expectedClientConfig);
@@ -157,11 +142,6 @@ public final class UpdateTransactionExecutor {
 				&& !verifyProjectionQuietly(storage.activeDirectory(), pending.projectedFinalState))
 			throw new IOException("A deferred projection publication must finish before its request can be replaced");
 		cleanupTransactionDirectories(pending);
-	}
-
-	public Execution recover(UpdateTransaction transaction) throws IOException {
-		Objects.requireNonNull(transaction, "transaction");
-		return ClientStorageMutation.run(context.storage(), () -> recoverPersisted(transaction.transactionId));
 	}
 
 	/** Recovers the current mailbox contents, never a transaction captured by an earlier process. */
@@ -229,11 +209,6 @@ public final class UpdateTransactionExecutor {
 			if (!publicationStarted) validateSelectionBeforeMutation(pending);
 			return executePersisted(pending);
 		});
-	}
-
-	private ClientConfigJsons.ClientConfigFieldsV3 readClientConfig() {
-		return ConfigTools.read(context.storage().clientConfigFile(), ClientConfigJsons.ClientConfigFieldsV3.class)
-				.orElseGet(ClientConfigJsons.ClientConfigFieldsV3::new);
 	}
 
 	private Execution executePersisted(UpdateTransaction transaction) throws IOException {
