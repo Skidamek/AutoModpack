@@ -20,6 +20,7 @@ import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.FileLocks;
+import pl.skidam.automodpack_core.utils.FileTrees;
 
 /** Shared per-user route and client-secret state keyed by modpack identity. */
 public final class ConnectionStore {
@@ -91,7 +92,7 @@ public final class ConnectionStore {
 
 	private static ConnectionJsons.ConnectionRecordFields readUnlocked(Path file) throws IOException {
 		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new ConnectionJsons.ConnectionRecordFields();
-		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Connection record is not a regular file: " + file);
+		FileTrees.requireRegularFile(file, "Connection record");
 		ConnectionJsons.ConnectionRecordFields fields = ConfigTools.read(file, ConnectionJsons.ConnectionRecordFields.class)
 				.orElseThrow(() -> new IOException("Connection record is empty: " + file));
 		normalize(fields);

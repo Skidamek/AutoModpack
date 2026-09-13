@@ -13,6 +13,7 @@ import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.FileLocks;
+import pl.skidam.automodpack_core.utils.FileTrees;
 
 /** Shared exact certificate trust keyed by the original Minecraft server address. */
 public final class OriginTrustStore {
@@ -53,7 +54,7 @@ public final class OriginTrustStore {
 
 	private static ConnectionJsons.KnownHostsFields readUnlocked(Path file) throws IOException {
 		if (!Files.exists(file, LinkOption.NOFOLLOW_LINKS)) return new ConnectionJsons.KnownHostsFields();
-		if (Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Known-hosts file is not a regular file: " + file);
+		FileTrees.requireRegularFile(file, "Known-hosts file");
 		ConnectionJsons.KnownHostsFields fields = ConfigTools.read(file, ConnectionJsons.KnownHostsFields.class)
 				.orElseThrow(() -> new IOException("Known-hosts file is empty: " + file));
 		if (fields.hosts == null) fields.hosts = new HashMap<>();
