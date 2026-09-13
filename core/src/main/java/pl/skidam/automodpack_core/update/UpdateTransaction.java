@@ -26,8 +26,7 @@ import pl.skidam.automodpack_core.utils.HashUtils;
  * client state it was planned against, the selection intents, the target's ledger) and the execution lifecycle.
  */
 public final class UpdateTransaction {
-	/** Pre-production: schema 1 write-ahead logs are unusable content; there is no migration. */
-	public static final int CURRENT_SCHEMA_VERSION = 2;
+	public static final int CURRENT_SCHEMA_VERSION = 1;
 
 	public int schemaVersion;
 	public String transactionId;
