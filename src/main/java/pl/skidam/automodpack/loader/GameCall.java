@@ -14,10 +14,14 @@ public class GameCall implements GameCallService {
 	@Override
 	public boolean isPlayerAuthorized(SocketAddress address, String id, String playerName) {
 		if (server == null) {
-			LOGGER.error("Server is null?");
-			return true;
+			LOGGER.error("Server is null; rejecting authorization for {}", id);
+			return false;
 		}
-
-		return GameHelpers.isPlayerAuthorized(address, UUID.fromString(id), playerName);
+		try {
+			return GameHelpers.isPlayerAuthorized(address, UUID.fromString(id), playerName);
+		} catch (IllegalArgumentException e) {
+			LOGGER.error("Rejecting a secret bound to an unreadable player id: {}", id);
+			return false;
+		}
 	}
 }
