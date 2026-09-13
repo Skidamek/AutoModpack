@@ -71,7 +71,6 @@ final class RemovalAttempt implements UpdateAttempt {
 	@Override
 	public ApplyResult commit() throws Exception {
 		if (prepared == null || review == null) throw new IllegalStateException("Modpack lifecycle action was not prepared");
-		if (!review.isApproved()) review.approve();
 		review.beginExecution();
 		boolean remove = kind == Kind.REMOVAL;
 		UpdatePreview applied = removalPreview(prepared, remove ? UpdatePreview.Mode.REMOVAL : UpdatePreview.Mode.DEACTIVATION);
