@@ -61,9 +61,7 @@ public class ConfigUtils {
 	public static void normalizeServerConfig(ServerConfigJsons.ServerConfigFieldsV3 config) {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.HOLEPUNCH;
 
-		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<group>/' prefix.
-		Pattern hostModpackGroup = Pattern.compile("^/?automodpack/host-modpack/[^/]+/");
-
+		// Rules are group-directory-relative: no leading slash, no '/automodpack/host-modpack/<this group>/' prefix.
 		if (config.groups == null) return;
 		for (var groupEntry : config.groups.entrySet()) {
 			var group = groupEntry.getValue();
@@ -71,9 +69,10 @@ public class ConfigUtils {
 				LOGGER.warn("Ignored null group declaration '{}'.", groupEntry.getKey());
 				continue;
 			}
-			group.syncedFiles = normalizeRuleSet(group.syncedFiles, "syncedFiles", hostModpackGroup, true);
-			group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", hostModpackGroup, false);
-			group.allowEditsInFiles = normalizeRuleSet(group.allowEditsInFiles, "allowEditsInFiles", hostModpackGroup, false);
+			Pattern ownGroupPrefix = Pattern.compile("^/?automodpack/host-modpack/" + Pattern.quote(groupEntry.getKey()) + "/");
+			group.syncedFiles = normalizeRuleSet(group.syncedFiles, "syncedFiles", groupEntry.getKey(), ownGroupPrefix, true);
+			group.excludedFiles = normalizeRuleSet(group.excludedFiles, "excludedFiles", groupEntry.getKey(), ownGroupPrefix, false);
+			group.allowEditsInFiles = normalizeRuleSet(group.allowEditsInFiles, "allowEditsInFiles", groupEntry.getKey(), ownGroupPrefix, false);
 		}
 	}
 
@@ -84,7 +83,7 @@ public class ConfigUtils {
 	 * moving one to the other would change what ships. syncedFiles entries under the group directory are dropped
 	 * instead of stripped: the directory is included in full, so a synced rule there can only be redundant.
 	 */
-	private static Set<String> normalizeRuleSet(Set<String> ruleSet, String configKey, Pattern hostModpackGroup, boolean dropHostModpackPaths) {
+	private static Set<String> normalizeRuleSet(Set<String> ruleSet, String configKey, String groupId, Pattern ownGroupPrefix, boolean dropOwnGroupPaths) {
 		Set<String> normalized = new LinkedHashSet<>();
 		for (String rule : rules(ruleSet)) {
 			String path = clean(rule, configKey);
@@ -92,9 +91,16 @@ public class ConfigUtils {
 			boolean negated = path.startsWith("!");
 			String body = negated ? path.substring(1) : path;
 			while (body.startsWith("/")) body = body.substring(1);
-			if (hostModpackGroup.matcher(body).find()) {
-				if (dropHostModpackPaths) LOGGER.info("Removed redundant {} entry '{}': the group directory under '/automodpack/host-modpack/' is included in full.", configKey, rule);
-				else normalized.add((negated ? "!" : "") + hostModpackGroup.matcher(body).replaceFirst(""));
+			if (body.startsWith("automodpack/host-modpack/")) {
+				if (ownGroupPrefix.matcher(body).find()) {
+					if (dropOwnGroupPaths) LOGGER.info("Removed redundant {} entry '{}': the group directory under '/automodpack/host-modpack/' is included in full.", configKey, rule);
+					else normalized.add((negated ? "!" : "") + ownGroupPrefix.matcher(body).replaceFirst(""));
+				} else {
+					// Another group's directory cannot be spelled in this group's relative space; stripping it would
+					// silently rebind the rule to this group's files. Keep it verbatim and tell the server owner.
+					LOGGER.warn("Kept {} entry '{}' verbatim: host-modpack rules must name their own group '{}'.", configKey, rule, groupId);
+					normalized.add((negated ? "!" : "") + body);
+				}
 				continue;
 			}
 			normalized.add((negated ? "!" : "") + body);

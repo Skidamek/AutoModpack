@@ -39,4 +39,21 @@ class ConfigUtilsTest {
 		assertEquals(List.of("secret.bin", "!keep.bin"), List.copyOf(group.excludedFiles));
 		assertEquals(List.of("config/**"), List.copyOf(group.allowEditsInFiles));
 	}
+
+	@Test
+	void hostModpackRulesStripOnlyTheirOwnGroupPrefix() {
+		ServerConfigJsons.ServerConfigFieldsV3 config = new ServerConfigJsons.ServerConfigFieldsV3();
+		ServerConfigJsons.GroupDeclaration group = new ServerConfigJsons.GroupDeclaration();
+		group.syncedFiles = new LinkedHashSet<>(List.of("automodpack/host-modpack/main/extra", "!automodpack/host-modpack/main/skip/**"));
+		group.excludedFiles = new LinkedHashSet<>(List.of("automodpack/host-modpack/main/**", "automodpack/host-modpack/other/**", "/automodpack/host-modpack/main"));
+		config.groups = new LinkedHashMap<>(Map.of("main", group));
+
+		ConfigUtils.normalizeServerConfig(config);
+
+		// Own-group synced rules are dropped entirely: the group directory is included in full, so they are redundant.
+		assertEquals(List.of(), List.copyOf(group.syncedFiles));
+		// The own-group prefix strips; a whole-directory rule stays meaningful in the group's own space, and a
+		// foreign group's rule is kept verbatim instead of being rewritten into a whole-pack statement.
+		assertEquals(List.of("**", "automodpack/host-modpack/other/**", "automodpack/host-modpack/main"), List.copyOf(group.excludedFiles));
+	}
 }
