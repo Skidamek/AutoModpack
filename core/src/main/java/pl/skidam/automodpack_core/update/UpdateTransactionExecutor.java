@@ -225,7 +225,7 @@ public final class UpdateTransactionExecutor {
 			transaction.resultMessage = null;
 			setPhase(transaction, UpdateTransaction.Phase.PREPARING);
 			applyModpackTransaction(transaction, current, publicationStarted, liveAlreadyApplied, preserveNewerSelection);
-			setPhase(transaction, UpdateTransaction.Phase.COMMITTED);
+			persistPhase(transaction, UpdateTransaction.Phase.COMMITTED);
 			return finalizeCommitted(transaction);
 		} catch (IOException e) {
 			Operation currentOperation = current.get();
@@ -293,7 +293,6 @@ public final class UpdateTransactionExecutor {
 	private void publishProjection(UpdateTransaction transaction) throws IOException {
 		if (verifyProjectionQuietly(context.storage().activeDirectory(), transaction.plan().projectedFinalState())) return;
 		buildIncomingProjection(transaction);
-		setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
 		setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
 		swapProjection(transaction);
 	}
@@ -332,8 +331,14 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	private void setPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) throws IOException {
+	/** Marks an in-memory phase transition. The phase is only durable at the boundaries: the PLANNED intent, the COMMITTED marker, and the result receipt. */
+	private void setPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) {
 		transaction.phase = phase;
+	}
+
+	/** Persists the journal at a durable phase boundary, rewriting the whole record exactly where recovery depends on the phase. */
+	private void persistPhase(UpdateTransaction transaction, UpdateTransaction.Phase phase) throws IOException {
+		setPhase(transaction, phase);
 		ConfigTools.writeAtomic(context.storage().transactionFile(), transaction);
 	}
 

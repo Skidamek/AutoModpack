@@ -200,6 +200,7 @@ public final class UpdateTransaction {
 	public enum Phase {
 		PLANNED,
 		PREPARING,
+		/** No longer persisted by the executor, but older journals carry it and it still means publication started on read. */
 		PROJECTED,
 		SWAPPING,
 		COMMITTED,
