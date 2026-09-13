@@ -6,7 +6,6 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.KeyManagementException;
@@ -25,14 +24,13 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
@@ -45,12 +43,6 @@ import javax.net.ssl.TrustManager;
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
-import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
-import pl.skidam.automodpack_core.protocol.compression.CompressionType;
-import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationChunkSizeMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationCompressionMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.configuration.ConfigurationEchoMessage;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.Throwables;
@@ -83,7 +75,6 @@ public class DownloadClient implements AutoCloseable {
 	private final Deque<Connection> availableConnections = new ArrayDeque<>();
 	private final Deque<CompletableFuture<Connection>> connectionWaiters = new ArrayDeque<>();
 	private final Set<Connection> allConnections = Collections.newSetFromMap(new IdentityHashMap<>());
-	private final Set<PreConfigurationKeepalive> preConfigurationKeepalives = ConcurrentHashMap.newKeySet();
 	private int openingConnections;
 	private volatile boolean closed;
 
@@ -316,7 +307,8 @@ public class DownloadClient implements AutoCloseable {
 			return rejectCandidate(candidate, new IOException("Certificate trust callback failed", e));
 		}
 
-		PreConfigurationKeepalive keepalive = startPreConfigurationKeepalive(candidate);
+		BooleanSupplier clientAlive = () -> !closed;
+		PreConfigurationKeepalive keepalive = new PreConfigurationKeepalive(candidate.socket(), preConfigurationKeepaliveInterval, PRE_CONFIGURATION_KEEPALIVE_EXECUTOR, clientAlive);
 		return decision.handle((trusted, error) -> {
 			// The heartbeat must be gone before the negotiation writes start, so a straggler keepalive record can
 			// never land after the configuration echo and misframe the configured connection.
@@ -339,63 +331,6 @@ public class DownloadClient implements AutoCloseable {
 				throw new CompletionException(e);
 			}
 		});
-	}
-
-	/**
-	 * Keeps the transport warm while the human decides on certificate trust: every interval the candidate writes a
-	 * configuration-phase keepalive the server absorbs silently, so idle NAT mappings and relay bindings never decay
-	 * under the parked connection. Retired when the trust decision settles, the client closes, or the socket dies.
-	 */
-	private PreConfigurationKeepalive startPreConfigurationKeepalive(TlsCandidate candidate) {
-		PreConfigurationKeepalive keepalive = new PreConfigurationKeepalive(candidate.socket());
-		preConfigurationKeepalives.add(keepalive);
-		return keepalive;
-	}
-
-	/** One parked candidate's heartbeat; the write gate makes retirement wait for an in-flight keepalive write. */
-	private final class PreConfigurationKeepalive {
-
-		private final SSLSocket socket;
-		private final ScheduledFuture<?> task;
-		private final Object writeGate = new Object();
-		private boolean retired;
-
-		private PreConfigurationKeepalive(SSLSocket socket) {
-			this.socket = socket;
-			Duration interval = DownloadClient.this.preConfigurationKeepaliveInterval;
-			this.task = PRE_CONFIGURATION_KEEPALIVE_EXECUTOR.scheduleWithFixedDelay(this::tick, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
-		}
-
-		private void tick() {
-			boolean dead;
-			synchronized (writeGate) {
-				dead = retired || closed || socket.isClosed();
-				if (!dead) {
-					try {
-						OutputStream out = socket.getOutputStream();
-						out.write(new byte[]{LATEST_SUPPORTED_PROTOCOL_VERSION, CONFIGURATION_KEEPALIVE_TYPE});
-						out.flush();
-					} catch (IOException died) {
-						dead = true;
-					}
-				}
-				if (dead) retired = true;
-			}
-			if (dead) retireTask();
-		}
-
-		/** Stops the heartbeat and returns only after any in-flight keepalive write has finished. */
-		private void retire() {
-			synchronized (writeGate) {
-				retired = true;
-			}
-			retireTask();
-		}
-
-		private void retireTask() {
-			task.cancel(false);
-			preConfigurationKeepalives.remove(this);
-		}
 	}
 
 	/** Turns a validated candidate into a configured connection, releasing the socket when the negotiation fails. */
@@ -513,7 +448,6 @@ public class DownloadClient implements AutoCloseable {
 		synchronized (poolLock) {
 			if (closed) return;
 			closed = true;
-			preConfigurationKeepalives.forEach(PreConfigurationKeepalive::retire);
 			connections = new ArrayList<>(allConnections);
 			waiters = new ArrayList<>(connectionWaiters);
 			allConnections.clear();
@@ -524,164 +458,5 @@ public class DownloadClient implements AutoCloseable {
 		IOException closedError = new IOException("Download client is closed");
 		waiters.forEach(waiter -> waiter.completeExceptionally(closedError));
 		connections.forEach(DownloadClient::closeQuietly);
-	}
-}
-
-class Connection implements AutoCloseable {
-
-	private byte protocolVersion = LATEST_SUPPORTED_PROTOCOL_VERSION;
-	// ZSTD stays the default on purpose: packs carry plenty of non-jar content (configs, scripts) that compresses well, and zstd costs a fraction of the transfer it saves.
-	private CompressionType compressionType = CompressionType.ZSTD;
-	private int chunkSize = DEFAULT_CHUNK_SIZE;
-	private final byte[] secretBytes;
-	private final SSLSocket socket;
-	private final DataInputStream in;
-	private final DataOutputStream out;
-	private CompressionCodec compressionCodec;
-	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
-
-	public Connection(SSLSocket socket, byte[] secretBytes) throws IOException {
-		if (socket == null || socket.isClosed()) throw new IOException("Server connection is closed");
-		this.socket = socket;
-		this.secretBytes = secretBytes;
-
-		this.in = new DataInputStream(new BufferedInputStream(this.socket.getInputStream()));
-		this.out = new DataOutputStream(new BufferedOutputStream(this.socket.getOutputStream()));
-
-		if (!CompressionFactory.isAvailable(compressionType)) compressionType = CompressionType.GZIP;
-		compressionType = sendCompressionConfig(compressionType);
-		compressionCodec = CompressionFactory.createCodec(compressionType);
-		chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
-		sendEchoConfig();
-	}
-
-	public boolean isActive() {
-		return !socket.isClosed();
-	}
-
-	private CompressionCodec getCompressionCodec() {
-		return compressionCodec;
-	}
-
-	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
-		if (destination == null) throw new IllegalArgumentException("Destination cannot be null");
-
-		return CompletableFuture.supplyAsync(() -> {
-			Exception exception = null;
-			try {
-				ByteArrayOutputStream baos = new ByteArrayOutputStream(64 + fileHash.length);
-				DataOutputStream dos = new DataOutputStream(baos);
-				dos.writeByte(protocolVersion);
-				dos.writeByte(FILE_REQUEST_TYPE);
-				dos.write(secretBytes);
-				dos.writeInt(fileHash.length);
-				dos.write(fileHash);
-
-				writeProtocolMessage(baos.toByteArray());
-				return readFileResponse(destination, chunkCallback);
-			} catch (Exception e) {
-				exception = e;
-				throw new CompletionException(e);
-			} finally {
-				finalBlock(exception);
-			}
-		}, DownloadClient.NET_EXECUTOR);
-	}
-
-	private void finalBlock(Exception exception) {
-		try {
-			int available;
-			while ((available = in.available()) > 0) {
-				in.skipBytes(available);
-			}
-		} catch (IOException e) {
-			if (exception == null) throw new CompletionException(e);
-		}
-	}
-
-	private void writeProtocolMessage(byte[] payload) throws IOException {
-		ProtocolFrameCodec.write(out, getCompressionCodec(), payload, chunkSize);
-	}
-
-	private ProtocolFrameCodec.Frame readProtocolMessageFrame() throws IOException {
-		return ProtocolFrameCodec.read(in, getCompressionCodec(), chunkSize, frameScratch);
-	}
-
-	private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
-		ProtocolFrameCodec.Frame header = readProtocolMessageFrame();
-		ByteBuffer headerWrap = ByteBuffer.wrap(header.data(), 0, header.length());
-
-		byte version = headerWrap.get();
-		byte messageType = headerWrap.get();
-
-		if (messageType == ERROR) {
-			int errLen = headerWrap.getInt();
-			byte[] errBytes = new byte[errLen];
-			headerWrap.get(errBytes);
-			throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
-		}
-
-		if (messageType == END_OF_TRANSMISSION) return destination;
-
-		if (messageType != FILE_RESPONSE_TYPE) throw new IOException("Unexpected message type: " + messageType);
-
-		long expectedFileSize = headerWrap.getLong();
-		if (expectedFileSize < 0) throw new IOException("Negative file size: " + expectedFileSize);
-		long receivedBytes = 0;
-
-		try (OutputStream fos = LocalFileWriter.open(destination)) {
-			while (receivedBytes < expectedFileSize) {
-				ProtocolFrameCodec.Frame dataFrame = readProtocolMessageFrame();
-				int toWrite = ProtocolFrameCodec.writableFrameBytes(dataFrame.length(), expectedFileSize - receivedBytes);
-				if (toWrite <= 0) throw new IOException("File frame did not advance the download");
-				fos.write(dataFrame.data(), 0, toWrite);
-				receivedBytes += toWrite;
-				if (chunkCallback != null) chunkCallback.accept(toWrite);
-			}
-		}
-
-		ProtocolFrameCodec.Frame eot = readProtocolMessageFrame();
-		if (eot.length() < 2 || eot.data()[0] != version || eot.data()[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
-		return destination;
-	}
-
-	private CompressionType sendCompressionConfig(CompressionType desiredCompression) throws IOException {
-		writeAndFlush(new ConfigurationCompressionMessage(protocolVersion, desiredCompression).toBytes());
-
-		byte version = readConfigResponseHeader(CONFIGURATION_COMPRESSION_TYPE);
-		return ConfigurationCompressionMessage.readFrom(version, in).getCompressionType();
-	}
-
-	private int sendChunkSizeConfig(int desiredChunkSize) throws IOException {
-		writeAndFlush(new ConfigurationChunkSizeMessage(protocolVersion, desiredChunkSize).toBytes());
-
-		byte version = readConfigResponseHeader(CONFIGURATION_CHUNK_SIZE_TYPE);
-		return ConfigurationChunkSizeMessage.readFrom(version, in).getChunkSize();
-	}
-
-	private void sendEchoConfig() throws IOException {
-		writeAndFlush(new ConfigurationEchoMessage(protocolVersion).toBytes());
-	}
-
-	private void writeAndFlush(byte[] payload) throws IOException {
-		out.write(payload);
-		out.flush();
-	}
-
-	/** Reads and verifies the [version][type] header of one configuration reply, adopting the server's protocol version when it is older. */
-	private byte readConfigResponseHeader(byte expectedType) throws IOException {
-		byte version = in.readByte();
-		if (version >= 1 && version < protocolVersion) protocolVersion = version;
-		byte type = in.readByte();
-		if (type != expectedType) throw new IOException("Unexpected response: " + type);
-		return version;
-	}
-
-	@Override
-	public void close() {
-		try {
-			socket.close();
-		} catch (Exception ignored) {
-		}
 	}
 }
