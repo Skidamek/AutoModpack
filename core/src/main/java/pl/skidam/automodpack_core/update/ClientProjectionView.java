@@ -69,7 +69,7 @@ public final class ClientProjectionView {
 	public ClientConfigJsons.ClientConfigFieldsV3 logicalConfig(ClientConfigJsons.ClientConfigFieldsV3 current) throws IOException {
 		Objects.requireNonNull(current, "current config");
 		UpdateTransaction pending = readPending();
-		if (pending == null || pending.plannedClientConfig == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
+		if (pending == null || pending.plan().plannedClientConfig() == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
 		return rebaseConfig(persistedClientConfig(), pending);
 	}
 
@@ -79,14 +79,14 @@ public final class ClientProjectionView {
 		Objects.requireNonNull(current, "current config");
 		Objects.requireNonNull(persisted, "persisted config");
 		UpdateTransaction pending = readPending();
-		if (pending == null || pending.plannedClientConfig == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
+		if (pending == null || pending.plan().plannedClientConfig() == null) return new ClientConfigJsons.ClientConfigFieldsV3(current);
 		return rebaseConfig(persisted, pending);
 	}
 
 	private ClientConfigJsons.ClientConfigFieldsV3 rebaseConfig(ClientConfigJsons.ClientConfigFieldsV3 persisted, UpdateTransaction pending) throws IOException {
 		if (pending.expectedClientConfig == null) throw new IOException("Pending client configuration precondition is missing");
 		ClientConfigJsons.ClientConfigFieldsV3 expected = pending.expectedClientConfig;
-		ClientConfigJsons.ClientConfigFieldsV3 planned = pending.plannedClientConfig;
+		ClientConfigJsons.ClientConfigFieldsV3 planned = pending.plan().plannedClientConfig();
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		boolean mayUpdateSelectedModpack = active == null || Objects.equals(persisted.selectedModpackId, active.modpackId);
 		return persisted.rebase(expected, planned, mayUpdateSelectedModpack);
@@ -125,9 +125,9 @@ public final class ClientProjectionView {
 	}
 
 	private Snapshot stagedSnapshot(UpdateTransaction pending) throws IOException {
-		if (pending.contentToken == null) throw new IOException("Pending projection target generation is missing");
+		if (pending.plan().packTarget().contentToken() == null) throw new IOException("Pending projection target generation is missing");
 		Map<String, UpdatePlan.FileState> files = new LinkedHashMap<>();
-		for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
+		for (UpdatePlan.ProjectedFile projected : pending.plan().projectedFinalState()) {
 			if (projected == null || projected.root() != UpdatePlan.Root.PROJECTION || !projected.present()) continue;
 			if (!HashUtils.isSha1(projected.expectedHash()) || projected.expectedSize() < 0) throw new IOException("Pending projection file metadata is invalid");
 			files.put(LogicalPath.normalize(projected.relativePath()), new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true));
@@ -171,10 +171,10 @@ public final class ClientProjectionView {
 	}
 
 	private static Map<String, List<UpdatePlan.FileState>> pendingGameStates(UpdateTransaction pending) throws IOException {
-		if (pending == null || pending.projectedFinalState == null) return Map.of();
+		if (pending == null || pending.plan().projectedFinalState() == null) return Map.of();
 		Map<String, List<UpdatePlan.FileState>> pendingGameStates = new LinkedHashMap<>();
 		try {
-			for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
+			for (UpdatePlan.ProjectedFile projected : pending.plan().projectedFinalState()) {
 				if (projected == null || projected.root() != UpdatePlan.Root.GAME_DIR) continue;
 				String relative = LogicalPath.normalize(projected.relativePath());
 				UpdatePlan.FileState state = projected.present()
@@ -182,8 +182,8 @@ public final class ClientProjectionView {
 						: new UpdatePlan.FileState(null, -1, false);
 				pendingGameStates.computeIfAbsent(relative, ignored -> new ArrayList<>()).add(state);
 			}
-			if (pending.plannedBaselineCaptures != null) {
-				for (UpdatePlan.BaselineCapture capture : pending.plannedBaselineCaptures) {
+			if (pending.plan().baselineCaptures() != null) {
+				for (UpdatePlan.BaselineCapture capture : pending.plan().baselineCaptures()) {
 					if (capture == null || capture.root() != UpdatePlan.Root.GAME_DIR) continue;
 					String relative = LogicalPath.normalize(capture.relativePath());
 					UpdatePlan.FileState state = capture.absent()
@@ -204,7 +204,7 @@ public final class ClientProjectionView {
 
 	private ModpackJsons.ModpackContentFields stagedTarget(UpdateTransaction pending) throws IOException {
 		if (!isProjectionTransaction(pending)) return null;
-		if (pending.contentToken == null) throw new IOException("Pending projection target generation is missing");
+		if (pending.plan().packTarget().contentToken() == null) throw new IOException("Pending projection target generation is missing");
 		try {
 			PackDocument document = new ClientGenerationStore(storage).document(pending);
 			SelectionIntent intent = pending.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE ? pending.targetIntent() : pending.expectedPriorIntent();
@@ -221,7 +221,7 @@ public final class ClientProjectionView {
 	}
 
 	private static boolean isProjectionTransaction(UpdateTransaction transaction) {
-		return transaction != null && transaction.purpose != null && transaction.projectedFinalState != null;
+		return transaction != null && transaction.purpose != null && transaction.plan().projectedFinalState() != null;
 	}
 
 	public final class Snapshot {
@@ -261,7 +261,7 @@ public final class ClientProjectionView {
 			if (pending == null) return Set.of();
 			try {
 				TreeSet<String> paths = new TreeSet<>();
-				for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState)
+				for (UpdatePlan.ProjectedFile projected : pending.plan().projectedFinalState())
 					if (projected != null && projected.root() == UpdatePlan.Root.GAME_DIR) paths.add(LogicalPath.normalize(projected.relativePath()));
 				return Collections.unmodifiableSet(paths);
 			} catch (RuntimeException e) {
@@ -271,9 +271,9 @@ public final class ClientProjectionView {
 
 		/** Returns the generated-copy state for this logical projection, including an unpublished pending state. */
 		public GeneratedCopyState generatedCopies() throws IOException {
-			if (pending != null && pending.plannedGeneratedCopies != null) {
+			if (pending != null) {
 				try {
-					return GeneratedCopyState.fromFields(pending.plannedGeneratedCopies);
+					return GeneratedCopyState.fromCopies(pending.plan().modpackId(), pending.plan().packTarget().contentToken(), pending.selectionDigest(), pending.plan().generatedCopies());
 				} catch (RuntimeException e) {
 					throw new IOException("Pending generated-copy state is invalid", e);
 				}
@@ -296,8 +296,8 @@ public final class ClientProjectionView {
 			candidates.add(storage.activePath(relative));
 			UpdatePlan.FileState expected = files.get(relative);
 			if (expected != null && expected.sha1() != null) candidates.add(storage.objectFile(expected.sha1()));
-			if (pending != null && pending.projectedFinalState != null) {
-				for (UpdatePlan.ProjectedFile projected : pending.projectedFinalState) {
+			if (pending != null && pending.plan().projectedFinalState() != null) {
+				for (UpdatePlan.ProjectedFile projected : pending.plan().projectedFinalState()) {
 					if (projected == null || projected.root() != UpdatePlan.Root.PROJECTION || !projected.present()) continue;
 					if (!relative.equals(LogicalPath.normalize(projected.relativePath())) || !HashUtils.isSha1(projected.expectedHash())) continue;
 					candidates.add(storage.objectFile(projected.expectedHash()));

@@ -139,7 +139,7 @@ public final class UpdateTransactionExecutor {
 		}
 		validator.validatePendingReplacementEnvelope(pending);
 		if (Files.exists(storage.backupDirectory(), LinkOption.NOFOLLOW_LINKS)
-				&& !verifyProjectionQuietly(storage.activeDirectory(), pending.projectedFinalState))
+				&& !verifyProjectionQuietly(storage.activeDirectory(), pending.plan().projectedFinalState()))
 			throw new IOException("A deferred projection publication must finish before its request can be replaced");
 		cleanupTransactionDirectories(pending);
 	}
@@ -177,7 +177,7 @@ public final class UpdateTransactionExecutor {
 	private boolean generationAlreadyFinalized(UpdateTransaction transaction) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields state = context.storage().readActiveState();
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL || transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION) return state == null;
-		return state != null && transaction.contentToken != null && transaction.contentToken.equals(state.contentToken);
+		return state != null && transaction.plan().packTarget().contentToken() != null && transaction.plan().packTarget().contentToken().equals(state.contentToken);
 	}
 
 	/** Reports mutable input drift that requires a fresh plan before live mutation can continue. */
@@ -291,7 +291,7 @@ public final class UpdateTransactionExecutor {
 
 	/** Builds and swaps the incoming projection unless the active tree already matches; no-ops when the projection was published earlier. */
 	private void publishProjection(UpdateTransaction transaction) throws IOException {
-		if (verifyProjectionQuietly(context.storage().activeDirectory(), transaction.projectedFinalState)) return;
+		if (verifyProjectionQuietly(context.storage().activeDirectory(), transaction.plan().projectedFinalState())) return;
 		buildIncomingProjection(transaction);
 		setPhase(transaction, UpdateTransaction.Phase.PROJECTED);
 		setPhase(transaction, UpdateTransaction.Phase.SWAPPING);
@@ -301,18 +301,18 @@ public final class UpdateTransactionExecutor {
 	/** The durable finalization: planned config, pack state, active-state pointer, and the before-manifest hook. */
 	private void finalizeModpackState(UpdateTransaction transaction, boolean preserveNewerSelection) throws IOException {
 		SelectedModpackTarget resolved = validator.resolvedTarget(transaction, validator.targetDocument(transaction));
-		if (transaction.plannedClientConfig != null && !preserveNewerSelection)
-			ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plannedClientConfig);
+		if (transaction.plan().plannedClientConfig() != null && !preserveNewerSelection)
+			ConfigTools.writeAtomic(context.storage().clientConfigFile(), transaction.plan().plannedClientConfig());
 		if (context.beforeManifestAction() != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
 			context.beforeManifestAction().run(transaction, resolved.flatTarget());
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			PackTarget generation = transaction.packTarget();
-			GeneratedCopyState.fromFields(transaction.plannedGeneratedCopies).write(context.storage());
-			context.storage().writeActiveState(transaction.modpackId, generation.contentToken(), resolved.document().ownershipLedger().toFields());
+			GeneratedCopyState.fromCopies(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken(), transaction.selectionDigest(), transaction.plan().generatedCopies()).write(context.storage());
+			context.storage().writeActiveState(transaction.plan().modpackId(), generation.contentToken(), resolved.document().ownershipLedger().toFields());
 		} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
-			FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.modpackId, transaction.contentToken));
+			FileTrees.delete(context.storage().generatedCopiesGenerationDirectory(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken()));
 			context.storage().clearActiveState();
-			Files.deleteIfExists(context.storage().baselineFile(transaction.modpackId));
+			Files.deleteIfExists(context.storage().baselineFile(transaction.plan().modpackId()));
 		} else {
 			context.storage().clearActiveState();
 		}
@@ -338,7 +338,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void applyOperations(UpdateTransaction transaction, AtomicReference<Operation> current) throws IOException {
-		for (Operation operation : transaction.operations) {
+		for (Operation operation : transaction.plan().operations()) {
 			if (operation.operation() != OperationType.INSTALL_OBJECT || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
@@ -347,7 +347,7 @@ public final class UpdateTransactionExecutor {
 			Path source = context.storage().objectFile(operation.expectedObjectHash());
 			VerifiedFileTransfer.copyAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash(), fileCache);
 		}
-		for (Operation operation : transaction.operations) {
+		for (Operation operation : transaction.plan().operations()) {
 			if (operation.operation() != OperationType.DELETE || operation.root() == Root.PROJECTION) continue;
 			current.set(operation);
 			Path target = resolve(operation, transaction);
@@ -355,7 +355,7 @@ public final class UpdateTransactionExecutor {
 				verifyExpectedExisting(operation, target);
 				Files.delete(target);
 			}
-			FileTrees.pruneEmptyAncestors(target, context.storage().root(operation.root(), transaction.modpackId));
+			FileTrees.pruneEmptyAncestors(target, context.storage().root(operation.root(), transaction.plan().modpackId()));
 		}
 	}
 
@@ -380,7 +380,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void preserveBeforeMutation(UpdateTransaction transaction) throws IOException {
-		for (Preservation preservation : transaction.plannedPreservations) {
+		for (Preservation preservation : transaction.plan().preservations()) {
 			PreservationOrigin origin = preservationOrigin(transaction, preservation);
 			PreservationVault.preserve(context.storage(), origin.modpackId(), origin.contentToken(), origin.reason(), preservation.root(),
 					preservation.relativePath(), preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize());
@@ -388,29 +388,31 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void preserveConflicts(UpdateTransaction transaction) throws IOException {
-		for (Conflict conflict : transaction.plannedConflicts)
-			if (conflict.action() == ConflictAction.PRESERVE_LOCAL) PreservationVault.preserveConflict(context.storage(), transaction.contentToken, conflict);
+		for (Conflict conflict : transaction.plan().conflicts())
+			if (conflict.action() == ConflictAction.PRESERVE_LOCAL) PreservationVault.preserveConflict(context.storage(), transaction.plan().packTarget().contentToken(), conflict);
 	}
 
 	private PreservationOrigin preservationOrigin(UpdateTransaction transaction, Preservation preservation) throws IOException {
 		ClientStorageJsons.ClientGenerationStateFields active = context.storage().readActiveState();
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL)
-			return new PreservationOrigin(transaction.modpackId, active == null ? transaction.contentToken : HashUtils.normalizeSha1(active.contentToken), PreservationVault.Reason.MODPACK_REMOVAL);
+			return new PreservationOrigin(transaction.plan().modpackId(), active == null ? transaction.plan().packTarget().contentToken() : HashUtils.normalizeSha1(active.contentToken),
+					PreservationVault.Reason.MODPACK_REMOVAL);
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_DEACTIVATION)
-			return new PreservationOrigin(transaction.modpackId, active == null ? transaction.contentToken : HashUtils.normalizeSha1(active.contentToken), PreservationVault.Reason.MODPACK_DEACTIVATION);
+			return new PreservationOrigin(transaction.plan().modpackId(), active == null ? transaction.plan().packTarget().contentToken() : HashUtils.normalizeSha1(active.contentToken),
+					PreservationVault.Reason.MODPACK_DEACTIVATION);
 		if (preservation.proof() == PreservationProof.ACTIVE_LEDGER && active != null) {
-			PreservationVault.Reason reason = transaction.modpackId.equals(active.modpackId) ? PreservationVault.Reason.SERVER_REMOVAL : PreservationVault.Reason.MODPACK_DEACTIVATION;
+			PreservationVault.Reason reason = transaction.plan().modpackId().equals(active.modpackId) ? PreservationVault.Reason.SERVER_REMOVAL : PreservationVault.Reason.MODPACK_DEACTIVATION;
 			return new PreservationOrigin(active.modpackId, HashUtils.normalizeSha1(active.contentToken), reason);
 		}
 		if (preservation.proof() == PreservationProof.PLAYER_CONSENT)
-			return new PreservationOrigin(transaction.modpackId, transaction.contentToken, PreservationVault.Reason.PLAYER_CONSENT);
-		return new PreservationOrigin(transaction.modpackId, transaction.contentToken, PreservationVault.Reason.SERVER_REMOVAL);
+			return new PreservationOrigin(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken(), PreservationVault.Reason.PLAYER_CONSENT);
+		return new PreservationOrigin(transaction.plan().modpackId(), transaction.plan().packTarget().contentToken(), PreservationVault.Reason.SERVER_REMOVAL);
 	}
 
 	private record PreservationOrigin(String modpackId, String contentToken, PreservationVault.Reason reason) {}
 
 	private void verifyManagedFinalState(UpdateTransaction transaction) throws IOException {
-		for (ProjectedFile projected : transaction.projectedFinalState) {
+		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
 			if (projected.root() == Root.PROJECTION) continue;
 			Path target = resolve(projected.root(), projected.relativePath(), transaction);
 			if (projected.present()) {
@@ -433,46 +435,46 @@ public final class UpdateTransactionExecutor {
 
 	private boolean overlayStateMatches(UpdateTransaction transaction) throws IOException {
 		Map<String, UpdatePlan.FileState> expected = new TreeMap<>();
-		for (ProjectedFile projected : transaction.projectedFinalState) {
+		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
 			if (projected.root() != Root.OVERLAY) continue;
 			expected.put(UpdateTransactionValidator.normalizeOperationPath(projected.relativePath()), projected.present()
 					? new UpdatePlan.FileState(projected.expectedHash(), projected.expectedSize(), true)
 					: new UpdatePlan.FileState(null, -1, false));
 		}
-		return expected.equals(ClientOverlaySnapshot.capture(context.storage(), transaction.modpackId, fileCache).files());
+		return expected.equals(ClientOverlaySnapshot.capture(context.storage(), transaction.plan().modpackId(), fileCache).files());
 	}
 
 	private void buildIncomingProjection(UpdateTransaction transaction) throws IOException {
 		Path incoming = context.storage().incomingDirectory();
 		FileTrees.delete(incoming);
 		Files.createDirectories(incoming);
-		for (ProjectedFile projected : transaction.projectedFinalState) {
+		for (ProjectedFile projected : transaction.plan().projectedFinalState()) {
 			if (projected.root() != Root.PROJECTION || !projected.present()) continue;
 			Path source = context.storage().objectFile(projected.expectedHash());
 			Path target = incoming.resolve(UpdateTransactionValidator.normalizeOperationPath(projected.relativePath())).normalize();
 			if (!target.startsWith(incoming)) throw new IOException("Projection path escapes incoming directory");
 			VerifiedFileTransfer.linkAtomic(source, target, projected.expectedSize(), projected.expectedHash(), fileCache);
 		}
-		verifyProjection(incoming, transaction.projectedFinalState);
+		verifyProjection(incoming, transaction.plan().projectedFinalState());
 	}
 
 	private void swapProjection(UpdateTransaction transaction) throws IOException {
 		Path active = context.storage().activeDirectory();
 		Path incoming = context.storage().incomingDirectory();
 		Path backup = context.storage().backupDirectory();
-		if (verifyProjectionQuietly(active, transaction.projectedFinalState)) {
+		if (verifyProjectionQuietly(active, transaction.plan().projectedFinalState())) {
 			FileTrees.delete(incoming);
 			FileTrees.delete(backup);
 			return;
 		}
-		if (!verifyProjectionQuietly(incoming, transaction.projectedFinalState)) buildIncomingProjection(transaction);
+		if (!verifyProjectionQuietly(incoming, transaction.plan().projectedFinalState())) buildIncomingProjection(transaction);
 		if (Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
 			FileTrees.delete(active);
 		} else if (Files.exists(active, LinkOption.NOFOLLOW_LINKS)) {
 			FileTrees.moveRecoverableDirectory(active, backup);
 		}
 		FileTrees.moveRecoverableDirectory(incoming, active);
-		verifyProjection(active, transaction.projectedFinalState);
+		verifyProjection(active, transaction.plan().projectedFinalState());
 	}
 
 	private void verifyProjection(Path projection, List<ProjectedFile> finalState) throws IOException {
@@ -507,11 +509,11 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void captureBaselines(UpdateTransaction transaction) throws IOException {
-		if (transaction.plannedBaselineCaptures.isEmpty()) return;
-		ClientBaseline baseline = ClientBaseline.read(context.storage(), transaction.modpackId);
+		if (transaction.plan().baselineCaptures().isEmpty()) return;
+		ClientBaseline baseline = ClientBaseline.read(context.storage(), transaction.plan().modpackId());
 		Map<String, ClientBaseline.Entry> entries = new TreeMap<>(baseline.entriesByPath());
 		boolean changed = false;
-		for (BaselineCapture capture : transaction.plannedBaselineCaptures) {
+		for (BaselineCapture capture : transaction.plan().baselineCaptures()) {
 			String logicalPath = capture.relativePath();
 			if (entries.containsKey(logicalPath)) continue;
 			Path source = resolve(capture.root(), capture.relativePath(), transaction);
@@ -529,17 +531,17 @@ public final class UpdateTransactionExecutor {
 			changed = true;
 		}
 		if (!changed) return;
-		new ClientBaseline(transaction.modpackId, new ArrayList<>(entries.values())).write(context.storage());
+		new ClientBaseline(transaction.plan().modpackId(), new ArrayList<>(entries.values())).write(context.storage());
 	}
 
 	private void claimSelection(UpdateTransaction transaction) throws IOException {
 		ClientSelectionStore selections = new ClientSelectionStore(context.storage().selectionFile());
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) selections.compareAndSet(transaction.modpackId, transaction.expectedPriorIntent(), transaction.targetIntent());
-		else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) selections.remove(transaction.modpackId, transaction.expectedPriorIntent());
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) selections.compareAndSet(transaction.plan().modpackId(), transaction.expectedPriorIntent(), transaction.targetIntent());
+		else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) selections.remove(transaction.plan().modpackId(), transaction.expectedPriorIntent());
 	}
 
 	private void validateSelectionBeforeMutation(UpdateTransaction transaction) throws IOException {
-		if (validator.mutableInputDrift(transaction).selection()) throw new IOException("Group selection changed after planning for modpack " + transaction.modpackId);
+		if (validator.mutableInputDrift(transaction).selection()) throw new IOException("Group selection changed after planning for modpack " + transaction.plan().modpackId());
 	}
 
 	private Path resolve(Operation operation, UpdateTransaction transaction) throws IOException {
@@ -547,7 +549,7 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private Path resolve(Root root, String relativePath, UpdateTransaction transaction) throws IOException {
-		return FileTrees.resolveConfined(context.storage().root(root, transaction.modpackId), UpdateTransactionValidator.normalizeOperationPath(relativePath), "Operation target");
+		return FileTrees.resolveConfined(context.storage().root(root, transaction.plan().modpackId()), UpdateTransactionValidator.normalizeOperationPath(relativePath), "Operation target");
 	}
 
 	private interface FileCacheWork<T> {

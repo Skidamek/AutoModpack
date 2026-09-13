@@ -6,13 +6,11 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HexFormat;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
-import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.GenerationJsons;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
@@ -20,15 +18,13 @@ import pl.skidam.automodpack_core.modpack.generation.PackTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
-import pl.skidam.automodpack_core.update.UpdatePlan.Conflict;
-import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
-import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
-import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
-import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-/** The single write-ahead record for one client update. It stores intent, operations, and its target's ledger, never filesystem paths or duplicated manifests. */
+/**
+ * The single write-ahead record for one client update. It carries the reviewed {@link UpdatePlan} itself — the one
+ * durable spelling of what this update means — plus the transactional context the plan cannot know (the observed
+ * client state it was planned against, the selection intents, the target's ledger) and the execution lifecycle.
+ */
 public final class UpdateTransaction {
 	public static final int CURRENT_SCHEMA_VERSION = 1;
 
@@ -36,15 +32,8 @@ public final class UpdateTransaction {
 	public String transactionId;
 	public Purpose purpose;
 	public Phase phase;
-	public String modpackId;
-	public String contentToken;
-	public String policySha1;
-	public String ledgerDigest;
-	public GenerationJsons.OwnershipLedgerFields ownershipLedger;
+	private UpdatePlan plan;
 	public String targetPlatform;
-	public String selectionDigest;
-	public String overlayDigest;
-	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
 	public boolean expectedPriorSelectionPresent;
 	public List<String> expectedPriorRequestedGroups;
 	public List<String> expectedPriorRequestedCategories;
@@ -52,15 +41,9 @@ public final class UpdateTransaction {
 	public List<String> requestedGroups;
 	public List<String> requestedCategories;
 	public List<String> excludedGroups;
-	public List<Operation> operations;
-	public List<ProjectedFile> projectedFinalState;
-	public ClientConfigJsons.ClientConfigFieldsV3 plannedClientConfig;
-	public List<RestartReason> restartReasons;
-	public List<Preservation> plannedPreservations;
-	public List<BaselineCapture> plannedBaselineCaptures;
-	public List<Conflict> plannedConflicts;
-	public String plannedConsequencesDigest;
-	public ClientStorageJsons.ClientGeneratedCopiesFields plannedGeneratedCopies;
+	public String overlayDigest;
+	public ClientConfigJsons.ClientConfigFieldsV3 expectedClientConfig;
+	public GenerationJsons.OwnershipLedgerFields ownershipLedger;
 	public Status resultStatus;
 	public String resultOperation;
 	public String resultPath;
@@ -76,15 +59,13 @@ public final class UpdateTransaction {
 		return ConfigTools.readState(path, UpdateTransaction.class, "Persisted update transaction", UpdateTransaction::validated).orElse(null);
 	}
 
-	/** The document's completeness contract: a transaction missing any planned section, or carrying null rows, was never fully written and is unusable content. */
+	/**
+	 * The document's completeness contract: a transaction without its whole plan was never fully written and is unusable
+	 * content. The plan is a record, so a present one already guarantees its lists and rows are whole.
+	 */
 	private static UpdateTransaction validated(UpdateTransaction transaction) {
-		if (transaction.schemaVersion != CURRENT_SCHEMA_VERSION || transaction.operations == null || transaction.projectedFinalState == null
-				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null || transaction.plannedConflicts == null)
+		if (transaction.schemaVersion != CURRENT_SCHEMA_VERSION || transaction.plan == null)
 			throw new IllegalArgumentException("Persisted update transaction fields are incomplete");
-		if (transaction.operations.stream().anyMatch(Objects::isNull) || transaction.projectedFinalState.stream().anyMatch(Objects::isNull)
-				|| transaction.plannedPreservations.stream().anyMatch(Objects::isNull) || transaction.plannedBaselineCaptures.stream().anyMatch(Objects::isNull)
-				|| transaction.plannedConflicts.stream().anyMatch(Objects::isNull))
-			throw new IllegalArgumentException("Persisted update transaction contains incomplete rows");
 		return transaction;
 	}
 
@@ -107,11 +88,9 @@ public final class UpdateTransaction {
 		transaction.requestedGroups = new ArrayList<>(target.selection().intent().requestedGroups());
 		transaction.requestedCategories = new ArrayList<>(target.selection().intent().requestedCategories());
 		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
-		transaction.selectionDigest = digest(target.selection().intent());
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
-		fillPlan(transaction, plan);
-		transaction.plannedGeneratedCopies = GeneratedCopyState.fromCopies(plan.modpackId(), plan.packTarget().contentToken(), digest(target.selection().intent()), plan.generatedCopies()).toFields();
+		transaction.plan = plan;
 		return transaction;
 	}
 
@@ -138,33 +117,17 @@ public final class UpdateTransaction {
 		transaction.requestedGroups = List.of();
 		transaction.requestedCategories = List.of();
 		transaction.excludedGroups = List.of();
-		transaction.selectionDigest = digest(expectedPriorIntent);
 		transaction.overlayDigest = overlayDigest == null ? "" : overlayDigest;
 		transaction.expectedClientConfig = copyConfig(expectedClientConfig);
-		fillPlan(transaction, plan);
+		transaction.plan = plan;
 		return transaction;
 	}
 
-	/** The pending work must be able to rebuild its target generation offline, so modpack transactions carry its exact ledger. */
+	/** The pending work must be able to rebuild its target generation offline, so every transaction carries its target's exact ledger. */
 	private static void fillGeneration(UpdateTransaction transaction, PackTarget target, OwnershipLedger ledger) {
-		transaction.modpackId = target.modpackId();
-		transaction.contentToken = target.contentToken();
-		transaction.policySha1 = target.policySha1();
-		transaction.ledgerDigest = target.ledgerDigest();
 		if (!target.modpackId().equals(ledger.modpackId()) || !target.ledgerDigest().equals(ledger.digest()))
 			throw new IllegalArgumentException("Transaction generation identity does not match the target ledger");
 		transaction.ownershipLedger = ledger.toFields();
-	}
-
-	private static void fillPlan(UpdateTransaction transaction, UpdatePlan plan) {
-		transaction.operations = List.copyOf(plan.operations());
-		transaction.projectedFinalState = List.copyOf(plan.projectedFinalState());
-		transaction.plannedClientConfig = plan.plannedClientConfig();
-		transaction.restartReasons = new ArrayList<>(new LinkedHashSet<>(plan.restartReasons()));
-		transaction.plannedPreservations = List.copyOf(plan.preservations());
-		transaction.plannedBaselineCaptures = List.copyOf(plan.baselineCaptures());
-		transaction.plannedConflicts = List.copyOf(plan.conflicts());
-		transaction.plannedConsequencesDigest = ReviewedUpdatePlan.consequencesDigest(plan.consequences());
 	}
 
 	private static UpdateTransaction base(Purpose purpose) {
@@ -173,10 +136,6 @@ public final class UpdateTransaction {
 		transaction.transactionId = UUID.randomUUID().toString();
 		transaction.purpose = purpose;
 		transaction.phase = Phase.PLANNED;
-		transaction.plannedPreservations = new ArrayList<>();
-		transaction.plannedBaselineCaptures = new ArrayList<>();
-		transaction.plannedConflicts = new ArrayList<>();
-		transaction.plannedGeneratedCopies = null;
 		return transaction;
 	}
 
@@ -193,8 +152,16 @@ public final class UpdateTransaction {
 		};
 	}
 
+	public UpdatePlan plan() {
+		return plan;
+	}
+
+	public String modpackId() {
+		return plan.modpackId();
+	}
+
 	public PackTarget packTarget() {
-		return new PackTarget(modpackId, contentToken, policySha1, ledgerDigest);
+		return plan.packTarget();
 	}
 
 	public ClientPlatform platform() {
@@ -207,6 +174,11 @@ public final class UpdateTransaction {
 
 	public SelectionIntent targetIntent() {
 		return new SelectionIntent(requestedGroups, requestedCategories, excludedGroups);
+	}
+
+	/** The selection the transaction plans for; generated-copy state is keyed by it. */
+	public String selectionDigest() {
+		return purpose == Purpose.MODPACK_UPDATE ? digest(targetIntent()) : digest(expectedPriorIntent());
 	}
 
 	public static String digest(SelectionIntent intent) {

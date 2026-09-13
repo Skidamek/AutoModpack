@@ -335,20 +335,20 @@ public final class ClientObjectStore {
 	private static void collectTransaction(ClientStorage storage, ExpectedSizes retained) throws IOException {
 		UpdateTransaction transaction = UpdateTransaction.read(storage.transactionFile());
 		if (transaction == null) return;
-		for (UpdatePlan.Operation operation : transaction.operations) {
+		for (UpdatePlan.Operation operation : transaction.plan().operations()) {
 			retained.ifPresent(operation.expectedObjectHash(), operation.expectedSize(), "in-flight transaction operation");
 			retained.ifPresent(operation.expectedExistingHash(), -1, "in-flight transaction source");
 		}
-		for (UpdatePlan.ProjectedFile projected : transaction.projectedFinalState) {
+		for (UpdatePlan.ProjectedFile projected : transaction.plan().projectedFinalState()) {
 			if (projected.present()) retained.require(projected.expectedHash(), projected.expectedSize(), "in-flight transaction projection");
 		}
-		for (UpdatePlan.BaselineCapture capture : transaction.plannedBaselineCaptures) {
+		for (UpdatePlan.BaselineCapture capture : transaction.plan().baselineCaptures()) {
 			if (!capture.absent()) retained.require(capture.expectedHash(), capture.expectedSize(), "in-flight transaction baseline");
 		}
-		for (UpdatePlan.Preservation preservation : transaction.plannedPreservations) {
+		for (UpdatePlan.Preservation preservation : transaction.plan().preservations()) {
 			retained.require(preservation.expectedHash(), preservation.expectedSize(), "in-flight transaction preservation");
 		}
-		for (UpdatePlan.Conflict conflict : transaction.plannedConflicts) {
+		for (UpdatePlan.Conflict conflict : transaction.plan().conflicts()) {
 			retained.optional(conflict.sourceHash(), conflict.sourceSize(), "in-flight transaction conflict source");
 			retained.require(conflict.targetHash(), conflict.targetSize(), "in-flight transaction conflict target");
 		}

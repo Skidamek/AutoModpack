@@ -5,11 +5,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class UpdateTransactionCorruptionTest {
+	private static final String TOKEN = "a".repeat(40);
+
 	@TempDir
 	Path tempDir;
 
@@ -17,7 +20,7 @@ class UpdateTransactionCorruptionTest {
 	void corruptTransactionIsSetAsideAndStartupSeesNoTransaction() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
 		// A transaction written by an older build whose RestartReason constants no longer exist.
-		Files.writeString(file, "{\"schemaVersion\":1,\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"restartReasons\":[\"GONE_REASON\"]}");
+		Files.writeString(file, "{\"schemaVersion\":1,\"plan\":{\"restartReasons\":[\"GONE_REASON\"]}}");
 
 		assertNull(UpdateTransaction.read(file));
 		assertTrue(Files.notExists(file));
@@ -34,7 +37,7 @@ class UpdateTransactionCorruptionTest {
 	void incompleteTransactionIsSetAsideAndStartupSeesNoTransaction() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
 		// A transaction whose planned sections never reached the disk cannot drive any recovery; only a whole one loads.
-		Files.writeString(file, "{\"schemaVersion\":1,\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"restartReasons\":[\"SELECTED_MODPACK\"]}");
+		Files.writeString(file, "{\"schemaVersion\":1,\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\"}");
 
 		assertNull(UpdateTransaction.read(file));
 		assertTrue(Files.notExists(file));
@@ -48,13 +51,15 @@ class UpdateTransactionCorruptionTest {
 	void validTransactionStillLoads() throws Exception {
 		Path file = tempDir.resolve("update-transaction.json");
 		Files.writeString(file, "{\"schemaVersion\":1,\"transactionId\":\"t1\",\"purpose\":\"MODPACK_UPDATE\",\"phase\":\"PLANNED\",\"targetPlatform\":\"linux\","
-				+ "\"restartReasons\":[\"SELECTED_MODPACK\"],\"operations\":[],\"projectedFinalState\":[],\"plannedPreservations\":[],\"plannedBaselineCaptures\":[],\"plannedConflicts\":[]}");
+				+ "\"plan\":{\"modpackId\":\"packaa1\",\"packTarget\":{\"modpackId\":\"packaa1\",\"contentToken\":\"" + TOKEN + "\",\"policySha1\":\"" + TOKEN + "\",\"ledgerDigest\":\"" + TOKEN + "\"},"
+				+ "\"operations\":[],\"projectedFinalState\":[],\"restartReasons\":[\"SELECTED_MODPACK\"],\"preservations\":[],\"baselineCaptures\":[],\"conflicts\":[],\"generatedCopies\":[],"
+				+ "\"plannedClientConfig\":null,\"consequences\":{\"changes\":[],\"effects\":[]}}}");
 
 		UpdateTransaction transaction = UpdateTransaction.read(file);
 
 		assertNotNull(transaction);
 		assertEquals(UpdateTransaction.Purpose.MODPACK_UPDATE, transaction.purpose);
-		assertEquals(List.of(UpdatePlan.RestartReason.SELECTED_MODPACK), transaction.restartReasons);
+		assertEquals(Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), transaction.plan().restartReasons());
 		assertTrue(Files.exists(file));
 	}
 }

@@ -12,7 +12,9 @@ import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ClientConfigJsons;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.generation.PackTarget;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
@@ -101,24 +103,13 @@ class ReviewedUpdatePlanTest {
 
 	@Test
 	void durableTransactionUsesTheSameExecutionFingerprint() {
-		UpdatePlan plan = plan(List.of(operation("mods/a.jar", OBJECT_HASH)));
-		UpdateTransaction transaction = new UpdateTransaction();
-		transaction.modpackId = plan.modpackId();
-		transaction.contentToken = plan.packTarget().contentToken();
-		transaction.policySha1 = plan.packTarget().policySha1();
-		transaction.ledgerDigest = plan.packTarget().ledgerDigest();
-		transaction.operations = plan.operations();
-		transaction.projectedFinalState = plan.projectedFinalState();
-		transaction.plannedClientConfig = plan.plannedClientConfig();
-		transaction.restartReasons = List.copyOf(plan.restartReasons());
-		transaction.plannedPreservations = plan.preservations();
-		transaction.plannedBaselineCaptures = plan.baselineCaptures();
-		transaction.plannedConflicts = plan.conflicts();
-		transaction.plannedConsequencesDigest = ReviewedUpdatePlan.consequencesDigest(plan.consequences());
+		OwnershipLedger ledger = OwnershipLedger.empty("packaa1");
+		UpdatePlan plan = new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), ledger.digest()), List.of(operation("mods/a.jar", OBJECT_HASH)),
+				List.of(), new ClientConfigJsons.ClientConfigFieldsV3(), Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
+		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, ClientPlatform.LINUX, null, ledger.toFields(), "", new ClientConfigJsons.ClientConfigFieldsV3());
 
 		assertTrue(ReviewedUpdatePlan.isCompatible(transaction, plan));
-		transaction.operations = List.of(operation("mods/a.jar", OTHER_HASH));
-		assertFalse(ReviewedUpdatePlan.isCompatible(transaction, plan));
+		assertFalse(ReviewedUpdatePlan.isCompatible(transaction, plan(List.of(operation("mods/a.jar", OTHER_HASH)))));
 	}
 
 	private static UpdatePlan plan(List<Operation> operations) {

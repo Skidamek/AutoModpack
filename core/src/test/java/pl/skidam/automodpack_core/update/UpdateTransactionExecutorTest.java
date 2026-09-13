@@ -8,7 +8,6 @@ import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -419,7 +418,7 @@ class UpdateTransactionExecutorTest {
 				new Operation(Root.PROJECTION, "mods/pending-selection.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.PROJECTION, "mods/pending-selection.jar", true, hash, bytes.length)));
 		UpdateTransaction transaction = createTransaction(storage, plan, target);
-		transaction.plannedClientConfig.syncLoaderVersion = false;
+		transaction.plan().plannedClientConfig().syncLoaderVersion = false;
 		ClientConfigJsons.ClientConfigFieldsV3 current = new ClientConfigJsons.ClientConfigFieldsV3();
 		transaction.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3(current);
 		current.playMusic = false;
@@ -447,14 +446,6 @@ class UpdateTransactionExecutorTest {
 				List.of(new UpdatePlan.ModInfo("mods/server-sodium.jar", serverHash, serverBytes.length, Set.of("sodium"), Set.of())),
 				List.of(new UpdatePlan.ModInfo("mods/local-sodium.jar", localHash, localBytes.length, Set.of("sodium"), Set.of())), List.of(), List.of(), null,
 				clientConfig(target.manifest().modpackId())));
-		UpdateTransaction malformed = createTransaction(storage, plan, target);
-		malformed.expectedClientConfig = new ClientConfigJsons.ClientConfigFieldsV3();
-		malformed.plannedConflicts = new ArrayList<>(List.of(plan.conflicts().get(0)));
-		malformed.plannedConflicts.set(0, null);
-		try (FileCache cache = FileCache.open(storage.fileCacheDirectory())) {
-			assertThrows(IOException.class, () -> new UpdateTransactionValidator(storage).validate(malformed, null, true, cache));
-		}
-
 		UpdateTransactionExecutor.Execution execution = commit(storage, plan, target);
 
 		assertTrue(execution.success());

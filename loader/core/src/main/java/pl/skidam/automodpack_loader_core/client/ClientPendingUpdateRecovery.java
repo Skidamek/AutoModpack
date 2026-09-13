@@ -84,8 +84,8 @@ public final class ClientPendingUpdateRecovery {
 				? !currentConfig.hasSelectedModpack()
 				: Objects.equals(currentConfig.selectedModpackId, active.modpackId);
 		PackDocument record;
-		if (configStillDescribesThePendingInput || pending.modpackId.equals(currentConfig.selectedModpackId))
-			record = newer(pendingDocument, newest(generations, pending.modpackId));
+		if (configStillDescribesThePendingInput || pending.plan().modpackId().equals(currentConfig.selectedModpackId))
+			record = newer(pendingDocument, newest(generations, pending.plan().modpackId()));
 		else {
 			if (!ModpackId.isValid(currentConfig.selectedModpackId))
 				throw new IOException("Selected modpack changed to an invalid or empty ID while replanning the pending update");
@@ -94,7 +94,7 @@ public final class ClientPendingUpdateRecovery {
 		}
 		ClientSelectionStore selections = new ClientSelectionStore(storage.selectionFile());
 		SelectionIntent storedIntent = selections.get(record.manifest().modpackId()).orElse(null);
-		if (record.manifest().modpackId().equals(pending.modpackId) && Objects.equals(storedIntent, pending.expectedPriorIntent()))
+		if (record.manifest().modpackId().equals(pending.plan().modpackId()) && Objects.equals(storedIntent, pending.expectedPriorIntent()))
 			return SelectedModpackTarget.prepare(record, storedIntent, pending.targetIntent(), pending.platform());
 		if (storedIntent == null) return SelectedModpackTarget.prepareDefault(record, pending.platform());
 		return SelectedModpackTarget.prepare(record, storedIntent, storedIntent, pending.platform());
