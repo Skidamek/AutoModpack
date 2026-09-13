@@ -41,6 +41,8 @@ public final class RequestedCandidates {
 	 */
 	public static <T> List<T> keep(Collection<T> candidates, Accessor<T> accessor, Predicate<Path> requested) {
 		List<T> kept = new ArrayList<>(candidates.size());
+		Set<T> discovered = Collections.newSetFromMap(new IdentityHashMap<>());
+		discovered.addAll(candidates);
 		Set<T> visited = Collections.newSetFromMap(new IdentityHashMap<>());
 		Deque<T> queue = new ArrayDeque<>();
 
@@ -54,7 +56,9 @@ public final class RequestedCandidates {
 			T candidate = queue.poll();
 			if (!visited.add(candidate)) continue;
 			kept.add(candidate);
-			queue.addAll(accessor.nestedMods(candidate));
+			Collection<T> nested = accessor.nestedMods(candidate);
+			if (nested == null) continue;
+			for (T child : nested) if (child != null && discovered.contains(child)) queue.add(child);
 		}
 
 		return kept;

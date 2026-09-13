@@ -42,22 +42,34 @@ class RequestedCandidatesTest {
 
 	@Test
 	void keepsTheWholeNestedSubtreeOfRequestedRoots() {
+		Node yumiCommonsCore = nested("yumi_commons_core");
 		Node yumiEvent = nested("yumi_commons_event");
-		Node yumiCore = nested("yumi_mc_core", yumiEvent, nested("yumi_commons_core"));
+		Node yumiCore = nested("yumi_mc_core", yumiEvent, yumiCommonsCore);
 		Node trinkets = root("trinkets_updated", "/pack/mods/trinkets.jar", yumiCore);
 
-		List<Node> kept = RequestedCandidates.keep(List.of(trinkets, yumiCore, yumiEvent), ACCESSOR, path -> true);
+		List<Node> kept = RequestedCandidates.keep(List.of(trinkets, yumiCore, yumiEvent, yumiCommonsCore), ACCESSOR, path -> true);
 
 		assertEquals(Set.of("trinkets_updated", "yumi_mc_core", "yumi_commons_core", "yumi_commons_event"), ids(kept));
+	}
+
+	@Test
+	void doesNotInventNestedCandidatesTheDiscovererAlreadyDropped() {
+		Node envDisabled = nested("client_only_nested");
+		Node requested = root("requested", "/pack/mods/requested.jar", envDisabled);
+
+		List<Node> kept = RequestedCandidates.keep(List.of(requested), ACCESSOR, path -> true);
+
+		assertEquals(Set.of("requested"), ids(kept));
 	}
 
 	@Test
 	void dropsUnrequestedRootsWithTheirWholeSubtree() {
 		Node pinnedNested = nested("pinned_nested");
 		Node pinnedProjectionCopy = root("pinned", "/pack/mods/pinned.jar", pinnedNested);
-		Node requested = root("requested", "/pack/mods/requested.jar", nested("requested_nested"));
+		Node requestedNested = nested("requested_nested");
+		Node requested = root("requested", "/pack/mods/requested.jar", requestedNested);
 
-		List<Node> kept = RequestedCandidates.keep(List.of(pinnedProjectionCopy, pinnedNested, requested, nested("requested_nested")), ACCESSOR, path -> path.endsWith("requested.jar"));
+		List<Node> kept = RequestedCandidates.keep(List.of(pinnedProjectionCopy, pinnedNested, requested, requestedNested), ACCESSOR, path -> path.endsWith("requested.jar"));
 
 		assertEquals(Set.of("requested", "requested_nested"), ids(kept));
 	}
