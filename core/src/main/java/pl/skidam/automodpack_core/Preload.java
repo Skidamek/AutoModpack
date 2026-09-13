@@ -202,6 +202,7 @@ public class Preload {
 		LOGGER.error("Blocked operation {}, blocked path {}, message {}", execution.operation(), execution.blockedPath(), execution.message());
 		LOGGER.error("Journal-recorded result: status {}, operation {}, path {}, message {}", transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 		LOGGER.error("The full transaction journal is at {}", storage.transactionFile().toAbsolutePath().normalize());
+		LOGGER.error("The detached helper's own log, with its per-attempt recovery failures, is at {}", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
 	}
 
 	private UpdateLoopDetector deferredRecoveryGuard() {
