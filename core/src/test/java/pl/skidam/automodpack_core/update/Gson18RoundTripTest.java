@@ -41,7 +41,10 @@ class Gson18RoundTripTest {
 		UpdatePlan plan = new UpdatePlan("packaa1", new PackTarget("packaa1", "a".repeat(40), "b".repeat(40), ledger.digest()),
 				List.of(new Operation(Root.PROJECTION, "mods/a.jar", OperationType.INSTALL_OBJECT, OBJECT_HASH, 1, null)),
 				List.of(new UpdatePlan.ProjectedFile(Root.PROJECTION, "mods/a.jar", true, OBJECT_HASH, 1)), new ClientConfigJsons.ClientConfigFieldsV3(),
-				Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK), List.of(), List.of(), List.of(),
+				Set.of(UpdatePlan.RestartReason.SELECTED_MODPACK),
+				List.of(new UpdatePlan.Preservation(Root.PROJECTION, "config/options.txt", OBJECT_HASH, 12, UpdatePlan.PreservationProof.PLAYER_CONSENT)),
+				List.of(new UpdatePlan.BaselineCapture(Root.PROJECTION, "mods/old.jar", OBJECT_HASH, 34, false)),
+				List.of(new UpdatePlan.Conflict("packaa1", "c".repeat(40), Set.of("sodium"), "mods/a.jar", OBJECT_HASH, 1, "mods/b.jar", OBJECT_HASH, 2, UpdatePlan.ConflictAction.PRESERVE_LOCAL)),
 				List.of(new UpdatePlan.NestedCopy("mods/nested.jar", OBJECT_HASH, 2, Set.of("sodium"))), consequences);
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, ClientPlatform.LINUX, null, ledger.toFields(), "", new ClientConfigJsons.ClientConfigFieldsV3());
 
@@ -53,6 +56,10 @@ class Gson18RoundTripTest {
 		assertEquals(UpdateTransaction.Purpose.MODPACK_REMOVAL, roundTripped.purpose);
 		assertEquals("packaa1", roundTripped.plan().modpackId());
 		assertEquals(OBJECT_HASH, roundTripped.plan().operations().get(0).expectedObjectHash());
+		assertEquals(UpdatePlan.PreservationProof.PLAYER_CONSENT, roundTripped.plan().preservations().get(0).proof());
+		assertEquals("mods/old.jar", roundTripped.plan().baselineCaptures().get(0).relativePath());
+		assertEquals(UpdatePlan.ConflictAction.PRESERVE_LOCAL, roundTripped.plan().conflicts().get(0).action());
+		assertEquals(Set.of("sodium"), roundTripped.plan().conflicts().get(0).modIds());
 		assertEquals(ChangeSet.Kind.ADDED, roundTripped.plan().consequences().changes().get(0).kind());
 	}
 
