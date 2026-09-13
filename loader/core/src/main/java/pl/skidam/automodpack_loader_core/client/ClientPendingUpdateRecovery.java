@@ -53,7 +53,7 @@ public final class ClientPendingUpdateRecovery {
 		SelectedModpackTarget target = targetFor(storage, pending, currentConfig);
 		try (FileCache cache = FileCache.open(storage.fileCacheDirectory()); ModFileCache modCache = ModFileCache.open(storage.modCacheDirectory())) {
 			builder.reconcileEditableState(cache, target.flatTarget());
-			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, target.flatTarget(), null, currentConfig, true), cache, modCache);
+			ClientUpdatePlanBuilder.PreparedPlan prepared = builder.buildPlan(new ClientUpdatePlanBuilder.Input(target, null, currentConfig, true), cache, modCache);
 			if (!ReviewedUpdatePlan.isCompatible(pending, prepared.plan()))
 				throw new UpdateReplanRequiredException(null, "Mutable inputs changed the pending update consequences; a new review is required");
 			builder.preparePlanObjects(prepared.plan(), target.flatTarget());
