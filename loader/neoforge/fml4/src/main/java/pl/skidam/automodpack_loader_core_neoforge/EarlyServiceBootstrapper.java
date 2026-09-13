@@ -37,18 +37,19 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
 	@Override
 	public void bootstrap(String[] arguments) {
+		EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
+		EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
+		String launchTarget = argValue(arguments, "--launchTarget");
+		if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
+
+		// Run our own update/reconcile step first: it decides what this launch loads, and the
+		// early-service hosting below hosts only jars from that decision. Preload failures must crash
+		// the launch; swallowing them would boot without the pack.
+		ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
+		new Preload();
+		progress.complete();
+
 		try {
-			EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
-			EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
-			String launchTarget = argValue(arguments, "--launchTarget");
-			if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
-
-			// Run our own update/reconcile step first: it decides what this launch loads, and the
-			// early-service hosting below hosts only jars from that decision.
-			ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
-			new Preload();
-			progress.complete();
-
 			// Early-service hosting serves the client's active projection; a dedicated server has none.
 			if (Constants.LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) return;
 
@@ -72,6 +73,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			EarlyServiceBridgePlugin.registerFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
 		} catch (Throwable t) {
 			Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
+			throw new RuntimeException("AutoModpack early-service bootstrap failed", t);
 		}
 	}
 
