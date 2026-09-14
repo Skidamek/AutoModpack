@@ -18,27 +18,29 @@ import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ServerConfigJsons;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
-import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 
 class ProtocolServerHandlerTest {
 	private ServerConfigJsons.ServerConfigFieldsV3 previousConfig;
+	private NettyServer server;
 
 	@BeforeEach
 	void setUp() {
 		previousConfig = Constants.serverConfig;
 		Constants.serverConfig = new ServerConfigJsons.ServerConfigFieldsV3();
+		server = new NettyServer();
+		server.startSharedTraffic();
 	}
 
 	@AfterEach
 	void tearDown() {
-		TrafficShaper.close();
+		server.stop();
 		Constants.serverConfig = previousConfig;
 	}
 
 	@Test
 	void sharedMagicMismatchReturnsBytesToMinecraftUnchanged() {
 		byte[] minecraftHandshake = {0x10, 0x00, 0x01, 0x02, 0x03};
-		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(new NettyServer(), ModpackConnectionMode.MAGIC, true));
+		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(server, ModpackConnectionMode.MAGIC, true));
 
 		assertTrue(channel.writeInbound(Unpooled.wrappedBuffer(minecraftHandshake)));
 		ByteBuf forwarded = channel.readInbound();
@@ -55,7 +57,7 @@ class ProtocolServerHandlerTest {
 
 	@Test
 	void dedicatedMagicRejectsDirectTls() {
-		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(new NettyServer(), ModpackConnectionMode.MAGIC, false));
+		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(server, ModpackConnectionMode.MAGIC, false));
 
 		channel.writeInbound(Unpooled.wrappedBuffer(new byte[]{0x16, 0x03, 0x03, 0x00, 0x00}));
 
@@ -66,8 +68,7 @@ class ProtocolServerHandlerTest {
 
 	@Test
 	void directDoesNotRespondToMagicPacket() {
-		TrafficShaper.startShared();
-		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(new NettyServer(), ModpackConnectionMode.DIRECT, false));
+		EmbeddedChannel channel = new EmbeddedChannel(new ProtocolServerHandler(server, ModpackConnectionMode.DIRECT, false));
 
 		channel.writeInbound(magicPacket("example.com"));
 

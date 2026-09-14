@@ -32,7 +32,7 @@ public final class ProtocolPipeline {
 	public static SslHandler installServer(Channel channel, NettyServer server, SocketAddress remoteAddress, ChannelHandler... wireSideHandlers) {
 		ChannelPipeline pipeline = channel.pipeline();
 		pipeline.addLast("error-printer-first", new ErrorPrinter());
-		pipeline.addLast("traffic-shaper", TrafficShaper.handler());
+		pipeline.addLast("traffic-shaper", server.trafficHandler());
 		for (ChannelHandler wireSideHandler : wireSideHandlers) {
 			pipeline.addLast(wireSideHandler);
 		}
@@ -51,7 +51,7 @@ public final class ProtocolPipeline {
 		channel.attr(NettyServer.PROTOCOL_VERSION).set(NetUtils.LATEST_SUPPORTED_PROTOCOL_VERSION);
 		// ZSTD stays the default on purpose: packs carry plenty of non-jar content (configs, scripts) that compresses well, and zstd costs a fraction of the transfer it saves.
 		CompressionType defaultCompression = CompressionFactory.isAvailable(CompressionType.ZSTD) ? CompressionType.ZSTD : CompressionType.GZIP;
-		channel.attr(NettyServer.COMPRESSION_TYPE).set(defaultCompression);
+		NettyServer.setCompression(channel, defaultCompression);
 		channel.attr(NettyServer.CHUNK_SIZE).set(NetUtils.DEFAULT_CHUNK_SIZE);
 
 		PreConfigurationLifetimeHandler preConfigurationLifetime = new PreConfigurationLifetimeHandler();
