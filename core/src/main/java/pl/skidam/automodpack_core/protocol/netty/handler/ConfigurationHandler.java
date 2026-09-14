@@ -71,7 +71,7 @@ public class ConfigurationHandler extends ByteToMessageDecoder {
 			}
 
 			CompressionType selected = CompressionFactory.isAvailable(requested) ? requested : CompressionType.GZIP;
-			ctx.channel().attr(NettyServer.COMPRESSION_TYPE).set(selected);
+			NettyServer.setCompression(ctx.channel(), selected);
 			ctx.writeAndFlush(new ConfigurationCompressionMessage(LATEST_SUPPORTED_PROTOCOL_VERSION, selected).toByteBuf());
 			LOGGER.debug("Negotiated configuration: compression {}", selected);
 		} else if (type == CONFIGURATION_CHUNK_SIZE_TYPE) {

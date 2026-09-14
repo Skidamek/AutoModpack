@@ -26,12 +26,15 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
+import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.AttributeKey;
 
 import pl.skidam.automodpack_core.modpack.generation.GenerationHosting;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
+import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
+import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.handler.PreConfigurationLifetimeHandler;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
@@ -42,9 +45,11 @@ public class NettyServer {
 
 	public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
 	public static final AttributeKey<CompressionType> COMPRESSION_TYPE = AttributeKey.valueOf("COMPRESSION_TYPE");
+	public static final AttributeKey<CompressionCodec> COMPRESSION_CODEC = AttributeKey.valueOf("COMPRESSION_CODEC");
 	public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
 	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
 	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
+	private TrafficShaper trafficShaper;
 	private volatile Map<String, Path> paths = Map.of();
 	private MultithreadEventLoopGroup eventLoopGroup;
 	private ExecutorService senderExecutor;
@@ -56,6 +61,39 @@ public class NettyServer {
 
 	// The map is already a concurrent one and every access is a single atomic operation, so no external
 	// lock adds anything - readers get the live map and see per-entry updates immediately.
+
+	public static void setCompression(Channel channel, CompressionType type) {
+		channel.attr(COMPRESSION_TYPE).set(type);
+		channel.attr(COMPRESSION_CODEC).set(CompressionFactory.createCodec(type));
+	}
+
+	public static CompressionCodec compressionCodec(Channel channel) {
+		CompressionCodec codec = channel.attr(COMPRESSION_CODEC).get();
+		if (codec == null) throw new IllegalStateException("Compression codec has not been configured");
+		return codec;
+	}
+
+	public GlobalTrafficShapingHandler trafficHandler() {
+		if (trafficShaper == null) throw new IllegalStateException("Traffic shaper is not running");
+		return trafficShaper.handler();
+	}
+
+	public void startSharedTraffic() {
+		closeTraffic();
+		trafficShaper = TrafficShaper.owned();
+	}
+
+	private void startEventLoopTraffic() {
+		closeTraffic();
+		trafficShaper = TrafficShaper.on(eventLoopGroup);
+	}
+
+	private void closeTraffic() {
+		if (trafficShaper != null) {
+			trafficShaper.close();
+			trafficShaper = null;
+		}
+	}
 
 	public void addConnection(Channel channel, String secret) {
 		connections.put(channel, secret);
@@ -126,14 +164,14 @@ public class NettyServer {
 
 			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
 				LOGGER.info("Hosting modpack through Minecraft Login holepunch; bindPort is not used");
-				TrafficShaper.startShared();
+				startSharedTraffic();
 				holepunchActive = ServerHolepunchBridge.register(this);
 				return Optional.empty();
 			}
 
 			if (connectionMode == ModpackConnectionMode.MAGIC && serverConfig.bindPort == -1) {
 				LOGGER.info("Hosting modpack through magic packet routing on the Minecraft port");
-				TrafficShaper.startShared();
+				startSharedTraffic();
 				sharedMagicEnabled = true;
 				return Optional.empty();
 			}
@@ -167,7 +205,7 @@ public class NettyServer {
 			eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
 		}
 
-		TrafficShaper.start(eventLoopGroup);
+		startEventLoopTraffic();
 
 		serverChannel = new ServerBootstrap().channel(socketChannelClass).childOption(ChannelOption.TCP_NODELAY, true)
 				.childHandler(new ChannelInitializer<SocketChannel>() {
@@ -227,7 +265,7 @@ public class NettyServer {
 			serverChannel = null;
 		}
 
-		TrafficShaper.close();
+		closeTraffic();
 
 		try {
 			if (eventLoopGroup != null) eventLoopGroup.shutdownGracefully().sync();

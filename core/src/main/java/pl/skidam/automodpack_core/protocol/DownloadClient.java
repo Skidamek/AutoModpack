@@ -337,7 +337,7 @@ public class DownloadClient implements AutoCloseable {
 	private Connection configuredConnection(TlsCandidate candidate) throws IOException {
 		try {
 			candidate.socket().setSoTimeout(TRANSFER_IDLE_TIMEOUT_MILLIS);
-			return new Connection(candidate.socket(), secretBytes);
+			return new Connection(candidate.socket(), secretBytes, NET_EXECUTOR);
 		} catch (IOException e) {
 			closeQuietly(candidate.socket());
 			throw e;

@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
 import java.util.function.IntConsumer;
 
 import javax.net.ssl.SSLSocket;
@@ -38,11 +39,13 @@ class Connection implements AutoCloseable {
 	private final DataOutputStream out;
 	private CompressionCodec compressionCodec;
 	private final ProtocolFrameCodec.FrameScratch frameScratch = new ProtocolFrameCodec.FrameScratch();
+	private final Executor executor;
 
-	public Connection(SSLSocket socket, byte[] secretBytes) throws IOException {
+	public Connection(SSLSocket socket, byte[] secretBytes, Executor executor) throws IOException {
 		if (socket == null || socket.isClosed()) throw new IOException("Server connection is closed");
 		this.socket = socket;
 		this.secretBytes = secretBytes;
+		this.executor = executor;
 
 		this.in = new DataInputStream(new BufferedInputStream(this.socket.getInputStream()));
 		this.out = new DataOutputStream(new BufferedOutputStream(this.socket.getOutputStream()));
@@ -84,7 +87,7 @@ class Connection implements AutoCloseable {
 			} finally {
 				finalBlock(exception);
 			}
-		}, DownloadClient.NET_EXECUTOR);
+		}, executor);
 	}
 
 	private void finalBlock(Exception exception) {
