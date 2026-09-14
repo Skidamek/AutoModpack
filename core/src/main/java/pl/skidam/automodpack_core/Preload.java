@@ -4,6 +4,9 @@ import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Supplier;
@@ -172,6 +175,7 @@ public class Preload {
 			UpdateTransactionExecutor executor = UpdateTransactionSupport.executor();
 			execution = executor.recoverLatest();
 			deferred = execution.transaction() == null ? original : execution.transaction();
+			if (execution.success()) logHelperLogTail();
 		}
 		if (!execution.success()) {
 			UpdateLoopDetector.Outcome loop = deferredRecoveryGuard().evaluateAndRecord(deferred.transactionId);
@@ -204,8 +208,41 @@ public class Preload {
 		LOGGER.error("Journal-recorded result: status {}, operation {}, path {}, message {}", transaction.resultStatus, transaction.resultOperation, transaction.resultPath, transaction.resultMessage);
 		LOGGER.error("The full transaction journal is at {}", storage.transactionFile().toAbsolutePath().normalize());
 		LOGGER.error("The detached helper's own log, with its per-attempt recovery failures, is at {}", GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
+		logHelperLogTail();
 		if (loop.decision() == UpdateLoopDetector.Decision.RESTART)
 			LOGGER.error("This is deferred restart {} of {} for the transaction; when they run out, the next failed launch rolls back to the last finalized generation", loop.restarts(), loop.maxRestarts());
+	}
+
+	// The helper log accumulates whole runs; the tail covers the most recent one or two.
+	private static final int HELPER_LOG_TAIL_BYTES = 8192;
+
+	/**
+	 * Mirrors the helper's recent narration into the client log, so latest.log alone carries what the helper did between
+	 * sessions - its parent wait, its per-attempt failures, its give-up.
+	 */
+	private void logHelperLogTail() {
+		Path helperLog = GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize();
+		try {
+			if (!Files.isRegularFile(helperLog, LinkOption.NOFOLLOW_LINKS)) return;
+			byte[] tail;
+			try (FileChannel channel = FileChannel.open(helperLog, StandardOpenOption.READ)) {
+				long position = Math.max(0, channel.size() - HELPER_LOG_TAIL_BYTES);
+				tail = new byte[(int) (channel.size() - position)];
+				ByteBuffer buffer = ByteBuffer.wrap(tail);
+				while (buffer.hasRemaining() && channel.read(buffer, position + buffer.position()) > 0) {
+				}
+			}
+			int start = 0;
+			while (start < tail.length && tail[start] != '\n') start++; // the cut can land mid-line; drop the partial head
+			if (start >= tail.length - 1) return;
+			start++;
+			LOGGER.info("Mirroring the detached helper's recent runs from {}", helperLog);
+			for (String line : new String(tail, start, tail.length - start, StandardCharsets.UTF_8).split("\r?\n")) {
+				if (!line.isBlank()) LOGGER.info("{}", line);
+			}
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Cannot mirror the detached helper's log tail from {}", helperLog, e);
+		}
 	}
 
 	private UpdateLoopDetector deferredRecoveryGuard() {
