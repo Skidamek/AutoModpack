@@ -10,9 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * What, and where the platform can tell who, is holding a path open against a rename. Windows only: a directory's
- * entries are probed by taking DELETE access (the same right the update's blocked move needs) without moving
- * anything, and the bundled Restart Manager native names the processes holding the found paths. Any failure returns null.
+ * What, and where Restart Manager can name who, is using a path. Windows only: a directory's entries are probed by a
+ * DELETE-capable open; true means an existing share mode refused that open, not that a later ATOMIC_MOVE is guaranteed
+ * to fail. Restart Manager then names applications and services it reports as using those paths. Any failure returns null.
  */
 public final class WindowsLockProbe {
 	private static final int MAX_HELD_PATHS = 5;
@@ -22,9 +22,9 @@ public final class WindowsLockProbe {
 	private WindowsLockProbe() {}
 
 	/**
-	 * A compact receipt for a rename blocker: held child paths, each with its holding processes where Restart
-	 * Manager can answer, or the folder-itself hint when probing finds nothing. Null when this is not Windows,
-	 * the path is not a regular file or directory, or anything failed; never throws.
+	 * A compact receipt for a rename blocker: child paths whose DELETE open hit a sharing violation, each with the
+	 * applications Restart Manager reports, or the folder-itself hint when probing finds nothing. Null when this is
+	 * not Windows, the path is not a regular file or directory, or anything failed; never throws.
 	 */
 	public static String describeHeld(Path path) {
 		if (path == null || PlatformUtils.operatingSystem() != PlatformUtils.OperatingSystem.WINDOWS) return null;
@@ -52,7 +52,7 @@ public final class WindowsLockProbe {
 		}
 	}
 
-	/** The holding process names of one path per the bundled Restart Manager native, or null when it cannot answer. */
+	/** Application names Restart Manager reports for one path, or null when it cannot answer. */
 	private static String describeProcesses(Path path) {
 		if (!WindowsNatives.ensureLoaded()) return null;
 		String raw = describe0(path.toString());
@@ -78,8 +78,8 @@ public final class WindowsLockProbe {
 	}
 
 	/**
-	 * Asks of each entry of {@code directory} whether a rename would be denied, recursing one level into denied
-	 * subdirectories, and records the denied leaves relative to {@code root}.
+	 * Asks of each entry of {@code directory} whether a DELETE open is refused by an existing share mode, recursing
+	 * one level into those subdirectories, and records those leaves relative to {@code root}.
 	 */
 	private static void probeChildren(Path root, Path directory, int depth, int[] remainingOperations, List<Path> held) throws IOException {
 		List<Path> children;
@@ -96,14 +96,14 @@ public final class WindowsLockProbe {
 		}
 	}
 
-	/** Whether taking DELETE access on the entry is denied; the same right a rename needs, without moving the file. */
+	/** Whether an existing share mode currently refuses a DELETE-capable open of the entry. */
 	private static boolean heldAgainstRename(Path child) {
 		return WindowsNatives.ensureLoaded() && held0(child.toString());
 	}
 
-	/** The bundled Windows native: {@code name<SEPARATOR>pid} pairs of the processes holding path open, or null. */
+	/** The bundled Windows native: {@code name<SEPARATOR>pid} pairs Restart Manager reports for the path, or null. */
 	private static native String describe0(String path);
 
-	/** The bundled Windows native: true when DELETE access on the path is denied. */
+	/** The bundled Windows native: true when a DELETE open fails with a sharing violation. */
 	private static native boolean held0(String path);
 }
