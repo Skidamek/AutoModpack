@@ -2,8 +2,10 @@ package pl.skidam.automodpack_core.screen;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
+import java.awt.GraphicsEnvironment;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Semaphore;
 
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.DownloadManager;
@@ -14,7 +16,8 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 
 public final class ScreenManager {
 
-	private static volatile ScreenService instance = new PreloadScreenImpl();
+	private static volatile ScreenService instance = new ScreenService() {
+	};
 
 	private ScreenManager() {}
 
@@ -32,6 +35,12 @@ public final class ScreenManager {
 
 	public static void restart(UpdateType updateType, Changelogs changelogs) {
 		instance.restart(updateType, changelogs);
+	}
+
+	/** Preload restart UI: Minecraft screens are not installed yet, so this is the AWT adapter. */
+	public static Semaphore preloadRestart(String message) {
+		if (GraphicsEnvironment.isHeadless()) return null;
+		return new Gui().open(message);
 	}
 
 	public static void completeWithoutRestart() {

@@ -10,28 +10,30 @@ import pl.skidam.automodpack_core.update.UpdatePreview;
 
 public interface ScreenService {
 
-	void download(DownloadManager downloadManager, String modpackName);
+	default void download(DownloadManager downloadManager, String modpackName) {}
 
-	void changelog(Object parent, Changelogs changelogs);
+	default void changelog(Object parent, Changelogs changelogs) {}
 
-	void restart(UpdateType updateType, Changelogs changelogs);
+	default void restart(UpdateType updateType, Changelogs changelogs) {}
 
-	void completeWithoutRestart();
+	default void completeWithoutRestart() {}
 
-	void welcome(ModpackUpdater modpackUpdater);
+	default void welcome(ModpackUpdater modpackUpdater) {}
 
-	boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction);
+	default boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
+		return false;
+	}
 
-	void history(HistoryViewRequest request);
+	default void history(HistoryViewRequest request) {}
 
-	void failure(FailureRequest request);
+	default void failure(FailureRequest request) {}
 
 	/**
 	 * Asks the player to verify a server certificate during a join. The join is already owned by this prompt, so
 	 * backing out of it always lands on the multiplayer hub — never on the vanilla connecting screen the prompt
 	 * interrupted, which has no live connection to return to.
 	 */
-	void validation(String fingerprint, String origin, Runnable validated, Runnable canceled);
+	default void validation(String fingerprint, String origin, Runnable validated, Runnable canceled) {}
 
 	/** Asks before an installed modpack starts being served from a different address; exactly one of the runnables runs. */
 	default void originChange(String modpackName, String approvedOrigins, String newOrigin, Runnable allowed, Runnable refused) {
@@ -48,7 +50,7 @@ public interface ScreenService {
 		continueJoin.run();
 	}
 
-	void waiting();
+	default void waiting() {}
 
 	/** Shows the preparing screen; {@code onCancel} runs when the player backs out with Esc. */
 	default void waiting(Runnable onCancel) {
@@ -62,7 +64,11 @@ public interface ScreenService {
 	 */
 	default void discardReturnTarget() {}
 
-	Optional<String> getScreenString();
+	default Optional<String> getScreenString() {
+		return Optional.empty();
+	}
 
-	Optional<Object> getScreen();
+	default Optional<Object> getScreen() {
+		return Optional.empty();
+	}
 }
