@@ -47,8 +47,8 @@ import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_core.utils.DurableFiles;
 
 public class Preload {
-	// Three deferred restarts for the same transaction id, then the next failed recover rolls back. The id is the episode; the count does not expire.
-	private static final int MAX_DEFERRED_RESTARTS = 3;
+	// Two deferred restarts for the same transaction id; the third failed recover rolls back to the last finalized generation. The id is the episode; the count does not expire.
+	private static final int MAX_DEFERRED_RESTARTS = 2;
 	// AWT preload dialog; Minecraft locale files are not loaded yet.
 	private static final String DEFERRED_POPUP_MESSAGE = "The modpack update paused on a busy file. Restart again; if this window keeps appearing, please send your latest log file.";
 
