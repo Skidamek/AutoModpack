@@ -172,26 +172,37 @@ final class ClientLoginUpdateFlow {
 				LOGGER.info("Modpack {} runs detached from the server head; asking the player before any sync", serverModpackContent.modpackId);
 				return detachedJoin(handler, updater, selectedTarget, alreadyDisconnected, headMatchesActive);
 			}
-			ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, storage);
-			ModpackUtils.reprotectActiveFiles(serverModpackContent, storage);
-			if (!updater.requiresUpdateBeforeLogin(updateCheckResult)) {
-				updater.close();
-				if (alreadyDisconnected) ScreenImpl.multiplayer();
-				return CompletableFuture.completedFuture(alreadyDisconnected ? LoginUpdateResponse.UPDATE_REQUIRED : LoginUpdateResponse.CONTINUE);
-			}
-			if (!alreadyDisconnected) {
-				LOGGER.info("Modpack update required; leaving the connecting screen");
-				ScreenManager.waiting(updater::cancelFromPlayer);
-				disconnectImmediately(handler);
-			}
-			updater.processModpackUpdate(true);
-			return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
+			return CompletableFuture.completedFuture(syncDuringLogin(handler, storage, updater, selectedTarget, alreadyDisconnected));
 		} catch (Exception e) {
 			updater.close();
 			presentFailure(e, "automodpack.error.update", FailureCategory.UPDATE);
 			if (!alreadyDisconnected) disconnectImmediately(handler);
 			return CompletableFuture.completedFuture(LoginUpdateResponse.UPDATE_REQUIRED);
 		}
+	}
+
+	/**
+	 * The non-detached join: the advertised head is checked against the local generation, an already-current pack lets
+	 * the login proceed, and everything else runs the reviewed update through the engine after the connecting screen is
+	 * released. The failure tail stays with the caller, since the detached prompt shares it.
+	 */
+	private static LoginUpdateResponse syncDuringLogin(ClientHandshakePacketListenerImpl handler, ClientStorage storage, ModpackUpdater updater,
+			SelectedModpackTarget selectedTarget, boolean alreadyDisconnected) throws Exception {
+		ModpackJsons.ModpackContentFields serverModpackContent = selectedTarget.flatTarget();
+		ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, storage);
+		ModpackUtils.reprotectActiveFiles(serverModpackContent, storage);
+		if (!updater.requiresUpdateBeforeLogin(updateCheckResult)) {
+			updater.close();
+			if (alreadyDisconnected) ScreenImpl.multiplayer();
+			return alreadyDisconnected ? LoginUpdateResponse.UPDATE_REQUIRED : LoginUpdateResponse.CONTINUE;
+		}
+		if (!alreadyDisconnected) {
+			LOGGER.info("Modpack update required; leaving the connecting screen");
+			ScreenManager.waiting(updater::cancelFromPlayer);
+			disconnectImmediately(handler);
+		}
+		updater.processModpackUpdate(true);
+		return LoginUpdateResponse.UPDATE_REQUIRED;
 	}
 
 	/**
