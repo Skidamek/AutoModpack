@@ -145,13 +145,13 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		final int chunkSize = this.chunkSize;
 
 		FileChannel file = null;
+		inFlightTransfers.incrementAndGet();
 		try {
 			// Resolved eagerly on the loop so the worker never reads channel state racing a later reconfiguration.
 			final CompressionCodec codec = compressionCodec(ctx);
 			final ChannelHandlerContext encoderContext = encoderContext(ctx);
 			final FileChannel opened = FileChannel.open(path, StandardOpenOption.READ);
 			file = opened;
-			inFlightTransfers.incrementAndGet();
 			server.senderExecutor().execute(() -> streamFile(ctx, opened, fileSize, chunkSize, protocolVersion, headerFuture, codec, encoderContext));
 		} catch (Exception e) {
 			inFlightTransfers.decrementAndGet();
