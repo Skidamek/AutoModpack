@@ -40,6 +40,7 @@ import pl.skidam.automodpack_core.utils.FileIntegrity;
 import pl.skidam.automodpack_core.utils.FileTrees;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
+import pl.skidam.automodpack_core.utils.WindowsLockProbe;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 
 /** Validates and applies the one journaled client operation plan. */
@@ -71,7 +72,11 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	public record Execution(UpdateTransaction.Status status, UpdateTransaction transaction, String operation, Path blockedPath, String message) {
+	/**
+	 * One apply outcome. {@code held} is the lock probe's receipt for a {@code DEFERRED_LOCKED} result: which
+	 * paths stayed held open and by which processes, when Windows could answer; null for every other status.
+	 */
+	public record Execution(UpdateTransaction.Status status, UpdateTransaction transaction, String operation, Path blockedPath, String message, String held) {
 		public boolean success() {
 			return status == UpdateTransaction.Status.SUCCESS;
 		}
@@ -201,7 +206,7 @@ public final class UpdateTransactionExecutor {
 	private Execution recoverPersisted(String expectedTransactionId) throws IOException {
 		return withFileCache(cache -> {
 			UpdateTransaction pending = UpdateTransaction.read(context.storage().transactionFile());
-			if (pending == null) return new Execution(UpdateTransaction.Status.SUCCESS, null, null, null, null);
+			if (pending == null) return new Execution(UpdateTransaction.Status.SUCCESS, null, null, null, null, null);
 			if (expectedTransactionId != null && !expectedTransactionId.equals(pending.transactionId))
 				throw new IOException("The requested update transaction was superseded by a newer pending request");
 			boolean publicationStarted = projectionPublicationStarted(pending);
@@ -238,8 +243,12 @@ public final class UpdateTransactionExecutor {
 					: isLockFailure(e) ? UpdateTransaction.Status.DEFERRED_LOCKED : UpdateTransaction.Status.FAILED;
 			if (status != UpdateTransaction.Status.FAILED) {
 				transaction.phase = UpdateTransaction.Phase.DEFERRED;
-				recordResult(transaction, status, operationName, blockedPath, e.getMessage(), e);
-				return new Execution(status, transaction, operationName, blockedPath, e.getMessage());
+				// The receipt travels in the journal message, so every later boot re-announces who ate the update.
+				String held = status == UpdateTransaction.Status.DEFERRED_LOCKED ? WindowsLockProbe.describeHeld(blockedPath != null ? blockedPath : context.storage().activeDirectory()) : null;
+				if (held != null) LOGGER.warn("The update is blocked by paths held open by other processes: {}", held);
+				String message = held == null ? e.getMessage() : e.getMessage() + " (held: " + held + ")";
+				recordResult(transaction, status, operationName, blockedPath, message, e);
+				return new Execution(status, transaction, operationName, blockedPath, message, held);
 			}
 			recordResult(transaction, UpdateTransaction.Status.FAILED, operationName, blockedPath, e.getMessage(), e);
 			throw new UpdateExecutionException(operationName, blockedPath, e);
@@ -258,7 +267,7 @@ public final class UpdateTransactionExecutor {
 		cleanupTransactionDirectories(transaction);
 		Files.deleteIfExists(context.storage().transactionFile());
 		ClientObjectStore.publishOwnership(context.storage());
-		return new Execution(UpdateTransaction.Status.SUCCESS, transaction, null, null, null);
+		return new Execution(UpdateTransaction.Status.SUCCESS, transaction, null, null, null, null);
 	}
 
 	/** The modpack apply sequence: pre-mutation captures, live operations, projection publication, and durable finalization. */
