@@ -7,7 +7,6 @@ import java.util.concurrent.Semaphore;
 
 import pl.skidam.automodpack_core.client.compat.crashassistant.ProcessSignalIO;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.screen.Gui;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 
 public class ReLauncher {
@@ -59,7 +58,7 @@ public class ReLauncher {
 			if (isHeadless) {
 				LOGGER.info("Please restart the game to apply updates!");
 			} else {
-				semaphore = new Gui().open(updateMessage);
+				semaphore = ScreenManager.preloadRestart(updateMessage);
 			}
 
 			wait(semaphore); // wait for gui to launch
