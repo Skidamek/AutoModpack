@@ -42,8 +42,8 @@ import pl.skidam.automodpack_core.utils.cache.PlatformCache;
  * apply machinery and every restart decision stay here.
  */
 public class ModpackUpdater implements AutoCloseable {
-	public Changelogs changelogs = new Changelogs();
-	public boolean fullDownload = false;
+	private Changelogs changelogs = new Changelogs();
+	boolean fullDownload = false;
 	private SelectedModpackTarget selectedTarget;
 	private ModpackJsons.ModpackContentFields serverModpackContent;
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
@@ -69,7 +69,7 @@ public class ModpackUpdater implements AutoCloseable {
 		return serverModpackContent.modpackName;
 	}
 
-	public SelectedModpackTarget getSelectedTarget() {
+	SelectedModpackTarget getSelectedTarget() {
 		return Objects.requireNonNull(selectedTarget, "Selected modpack target is unavailable");
 	}
 
@@ -112,17 +112,17 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** The actions and live polls a review-backed screen may drive; the seam type, backed by this engine's review. */
-	public ReviewActions reviewActions() {
+	ReviewActions reviewActions() {
 		return review.reviewActions();
 	}
 
 	/** Selected jar paths of the selected target without a Modrinth/CurseForge hash hit. */
-	public List<String> unverifiedSelectedJarPaths() {
+	List<String> unverifiedSelectedJarPaths() {
 		return review.unverifiedSelectedJarPaths();
 	}
 
 	/** True when the plan would write a gated jar that has no first-party hit. */
-	public boolean planWritesUnverifiedJar(UpdatePlan plan) {
+	boolean planWritesUnverifiedJar(UpdatePlan plan) {
 		return review.planWritesUnverifiedJar(plan);
 	}
 
@@ -404,7 +404,7 @@ public class ModpackUpdater implements AutoCloseable {
 		return beginAttempt(new RemovalAttempt(storage, planBuilder, changelogs, RemovalAttempt.Kind.DEACTIVATION)).preview();
 	}
 
-	public record LifecycleApply(boolean success, boolean restartRequired) {}
+	record LifecycleApply(boolean success, boolean restartRequired) {}
 
 	/**
 	 * Reviews then commits the active pack's removal or deactivation on this updater: the preview takes the screen, the

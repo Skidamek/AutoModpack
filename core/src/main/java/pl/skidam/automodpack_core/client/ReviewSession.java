@@ -42,6 +42,11 @@ import pl.skidam.automodpack_core.utils.cache.ModFileCache;
  * engine; the session drives them through it and owns when the review is open at all.
  */
 final class ReviewSession {
+	/**
+	 * STARTED is never read as a value, but it is not dead: the PREVIEWING→STARTED CAS is the load-bearing guard that
+	 * rejects a second confirm click while an advance runs, and {@link #confirmationClosed} deliberately refuses to
+	 * cancel a commit that already began (an executing plan is a durable fact).
+	 */
 	enum ConfirmationState {
 		INACTIVE, WAITING, PREVIEWING, STARTED, CANCELLED
 	}
