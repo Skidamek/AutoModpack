@@ -86,11 +86,12 @@ final class FileSend {
 	}
 
 	private void streamFile(ChannelHandlerContext ctx, FileChannel file, long fileSize, int chunkSize, byte protocolVersion, ChannelFuture headerFuture, CompressionCodec codec, ChannelHandlerContext encoderContext) {
-		ProtocolFrameCodec.FrameScratch scratch = new ProtocolFrameCodec.FrameScratch();
-		ByteBuf chunk = ctx.alloc().heapBuffer(chunkSize, chunkSize);
-		ByteBuffer chunkBuffer = chunk.nioBuffer(0, chunkSize);
+		ByteBuf chunk = null;
 		Throwable failure = null;
 		try {
+			ProtocolFrameCodec.FrameScratch scratch = new ProtocolFrameCodec.FrameScratch();
+			chunk = ctx.alloc().heapBuffer(chunkSize, chunkSize);
+			ByteBuffer chunkBuffer = chunk.nioBuffer(0, chunkSize);
 			Throwable headerFailure = awaitFrameFlush(ctx.channel(), headerFuture);
 			if (headerFailure == null && !headerFuture.isSuccess()) headerFailure = causeOf(headerFuture);
 			if (headerFailure != null) {
@@ -110,7 +111,7 @@ final class FileSend {
 			failure = e;
 		} finally {
 			inFlightTransfers.decrementAndGet();
-			chunk.release();
+			if (chunk != null) chunk.release();
 			closeQuietly(file);
 		}
 		if (failure == null) {
