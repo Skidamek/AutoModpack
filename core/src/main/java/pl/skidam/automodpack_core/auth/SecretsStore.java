@@ -59,13 +59,15 @@ public class SecretsStore {
 		 * The issued secret for {@code secret}, or null. Answers exactly what a linear scan of the cache would:
 		 * entries with a null secret never match, equality stays case-sensitive string equality, and duplicate
 		 * secrets resolve to the first match in cache iteration order — nondeterministic under the old scan, so
-		 * the index fixing one arbitrary owner is at least as deterministic.
+		 * the index fixing one arbitrary owner is at least as deterministic. The secret equality is re-checked
+		 * against the cache entry: a stale index published just before a rotation must not accept the rotated-out bearer.
 		 */
 		public Map.Entry<String, IssuedSecret> bySecret(String secret) {
 			if (secret == null) return null;
 			String key = keysBySecret.get(secret);
 			IssuedSecret issued = key == null ? null : cache.get(key);
-			return issued == null ? null : Map.entry(key, issued);
+			if (issued == null || !secret.equals(issued.secret())) return null;
+			return Map.entry(key, issued);
 		}
 
 		/** Rebuilt from the whole cache on every mutation, so the index can only answer what a scan of the cache answers. */
