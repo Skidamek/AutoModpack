@@ -9,6 +9,7 @@ import pl.skidam.automodpack_core.utils.WindowsNatives;
 /** Optional full Windows NTFS stat - timestamps, size, attributes, volume serial, file index, and reparse tag - from one native call. Any load or read failure returns null. */
 final class WindowsFileStat {
 	// raw[6] carries the Windows file attributes; raw[7] the reparse tag, zero without a reparse point.
+	private static final int FILE_ATTRIBUTE_DEVICE = 0x40;
 	private static final int FILE_ATTRIBUTE_DIRECTORY = 0x10;
 	private static final int FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
 	private static final long IO_REPARSE_TAG_SYMLINK = 0xA000000CL;
@@ -43,7 +44,7 @@ final class WindowsFileStat {
 		boolean directory = (raw[6] & FILE_ATTRIBUTE_DIRECTORY) != 0;
 		boolean reparse = (raw[6] & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
 		boolean symbolicLink = reparse && raw[7] == IO_REPARSE_TAG_SYMLINK;
-		boolean regularFile = !symbolicLink && !directory && (!reparse || raw[7] == IO_REPARSE_TAG_DEDUP || (raw[7] & ~IO_REPARSE_TAG_CLOUD_MASK) == IO_REPARSE_TAG_CLOUD);
+		boolean regularFile = !symbolicLink && !directory && (raw[6] & FILE_ATTRIBUTE_DEVICE) == 0 && (!reparse || raw[7] == IO_REPARSE_TAG_DEDUP || (raw[7] & ~IO_REPARSE_TAG_CLOUD_MASK) == IO_REPARSE_TAG_CLOUD);
 		return new FileCache.StatSnapshot(lastModified, creation, changeTimeNanos, raw[3], raw[4] + ":" + raw[5], regularFile, symbolicLink);
 	}
 
