@@ -6,11 +6,12 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.Locale;
 
 /** Extracts and loads the bundled Windows JNI library once per process. Any failure leaves it unloaded and returns false. */
 public final class WindowsNatives {
+	private static final String RESOURCE = "/natives/windows-x86_64/win_natives.dll";
 	private static final Object LOCK = new Object();
+	private static volatile boolean attempted;
 	private static volatile boolean loaded;
 	private static volatile String loadError = "not loaded";
 
@@ -19,7 +20,11 @@ public final class WindowsNatives {
 	public static boolean ensureLoaded() {
 		if (loaded) return true;
 		synchronized (LOCK) {
-			if (!loaded) load();
+			// One attempt per process: a machine that cannot load it (foreign architecture, locked-down temp) must not re-warn per stat call.
+			if (!attempted) {
+				attempted = true;
+				load();
+			}
 			return loaded;
 		}
 	}
@@ -33,14 +38,13 @@ public final class WindowsNatives {
 			loadError = "not Windows";
 			return;
 		}
-		String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
-		if (!arch.equals("amd64") && !arch.equals("x86_64")) {
-			loadError = "unsupported arch " + arch;
+		if (!PlatformUtils.isX8664()) {
+			loadError = "unsupported architecture " + System.getProperty("os.arch", "");
 			return;
 		}
-		try (InputStream in = WindowsNatives.class.getResourceAsStream("/natives/windows-x86_64/win_file_stat.dll")) {
+		try (InputStream in = WindowsNatives.class.getResourceAsStream(RESOURCE)) {
 			if (in == null) {
-				loadError = "missing resource /natives/windows-x86_64/win_file_stat.dll";
+				loadError = "missing resource " + RESOURCE;
 				return;
 			}
 			byte[] bytes = in.readAllBytes();
@@ -50,9 +54,9 @@ public final class WindowsNatives {
 			}
 			String sha1 = HashUtils.sha1(bytes);
 			Path directory = Path.of(System.getProperty("java.io.tmpdir"));
-			Path file = directory.resolve("win-file-stat-" + sha1 + ".dll");
+			Path file = directory.resolve("win-natives-" + sha1 + ".dll");
 			if (!dllMatches(file, sha1)) {
-				Path part = directory.resolve("win-file-stat-" + sha1 + ".dll.part");
+				Path part = directory.resolve("win-natives-" + sha1 + ".dll.part");
 				Files.write(part, bytes);
 				try {
 					Files.move(part, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);

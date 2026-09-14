@@ -14,7 +14,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
-import java.util.Locale;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -73,8 +72,7 @@ class FileCacheTest {
 			assertNull(snapshot);
 			return;
 		}
-		String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
-		if (!arch.equals("amd64") && !arch.equals("x86_64")) return;
+		if (!PlatformUtils.isX8664()) return;
 		System.err.println("WindowsFileStat: " + WindowsFileStat.loadError());
 		System.err.flush();
 		assertNotNull(snapshot, WindowsFileStat.loadError());

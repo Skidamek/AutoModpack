@@ -3,4 +3,4 @@ f583c02b8af051f0e357fa6596f9eb33c0a1515b3f264f696407885ed18b73ef  core/src/main/
 7d7c62020a353278f7d9cb3c9d639cfffdea1a49569a67d016c6a2a4237992be  core/src/main/c/windows_lock_probe.c
 e0425219b9d4abbdad972d76e70fd1cb5778c4bb737e9dfa3840e699ef66839a  core/src/main/c/pe_reloc.c
 51057713e703fd91778754c9ee6de9db336a85e29d2c313bb561a652d6ed5145  core/src/main/c/jni_md.h
-a0dbaf1addd593c40ce5a15988b7203c00a5ff546a590d64f86d57e493d1e3a2  core/src/main/resources/natives/windows-x86_64/win_file_stat.dll
+7a984b75eb3330af3d11290661dd4403d49420e4ed9b262df43fa83275ea682b  core/src/main/resources/natives/windows-x86_64/win_natives.dll
