@@ -106,7 +106,7 @@ public final class FileIntegrity {
 			FileCache.StatSnapshot fileSnapshot = FileCache.statSnapshot(file);
 			try {
 				FileCache.StatSnapshot canonical = FileCache.statSnapshot(canonicalObject);
-				if (matchesNamed(canonicalObject, expectedSize, expectedSha1, cache, canonical) && sameInode(file, canonicalObject, canonical, fileSnapshot)) return true;
+				if (matchesNamed(canonicalObject, expectedSize, expectedSha1, cache, canonical) && sameInode(file, canonicalObject, fileSnapshot, canonical)) return true;
 			} catch (IOException e) {
 				// A stat failure answers false on the disturbed side; the file snapshot already paid for decides below.
 			}
