@@ -6,11 +6,15 @@ import java.util.concurrent.TimeUnit;
 
 import pl.skidam.automodpack_core.utils.WindowsNatives;
 
-/** Optional full Windows NTFS stat - four timestamps, size, attributes, volume serial and file index - from one native call. Any load or read failure returns null. */
+/** Optional full Windows NTFS stat - timestamps, size, attributes, volume serial, file index, and reparse tag - from one native call. Any load or read failure returns null. */
 final class WindowsFileStat {
-	// raw[6] carries the Windows file attributes the snapshot classifies from.
+	// raw[6] carries the Windows file attributes; raw[7] the reparse tag, zero without a reparse point.
 	private static final int FILE_ATTRIBUTE_DIRECTORY = 0x10;
 	private static final int FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
+	private static final long IO_REPARSE_TAG_SYMLINK = 0xA000000CL;
+	private static final long IO_REPARSE_TAG_DEDUP = 0x80000013L;
+	private static final long IO_REPARSE_TAG_CLOUD = 0x80000000L;
+	private static final long IO_REPARSE_TAG_CLOUD_MASK = 0x0F000000L;
 
 	record Snapshot(long changeTimeNanos, String fileKey) {}
 
@@ -25,7 +29,10 @@ final class WindowsFileStat {
 		return new Snapshot(changeTimeNanos, raw[4] + ":" + raw[5]);
 	}
 
-	/** The whole {@link FileCache.StatSnapshot} from the one native stat, or null when the native is unavailable or the file cannot be answered. */
+	/**
+	 * The whole {@link FileCache.StatSnapshot} from the one native stat, or null when the native is unavailable or the file cannot be answered. The classification mirrors
+	 * OpenJDK's {@code WindowsFileAttributes}: a reparse point is a symlink only when its tag says so, and dedup and cloud-placeholder files stay regular files.
+	 */
 	static FileCache.StatSnapshot statSnapshot(Path path) {
 		long[] raw = stat(path);
 		if (raw == null) return null;
@@ -34,8 +41,10 @@ final class WindowsFileStat {
 		FileTime creation = fileTime(raw[2]);
 		if (changeTimeNanos == Long.MIN_VALUE || lastModified == null || creation == null) return null;
 		boolean directory = (raw[6] & FILE_ATTRIBUTE_DIRECTORY) != 0;
-		boolean symbolicLink = (raw[6] & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
-		return new FileCache.StatSnapshot(lastModified, creation, changeTimeNanos, raw[3], raw[4] + ":" + raw[5], !directory, symbolicLink);
+		boolean reparse = (raw[6] & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+		boolean symbolicLink = reparse && raw[7] == IO_REPARSE_TAG_SYMLINK;
+		boolean regularFile = !symbolicLink && !directory && (!reparse || raw[7] == IO_REPARSE_TAG_DEDUP || (raw[7] & ~IO_REPARSE_TAG_CLOUD_MASK) == IO_REPARSE_TAG_CLOUD);
+		return new FileCache.StatSnapshot(lastModified, creation, changeTimeNanos, raw[3], raw[4] + ":" + raw[5], regularFile, symbolicLink);
 	}
 
 	private static long[] stat(Path path) {

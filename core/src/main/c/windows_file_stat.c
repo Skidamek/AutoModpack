@@ -1,9 +1,15 @@
-/* CRT-free JNI: the full Windows stat - four NTFS timestamps, size, volume serial and file index,
- * attributes - in one KERNEL32 call chain, so Java never re-opens the file for identity questions.
+/* CRT-free JNI: a handle-based Windows metadata query for identity questions.
+ *
+ * Opens the requested path once (FILE_READ_ATTRIBUTES, OPEN_REPARSE_POINT) and answers from two
+ * handle queries - FileBasicInfo for the timestamps and attributes, BY_HANDLE_FILE_INFORMATION
+ * for size, volume serial, and the legacy 64-bit file index - so Java never re-opens the file.
+ * The two queries are not an atomic snapshot; identity answers tolerate that the same way the
+ * split reads always have. The legacy volume+index identity pair is NTFS-grade: filesystems with
+ * weaker 64-bit id uniqueness (ReFS) are outside what this receipt is built for.
  *
  * Rebuild via core/src/main/c/rebuild-windows-natives.sh (needs mingw-w64 and JAVA_HOME).
  * The output must stay byte-identical on every rebuild: --no-insert-timestamp and the fixed
- * --image-base pin the PE header, and the output name must remain win_file_stat.dll because
+ * --image-base pin the PE header, and the output name must remain win_natives.dll because
  * mingw embeds it as the DLL's internal export name. CI rebuilds and compares against the
  * committed binary, so sources and DLL cannot drift apart silently.
  */
@@ -124,10 +130,18 @@ JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_cache_WindowsF
 		CloseHandle(handle);
 		return JNI_FALSE;
 	}
+	DWORD reparseTag = 0;
+	if ((basic.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+		/* A reparse point is not a symlink: only the tag decides (symlink vs junction vs dedup vs cloud
+		 * placeholder), and only an open carrying OPEN_REPARSE_POINT can answer it. */
+		FILE_ATTRIBUTE_TAG_INFO tag;
+		if (GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(tag))) reparseTag = tag.ReparseTag;
+	}
 	CloseHandle(handle);
 	file_id = ((unsigned long long) info.nFileIndexHigh << 32) | (unsigned long long) info.nFileIndexLow;
-	/* The full stat in one call: FileBasicInfo carries the four NTFS timestamps plus attributes, the
-	 * BY_HANDLE information adds size, volume serial, and file index, so Java never re-opens the file. */
+	/* Two handle queries, not an atomic snapshot - the same tolerance the split reads always had.
+	 * FileBasicInfo carries creation, last-write, change, and attributes; BY_HANDLE adds size,
+	 * volume serial, and index. raw[7] is the reparse tag, zero without a reparse point. */
 	values[0] = basic.ChangeTime.QuadPart;
 	values[1] = basic.LastWriteTime.QuadPart;
 	values[2] = basic.CreationTime.QuadPart;
@@ -135,7 +149,7 @@ JNIEXPORT jboolean JNICALL Java_pl_skidam_automodpack_1core_utils_cache_WindowsF
 	values[4] = (jlong) info.dwVolumeSerialNumber;
 	values[5] = (jlong) file_id;
 	values[6] = basic.FileAttributes;
-	values[7] = 0;
+	values[7] = (jlong) reparseTag;
 	(*env)->SetLongArrayRegion(env, out, 0, 8, values);
 	if ((*env)->ExceptionCheck(env)) return JNI_FALSE;
 	return JNI_TRUE;
