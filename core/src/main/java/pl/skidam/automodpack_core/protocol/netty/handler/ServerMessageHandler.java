@@ -4,15 +4,12 @@ import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.net.SocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.stream.ChunkedWriteHandler;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -47,7 +44,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		byte clientProtocolVersion = msg.getVersion();
 
 		if (protocolVersion != clientProtocolVersion) {
-			sendError(ctx, protocolVersion, "Protocol version mismatch");
+			FileSend.sendError(ctx, protocolVersion, "Protocol version mismatch");
 			return;
 		}
 
@@ -55,7 +52,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
 		// Validate the secret; rejection reasons are logged by the auth layer
 		if (!validateSecret(ctx, address, msg.getSecret())) {
-			sendError(ctx, protocolVersion, "Authentication failed");
+			FileSend.sendError(ctx, protocolVersion, "Authentication failed");
 			return;
 		}
 
@@ -67,14 +64,14 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 				echoBuf.writeByte(ECHO_TYPE);
 				echoBuf.writeBytes(echoMsg.getSecret());
 				echoBuf.writeBytes(echoMsg.getData());
-				writeControlAndFlush(ctx, echoBuf).addListener(ChannelFutureListener.CLOSE);
+				FileSend.writeControlAndFlush(ctx, echoBuf).addListener(ChannelFutureListener.CLOSE);
 				break;
 			case FILE_REQUEST_TYPE :
 				FileRequestMessage fileRequest = (FileRequestMessage) msg;
 				fileSend.send(ctx, fileRequest.getFileHash(), protocolVersion, chunkSize);
 				break;
 			default :
-				sendError(ctx, protocolVersion, "Unknown message type");
+				FileSend.sendError(ctx, protocolVersion, "Unknown message type");
 		}
 	}
 
@@ -90,21 +87,5 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 			return false;
 		}
 		return true;
-	}
-
-	private void sendError(ChannelHandlerContext ctx, byte version, String errorMessage) {
-		byte[] errMsgBytes = errorMessage.getBytes(StandardCharsets.UTF_8);
-		ByteBuf errorBuf = ctx.alloc().buffer(1 + 1 + 4 + errMsgBytes.length);
-		errorBuf.writeByte(version);
-		errorBuf.writeByte(ERROR);
-		errorBuf.writeInt(errMsgBytes.length);
-		errorBuf.writeBytes(errMsgBytes);
-		writeControlAndFlush(ctx, errorBuf).addListener(ChannelFutureListener.CLOSE);
-	}
-
-	private static ChannelFuture writeControlAndFlush(ChannelHandlerContext ctx, Object message) {
-		ChannelHandlerContext chunkedContext = ctx.pipeline().context(ChunkedWriteHandler.class);
-		if (chunkedContext == null) return ctx.writeAndFlush(message);
-		return chunkedContext.writeAndFlush(message);
 	}
 }
