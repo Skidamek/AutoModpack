@@ -16,6 +16,7 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -43,12 +44,13 @@ final class GenerationRollback {
 					throw new IOException("This version's files are no longer kept on this computer, so it cannot be restored");
 				UpdatePreview preview = updater.previewInstalledSwitch().withMode(UpdatePreview.Mode.ROLLBACK);
 				ModpackUpdater finalUpdater = updater;
-				boolean shown = ScreenManager.preview(preview, modpackName, finalUpdater,
+				boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && finalUpdater.planWritesUnverifiedJar(preview.plan());
+				boolean shown = ScreenManager.preview(new PreviewPayload(preview, modpackName, writesUnverifiedJar, target, finalUpdater.unverifiedSelectedJarPaths(), finalUpdater.reviewActions(),
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> apply(finalUpdater, release)),
 						(Runnable) () -> {
 							finalUpdater.close();
 							Minecraft.getInstance().execute(release);
-						});
+						}));
 				if (!shown) {
 					finalUpdater.close();
 					Minecraft.getInstance().execute(release);

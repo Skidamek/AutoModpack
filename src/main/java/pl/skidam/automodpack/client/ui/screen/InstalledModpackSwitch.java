@@ -12,6 +12,7 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.update.UpdatePreview;
@@ -29,12 +30,13 @@ final class InstalledModpackSwitch {
 				updater = updater(storage, target);
 				UpdatePreview preview = updater.previewInstalledSwitch();
 				ModpackUpdater finalUpdater = updater;
-				boolean shown = ScreenManager.preview(preview, modpackName, finalUpdater,
+				boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && finalUpdater.planWritesUnverifiedJar(preview.plan());
+				boolean shown = ScreenManager.preview(new PreviewPayload(preview, modpackName, writesUnverifiedJar, target, finalUpdater.unverifiedSelectedJarPaths(), finalUpdater.reviewActions(),
 						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> apply(finalUpdater, release)),
 						(Runnable) () -> {
 							finalUpdater.close();
 							release.run();
-						});
+						}));
 				if (!shown) {
 					finalUpdater.close();
 					Minecraft.getInstance().execute(release);

@@ -28,10 +28,10 @@ final class SourceCatalogue {
 		this.platformCache = platformCache;
 	}
 
-	ModpackUpdater.SourceAvailability sourceAvailability() {
+	SourceAvailability sourceAvailability() {
 		FetchManager manager = sourceFetchManager;
-		if (manager == null) return new ModpackUpdater.SourceAvailability(0, 0, true, false);
-		return new ModpackUpdater.SourceAvailability(manager.totalFiles(), manager.resolvedFiles(), manager.isComplete(), manager.isCancelled());
+		if (manager == null) return new SourceAvailability(0, 0, true, false);
+		return new SourceAvailability(manager.totalFiles(), manager.resolvedFiles(), manager.isComplete(), manager.isCancelled());
 	}
 
 	List<String> mainPageUrlsForCatalogue(String location, String path) {

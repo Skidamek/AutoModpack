@@ -1,8 +1,5 @@
 package pl.skidam.automodpack.client.ui.screen;
 
-import static pl.skidam.automodpack_core.Constants.LOGGER;
-
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -23,12 +20,15 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.Countdown;
 import pl.skidam.automodpack.client.ui.widget.UnverifiedJarList;
 import pl.skidam.automodpack_core.client.Changelogs;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.HistoryViewRequest;
+import pl.skidam.automodpack_core.screen.PreviewPayload;
+import pl.skidam.automodpack_core.screen.ReviewActions;
+import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -37,7 +37,9 @@ import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 public final class PackConfirmScreen extends VersionedScreen {
 	private static final int BODY = 420;
 	private static final int TIMER_SECONDS = 10;
-	private final ModpackUpdater updater;
+	private final ReviewPayload welcome;
+	private final PreviewPayload later;
+	private final ReviewActions actions;
 	private final boolean firstInstall;
 	private final boolean unverified;
 	private final Screen parent;
@@ -57,11 +59,13 @@ public final class PackConfirmScreen extends VersionedScreen {
 	private String originDisplay = "";
 
 	/** First-install confirm; every selected jar matched Modrinth or CurseForge unless unverified jars were picked. */
-	public PackConfirmScreen(ModpackUpdater updater) {
+	public PackConfirmScreen(ReviewPayload payload) {
 		super(VersionedText.translatable("automodpack.firstConnect.title"));
-		this.updater = Objects.requireNonNull(updater, "updater");
+		this.welcome = Objects.requireNonNull(payload, "payload");
+		this.later = null;
+		this.actions = payload.actions();
 		this.firstInstall = true;
-		this.unverified = !updater.unverifiedSelectedJarPaths().isEmpty();
+		this.unverified = !payload.unverifiedJarPaths().isEmpty();
 		this.parent = null;
 		this.laterPreview = null;
 		this.laterContinue = null;
@@ -69,21 +73,31 @@ public final class PackConfirmScreen extends VersionedScreen {
 	}
 
 	/** Confirm before writing unverified jars on a later update or generation rollback. */
-	public PackConfirmScreen(Screen parent, ModpackUpdater updater, UpdatePreview preview, Runnable continueAction, Runnable cancelAction) {
-		super(VersionedText.translatable(UpdatePreviewScreen.titleKey(preview.mode())));
-		this.updater = Objects.requireNonNull(updater, "updater");
+	public PackConfirmScreen(Screen parent, PreviewPayload payload) {
+		super(VersionedText.translatable(UpdatePreviewScreen.titleKey(payload.preview().mode())));
+		this.welcome = null;
+		this.later = Objects.requireNonNull(payload, "payload");
+		this.actions = Objects.requireNonNull(payload.actions(), "actions");
 		this.firstInstall = false;
 		this.unverified = true;
 		this.parent = parent;
-		this.laterPreview = Objects.requireNonNull(preview, "preview");
-		this.laterContinue = Objects.requireNonNull(continueAction, "continueAction");
-		this.laterCancel = Objects.requireNonNull(cancelAction, "cancelAction");
+		this.laterPreview = Objects.requireNonNull(payload.preview(), "preview");
+		this.laterContinue = Objects.requireNonNull(payload.continueAction(), "continueAction");
+		this.laterCancel = Objects.requireNonNull(payload.cancelAction(), "cancelAction");
+	}
+
+	private SelectedModpackTarget target() {
+		return firstInstall ? welcome.target() : later.target();
+	}
+
+	private List<String> unverifiedJarPaths() {
+		return firstInstall ? welcome.unverifiedJarPaths() : later.unverifiedJarPaths();
 	}
 
 	@Override
 	protected void init() {
 		super.init();
-		originFull = updater.joinOrigin();
+		originFull = firstInstall ? welcome.origin() : "";
 		originDisplay = truncateToWidth(this.font, PackConfirmCopy.displayOrigin(originFull), panelWidth(BODY) - 8);
 		refreshUnverifiedFiles();
 		if (unverified) {
@@ -95,16 +109,16 @@ public final class PackConfirmScreen extends VersionedScreen {
 			countdown.finish();
 		}
 
-		boolean leftover = firstInstall && updater.firstInstallLocalModCount() > 0;
-		boolean customize = PackConfirmCopy.canCustomize(updater.getSelectedTarget().manifest());
+		boolean leftover = firstInstall && welcome.firstInstallLocalModPaths().size() > 0;
+		boolean customize = PackConfirmCopy.canCustomize(target().manifest());
 		boolean notes = firstInstall
-				? Changelogs.hasNotes(updater.getFirstInstallPatchNotes())
+				? Changelogs.hasNotes(welcome.patchNotes())
 				: laterPreview != null && Changelogs.hasNotes(laterPreview.journal());
 
 		ActionDefinition historyAction = notes ? optionalAction(VersionedText.translatable("automodpack.management.history"), button -> openHistory()) : null;
-		ActionDefinition leftoverAction = leftover ? checkboxAction(PackConfirmCopy.leftoverLabel(updater.firstInstallLocalModCount()), keepExistingMods, value -> {
+		ActionDefinition leftoverAction = leftover ? checkboxAction(PackConfirmCopy.leftoverLabel(welcome.firstInstallLocalModPaths().size()), keepExistingMods, value -> {
 			keepExistingMods = value;
-			updater.setFirstInstallLocalModCleanup(!keepExistingMods);
+			actions.setFirstInstallLocalModCleanup().accept(!keepExistingMods);
 			// The checkbox label is constant now; the rebuild only refreshes the existing-mods summary line.
 			rebuild();
 		}) : null;
@@ -124,7 +138,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		if (leftoverAction != null) {
-			String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", updater.firstInstallLocalModPaths()), 240, 8));
+			String joined = String.join("\n", wrapToWidth(this.font, String.join(", ", welcome.firstInstallLocalModPaths()), 240, 8));
 			VersionedScreen.setTooltip(leftoverAction.widget(), VersionedText.translatable("automodpack.confirm.leftoverTooltip", joined));
 		}
 		ackCheckbox = ackAction == null ? null : ackAction.widget();
@@ -142,14 +156,13 @@ public final class PackConfirmScreen extends VersionedScreen {
 		layoutBody(bottomY);
 	}
 
-	/** Snapshots the unverified set from the updater; the lookup settles before this screen opens, so the set never moves while it is open. */
+	/** Snapshots the unverified set; the lookup settles before this screen opens, so the set never moves while it is open. */
 	private void refreshUnverifiedFiles() {
-		List<String> currentPaths = updater.unverifiedSelectedJarPaths();
+		List<String> currentPaths = unverifiedJarPaths();
 		unverifiedPaths.clear();
 		unverifiedPaths.addAll(currentPaths);
 		unverifiedFiles.clear();
-		var target = updater.getSelectedTarget();
-		for (String path : currentPaths) unverifiedFiles.add(new UnverifiedJarList.UnverifiedFile(path, PackConfirmCopy.selectedJarSize(target, path)));
+		for (String path : currentPaths) unverifiedFiles.add(new UnverifiedJarList.UnverifiedFile(path, PackConfirmCopy.selectedJarSize(target(), path)));
 	}
 
 	/** The acknowledge checkbox is inactive until the read timer ran out, so a flip is always a real consent. */
@@ -215,7 +228,7 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 	/** The platform lookup has settled before this screen opens, so the unverified count is final and red. */
 	private void appendSourceLines(List<MutableComponent> lines, int wrapWidth) {
-		int jars = PackConfirmCopy.selectedJarCount(updater.getSelectedTarget());
+		int jars = PackConfirmCopy.selectedJarCount(target());
 		lines.addAll(wrapParagraph(this.font, PackConfirmCopy.unverifiedCount(unverifiedPaths.size(), jars), wrapWidth, ChatFormatting.RED));
 	}
 
@@ -237,25 +250,21 @@ public final class PackConfirmScreen extends VersionedScreen {
 	}
 
 	private void appendStatLines(List<MutableComponent> lines, int wrapWidth) {
-		var target = updater.getSelectedTarget();
-		appendStat(lines, wrapWidth, PackConfirmCopy.selectedSummary(target), ChatFormatting.GREEN);
+		appendStat(lines, wrapWidth, PackConfirmCopy.selectedSummary(target()), ChatFormatting.GREEN);
 		// Same stat the update preview shows: what the local store still misses of the announced content.
 		if (firstInstall) {
-			try {
+			if (welcome.uncachedTargetBytes().isPresent()) {
 				appendStat(lines, wrapWidth,
-						VersionedText.translatable("automodpack.firstConnect.downloadSummary", UiFormat.formatSize(updater.uncachedSelectedTargetBytes()), UiFormat.formatSize(PackConfirmCopy.selectedBytes(target)))
+						VersionedText.translatable("automodpack.firstConnect.downloadSummary", UiFormat.formatSize(welcome.uncachedTargetBytes().getAsLong()), UiFormat.formatSize(PackConfirmCopy.selectedBytes(target())))
 								.getString(),
 						ChatFormatting.GRAY);
-			} catch (IOException e) {
-				// The stat is informational; the acquisition after confirm reports a real failure if the store is unreadable.
-				LOGGER.warn("Cannot measure the first-install download cost", e);
 			}
 		}
-		appendStat(lines, wrapWidth, PackConfirmCopy.existingMods(keepExistingMods, updater.firstInstallLocalModCount()), keepExistingMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY);
-		appendStat(lines, wrapWidth, PackConfirmCopy.requestedGroups(target), ChatFormatting.WHITE);
-		appendStat(lines, wrapWidth, PackConfirmCopy.includedGroups(target), ChatFormatting.WHITE);
-		appendStat(lines, wrapWidth, PackConfirmCopy.staleRequestedGroups(target), ChatFormatting.RED);
-		appendStat(lines, wrapWidth, PackConfirmCopy.requestedUnavailableGroups(target), ChatFormatting.RED);
+		appendStat(lines, wrapWidth, PackConfirmCopy.existingMods(keepExistingMods, firstInstall ? welcome.firstInstallLocalModPaths().size() : 0), keepExistingMods ? ChatFormatting.YELLOW : ChatFormatting.GRAY);
+		appendStat(lines, wrapWidth, PackConfirmCopy.requestedGroups(target()), ChatFormatting.WHITE);
+		appendStat(lines, wrapWidth, PackConfirmCopy.includedGroups(target()), ChatFormatting.WHITE);
+		appendStat(lines, wrapWidth, PackConfirmCopy.staleRequestedGroups(target()), ChatFormatting.RED);
+		appendStat(lines, wrapWidth, PackConfirmCopy.requestedUnavailableGroups(target()), ChatFormatting.RED);
 	}
 
 	private void appendStat(List<MutableComponent> lines, int wrapWidth, String text, ChatFormatting style) {
@@ -280,15 +289,15 @@ public final class PackConfirmScreen extends VersionedScreen {
 		if (finished) return;
 		if (unverified && (!acknowledged || countdown.running())) return;
 		if (firstInstall) {
-			if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) return;
+			if (!actions.reviewActive().getAsBoolean()) return;
 			finished = true;
-			updater.setFirstInstallLocalModCleanup(!keepExistingMods);
-			ScreenManager.waiting(updater::cancelFromPlayer);
-			updater.startConfirmedUpdate();
+			actions.setFirstInstallLocalModCleanup().accept(!keepExistingMods);
+			ScreenManager.waiting(actions.cancelFromPlayer());
+			actions.startConfirmedUpdate().run();
 			return;
 		}
 		finished = true;
-		ScreenManager.waiting(updater::cancelFromPlayer);
+		ScreenManager.waiting(actions.cancelFromPlayer());
 		laterContinue.run();
 	}
 
@@ -296,22 +305,21 @@ public final class PackConfirmScreen extends VersionedScreen {
 		if (finished) return;
 		Consumer<SelectionIntent> action = intent -> {
 			try {
-				if (!unverified && updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) throw new IllegalStateException("Modpack confirmation is no longer active");
-				if (firstInstall) updater.setFirstInstallLocalModCleanup(!keepExistingMods);
-				updater.reselectAndPreview(intent);
+				if (!unverified && !actions.reviewActive().getAsBoolean()) throw new IllegalStateException("Modpack confirmation is no longer active");
+				if (firstInstall) actions.setFirstInstallLocalModCleanup().accept(!keepExistingMods);
+				actions.reselectAndPreview().accept(intent);
 			} catch (RuntimeException e) {
 				finished = false;
 				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.MULTIPLAYER, null));
 			}
 		};
-		ScreenImpl.setScreen(new ModpackSelectionScreen(this, updater, action));
+		ScreenImpl.setScreen(new ModpackSelectionScreen(this, target(), actions, action));
 	}
 
 	private void openFiles() {
 		if (firstInstall) {
-			var target = updater.getSelectedTarget();
 			ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable("automodpack.firstConnect.description"),
-					PackConfirmCopy.catalogue(updater), PackConfirmCopy.groupNames(target.manifest()), null, List.of(), true, PackConfirmCopy.selectedBytes(target), ""));
+					welcome.catalogue(), PackConfirmCopy.groupNames(target().manifest()), null, List.of(), true, PackConfirmCopy.selectedBytes(target()), ""));
 			return;
 		}
 		ScreenImpl.setScreen(new ChangeBrowserScreen(this, VersionedText.translatable("automodpack.browser.previewTitle"), VersionedText.translatable(UpdatePreviewScreen.reviewKey(laterPreview.mode())),
@@ -319,15 +327,15 @@ public final class PackConfirmScreen extends VersionedScreen {
 	}
 
 	private void openHistory() {
-		var history = firstInstall ? updater.getFirstInstallPatchNotes() : laterPreview.journal();
-		String name = updater.getSelectedTarget().manifest().modpackName();
+		var history = firstInstall ? welcome.patchNotes() : laterPreview.journal();
+		String name = target().manifest().modpackName();
 		// The journal is the server's timeline, so no entry of a pending preview is installed yet.
 		ScreenImpl.setScreen(new ContentHistoryScreen(this, new HistoryViewRequest(history, -1, name, () -> {})));
 	}
 
 	private void cancel() {
 		if (firstInstall) {
-			if (updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING) updater.cancelConfirmation();
+			if (actions.reviewActive().getAsBoolean()) actions.cancelConfirmation().run();
 			finished = true;
 			ScreenImpl.multiplayer();
 			return;
@@ -344,20 +352,20 @@ public final class PackConfirmScreen extends VersionedScreen {
 		if (!countdown.running() && ackCheckbox != null) ackCheckbox.active = true;
 		if (primaryButton != null) primaryButton.active = !unverified || (!countdown.running() && acknowledged);
 		if (firstInstall) {
-			if (updater.getConfirmationState() == ModpackUpdater.ConfirmationState.CANCELLED) {
+			if (actions.reviewCancelled().getAsBoolean()) {
 				finished = true;
 				ScreenImpl.multiplayer();
 				return;
 			}
-			if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING && !updater.isCancelledByPlayer()) finished = false;
-		} else if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING && !updater.isCancelledByPlayer()) {
+			if (finished && actions.reviewActive().getAsBoolean() && !actions.cancelledByPlayer().getAsBoolean()) finished = false;
+		} else if (finished && actions.reviewActive().getAsBoolean() && !actions.cancelledByPlayer().getAsBoolean()) {
 			finished = false;
 		}
 	}
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String name = updater.getSelectedTarget().manifest().modpackName().isBlank() ? "AutoModpack" : updater.getSelectedTarget().manifest().modpackName();
+		String name = target().manifest().modpackName().isBlank() ? "AutoModpack" : target().manifest().modpackName();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, panelWidth(BODY))).withStyle(ChatFormatting.WHITE), this.width / 2, 14, TextColors.WHITE);
 		// The disabled primary needs its reason on screen: the countdown while the risk read runs, the checkbox after it.
 		if (!finished && !unverifiedPaths.isEmpty() && !acknowledged) {

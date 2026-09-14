@@ -5,54 +5,50 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
-import java.nio.file.Path;
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.stream.Stream;
 
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.ModpackJsons;
-import pl.skidam.automodpack_core.loader.PinnedMods;
-import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
-import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
-import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.PreviewPayload;
+import pl.skidam.automodpack_core.screen.ReviewActions;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
-import pl.skidam.automodpack_core.update.JournalMirror;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
-import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
-import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
+/**
+ * The update engine facade: the one construction point for storage, loaders, the transfer client, and the review, and
+ * the driver of the sync, switch, and lifecycle flows. The player-facing review lives in {@link ReviewSession}; the
+ * apply machinery and every restart decision stay here.
+ */
 public class ModpackUpdater implements AutoCloseable {
 	public Changelogs changelogs = new Changelogs();
 	public boolean fullDownload = false;
-	private boolean firstConnection;
 	private SelectedModpackTarget selectedTarget;
 	private ModpackJsons.ModpackContentFields serverModpackContent;
 	private final ConnectionJsons.ConnectionInfo connectionInfo;
 	private final DownloadClient downloadClient;
 	private final AtomicBoolean closed = new AtomicBoolean();
-	private final AtomicBoolean playerCancelled = new AtomicBoolean();
-	private final AtomicReference<ConfirmationState> confirmationState = new AtomicReference<>(ConfirmationState.INACTIVE);
 	private final UpdateLoopDetector updateLoopDetector;
 	private final ClientStorage storage;
 	private final PlatformCache platformCache;
@@ -61,15 +57,13 @@ public class ModpackUpdater implements AutoCloseable {
 	private final ProjectionLoader projectionLoader;
 	private final ModpackObjectAcquisition objectAcquisition;
 	private final AtomicReference<UpdateAttempt> attempt = new AtomicReference<>();
-	private Map<String, UpdatePlan.FileState> firstInstallLocalModFiles = Map.of();
-	private Map<String, UpdatePlan.FileState> consentedLocalModFiles = Map.of();
+	private final ReviewSession review;
 	/**
 	 * The attaching intent of an explicitly requested sync. Detachment ends only through this intent: an applied plan
 	 * clears the flag inside the commit, and a requested sync that finds nothing to apply clears it on its early exit.
 	 * Detachment is declared by explicit entry points; nothing else ever clears it.
 	 */
 	private boolean attaching;
-	public record SourceAvailability(int totalFiles, int resolvedFiles, boolean complete, boolean cancelled) {}
 
 	private String getModpackName() {
 		return serverModpackContent.modpackName;
@@ -79,33 +73,62 @@ public class ModpackUpdater implements AutoCloseable {
 		return Objects.requireNonNull(selectedTarget, "Selected modpack target is unavailable");
 	}
 
-	public List<JournalEntry> getFirstInstallPatchNotes() {
-		try {
-			return new JournalMirror(storage).entries(getSelectedTarget().manifest().modpackId());
-		} catch (IOException e) {
-			// The mirror was verified at the head fetch moments ago; an unreadable mirror only hides the history entry.
-			LOGGER.warn("Journal mirror is unreadable; first-install history is unavailable", e);
-			return List.of();
+	/** The selected target's objects the local store still misses, after counting the sources already available locally. */
+	private Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingSelectedTargetObjects() throws IOException {
+		if (selectedTarget == null || serverModpackContent == null) throw new IOException("Selected modpack target is unavailable");
+		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
+			planBuilder.populateStoreFromCachedLocations(selectedTarget.flatTarget(), cache);
+			return objectAcquisition.missingTargetObjects(selectedTarget.flatTarget(), cache);
 		}
 	}
 
-	public SourceAvailability getSourceAvailability() {
-		return sourceCatalogue.sourceAvailability();
+	/** Returns whether the selected installed target needs an authenticated object-transfer session. */
+	public boolean requiresSelectedTargetDownload() throws IOException {
+		return !missingSelectedTargetObjects().isEmpty();
 	}
 
-	/** Direct regular files currently visible in the loader's standard mods directory during first install. */
-	public List<String> firstInstallLocalModPaths() {
-		return List.copyOf(firstInstallLocalModFiles.keySet());
+	/** The selected target's download cost with the local store: the bytes of its objects not already acquired. */
+	long uncachedSelectedTargetBytes() throws IOException {
+		long bytes = 0;
+		for (var item : missingSelectedTargetObjects()) bytes += item.size;
+		return bytes;
 	}
 
-	public int firstInstallLocalModCount() {
-		return firstInstallLocalModFiles.size();
+	ConnectionJsons.ConnectionInfo connectionInfo() {
+		return connectionInfo;
 	}
 
-	/** Sets the first-install cleanup consent represented in the canonical update plan. */
-	public void setFirstInstallLocalModCleanup(boolean archive) {
-		if (!firstConnection || confirmationState.get() != ConfirmationState.WAITING) return;
-		consentedLocalModFiles = archive ? firstInstallLocalModFiles : Map.of();
+	ModpackJsons.ModpackContentFields storedTarget() throws IOException {
+		return ClientProjectionView.open(storage).target();
+	}
+
+	/** Applies a new group selection to the installed target on an explicit review reselect. */
+	void reselectTarget(SelectionIntent intent) {
+		Objects.requireNonNull(intent, "intent");
+		SelectedModpackTarget current = getSelectedTarget();
+		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(current.document(), current.expectedPriorIntent(), intent, current.platform());
+		selectedTarget = replacement;
+		serverModpackContent = replacement.flatTarget();
+	}
+
+	/** The actions and live polls a review-backed screen may drive; the seam type, backed by this engine's review. */
+	public ReviewActions reviewActions() {
+		return review.reviewActions();
+	}
+
+	/** Selected jar paths of the selected target without a Modrinth/CurseForge hash hit. */
+	public List<String> unverifiedSelectedJarPaths() {
+		return review.unverifiedSelectedJarPaths();
+	}
+
+	/** True when the plan would write a gated jar that has no first-party hit. */
+	public boolean planWritesUnverifiedJar(UpdatePlan plan) {
+		return review.planWritesUnverifiedJar(plan);
+	}
+
+	/** Stops the in-flight update work after the player backed out of the preparing screen. */
+	public void cancelFromPlayer() {
+		review.cancelFromPlayer();
 	}
 
 	/** Builds a reviewable switch plan for an installed generation, acquiring selected objects when necessary. */
@@ -145,111 +168,6 @@ public class ModpackUpdater implements AutoCloseable {
 		applyInstalledSwitch();
 	}
 
-	/** The selected target's objects the local store still misses, after counting the sources already available locally. */
-	private Set<ModpackJsons.ModpackContentFields.ModpackContentItem> missingSelectedTargetObjects() throws IOException {
-		if (selectedTarget == null || serverModpackContent == null) throw new IOException("Selected modpack target is unavailable");
-		try (var cache = FileCache.open(storage.fileCacheDirectory())) {
-			planBuilder.populateStoreFromCachedLocations(selectedTarget.flatTarget(), cache);
-			return objectAcquisition.missingTargetObjects(selectedTarget.flatTarget(), cache);
-		}
-	}
-
-	/** Returns whether the selected installed target needs an authenticated object-transfer session. */
-	public boolean requiresSelectedTargetDownload() throws IOException {
-		return !missingSelectedTargetObjects().isEmpty();
-	}
-
-	/** The selected target's download cost with the local store: the bytes of its objects not already acquired. */
-	public long uncachedSelectedTargetBytes() throws IOException {
-		long bytes = 0;
-		for (var item : missingSelectedTargetObjects()) bytes += item.size;
-		return bytes;
-	}
-
-	private ModpackJsons.ModpackContentFields storedTarget() throws IOException {
-		return ClientProjectionView.open(storage).target();
-	}
-
-	private void selectTarget(SelectionIntent intent) {
-		Objects.requireNonNull(intent, "intent");
-		SelectedModpackTarget current = getSelectedTarget();
-		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(current.document(), current.expectedPriorIntent(), intent, current.platform());
-		selectedTarget = replacement;
-		serverModpackContent = replacement.flatTarget();
-	}
-
-	public ConfirmationState getConfirmationState() {
-		return confirmationState.get();
-	}
-
-	/** Minecraft join target as `host:port` from the connection origin, or an empty string when offline. */
-	public String joinOrigin() {
-		if (connectionInfo == null) return "";
-		return connectionInfo.origin.getHostString() + ":" + connectionInfo.origin.getPort();
-	}
-
-	public void startConfirmedUpdate() {
-		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.PREVIEWING)) {
-			LOGGER.info("Ignoring modpack download confirmation while another confirmation run is still active");
-			return;
-		}
-		DownloadClient.NET_EXECUTOR.execute(() -> startUpdate(true));
-	}
-
-	public void cancelConfirmation() {
-		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED)) return;
-		close();
-	}
-
-	/**
-	 * Stops the in-flight update work after the player backed out of the preparing screen. The flag stays raised
-	 * until the draining work observes it; only then is the confirmation seam restored (or the updater closed),
-	 * so a follow-up confirmation can never race a still-draining run.
-	 */
-	public void cancelFromPlayer() {
-		if (!playerCancelled.compareAndSet(false, true)) return;
-		LOGGER.info("Modpack update cancelled by the player");
-		interruptInFlight();
-	}
-
-	public boolean isCancelledByPlayer() {
-		return playerCancelled.get() || objectAcquisition.downloadCancelled();
-	}
-
-	private boolean abortedByPlayer(Throwable cause) {
-		return isCancelledByPlayer() || CertificateTrustCancelledException.is(cause);
-	}
-
-	/** Applies a new group selection and re-enters the preview path from confirm or preview customize. */
-	public void reselectAndPreview(SelectionIntent intent) {
-		selectTarget(intent);
-		UpdateAttempt previous = attempt.getAndSet(null);
-		if (previous != null) previous.cancel();
-		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
-		if (firstConnection && confirmationState.get() == ConfirmationState.WAITING) {
-			ScreenManager.welcome(this);
-			return;
-		}
-		ScreenManager.waiting(this::cancelFromPlayer);
-		DownloadClient.NET_EXECUTOR.execute(() -> startUpdate(true));
-	}
-
-	/** First-install review catalogue with Modrinth/CurseForge pages from the completed lookup. */
-	public ChangeSet reviewCatalogue() {
-		if (selectedTarget == null) return ChangeSet.empty();
-		return ChangeSet.catalogue(selectedTarget.manifest(), ChangeSet.Kind.ADDED, selectedTarget.selection().selectedGroups()).withReferences(sourceCatalogue::mainPageUrlsForCatalogue);
-	}
-
-	/** Selected jar paths of the selected target without a Modrinth/CurseForge hash hit. */
-	public List<String> unverifiedSelectedJarPaths() {
-		return sourceCatalogue.unverifiedSelectedJarPaths(selectedTarget);
-	}
-
-	/** True when the plan would write a gated jar that has no first-party hit. */
-	public boolean planWritesUnverifiedJar(UpdatePlan plan) {
-		return sourceCatalogue.planWritesUnverifiedJar(plan);
-	}
-
 	public ModpackUpdater(SelectedModpackTarget selectedTarget, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, ClientStorage storage) {
 		this(selectedTarget, connectionInfo, secret, storage, null);
 	}
@@ -270,24 +188,26 @@ public class ModpackUpdater implements AutoCloseable {
 		this.sourceCatalogue = new SourceCatalogue(() -> selectedTarget, this.platformCache);
 		this.projectionLoader = new ProjectionLoader(this.storage, this::storedTarget);
 		this.downloadClient = downloadClient;
+		AtomicBoolean playerCancelled = new AtomicBoolean();
 		this.objectAcquisition = new ModpackObjectAcquisition(this.storage, this.platformCache, this.sourceCatalogue, this.planBuilder, this.connectionInfo, this.downloadClient,
-				this.playerCancelled, this::getModpackName);
+				playerCancelled, this::getModpackName);
+		this.review = new ReviewSession(this, this.storage, this.sourceCatalogue, playerCancelled);
 	}
 
 	/** A session for one update attempt against the currently selected target, carrying this attempt's consent and attach intent. */
 	private UpdateSession newSession() {
-		return new UpdateSession(storage, planBuilder, objectAcquisition, sourceCatalogue, changelogs, connectionInfo, getSelectedTarget(), firstConnection,
-				consentedLocalModFiles, attaching);
+		return new UpdateSession(storage, planBuilder, objectAcquisition, sourceCatalogue, changelogs, connectionInfo, getSelectedTarget(), review.firstConnection(),
+				review.consentedLocalModFiles(), attaching);
 	}
 
 	/** Replaces any in-flight attempt so prepare, review, and commit cannot drift across two sessions. */
-	private <T extends UpdateAttempt> T beginAttempt(T next) {
+	<T extends UpdateAttempt> T beginAttempt(T next) {
 		UpdateAttempt previous = attempt.getAndSet(next);
 		if (previous != null) previous.cancel();
 		return next;
 	}
 
-	private UpdateSession beginUpdateAttempt() {
+	UpdateSession beginUpdateAttempt() {
 		return beginAttempt(newSession());
 	}
 
@@ -359,19 +279,13 @@ public class ModpackUpdater implements AutoCloseable {
 
 		try {
 			requireLiveConnection();
-			if (showWaitingScreen) ScreenManager.waiting(this::cancelFromPlayer);
+			if (showWaitingScreen) ScreenManager.waiting(review::cancelFromPlayer);
 
 			if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
 			// Handle a modpack installed for the first time: the local-mod consent and group defaults only apply here
 			if (!new ClientGenerationStore(storage).hasLocalState(selectedTarget.manifest().modpackId())) {
-				firstConnection = true;
-				fullDownload = true;
-				LOGGER.info("First-time install; scanning existing mods before the review screen");
-				sourceCatalogue.startSourceFetch();
-				firstInstallLocalModFiles = storedTarget() == null ? scanFirstInstallLocalMods() : Map.of();
-				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
-				ScreenManager.welcome(this);
+				review.beginFirstInstallReview();
 				return UpdateOutcome.REVIEW_OPENED;
 			} else if (storage.readActiveState() == null || !Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS)) {
 				// Handle an installed modpack without an active projection: reactivate it through the reviewed switch plan
@@ -380,46 +294,20 @@ public class ModpackUpdater implements AutoCloseable {
 				// Handle existing modpack
 				ModpackUtils.reprotectActiveFiles(serverModpackContent, storage);
 
-				return startUpdate(showWaitingScreen);
+				return review.startUpdate(showWaitingScreen);
 			}
 		} catch (UpdateDeferredException e) {
 			close();
-			if (isCancelledByPlayer()) return UpdateOutcome.INCOMPLETE;
+			if (review.isCancelledByPlayer()) return UpdateOutcome.INCOMPLETE;
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
 			new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 			return UpdateOutcome.INCOMPLETE;
 		} catch (Exception e) {
 			close();
-			if (abortedByPlayer(e)) return UpdateOutcome.INCOMPLETE;
+			if (review.abortedByPlayer(e)) return UpdateOutcome.INCOMPLETE;
 			showUpdateFailure(e);
 			return UpdateOutcome.INCOMPLETE;
 		}
-	}
-
-	private Map<String, UpdatePlan.FileState> scanFirstInstallLocalMods() throws IOException {
-		Path modsDirectory = storage.modsDirectory();
-		if (Files.notExists(modsDirectory, LinkOption.NOFOLLOW_LINKS)) return Map.of();
-		if (Files.isSymbolicLink(modsDirectory) || !Files.isDirectory(modsDirectory, LinkOption.NOFOLLOW_LINKS))
-			throw new IOException("Loader-visible mods directory is not a real directory: " + modsDirectory);
-		Path loadedMod = THIS_MOD_JAR == null ? null : THIS_MOD_JAR.toAbsolutePath().normalize();
-		Map<String, UpdatePlan.FileState> observed = new TreeMap<>();
-		Set<String> listedPins = PinnedMods.index(clientConfig == null ? List.of() : clientConfig.pinnedModIds);
-		try (var cache = FileCache.open(storage.fileCacheDirectory()); var modCache = ModFileCache.open(storage.modCacheDirectory()); Stream<Path> stream = Files.list(modsDirectory)) {
-			for (Path path : stream.toList()) {
-				if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
-				Path normalized = path.toAbsolutePath().normalize();
-				if (loadedMod != null && normalized.equals(loadedMod)) continue;
-				if (!listedPins.isEmpty()) {
-					FileInspection.Mod inspected = modCache.getModOrNull(normalized, cache);
-					if (inspected != null && PinnedMods.matches(listedPins, inspected.IDs())) continue;
-				}
-				String relative = LogicalPath.normalize(storage.gameDirectory().relativize(normalized).toString());
-				String hash = cache.getOrComputeHash(normalized);
-				if (hash == null) throw new IOException("Cannot hash local mod file: " + normalized);
-				observed.put(relative, new UpdatePlan.FileState(hash, Files.size(normalized), true));
-			}
-		}
-		return Collections.unmodifiableMap(observed);
 	}
 
 	/**
@@ -432,7 +320,7 @@ public class ModpackUpdater implements AutoCloseable {
 	private void applySelectedTargetWithoutReview(boolean applyFirstInstall) {
 		runReviewedFlow(new ApplyFlow("Launch apply", () -> new ReLauncher(UpdateType.UPDATE, changelogs).restart(true), e -> {
 			LOGGER.error("Failed to apply the selected modpack; no projection changes were made outside the existing transaction guarantees", e);
-			if (!preload && !abortedByPlayer(e)) showUpdateFailure(e);
+			if (!preload && !review.abortedByPlayer(e)) showUpdateFailure(e);
 		}, this::closeLaunchApply), () -> launchApply(applyFirstInstall));
 	}
 
@@ -443,9 +331,9 @@ public class ModpackUpdater implements AutoCloseable {
 			return;
 		}
 		requireLiveConnection();
-		firstConnection = !new ClientGenerationStore(storage).hasLocalState(selectedTarget.manifest().modpackId());
-		consentedLocalModFiles = Map.of();
-		if (firstConnection && !applyFirstInstall) {
+		review.firstConnection(!new ClientGenerationStore(storage).hasLocalState(selectedTarget.manifest().modpackId()));
+		review.resetLocalModConsent();
+		if (review.firstConnection() && !applyFirstInstall) {
 			try (var cache = FileCache.open(storage.fileCacheDirectory())) {
 				objectAcquisition.acquireTargetObjects(selectedTarget.flatTarget(), cache, false);
 			}
@@ -456,11 +344,11 @@ public class ModpackUpdater implements AutoCloseable {
 		sourceCatalogue.startSourceFetch();
 		UpdateSession launch = beginUpdateAttempt();
 		launch.prepare(false, false);
-		if (planWritesUnverifiedJar(launch.prepared().plan())) {
+		if (review.planWritesUnverifiedJar(launch.prepared().plan())) {
 			LOGGER.warn("Launch apply aborted: unverified jars will not be written during preload; leaving the live pack unchanged");
 			return;
 		}
-		if (!firstConnection && !launch.requiresReconciliation(storedTarget())) {
+		if (!review.firstConnection() && !launch.requiresReconciliation(storedTarget())) {
 			LOGGER.info("Launch apply reused the active projection");
 			return;
 		}
@@ -489,7 +377,7 @@ public class ModpackUpdater implements AutoCloseable {
 			LOGGER.info("Launch apply needs no restart at preload; hot-loading the fresh pack in this boot");
 			return;
 		}
-		new ReLauncher(RestartDecision.launchRestartType(firstConnection, applyResult.restartReasons()), changelogs).restart(true);
+		new ReLauncher(RestartDecision.launchRestartType(review.firstConnection(), applyResult.restartReasons()), changelogs).restart(true);
 	}
 
 	// Load the already-installed modpack without contacting the server or
@@ -542,7 +430,7 @@ public class ModpackUpdater implements AutoCloseable {
 		else updateLoopDetector.clear();
 	}
 
-	/** Post-apply restart for a running game: the updater is the screen adapter, so this decision stays here. */
+	/** Post-apply restart for a running game: the engine owns the restart decision, the flows only supply their kind. */
 	private void restartAfterApply(ApplyResult applyResult) {
 		if (!preload && (!changelogs.changedFiles().isEmpty() || !changelogs.removedFiles().isEmpty())) SessionUpdateState.markAppliedContentNotLoaded();
 		if (!applyResult.requiresRestart()) {
@@ -566,66 +454,6 @@ public class ModpackUpdater implements AutoCloseable {
 		new ReLauncher(RestartDecision.applyRestartType(fullDownload, applyResult.restartReasons()), changelogs).restart(false);
 	}
 
-	/** Returns the updater to the confirmation seam once drained work observes the player's cancellation. */
-	private void confirmCancellationHandled() {
-		if (confirmationState.get() == ConfirmationState.WAITING || confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING)) {
-			clearPlayerCancel();
-			return;
-		}
-		close();
-	}
-
-	/** Returns {@link UpdateOutcome#REVIEW_OPENED} only when the review preview was accepted for display; every other outcome still owns the screen. */
-	private UpdateOutcome startUpdate(boolean showWaitingScreen) {
-		try {
-			requireLiveConnection();
-			if (showWaitingScreen) ScreenManager.waiting(this::cancelFromPlayer);
-			UpdateOutcome outcome = switch (requestUpdatePreview()) {
-				case PREVIEW_SHOWN -> UpdateOutcome.REVIEW_OPENED;
-				case APPLIED -> {
-					LOGGER.info("Applied an already-authorized no-op update without opening a review screen");
-					yield UpdateOutcome.APPLIED;
-				}
-				case DEFERRED -> {
-					LOGGER.info("Already-authorized no-op update was deferred to the detached helper");
-					yield UpdateOutcome.INCOMPLETE;
-				}
-				case FAILED -> {
-					if (isCancelledByPlayer()) {
-						confirmCancellationHandled();
-						yield UpdateOutcome.INCOMPLETE;
-					}
-					LOGGER.error("Already-authorized no-op update failed; the installed generation was not advanced");
-					yield UpdateOutcome.INCOMPLETE;
-				}
-				case PREVIEW_NOT_SHOWN -> {
-					if (isCancelledByPlayer()) {
-						confirmCancellationHandled();
-						yield UpdateOutcome.INCOMPLETE;
-					}
-					LOGGER.warn("Update preview could not be shown; leaving the installed generation unchanged");
-					yield UpdateOutcome.INCOMPLETE;
-				}
-			};
-			if (outcome == UpdateOutcome.REVIEW_OPENED) return outcome; // the updater stays open; the review flow owns it now
-			close();
-			return outcome;
-		} catch (Exception e) {
-			if (objectAcquisition.downloadCancelled()) {
-				close();
-				return UpdateOutcome.INCOMPLETE;
-			}
-			if (abortedByPlayer(e) || confirmationState.get() == ConfirmationState.WAITING) {
-				if (abortedByPlayer(e)) LOGGER.warn("Modpack update preparation was aborted by the player", e);
-				confirmCancellationHandled();
-				return UpdateOutcome.INCOMPLETE;
-			}
-			close();
-			showUpdateFailure(e);
-			return UpdateOutcome.INCOMPLETE;
-		}
-	}
-
 	/**
 	 * Presents the switch plan for an installed modpack that has no active projection, instead of replaying the
 	 * first-install flow. Returns true only when the preview was accepted for display.
@@ -633,9 +461,9 @@ public class ModpackUpdater implements AutoCloseable {
 	private UpdateOutcome startInstalledSwitch(boolean showWaitingScreen) {
 		try {
 			requireLiveConnection();
-			if (showWaitingScreen) ScreenManager.waiting(this::cancelFromPlayer);
+			if (showWaitingScreen) ScreenManager.waiting(review::cancelFromPlayer);
 			UpdatePreview preview = previewInstalledSwitch();
-			if (isCancelledByPlayer()) {
+			if (review.isCancelledByPlayer()) {
 				close();
 				return UpdateOutcome.INCOMPLETE;
 			}
@@ -645,41 +473,32 @@ public class ModpackUpdater implements AutoCloseable {
 					if (attempt.get() != switchAttempt) return;
 					applyInstalledSwitch();
 				} catch (Exception e) {
-					if (!abortedByPlayer(e)) showUpdateFailure(e);
+					if (!review.abortedByPlayer(e)) showUpdateFailure(e);
 				}
 			};
-			if (!ScreenManager.preview(preview, getModpackName(), this, (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), this::close)) {
+			if (!ScreenManager.preview(previewPayload(preview, (Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), this::close))) {
 				LOGGER.warn("Installed modpack switch preview could not be shown; leaving the client without an active modpack");
 				close();
 				return UpdateOutcome.INCOMPLETE;
 			}
 			return UpdateOutcome.REVIEW_OPENED;
 		} catch (Exception e) {
-			if (!abortedByPlayer(e)) showUpdateFailure(e);
+			if (!review.abortedByPlayer(e)) showUpdateFailure(e);
 			close();
 			return UpdateOutcome.INCOMPLETE;
 		}
 	}
 
-	private void startUpdateAfterPreview(UpdateSession reviewed) {
-		long start = System.currentTimeMillis();
-		if (reviewed == null || attempt.get() != reviewed || !reviewed.isApproved()) {
-			LOGGER.warn("Update approval callback arrived without an approved prepared plan");
-			close();
-			return;
-		}
-		applyApprovedPlan(reviewed, start);
-	}
-
-	private ApplyStatus applyApprovedPlan(UpdateSession reviewed, long start) {
-		if (isCancelledByPlayer()) {
+	/** Runs the reviewed plan's commit through the shared apply harness; the review drives it, the engine owns the tails. */
+	ModpackUpdater.ApplyStatus applyApprovedPlan(UpdateSession reviewed, long start) {
+		if (review.isCancelledByPlayer()) {
 			close();
 			return ApplyStatus.FAILED;
 		}
 		return runReviewedFlow(new ApplyFlow("Update", () -> {
-			if (!isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
+			if (!review.isCancelledByPlayer()) new ReLauncher(UpdateType.UPDATE, changelogs).restart(preload);
 		}, e -> {
-			if (abortedByPlayer(e)) LOGGER.warn("Modpack update apply was aborted by the player", e);
+			if (review.abortedByPlayer(e)) LOGGER.warn("Modpack update apply was aborted by the player", e);
 			else showUpdateFailure(e);
 		}, this::close), () -> {
 			ApplyResult applyResult = reviewed.commit();
@@ -688,7 +507,7 @@ public class ModpackUpdater implements AutoCloseable {
 		});
 	}
 
-	private void requireLiveConnection() throws IOException {
+	void requireLiveConnection() throws IOException {
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IOException("Modpack connection is unavailable");
 		objectAcquisition.requireTransferSession();
 	}
@@ -716,97 +535,32 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** The failure tail every flow shares: the player-facing update failure on the current screen. */
-	private static void showUpdateFailure(Exception e) {
+	static void showUpdateFailure(Exception e) {
 		ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
 	}
 
-	private PreviewRequestResult requestUpdatePreview() throws Exception {
-		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
-		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
-		sourceCatalogue.startSourceFetch();
-		requireLiveConnection();
-		UpdateSession session = beginUpdateAttempt();
-		session.prepare(true, false);
-		if (isCancelledByPlayer()) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
-		ClientUpdatePlanBuilder.PreparedPlan prepared = session.prepared();
-		if (firstConnection && confirmationState.get() == ConfirmationState.PREVIEWING) {
-			session.approve();
-			if (!confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED)) return PreviewRequestResult.PREVIEW_NOT_SHOWN;
-			return previewResult(applyApprovedPlan(session, System.currentTimeMillis()));
-		}
-		if (!session.requiresPlayerReview()) {
-			session.approve();
-			return previewResult(applyApprovedPlan(session, System.currentTimeMillis()));
-		}
-		Runnable continueAction = () -> {
-			if (attempt.get() != session) return;
-			try {
-				session.approve(); // The confirm click is the review's consent; a second click dies here.
-			} catch (IllegalStateException e) {
-				return;
-			}
-			if (!confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.STARTED) && firstConnection) return;
-			startUpdateAfterPreview(session);
-		};
-		Runnable cancelAction = firstConnection
-				? () -> {
-					if (attempt.get() == session) session.cancel();
-					confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.WAITING);
-				}
-				: () -> {
-					if (attempt.get() == session) session.cancel();
-					detachOnDeclinedUpdate();
-					close();
-				};
-		return requestPreparedPlanPreview(session, prepared, continueAction, cancelAction)
-				? PreviewRequestResult.PREVIEW_SHOWN
-				: PreviewRequestResult.PREVIEW_NOT_SHOWN;
+	/** Wraps a reviewable plan with this engine's review backing; the unverified-jar gate is precomputed, mode-gated. */
+	PreviewPayload previewPayload(UpdatePreview preview, Runnable continueAction, Runnable cancelAction) {
+		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && review.planWritesUnverifiedJar(preview.plan());
+		return new PreviewPayload(preview, getModpackName(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(), review.reviewActions(), continueAction, cancelAction);
 	}
 
-	private boolean requestPreparedPlanPreview(UpdateSession session, ClientUpdatePlanBuilder.PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
-		UpdatePreview preview = session.preview(UpdateSession.InstalledTokenRule.ACTIVE_BOOKMARK)
-				.withReferences(sourceCatalogue.resolveMainPageReferences(prepared));
-		return ScreenManager.preview(preview, getModpackName(), this,
-				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction);
+	boolean downloadCancelled() {
+		return objectAcquisition.downloadCancelled();
 	}
 
-	/**
-	 * Declining a reviewed advance of the active generation is local sovereignty: the pack stops syncing until the
-	 * player attaches again. Declines without an active generation, or of the already-active generation, change nothing.
-	 */
-	private void detachOnDeclinedUpdate() {
-		try {
-			new ClientGenerationStore(storage).detachOnDeclinedAdvance(selectedTarget.manifest().modpackId(), selectedTarget.document().contentToken());
-		} catch (IOException e) {
-			LOGGER.warn("The declined update could not be recorded as detachment", e);
-		}
+	boolean isCurrentAttempt(UpdateAttempt candidate) {
+		return attempt.get() == candidate;
 	}
 
-	private PreviewRequestResult previewResult(ApplyStatus status) {
-		return switch (status) {
-			case APPLIED -> PreviewRequestResult.APPLIED;
-			case DEFERRED -> PreviewRequestResult.DEFERRED;
-			case FAILED -> PreviewRequestResult.FAILED;
-		};
-	}
-
-	private boolean beginConfirmation() {
-		return confirmationState.compareAndSet(ConfirmationState.INACTIVE, ConfirmationState.WAITING);
-	}
-
-	private boolean clearPlayerCancel() {
-		return playerCancelled.compareAndSet(true, false);
-	}
-
-	private void interruptInFlight() {
+	void interruptInFlight() {
 		sourceCatalogue.cancelIfRunning();
 		objectAcquisition.interrupt();
 	}
 
 	@Override
 	public void close() {
-		confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED);
-		confirmationState.compareAndSet(ConfirmationState.PREVIEWING, ConfirmationState.CANCELLED);
+		review.confirmationClosed();
 		interruptInFlight();
 		UpdateAttempt current = attempt.getAndSet(null);
 		if (current != null) current.cancel();
@@ -817,16 +571,8 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	public enum ConfirmationState {
-		INACTIVE, WAITING, PREVIEWING, STARTED, CANCELLED
-	}
-
-	private enum ApplyStatus {
+	enum ApplyStatus {
 		APPLIED, DEFERRED, FAILED
-	}
-
-	private enum PreviewRequestResult {
-		PREVIEW_SHOWN, PREVIEW_NOT_SHOWN, APPLIED, DEFERRED, FAILED
 	}
 
 	/** One reviewed flow's own tail decisions, stated by the flow instead of absorbed into the harness. */
