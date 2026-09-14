@@ -39,13 +39,13 @@ public final class StableSourceSnapshotter {
 		Path staged = null;
 		try {
 			BasicFileAttributes before = attributes(source.sourcePath());
-			FileCache.FileFingerprint beforeFingerprint = FileCache.fingerprint(source.sourcePath(), before);
+			FileCache.FileFingerprint beforeFingerprint = FileCache.fingerprint(source.sourcePath());
 			Exclusion exclusion = expectedPathExclusion(source, before, autoExcludeUnnecessary);
 			if (exclusion != null) return new Snapshot(null, exclusion, null);
 
-			String sha1 = fileCache != null ? fileCache.getOrComputeHashWithAttributes(source.sourcePath(), before) : HashUtils.getHash(source.sourcePath());
+			String sha1 = fileCache != null ? fileCache.getOrComputeHash(source.sourcePath()) : HashUtils.getHash(source.sourcePath());
 			if (sha1 == null) throw new IOException("SHA-1 calculation returned null");
-			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
+			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath())))
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 
 			FileInspection.Mod mod = modFileCache == null ? null : modFileCache.getModOrNull(source.sourcePath(), fileCache);
@@ -55,7 +55,7 @@ public final class StableSourceSnapshotter {
 			String type = fileType(source.sourcePath(), source.logicalPath(), mod);
 			String murmur = null;
 			if (ModpackContentType.isSourceFetchable(type)) murmur = fileCache != null ? fileCache.getOrComputeMurmur(source.sourcePath()) : HashUtils.getCurseforgeMurmurHash(source.sourcePath());
-			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
+			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath())))
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 			GroupManifest.GroupFile file = new GroupManifest.GroupFile(before.size(), type, false, sha1, murmur);
 			if (!materializeMissing) return new Snapshot(file, null, null);
@@ -65,7 +65,7 @@ public final class StableSourceSnapshotter {
 			staged = Files.createTempFile(stagingDirectory, "snapshot-", stagingSuffix(source.sourcePath()));
 			String copiedSha1 = copyOperation.copy(source.sourcePath(), staged);
 			FileTrees.forceFile(staged);
-			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath(), attributes(source.sourcePath()))))
+			if (!beforeFingerprint.equals(FileCache.fingerprint(source.sourcePath())))
 				throw new CandidateBuildException("Source changed while being snapshotted: " + source.sourcePath());
 			long size = Files.size(staged);
 			if (size != before.size()) throw new IOException("Staged snapshot size does not match stable source size: " + source.sourcePath());
