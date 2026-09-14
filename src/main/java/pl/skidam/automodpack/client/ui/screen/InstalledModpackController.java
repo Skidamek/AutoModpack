@@ -43,6 +43,7 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
@@ -233,7 +234,7 @@ final class InstalledModpackController {
 			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(record), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(),
 					ChangeSet.catalogue(record.manifest(), ChangeSet.Kind.REMOVED));
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(record.manifest());
-			boolean shown = ScreenManager.preview(preview, pack.name(), null,
+			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), false, null, List.of(), null,
 					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> {
 						try {
 							new ClientGenerationStore(storage).forgetModpack(pack.modpackId());
@@ -242,7 +243,7 @@ final class InstalledModpackController {
 							releaseOnClient(completed);
 							failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
 						}
-					}), completed);
+					}), completed));
 			if (!shown) completed.run();
 		} catch (Exception e) {
 			completed.run();
@@ -354,9 +355,8 @@ final class InstalledModpackController {
 		try {
 			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(pack.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(pack.record().manifest());
-			boolean shown = ScreenManager.preview(preview, pack.name(), null,
-					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> forget(pack, released, removed)),
-					released);
+			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), false, null, List.of(), null,
+					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> forget(pack, released, removed)), released));
 			if (!shown) released.run();
 		} catch (Exception e) {
 			released.run();
@@ -413,9 +413,8 @@ final class InstalledModpackController {
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
 				UpdatePreview preview = deactivation ? removalUpdater.previewDeactivation() : removalUpdater.previewRemoval();
-				boolean shown = ScreenManager.preview(preview, pack.name(), removalUpdater,
-						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeActiveRemoval(removalUpdater, deactivation, released, removed)),
-						released);
+				boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), false, null, List.of(), removalUpdater.reviewActions(),
+						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeActiveRemoval(removalUpdater, deactivation, released, removed)), released));
 				if (!shown) {
 					removalUpdater.close();
 					releaseOnClient(released);

@@ -10,8 +10,6 @@ import net.minecraft.network.chat.MutableComponent;
 
 import pl.skidam.automodpack.client.ui.UiFormat;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 
@@ -112,10 +110,6 @@ final class PackConfirmCopy {
 			if (item.file != null && item.file.toLowerCase(Locale.ROOT).endsWith(".jar")) count++;
 		}
 		return count;
-	}
-
-	static ChangeSet catalogue(ModpackUpdater updater) {
-		return updater.reviewCatalogue();
 	}
 
 	static Map<String, String> groupNames(GroupManifest manifest) {

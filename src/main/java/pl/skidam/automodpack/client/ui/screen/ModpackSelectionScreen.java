@@ -25,18 +25,20 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.DropdownWidget;
 import pl.skidam.automodpack.client.ui.widget.GroupSelectionList;
 import pl.skidam.automodpack_core.change.ChangeSet;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.SourceAvailability;
 import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupResolution;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
+import pl.skidam.automodpack_core.screen.ReviewActions;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 
@@ -60,7 +62,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final SelectionIntent initialSelection;
 	private final Consumer<SelectionIntent> selectionAction;
 	private final Runnable cancelAction;
-	private final ModpackUpdater pendingUpdater;
+	private final ReviewActions actions;
 	private final boolean managerEntry;
 	private final boolean activeModpack;
 	private final PackDocument localRecord;
@@ -81,9 +83,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private DropdownWidget platformDropdown;
 	private int listBottom;
 
-	public ModpackSelectionScreen(Screen parent, ModpackUpdater updater, Consumer<SelectionIntent> selectionAction) {
-		this(parent, updater.getSelectedTarget().manifest(),
-				new Entry(updater.getSelectedTarget().expectedPriorIntent(), updater.getSelectedTarget().selection().intent(), selectionAction, () -> {}, updater, false, null));
+	public ModpackSelectionScreen(Screen parent, SelectedModpackTarget target, ReviewActions actions, Consumer<SelectionIntent> selectionAction) {
+		this(parent, target.manifest(),
+				new Entry(target.expectedPriorIntent(), target.selection().intent(), selectionAction, () -> {}, actions, false, null));
 	}
 
 	public static ModpackSelectionScreen repair(Screen parent, GroupManifest manifest, SelectionIntent savedSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction) {
@@ -96,7 +98,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	/** What an entry point varies; the screen settles everything else itself. */
 	private record Entry(SelectionIntent expectedSelection, SelectionIntent initialSelection, Consumer<SelectionIntent> selectionAction, Runnable cancelAction,
-			ModpackUpdater pendingUpdater, boolean managerEntry, PackDocument localRecord) {}
+			ReviewActions actions, boolean managerEntry, PackDocument localRecord) {}
 
 	private ModpackSelectionScreen(Screen parent, GroupManifest manifest, Entry entry) {
 		super(VersionedText.translatable("automodpack.selection.title"));
@@ -111,7 +113,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				: entry.expectedSelection();
 		this.selectionAction = entry.selectionAction();
 		this.cancelAction = entry.cancelAction();
-		this.pendingUpdater = entry.pendingUpdater();
+		this.actions = entry.actions();
 		this.managerEntry = entry.managerEntry();
 		this.activeModpack = controller.activeRecord(modpackId) != null;
 		this.localRecord = entry.localRecord();
@@ -252,9 +254,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	@Override
 	public void tick() {
 		super.tick();
-		if (pendingUpdater == null) return;
-		ModpackUpdater.ConfirmationState state = pendingUpdater.getConfirmationState();
-		if (state == ModpackUpdater.ConfirmationState.CANCELLED) ScreenImpl.multiplayer();
+		if (actions == null) return;
+		if (actions.reviewCancelled().getAsBoolean()) ScreenImpl.multiplayer();
 	}
 
 	private boolean canToggle(String groupId, GroupManifest.Group group) {
@@ -622,10 +623,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
 		if (!resolutionError.isEmpty()) {
 			drawWrappedStatus(matrices, VersionedText.literal(resolutionError).withStyle(ChatFormatting.RED));
-		} else if (pendingUpdater == null || pendingUpdater.getSourceAvailability().totalFiles() == 0) {
+		} else if (actions == null || actions.sourceAvailability().get().totalFiles() == 0) {
 			if (!groups.isEmpty()) drawWrappedStatus(matrices, VersionedText.translatable("automodpack.selection.categoryExplanation").withStyle(ChatFormatting.GRAY));
 		} else {
-			ModpackUpdater.SourceAvailability availability = pendingUpdater.getSourceAvailability();
+			SourceAvailability availability = actions.sourceAvailability().get();
 			String sourceStatus = VersionedText.translatable(availability.cancelled()
 					? "automodpack.selection.sourcesCancelled"
 					: !availability.complete()

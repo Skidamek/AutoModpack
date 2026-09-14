@@ -9,10 +9,10 @@ import pl.skidam.automodpack_core.modpack.generation.PackDocument;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
-import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.client.Changelogs;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.SessionUpdateState;
+import pl.skidam.automodpack_core.screen.PreviewPayload;
+import pl.skidam.automodpack_core.screen.ReviewPayload;
 import pl.skidam.automodpack_core.screen.ScreenService;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -68,13 +68,13 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void welcome(ModpackUpdater modpackUpdater) {
-		executeOnClient(() -> Screens.welcome(modpackUpdater));
+	public void welcome(ReviewPayload payload) {
+		executeOnClient(() -> Screens.welcome(payload));
 	}
 
 	@Override
-	public boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
-		executeOnClient(() -> Screens.preview(preview, modpackName, updater, continueAction, cancelAction));
+	public boolean preview(PreviewPayload payload) {
+		executeOnClient(() -> Screens.preview(payload));
 		return true;
 	}
 
@@ -220,17 +220,17 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new RestartScreen(updateType, changelogs));
 		}
 
-		public static void welcome(ModpackUpdater modpackUpdater) {
-			Screens.setScreen(new PackConfirmScreen(modpackUpdater));
+		public static void welcome(ReviewPayload payload) {
+			Screens.setScreen(new PackConfirmScreen(payload));
 		}
 
-		public static void preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
+		public static void preview(PreviewPayload payload) {
 			Screen parent = returnTarget(flowParent());
-			if (updater != null && (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && updater.planWritesUnverifiedJar(preview.plan())) {
-				Screens.setScreen(new PackConfirmScreen(parent, updater, preview, continueAction, cancelAction));
+			if (payload.writesUnverifiedJar()) {
+				Screens.setScreen(new PackConfirmScreen(parent, payload));
 				return;
 			}
-			Screens.setScreen(new UpdatePreviewScreen(parent, preview, modpackName, updater, continueAction, cancelAction));
+			Screens.setScreen(new UpdatePreviewScreen(parent, payload));
 		}
 
 		private static boolean isTransient(Screen screen) {

@@ -4,9 +4,7 @@ import java.util.Optional;
 
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.DownloadManager;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.UpdateType;
-import pl.skidam.automodpack_core.update.UpdatePreview;
 
 public interface ScreenService {
 
@@ -18,9 +16,9 @@ public interface ScreenService {
 
 	default void completeWithoutRestart() {}
 
-	default void welcome(ModpackUpdater modpackUpdater) {}
+	default void welcome(ReviewPayload payload) {}
 
-	default boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
+	default boolean preview(PreviewPayload payload) {
 		return false;
 	}
 

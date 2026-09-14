@@ -9,10 +9,8 @@ import java.util.concurrent.Semaphore;
 
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.DownloadManager;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
-import pl.skidam.automodpack_core.update.UpdatePreview;
 
 public final class ScreenManager {
 
@@ -47,12 +45,12 @@ public final class ScreenManager {
 		instance.completeWithoutRestart();
 	}
 
-	public static void welcome(ModpackUpdater modpackUpdater) {
-		instance.welcome(modpackUpdater);
+	public static void welcome(ReviewPayload payload) {
+		instance.welcome(payload);
 	}
 
-	public static boolean preview(UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction, Runnable cancelAction) {
-		return instance.preview(preview, modpackName, updater, continueAction, cancelAction);
+	public static boolean preview(PreviewPayload payload) {
+		return instance.preview(payload);
 	}
 
 	public static void history(HistoryViewRequest request) {

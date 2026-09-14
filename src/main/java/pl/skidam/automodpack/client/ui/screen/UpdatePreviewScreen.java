@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client.ui.screen;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import net.minecraft.ChatFormatting;
@@ -18,12 +19,14 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.client.Changelogs;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.HistoryViewRequest;
+import pl.skidam.automodpack_core.screen.PreviewPayload;
+import pl.skidam.automodpack_core.screen.ReviewActions;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -35,23 +38,24 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final UpdatePreview preview;
 	private final String modpackName;
 	private final UpdatePreview.Mode mode;
-	private final ModpackUpdater updater;
+	private final ReviewActions actions;
+	private final SelectedModpackTarget target;
 	private final Runnable continueAction;
 	private final Runnable cancelAction;
 	private final ChangeSet changes;
 	private boolean finished;
 	private int titleTop;
 
-	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, ModpackUpdater updater, Runnable continueAction,
-			Runnable cancelAction) {
-		super(VersionedText.translatable(titleKey(preview.mode())));
+	public UpdatePreviewScreen(Screen parent, PreviewPayload payload) {
+		super(VersionedText.translatable(titleKey(payload.preview().mode())));
 		this.parent = parent;
-		this.preview = preview;
-		this.modpackName = modpackName == null ? "" : modpackName;
+		this.preview = payload.preview();
+		this.modpackName = payload.modpackName() == null ? "" : payload.modpackName();
 		this.mode = preview.mode();
-		this.updater = updater;
-		this.continueAction = continueAction;
-		this.cancelAction = cancelAction;
+		this.actions = payload.actions();
+		this.target = payload.target();
+		this.continueAction = Objects.requireNonNull(payload.continueAction(), "continueAction");
+		this.cancelAction = Objects.requireNonNull(payload.cancelAction(), "cancelAction");
 		this.changes = preview.changeSet();
 	}
 
@@ -81,9 +85,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private boolean canCustomize() {
-		if (mode != UpdatePreview.Mode.UPDATE || updater == null) return false;
+		if (mode != UpdatePreview.Mode.UPDATE || actions == null) return false;
 		try {
-			return PackConfirmCopy.canCustomize(updater.getSelectedTarget().manifest());
+			return PackConfirmCopy.canCustomize(target.manifest());
 		} catch (RuntimeException ignored) {
 			return false;
 		}
@@ -124,7 +128,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private void continueUpdate() {
 		if (finished) return;
 		finished = true;
-		ScreenManager.waiting(updater == null ? null : updater::cancelFromPlayer);
+		ScreenManager.waiting(actions == null ? null : actions.cancelFromPlayer());
 		continueAction.run();
 	}
 
@@ -135,15 +139,15 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	}
 
 	private void customize() {
-		if (finished || updater == null) return;
+		if (finished || actions == null) return;
 		Consumer<SelectionIntent> action = intent -> {
 			try {
-				updater.reselectAndPreview(intent);
+				actions.reselectAndPreview().accept(intent);
 			} catch (RuntimeException e) {
 				ScreenManager.failure(FailureRequest.of(e, "automodpack.error.update", FailureCategory.UPDATE, FailureDestination.MULTIPLAYER, null));
 			}
 		};
-		ScreenImpl.setScreen(new ModpackSelectionScreen(this, updater, action));
+		ScreenImpl.setScreen(new ModpackSelectionScreen(this, target, actions, action));
 	}
 
 	private void openFiles() {
@@ -204,8 +208,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	@Override
 	public void tick() {
 		super.tick();
-		if (updater == null) return;
-		if (finished && updater.getConfirmationState() == ModpackUpdater.ConfirmationState.WAITING && !updater.isCancelledByPlayer()) finished = false;
+		if (actions == null) return;
+		if (finished && actions.reviewActive().getAsBoolean() && !actions.cancelledByPlayer().getAsBoolean()) finished = false;
 	}
 
 	@Override
