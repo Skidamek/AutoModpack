@@ -37,6 +37,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final Screen parent;
 	private final UpdatePreview preview;
 	private final String modpackName;
+	private final String origin;
 	private final UpdatePreview.Mode mode;
 	private final ReviewActions actions;
 	private final SelectedModpackTarget target;
@@ -51,6 +52,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.parent = parent;
 		this.preview = payload.preview();
 		this.modpackName = payload.modpackName() == null ? "" : payload.modpackName();
+		this.origin = payload.origin() == null ? "" : payload.origin();
 		this.mode = preview.mode();
 		this.actions = payload.actions();
 		this.target = payload.target();
@@ -65,7 +67,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		List<ActionRow> rows = buildRows();
 		ActionRow[] rowArray = rows.toArray(ActionRow[]::new);
 		List<MutableComponent> body = buildBodyLines();
-		DialogLayout layout = layoutDialogWithActions(28, 2 * LINE_HEIGHT, body.size() * LINE_HEIGHT, 0, rowArray);
+		// The origin takes the third header line when it is known, so the pack name always names its server.
+		int headerLines = origin.isBlank() ? 2 : 3;
+		DialogLayout layout = layoutDialogWithActions(28, headerLines * LINE_HEIGHT, body.size() * LINE_HEIGHT, 0, rowArray);
 		this.titleTop = layout.titleTop();
 		List<AbstractWidget> buttons = this.addActionArea(ActionAreaLayout.FOOTER_RAIL, this.height - 28, rowArray);
 		setTooltip(buttons.get(buttons.size() - 2), ChangeSummary.diffLegend());
@@ -167,6 +171,9 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, panelWidth(PANEL_WIDTH))).withStyle(ChatFormatting.BOLD), this.width / 2, titleTop,
 				TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable(reviewKey(mode)).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + LINE_HEIGHT, TextColors.WHITE);
+		if (!origin.isBlank())
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.server", origin).withStyle(ChatFormatting.GRAY), this.width / 2, titleTop + 2 * LINE_HEIGHT,
+					TextColors.WHITE);
 	}
 
 	static String titleKey(UpdatePreview.Mode mode) {

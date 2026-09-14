@@ -58,6 +58,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private final String modpackName;
 	private final Map<String, GroupManifest.Group> groups;
 	private final InstalledModpackController controller;
+	private final String origin;
 	private final SelectionIntent expectedSelection;
 	private final SelectionIntent initialSelection;
 	private final Consumer<SelectionIntent> selectionAction;
@@ -108,6 +109,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.modpackName = manifest.modpackName();
 		this.groups = manifest.groups();
 		this.controller = new InstalledModpackController();
+		this.origin = controller.originFor(modpackId);
 		this.expectedSelection = entry.expectedSelection() == null && entry.initialSelection() == null
 				? controller.savedSelection(modpackId)
 				: entry.expectedSelection();
@@ -615,13 +617,19 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				? VersionedText.translatable("automodpack.packManager.switchDescription")
 				: VersionedText.translatable("automodpack.selection.description");
 		// The header stack shares the rail with the platform dropdown (y 24..44), so the description
-		// wraps inside the space left of it and the summary waits until that zone ends.
+		// wraps inside the space left of it and the summary waits until that zone ends. The origin
+		// takes the first rail line when it is known, so the pack name always sits next to its server.
 		int railLeft = listLeft();
 		int railWidth = listWidth();
+		int railY = 22;
+		if (!origin.isBlank()) {
+			drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.packDetails.server", origin).withStyle(ChatFormatting.GRAY), railLeft, railY, TextColors.WHITE);
+			railY += 11;
+		}
 		List<String> descriptionLines = wrapToWidth(this.font, description.getString(), railWidth - platformDropdown.getWidth() - 8);
-		if (descriptionLines.size() > 2) descriptionLines = descriptionLines.subList(0, 2);
+		if (descriptionLines.size() > 44 - railY) descriptionLines = descriptionLines.subList(0, (44 - railY) / 11);
 		for (int index = 0; index < descriptionLines.size(); index++)
-			drawTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), railLeft, 22 + index * 11, TextColors.WHITE);
+			drawTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.GRAY), railLeft, railY + index * 11, TextColors.WHITE);
 		drawTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.platformSummary", platformDisplay(effectivePlatform()), resolution.selectedGroups().size())
 				.withStyle(platformOverride == null ? ChatFormatting.GRAY : ChatFormatting.YELLOW), railLeft, 44, TextColors.WHITE);
 		// Status lines are load-bearing sentences: they wrap, they never hard-truncate mid-sentence.
