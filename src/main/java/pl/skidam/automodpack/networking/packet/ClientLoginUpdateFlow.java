@@ -79,7 +79,7 @@ final class ClientLoginUpdateFlow {
 							repairCancelled.set(true);
 							downloadClient.close();
 						});
-						DownloadClient.NET_EXECUTOR.execute(() -> {
+						ModpackUpdater.executor().execute(() -> {
 							if (repairCancelled.get()) return;
 							try {
 								SelectedModpackTarget repaired = SelectedModpackTarget.prepare(manifestResult.content(), savedSelection, intent, ClientPlatform.effective(intent));
@@ -105,7 +105,7 @@ final class ClientLoginUpdateFlow {
 			}
 
 			return continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, false, false);
-		}, DownloadClient.NET_EXECUTOR).exceptionally(e -> {
+		}, ModpackUpdater.executor()).exceptionally(e -> {
 			disconnectImmediately(handler);
 			Throwable failure = Throwables.unwrap(e);
 			if (Throwables.findCause(failure, CertificateTrustCancelledException.class) == null) {
@@ -205,11 +205,11 @@ final class ClientLoginUpdateFlow {
 		CompletableFuture<LoginUpdateResponse> answered = new CompletableFuture<>();
 		String modpackName = selectedTarget.manifest().modpackName();
 		if (modpackName.isBlank()) modpackName = selectedTarget.flatTarget().modpackId;
-		Runnable continueJoin = () -> DownloadClient.NET_EXECUTOR.execute(() -> {
+		Runnable continueJoin = () -> ModpackUpdater.executor().execute(() -> {
 			updater.close();
 			answered.complete(alreadyDisconnected ? LoginUpdateResponse.UPDATE_REQUIRED : LoginUpdateResponse.CONTINUE);
 		});
-		Runnable syncNow = () -> DownloadClient.NET_EXECUTOR.execute(() -> {
+		Runnable syncNow = () -> ModpackUpdater.executor().execute(() -> {
 			LOGGER.info("Attaching the detached modpack {} to the server head", selectedTarget.manifest().modpackId());
 			if (!alreadyDisconnected) {
 				ScreenManager.waiting(updater::cancelFromPlayer);
@@ -249,7 +249,7 @@ final class ClientLoginUpdateFlow {
 		List<String> approved = new ArrayList<>(stored.approvedOrigins());
 		if (approved.isEmpty() && stored.origin != null) approved.add(AddressHelpers.formatAddress(stored.origin));
 		ScreenManager.originChange(modpackName, String.join(", ", approved), AddressHelpers.formatAddress(connectionInfo.origin),
-				() -> DownloadClient.NET_EXECUTOR.execute(() -> continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, true, true)),
+				() -> ModpackUpdater.executor().execute(() -> continueReconcile(handler, connectionInfo, secret, storage, downloadClient, selectedTarget, true, true)),
 				() -> {
 					downloadClient.close();
 					ScreenImpl.multiplayer();

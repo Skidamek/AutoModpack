@@ -32,7 +32,7 @@ import pl.skidam.automodpack.client.ui.widget.DropdownWidget;
 import pl.skidam.automodpack_core.change.ChangeBrowserProjection;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.change.PlatformReferences;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -305,7 +305,7 @@ public class ChangeBrowserScreen extends VersionedScreen {
 			referencesResolved = true;
 			return;
 		}
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ScreenManager.background(() -> {
 			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, ClientStorage.open(GameDirectory.current()).platformCacheDirectory());
 			this.minecraft.execute(() -> {
 				referencesResolved = true;

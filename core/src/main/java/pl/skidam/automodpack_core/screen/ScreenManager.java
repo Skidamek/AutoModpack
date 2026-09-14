@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import java.awt.GraphicsEnvironment;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 
 import pl.skidam.automodpack_core.client.Changelogs;
@@ -85,6 +86,11 @@ public final class ScreenManager {
 	/** Runs a task on the client thread; headless adapters run it inline. */
 	public static void clientThread(Runnable task) {
 		instance.clientThread(task);
+	}
+
+	/** Runs a task off the player thread and answers with its handle; the headless adapter runs it inline. */
+	public static Future<?> background(Runnable task) {
+		return instance.background(task);
 	}
 
 	public static void waiting(Runnable onCancel) {

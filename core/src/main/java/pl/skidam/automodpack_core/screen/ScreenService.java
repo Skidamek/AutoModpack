@@ -1,6 +1,8 @@
 package pl.skidam.automodpack_core.screen;
 
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.client.DownloadManager;
@@ -53,6 +55,16 @@ public interface ScreenService {
 	/** Runs a task on the client thread; headless adapters run it inline. */
 	default void clientThread(Runnable task) {
 		task.run();
+	}
+
+	/**
+	 * Runs a task off the player thread and answers with its handle, so storage and network work never block the client
+	 * thread and screens can cancel abandoned work. The headless adapter runs the task inline, keeping core tests
+	 * deterministic.
+	 */
+	default Future<?> background(Runnable task) {
+		task.run();
+		return CompletableFuture.completedFuture(null);
 	}
 
 	/** Shows the preparing screen; {@code onCancel} runs when the player backs out with Esc. */

@@ -24,8 +24,8 @@ import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.change.PlatformReferences;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.HistoryViewRequest;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.storage.GameDirectory;
 import pl.skidam.automodpack_core.update.ClientStorage;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
@@ -149,7 +149,7 @@ public final class ContentHistoryScreen extends VersionedScreen {
 
 	/** Resolves the cached Modrinth/CurseForge page references off the render thread, then opens the shared browser. */
 	private void openBrowserScreen(Component heading, Component description, List<MutableComponent> notes, ChangeSet changes, ChangeBrowserScreen.BrowserAction restoreAction) {
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ScreenManager.background(() -> {
 			ChangeSet referenced = PlatformReferences.withCachedReferences(changes, platformCacheDirectory());
 			this.minecraft.execute(() -> {
 				if (closed) return;

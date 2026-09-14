@@ -40,7 +40,6 @@ import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -236,7 +235,7 @@ final class InstalledModpackController {
 					ChangeSet.catalogue(record.manifest(), ChangeSet.Kind.REMOVED));
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(record.manifest());
 			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), false, null, List.of(), null,
-					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> {
+					(Runnable) () -> ScreenManager.background(() -> {
 						try {
 							new ClientGenerationStore(storage).forgetModpack(pack.modpackId());
 							releaseOnClient(() -> previewStaleRemoval(stale, index + 1, completed));
@@ -269,7 +268,7 @@ final class InstalledModpackController {
 			releaseOnClient(() -> completed.accept(false));
 			return;
 		}
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ScreenManager.background(() -> {
 			ModpackUpdater updater = null;
 			try {
 				SelectedModpackTarget target;
@@ -304,7 +303,7 @@ final class InstalledModpackController {
 
 	/** Declares local sovereignty for the active pack: a pure local statement that stops every sync until the player explicitly syncs again. */
 	void stopSyncing(Pack pack, Runnable completed) {
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ScreenManager.background(() -> {
 			try {
 				new ClientGenerationStore(storage).declareDetached(pack.modpackId());
 				releaseOnClient(completed);
@@ -320,7 +319,7 @@ final class InstalledModpackController {
 			releaseOnClient(() -> completed.accept(false));
 			return;
 		}
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ScreenManager.background(() -> {
 			try {
 				ClientOfflineRepair repair = new ClientOfflineRepair(storage, MODPACK_LOADER);
 				OfflineRepair.Prepared prepared = repair.inspect();
@@ -357,7 +356,7 @@ final class InstalledModpackController {
 			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(pack.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
 			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(pack.record().manifest());
 			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), false, null, List.of(), null,
-					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> forget(pack, released, removed)), released));
+					(Runnable) () -> ScreenManager.background(() -> forget(pack, released, removed)), released));
 			if (!shown) released.run();
 		} catch (Exception e) {
 			released.run();
@@ -366,7 +365,7 @@ final class InstalledModpackController {
 	}
 
 	void openHistory(Pack pack, Runnable released) {
-		DownloadClient.NET_EXECUTOR.execute(() -> {
+		ScreenManager.background(() -> {
 			try {
 				GenerationHistoryController.open(storage, pack.modpackId(), pack.name(), released);
 			} catch (Exception e) {

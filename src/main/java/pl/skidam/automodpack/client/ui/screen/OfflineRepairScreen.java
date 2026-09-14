@@ -21,7 +21,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.CheckboxWidget;
 import pl.skidam.automodpack.client.ui.widget.RowListWidget;
 import pl.skidam.automodpack_core.client.ClientOfflineRepair;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.screen.FailureCategory;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
@@ -146,7 +145,7 @@ public final class OfflineRepairScreen extends VersionedScreen {
 		rebuild();
 		Set<String> editable = Set.copyOf(selectedEditablePaths);
 		Set<String> unowned = keepUnownedMods ? Set.of() : Set.copyOf(prepared.unownedModPaths());
-		work = DownloadClient.NET_EXECUTOR.submit(() -> {
+		work = ScreenManager.background(() -> {
 			try {
 				OfflineRepair.Receipt result = repair.apply(prepared, editable, unowned);
 				this.minecraft.execute(() -> applied(result, updateAfterRepair));
