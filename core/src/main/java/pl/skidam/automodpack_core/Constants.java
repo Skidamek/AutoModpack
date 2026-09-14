@@ -11,8 +11,6 @@ import pl.skidam.automodpack_core.loader.GameCallService;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.loader.NullGameCall;
-import pl.skidam.automodpack_core.loader.NullLoaderManager;
-import pl.skidam.automodpack_core.loader.NullModpackLoader;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -27,8 +25,8 @@ public final class Constants {
 	public static String AM_VERSION;
 	public static String LOADER_VERSION;
 	public static String LOADER;
-	public static LoaderManagerService LOADER_MANAGER = new NullLoaderManager();
-	public static ModpackLoaderService MODPACK_LOADER = new NullModpackLoader();
+	public static LoaderManagerService LOADER_MANAGER;
+	public static ModpackLoaderService MODPACK_LOADER;
 	public static GameCallService GAME_CALL = new NullGameCall();
 	public static Path THIS_MOD_JAR;
 	public static ModpackExecutor modpackExecutor;

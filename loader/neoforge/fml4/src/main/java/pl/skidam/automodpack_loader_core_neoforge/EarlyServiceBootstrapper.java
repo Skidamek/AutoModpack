@@ -47,7 +47,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 		// early-service hosting below hosts only jars from that decision. Preload failures must crash
 		// the launch; swallowing them would boot without the pack.
 		ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
-		new Preload(new LoaderManager(), ModpackLoader::new);
+		new Preload(new LoaderManager(), new ModpackLoader());
 		progress.complete();
 
 		try {

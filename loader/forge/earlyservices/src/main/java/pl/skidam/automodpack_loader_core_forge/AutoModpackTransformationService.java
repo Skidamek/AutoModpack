@@ -57,7 +57,7 @@ public class AutoModpackTransformationService implements ITransformationService 
 		String launchTarget = firstNonNull(argValue(launchArgs, "--launchTarget"), argValue(processArgs, "--launchTarget"));
 		if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
 
-		new Preload(new LoaderManager(), ModpackLoader::new);
+		new Preload(new LoaderManager(), new ModpackLoader());
 		EarlyServiceLayer.bootstrap();
 		EarlyServiceLayer.forwardOnLoad(env, otherServices);
 	}

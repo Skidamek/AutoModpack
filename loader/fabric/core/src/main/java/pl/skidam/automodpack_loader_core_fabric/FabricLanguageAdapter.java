@@ -12,7 +12,8 @@ public class FabricLanguageAdapter implements LanguageAdapter {
 
 	public FabricLanguageAdapter() throws IllegalAccessException {
 		FabricLoaderMods.install();
-		new Preload(new LoaderManager(), ModpackLoader::new);
+		LoaderManager loaderManager = new LoaderManager();
+		new Preload(loaderManager, new ModpackLoader(loaderManager));
 	}
 
 	@Override
