@@ -41,10 +41,8 @@ public class Gui {
 		frame.setUndecorated(true);
 		frame.setLayout(null);
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		frame.setSize(400, 200);
 		frame.setResizable(false);
 		Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
-		frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
 		frame.getContentPane().setBackground(new ColorUIResource(22, 27, 34));
 
 		JLabel RestartText = new JLabel("Restart your game!");
@@ -55,14 +53,18 @@ public class Gui {
 
 		// The deferred-update guidance runs longer than one line; Swing wraps a label only through the HTML renderer.
 		JLabel CustomText = new JLabel("<html><div style='text-align:center;width:380px'>" + text + "</div></html>");
-		CustomText.setBounds(0, 44, 400, 112);
 		CustomText.setVerticalAlignment(JLabel.TOP);
 		CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 14));
 		CustomText.setForeground(Color.white);
 		CustomText.setHorizontalAlignment(JLabel.CENTER);
+		int textHeight = CustomText.getPreferredSize().height;
+		int height = Math.max(200, Math.min(44 + textHeight + 42, dim.height - 40));
+		frame.setSize(400, height);
+		frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
+		CustomText.setBounds(0, 44, 400, textHeight);
 
 		JButton OKButton = new JButton("OK");
-		OKButton.setBounds(170, 158, 60, 25);
+		OKButton.setBounds(170, height - 42, 60, 25);
 		OKButton.setBackground(new Color(0, 153, 51));
 		OKButton.setForeground(Color.white);
 		OKButton.setFont(new Font("Segoe UI", Font.BOLD, 14));
