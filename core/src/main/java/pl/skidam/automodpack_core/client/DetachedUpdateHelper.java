@@ -8,9 +8,11 @@ import static pl.skidam.automodpack_core.storage.StoragePaths.HELPER_LOG_FILE;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -41,6 +43,8 @@ public final class DetachedUpdateHelper {
 	private static final Duration HELPER_LEASE_WAIT = Duration.ofMinutes(3);
 	// A released lease is noticed within half a second, the helper's own initial backoff step.
 	private static final long LEASE_POLL_MILLIS = 500;
+	// The helper log accumulates whole runs; the tail covers the most recent one or two.
+	private static final int HELPER_LOG_TAIL_BYTES = 8192;
 
 	private DetachedUpdateHelper() {}
 
@@ -114,6 +118,35 @@ public final class DetachedUpdateHelper {
 			LOGGER.error("The detached update helper still holds the lease after {} minutes; continuing without it, its own log is at {}", HELPER_LEASE_WAIT.toMinutes(),
 					GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize());
 			return false;
+		}
+	}
+
+	/**
+	 * Mirrors the helper's recent narration into the client log, so latest.log alone carries what the helper did between
+	 * sessions - its parent wait, its per-attempt failures, its give-up.
+	 */
+	public static void mirrorRecentRuns() {
+		Path helperLog = GameDirectory.current().resolve(HELPER_LOG_FILE).toAbsolutePath().normalize();
+		try {
+			if (!Files.isRegularFile(helperLog, LinkOption.NOFOLLOW_LINKS)) return;
+			byte[] tail;
+			try (FileChannel channel = FileChannel.open(helperLog, StandardOpenOption.READ)) {
+				long position = Math.max(0, channel.size() - HELPER_LOG_TAIL_BYTES);
+				tail = new byte[(int) (channel.size() - position)];
+				ByteBuffer buffer = ByteBuffer.wrap(tail);
+				while (buffer.hasRemaining() && channel.read(buffer, position + buffer.position()) > 0) {
+				}
+			}
+			int start = 0;
+			while (start < tail.length && tail[start] != '\n') start++;
+			if (start >= tail.length - 1) return;
+			start++;
+			LOGGER.info("Mirroring the detached helper's recent runs from {}", helperLog);
+			for (String line : new String(tail, start, tail.length - start, StandardCharsets.UTF_8).split("\r?\n")) {
+				if (!line.isBlank()) LOGGER.info("{}", line);
+			}
+		} catch (IOException | RuntimeException e) {
+			LOGGER.warn("Cannot mirror the detached helper's log tail from {}", helperLog, e);
 		}
 	}
 
