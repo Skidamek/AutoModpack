@@ -109,6 +109,11 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
+	public void clientThread(Runnable task) {
+		executeOnClient(task);
+	}
+
+	@Override
 	public void waiting(Runnable onCancel) {
 		executeOnClient(() -> Screens.waiting(onCancel));
 	}

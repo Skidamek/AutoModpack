@@ -26,6 +26,7 @@ import pl.skidam.automodpack_core.client.ClientOfflineRepair;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
 import pl.skidam.automodpack_core.client.StoredModpackConnection;
+import pl.skidam.automodpack_core.client.SwitchFlow;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.config.ConnectionJsons;
 import pl.skidam.automodpack_core.config.GenerationJsons;
@@ -119,7 +120,7 @@ final class InstalledModpackController {
 	}
 
 	void switchSelection(PackDocument record, SelectionIntent expected, SelectionIntent target, String modpackName, Runnable released) {
-		InstalledModpackSwitch.start(storage, record, expected, target, modpackName, released);
+		SwitchFlow.start(storage, record, expected, target, modpackName, released);
 	}
 
 	Pack installedPack(String modpackId) {
@@ -336,7 +337,7 @@ final class InstalledModpackController {
 		try {
 			SelectionIntent savedSelection = new ClientSelectionStore(storage.selectionFile()).get(pack.modpackId()).orElse(null);
 			SelectionIntent targetSelection = savedSelection == null ? GroupSelectionResolver.defaultIntent(pack.record().manifest()) : savedSelection;
-			InstalledModpackSwitch.start(storage, pack.record(), savedSelection, targetSelection, pack.name(), released);
+			SwitchFlow.start(storage, pack.record(), savedSelection, targetSelection, pack.name(), released);
 		} catch (RuntimeException e) {
 			released.run();
 			failure(e, "automodpack.error.corruptState", FailureCategory.CORRUPT_STATE);
@@ -409,44 +410,7 @@ final class InstalledModpackController {
 			failure(e, "automodpack.error.storage", FailureCategory.STORAGE);
 			return;
 		}
-		ModpackUpdater removalUpdater = updater;
-		DownloadClient.NET_EXECUTOR.execute(() -> {
-			try {
-				UpdatePreview preview = deactivation ? removalUpdater.previewDeactivation() : removalUpdater.previewRemoval();
-				boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), false, null, List.of(), removalUpdater.reviewActions(),
-						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeActiveRemoval(removalUpdater, deactivation, released, removed)), released));
-				if (!shown) {
-					removalUpdater.close();
-					releaseOnClient(released);
-				}
-			} catch (Exception e) {
-				removalUpdater.close();
-				releaseOnClient(released);
-				failure(e, "automodpack.error.update", FailureCategory.UPDATE);
-			}
-		});
-	}
-
-	private void executeActiveRemoval(ModpackUpdater updater, boolean deactivation, Runnable released, Runnable removed) {
-		boolean finishedWithoutRestart = false;
-		try {
-			ModpackUpdater.LifecycleApply apply = deactivation ? updater.deactivateModpack() : updater.removeModpack();
-			if (!apply.success()) {
-				String error = deactivation ? "automodpack.error.deactivationIncomplete" : "automodpack.error.removalIncomplete";
-				failure(new IllegalStateException(error), error, FailureCategory.UPDATE);
-			} else {
-				finishedWithoutRestart = removed != null && (!deactivation || !apply.restartRequired());
-			}
-		} catch (Exception e) {
-			failure(e, "automodpack.error.update", FailureCategory.UPDATE);
-		} finally {
-			updater.close();
-			boolean navigate = finishedWithoutRestart;
-			releaseOnClient(() -> {
-				released.run();
-				if (navigate) removed.run();
-			});
-		}
+		updater.removeOrDeactivate(deactivation, pack.name(), released, removed);
 	}
 
 	private void forget(Pack pack, Runnable released, Runnable removed) {

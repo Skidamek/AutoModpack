@@ -50,6 +50,11 @@ public interface ScreenService {
 
 	default void waiting() {}
 
+	/** Runs a task on the client thread; headless adapters run it inline. */
+	default void clientThread(Runnable task) {
+		task.run();
+	}
+
 	/** Shows the preparing screen; {@code onCancel} runs when the player backs out with Esc. */
 	default void waiting(Runnable onCancel) {
 		waiting();

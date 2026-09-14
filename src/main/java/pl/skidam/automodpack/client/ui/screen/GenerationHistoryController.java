@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
 
+import pl.skidam.automodpack_core.client.SwitchFlow;
 import pl.skidam.automodpack_core.config.ClientStorageJsons;
 import pl.skidam.automodpack_core.modpack.generation.JournalEntry;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -49,7 +50,7 @@ final class GenerationHistoryController {
 						else if (generations.locallyRestorable(modpackId, entry)) restorableSeqs.add(entry.seq());
 					}
 				}
-				Consumer<JournalEntry> restore = activePack ? entry -> GenerationRollback.start(storage, modpackId, entry, modpackName, closed) : null;
+				Consumer<JournalEntry> restore = activePack ? entry -> SwitchFlow.rollback(storage, modpackId, entry, modpackName, closed) : null;
 				ScreenManager.history(new HistoryViewRequest(journal, currentSeq, modpackName, closed, restorableSeqs, restore));
 			} catch (Exception e) {
 				Minecraft.getInstance().execute(closed);
