@@ -54,8 +54,8 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void changelog(Object parent, Changelogs changelogs) {
-		executeOnClient(() -> Screens.changelog((Screen) parent, changelogs));
+	public void changelog(Changelogs changelogs) {
+		executeOnClient(() -> Screens.changelog(Screens.getScreen(), changelogs));
 	}
 
 	@Override
@@ -126,8 +126,18 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public Optional<Object> getScreen() {
-		return Optional.ofNullable(Screens.getScreen());
+	public boolean hasScreen() {
+		return Screens.getScreen() != null;
+	}
+
+	@Override
+	public Optional<String> getScreenKind() {
+		Screen screen = Screens.getScreen();
+		return Optional.ofNullable(screen).map(current -> current.getClass().getSimpleName());
+	}
+
+	public static Screen currentScreen() {
+		return Screens.getScreen();
 	}
 
 	public static void setScreen(Screen screen) {

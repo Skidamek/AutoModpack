@@ -239,7 +239,7 @@ final class ClientLoginUpdateFlow {
 	private static LoginUpdateResponse offerOriginChange(ClientHandshakePacketListenerImpl handler, ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			ClientStorage storage, DownloadClient downloadClient, SelectedModpackTarget selectedTarget, boolean alreadyDisconnected, ConnectionJsons.ConnectionInfo stored) {
 		if (!alreadyDisconnected) disconnectImmediately(handler);
-		if (ScreenManager.getScreen().isEmpty()) {
+		if (!ScreenManager.hasScreen()) {
 			LOGGER.warn("No screen available, refusing the changed origin for modpack {}", selectedTarget.flatTarget().modpackId);
 			downloadClient.close();
 			return LoginUpdateResponse.UPDATE_REQUIRED;

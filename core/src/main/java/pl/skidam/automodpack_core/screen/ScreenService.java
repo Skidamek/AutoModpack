@@ -12,7 +12,7 @@ public interface ScreenService {
 
 	default void download(DownloadManager downloadManager, String modpackName) {}
 
-	default void changelog(Object parent, Changelogs changelogs) {}
+	default void changelog(Changelogs changelogs) {}
 
 	default void restart(UpdateType updateType, Changelogs changelogs) {}
 
@@ -68,7 +68,13 @@ public interface ScreenService {
 		return Optional.empty();
 	}
 
-	default Optional<Object> getScreen() {
+	/** True when a Minecraft screen is showing; core does not hold the Screen type. */
+	default boolean hasScreen() {
+		return false;
+	}
+
+	/** Simple class name of the current screen, for logs. */
+	default Optional<String> getScreenKind() {
 		return Optional.empty();
 	}
 }

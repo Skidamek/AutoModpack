@@ -181,7 +181,7 @@ public final class ManifestFetcher {
 		LOGGER.info("Asking user to verify certificate for Minecraft server {} from AutoModpack endpoint {}:{}", originHost, connectionInfo.endpoint.getHostString(),
 				connectionInfo.endpoint.getPort());
 
-		if (ScreenManager.getScreen().isEmpty()) {
+		if (!ScreenManager.hasScreen()) {
 			LOGGER.warn("No screen available, cannot ask user");
 			return CompletableFuture.completedFuture(false);
 		}
