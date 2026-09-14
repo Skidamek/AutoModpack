@@ -81,6 +81,12 @@ def _lock_path(scope: str) -> str:
     return str(_LOCK_ROOT / f"{scope}.lock")
 
 
+def server_cache_lock(volume: str) -> FileLock:
+    """Advisory lock serializing concurrent runs that would share one server cache volume."""
+    _LOCK_ROOT.mkdir(parents=True, exist_ok=True)
+    return FileLock(_LOCK_ROOT / f"cache-{volume}.lock")
+
+
 def _watch(scope: str) -> None:
     lock = FileLock(_lock_path(scope))
     with lock:

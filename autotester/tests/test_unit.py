@@ -757,3 +757,24 @@ def test_preservation_claim_assert_times_out_with_the_last_mismatch(make_ctx):
             ctx,
             {"packId": "packaaa", "originalPath": "mods/gone.jar", "present": False, "timeout": "0.2s", "poll": "10ms"},
         )
+
+
+# ── server cache volume naming (concurrent-run safety) ───────────────────
+
+
+def test_server_cache_volume_scopes_per_checkout():
+    from automodpack_autotester.config import checkout_tag, server_cache_volume
+
+    volume = server_cache_volume("26.2-fabric", "amp-server-cache")
+    assert volume == f"amp-server-cache-{checkout_tag()}-26.2-fabric"
+    # A different prefix or target must produce a different volume.
+    assert server_cache_volume("1.20.1-forge", "amp-server-cache") != volume
+    assert server_cache_volume("26.2-fabric", "other-prefix") != volume
+
+
+def test_checkout_tag_is_a_stable_short_hash_of_the_repo_root():
+    from automodpack_autotester.config import REPO_ROOT, checkout_tag
+
+    expected = hashlib.sha256(str(REPO_ROOT.resolve()).encode()).hexdigest()[:8]
+    assert checkout_tag() == expected
+    assert len(checkout_tag()) == 8

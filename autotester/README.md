@@ -370,6 +370,24 @@ Each step records its `name`, `verb`, `ok`, and `duration`; failed steps also
 carry an `error`. On failure the partial step list up to and including the failing
 step is preserved.
 
+## Concurrent Runs
+
+Two autotesters can safely run at the same time as long as they run from
+different checkouts (or use distinct `--out-dir` values):
+
+- The server cache volume is named per checkout (`amp-server-cache-<checkout>-<target>`),
+  so two checkouts never share world data. Within one checkout, runs touching the
+  same target serialize on a lock file instead of racing (`[wait] ... server cache
+  is in use by another run`).
+- `clean` only deletes this checkout's output and reaps this run's orphaned docker
+  resources. It does **not** stop Gradle daemons unless `--stop-daemons` is passed:
+  `gradle --stop` kills daemons for every project of the Gradle user home, including
+  builds another checkout is running.
+
+Running two sessions from the *same* checkout is still unsafe outside the volume
+lock: `gradlew build` shares one build tree, and `git checkout`/`clean` while
+another run deploys jars will break it. Use a separate worktree per session.
+
 ## CI Workflow
 
 `.github/workflows/ingame-tests.yml` is manual (`workflow_dispatch`). It selects

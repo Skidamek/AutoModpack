@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import docker as docker_py
+from filelock import Timeout
 
 from .cache import deduplicate_asset_objects
 from .config import (
@@ -24,9 +25,10 @@ from .config import (
     load_settings,
     load_targets,
     scenario_matches_target,
+    server_cache_volume,
 )
 from .runner import run_case
-from .supervisor import RunSupervisor, reap_orphaned_scopes
+from .supervisor import RunSupervisor, reap_orphaned_scopes, server_cache_lock
 from .validate import CONNECTION_MODES, validate_scenario
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -95,19 +97,39 @@ def _write_results(path: Path, payload: dict) -> None:
     os.replace(temporary, path)
 
 
+def _server_cache_guard(target, variants, settings):
+    """A held lock keeps two concurrent runs from sharing one server cache volume and corrupting each other's world."""
+    sc = variants[0].get("serverCache") or settings.get("serverCache", {})
+    if not sc.get("enabled", True):
+        return None
+    volume = server_cache_volume(target.id, sc.get("volumePrefix", "amp-server-cache"))
+    lock = server_cache_lock(volume)
+    while True:
+        try:
+            lock.acquire(timeout=5)
+            return lock
+        except Timeout:
+            print(f"[wait] {target.id}: server cache is in use by another run; waiting", flush=True)
+
+
 def _run_target_cases(target, variants, *, out_dir, artifact_dir, client_image, settings, resource_scope):
-    case_results = [
-        run_case(
-            target,
-            deepcopy(variant),
-            out_dir=out_dir,
-            artifact_dir=artifact_dir,
-            client_image=client_image,
-            settings=settings,
-            resource_scope=resource_scope,
-        )
-        for variant in variants
-    ]
+    lock = _server_cache_guard(target, variants, settings)
+    try:
+        case_results = [
+            run_case(
+                target,
+                deepcopy(variant),
+                out_dir=out_dir,
+                artifact_dir=artifact_dir,
+                client_image=client_image,
+                settings=settings,
+                resource_scope=resource_scope,
+            )
+            for variant in variants
+        ]
+    finally:
+        if lock is not None:
+            lock.release()
     if len(case_results) == 1:
         return case_results[0]
     failures = [
@@ -225,6 +247,9 @@ def main(argv: list[str] | None = None) -> int:
 
     clean = sub.add_parser("clean")
     clean.add_argument("--out-dir", type=Path)
+    clean.add_argument("--stop-daemons", action="store_true",
+                       help="Also stop Gradle daemons. Off by default: gradle --stop kills daemons for every "
+                            "project of this Gradle user home, including builds another checkout is running.")
 
     sub.add_parser("verbs", help="List available scenario verbs and condition keys")
 
@@ -276,7 +301,8 @@ def main(argv: list[str] | None = None) -> int:
             else args.out_dir.resolve()
         )
         shutil.rmtree(out_dir, ignore_errors=True)
-        _stop_gradle_daemons()
+        if args.stop_daemons:
+            _stop_gradle_daemons()
         reap_orphaned_scopes()
         return 0
 
