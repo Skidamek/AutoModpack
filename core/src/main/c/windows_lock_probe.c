@@ -11,6 +11,9 @@
 #include <restartmanager.h>
 
 #define MAX_PROCESSES 4
+/* The receipt names MAX_PROCESSES holders; this cap only bounds how far a transiently growing list is
+ * chased. Past it the probe returns nothing and the caller keeps its path-only receipt - the trade is
+ * completeness of invisible data, not safety. */
 #define MAX_KNOWN_PROCESSES 64
 #define OUT_CHARS 2048
 #define NAME_CHARS 60
