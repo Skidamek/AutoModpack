@@ -119,7 +119,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		}
 	}
 
-	private record ComputedHash(String hash, BasicFileAttributes attributes, FileFingerprint fingerprint) {}
+	private record ComputedHash(String hash, FileFingerprint fingerprint) {}
 
 	public static FileCache open(Path path) throws IOException {
 		return REGISTRY.acquire(path, FileCache::new);
@@ -131,26 +131,24 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	/** Git worktree identity. Named CAS objects use {@link #matchesImmutable}. */
 	public String getOrComputeHash(Path file) throws IOException {
-		BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
-		return getOrComputeHashWithAttributes(file, attrs);
+		return getOrComputeHashWithFingerprint(file.toAbsolutePath().normalize(), statSnapshot(file).fingerprint());
 	}
 
 	/** Full-read identity for explicit fsck. Hot paths use {@link #getOrComputeHash(Path)}. */
 	public String hash(Path file) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
-		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-		if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
+		StatSnapshot snapshot = statSnapshot(absPath);
+		if (!snapshot.isTrackedRegularFile()) throw new IOException("Cannot hash a non-regular file without following links: " + absPath);
 		String pathKey = absPath.toString();
 		synchronized (lock(pathKey)) {
-			ComputedHash computed = computeStableHash(absPath, fingerprint(absPath, attrs), LinkOption.NOFOLLOW_LINKS);
+			ComputedHash computed = computeStableHash(absPath, snapshot.fingerprint());
 			if (computed == null) throw new IOException("Cannot obtain a stable hash for file: " + absPath);
 			return computed.hash();
 		}
 	}
 
-	public String getOrComputeHashWithAttributes(Path file, BasicFileAttributes attrs) {
-		Path absPath = file.toAbsolutePath().normalize();
-		return getOrComputeHashWithFingerprint(absPath, fingerprint(absPath, attrs));
+	public String getOrComputeHashWithAttributes(Path file, BasicFileAttributes attrs) throws IOException {
+		return getOrComputeHashWithFingerprint(file.toAbsolutePath().normalize(), fingerprint(file, attrs));
 	}
 
 	private String getOrComputeHashWithFingerprint(Path file, FileFingerprint fingerprint) {
@@ -191,13 +189,12 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		Path absPath = file.toAbsolutePath().normalize();
 		String pathKey = absPath.toString();
 		synchronized (lock(pathKey)) {
-			BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-			FileFingerprint fingerprint = fingerprint(absPath, attrs);
+			FileFingerprint fingerprint = statSnapshot(absPath).fingerprint();
 			CachedFile cached = readRecord(pathKey, CachedFile.class);
 			if (!statsMatch(cached, fingerprint)) {
 				getOrComputeHashWithFingerprint(absPath, fingerprint);
 				cached = readRecord(pathKey, CachedFile.class);
-				if (!statsMatch(cached, fingerprint(absPath, Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS))))
+				if (!statsMatch(cached, statSnapshot(absPath).fingerprint()))
 					throw new IOException("Cannot obtain a stable hash record for murmur: " + absPath);
 			}
 			if (cached.murmur() != null) return cached.murmur();
@@ -250,8 +247,9 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		return REGISTRY.release(recordsDirectory, this);
 	}
 
-	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) {
-		return snapshot(path, attrs, WindowsFileStat.read(path)).fingerprint();
+	/** Identity fingerprint of {@code path}. {@code attrs} is ignored: one {@link #statSnapshot} answers the question. */
+	public static FileFingerprint fingerprint(Path path, BasicFileAttributes attrs) throws IOException {
+		return statSnapshot(path).fingerprint();
 	}
 
 	private static StatSnapshot snapshot(Path path, BasicFileAttributes attributes, WindowsFileStat.Snapshot nativeStat) {
@@ -262,8 +260,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	/**
 	 * A single-stat {@link StatSnapshot} of {@code path}, never following symbolic links. Windows answers it
 	 * from the one native stat and OpenJDK Unix filesystems from one fused read; if any needed field comes
-	 * back missing or mistyped the split reads below produce exactly the values
-	 * {@link #fingerprint(Path, BasicFileAttributes)} would.
+	 * back missing or mistyped the split reads below produce the same fingerprint.
 	 */
 	public static StatSnapshot statSnapshot(Path path) throws IOException {
 		if (PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS) {
@@ -323,16 +320,16 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 		return now.getEpochSecond() * 1_000_000_000L + now.getNano();
 	}
 
-	private ComputedHash computeStableHash(Path file, FileFingerprint initialFingerprint, LinkOption... options) {
+	private ComputedHash computeStableHash(Path file, FileFingerprint initialFingerprint) {
 		FileFingerprint beforeFingerprint = initialFingerprint;
 		for (int attempt = 0; attempt < 3; attempt++) {
 			String hash = HashUtils.getHash(file);
 			if (hash == null) return null;
 			try {
-				BasicFileAttributes after = Files.readAttributes(file, BasicFileAttributes.class, options);
-				if (!after.isRegularFile() || after.isSymbolicLink()) return null;
-				FileFingerprint afterFingerprint = fingerprint(file, after);
-				if (beforeFingerprint.equals(afterFingerprint)) return new ComputedHash(hash, after, afterFingerprint);
+				StatSnapshot after = statSnapshot(file);
+				if (!after.isTrackedRegularFile()) return null;
+				FileFingerprint afterFingerprint = after.fingerprint();
+				if (beforeFingerprint.equals(afterFingerprint)) return new ComputedHash(hash, afterFingerprint);
 				beforeFingerprint = afterFingerprint;
 			} catch (IOException e) {
 				return null;
@@ -392,8 +389,7 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 
 	public void overwriteCache(Path file, String hash, String murmur) throws IOException {
 		Path absPath = file.toAbsolutePath().normalize();
-		BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-		FileFingerprint fingerprint = fingerprint(absPath, attrs);
+		FileFingerprint fingerprint = statSnapshot(absPath).fingerprint();
 		String pathKey = absPath.toString();
 		synchronized (lock(pathKey)) {
 			CachedFile previous = readRecord(pathKey, CachedFile.class);

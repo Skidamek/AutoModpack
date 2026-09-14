@@ -64,8 +64,13 @@ public final class FileIntegrity {
 	 * identity, that hash is returned and the bytes are not read. Otherwise this is {@link #identityHash}.
 	 */
 	public static String observedHash(Path file, long expectedSize, String expectedSha1, FileCache cache) {
-		if (matchesNamed(file, expectedSize, expectedSha1, cache)) return HashUtils.normalizeSha1(expectedSha1);
-		return identityHash(file, cache);
+		try {
+			FileCache.StatSnapshot snapshot = FileCache.statSnapshot(file);
+			if (matchesNamed(file, expectedSize, expectedSha1, cache, snapshot)) return HashUtils.normalizeSha1(expectedSha1);
+			return identityHash(file, cache, snapshot);
+		} catch (IOException e) {
+			return identityHash(file, cache);
+		}
 	}
 
 	/**
@@ -98,12 +103,17 @@ public final class FileIntegrity {
 	public static boolean matchesObject(Path file, Path canonicalObject, long expectedSize, String expectedSha1, FileCache cache) {
 		if (!HashUtils.isSha1(expectedSha1)) return false;
 		try {
-			FileCache.StatSnapshot canonical = FileCache.statSnapshot(canonicalObject);
-			if (matchesNamed(canonicalObject, expectedSize, expectedSha1, cache, canonical) && sameInode(file, canonicalObject, canonical, FileCache.statSnapshot(file))) return true;
+			FileCache.StatSnapshot fileSnapshot = FileCache.statSnapshot(file);
+			try {
+				FileCache.StatSnapshot canonical = FileCache.statSnapshot(canonicalObject);
+				if (matchesNamed(canonicalObject, expectedSize, expectedSha1, cache, canonical) && sameInode(file, canonicalObject, canonical, fileSnapshot)) return true;
+			} catch (IOException e) {
+				// A stat failure answers false on the disturbed side; the file snapshot already paid for decides below.
+			}
+			return matchesNamed(file, expectedSize, expectedSha1, cache, fileSnapshot);
 		} catch (IOException e) {
-			// A stat failure answers false on the disturbed side, like every other read here; the file side decides below.
+			return false;
 		}
-		return matchesNamed(file, expectedSize, expectedSha1, cache);
 	}
 
 	/** Whether two regular non-symlink paths share an inode (Unix file key / NTFS file index). */
