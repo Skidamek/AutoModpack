@@ -260,18 +260,23 @@ public class FileCache extends LooseRecordCache<FileCache.CachedFile> {
 	}
 
 	/**
-	 * A single-stat {@link StatSnapshot} of {@code path}, never following symbolic links. OpenJDK Unix
-	 * filesystems answer it in one fused read; if any needed field comes back missing or mistyped the split
-	 * reads below produce exactly the values {@link #fingerprint(Path, BasicFileAttributes)} would.
+	 * A single-stat {@link StatSnapshot} of {@code path}, never following symbolic links. Windows answers it
+	 * from the one native stat and OpenJDK Unix filesystems from one fused read; if any needed field comes
+	 * back missing or mistyped the split reads below produce exactly the values
+	 * {@link #fingerprint(Path, BasicFileAttributes)} would.
 	 */
 	public static StatSnapshot statSnapshot(Path path) throws IOException {
-		if (PlatformUtils.operatingSystem() != PlatformUtils.OperatingSystem.WINDOWS) {
-			try {
-				StatSnapshot fused = fusedSnapshot(Files.readAttributes(path, "unix:*", LinkOption.NOFOLLOW_LINKS));
-				if (fused != null) return fused;
-			} catch (UnsupportedOperationException | IllegalArgumentException e) {
-				// No fused unix view on this filesystem (foreign providers, odd mounts): the split reads answer identically.
-			}
+		if (PlatformUtils.operatingSystem() == PlatformUtils.OperatingSystem.WINDOWS) {
+			// The native answers the whole question from one open; the split reads only speak for it when it cannot.
+			StatSnapshot nativeStat = WindowsFileStat.statSnapshot(path);
+			if (nativeStat != null) return nativeStat;
+			return splitSnapshot(path);
+		}
+		try {
+			StatSnapshot fused = fusedSnapshot(Files.readAttributes(path, "unix:*", LinkOption.NOFOLLOW_LINKS));
+			if (fused != null) return fused;
+		} catch (UnsupportedOperationException | IllegalArgumentException e) {
+			// No fused unix view on this filesystem (foreign providers, odd mounts): the split reads answer identically.
 		}
 		return splitSnapshot(path);
 	}
