@@ -186,7 +186,7 @@ public class Preload {
 				return;
 			}
 			DetachedUpdateHelper.launch();
-			new ReLauncher(UpdateType.UPDATE, null, DEFERRED_POPUP_MESSAGE).restart(true);
+			new ReLauncher(UpdateType.UPDATE, null, deferredPopupMessage(execution.held())).restart(true);
 			throw new UpdateDeferredException(deferred.transactionId, execution.blockedPath(), execution.message());
 		}
 		deferredRecoveryGuard().clear();
@@ -210,6 +210,11 @@ public class Preload {
 
 	private UpdateLoopDetector deferredRecoveryGuard() {
 		return new UpdateLoopDetector(storage.stuckTransactionStateFile(), System::currentTimeMillis, MAX_DEFERRED_RESTARTS, null);
+	}
+
+	/** The generic guidance, plus the lock probe's holder receipt when the failure captured one. */
+	private static String deferredPopupMessage(String held) {
+		return held == null || held.isBlank() ? DEFERRED_POPUP_MESSAGE : DEFERRED_POPUP_MESSAGE + " Blocked paths: " + held + ".";
 	}
 
 	private void quarantineTransaction(Exception reason) throws IOException {
