@@ -132,7 +132,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** Builds a reviewable switch plan for an installed generation, acquiring selected objects when necessary. */
-	public UpdatePreview previewInstalledSwitch() throws Exception {
+	UpdatePreview previewInstalledSwitch() throws Exception {
 		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Installed modpack target is unavailable");
 		ClientStorageJsons.ClientGenerationStateFields active = storage.readActiveState();
 		boolean projectionPresent = active != null && Files.isDirectory(storage.activeDirectory(), LinkOption.NOFOLLOW_LINKS);
@@ -146,7 +146,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	/** Applies the last installed-generation switch plan through the normal atomic transaction executor. */
-	public void applyInstalledSwitch() throws Exception {
+	void applyInstalledSwitch() throws Exception {
 		UpdateAttempt current = attempt.get();
 		if (!(current instanceof UpdateSession switchPlan) || selectedTarget == null) throw new IllegalStateException("Installed modpack switch was not prepared");
 		// The confirm click that reached this action is the review's consent; commit itself refuses an unapproved plan.
@@ -162,7 +162,7 @@ public class ModpackUpdater implements AutoCloseable {
 	 * Applies the last prepared switch as a rollback to an older generation: detachment is declared before the commit so
 	 * the published active state keeps the flag, making the rollback itself the declaration of local sovereignty.
 	 */
-	public void applyGenerationRollback() throws Exception {
+	void applyGenerationRollback() throws Exception {
 		if (selectedTarget == null) throw new IllegalStateException("Generation rollback was not prepared");
 		new ClientGenerationStore(storage).declareDetached(selectedTarget.manifest().modpackId());
 		applyInstalledSwitch();
@@ -396,22 +396,67 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	// Build the removal plan without changing the installed files.
-	public UpdatePreview previewRemoval() throws Exception {
+	UpdatePreview previewRemoval() throws Exception {
 		return beginAttempt(new RemovalAttempt(storage, planBuilder, changelogs, RemovalAttempt.Kind.REMOVAL)).preview();
 	}
 
-	public UpdatePreview previewDeactivation() throws Exception {
+	UpdatePreview previewDeactivation() throws Exception {
 		return beginAttempt(new RemovalAttempt(storage, planBuilder, changelogs, RemovalAttempt.Kind.DEACTIVATION)).preview();
 	}
 
 	public record LifecycleApply(boolean success, boolean restartRequired) {}
 
-	public LifecycleApply deactivateModpack() throws Exception {
+	/**
+	 * Reviews then commits the active pack's removal or deactivation on this updater: the preview takes the screen, the
+	 * confirm click commits, and the caller's released (always) and removed (only when navigation makes sense) run on
+	 * the client thread.
+	 */
+	public void removeOrDeactivate(boolean deactivation, String modpackName, Runnable released, Runnable removed) {
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			try {
+				UpdatePreview preview = deactivation ? previewDeactivation() : previewRemoval();
+				boolean shown = ScreenManager.preview(new PreviewPayload(preview, modpackName, false, null, List.of(), reviewActions(),
+						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeRemoval(deactivation, released, removed)), released));
+				if (!shown) {
+					close();
+					ScreenManager.clientThread(released);
+				}
+			} catch (Exception e) {
+				close();
+				ScreenManager.clientThread(released);
+				showUpdateFailure(e);
+			}
+		});
+	}
+
+	private void executeRemoval(boolean deactivation, Runnable released, Runnable removed) {
+		boolean finishedWithoutRestart = false;
+		try {
+			LifecycleApply apply = deactivation ? deactivateModpack() : removeModpack();
+			if (!apply.success()) {
+				String error = deactivation ? "automodpack.error.deactivationIncomplete" : "automodpack.error.removalIncomplete";
+				ScreenManager.failure(FailureRequest.of(new IllegalStateException(error), error, FailureCategory.UPDATE, FailureDestination.CURRENT_SCREEN, null));
+			} else {
+				finishedWithoutRestart = removed != null && (!deactivation || !apply.restartRequired());
+			}
+		} catch (Exception e) {
+			showUpdateFailure(e);
+		} finally {
+			close();
+			boolean navigate = finishedWithoutRestart;
+			ScreenManager.clientThread(() -> {
+				released.run();
+				if (navigate) removed.run();
+			});
+		}
+	}
+
+	LifecycleApply deactivateModpack() throws Exception {
 		return commitRemoval(RemovalAttempt.Kind.DEACTIVATION);
 	}
 
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
-	public LifecycleApply removeModpack() throws Exception {
+	LifecycleApply removeModpack() throws Exception {
 		return commitRemoval(RemovalAttempt.Kind.REMOVAL);
 	}
 

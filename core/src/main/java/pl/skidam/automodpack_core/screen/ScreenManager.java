@@ -82,6 +82,11 @@ public final class ScreenManager {
 		instance.waiting();
 	}
 
+	/** Runs a task on the client thread; headless adapters run it inline. */
+	public static void clientThread(Runnable task) {
+		instance.clientThread(task);
+	}
+
 	public static void waiting(Runnable onCancel) {
 		instance.waiting(onCancel);
 	}
