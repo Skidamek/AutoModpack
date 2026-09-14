@@ -42,7 +42,8 @@ public final class ClientLaunch {
 	public void run() {
 		if (rolledBackStuckUpdate) {
 			LOGGER.info("Booting the restored modpack without contacting the server");
-			if (hasActiveProjection()) loadLocalModpack(null, null);
+			boolean projectionActive = hasActiveProjection();
+			if (projectionActive) loadLocalModpack(null, null, projectionActive);
 			return;
 		}
 
@@ -100,14 +101,14 @@ public final class ClientLaunch {
 			} catch (RuntimeException e) {
 				LOGGER.error("Failed to resolve the downloaded modpack catalogue and group selection", e);
 				downloadClient.close();
-				loadLocalModpack(connectionInfo, secret);
+				loadLocalModpack(connectionInfo, secret, hasActiveProjection());
 				return;
 			}
 			ModpackJsons.ModpackContentFields latestModpackContent = selectedTarget.flatTarget();
 			if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
 				LOGGER.error("Selected modpack catalogue changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
 				downloadClient.close();
-				loadLocalModpack(connectionInfo, secret);
+				loadLocalModpack(connectionInfo, secret, hasActiveProjection());
 				return;
 			}
 			if (SelfUpdater.update(latestModpackContent)) {
@@ -116,7 +117,7 @@ public final class ClientLaunch {
 			}
 		}
 		if (selectedTarget == null) {
-			loadLocalModpack(connectionInfo, secret);
+			loadLocalModpack(connectionInfo, secret, hasActiveProjection());
 			return;
 		}
 
@@ -126,12 +127,13 @@ public final class ClientLaunch {
 	}
 
 	private void bootLocalOrSelfUpdate(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
-		if (hasActiveProjection()) loadLocalModpack(connectionInfo, secret);
+		boolean projectionActive = hasActiveProjection();
+		if (projectionActive) loadLocalModpack(connectionInfo, secret, projectionActive);
 		else SelfUpdater.update();
 	}
 
-	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
-		if (!hasActiveProjection()) return;
+	private void loadLocalModpack(ConnectionJsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean projectionActive) {
+		if (!projectionActive) return;
 		try {
 			new ModpackUpdater(connectionInfo, secret, storage).loadModpack();
 		} catch (Exception e) {
