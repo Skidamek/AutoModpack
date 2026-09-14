@@ -231,9 +231,7 @@ final class InstalledModpackController {
 		try {
 			PackDocument record = new ClientGenerationStore(storage).newestDocument(pack.modpackId());
 			if (record == null) throw new IOException("Stale pack has no installed generation: " + pack.modpackId());
-			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(record), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(),
-					ChangeSet.catalogue(record.manifest(), ChangeSet.Kind.REMOVED));
-			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(record.manifest());
+			UpdatePreview preview = removalPreview(pack.modpackId(), record, ChangeSet.catalogue(record.manifest(), ChangeSet.Kind.REMOVED));
 			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), originFor(pack.modpackId()), false, null, List.of(), null, null,
 					(Runnable) () -> ScreenManager.background(() -> {
 						try {
@@ -353,8 +351,7 @@ final class InstalledModpackController {
 			return;
 		}
 		try {
-			UpdatePlan plan = new UpdatePlan(pack.modpackId(), PackTarget.from(pack.record()), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), ChangeSet.empty());
-			UpdatePreview preview = UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(pack.record().manifest());
+			UpdatePreview preview = removalPreview(pack.modpackId(), pack.record(), ChangeSet.empty());
 			boolean shown = ScreenManager.preview(new PreviewPayload(preview, pack.name(), originFor(pack.modpackId()), false, null, List.of(), null, null,
 					(Runnable) () -> ScreenManager.background(() -> forget(pack, released, removed)), released));
 			if (!shown) released.run();
@@ -458,6 +455,12 @@ final class InstalledModpackController {
 	public String originFor(String modpackId) {
 		String origin = connectionOrigin(connection(modpackId));
 		return origin == null ? "" : origin;
+	}
+
+	/** The forget-this-pack preview: a removal plan over the installed record with no operations of its own. */
+	private static UpdatePreview removalPreview(String modpackId, PackDocument record, ChangeSet changes) {
+		UpdatePlan plan = new UpdatePlan(modpackId, PackTarget.from(record), List.of(), List.of(), null, Set.of(), List.of(), List.of(), List.of(), List.of(), changes);
+		return UpdatePreview.create(plan, null, UpdatePreview.Mode.REMOVAL).withFeatureManifest(record.manifest());
 	}
 
 	private static String connectionOrigin(ConnectionJsons.ConnectionInfo connection) {
