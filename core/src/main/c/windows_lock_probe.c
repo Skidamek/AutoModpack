@@ -103,10 +103,10 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 		if (rm_register(session, 1, &resource, 0, NULL, 0, NULL) == ERROR_SUCCESS) {
 			/* lpdwRebootReasons receives one operation-wide reason, not per-process entries. Restart Manager refreshes
 			 * the list on every call, so the documented practice is to re-query into a larger buffer; three attempts. */
-			RM_REBOOT_REASON rebootReasons = RmRebootReasonNone;
+			DWORD rebootReasons = RmRebootReasonNone;
 			for (int attempt = 0; attempt < 3 && rmResult == ERROR_MORE_DATA; attempt++) {
 				if (attempt > 0) {
-					if (needed > MAX_KNOWN_PROCESSES) break;
+					if (needed == 0 || needed > MAX_KNOWN_PROCESSES) break;
 					RM_PROCESS_INFO *grown = (RM_PROCESS_INFO *) HeapAlloc(GetProcessHeap(), 0, sizeof(RM_PROCESS_INFO) * needed);
 					if (grown == NULL) break;
 					HeapFree(GetProcessHeap(), 0, infos);
@@ -114,7 +114,7 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 					listed = needed;
 					needed = 0;
 				}
-				rmResult = rm_getlist(session, &needed, &listed, infos, (LPDWORD) &rebootReasons);
+				rmResult = rm_getlist(session, &needed, &listed, infos, &rebootReasons);
 			}
 			if (rmResult == ERROR_SUCCESS) {
 				UINT i;

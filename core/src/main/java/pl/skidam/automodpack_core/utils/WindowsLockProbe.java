@@ -29,7 +29,7 @@ public final class WindowsLockProbe {
 	public static String describeHeld(Path path) {
 		if (path == null || PlatformUtils.operatingSystem() != PlatformUtils.OperatingSystem.WINDOWS) return null;
 		try {
-			path = path.toAbsolutePath();
+			path = path.toAbsolutePath().normalize();
 			if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
 				String processes = describeProcesses(path);
 				return processes == null ? null : path.getFileName() + " is held by " + processes;
@@ -55,7 +55,7 @@ public final class WindowsLockProbe {
 	/** Application names Restart Manager reports for one path, or null when it cannot answer. */
 	private static String describeProcesses(Path path) {
 		if (!WindowsNatives.ensureLoaded()) return null;
-		String raw = describe0(path.toString());
+		String raw = describe0(path.toAbsolutePath().normalize().toString());
 		if (raw == null || raw.isBlank()) return null;
 		String[] fields = raw.split(String.valueOf(SEPARATOR), -1);
 		long self = ProcessHandle.current().pid();
@@ -98,7 +98,7 @@ public final class WindowsLockProbe {
 
 	/** Whether an existing share mode currently refuses a DELETE-capable open of the entry. */
 	private static boolean heldAgainstRename(Path child) {
-		return WindowsNatives.ensureLoaded() && held0(child.toString());
+		return WindowsNatives.ensureLoaded() && held0(child.toAbsolutePath().normalize().toString());
 	}
 
 	/** The bundled Windows native: {@code name<SEPARATOR>pid} pairs Restart Manager reports for the path, or null. */
