@@ -28,6 +28,7 @@ import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.PreviewPayload;
 import pl.skidam.automodpack_core.screen.ReviewActions;
 import pl.skidam.automodpack_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.screen.SourceCounts;
 import pl.skidam.automodpack_core.update.ClientGenerationStore;
 import pl.skidam.automodpack_core.update.ClientProjectionView;
 import pl.skidam.automodpack_core.update.ClientStorage;
@@ -133,6 +134,11 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Selected jar paths of the selected target without a Modrinth/CurseForge hash hit. */
 	List<String> unverifiedSelectedJarPaths() {
 		return review.unverifiedSelectedJarPaths();
+	}
+
+	/** Jar counts by lookup source over the selected target; the lookup settles before review screens open. */
+	public SourceCounts selectedJarSourceCounts() {
+		return sourceCatalogue.selectedJarSourceCounts(getSelectedTarget());
 	}
 
 	/** Minecraft join target as `host:port`, or "" when this engine has no live connection. */
@@ -626,7 +632,8 @@ public class ModpackUpdater implements AutoCloseable {
 	/** Wraps a reviewable plan with this engine's review backing; the unverified-jar gate is precomputed, mode-gated. */
 	PreviewPayload previewPayload(UpdatePreview preview, Runnable continueAction, Runnable cancelAction) {
 		boolean writesUnverifiedJar = (preview.mode() == UpdatePreview.Mode.UPDATE || preview.mode() == UpdatePreview.Mode.ROLLBACK) && review.planWritesUnverifiedJar(preview.plan());
-		return new PreviewPayload(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(), review.reviewActions(), continueAction, cancelAction);
+		return new PreviewPayload(preview, getModpackName(), review.joinOrigin(), writesUnverifiedJar, getSelectedTarget(), review.unverifiedSelectedJarPaths(),
+				sourceCatalogue.selectedJarSourceCounts(getSelectedTarget()), review.reviewActions(), continueAction, cancelAction);
 	}
 
 	boolean downloadCancelled() {

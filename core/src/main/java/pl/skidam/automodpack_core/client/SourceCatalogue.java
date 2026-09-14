@@ -4,16 +4,20 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import pl.skidam.automodpack_core.change.ChangeSet;
 import pl.skidam.automodpack_core.config.ModpackJsons;
 import pl.skidam.automodpack_core.modpack.group.ModpackContentType;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.screen.SourceCounts;
 import pl.skidam.automodpack_core.update.UpdatePlan;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
@@ -97,6 +101,33 @@ final class SourceCatalogue {
 			if (!firstPartyHit(item.sha1)) unverified.add(item.file);
 		}
 		return List.copyOf(unverified);
+	}
+
+	/** Jar counts by lookup source over the target's selected files; the server-only count equals the unverified set. */
+	SourceCounts selectedJarSourceCounts(SelectedModpackTarget target) {
+		if (target == null || target.flatTarget().list == null) return new SourceCounts(0, 0, 0);
+		Set<String> hashes = new LinkedHashSet<>();
+		for (var item : target.flatTarget().list) if (gatedJar(item.file) && item.sha1 != null && !item.sha1.isBlank()) hashes.add(item.sha1);
+		Map<String, PlatformCache.Record> records = hashes.isEmpty() ? Map.of() : platformCache.getAll(hashes);
+		int modrinth = 0, curseforge = 0, serverOnly = 0;
+		for (var item : target.flatTarget().list) {
+			if (!gatedJar(item.file)) continue;
+			boolean modrinthHit = platformHit(item.sha1, records, DownloadSource.Provider.MODRINTH);
+			boolean curseforgeHit = platformHit(item.sha1, records, DownloadSource.Provider.CURSEFORGE);
+			if (modrinthHit) modrinth++;
+			if (curseforgeHit) curseforge++;
+			if (!modrinthHit && !curseforgeHit) serverOnly++;
+		}
+		return new SourceCounts(modrinth, curseforge, serverOnly);
+	}
+
+	/** Same hit semantics as {@link #firstPartyHit}, narrowed to one platform: the running lookup or a persisted cache record. */
+	private boolean platformHit(String sha1, Map<String, PlatformCache.Record> records, DownloadSource.Provider provider) {
+		if (sha1 == null || sha1.isBlank()) return false;
+		FetchManager manager = sourceFetchManager;
+		if (manager != null) for (DownloadSource source : manager.sourcesFor(sha1)) if (source.provider() == provider) return true;
+		PlatformCache.Record record = records.get(sha1);
+		return record != null && (provider == DownloadSource.Provider.MODRINTH ? record.modrinth() != null : record.curseforge() != null);
 	}
 
 	boolean planWritesUnverifiedJar(UpdatePlan plan) {

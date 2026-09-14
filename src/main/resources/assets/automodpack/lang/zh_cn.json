@@ -35,6 +35,7 @@
   "automodpack.confirm.computerRisk": "整合包里的模组只是运行在你电脑上的程序。它们可以修改文件、窃取账号信息，或者让别人控制你的电脑。这不代表它们一定会这么做。",
   "automodpack.confirm.commands": "下载前先查看文件。如果你的启动器有沙盒模式，请开启。如果你几乎不认识运营这个服务器的人，或者不信任他们，就不要下载。",
   "automodpack.confirm.unverifiedCount": "%s 个模组文件（共 %s 个）没有在 Modrinth 或 CurseForge 上找到。",
+  "automodpack.confirm.sourceCounts": "在 Modrinth 匹配：%s  |  在 CurseForge 匹配：%s  |  仅来自服务器：%s",
   "automodpack.confirm.unverifiedExplain": "它们可能无害的自制模组、被修改过的模组，也可能是恶意模组。AutoModpack 无法分辨。",
   "automodpack.confirm.ack": "我了解风险并信任这个服务器。",
   "automodpack.confirm.ackCountdown": "风险确认框将在 %s 秒后可用。",

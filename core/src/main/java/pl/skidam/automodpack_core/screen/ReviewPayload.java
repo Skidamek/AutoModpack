@@ -13,4 +13,4 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
  * measured; the screen hides the stat instead of failing the review over it.
  */
 public record ReviewPayload(SelectedModpackTarget target, ChangeSet catalogue, List<JournalEntry> patchNotes, String origin, List<String> unverifiedJarPaths,
-		List<String> firstInstallLocalModPaths, OptionalLong uncachedTargetBytes, ReviewActions actions) {}
+		SourceCounts sourceCounts, List<String> firstInstallLocalModPaths, OptionalLong uncachedTargetBytes, ReviewActions actions) {}

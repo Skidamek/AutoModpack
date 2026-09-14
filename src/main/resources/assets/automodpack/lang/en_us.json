@@ -32,6 +32,7 @@
   "automodpack.confirm.computerRisk": "Mods in any Minecraft modpack are just programs that run on your computer. They can change files, steal credentials, or let someone else control your computer. That does not mean that they will.",
   "automodpack.confirm.commands": "Review the files before you download. If your launcher has a sandbox, enable it. If you barely know the people who run this server, or you do not trust them, do not download.",
   "automodpack.confirm.unverifiedCount": "%s of %s mod files were not found on Modrinth or CurseForge.",
+  "automodpack.confirm.sourceCounts": "Matched on Modrinth: %s  |  Matched on CurseForge: %s  |  Only from the server: %s",
   "automodpack.confirm.unverifiedExplain": "They can be harmless custom mods, edited mods, or malicious mods. AutoModpack cannot tell which.",
   "automodpack.confirm.ack": "I understand the risk and trust this server.",
   "automodpack.confirm.ackCountdown": "The risk box unlocks in %s seconds.",

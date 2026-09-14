@@ -251,6 +251,8 @@ public final class PackConfirmScreen extends VersionedScreen {
 
 	private void appendStatLines(List<MutableComponent> lines, int wrapWidth) {
 		appendStat(lines, wrapWidth, PackConfirmCopy.selectedSummary(target()), ChatFormatting.GREEN);
+		// Where the jars come from: platform matches overlap, server-only equals the unverified set.
+		appendStat(lines, wrapWidth, PackConfirmCopy.sourceCounts(firstInstall ? welcome.sourceCounts() : later.sourceCounts()), ChatFormatting.GRAY);
 		// Same stat the update preview shows: what the local store still misses of the announced content.
 		if (firstInstall) {
 			if (welcome.uncachedTargetBytes().isPresent()) {
