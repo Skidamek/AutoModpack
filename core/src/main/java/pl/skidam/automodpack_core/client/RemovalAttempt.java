@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.client.RestartDecision.ApplyResult;
+import pl.skidam.automodpack_core.config.ClientConfigJsons;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -45,6 +46,11 @@ final class RemovalAttempt implements UpdateAttempt {
 		return kind;
 	}
 
+	/** The config snapshot the removal plans to persist; the flow applies it at completion. */
+	ClientConfigJsons.ClientConfigFieldsV3 plannedConfig() {
+		return Objects.requireNonNull(prepared, "Modpack lifecycle action was not prepared").plannedConfig();
+	}
+
 	UpdatePreview preview() throws Exception {
 		prepared = planBuilder.prepareRemoval();
 		review = ReviewedUpdatePlan.pending(prepared.plan());
@@ -77,7 +83,6 @@ final class RemovalAttempt implements UpdateAttempt {
 		if (execution.replanRequired()) throw new UpdateReplanRequiredException(execution.blockedPath(), execution.message());
 		if (!execution.success()) throw new IOException(remove ? "Modpack removal did not complete" : "Modpack deactivation did not complete");
 		review.complete();
-		clientConfig = prepared.plannedConfig();
 		if (remove) {
 			try {
 				new ClientGenerationStore(storage).forgetModpack(prepared.installed().modpackId);
