@@ -23,6 +23,7 @@ import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.utils.Throwables;
 
 import java.util.Optional;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -115,7 +116,7 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public java.util.concurrent.Future<?> background(Runnable task) {
+	public Future<?> background(Runnable task) {
 		return ModpackUpdater.executor().submit(task);
 	}
 
