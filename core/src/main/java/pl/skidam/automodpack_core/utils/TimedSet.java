@@ -31,13 +31,4 @@ public class TimedSet<T> {
 		long now = System.currentTimeMillis();
 		map.entrySet().removeIf(e -> e.getValue().expiryTime() <= now);
 	}
-
-//    // Example usage
-//    public static void main(String[] args) throws InterruptedException {
-//        TimedSet<String> set = new TimedSet<>(3000); // 3 seconds
-//        set.add("hello");
-//        System.out.println(set.contains("hello")); // true
-//        Thread.sleep(3500);
-//        System.out.println(set.contains("hello")); // false
-//    }
 }

@@ -71,7 +71,6 @@ public class HandshakeC2SPacket {
 
 		SemanticVersion semver = SemanticVersion.parse(automodpack.fileVersion());
 
-		// Disconnect and install only if the update is valid
 		if (SelfUpdater.validUpdate(semver)) {
 			ScreenManager.waiting();
 			ClientLoginDisconnect.disconnect(handler);

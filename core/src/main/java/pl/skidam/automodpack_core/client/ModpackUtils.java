@@ -26,7 +26,7 @@ public class ModpackUtils {
 	// Modpack may require update even if there's no files to update, because some files may need to be deleted
 	public record UpdateCheckResult(boolean requiresUpdate, Set<ModpackJsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
 
-	// Fast and friendly method to check if the modpack is up to date without modifying anything on disk
+	// Checks if the modpack is up to date without modifying anything on disk
 	public static UpdateCheckResult isUpdate(ModpackJsons.ModpackContentFields serverModpackContent, ClientStorage storage) {
 		if (serverModpackContent == null || serverModpackContent.list == null) throw new IllegalArgumentException("Server modpack content list is null");
 		if (verificationCannotDecide(serverModpackContent, storage)) return new UpdateCheckResult(true, serverModpackContent.list);

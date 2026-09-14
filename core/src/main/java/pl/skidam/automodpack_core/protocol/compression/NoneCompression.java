@@ -2,10 +2,6 @@ package pl.skidam.automodpack_core.protocol.compression;
 
 import java.util.Arrays;
 
-/**
- * None compression codec implementation.
- * Input == Output (no compression).
- */
 public class NoneCompression implements CompressionCodec {
 
 	@Override

@@ -40,7 +40,6 @@ public class Server {
 
 		LOGGER.info("Starting server on port {}", serverConfig.bindPort);
 		server.start();
-		// wait for server to stop
 		while (server.isRunning()) {
 			try {
 				Thread.sleep(1000);

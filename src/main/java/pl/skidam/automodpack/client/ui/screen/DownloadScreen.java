@@ -38,7 +38,6 @@ public class DownloadScreen extends VersionedScreen {
 	private Button muteMusicButton;
 	private Button playMusicButton;
 
-	// UI Cache
 	private String cachedStage = "0/0";
 	private double cachedPercentage = 0.0;
 	private String cachedSpeed = "0 B/s";
@@ -97,8 +96,6 @@ public class DownloadScreen extends VersionedScreen {
 			cachedETA = ByteFormat.formatETA(download.getETA());
 		}
 	}
-
-	// --- Components ---
 
 	private Component getStage() {
 		return VersionedText.literal(cachedStage);

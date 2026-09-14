@@ -62,29 +62,24 @@ public class NetUtils {
 	public static final int TRANSFER_IDLE_TIMEOUT_MILLIS = Math.toIntExact(TRANSFER_IDLE_TIMEOUT.toMillis());
 	public static final int HTTP_TIMEOUT_MILLIS = Math.toIntExact(HTTP_TIMEOUT.toMillis());
 
-	// Magic numbers
 	public static final int MAGIC_AMMH = 0x414D4D48;
 	public static final int MAGIC_AMOK = 0x414D4F4B;
 
-	// Protocol versions
 	public static final byte LATEST_SUPPORTED_PROTOCOL_VERSION = 0x01;
 
 	// Message types and configuration message types should not overlap
-	// Message types
 	public static final byte ECHO_TYPE = 0x00;
 	public static final byte FILE_REQUEST_TYPE = 0x01;
 	public static final byte FILE_RESPONSE_TYPE = 0x02;
 	public static final byte END_OF_TRANSMISSION = 0x04;
 	public static final byte ERROR = 0x05;
 
-	// Configuration message types
 	public static final byte CONFIGURATION_ECHO_TYPE = 0x40;
 	public static final byte CONFIGURATION_COMPRESSION_TYPE = 0x41;
 	public static final byte CONFIGURATION_CHUNK_SIZE_TYPE = 0x42;
 	// A client parked on its certificate-trust decision heartbeats these; the server absorbs them silently.
 	public static final byte CONFIGURATION_KEEPALIVE_TYPE = 0x4F;
 
-	// Chunk size
 	public static final int DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
 	public static final int MIN_CHUNK_SIZE = 1024 * 1024; // 1 MiB
 	public static final int MAX_CHUNK_SIZE = 8 * 1024 * 1024; // 8 MiB

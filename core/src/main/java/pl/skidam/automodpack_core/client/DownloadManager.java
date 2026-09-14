@@ -52,7 +52,6 @@ public class DownloadManager implements DownloadView {
 
 	private volatile boolean cancelled = false;
 
-	// --- QUEUES ---
 	private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
 	public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
 	private final Map<FileInspection.HashPathPair, Path> activeTemporaryFiles = new ConcurrentHashMap<>();
@@ -64,7 +63,6 @@ public class DownloadManager implements DownloadView {
 
 	private final DownloadScheduler scheduler = new DownloadScheduler();
 
-	// --- PROGRESS TRACKING ---
 	private final AtomicLong totalBytesToDownload = new AtomicLong(0);
 	private final AtomicLong totalBytesDownloaded = new AtomicLong(0);
 	private int totalFilesAdded = 0;
@@ -119,7 +117,6 @@ public class DownloadManager implements DownloadView {
 		DownloadScheduler.Pick<FileInspection.HashPathPair> pick = scheduler.pick(queue, inFlightBacklog);
 		if (pick == null) return;
 
-		// --- EXECUTE ---
 		QueuedDownload task = queuedDownloads.remove(pick.identity());
 		if (task == null) return; // The queue was cleared (cancel) between the snapshot and the removal.
 		final FileInspection.HashPathPair key = pick.identity();
@@ -193,7 +190,6 @@ public class DownloadManager implements DownloadView {
 
 		try (FileCache cache = FileCache.open(dataLayout.fileCacheDirectory())) {
 			if (ClientObjectStore.acquireVerified(storeFile, hashPathPair.hash(), task.fileSize, List.of(), cache, ClientObjectStore.CorruptObjectPolicy.EVICT_QUIETLY).present()) {
-				// CACHE HIT
 				totalBytesDownloaded.addAndGet(task.fileSize);
 				// IMPORTANT: Do NOT add cached bytes to Speedometer.
 				// It would fake a massive speed spike.
