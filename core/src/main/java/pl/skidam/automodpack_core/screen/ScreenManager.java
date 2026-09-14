@@ -9,7 +9,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 
 import pl.skidam.automodpack_core.client.Changelogs;
-import pl.skidam.automodpack_core.client.DownloadManager;
 import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.protocol.CertificateTrustCancelledException;
 
@@ -24,8 +23,8 @@ public final class ScreenManager {
 		instance = Objects.requireNonNull(screenService, "screenService");
 	}
 
-	public static void download(DownloadManager downloadManager, String modpackName) {
-		instance.download(downloadManager, modpackName);
+	public static void download(DownloadView download, String modpackName) {
+		instance.download(download, modpackName);
 	}
 
 	public static void changelog(Changelogs changelogs) {

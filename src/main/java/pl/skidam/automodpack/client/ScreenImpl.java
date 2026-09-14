@@ -18,7 +18,7 @@ import pl.skidam.automodpack_core.screen.ScreenService;
 import pl.skidam.automodpack_core.screen.FailureDestination;
 import pl.skidam.automodpack_core.screen.FailureRequest;
 import pl.skidam.automodpack_core.screen.HistoryViewRequest;
-import pl.skidam.automodpack_core.client.DownloadManager;
+import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.client.UpdateType;
 import pl.skidam.automodpack_core.utils.Throwables;
 
@@ -49,8 +49,8 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
-	public void download(DownloadManager downloadManager, String modpackName) {
-		executeOnClient(() -> Screens.download(downloadManager, modpackName));
+	public void download(DownloadView download, String modpackName) {
+		executeOnClient(() -> Screens.download(download, modpackName));
 	}
 
 	@Override
@@ -219,8 +219,8 @@ public class ScreenImpl implements ScreenService {
 			return parent == null ? multiplayerScreen() : parent;
 		}
 
-		public static void download(DownloadManager downloadManager, String modpackName) {
-			Screens.setScreen(new DownloadScreen(downloadManager, modpackName));
+		public static void download(DownloadView download, String modpackName) {
+			Screens.setScreen(new DownloadScreen(download, modpackName));
 		}
 
 		public static void changelog(Screen parent, Changelogs changelogs) {

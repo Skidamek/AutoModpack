@@ -18,7 +18,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
-import pl.skidam.automodpack_core.client.DownloadManager;
+import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.utils.ActionAreaLayout;
 import pl.skidam.automodpack_core.utils.ByteFormat;
 
@@ -28,7 +28,7 @@ public class DownloadScreen extends VersionedScreen {
 	private static final int PROGRESS_BAR_WIDTH = 182;
 	private static final int PROGRESS_BAR_HEIGHT = 5;
 
-	private final DownloadManager downloadManager;
+	private final DownloadView download;
 	private final String header;
 
 	private final long startedAtNanos = System.nanoTime();
@@ -47,9 +47,9 @@ public class DownloadScreen extends VersionedScreen {
 	private long lastTextUpdate = 0;
 	private static final long TEXT_UPDATE_INTERVAL = 100; // Update strings 10x per second
 
-	public DownloadScreen(DownloadManager downloadManager, String header) {
+	public DownloadScreen(DownloadView download, String header) {
 		super(VersionedText.translatable("automodpack.download.title"));
-		this.downloadManager = downloadManager;
+		this.download = download;
 		this.header = header;
 	}
 
@@ -85,16 +85,16 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private void updateUIState() {
-		if (downloadManager == null || !downloadManager.isRunning()) return;
+		if (download == null || !download.isRunning()) return;
 
 		long now = System.currentTimeMillis();
 		if (now - lastTextUpdate >= TEXT_UPDATE_INTERVAL) {
 			lastTextUpdate = now;
 
-			cachedStage = downloadManager.getStage();
-			cachedPercentage = downloadManager.getPrecisePercentage();
-			cachedSpeed = ByteFormat.formatSpeed(downloadManager.getDownloadSpeed());
-			cachedETA = ByteFormat.formatETA(downloadManager.getETA());
+			cachedStage = download.getStage();
+			cachedPercentage = download.getPrecisePercentage();
+			cachedSpeed = ByteFormat.formatSpeed(download.getDownloadSpeed());
+			cachedETA = ByteFormat.formatETA(download.getETA());
 		}
 	}
 
@@ -119,8 +119,7 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private Component getAcquisitionSummary() {
-		DownloadManager.AcquisitionProgress progress = downloadManager.acquisitionProgress();
-		return VersionedText.translatable("automodpack.download.acquired", progress.acquired(), progress.failed());
+		return VersionedText.translatable("automodpack.download.acquired", download.acquired(), download.failed());
 	}
 
 	private float getDownloadScale() {
@@ -128,19 +127,16 @@ public class DownloadScreen extends VersionedScreen {
 	}
 
 	private boolean downloadsInProgress() {
-		return downloadManager != null && !downloadManager.downloadsInProgress.isEmpty();
+		return download != null && !download.downloadingFileNames().isEmpty();
 	}
 
 	private void drawDownloadingFiles(VersionedMatrices matrices) {
 		int y = this.height / 2 - 94;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.download.downloading").withStyle(ChatFormatting.BOLD), this.width / 2, y, TextColors.WHITE);
 		int currentY = y + 14;
-		synchronized (downloadManager.downloadsInProgress) {
-			for (DownloadManager.DownloadData data : downloadManager.downloadsInProgress.values()) {
-				String fileName = truncateToWidth(this.font, data.getFileName(), Math.max(1, panelWidth(310) - 20));
-				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(fileName), this.width / 2, currentY, TextColors.GRAY);
-				currentY += 10;
-			}
+		for (String fileName : download.downloadingFileNames()) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, fileName, Math.max(1, panelWidth(310) - 20))), this.width / 2, currentY, TextColors.GRAY);
+			currentY += 10;
 		}
 	}
 
@@ -148,7 +144,7 @@ public class DownloadScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		updateUIState();
 
-		if (downloadManager != null && downloadManager.isRunning()) {
+		if (download != null && download.isRunning()) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, header, panelWidth(310))).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 110,
 					TextColors.WHITE);
 			if (downloadsInProgress()) drawDownloadingFiles(matrices);
@@ -174,7 +170,7 @@ public class DownloadScreen extends VersionedScreen {
 			cancelButton.active = true;
 		} else {
 			WaitingPresentation.render(matrices, this.font, this.width, this.height, System.nanoTime() - startedAtNanos);
-			cancelButton.active = downloadManager == null || !downloadManager.isCancelled();
+			cancelButton.active = download == null || !download.isCancelled();
 		}
 
 		checkAndStartMusic();
@@ -219,7 +215,7 @@ public class DownloadScreen extends VersionedScreen {
 
 	public void cancelDownload() {
 		try {
-			if (downloadManager != null) downloadManager.cancelAllAndShutdown();
+			if (download != null) download.cancelAllAndShutdown();
 			ScreenImpl.multiplayer();
 		} catch (Exception e) {
 			LOGGER.error("Failed to cancel the download run", e);

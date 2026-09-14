@@ -15,6 +15,7 @@ import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.LocalStorageException;
+import pl.skidam.automodpack_core.screen.DownloadView;
 import pl.skidam.automodpack_core.storage.DataRootResolver;
 import pl.skidam.automodpack_core.update.ClientObjectStore;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
@@ -26,7 +27,7 @@ import pl.skidam.automodpack_core.utils.VerifiedFileTransfer;
 import pl.skidam.automodpack_core.utils.cache.FileCache;
 import pl.skidam.automodpack_core.utils.cache.PlatformCache;
 
-public class DownloadManager {
+public class DownloadManager implements DownloadView {
 
 	public enum FailureCategory {
 		REMOTE_SOURCE,
@@ -447,6 +448,23 @@ public class DownloadManager {
 	}
 
 	/** Snapshot of finished acquisitions, what the acquisition summary line renders. */
+	@Override
+	public long acquired() {
+		return acquisitionProgress().acquired();
+	}
+
+	@Override
+	public long failed() {
+		return acquisitionProgress().failed();
+	}
+
+	@Override
+	public List<String> downloadingFileNames() {
+		synchronized (downloadsInProgress) {
+			return downloadsInProgress.values().stream().map(DownloadData::getFileName).toList();
+		}
+	}
+
 	public AcquisitionProgress acquisitionProgress() {
 		return new AcquisitionProgress(acquiredFiles.get(), failedFiles.get());
 	}
