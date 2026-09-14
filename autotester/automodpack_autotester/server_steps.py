@@ -10,6 +10,7 @@ from pathlib import Path
 from .mod_fixtures import write_valid_mod_fixture
 from .supervisor import resource_labels
 from .client_steps import cas_object
+from .config import server_cache_volume
 from .docker_harness import _container, _container_logs, _ensure_volume, _exec_output, _remove_volume, _run_container, _uid, _gid, _wait_for_log
 from .engine import Context
 from .engine.registry import verb
@@ -151,7 +152,7 @@ def _launch_server(ctx: Context):
             env["MODRINTH_PROJECTS_DEFAULT_VERSION_TYPE"] = str(mr["versionType"])
     sc = topo.get("serverCache", {}) or settings.get("serverCache", {})
     if sc.get("enabled", True):
-        vol = f"{sc.get('volumePrefix', 'amp-server-cache')}-{target.id}"
+        vol = server_cache_volume(target.id, sc.get("volumePrefix", "amp-server-cache"))
         if sc.get("clean", False):
             _remove_volume(vol)
         _ensure_volume(vol)
