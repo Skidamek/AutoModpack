@@ -52,13 +52,10 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 	WCHAR sessionKey[CCH_RM_SESSION_KEY + 2];
 	LPCWSTR resource;
 	RM_PROCESS_INFO *infos;
-	RM_PROCESS_INFO *grown = NULL;
-	DWORD *reasons;
-	DWORD *grownReasons = NULL;
 	jchar *out;
 	UINT listed = MAX_PROCESSES;
 	UINT needed = 0;
-	DWORD rmResult;
+	DWORD rmResult = ERROR_MORE_DATA;
 	jsize pos = 0;
 	jstring result = NULL;
 	(void) cls;
@@ -78,11 +75,9 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 		return NULL;
 	}
 	infos = (RM_PROCESS_INFO *) HeapAlloc(GetProcessHeap(), 0, sizeof(RM_PROCESS_INFO) * MAX_PROCESSES);
-	reasons = (DWORD *) HeapAlloc(GetProcessHeap(), 0, sizeof(DWORD) * MAX_PROCESSES);
 	out = (jchar *) HeapAlloc(GetProcessHeap(), 0, sizeof(jchar) * OUT_CHARS);
-	if (infos == NULL || reasons == NULL || out == NULL) {
+	if (infos == NULL || out == NULL) {
 		if (infos != NULL) HeapFree(GetProcessHeap(), 0, infos);
-		if (reasons != NULL) HeapFree(GetProcessHeap(), 0, reasons);
 		if (out != NULL) HeapFree(GetProcessHeap(), 0, out);
 		(*env)->ReleaseStringChars(env, jpath, chars);
 		FreeLibrary(module);
@@ -92,24 +87,20 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 	resource = (LPCWSTR) chars;
 	if (rm_start(&session, 0, sessionKey) == ERROR_SUCCESS) {
 		if (rm_register(session, 1, &resource, 0, NULL, 0, NULL) == ERROR_SUCCESS) {
-			rmResult = rm_getlist(session, &needed, &listed, infos, reasons);
-			if (rmResult == ERROR_MORE_DATA && needed > MAX_PROCESSES && needed <= MAX_KNOWN_PROCESSES) {
-				/* lpdwRebootReasons is parallel to rgAffectedApps: it receives one reason per listed entry, so it must grow to the same size before the second query. */
-				grown = (RM_PROCESS_INFO *) HeapAlloc(GetProcessHeap(), 0, sizeof(RM_PROCESS_INFO) * needed);
-				grownReasons = (DWORD *) HeapAlloc(GetProcessHeap(), 0, sizeof(DWORD) * needed);
-				if (grown != NULL && grownReasons != NULL) {
-					UINT grownListed = needed;
-					UINT grownNeeded = 0;
-					rmResult = rm_getlist(session, &grownNeeded, &grownListed, grown, grownReasons);
-					if (rmResult == ERROR_SUCCESS) {
-						HeapFree(GetProcessHeap(), 0, infos);
-						HeapFree(GetProcessHeap(), 0, reasons);
-						infos = grown;
-						reasons = grownReasons;
-						grown = NULL;
-						grownReasons = NULL;
-					}
+			/* lpdwRebootReasons receives one operation-wide reason, not per-process entries. Restart Manager refreshes
+			 * the list on every call, so the documented practice is to re-query into a larger buffer; three attempts. */
+			RM_REBOOT_REASON rebootReasons = RmRebootReasonNone;
+			for (int attempt = 0; attempt < 3 && rmResult == ERROR_MORE_DATA; attempt++) {
+				if (attempt > 0) {
+					if (needed > MAX_KNOWN_PROCESSES) break;
+					RM_PROCESS_INFO *grown = (RM_PROCESS_INFO *) HeapAlloc(GetProcessHeap(), 0, sizeof(RM_PROCESS_INFO) * needed);
+					if (grown == NULL) break;
+					HeapFree(GetProcessHeap(), 0, infos);
+					infos = grown;
+					listed = needed;
+					needed = 0;
 				}
+				rmResult = rm_getlist(session, &needed, &listed, infos, (LPDWORD) &rebootReasons);
 			}
 			if (rmResult == ERROR_SUCCESS) {
 				UINT i;
@@ -125,10 +116,7 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 		}
 		rm_end(session);
 	}
-	if (grown != NULL) HeapFree(GetProcessHeap(), 0, grown);
-	if (grownReasons != NULL) HeapFree(GetProcessHeap(), 0, grownReasons);
 	HeapFree(GetProcessHeap(), 0, out);
-	HeapFree(GetProcessHeap(), 0, reasons);
 	HeapFree(GetProcessHeap(), 0, infos);
 	(*env)->ReleaseStringChars(env, jpath, chars);
 	FreeLibrary(module);
