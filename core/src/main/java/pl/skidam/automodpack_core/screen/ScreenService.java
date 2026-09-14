@@ -5,12 +5,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 import pl.skidam.automodpack_core.client.Changelogs;
-import pl.skidam.automodpack_core.client.DownloadManager;
 import pl.skidam.automodpack_core.client.UpdateType;
 
 public interface ScreenService {
 
-	default void download(DownloadManager downloadManager, String modpackName) {}
+	default void download(DownloadView download, String modpackName) {}
 
 	default void changelog(Changelogs changelogs) {}
 
