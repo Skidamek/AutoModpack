@@ -61,6 +61,8 @@ import javax.imageio.ImageIO;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
+import pl.skidam.automodpack_core.utils.ScreenshotSettler;
+
 public final class AutoTestBridge {
 	private static final AtomicBoolean STARTED = new AtomicBoolean(false);
 	private static volatile Path bridgeDir;
@@ -298,13 +300,13 @@ public final class AutoTestBridge {
 	public static void onFrameRendered() {
 		PendingScreenshot pending = PENDING_SCREENSHOT.get();
 		if (pending == null) return;
-		RenderedFrameState state = RenderedFrameState.capture();
-		PendingScreenshot.Observation observation = pending.observe(state);
-		if (observation == PendingScreenshot.Observation.WAIT) return;
+		ScreenshotSettler.Frame frame = captureFrame();
+		ScreenshotSettler.Observation observation = pending.observe(frame);
+		if (observation == ScreenshotSettler.Observation.WAIT) return;
 		if (!PENDING_SCREENSHOT.compareAndSet(pending, null)) return;
-		if (observation == PendingScreenshot.Observation.TARGET_GONE) {
-			LOGGER.info("AutoModpack autotest screenshot {} skipped: {}", pending.path().getFileName(), state.describeFor(pending.targetScreen()));
-			pending.captured().complete(pending.skippedResponse(state).toString());
+		if (observation == ScreenshotSettler.Observation.TARGET_GONE) {
+			LOGGER.info("AutoModpack autotest screenshot {} skipped: {}", pending.path().getFileName(), describe(pending.targetScreen(), frame));
+			pending.captured().complete(pending.skippedResponse(frame).toString());
 			return;
 		}
 		try {
@@ -327,38 +329,31 @@ public final class AutoTestBridge {
 		private final CompletableFuture<String> captured;
 		private final Path path;
 		private final Screen targetScreen;
-		private volatile RenderedFrameState lastState;
-		private RenderedFrameState previousState;
-
-		private enum Observation {
-			WAIT, SETTLED, TARGET_GONE
-		}
+		private final ScreenshotSettler settler;
+		private volatile ScreenshotSettler.Frame lastFrame;
 
 		private PendingScreenshot(CompletableFuture<String> captured, Path path, Screen targetScreen) {
 			this.captured = captured;
 			this.path = path;
 			this.targetScreen = targetScreen;
+			this.settler = new ScreenshotSettler(targetScreen);
 		}
 
-		private Observation observe(RenderedFrameState state) {
-			RenderedFrameState previous = previousState;
-			lastState = state;
-			previousState = state;
-			// A replaced target screen can never settle; two consecutive frames of another screen prove it is gone.
-			if (previous != null && state.screen() != targetScreen && previous.screen() != targetScreen) return Observation.TARGET_GONE;
-			return state.isSettledAfter(previous, targetScreen) ? Observation.SETTLED : Observation.WAIT;
+		private ScreenshotSettler.Observation observe(ScreenshotSettler.Frame frame) {
+			lastFrame = frame;
+			return settler.observe(frame);
 		}
 
-		private JsonObject skippedResponse(RenderedFrameState state) {
+		private JsonObject skippedResponse(ScreenshotSettler.Frame frame) {
 			JsonObject response = base();
 			response.addProperty("skipped", true);
-			response.addProperty("reason", state.describeFor(targetScreen));
+			response.addProperty("reason", describe(targetScreen, frame));
 			return response;
 		}
 
 		private void logTimeout() {
-			RenderedFrameState state = lastState;
-			LOGGER.error("AutoModpack autotest screenshot {} did not settle: {}", path.getFileName(), state == null ? "no rendered frame observed" : state.describeFor(targetScreen));
+			ScreenshotSettler.Frame frame = lastFrame;
+			LOGGER.error("AutoModpack autotest screenshot {} did not settle: {}", path.getFileName(), frame == null ? "no rendered frame observed" : describe(targetScreen, frame));
 		}
 
 		private CompletableFuture<String> captured() {
@@ -374,24 +369,18 @@ public final class AutoTestBridge {
 		}
 	}
 
-	private record RenderedFrameState(Screen screen, boolean overlayVisible) {
-		private static RenderedFrameState capture() {
-			Minecraft minecraft = Minecraft.getInstance();
-			/*? if >=26.2 {*/
-			// Since 26.2 Gui owns the render overlay; sample it after GameRenderer rendered the frame.
-			return new RenderedFrameState(currentScreen(), minecraft.gui.overlay() != null);
-			/*?} else {*/
-			/*return new RenderedFrameState(currentScreen(), minecraft.getOverlay() != null);
-			*//*?}*/
-		}
+	private static ScreenshotSettler.Frame captureFrame() {
+		Minecraft minecraft = Minecraft.getInstance();
+		/*? if >=26.2 {*/
+		// Since 26.2 Gui owns the render overlay; sample it after GameRenderer rendered the frame.
+		return new ScreenshotSettler.Frame(currentScreen(), minecraft.gui.overlay() != null);
+		/*?} else {*/
+		/*return new ScreenshotSettler.Frame(currentScreen(), minecraft.getOverlay() != null);
+		*//*?}*/
+	}
 
-		private boolean isSettledAfter(RenderedFrameState previous, Screen targetScreen) {
-			return previous != null && screen == targetScreen && previous.screen == targetScreen && !overlayVisible && !previous.overlayVisible && screen == previous.screen;
-		}
-
-		private String describeFor(Screen targetScreen) {
-			return "targetScreen=" + targetScreen.getClass().getName() + ", renderedScreen=" + (screen == null ? "<none>" : screen.getClass().getName()) + ", overlayVisible=" + overlayVisible;
-		}
+	private static String describe(Screen targetScreen, ScreenshotSettler.Frame frame) {
+		return "targetScreen=" + targetScreen.getClass().getName() + ", renderedScreen=" + (frame.screen() == null ? "<none>" : frame.screen().getClass().getName()) + ", overlayVisible=" + frame.overlayVisible();
 	}
 
 	private static void completeScreenshot(CompletableFuture<String> captured, Path path, NativeImage source) {
