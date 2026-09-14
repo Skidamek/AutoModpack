@@ -8,22 +8,23 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <jni.h>
+#include <restartmanager.h>
 
 #define MAX_PROCESSES 4
+#define MAX_KNOWN_PROCESSES 64
 #define OUT_CHARS 2048
 #define NAME_CHARS 60
 #define SEPARATOR 0x001F
 
-/* RM_PROCESS_INFO per rstmgr.h: RM_UNIQUE_PROCESS (DWORD id + FILETIME start), 255-wchar app
- * name, 63-wchar service short name. Declared here because mingw-w64 ships no import library
- * for rstrtmgr.dll, so the API is resolved per call with LoadLibraryW/GetProcAddress. */
-typedef struct { DWORD dwProcessId; FILETIME ProcessStartTime; } AM_UNIQUE_PROCESS;
-typedef struct { AM_UNIQUE_PROCESS Process; WCHAR strAppName[255]; WCHAR strServiceShortName[63]; } AM_PROCESS_INFO;
-
+/* mingw-w64 ships no rstrtmgr import library, so the API is resolved per call with
+ * LoadLibraryW/GetProcAddress against the SDK's own types. */
 typedef DWORD (WINAPI *RmStartSessionFn)(DWORD *, DWORD, WCHAR *);
-typedef DWORD (WINAPI *RmRegisterResourcesFn)(DWORD, UINT, LPCWSTR *, UINT, const AM_UNIQUE_PROCESS *, UINT, LPCWSTR *);
-typedef DWORD (WINAPI *RmGetListFn)(DWORD, UINT *, UINT *, AM_PROCESS_INFO *, DWORD *);
+typedef DWORD (WINAPI *RmRegisterResourcesFn)(DWORD, UINT, LPCWSTR *, UINT, const RM_UNIQUE_PROCESS *, UINT, LPCWSTR *);
+typedef DWORD (WINAPI *RmGetListFn)(DWORD, UINT *, UINT *, RM_PROCESS_INFO *, DWORD *);
 typedef DWORD (WINAPI *RmEndSessionFn)(DWORD);
+
+/* The ABI this file's output math and buffer sizing depend on; pins any future header drift. */
+_Static_assert(sizeof(RM_PROCESS_INFO) == 668, "RM_PROCESS_INFO layout drifted from the Windows SDK");
 
 static jsize append_text(jchar *out, jsize pos, jsize cap, const WCHAR *text, jsize maxChars) {
 	jsize i;
@@ -41,7 +42,6 @@ static jsize append_uint(jchar *out, jsize pos, jsize cap, DWORD value) {
 
 /* JNI encodes '_' in automodpack_core as _1. javac -h emits Java_pl_skidam_automodpack_1core_utils_WindowsLockProbe_describe0. */
 JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProbe_describe0(JNIEnv *env, jclass cls, jstring jpath) {
-	static const WCHAR sessionKeyName[39] = L"6F98D7FD-4A65-4E17-BE4B-6D822D5A5E7C";
 	HMODULE module;
 	RmStartSessionFn rm_start;
 	RmRegisterResourcesFn rm_register;
@@ -49,18 +49,21 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 	RmEndSessionFn rm_end;
 	const jchar *chars;
 	DWORD session = 0;
-	WCHAR sessionKey[39];
+	WCHAR sessionKey[CCH_RM_SESSION_KEY + 2];
 	LPCWSTR resource;
-	AM_PROCESS_INFO *infos;
+	RM_PROCESS_INFO *infos;
+	RM_PROCESS_INFO *grown = NULL;
 	DWORD *reasons;
 	jchar *out;
 	UINT listed = MAX_PROCESSES;
 	UINT needed = 0;
+	DWORD rmResult;
 	jsize pos = 0;
 	jstring result = NULL;
 	(void) cls;
 	if (jpath == NULL) return NULL;
-	/* infos alone is ~2.6 KB and out another ~4 KB; past 4 KB mingw emits a ___chkstk_ms stack probe that the CRT-free link cannot satisfy, so both live on the process heap. */
+	/* infos at four entries is ~2.7 KB and out another ~4 KB; past 4 KB mingw emits a ___chkstk_ms stack probe that the
+	 * CRT-free link cannot satisfy, so all of it lives on the process heap. */
 	module = LoadLibraryW(L"rstrtmgr.dll");
 	if (module == NULL) return NULL;
 	rm_start = (RmStartSessionFn) (void *) GetProcAddress(module, "RmStartSession");
@@ -73,7 +76,7 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 		FreeLibrary(module);
 		return NULL;
 	}
-	infos = (AM_PROCESS_INFO *) HeapAlloc(GetProcessHeap(), 0, sizeof(AM_PROCESS_INFO) * MAX_PROCESSES);
+	infos = (RM_PROCESS_INFO *) HeapAlloc(GetProcessHeap(), 0, sizeof(RM_PROCESS_INFO) * MAX_PROCESSES);
 	reasons = (DWORD *) HeapAlloc(GetProcessHeap(), 0, sizeof(DWORD) * MAX_PROCESSES);
 	out = (jchar *) HeapAlloc(GetProcessHeap(), 0, sizeof(jchar) * OUT_CHARS);
 	if (infos == NULL || reasons == NULL || out == NULL) {
@@ -84,14 +87,26 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 		FreeLibrary(module);
 		return NULL;
 	}
-	for (jsize i = 0; i < 39; i++) sessionKey[i] = sessionKeyName[i];
+	/* strSessionKey is an out parameter: the session generates its own key, so every session is unique by construction. */
 	resource = (LPCWSTR) chars;
 	if (rm_start(&session, 0, sessionKey) == ERROR_SUCCESS) {
 		if (rm_register(session, 1, &resource, 0, NULL, 0, NULL) == ERROR_SUCCESS) {
-			DWORD rmResult = rm_getlist(session, &needed, &listed, infos, reasons);
-			/* ERROR_MORE_DATA only means more processes than our cap; the listed prefix is still filled. */
-			if (rmResult == ERROR_SUCCESS || rmResult == ERROR_MORE_DATA) {
-				DWORD i;
+			rmResult = rm_getlist(session, &needed, &listed, infos, reasons);
+			if (rmResult == ERROR_MORE_DATA && needed > MAX_PROCESSES && needed <= MAX_KNOWN_PROCESSES) {
+				grown = (RM_PROCESS_INFO *) HeapAlloc(GetProcessHeap(), 0, sizeof(RM_PROCESS_INFO) * needed);
+				if (grown != NULL) {
+					listed = needed;
+					needed = 0;
+					rmResult = rm_getlist(session, &needed, &listed, grown, reasons);
+					if (rmResult == ERROR_SUCCESS) {
+						HeapFree(GetProcessHeap(), 0, infos);
+						infos = grown;
+						grown = NULL;
+					}
+				}
+			}
+			if (rmResult == ERROR_SUCCESS) {
+				UINT i;
 				if (listed > MAX_PROCESSES) listed = MAX_PROCESSES;
 				for (i = 0; i < listed && pos < OUT_CHARS - 80; i++) {
 					if (i > 0) out[pos++] = SEPARATOR;
@@ -104,6 +119,7 @@ JNIEXPORT jstring JNICALL Java_pl_skidam_automodpack_1core_utils_WindowsLockProb
 		}
 		rm_end(session);
 	}
+	if (grown != NULL) HeapFree(GetProcessHeap(), 0, grown);
 	HeapFree(GetProcessHeap(), 0, out);
 	HeapFree(GetProcessHeap(), 0, reasons);
 	HeapFree(GetProcessHeap(), 0, infos);
